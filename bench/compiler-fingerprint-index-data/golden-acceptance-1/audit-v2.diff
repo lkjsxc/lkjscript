@@ -1,0 +1,29 @@
+--- bench/compiler-fingerprint-index-data/golden-acceptance-1/audit.pl	2026-11-16 20:08:40.306186479 +0000
++++ bench/compiler-fingerprint-index-data/golden-acceptance-1/audit-v2.pl	2026-11-16 20:09:48.876611496 +0000
+@@ -14,7 +14,7 @@
+ 
+ my $repo='/home/coder/workspace/lkjscript';
+ my $root="$repo/target/compiler-fingerprint-index-golden-1";
+-my $out="$repo/bench/compiler-fingerprint-index-data/golden-acceptance-1";
++my $out="$repo/bench/compiler-fingerprint-index-data/golden-acceptance-1/results-v2";
+ my $prep='042bce952af30959b1ecdff2fc686033f789c497';
+ my $source_commit='9326dbaab1bf6832b9f35dc156e12d0d62eccd9e';
+ my $prep_path='bench/compiler-fingerprint-index-data/golden-preparation-1';
+@@ -228,7 +228,8 @@
+ for my $which(qw(build dump)) { $expected_exec{"$which/$_"}=1 for @common,($which eq 'build'?'validation.json':'goldens.json'); }
+ my($ef,$ed)=files_under("$root/records/execution");
+ require_ok(equal([sort keys %$ef],[sort keys %expected_exec]) && equal([sort keys %$ed],['','build','dump']),"execution record population");
+-require_ok(bytes("$root/records/execution/release.json") eq $release_text,"execution release copy");
++require_ok(equal(json_at("$root/records/execution/release.json"),$release)
++ && bytes("$root/records/execution/release.json") eq $pretty->encode($release),"execution release fields / declared serializer");
+ my $controls=json_at("$root/records/execution/controls.json");
+ require_ok(equal($controls,{manifest_sha256=>sha256_hex($cm_text),pins_sha256=>sha256_hex(bytes("$root/control/pins.json")),plan_sha256=>sha256_hex(bytes("$root/control/plan.json"))}),"execution control correspondence");
+ sub utc_ns {
+@@ -360,6 +361,7 @@
+  schema=>'compiler-fingerprint-golden-independent-acceptance-1',status=>'accepted_capture_not_installed',
+  auditor_language=>'Perl',captured_attempt=>'root1605 / final1606',root=>$root,
+  preparation_commit=>$prep,preparation_manifest_sha256=>sha256_hex($prep_manifest),release_sha256=>$release_sha,
++ execution_release_sha256=>sha256_hex(bytes("$root/records/execution/release.json")),release_fields_equal=>JSON::PP::true,
+  source=>{commit=>$source_commit,trees=>$pins->{trees},git_files=>1743,live_files=>1744,bytes=>$source_bytes,
+   overlays=>\%overlay,source_manifest_sha256=>$source_sha,incremental_sha256=>$incremental_sha,
+   comparisons=>'All live source bytes equal the exact Git blob or one of two committed overlays; all four captured source manifests equal the independently checked live manifest.'},

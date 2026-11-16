@@ -1,0 +1,164 @@
+[
+   {
+      "argv" : [
+         "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/compiler-baseline",
+         "build",
+         "src/main.lkj",
+         "--source-dir",
+         "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/source",
+         "--library-dir",
+         "library",
+         "--runtime-source",
+         "library/runtime.lkj",
+         "--inline-limit",
+         "0",
+         "--no-store",
+         "--stats",
+         "-o",
+         "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/fingerprint-golden"
+      ],
+      "cwd" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/source",
+      "gnu_time" : {
+         "elapsed_seconds" : "13.77",
+         "exit" : "0",
+         "max_rss_kib" : "470112",
+         "system_seconds" : "0.13",
+         "user_seconds" : "13.36"
+      },
+      "name" : "build",
+      "status" : {
+         "after_ns" : "1794859204923499277",
+         "after_utc" : "2026-11-16T20:00:04.924544492Z",
+         "before_ns" : "1794859191143699431",
+         "before_utc" : "2026-11-16T19:59:51.142823424Z",
+         "exit_code" : 0,
+         "gnu_time" : {
+            "bytes" : 87,
+            "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/build/time.tsv",
+            "sha256" : "cd6033bab74e74057c29eafe054c1967f25b1ed2cbbe276dca240ea89a5bf87e"
+         },
+         "load_after" : [
+            "1.58",
+            "3.13",
+            "2.87"
+         ],
+         "load_before" : [
+            "1.55",
+            "3.20",
+            "2.89"
+         ],
+         "phase" : "build",
+         "schema" : "fingerprint-golden-phase-status-1",
+         "signal" : 0,
+         "stderr" : {
+            "bytes" : 793,
+            "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/build/stderr",
+            "sha256" : "7c8f9ca8643673c78bfd7eeefe696617d45508e9f153bd1da35eb848805e8e8f"
+         },
+         "stdout" : {
+            "bytes" : 0,
+            "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/build/stdout",
+            "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+         },
+         "timing_boundary" : "Wrapper ns begins immediately before fork and ends after wait; includes resource/process launch, stdout/stderr capture and terminal timestamp acquisition. Source/prod verification and metadata before/after are outside it. GNU time is separately retained.",
+         "wait_status" : 0,
+         "wrapper_elapsed_ns" : "13779799846"
+      },
+      "wrapper_argv" : [
+         "/usr/bin/time",
+         "-o",
+         "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/build/time.tsv",
+         "-f",
+         "elapsed_seconds\t%e\nuser_seconds\t%U\nsystem_seconds\t%S\nmax_rss_kib\t%M\nexit\t%x",
+         "/usr/bin/timeout",
+         "--signal=TERM",
+         "--kill-after=10s",
+         "900s",
+         "/usr/bin/prlimit",
+         "--as=4294967296",
+         "--",
+         "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/compiler-baseline",
+         "build",
+         "src/main.lkj",
+         "--source-dir",
+         "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/source",
+         "--library-dir",
+         "library",
+         "--runtime-source",
+         "library/runtime.lkj",
+         "--inline-limit",
+         "0",
+         "--no-store",
+         "--stats",
+         "-o",
+         "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/fingerprint-golden"
+      ]
+   },
+   {
+      "argv" : [
+         "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/fingerprint-golden"
+      ],
+      "cwd" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1",
+      "gnu_time" : {
+         "elapsed_seconds" : "0.00",
+         "exit" : "0",
+         "max_rss_kib" : "3692",
+         "system_seconds" : "0.00",
+         "user_seconds" : "0.00"
+      },
+      "name" : "dump",
+      "status" : {
+         "after_ns" : "1794859205127927962",
+         "after_utc" : "2026-11-16T20:00:05.128735080Z",
+         "before_ns" : "1794859205121156521",
+         "before_utc" : "2026-11-16T20:00:05.120307986Z",
+         "exit_code" : 0,
+         "gnu_time" : {
+            "bytes" : 83,
+            "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/dump/time.tsv",
+            "sha256" : "b07aaec960a0f3097918eea56b86f7266685f98ee99e20e12c6d6c3e4c7babe3"
+         },
+         "load_after" : [
+            "1.58",
+            "3.13",
+            "2.87"
+         ],
+         "load_before" : [
+            "1.58",
+            "3.13",
+            "2.87"
+         ],
+         "phase" : "dump",
+         "schema" : "fingerprint-golden-phase-status-1",
+         "signal" : 0,
+         "stderr" : {
+            "bytes" : 0,
+            "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/dump/stderr",
+            "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+         },
+         "stdout" : {
+            "bytes" : 4531,
+            "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/dump/stdout",
+            "sha256" : "346340880cf8b9bd247c0caf30f75ed534a702c8b0257dc81fcea2cb5849e4cd"
+         },
+         "timing_boundary" : "Wrapper ns begins immediately before fork and ends after wait; includes resource/process launch, stdout/stderr capture and terminal timestamp acquisition. Source/prod verification and metadata before/after are outside it. GNU time is separately retained.",
+         "wait_status" : 0,
+         "wrapper_elapsed_ns" : "6771441"
+      },
+      "wrapper_argv" : [
+         "/usr/bin/time",
+         "-o",
+         "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/dump/time.tsv",
+         "-f",
+         "elapsed_seconds\t%e\nuser_seconds\t%U\nsystem_seconds\t%S\nmax_rss_kib\t%M\nexit\t%x",
+         "/usr/bin/timeout",
+         "--signal=TERM",
+         "--kill-after=10s",
+         "900s",
+         "/usr/bin/prlimit",
+         "--as=4294967296",
+         "--",
+         "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/fingerprint-golden"
+      ]
+   }
+]

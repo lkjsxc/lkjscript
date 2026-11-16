@@ -1,0 +1,12 @@
+{
+   "input_files" : 1743,
+   "module_sha256" : "ccaad8644eddaab9f4ae344648922ef7e3df032751a732e8923dcdbe1df7d956",
+   "new_module_files" : 1,
+   "operation_count" : 4,
+   "pins_sha256" : "c3cfc2ca37551ee06d98d8273041d67f8ed6efe2e6532bf87bb75c04d7f03bd6",
+   "request_sha256" : "47ceb4ed8e8e7fdc3746537d325ae48da9520142f3845b0527baecfe61d3927c",
+   "source_before_after_equal" : true,
+   "status" : "prepared_only_no_compiler_native_or_semantic_edit",
+   "touched_existing_files" : 3,
+   "tracked_language_files" : 1221
+}

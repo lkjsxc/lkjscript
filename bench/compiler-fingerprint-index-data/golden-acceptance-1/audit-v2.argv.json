@@ -1,0 +1,7 @@
+{
+  "argv": ["/usr/bin/perl", "bench/compiler-fingerprint-index-data/golden-acceptance-1/audit-v2.pl"],
+  "cwd": "/home/coder/workspace/lkjscript",
+  "wrapper_argv": ["/usr/bin/time", "-o", "bench/compiler-fingerprint-index-data/golden-acceptance-1/audit-v2.time.tsv", "-f", "elapsed_seconds\t%e\nuser_seconds\t%U\nsystem_seconds\t%S\nmax_rss_kib\t%M\nexit\t%x", "/usr/bin/timeout", "--signal=TERM", "--kill-after=10s", "900s", "/usr/bin/prlimit", "--as=4294967296", "--", "/usr/bin/perl", "bench/compiler-fingerprint-index-data/golden-acceptance-1/audit-v2.pl"],
+  "environment": {"LC_ALL": "C", "TZ": "UTC"},
+  "purpose": "Separate corrected retained-record audit; the original audit-only stop is retained. No capture helper, compiler, native image, decompression or archive command."
+}

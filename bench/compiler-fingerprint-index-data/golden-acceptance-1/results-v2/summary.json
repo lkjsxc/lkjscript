@@ -1,0 +1,132 @@
+{
+   "auditor_language" : "Perl",
+   "build_stats" : {
+      "emitted_bytes" : 1568827,
+      "store_writes" : "not emitted; --no-store command checked",
+      "zero_fields" : [
+         "build_reused",
+         "checked_local_reused",
+         "checked_reused",
+         "emitted_reused",
+         "front_reused",
+         "inline_accepted",
+         "inline_attempts",
+         "inline_calls",
+         "inline_functions",
+         "inline_rejected",
+         "test_reused",
+         "test_rerun"
+      ]
+   },
+   "captured_attempt" : "root1605 / final1606",
+   "commands" : {
+      "build_exit" : 0,
+      "dump_exit" : 0,
+      "exact_frozen_argv_and_wrappers" : true,
+      "phases" : 2
+   },
+   "dump" : {
+      "bytes" : 4531,
+      "cases" : 17,
+      "none" : 6,
+      "none_ordinals" : [
+         4,
+         5,
+         7,
+         8,
+         9,
+         10
+      ],
+      "relations" : 10,
+      "sha256" : "346340880cf8b9bd247c0caf30f75ed534a702c8b0257dc81fcea2cb5849e4cd",
+      "some" : 11
+   },
+   "execution_release_sha256" : "46a2235397dadb497280dc8491fcbcb2c16c2ac81608de78b45d653155fc44a2",
+   "image" : {
+      "bytes" : 1568827,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/fingerprint-golden",
+      "sha256" : "99a179be5fd5f6cd9c8e7d3e4466468ff4b519a406303e77e935c1d27dcade89"
+   },
+   "phases" : [
+      {
+         "gnu_time" : {
+            "elapsed_seconds" : "13.77",
+            "exit" : "0",
+            "max_rss_kib" : "470112",
+            "system_seconds" : "0.13",
+            "user_seconds" : "13.36"
+         },
+         "load_after" : [
+            "1.58",
+            "3.13",
+            "2.87"
+         ],
+         "load_before" : [
+            "1.55",
+            "3.20",
+            "2.89"
+         ],
+         "name" : "build",
+         "wrapper_elapsed_ns" : "13779799846"
+      },
+      {
+         "gnu_time" : {
+            "elapsed_seconds" : "0.00",
+            "exit" : "0",
+            "max_rss_kib" : "3692",
+            "system_seconds" : "0.00",
+            "user_seconds" : "0.00"
+         },
+         "load_after" : [
+            "1.58",
+            "3.13",
+            "2.87"
+         ],
+         "load_before" : [
+            "1.58",
+            "3.13",
+            "2.87"
+         ],
+         "name" : "dump",
+         "wrapper_elapsed_ns" : "6771441"
+      }
+   ],
+   "preparation_commit" : "042bce952af30959b1ecdff2fc686033f789c497",
+   "preparation_manifest_sha256" : "dba40d41be2e0551310fba20b89b09ac5aaf22e2affbf723d0b5c2b41a222949",
+   "producer" : {
+      "bytes" : 32588975,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/compiler-baseline",
+      "sha256" : "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db"
+   },
+   "qualifications" : [
+      "This audit reads only retained records, owned binary bytes and immutable Git blobs. It does not rerun the capture helper, compiler, image or fingerprint algorithm.",
+      "Before/after correspondence is established by the four captured complete source manifests and producer/image records plus this independent live/Git comparison; no process observer was used.",
+      "GNU dump time 0.00 seconds is centisecond rounding. Captured launch-inclusive wrapper interval is 6771441 ns, not zero execution time.",
+      "The image uses the declared temporary main/fixture overlay and explicit runtime. No canonical self-image equality is claimed.",
+      "The fixture still calls the unchanged original function; expected() remains a pending-capture panic. Golden installation and any candidate comparison are separate work.",
+      "Fingerprint values are compared independently of case-name/header labels. Full raw labels and every empty body slot remain retained."
+   ],
+   "release_fields_equal" : true,
+   "release_sha256" : "9d40835d790473ab8771f47ee96ae2a33c722add32a57493305a9276277b3dba",
+   "root" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1",
+   "schema" : "compiler-fingerprint-golden-independent-acceptance-1",
+   "source" : {
+      "bytes" : 9390696,
+      "commit" : "9326dbaab1bf6832b9f35dc156e12d0d62eccd9e",
+      "comparisons" : "All live source bytes equal the exact Git blob or one of two committed overlays; all four captured source manifests equal the independently checked live manifest.",
+      "git_files" : 1743,
+      "incremental_sha256" : "760485a5a12d97ce320ba9113797370df584c154084ee4a1f9689da28c7d1127",
+      "live_files" : 1744,
+      "overlays" : {
+         "src/fingerprint_fixture.lkj" : "incremental-fingerprint-module.txt",
+         "src/main.lkj" : "golden-main.txt"
+      },
+      "source_manifest_sha256" : "354bb88fe20e3685586fd689cc6681ce6c31d7fdba8c5db6ff9fe4f1d923acf5",
+      "trees" : {
+         "library" : "25bdb8ff8567b941790d3951c78e896b23e26e8e",
+         "src" : "626c9c1f234f4d003a08820d9b69840535eff8b8",
+         "tests" : "e2b30ac0f2fa8f897f366293189d6af552a41980"
+      }
+   },
+   "status" : "accepted_capture_not_installed"
+}

@@ -1,0 +1,34 @@
+{
+   "argv" : [
+      "/home/coder/workspace/lkjscript/target/lkjscript",
+      "edit",
+      "src/semantic_main.lkj",
+      "--source-dir",
+      "/home/coder/workspace/lkjscript",
+      "--library-dir",
+      "/home/coder/workspace/lkjscript/library",
+      "--request",
+      "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-integration-1/request.json",
+      "--no-store",
+      "--store-key",
+      "/home/coder/.local/state/lkjscript/store-key"
+   ],
+   "cwd" : "/home/coder/workspace/lkjscript",
+   "key" : {
+      "path" : "/home/coder/.local/state/lkjscript/store-key",
+      "source" : "Previously committed reference-capture operation argv; path only. No key bytes or metadata read by this preparation."
+   },
+   "limits" : {
+      "address_space_bytes" : 4294967296,
+      "compiler_workers" : 1,
+      "grace_seconds" : 10,
+      "timeout_seconds" : 900
+   },
+   "policy" : "One combined transaction, no replay/against and no additional index build. Any dry-run or apply requires root sequencing/release. Do not mutate original golden source, controls or dumps.",
+   "preflight" : [
+      "/usr/bin/perl",
+      "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-integration-1/guard.pl"
+   ],
+   "schema" : "fingerprint-index-integration-commands-1",
+   "status" : "PREPARED_NO_EXECUTION_RELEASE"
+}

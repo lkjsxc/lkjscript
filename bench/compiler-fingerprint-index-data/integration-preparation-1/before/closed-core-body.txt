@@ -1,0 +1,1 @@
+{ assert_eq!(semantic_tests::core(), 192usize); }

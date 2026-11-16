@@ -1,0 +1,578 @@
+[
+   {
+      "bytes" : 3250,
+      "kind" : "committed-preparation",
+      "mode" : "0644",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/README.md",
+      "root_relative" : "control/README.md",
+      "sha256" : "af7e13d70aaf48246a6c259b4a780f041a08ec00a57dd74d4a26d0c0aed0ad6f"
+   },
+   {
+      "bytes" : 12900,
+      "kind" : "committed-preparation",
+      "mode" : "0644",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/capture.pl",
+      "root_relative" : "control/capture.pl",
+      "sha256" : "e5b9aea21dcb323482634a811172d44c60c4318592834f29e2cb4f6b9ca25450"
+   },
+   {
+      "bytes" : 7205,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/fixtures.json",
+      "root_relative" : "control/fixtures.json",
+      "sha256" : "4533bf85ddb41fdca92aca085dd5f961e0edd62bf9299cd74ec060ed5bac7295"
+   },
+   {
+      "bytes" : 746,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/golden-main.txt",
+      "root_relative" : "control/golden-main.txt",
+      "sha256" : "7132e34bfb2da3bcfe033b5b99800198b24baf5db807a8ca947df304ba886e85"
+   },
+   {
+      "bytes" : 2065,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/golden-preparation-readme.md",
+      "root_relative" : "control/golden-preparation-readme.md",
+      "sha256" : "25b3a85a8de5f2112ba73aaa9b7874e26b84791b4b3172835485ec29b4896ba4"
+   },
+   {
+      "bytes" : 10463,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/incremental-fingerprint-module.txt",
+      "root_relative" : "control/incremental-fingerprint-module.txt",
+      "sha256" : "5b5a7c739cb6c45c5fd88bf366b46a04c196c1ea88d58997484623a6dee1c7b5"
+   },
+   {
+      "bytes" : 2394,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/integration-proposal.json",
+      "root_relative" : "control/integration-proposal.json",
+      "sha256" : "d979c680eb6afcc3d7ae369c1c3b2843920eb5420ce40c8d1155e9414eea43a9"
+   },
+   {
+      "bytes" : 1185,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/manifest.sha256",
+      "root_relative" : "control/manifest.sha256",
+      "sha256" : "915316d240ba16eb905dc055ea34404d8cf954913b26c1610210521669ee50ab"
+   },
+   {
+      "bytes" : 2481,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/pins.json",
+      "root_relative" : "control/pins.json",
+      "sha256" : "cc5b665b3615893cabba3146e741a667ed53c0fceb7fac5af8e2b954dd076d9a"
+   },
+   {
+      "bytes" : 4442,
+      "kind" : "committed-preparation",
+      "mode" : "0644",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/plan.json",
+      "root_relative" : "control/plan.json",
+      "sha256" : "730038ef4f2fb943a69f4fd85c656e70965752ebc4b903f3f6dad4c8b9eca983"
+   },
+   {
+      "bytes" : 8847,
+      "kind" : "committed-preparation",
+      "mode" : "0644",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/prepare.pl",
+      "root_relative" : "control/prepare.pl",
+      "sha256" : "ec9dbe777f14d3a174f9a0a8c02e512bec2032776a0a54ae486247bf9b0eb852"
+   },
+   {
+      "bytes" : 246,
+      "kind" : "committed-preparation",
+      "mode" : "0644",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/release.template.json",
+      "root_relative" : "control/release.template.json",
+      "sha256" : "397c1d6a66ccd2a792fb818e2b89cc58074e4decf4452acda88ad0bd2ea2c8b0"
+   },
+   {
+      "bytes" : 568000,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/source-correspondence.json",
+      "root_relative" : "control/source-correspondence.json",
+      "sha256" : "203a393129b20930d72e2636a8bb7d47a57b013543f5b4e9288dd73aa29557a5"
+   },
+   {
+      "bytes" : 212800,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/source.git.sha256",
+      "root_relative" : "control/source.git.sha256",
+      "sha256" : "3bcdcb955f65b037311343b6fedf02384a39546c6a2711a6e7a926fdda43a45f"
+   },
+   {
+      "bytes" : 212894,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/control/source.overlay.sha256",
+      "root_relative" : "control/source.overlay.sha256",
+      "sha256" : "354bb88fe20e3685586fd689cc6681ce6c31d7fdba8c5db6ff9fe4f1d923acf5"
+   },
+   {
+      "bytes" : 20,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/after.ns",
+      "root_relative" : "records/preparation/after.ns",
+      "sha256" : "37fae4189d1d42659411f8bec84d86581826ca9ce02cee743958d71f53d6d76a"
+   },
+   {
+      "bytes" : 31,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/after.utc",
+      "root_relative" : "records/preparation/after.utc",
+      "sha256" : "acc05c85cc0d4d419503860ea9dda269cdefeff623f9d4053348f6fbb7b9289e"
+   },
+   {
+      "bytes" : 977,
+      "kind" : "committed-preparation",
+      "mode" : "0644",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/argv.actual.json",
+      "root_relative" : "records/preparation/argv.actual.json",
+      "sha256" : "a3991e64ddf1f30758369876839989c3e4c04dde4d68e0d011c99007b913fc42"
+   },
+   {
+      "bytes" : 39,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/argv.json",
+      "root_relative" : "records/preparation/argv.json",
+      "sha256" : "fa17fa5617dfa5668cabc14dfbdee33af982e84e8b46ac033807413422e49734"
+   },
+   {
+      "bytes" : 20,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/before.ns",
+      "root_relative" : "records/preparation/before.ns",
+      "sha256" : "361004a35962f19d67a512a7dfb647f1915189fa1886965f335ac46f54531703"
+   },
+   {
+      "bytes" : 31,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/before.utc",
+      "root_relative" : "records/preparation/before.utc",
+      "sha256" : "cc3aac574b86d5ceab2283601267629844744f0f3196205f08345f89923bae79"
+   },
+   {
+      "bytes" : 1074,
+      "kind" : "committed-preparation",
+      "mode" : "0644",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/capture-syntax-gateway.json",
+      "root_relative" : "records/preparation/capture-syntax-gateway.json",
+      "sha256" : "abbc4bcc3ae432a8bb367e56208255d9632cc742bc7c522b0c36abd4976257cf"
+   },
+   {
+      "bytes" : 31,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/capture-syntax.after.utc",
+      "root_relative" : "records/preparation/capture-syntax.after.utc",
+      "sha256" : "e97ee387910fcee85c51c43de4a4bf1b8887cf1d3994d1a259885143df0828bf"
+   },
+   {
+      "bytes" : 31,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/capture-syntax.before.utc",
+      "root_relative" : "records/preparation/capture-syntax.before.utc",
+      "sha256" : "2783a4c50e9ead1fb1645e11d888ccf459a0baa79b62fa1f434cc9b0dbb33522"
+   },
+   {
+      "bytes" : 15,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/capture-syntax.load-after",
+      "root_relative" : "records/preparation/capture-syntax.load-after",
+      "sha256" : "43363b2be4c8603692de5dfe230a2d0dea342f0d9337bd6f077af01e85b307c6"
+   },
+   {
+      "bytes" : 15,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/capture-syntax.load-before",
+      "root_relative" : "records/preparation/capture-syntax.load-before",
+      "sha256" : "43363b2be4c8603692de5dfe230a2d0dea342f0d9337bd6f077af01e85b307c6"
+   },
+   {
+      "bytes" : 2,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/capture-syntax.status",
+      "root_relative" : "records/preparation/capture-syntax.status",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+   },
+   {
+      "bytes" : 29,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/capture-syntax.stderr",
+      "root_relative" : "records/preparation/capture-syntax.stderr",
+      "sha256" : "a5b0afaab77ed9174b3888a368ef5e856f7209fa451aa8a400c41c4d6b8a3b0a"
+   },
+   {
+      "bytes" : 0,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/capture-syntax.stdout",
+      "root_relative" : "records/preparation/capture-syntax.stdout",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+      "bytes" : 84,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/capture-syntax.time.tsv",
+      "root_relative" : "records/preparation/capture-syntax.time.tsv",
+      "sha256" : "aaf77019e0093918e23df82e3daabc1c1f455aa191b7e3feb79a0e0e18f21df4"
+   },
+   {
+      "bytes" : 989,
+      "kind" : "committed-preparation",
+      "mode" : "0644",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/create-gateway.json",
+      "root_relative" : "records/preparation/create-gateway.json",
+      "sha256" : "5b93c04ac8d40fcd2150df6ba358abd915ebfb684ad448cd2c7caf42d7585eb9"
+   },
+   {
+      "bytes" : 75,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/cwd",
+      "root_relative" : "records/preparation/cwd",
+      "sha256" : "b7f9e2faa97fc04b8e06e3689b7534ddc319673d5a628aee73c2df972fd2cd47"
+   },
+   {
+      "bytes" : 1203,
+      "kind" : "committed-preparation",
+      "mode" : "0644",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/free-space-gateway.json",
+      "root_relative" : "records/preparation/free-space-gateway.json",
+      "sha256" : "4c904822a85e876e775223d6a4be47fdf64ef123ce091fb460876f5c44ce2ea1"
+   },
+   {
+      "bytes" : 15,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/load-after",
+      "root_relative" : "records/preparation/load-after",
+      "sha256" : "bf0b5cddcb767c8fdebe36eff161f4dcea542c1a026f9baa547382e08591ac56"
+   },
+   {
+      "bytes" : 15,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/load-before",
+      "root_relative" : "records/preparation/load-before",
+      "sha256" : "bf0b5cddcb767c8fdebe36eff161f4dcea542c1a026f9baa547382e08591ac56"
+   },
+   {
+      "bytes" : 1332,
+      "kind" : "committed-preparation",
+      "mode" : "0644",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/materialize-gateway.json",
+      "root_relative" : "records/preparation/materialize-gateway.json",
+      "sha256" : "ab073444eedc7933e1e8ed9b9e400f0d149d29a6998e005620c4576f97aa7fb0"
+   },
+   {
+      "bytes" : 1308,
+      "kind" : "committed-preparation",
+      "mode" : "0644",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/prepare-capture-command.txt",
+      "root_relative" : "records/preparation/prepare-capture-command.txt",
+      "sha256" : "fb713ff96e19dd92883cbe1f74012ec592b34f56d1e7fd25a542add745c62d76"
+   },
+   {
+      "bytes" : 5435,
+      "kind" : "committed-preparation",
+      "mode" : "0644",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/source-inspection-diagnostic.json",
+      "root_relative" : "records/preparation/source-inspection-diagnostic.json",
+      "sha256" : "e9e420554f3285665637b2fd0605f58bd247864411db68d09e513d8eab497c58"
+   },
+   {
+      "bytes" : 2,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/status",
+      "root_relative" : "records/preparation/status",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+   },
+   {
+      "bytes" : 0,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/stderr",
+      "root_relative" : "records/preparation/stderr",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+      "bytes" : 268,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/stdout",
+      "root_relative" : "records/preparation/stdout",
+      "sha256" : "775d9b86cfac6008f9fbd2c51bfe9c1b7ffd3990c31dace5b29fddc155f122d4"
+   },
+   {
+      "bytes" : 2,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/syntax.status",
+      "root_relative" : "records/preparation/syntax.status",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+   },
+   {
+      "bytes" : 104,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/syntax.stderr",
+      "root_relative" : "records/preparation/syntax.stderr",
+      "sha256" : "b3abc4f63cabdda47aa3575dcacdab5143f160427062c59e8b09f71ee681c694"
+   },
+   {
+      "bytes" : 0,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/syntax.stdout",
+      "root_relative" : "records/preparation/syntax.stdout",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+      "bytes" : 84,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/preparation/time.tsv",
+      "root_relative" : "records/preparation/time.tsv",
+      "sha256" : "52ca6a6e1cf4d83dea95a690463efd7f9fb8368feac176343bf19f0c2831e934"
+   },
+   {
+      "bytes" : 4486,
+      "kind" : "committed-preparation",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/preparation-manifest.sha256",
+      "root_relative" : "preparation-manifest.sha256",
+      "sha256" : "dba40d41be2e0551310fba20b89b09ac5aaf22e2affbf723d0b5c2b41a222949"
+   },
+   {
+      "bytes" : 1046,
+      "kind" : "root-release",
+      "mode" : "0644",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/release.json",
+      "root_relative" : "release.json",
+      "sha256" : "9d40835d790473ab8771f47ee96ae2a33c722add32a57493305a9276277b3dba"
+   },
+   {
+      "bytes" : 32588975,
+      "kind" : "executing-compiler",
+      "mode" : "0755",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/compiler-baseline",
+      "root_relative" : "bin/compiler-baseline",
+      "sha256" : "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db"
+   },
+   {
+      "bytes" : 1568827,
+      "kind" : "built-native-image",
+      "mode" : "0755",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/fingerprint-golden",
+      "root_relative" : "bin/fingerprint-golden",
+      "sha256" : "99a179be5fd5f6cd9c8e7d3e4466468ff4b519a406303e77e935c1d27dcade89"
+   },
+   {
+      "bytes" : 1793,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/build/argv.json",
+      "root_relative" : "records/execution/build/argv.json",
+      "sha256" : "df97a112de59db8992dd183a347945d6ba72c83fba54bcc90cb6158ee7b4ab2b"
+   },
+   {
+      "bytes" : 376,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/build/inputs-after.json",
+      "root_relative" : "records/execution/build/inputs-after.json",
+      "sha256" : "f6b5396b1c89c524442c9d4fa5c0c2e9db082a9c73c3c4ef8a6f91a911c5629d"
+   },
+   {
+      "bytes" : 376,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/build/inputs-before.json",
+      "root_relative" : "records/execution/build/inputs-before.json",
+      "sha256" : "f6b5396b1c89c524442c9d4fa5c0c2e9db082a9c73c3c4ef8a6f91a911c5629d"
+   },
+   {
+      "bytes" : 212894,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/build/source-after.sha256",
+      "root_relative" : "records/execution/build/source-after.sha256",
+      "sha256" : "354bb88fe20e3685586fd689cc6681ce6c31d7fdba8c5db6ff9fe4f1d923acf5"
+   },
+   {
+      "bytes" : 212894,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/build/source-before.sha256",
+      "root_relative" : "records/execution/build/source-before.sha256",
+      "sha256" : "354bb88fe20e3685586fd689cc6681ce6c31d7fdba8c5db6ff9fe4f1d923acf5"
+   },
+   {
+      "bytes" : 1528,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/build/status.json",
+      "root_relative" : "records/execution/build/status.json",
+      "sha256" : "3ba17888b427f863869ec72e0070e96e957bb82f87fcc101c5d8c293861f839f"
+   },
+   {
+      "bytes" : 793,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/build/stderr",
+      "root_relative" : "records/execution/build/stderr",
+      "sha256" : "7c8f9ca8643673c78bfd7eeefe696617d45508e9f153bd1da35eb848805e8e8f"
+   },
+   {
+      "bytes" : 0,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/build/stdout",
+      "root_relative" : "records/execution/build/stdout",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+      "bytes" : 87,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/build/time.tsv",
+      "root_relative" : "records/execution/build/time.tsv",
+      "sha256" : "cd6033bab74e74057c29eafe054c1967f25b1ed2cbbe276dca240ea89a5bf87e"
+   },
+   {
+      "bytes" : 1516,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/build/validation.json",
+      "root_relative" : "records/execution/build/validation.json",
+      "sha256" : "ca45cf363f44e937e0849d0cfce00aee71750075a38b46b01050cb98f4aff699"
+   },
+   {
+      "bytes" : 268,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/controls.json",
+      "root_relative" : "records/execution/controls.json",
+      "sha256" : "b7214a4c9bf56b38d93e810ad29fcdc8e88717fc5c4543620a1ca3f57ea5441e"
+   },
+   {
+      "bytes" : 915,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/dump/argv.json",
+      "root_relative" : "records/execution/dump/argv.json",
+      "sha256" : "97b8db281df48cc178e8b149d7cfb44dee3d9a3c89576bd4121ad0a432589bf8"
+   },
+   {
+      "bytes" : 12420,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/dump/goldens.json",
+      "root_relative" : "records/execution/dump/goldens.json",
+      "sha256" : "ab08cc552e7e979a60c158000ba5266f920df6d3d34bc14c984e200fc4215fe1"
+   },
+   {
+      "bytes" : 629,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/dump/inputs-after.json",
+      "root_relative" : "records/execution/dump/inputs-after.json",
+      "sha256" : "ad9bf60195dd942ac30150b7752efebd96e6dcdca2ea2e6c3da7ffedbb4364b6"
+   },
+   {
+      "bytes" : 629,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/dump/inputs-before.json",
+      "root_relative" : "records/execution/dump/inputs-before.json",
+      "sha256" : "ad9bf60195dd942ac30150b7752efebd96e6dcdca2ea2e6c3da7ffedbb4364b6"
+   },
+   {
+      "bytes" : 212894,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/dump/source-after.sha256",
+      "root_relative" : "records/execution/dump/source-after.sha256",
+      "sha256" : "354bb88fe20e3685586fd689cc6681ce6c31d7fdba8c5db6ff9fe4f1d923acf5"
+   },
+   {
+      "bytes" : 212894,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/dump/source-before.sha256",
+      "root_relative" : "records/execution/dump/source-before.sha256",
+      "sha256" : "354bb88fe20e3685586fd689cc6681ce6c31d7fdba8c5db6ff9fe4f1d923acf5"
+   },
+   {
+      "bytes" : 1521,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/dump/status.json",
+      "root_relative" : "records/execution/dump/status.json",
+      "sha256" : "94bfa85c825e999f825d3576f7535c8e1c2f90ca0b12f62d8d84a14769cc462c"
+   },
+   {
+      "bytes" : 0,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/dump/stderr",
+      "root_relative" : "records/execution/dump/stderr",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+      "bytes" : 4531,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/dump/stdout",
+      "root_relative" : "records/execution/dump/stdout",
+      "sha256" : "346340880cf8b9bd247c0caf30f75ed534a702c8b0257dc81fcea2cb5849e4cd"
+   },
+   {
+      "bytes" : 83,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/dump/time.tsv",
+      "root_relative" : "records/execution/dump/time.tsv",
+      "sha256" : "b07aaec960a0f3097918eea56b86f7266685f98ee99e20e12c6d6c3e4c7babe3"
+   },
+   {
+      "bytes" : 1162,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/outcome.json",
+      "root_relative" : "records/execution/outcome.json",
+      "sha256" : "8aab1d38cbb77090b57c13bc60d1888722fbeae7406b653846d51eb65aac720c"
+   },
+   {
+      "bytes" : 1064,
+      "kind" : "closed-execution-record",
+      "mode" : "0600",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/release.json",
+      "root_relative" : "records/execution/release.json",
+      "sha256" : "46a2235397dadb497280dc8491fcbcb2c16c2ac81608de78b45d653155fc44a2"
+   }
+]

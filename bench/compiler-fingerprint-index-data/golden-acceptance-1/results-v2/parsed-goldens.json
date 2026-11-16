@@ -1,0 +1,194 @@
+{
+   "cases" : [
+      {
+         "bodies" : [
+            "",
+            "4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95",
+            "3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579",
+            "366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a",
+            "9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551",
+            "f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1"
+         ],
+         "exact_record" : "case 0 multi-base\nsome 752e231696fcc692c58024672e12b5cee58a412366ca7f965d9c6fb409056509 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n",
+         "id" : "multi-base",
+         "ordinal" : 0,
+         "outcome" : "Some",
+         "shape" : "752e231696fcc692c58024672e12b5cee58a412366ca7f965d9c6fb409056509"
+      },
+      {
+         "bodies" : [
+            "f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1",
+            "9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551",
+            "366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a",
+            "3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579",
+            "4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95",
+            ""
+         ],
+         "exact_record" : "case 1 multi-reversed-functions\nsome 5b781036c20507d1014e988ce8a23c4170000726a8dfa6842f38d0929ba407e9 6\nbody 0 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nbody 1 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 2 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 3 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 4 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 5 empty\nend\n",
+         "id" : "multi-reversed-functions",
+         "ordinal" : 1,
+         "outcome" : "Some",
+         "shape" : "5b781036c20507d1014e988ce8a23c4170000726a8dfa6842f38d0929ba407e9"
+      },
+      {
+         "bodies" : [
+            "",
+            "4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95",
+            "3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579",
+            "366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a",
+            "9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551",
+            "f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1"
+         ],
+         "exact_record" : "case 2 duplicate-parsed-later\nsome 752e231696fcc692c58024672e12b5cee58a412366ca7f965d9c6fb409056509 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n",
+         "id" : "duplicate-parsed-later",
+         "ordinal" : 2,
+         "outcome" : "Some",
+         "shape" : "752e231696fcc692c58024672e12b5cee58a412366ca7f965d9c6fb409056509"
+      },
+      {
+         "bodies" : [
+            "",
+            "4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95",
+            "3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579",
+            "366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a",
+            "9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551",
+            "20df9286b5b47e7f8d1c878dfba28ed577d2c52dc3aaf66e4aa4f50097420cde"
+         ],
+         "exact_record" : "case 3 duplicate-parsed-first\nsome 752e231696fcc692c58024672e12b5cee58a412366ca7f965d9c6fb409056509 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 20df9286b5b47e7f8d1c878dfba28ed577d2c52dc3aaf66e4aa4f50097420cde\nend\n",
+         "id" : "duplicate-parsed-first",
+         "ordinal" : 3,
+         "outcome" : "Some",
+         "shape" : "752e231696fcc692c58024672e12b5cee58a412366ca7f965d9c6fb409056509"
+      },
+      {
+         "exact_record" : "case 4 missing-bodyless-source\nnone\nend\n",
+         "id" : "missing-bodyless-source",
+         "ordinal" : 4,
+         "outcome" : "None"
+      },
+      {
+         "exact_record" : "case 5 duplicate-first-truncated\nnone\nend\n",
+         "id" : "duplicate-first-truncated",
+         "ordinal" : 5,
+         "outcome" : "None"
+      },
+      {
+         "bodies" : [
+            "",
+            "",
+            "3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579",
+            "366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a",
+            "9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551",
+            "f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1"
+         ],
+         "exact_record" : "case 6 ignored-invalid-function-file\nsome 676570df0edf73d053dad87f9d0e915a5e5e52f1ec75767d8c08ef01b212777e 6\nbody 0 empty\nbody 1 empty\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n",
+         "id" : "ignored-invalid-function-file",
+         "ordinal" : 6,
+         "outcome" : "Some",
+         "shape" : "676570df0edf73d053dad87f9d0e915a5e5e52f1ec75767d8c08ef01b212777e"
+      },
+      {
+         "exact_record" : "case 7 reversed-body-bounds\nnone\nend\n",
+         "id" : "reversed-body-bounds",
+         "ordinal" : 7,
+         "outcome" : "None"
+      },
+      {
+         "exact_record" : "case 8 body-past-eof\nnone\nend\n",
+         "id" : "body-past-eof",
+         "ordinal" : 8,
+         "outcome" : "None"
+      },
+      {
+         "exact_record" : "case 9 overlapping-bodies\nnone\nend\n",
+         "id" : "overlapping-bodies",
+         "ordinal" : 9,
+         "outcome" : "None"
+      },
+      {
+         "exact_record" : "case 10 type-past-eof\nnone\nend\n",
+         "id" : "type-past-eof",
+         "ordinal" : 10,
+         "outcome" : "None"
+      },
+      {
+         "bodies" : [
+            "",
+            "4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95",
+            "3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579",
+            "366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a",
+            "9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551",
+            "f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1"
+         ],
+         "exact_record" : "case 11 unparsed-order\nsome a5390be69ef4d933adc0c95c9172135fe38af3df6cc848be5107a78ae534ca18 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n",
+         "id" : "unparsed-order",
+         "ordinal" : 11,
+         "outcome" : "Some",
+         "shape" : "a5390be69ef4d933adc0c95c9172135fe38af3df6cc848be5107a78ae534ca18"
+      },
+      {
+         "bodies" : [
+            "",
+            "4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95",
+            "3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579",
+            "366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a",
+            "9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551",
+            "f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1"
+         ],
+         "exact_record" : "case 12 unparsed-duplicate\nsome 271ba43e04fbebed96514c31726cd330effc5a48adeb0a6788996dcc00123797 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n",
+         "id" : "unparsed-duplicate",
+         "ordinal" : 12,
+         "outcome" : "Some",
+         "shape" : "271ba43e04fbebed96514c31726cd330effc5a48adeb0a6788996dcc00123797"
+      },
+      {
+         "bodies" : [
+            "1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b",
+            "6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee"
+         ],
+         "exact_record" : "case 13 include-base\nsome 18116cbdd0d3c394f6b0e1e79c59f647ad812825bce8e0be9d65da792079e412 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n",
+         "id" : "include-base",
+         "ordinal" : 13,
+         "outcome" : "Some",
+         "shape" : "18116cbdd0d3c394f6b0e1e79c59f647ad812825bce8e0be9d65da792079e412"
+      },
+      {
+         "bodies" : [
+            "1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b",
+            "7c661f9a5e9dbdc8c3c46376af8060132c245f34dd18859e01cfaa6e9ffbfb49"
+         ],
+         "exact_record" : "case 14 include-parsed-body\nsome 1c9574a214cbddec85bf1633bc568961dff1cc680aaac6da88abdab0b7a82eb9 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 7c661f9a5e9dbdc8c3c46376af8060132c245f34dd18859e01cfaa6e9ffbfb49\nend\n",
+         "id" : "include-parsed-body",
+         "ordinal" : 14,
+         "outcome" : "Some",
+         "shape" : "1c9574a214cbddec85bf1633bc568961dff1cc680aaac6da88abdab0b7a82eb9"
+      },
+      {
+         "bodies" : [
+            "1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b",
+            "6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee"
+         ],
+         "exact_record" : "case 15 include-binary-payload\nsome adf535fda264c48390312dc3256e239ef833c6e3ef0ec72950e2378777843ac8 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n",
+         "id" : "include-binary-payload",
+         "ordinal" : 15,
+         "outcome" : "Some",
+         "shape" : "adf535fda264c48390312dc3256e239ef833c6e3ef0ec72950e2378777843ac8"
+      },
+      {
+         "bodies" : [
+            "1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b",
+            "6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee"
+         ],
+         "exact_record" : "case 16 include-string-payload\nsome a48eeda0c8db8278db9c45affa110bc0f2641bdebd477a5eb0be29473d0c1607 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n",
+         "id" : "include-string-payload",
+         "ordinal" : 16,
+         "outcome" : "Some",
+         "shape" : "a48eeda0c8db8278db9c45affa110bc0f2641bdebd477a5eb0be29473d0c1607"
+      }
+   ],
+   "none" : 6,
+   "raw_bytes" : 4531,
+   "raw_sha256" : "346340880cf8b9bd247c0caf30f75ed534a702c8b0257dc81fcea2cb5849e4cd",
+   "schema" : "independent-fingerprint-wire-parse-1",
+   "some" : 11
+}

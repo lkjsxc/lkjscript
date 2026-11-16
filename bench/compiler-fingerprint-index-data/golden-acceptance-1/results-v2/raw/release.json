@@ -1,0 +1,11 @@
+{
+   "control_manifest_sha256" : "915316d240ba16eb905dc055ea34404d8cf954913b26c1610210521669ee50ab",
+   "original_incremental_sha256" : "760485a5a12d97ce320ba9113797370df584c154084ee4a1f9689da28c7d1127",
+   "preparation_commit" : "042bce952af30959b1ecdff2fc686033f789c497",
+   "producer_sha256" : "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db",
+   "root_review" : "Root read the unchanged-function fixture module, exact seventeen-case specification and full capture helper. Only one old-source build and one native dump are released. Source, producer, runtime and all control pins stay fixed; any failed phase or validation closes this attempt. No candidate installation, added case, measurement cohort, key/store access or retry is authorized by this release.",
+   "run_root" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1",
+   "schema" : "compiler-fingerprint-baseline-golden-release-1",
+   "source_commit" : "9326dbaab1bf6832b9f35dc156e12d0d62eccd9e",
+   "status" : "RELEASED_BY_ROOT_FOR_ONE_BUILD_ONE_DUMP"
+}

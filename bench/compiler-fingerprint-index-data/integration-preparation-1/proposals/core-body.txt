@@ -1,0 +1,22 @@
+{
+    let mut count = units::run();
+    count += diagnostic_contracts::run();
+    count += function_owners::run();
+    count += library_demand::run();
+    count += reference_capture::run();
+    count += incremental_fingerprint::run();
+    count += source_contracts::run();
+    count += return_contracts::run();
+    count += array_repeat::run();
+    count += scalar_clone::run();
+    count += interpreter_contracts::run();
+    count += entry_grants::run();
+    count += allocator::run();
+    count += resolver::run();
+    count += reuse::run();
+    count += ir_binary_admission::run();
+    count += recheck::run();
+    crate::interpreter::assert_reference_reuse();
+    count += 1;
+    count
+}

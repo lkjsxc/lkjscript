@@ -1,0 +1,29 @@
+{
+   "argv" : [
+      "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/fingerprint-golden"
+   ],
+   "cwd" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1",
+   "environment" : {
+      "LC_ALL" : "C",
+      "TZ" : "UTC"
+   },
+   "stdin" : "/dev/null",
+   "unset_environment" : [
+      "LKJSCRIPT_STORE_IO"
+   ],
+   "wrapper_argv" : [
+      "/usr/bin/time",
+      "-o",
+      "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/records/execution/dump/time.tsv",
+      "-f",
+      "elapsed_seconds\t%e\nuser_seconds\t%U\nsystem_seconds\t%S\nmax_rss_kib\t%M\nexit\t%x",
+      "/usr/bin/timeout",
+      "--signal=TERM",
+      "--kill-after=10s",
+      "900s",
+      "/usr/bin/prlimit",
+      "--as=4294967296",
+      "--",
+      "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/fingerprint-golden"
+   ]
+}

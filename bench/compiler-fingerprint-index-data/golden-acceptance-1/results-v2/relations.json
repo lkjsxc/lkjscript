@@ -1,0 +1,52 @@
+[
+   {
+      "detail" : "Exactly 17 fixed records; None only at 4,5,7,8,9,10.",
+      "id" : "fixed-outcomes",
+      "status" : "pass"
+   },
+   {
+      "detail" : "Fingerprint shape and body vector match case0; case-name wrappers intentionally differ.",
+      "id" : "case-2-value-equality",
+      "status" : "pass"
+   },
+   {
+      "detail" : "Only alpha::left body slot5 differs; shape is unchanged.",
+      "id" : "case-3-one-body",
+      "status" : "pass"
+   },
+   {
+      "detail" : "Complete six-slot vector is reversed, including the empty slot; shape differs.",
+      "id" : "case-1-reversed-vector",
+      "status" : "pass"
+   },
+   {
+      "detail" : "Ignored function first adds one empty slot at1; pre-existing bodyless slot0 remains empty. Other slots match.",
+      "id" : "case-6-ignored-body",
+      "status" : "pass"
+   },
+   {
+      "detail" : "Shape differs from case0; full six-body vector matches.",
+      "id" : "case-11-extra-input",
+      "status" : "pass"
+   },
+   {
+      "detail" : "Shape differs from case0; full six-body vector matches.",
+      "id" : "case-12-extra-input",
+      "status" : "pass"
+   },
+   {
+      "detail" : "Shape and child body slot1 differ from case13; root body slot0 matches.",
+      "id" : "case-14-included-parsed-body",
+      "status" : "pass"
+   },
+   {
+      "detail" : "Shape differs from case13; full two-body vector matches.",
+      "id" : "case-15-include-payload",
+      "status" : "pass"
+   },
+   {
+      "detail" : "Shape differs from case13; full two-body vector matches.",
+      "id" : "case-16-include-payload",
+      "status" : "pass"
+   }
+]

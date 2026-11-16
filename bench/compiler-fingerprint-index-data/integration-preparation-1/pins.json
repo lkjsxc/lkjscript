@@ -1,0 +1,36 @@
+{
+   "alternate_module" : "src/semantic_tests/incremental_fingerprint/mod.lkj",
+   "baseline_source_commit" : "9326dbaab1bf6832b9f35dc156e12d0d62eccd9e",
+   "commit" : "042bce952af30959b1ecdff2fc686033f789c497",
+   "input_files" : 1743,
+   "input_manifest_sha256" : "3bcdcb955f65b037311343b6fedf02384a39546c6a2711a6e7a926fdda43a45f",
+   "language_manifest_sha256" : "20e681130ce8b6f049081ce6c252fd3f9fc55ebabc2c2785db54b81c61458dcf",
+   "module_bytes" : 15640,
+   "module_sha256" : "ccaad8644eddaab9f4ae344648922ef7e3df032751a732e8923dcdbe1df7d956",
+   "new_module" : "src/semantic_tests/incremental_fingerprint.lkj",
+   "operation_schema_sources" : [
+      "docs/structure.md",
+      "src/structure_edit.lkj",
+      "bench/compiler-reference-capture-data/integration-preparation/tests-request.json"
+   ],
+   "parent_identity" : {
+      "dev" : 144,
+      "gid" : 1001,
+      "inode" : 21189467,
+      "mode" : 448,
+      "path" : "src/semantic_tests",
+      "uid" : 1001
+   },
+   "producer_bytes" : 32588975,
+   "producer_sha256" : "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db",
+   "request_sha256" : "47ceb4ed8e8e7fdc3746537d325ae48da9520142f3845b0527baecfe61d3927c",
+   "runner_after_sha256" : "ebbd18fb4edb6fa98b61efc458b38e9d94f3ace1ebf45c362db0b48fa34deb25",
+   "runner_before_sha256" : "9ff51ad89da9d63efd0d8c3bd771595f5b790ea15ceabd4b508e223e406aa629",
+   "schema" : "fingerprint-index-prelaunch-pins-1",
+   "tracked_language_files" : 1221,
+   "trees" : {
+      "library" : "25bdb8ff8567b941790d3951c78e896b23e26e8e",
+      "src" : "626c9c1f234f4d003a08820d9b69840535eff8b8",
+      "tests" : "e2b30ac0f2fa8f897f366293189d6af552a41980"
+   }
+}

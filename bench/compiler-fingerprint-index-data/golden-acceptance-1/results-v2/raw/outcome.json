@@ -1,0 +1,30 @@
+{
+   "failure" : null,
+   "phases" : [
+      {
+         "image" : {
+            "bytes" : 1568827,
+            "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/fingerprint-golden",
+            "sha256" : "99a179be5fd5f6cd9c8e7d3e4466468ff4b519a406303e77e935c1d27dcade89"
+         },
+         "phase" : "build",
+         "status" : "accepted"
+      },
+      {
+         "phase" : "dump",
+         "result" : {
+            "cases" : 17,
+            "none" : 6,
+            "some" : 11,
+            "stdout_bytes" : 4531,
+            "stdout_sha256" : "346340880cf8b9bd247c0caf30f75ed534a702c8b0257dc81fcea2cb5849e4cd"
+         },
+         "status" : "accepted"
+      }
+   ],
+   "policy" : "Exactly one build and at most one native dump. Any failed command or validation is terminal for this attempt. No retry or expected() installation.",
+   "producer_sha256" : "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db",
+   "schema" : "fingerprint-baseline-golden-outcome-1",
+   "source_manifest_sha256" : "354bb88fe20e3685586fd689cc6681ce6c31d7fdba8c5db6ff9fe4f1d923acf5",
+   "status" : "captured_pending_review"
+}

@@ -1,0 +1,14 @@
+{
+   "native_image" : {
+      "bytes" : 1568827,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/fingerprint-golden",
+      "sha256" : "99a179be5fd5f6cd9c8e7d3e4466468ff4b519a406303e77e935c1d27dcade89"
+   },
+   "producer" : {
+      "bytes" : 32588975,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-fingerprint-index-golden-1/bin/compiler-baseline",
+      "sha256" : "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db"
+   },
+   "source_files" : 1744,
+   "source_manifest_sha256" : "354bb88fe20e3685586fd689cc6681ce6c31d7fdba8c5db6ff9fe4f1d923acf5"
+}

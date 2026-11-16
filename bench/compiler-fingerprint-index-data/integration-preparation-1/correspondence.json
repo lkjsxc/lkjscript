@@ -1,0 +1,196 @@
+{
+   "fixture" : {
+      "filled_bytes" : 15640,
+      "filled_sha256" : "ccaad8644eddaab9f4ae344648922ef7e3df032751a732e8923dcdbe1df7d956",
+      "frozen_sha256" : "5b5a7c739cb6c45c5fd88bf366b46a04c196c1ea88d58997484623a6dee1c7b5",
+      "new_item_end" : 14844,
+      "old_item_end" : 9667,
+      "old_item_start" : 9552,
+      "only_changed_item" : "expected(case)",
+      "raw_dump_sha256" : "346340880cf8b9bd247c0caf30f75ed534a702c8b0257dc81fcea2cb5849e4cd",
+      "records" : [
+         {
+            "id" : "multi-base",
+            "ordinal" : 0,
+            "record_bytes" : 467,
+            "record_sha256" : "33b2ce8d29089db0f07a37b10773096b123ce37f28f69724ec3a8c99e1f5723f"
+         },
+         {
+            "id" : "multi-reversed-functions",
+            "ordinal" : 1,
+            "record_bytes" : 481,
+            "record_sha256" : "f9a80e8d0d354b327fa268302f9fab7cdc3ad5d528a1252ea9e71b053e8bf4fd"
+         },
+         {
+            "id" : "duplicate-parsed-later",
+            "ordinal" : 2,
+            "record_bytes" : 479,
+            "record_sha256" : "488dcc59f70061f3b713172250a6794dfd7bc559f11c099ef919c2d4cbbdea27"
+         },
+         {
+            "id" : "duplicate-parsed-first",
+            "ordinal" : 3,
+            "record_bytes" : 479,
+            "record_sha256" : "aa44da766fd03259bd5c8dcbbaf2e6a1b428662d3fbeddb0b22c25c9dc22dca7"
+         },
+         {
+            "id" : "missing-bodyless-source",
+            "ordinal" : 4,
+            "record_bytes" : 40,
+            "record_sha256" : "998cab58ad76b4068a546aaa4f0d13c971f0e29d4a875cfc3528b6665c3bf2d8"
+         },
+         {
+            "id" : "duplicate-first-truncated",
+            "ordinal" : 5,
+            "record_bytes" : 42,
+            "record_sha256" : "a8ebc4be047c05f79278e7e0856c6a1a85295dc77923442a68d4cdbfc2816887"
+         },
+         {
+            "id" : "ignored-invalid-function-file",
+            "ordinal" : 6,
+            "record_bytes" : 427,
+            "record_sha256" : "ed76fb9f829c02adc7d35464433b3204eaf3e292ee9e6664ff8f8ca2ac64f0ba"
+         },
+         {
+            "id" : "reversed-body-bounds",
+            "ordinal" : 7,
+            "record_bytes" : 37,
+            "record_sha256" : "89f5fba4ec20a62408dcc5bd2f206e7195dd9481c10fa71030860890eb12b56e"
+         },
+         {
+            "id" : "body-past-eof",
+            "ordinal" : 8,
+            "record_bytes" : 30,
+            "record_sha256" : "1846f0f98ee21abc9f3832a2c09c9979f74b06617ad39d9653f548e83e164e10"
+         },
+         {
+            "id" : "overlapping-bodies",
+            "ordinal" : 9,
+            "record_bytes" : 35,
+            "record_sha256" : "b7cf4c51573045d6f790beb7ae7dbe1d2ee2621686e0ac551679b320df82555f"
+         },
+         {
+            "id" : "type-past-eof",
+            "ordinal" : 10,
+            "record_bytes" : 31,
+            "record_sha256" : "dc75d6f5cbda08d3f8a01cc0c9fa08048c88b2a765d8351f5a3866c2e7a48c37"
+         },
+         {
+            "id" : "unparsed-order",
+            "ordinal" : 11,
+            "record_bytes" : 472,
+            "record_sha256" : "6ba707dc6c60e9c58d93f9d3cebbe6178c7ed8fd305265c4afdcc1f741f1ed46"
+         },
+         {
+            "id" : "unparsed-duplicate",
+            "ordinal" : 12,
+            "record_bytes" : 476,
+            "record_sha256" : "9c755e4d45c5fa49c19424c85f731fa1885b5fe156257b94a686f8b668110cb9"
+         },
+         {
+            "id" : "include-base",
+            "ordinal" : 13,
+            "record_bytes" : 241,
+            "record_sha256" : "994bfd3433853ec52d1f97da68b83ee967a3fe45fc178267bdbb47a7e8e894de"
+         },
+         {
+            "id" : "include-parsed-body",
+            "ordinal" : 14,
+            "record_bytes" : 248,
+            "record_sha256" : "6fe9bd7a2b3a2cffb13354b7d623e4c7f4b7b4955ecbf2071944ae08254b2e57"
+         },
+         {
+            "id" : "include-binary-payload",
+            "ordinal" : 15,
+            "record_bytes" : 251,
+            "record_sha256" : "6caac0d349af91b46de5ea24700f54b9f444d287893b21bea91416c2a7733dd5"
+         },
+         {
+            "id" : "include-string-payload",
+            "ordinal" : 16,
+            "record_bytes" : 251,
+            "record_sha256" : "164232a878a994019e1cd469427170815f98cfddf1fa18f222fef70b93921fa4"
+         }
+      ],
+      "rollback_equals_frozen" : true,
+      "unchanged_prefix_sha256" : "9eda2fa9a3d6c44b7d0be9bb729e1303078cb28c178062d3d7c25d7cb522dd28",
+      "unchanged_suffix_sha256" : "0c1004dc38c7f0e3736c2b88e686952c341e515823dbbfdceb08299a696d1b83"
+   },
+   "hash_scope" : "Source-coordinate body hashes are audit facts, not guessed semantic item expect digests. Request omits expect and snapshot. Full source manifests are external prelaunch guards; compiler planning, input-staleness checks and independent candidate admission remain required.",
+   "host_runner" : {
+      "after_sha256" : "ebbd18fb4edb6fa98b61efc458b38e9d94f3ace1ebf45c362db0b48fa34deb25",
+      "before_sha256" : "9ff51ad89da9d63efd0d8c3bd771595f5b790ea15ceabd4b508e223e406aa629",
+      "exact_after" : "if [[ \"$entry\" == main ]]; then count=196; fi",
+      "exact_before" : "if [[ \"$entry\" == main ]]; then count=192; fi",
+      "path" : "tools/closed-semantics.sh",
+      "when" : "Root applies this separate guarded shell edit only after the four-op language transaction succeeds; no language-operation credit."
+   },
+   "operations" : [
+      {
+         "after_payload_bytes" : 4400,
+         "after_payload_sha256" : "5b5bab44a3ee458a775aa1b81a1d7557105d767e7a29293527083573ad8b1556",
+         "before_body_sha256" : "11eb61ba6ea50ecd948158965eccbaaa076a4c2f40380d09b9952120d99c94b2",
+         "before_sha256" : "760485a5a12d97ce320ba9113797370df584c154084ee4a1f9689da28c7d1127",
+         "file" : "src/elaborate/incremental.lkj",
+         "frozen_body_sha256" : "abb7f4dc76121a6d9f6a0e885da16ac22f50b35ef1f0a606cf07c9e7d3139271",
+         "id" : "elaborate::incremental::fingerprint",
+         "op" : "replace-body",
+         "operation" : 0,
+         "payload_normalization" : "Remove exactly one terminal LF from the frozen brace-delimited replacement to fit the body span; all other bytes identical.",
+         "source_span" : {
+            "end" : 5955,
+            "start" : 2471
+         }
+      },
+      {
+         "declaration" : "mod incremental_fingerprint;",
+         "id" : "semantic_tests",
+         "op" : "add-item",
+         "operation" : 1,
+         "parent_before_sha256" : "4d174b8311b10c29d417c0b7907a0d0d8a7de2797af5a915fb80fb932fd4c94f",
+         "parent_file" : "src/semantic_tests.lkj",
+         "placement" : "No before override: compiler selects the parent module insertion boundary.",
+         "projection" : {
+            "alternate" : "src/semantic_tests/incremental_fingerprint/mod.lkj",
+            "before" : "Absent",
+            "bytes" : 15640,
+            "identity" : "semantic_tests::incremental_fingerprint",
+            "path" : "src/semantic_tests/incremental_fingerprint.lkj",
+            "sha256" : "ccaad8644eddaab9f4ae344648922ef7e3df032751a732e8923dcdbe1df7d956"
+         }
+      },
+      {
+         "after_payload_bytes" : 691,
+         "after_payload_sha256" : "a3027b399c324b85d758654f70b004fda7cb939c4968281bb6ec4c57d6a7cc36",
+         "before_body_sha256" : "c2b487ec11272f67a6e102f1c60e6572ab308ab5048daf1e68cce881288def5a",
+         "before_sha256" : "4d174b8311b10c29d417c0b7907a0d0d8a7de2797af5a915fb80fb932fd4c94f",
+         "file" : "src/semantic_tests.lkj",
+         "id" : "semantic_tests::core",
+         "only_change" : "Add count += incremental_fingerprint::run(); immediately after reference_capture::run().",
+         "op" : "replace-body",
+         "operation" : 2,
+         "source_span" : {
+            "end" : 4941,
+            "start" : 4295
+         }
+      },
+      {
+         "after_payload_bytes" : 49,
+         "after_payload_sha256" : "5549e79e4303c1197c9e85794b22d5962e2c6463b9e9421b83eae527de87268b",
+         "before_body_sha256" : "a448ac1907ffa00b38a44aa272860839f34d80bd76d1eae18c762dcd4f288e99",
+         "before_sha256" : "6e6fe4120f041247ccdff5679bff6aabb342dee9e537fbad4fb65e403de68ad6",
+         "file" : "src/semantic_main.lkj",
+         "id" : "closed_core",
+         "only_change" : "192usize -> 196usize",
+         "op" : "replace-body",
+         "operation" : 3,
+         "source_span" : {
+            "end" : 1534,
+            "start" : 1485
+         }
+      }
+   ],
+   "root" : "src/semantic_main.lkj",
+   "schema" : "fingerprint-index-four-operation-correspondence-1",
+   "status" : "PREPARED_NOT_APPLIED"
+}

@@ -1,0 +1,201 @@
+//! Source/IR contracts; these helpers use the production compiler modules.
+mod allocator;
+mod array_repeat;
+mod diagnostic_contracts;
+mod entry_grants;
+mod function_owners;
+mod interpreter_contracts;
+mod library_demand;
+
+mod reference_capture;
+mod optimizer;
+mod panic_messages;
+mod resolver;
+mod reuse;
+mod ir_binary_admission;
+mod recheck;
+mod scalar_clone;
+mod return_contracts;
+mod source_cases;
+mod source_contracts;
+mod units;
+use crate::{embedded, frontend, source, syntax};
+
+fn source_file(path: &str, text: Option<&str>) -> source::SourceInput {
+    let text = match text {
+        Some(text) => text.to_string(),
+        None => String::from_utf8(embedded::library(path).unwrap()).unwrap(),
+    };
+    source::SourceInput {
+        path: path.to_string(),
+        text,
+    }
+}
+// Historical fixture lists predate the current canonical library modules. Complete only the
+// embedded canonical root; custom library/missing-module fixtures stay exact.
+fn complete_library(files: &mut Vec<source::SourceInput>) {
+    let canonical = source_file("$std/lib.lkj", None);
+    let mut canonical_root = false;
+    let mut index = 0usize;
+    while index < files.len() {
+        if files[index].path == canonical.path
+            && files[index].text.as_str() == canonical.text.as_str()
+        {
+            canonical_root = true;
+        }
+        index += 1;
+    }
+    if !canonical_root {
+        return;
+    }
+    let additions: Vec<String> = vec![
+        "$std/arena.lkj".to_string(),
+        "$std/process_model.lkj".to_string(),
+        "$std/http_protocol.lkj".to_string(),
+        "$std/http_policy.lkj".to_string(),
+        "$std/http_server.lkj".to_string(),
+    ];
+    for path in additions {
+        let mut present = false;
+        let mut index = 0usize;
+        while index < files.len() {
+            if files[index].path == path {
+                present = true;
+            }
+            index += 1;
+        }
+        if !present {
+            files.push(source_file(&path, None));
+        }
+    }
+}
+fn source_case_at(
+
+    name: &str,
+    root: &str,
+    library: Option<&str>,
+    mut files: Vec<source::SourceInput>,
+    expected: &str,
+    expected_path: &str,
+    expected_line: usize,
+    expected_column: usize,
+) -> Result<(), String> {
+    complete_library(&mut files);
+    let library = library.map(|path| path.to_string());
+    let result = frontend::check_bundle(&source::SourceBundle {
+        root: root.to_string(),
+        library,
+        files,
+    });
+    match result {
+        Ok(_) => {
+            if expected.is_empty() {
+                Ok(())
+            } else {
+                Err(format!("{name}: expected {expected}, accepted"))
+            }
+        }
+        Err(error) => {
+            if error.code == expected {
+                if (!expected_path.is_empty() && error.path != expected_path)
+                    || (expected_line != 0 && error.line != expected_line)
+                    || (expected_column != 0 && error.column != expected_column)
+                {
+                    Err(format!(
+                        "{name}: expected diagnostic {expected_path}:{expected_line}:{expected_column}, got {}:{}:{}",
+                        error.path, error.line, error.column
+                    ))
+                } else {
+                    Ok(())
+                }
+            } else {
+                Err(format!(
+                    "{name}: expected {expected}, got {}: {}",
+                    error.code, error.message
+                ))
+            }
+        }
+    }
+}
+fn parse_case(name: &str, text: &str, expected: &str) -> Result<(), String> {
+    match syntax::parse(text) {
+        Ok(_) => Err(format!("{name}: expected {expected}, parser accepted")),
+        Err(error) => {
+            if error.code == expected {
+                Ok(())
+            } else {
+                Err(format!("{name}: expected {expected}, got {}", error.code))
+            }
+        }
+    }
+}
+fn record(result: Result<(), String>, errors: &mut Vec<String>) {
+    if let Err(error) = result {
+        errors.push(error);
+    }
+}
+pub fn sources(shard: usize, workers: usize) -> (usize, Vec<String>) {
+    let mut errors = Vec::new();
+    let count = source_cases::run(shard, workers, &mut errors);
+    (count, errors)
+}
+pub fn core() -> usize {
+    let mut count = units::run();
+    count += diagnostic_contracts::run();
+    count += function_owners::run();
+    count += library_demand::run();
+    count += reference_capture::run();
+    count += source_contracts::run();
+    count += return_contracts::run();
+    count += array_repeat::run();
+    count += scalar_clone::run();
+    count += interpreter_contracts::run();
+    count += entry_grants::run();
+    count += allocator::run();
+    count += resolver::run();
+    count += reuse::run();
+    count += ir_binary_admission::run();
+    count += recheck::run();
+    crate::interpreter::assert_reference_reuse();
+    count += 1;
+    count
+}
+pub fn closed() -> (usize, Vec<String>) {
+    let (count, errors) = sources(0usize, 1usize);
+    (count + core(), errors)
+}
+pub fn live(world: &mut World, trace: bool) -> usize {
+    allocator::observe(world) + optimizer::run(world, trace) + panic_messages::run(world, trace)
+}
+
+fn source_case(
+    name: &str,
+    root: &str,
+    library: Option<&str>,
+    files: Vec<source::SourceInput>,
+    expected: &str,
+) -> Result<(), String> {
+    source_case_at(name, root, library, files, expected, "", 0, 0)
+}
+fn derived_source_case(
+    name: &str,
+    root: &str,
+    library: Option<&str>,
+    files: Vec<source::SourceInput>,
+    expected: &str,
+) -> Result<(), String> {
+    let mut expected_line = 1usize;
+    for file in &files {
+        if file.path == root {
+            let mut line_number = 1usize;
+            for line in file.text.as_str().lines() {
+                if line.contains("fn leak") || line.contains("fn invalid") {
+                    expected_line = line_number;
+                    break;
+                }
+                line_number += 1;
+            }
+        }
+    }
+    source_case_at(name, root, library, files, expected, root, expected_line, 0)
+}
