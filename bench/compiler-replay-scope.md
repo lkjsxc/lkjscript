@@ -65,8 +65,8 @@ The directly built candidate is 31,736,147 bytes, SHA-256
 `3c802509e8c37bc4016e32615b6266ab9be635a157fd5819cd07e33bd5149dd3`.
 Its build took **33.50 s (load 3.72 → 3.66)**, 32.64 user seconds,
 0.22 system seconds and peak RSS 1,091,504 KiB. This focused candidate was
-compiled with absolute source/library diagnostic paths; a later canonical
-bootstrap is a separate producer and will be recorded with the full gate.
+compiled with absolute source/library diagnostic paths; the canonical
+bootstrap below is a separate producer recorded with the full gate.
 
 The extended existing `tools/replay-test.sh` executes 17 compiler commands.
 Its nine original observations retain checked target equality, multiple
@@ -131,5 +131,36 @@ Seed-only commit `8007e47d` stores that exact canonical producer with
 `gzip -n -9`: 6,367,232 compressed bytes, SHA-256
 `13c601190b8bb3926a03d2b1bd40f875c357b68d3376f073f3db74e3f569faca`.
 Independent repeated compression compares exactly, and decompression matches
-the gated executable. New scope CI and any later historical replay outcomes
-remain separate acceptance steps.
+the gated executable. Scope CI is recorded below; later historical replay
+outcomes remain a separate acceptance step.
+
+## Accepted CI
+
+[CI43831972036](https://github.com/lkjsxc/lkjscript/actions/runs/43831972036)
+passes both jobs at `e7afd10853ac737973db4d8f4b23e9eb670414ad`.
+The source/library trees are exactly the locally gated trees:
+`0ef9f66881dfaf2ee0f00bc945b5e664bf6d1a49` and
+`25bdb8ff8567b941790d3951c78e896b23e26e8e`.
+
+The native job confirms an empty store and absence of cargo, rustc and Node,
+then runs four workers. It passes in **1,156.617 s (load 0.53 → 2.42)**,
+with 5,448 fresh case requests and zero reuse. Bootstrap takes
+**59.778 s (0.53 → 0.83)**; the extended history replay suite takes
+**7.329 s (4.24 → 4.28)**. The required 128-mutant gate also passes.
+
+The optional Rust witness passes 276 value/output cases and 344 verdicts,
+compares its emitted compiler byte-for-byte with the native compiler, and
+passes both Directory boundary suites on all three routes. Both logs were
+downloaded and inspected after the run completed; a prior attempt to download
+the already completed witness job while the overall run was active returned
+GitHub's unavailable-log diagnostic and supplied no evidence.
+
+| Retained CI log | SHA-256 |
+| --- | --- |
+| [Native](compiler-replay-scope-data/ci-gate.log) | `418f72555ed64d50e1a28cc31425de10255c18cc2853c0f8f70ebbb2d8e1847e` |
+| [Witness](compiler-replay-scope-data/ci-witness.log) | `ef7c94e56957afa101b02b242f8b1f106221f9406d19aa70579c6b835a404088` |
+
+After this acceptance and an independent prelaunch review, the separate fixed
+six-case campaign was released with explicit desired source roots. Its actual
+results must supply any increase above the existing 24 strict proofs; this CI
+result supplies no historical replay proof by itself.

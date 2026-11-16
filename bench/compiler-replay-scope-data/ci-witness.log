@@ -1,0 +1,613 @@
+witness	Set up job	﻿2026-11-16T08:31:56.8813524Z Current runner version: '2.338.2'
+witness	Set up job	2026-11-16T08:31:56.8835296Z ##[group]Runner Image Provisioner
+witness	Set up job	2026-11-16T08:31:56.8836356Z Hosted Compute Agent
+witness	Set up job	2026-11-16T08:31:56.8836844Z Version: 20261103.629
+witness	Set up job	2026-11-16T08:31:56.8837393Z Commit: 15dbd9ccb5dbf34fae002b6ed1a2670f52df37bc
+witness	Set up job	2026-11-16T08:31:56.8838025Z Build Date: 2026-11-03T17:26:59Z
+witness	Set up job	2026-11-16T08:31:56.8838575Z Worker ID: {273b5794-dffa-48d5-904c-866a6eb9b2dd}
+witness	Set up job	2026-11-16T08:31:56.8839262Z Region: eastus2
+witness	Set up job	2026-11-16T08:31:56.8839711Z Cloud: Azure
+witness	Set up job	2026-11-16T08:31:56.8840273Z ##[endgroup]
+witness	Set up job	2026-11-16T08:31:56.8841917Z ##[group]Operating System
+witness	Set up job	2026-11-16T08:31:56.8842680Z Ubuntu
+witness	Set up job	2026-11-16T08:31:56.8843344Z 26.04.1
+witness	Set up job	2026-11-16T08:31:56.8844085Z LTS
+witness	Set up job	2026-11-16T08:31:56.8844592Z ##[endgroup]
+witness	Set up job	2026-11-16T08:31:56.8845143Z ##[group]Runner Image
+witness	Set up job	2026-11-16T08:31:56.8845642Z Image: ubuntu-26.04
+witness	Set up job	2026-11-16T08:31:56.8846151Z Version: 20261111.196.1
+witness	Set up job	2026-11-16T08:31:56.8847050Z Included Software: https://github.com/actions/runner-images/blob/ubuntu26/20261111.196/images/ubuntu/Ubuntu2604-Readme.md
+witness	Set up job	2026-11-16T08:31:56.8848553Z Image Release: https://github.com/actions/runner-images/releases/tag/ubuntu26%2F20261111.196
+witness	Set up job	2026-11-16T08:31:56.8849339Z ##[endgroup]
+witness	Set up job	2026-11-16T08:31:56.8850354Z ##[group]GITHUB_TOKEN Permissions
+witness	Set up job	2026-11-16T08:31:56.8852251Z Contents: read
+witness	Set up job	2026-11-16T08:31:56.8852803Z Metadata: read
+witness	Set up job	2026-11-16T08:31:56.8853329Z Packages: read
+witness	Set up job	2026-11-16T08:31:56.8854035Z ##[endgroup]
+witness	Set up job	2026-11-16T08:31:56.8856259Z Secret source: Actions
+witness	Set up job	2026-11-16T08:31:56.8857023Z Cache mode: write
+witness	Set up job	2026-11-16T08:31:56.8857875Z Prepare workflow directory
+witness	Set up job	2026-11-16T08:31:56.9165180Z Prepare all required actions
+witness	Set up job	2026-11-16T08:31:56.9202940Z Getting action download info
+witness	Set up job	2026-11-16T08:31:57.1200646Z Download action repository 'actions/checkout@v4' (SHA:11d5960a326750d5838078e36cf38b85af677262)
+witness	Set up job	2026-11-16T08:31:57.2438041Z Download action repository 'dtolnay/rust-toolchain@stable' (SHA:39008827e6b4319a349e9a42dfc90579dd25f1ca)
+witness	Set up job	2026-11-16T08:31:57.4480782Z Complete job name: witness
+witness	Run actions/checkout@v4	﻿2026-11-16T08:31:57.5227066Z ##[group]Run actions/checkout@v4
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5227757Z with:
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5228132Z   repository: lkjsxc/lkjscript
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5231238Z   token: ***
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5231610Z   ssh-strict: true
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5231983Z   ssh-user: git
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5232358Z   persist-credentials: true
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5232811Z   clean: true
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5233178Z   sparse-checkout-cone-mode: true
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5233607Z   fetch-depth: 1
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5234193Z   fetch-tags: false
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5234567Z   show-progress: true
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5234936Z   lfs: false
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5235275Z   submodules: false
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5235659Z   set-safe-directory: true
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5236071Z   allow-unsafe-pr-checkout: false
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5236667Z env:
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5237007Z   CARGO_BUILD_JOBS: 1
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5237411Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.5237858Z ##[endgroup]
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.7944909Z Syncing repository: lkjsxc/lkjscript
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.7947580Z ##[group]Getting Git version info
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.7948355Z Working directory is '/home/runner/work/lkjscript/lkjscript'
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.7949644Z [command]/usr/bin/git version
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.7955401Z git version 2.56.1
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.7970525Z ##[endgroup]
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.7981837Z Temporarily overriding HOME='/home/runner/work/_temp/4c204e33-4795-4bad-b5f6-9588bebb226c' before making global git config changes
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.7985727Z Adding repository directory to the temporary git global config as a safe directory
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.7986905Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/lkjscript/lkjscript
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8043194Z Deleting the contents of '/home/runner/work/lkjscript/lkjscript'
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8046829Z ##[group]Initializing the repository
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8051371Z [command]/usr/bin/git init /home/runner/work/lkjscript/lkjscript
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8164920Z hint: Using 'master' as the name for the initial branch. This default branch name
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8166341Z hint: will change to "main" in Git 3.0. To configure the initial branch name
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8167649Z hint: to use in all of your new repositories, which will suppress this warning,
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8168410Z hint: call:
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8168861Z hint:
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8169340Z hint: 	git config --global init.defaultBranch <name>
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8169889Z hint:
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8170386Z hint: Names commonly chosen instead of 'master' are 'main', 'trunk' and
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8171333Z hint: 'development'. The just-created branch can be renamed via this command:
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8172080Z hint:
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8172456Z hint: 	git branch -m <name>
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8172875Z hint:
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8173415Z hint: Disable this message with "git config set advice.defaultBranchName false"
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8176503Z Initialized empty Git repository in /home/runner/work/lkjscript/lkjscript/.git/
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8187206Z [command]/usr/bin/git remote add origin https://github.com/lkjsxc/lkjscript
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8236735Z ##[endgroup]
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8237456Z ##[group]Disabling automatic garbage collection
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8240428Z [command]/usr/bin/git config --local gc.auto 0
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8270466Z ##[endgroup]
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8271122Z ##[group]Setting up auth
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8277391Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8306654Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8738925Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.8768482Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.9035108Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.9055430Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.9312112Z [command]/usr/bin/git config --local http.https://github.com/.extraheader AUTHORIZATION: basic ***
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.9363864Z ##[endgroup]
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.9364632Z ##[group]Fetching the repository
+witness	Run actions/checkout@v4	2026-11-16T08:31:57.9371344Z [command]/usr/bin/git -c protocol.version=2 fetch --no-tags --prune --no-recurse-submodules --depth=1 origin +e7afd10853ac737973db4d8f4b23e9eb670414ad:refs/remotes/origin/main
+witness	Run actions/checkout@v4	2026-11-16T08:31:58.5632580Z From https://github.com/lkjsxc/lkjscript
+witness	Run actions/checkout@v4	2026-11-16T08:31:58.5634296Z  * [new ref]         e7afd10853ac737973db4d8f4b23e9eb670414ad -> origin/main
+witness	Run actions/checkout@v4	2026-11-16T08:31:58.5639355Z ##[endgroup]
+witness	Run actions/checkout@v4	2026-11-16T08:31:58.5640398Z ##[group]Determining the checkout info
+witness	Run actions/checkout@v4	2026-11-16T08:31:58.5641673Z ##[endgroup]
+witness	Run actions/checkout@v4	2026-11-16T08:31:58.5646637Z [command]/usr/bin/git sparse-checkout disable
+witness	Run actions/checkout@v4	2026-11-16T08:31:58.5694517Z [command]/usr/bin/git config --local --unset-all extensions.worktreeConfig
+witness	Run actions/checkout@v4	2026-11-16T08:31:58.5720002Z ##[group]Checking out the ref
+witness	Run actions/checkout@v4	2026-11-16T08:31:58.5729055Z [command]/usr/bin/git checkout --progress --force -B main refs/remotes/origin/main
+witness	Run actions/checkout@v4	2026-11-16T08:31:58.7347612Z Switched to a new branch 'main'
+witness	Run actions/checkout@v4	2026-11-16T08:31:58.7351655Z branch 'main' set up to track 'origin/main'.
+witness	Run actions/checkout@v4	2026-11-16T08:31:58.7365226Z ##[endgroup]
+witness	Run actions/checkout@v4	2026-11-16T08:31:58.7406589Z [command]/usr/bin/git log -1 --format=%H
+witness	Run actions/checkout@v4	2026-11-16T08:31:58.7427881Z e7afd10853ac737973db4d8f4b23e9eb670414ad
+witness	Run dtolnay/rust-toolchain@stable	﻿2026-11-16T08:31:58.7981887Z ##[group]Run dtolnay/rust-toolchain@stable
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.7982969Z with:
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.7983873Z   toolchain: stable
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.7984667Z env:
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.7985403Z   CARGO_BUILD_JOBS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.7986475Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8055039Z ##[endgroup]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8128028Z ##[start-action display=Parse toolchain version;id=__dtolnay_rust-toolchain.parse]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8205881Z ##[group]Run if [[ -z $toolchain ]]; then
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8206976Z [36;1mif [[ -z $toolchain ]]; then[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8208588Z [36;1m  # GitHub does not enforce `required: true` inputs itself. https://github.com/actions/runner/issues/1070[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8210283Z [36;1m  echo "'toolchain' is a required input" >&2[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8211297Z [36;1m  exit 1[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8212378Z [36;1melif [[ $toolchain =~ ^stable' '[0-9]+' '(year|month|week|day)s?' 'ago$ ]]; then[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8213698Z [36;1m  if [[ Linux == macOS ]]; then[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8215537Z [36;1m    echo "toolchain=1.$((($(date -v-$(sed 's/stable \([0-9]*\) \(.\).*/\1\2/' <<< $toolchain) +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8217189Z [36;1m  else[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8218476Z [36;1m    echo "toolchain=1.$((($(date --date "${toolchain#stable }" +%s)/60/60/24-16569)/7/6))" >> $GITHUB_OUTPUT[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8219948Z [36;1m  fi[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8220940Z [36;1melif [[ $toolchain =~ ^stable' 'minus' '[0-9]+' 'releases?$ ]]; then[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8222597Z [36;1m  echo "toolchain=1.$((($(date +%s)/60/60/24-16569)/7/6-${toolchain//[^0-9]/}))" >> $GITHUB_OUTPUT[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8224136Z [36;1melif [[ $toolchain =~ ^1\.[0-9]+$ ]]; then[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8225773Z [36;1m  echo "toolchain=1.$((i=${toolchain#1.}, c=($(date +%s)/60/60/24-16569)/7/6, i+9*i*(10*i<=c)+90*i*(100*i<=c)))" >> $GITHUB_OUTPUT[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8227338Z [36;1melse[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8228063Z [36;1m  delimiter=EOF[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8229147Z [36;1m  while [[ $toolchain == *$delimiter* ]]; do delimiter+=_; done[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8230751Z [36;1m  printf 'toolchain<<%s\n%s\n%s\n' "$delimiter" "$toolchain" "$delimiter" >> $GITHUB_OUTPUT[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8232130Z [36;1mfi[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8281485Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8282600Z env:
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8283283Z   CARGO_BUILD_JOBS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8284245Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8285187Z   toolchain: stable
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8285924Z ##[endgroup]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8409964Z ##[end-action id=__dtolnay_rust-toolchain.parse;outcome=success;conclusion=success;duration_ms=27]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8418017Z ##[start-action display=Set $CARGO_HOME;id=__dtolnay_rust-toolchain.__run]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8466526Z ##[group]Run echo CARGO_HOME=${CARGO_HOME:-"$HOME/.cargo"} >> $GITHUB_ENV
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8468012Z [36;1mecho CARGO_HOME=${CARGO_HOME:-"$HOME/.cargo"} >> $GITHUB_ENV[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8512625Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8513928Z env:
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8514648Z   CARGO_BUILD_JOBS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8515504Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8516435Z ##[endgroup]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8598901Z ##[end-action id=__dtolnay_rust-toolchain.__run;outcome=success;conclusion=success;duration_ms=17]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8604660Z ##[start-action display=Install rustup if needed;id=__dtolnay_rust-toolchain.__run_2]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8651032Z ##[group]Run if ! command -v rustup &>/dev/null; then
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8652197Z [36;1mif ! command -v rustup &>/dev/null; then[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8654645Z [36;1m  curl --proto '=https' --tlsv1.2 --retry 10 --retry-connrefused --location --silent --show-error --fail https://sh.rustup.rs | sh -s -- --default-toolchain none -y[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8656894Z [36;1m  echo "$CARGO_HOME/bin" >> $GITHUB_PATH[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8658107Z [36;1mfi[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8700043Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8701139Z env:
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8701826Z   CARGO_BUILD_JOBS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8702799Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8703959Z   CARGO_HOME: /home/runner/.cargo
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8704871Z ##[endgroup]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8784632Z ##[end-action id=__dtolnay_rust-toolchain.__run_2;outcome=success;conclusion=success;duration_ms=17]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8790291Z ##[start-action display=Install rustup if needed on windows;id=__dtolnay_rust-toolchain.__run_3]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8803596Z ##[end-action id=__dtolnay_rust-toolchain.__run_3;outcome=skipped;conclusion=skipped;duration_ms=0]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8819947Z ##[start-action display=rustup toolchain install stable;id=__dtolnay_rust-toolchain.__run_4]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8857026Z ##[group]Run set -f  # split targets and components on commas and whitespace, without glob expansion
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8859054Z [36;1mset -f  # split targets and components on commas and whitespace, without glob expansion[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8860494Z [36;1mflags=()[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8861446Z [36;1mfor t in ${targets//,/ }; do flags+=(--target "$t"); done[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8862796Z [36;1mfor c in ${components//,/ }; do flags+=(--component "$c"); done[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8864544Z [36;1mif [[ $toolchain == nightly && -n $components ]]; then flags+=(--allow-downgrade); fi[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8865898Z [36;1mlog=$(mktemp)[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8866697Z [36;1mtrap 'rm -f "$log"' EXIT[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8867588Z [36;1mfor attempt in 1 2 3 4 5; do[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8869302Z [36;1m  if rustup toolchain install "$toolchain" "${flags[@]}" --profile minimal --no-self-update --force-non-host 2>&1 | tee "$log"; then[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8871055Z [36;1m    break[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8871784Z [36;1m  else[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8872493Z [36;1m    status=$?[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8873258Z [36;1m  fi[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8874385Z [36;1m  if [[ $attempt == 5 ]] || ! grep -Fq 'checksum failed for ' "$log" \[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8876073Z [36;1m      || ! grep -Fq 'this is likely due to an ongoing update of the official release server' "$log"; then[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8877533Z [36;1m    exit "$status"[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8878334Z [36;1m  fi[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8879471Z [36;1m  echo "Retrying rustup toolchain install in 30 seconds (retry $attempt of 4)" >&2[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8880831Z [36;1m  sleep 30[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8881567Z [36;1mdone[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8924956Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8926049Z env:
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8926712Z   CARGO_BUILD_JOBS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8927513Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8928457Z   CARGO_HOME: /home/runner/.cargo
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8929313Z   toolchain: stable
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8930035Z   targets: 
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8930724Z   components: 
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8931454Z   RUSTUP_PERMIT_COPY_RENAME: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:58.8932276Z ##[endgroup]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:59.1782185Z info: syncing channel updates for stable-x86_64-unknown-linux-gnu
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:59.3761457Z info: latest update on 2026-11-12 for version 1.100.0 (0ef1bc386 2026-11-09)
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:59.3880326Z info: removing previous version of component rustfmt
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:59.3895930Z info: removing previous version of component clippy
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:59.3905647Z info: removing previous version of component cargo
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:59.3944562Z info: removing previous version of component rust-std
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:59.3982548Z info: removing previous version of component rustc
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:31:59.4024538Z info: downloading 5 components
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8203218Z 
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8264902Z   stable-x86_64-unknown-linux-gnu updated - rustc 1.100.0 (0ef1bc386 2026-11-09) (from rustc 1.99.1 (58cf8f9c3 2026-10-13))
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8265380Z 
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8492076Z ##[end-action id=__dtolnay_rust-toolchain.__run_4;outcome=success;conclusion=success;duration_ms=7967]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8501009Z ##[start-action display=rustup default stable;id=__dtolnay_rust-toolchain.__run_5]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8520611Z ##[group]Run rustup default "$toolchain" --force-non-host
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8520944Z [36;1mrustup default "$toolchain" --force-non-host[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8566776Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8567062Z env:
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8567226Z   CARGO_BUILD_JOBS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8567423Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8567653Z   CARGO_HOME: /home/runner/.cargo
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8567867Z   toolchain: stable
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8568035Z ##[endgroup]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8664226Z info: using existing install for stable-x86_64-unknown-linux-gnu
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8669895Z info: default toolchain set to stable-x86_64-unknown-linux-gnu
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8670159Z 
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8726157Z   stable-x86_64-unknown-linux-gnu unchanged - rustc 1.100.0 (0ef1bc386 2026-11-09)
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8726600Z 
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8741996Z ##[end-action id=__dtolnay_rust-toolchain.__run_5;outcome=success;conclusion=success;duration_ms=24]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8745644Z ##[start-action display=Create cachekey;id=__dtolnay_rust-toolchain.rustc-version]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8763283Z ##[group]Run DATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8764195Z [36;1mDATE=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-date: \(20[0-9][0-9]\)-\([01][0-9]\)-\([0-3][0-9]\)$/\1\2\3/p')[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8764735Z [36;1mHASH=$(rustc +"$toolchain" --version --verbose | sed -ne 's/^commit-hash: //p')[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8765156Z [36;1mecho "cachekey=$(echo $DATE$HASH | head -c12)" >> $GITHUB_OUTPUT[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8808267Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8808562Z env:
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8808730Z   CARGO_BUILD_JOBS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8808930Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8809162Z   CARGO_HOME: /home/runner/.cargo
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8809380Z   toolchain: stable
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.8809555Z ##[endgroup]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9106510Z ##[end-action id=__dtolnay_rust-toolchain.rustc-version;outcome=success;conclusion=success;duration_ms=36]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9108978Z ##[start-action display=Disable incremental compilation;id=__dtolnay_rust-toolchain.__run_6]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9127791Z ##[group]Run if [ -z "${CARGO_INCREMENTAL+set}" ]; then
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9128093Z [36;1mif [ -z "${CARGO_INCREMENTAL+set}" ]; then[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9128356Z [36;1m  echo CARGO_INCREMENTAL=0 >> $GITHUB_ENV[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9128581Z [36;1mfi[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9175152Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9175427Z env:
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9175614Z   CARGO_BUILD_JOBS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9175807Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9176030Z   CARGO_HOME: /home/runner/.cargo
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9176236Z ##[endgroup]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9241025Z ##[end-action id=__dtolnay_rust-toolchain.__run_6;outcome=success;conclusion=success;duration_ms=13]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9242896Z ##[start-action display=Enable colors in Cargo output;id=__dtolnay_rust-toolchain.__run_7]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9279259Z ##[group]Run if [ -z "${CARGO_TERM_COLOR+set}" ]; then
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9279572Z [36;1mif [ -z "${CARGO_TERM_COLOR+set}" ]; then[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9279847Z [36;1m  echo CARGO_TERM_COLOR=always >> $GITHUB_ENV[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9280081Z [36;1mfi[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9321297Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9321568Z env:
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9321731Z   CARGO_BUILD_JOBS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9321941Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9322319Z   CARGO_HOME: /home/runner/.cargo
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9322529Z   CARGO_INCREMENTAL: 0
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9322706Z ##[endgroup]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9386024Z ##[end-action id=__dtolnay_rust-toolchain.__run_7;outcome=success;conclusion=success;duration_ms=14]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9389212Z ##[start-action display=Enable Cargo sparse registry;id=__dtolnay_rust-toolchain.__run_8]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9407521Z ##[group]Run # implemented in 1.66, stabilized in 1.68, made default in 1.70
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9407957Z [36;1m# implemented in 1.66, stabilized in 1.68, made default in 1.70[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9408513Z [36;1mif [ -z "${CARGO_REGISTRIES_CRATES_IO_PROTOCOL+set}" -o -f "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol ]; then[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9409077Z [36;1m  if rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[89]\.'; then[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9409522Z [36;1m    touch "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9409951Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=sparse >> $GITHUB_ENV[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9410345Z [36;1m  elif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.6[67]\.'; then[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9410810Z [36;1m    touch "/home/runner/work/_temp"/.implicit_cargo_registries_crates_io_protocol || true[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9411208Z [36;1m    echo CARGO_REGISTRIES_CRATES_IO_PROTOCOL=git >> $GITHUB_ENV[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9411481Z [36;1m  fi[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9411642Z [36;1mfi[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9451571Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9451840Z env:
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9452000Z   CARGO_BUILD_JOBS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9452199Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9452430Z   CARGO_HOME: /home/runner/.cargo
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9452648Z   CARGO_INCREMENTAL: 0
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9452831Z   CARGO_TERM_COLOR: always
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9453026Z   toolchain: stable
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9453204Z ##[endgroup]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9716658Z ##[end-action id=__dtolnay_rust-toolchain.__run_8;outcome=success;conclusion=success;duration_ms=32]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9720443Z ##[start-action display=Work around spurious network errors in curl 8.0;id=__dtolnay_rust-toolchain.__run_9]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9738640Z ##[group]Run # https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9739227Z [36;1m# https://rust-lang.zulipchat.com/#narrow/stream/246057-t-cargo/topic/timeout.20investigation[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9739739Z [36;1mif rustc +"$toolchain" --version --verbose | grep -q '^release: 1\.7[01]\.'; then[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9740195Z [36;1m  echo CARGO_HTTP_MULTIPLEXING=false >> $GITHUB_ENV[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9740441Z [36;1mfi[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9787415Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9787697Z env:
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9787862Z   CARGO_BUILD_JOBS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9788086Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9788320Z   CARGO_HOME: /home/runner/.cargo
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9788531Z   CARGO_INCREMENTAL: 0
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9788711Z   CARGO_TERM_COLOR: always
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9788913Z   toolchain: stable
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9789083Z ##[endgroup]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9958348Z ##[end-action id=__dtolnay_rust-toolchain.__run_9;outcome=success;conclusion=success;duration_ms=23]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9962715Z ##[start-action display=rustc +stable --version --verbose;id=__dtolnay_rust-toolchain.__run_10]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9980645Z ##[group]Run rustc +"$toolchain" --version --verbose
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:06.9980993Z [36;1mrustc +"$toolchain" --version --verbose[0m
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:07.0026431Z shell: /usr/bin/bash --noprofile --norc -e -o pipefail {0}
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:07.0026711Z env:
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:07.0026871Z   CARGO_BUILD_JOBS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:07.0027070Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:07.0027295Z   CARGO_HOME: /home/runner/.cargo
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:07.0027678Z   CARGO_INCREMENTAL: 0
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:07.0027861Z   CARGO_TERM_COLOR: always
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:07.0028048Z   toolchain: stable
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:07.0028219Z ##[endgroup]
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:07.0173532Z rustc 1.100.0 (0ef1bc386 2026-11-09)
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:07.0174029Z binary: rustc
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:07.0174337Z commit-hash: 0ef1bc386059596dada8fb65b50425aab2ea637a
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:07.0174713Z commit-date: 2026-11-09
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:07.0174996Z host: x86_64-unknown-linux-gnu
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:07.0175282Z release: 1.100.0
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:07.0176707Z LLVM version: 23.1.5
+witness	Run dtolnay/rust-toolchain@stable	2026-11-16T08:32:07.0188386Z ##[end-action id=__dtolnay_rust-toolchain.__run_10;outcome=success;conclusion=success;duration_ms=22]
+witness	Run sh tools/bootstrap.sh	﻿2026-11-16T08:32:07.0239857Z ##[group]Run sh tools/bootstrap.sh
+witness	Run sh tools/bootstrap.sh	2026-11-16T08:32:07.0240150Z [36;1msh tools/bootstrap.sh[0m
+witness	Run sh tools/bootstrap.sh	2026-11-16T08:32:07.0285087Z shell: /usr/bin/bash -e {0}
+witness	Run sh tools/bootstrap.sh	2026-11-16T08:32:07.0285319Z env:
+witness	Run sh tools/bootstrap.sh	2026-11-16T08:32:07.0285491Z   CARGO_BUILD_JOBS: 1
+witness	Run sh tools/bootstrap.sh	2026-11-16T08:32:07.0285701Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+witness	Run sh tools/bootstrap.sh	2026-11-16T08:32:07.0285939Z   CARGO_HOME: /home/runner/.cargo
+witness	Run sh tools/bootstrap.sh	2026-11-16T08:32:07.0286161Z   CARGO_INCREMENTAL: 0
+witness	Run sh tools/bootstrap.sh	2026-11-16T08:32:07.0286366Z   CARGO_TERM_COLOR: always
+witness	Run sh tools/bootstrap.sh	2026-11-16T08:32:07.0286583Z ##[endgroup]
+witness	Run sh tools/bootstrap.sh	2026-11-16T08:33:06.5073131Z ok bootstrap
+witness	Run bash witness/check.sh	﻿2026-11-16T08:33:06.5150119Z ##[group]Run bash witness/check.sh
+witness	Run bash witness/check.sh	2026-11-16T08:33:06.5150387Z [36;1mbash witness/check.sh[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:06.5193080Z shell: /usr/bin/bash -e {0}
+witness	Run bash witness/check.sh	2026-11-16T08:33:06.5193291Z env:
+witness	Run bash witness/check.sh	2026-11-16T08:33:06.5193460Z   CARGO_BUILD_JOBS: 1
+witness	Run bash witness/check.sh	2026-11-16T08:33:06.5193663Z   CARGO_PROFILE_RELEASE_CODEGEN_UNITS: 1
+witness	Run bash witness/check.sh	2026-11-16T08:33:06.5193986Z   CARGO_HOME: /home/runner/.cargo
+witness	Run bash witness/check.sh	2026-11-16T08:33:06.5194199Z   CARGO_INCREMENTAL: 0
+witness	Run bash witness/check.sh	2026-11-16T08:33:06.5194384Z   CARGO_TERM_COLOR: always
+witness	Run bash witness/check.sh	2026-11-16T08:33:06.5194572Z ##[endgroup]
+witness	Run bash witness/check.sh	2026-11-16T08:33:09.7922998Z [1m[33mwarning[0m[1m: unused variable: `fd`[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:09.7925221Z   [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/native/diagnostics.rs:25:44
+witness	Run bash witness/check.sh	2026-11-16T08:33:09.7926070Z    [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:09.7926771Z [1m[94m25[0m [1m[94m|[0m fn literal(a: &mut Assembler, p: Platform, fd: u32, value: &str) {
+witness	Run bash witness/check.sh	2026-11-16T08:33:09.7927646Z    [1m[94m|[0m                                            [1m[33m^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_fd`[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:09.7928121Z    [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:09.7928460Z    [1m[94m= [0m[1mnote[0m: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+witness	Run bash witness/check.sh	2026-11-16T08:33:09.7928742Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1002142Z [1m[33mwarning[0m[1m: unused variable: `index`[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1003938Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/structure_refactor.rs:323:18
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1006483Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1007062Z [1m[94m323[0m [1m[94m|[0m             for (index, parameter) in parameters.iter().enumerate() {
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1007943Z     [1m[94m|[0m                  [1m[33m^^^^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_index`[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1008474Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1008770Z [1m[33mwarning[0m[1m: value assigned to `arguments` is never read[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1009834Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/structure_refactor.rs:297:45
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1010672Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1015365Z [1m[94m297[0m [1m[94m|[0m             let mut arguments: Vec<usize> = Vec::new(); let mut head = String::new();
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1015990Z     [1m[94m|[0m                                             [1m[33m^^^^^^^^^^[0m [1m[33mthis value is reassigned later and never used[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1016373Z [1m[94m...[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1016942Z [1m[94m300[0m [1m[94m|[0m                 a::Expr::Call { callee, args } => { head = raw(&caller, caller.tree.exprs[*callee].span)?; arguments = args.clone(); }
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1017739Z     [1m[94m|[0m                                                                                                            [1m[94m---------[0m [1m[94m`arguments` is overwritten here before the previous value is read[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1019030Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1019384Z     [1m[94m= [0m[1mnote[0m: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1019649Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1019828Z [1m[33mwarning[0m[1m: value assigned to `head` is never read[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1020477Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/structure_refactor.rs:297:72
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1021018Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1021432Z [1m[94m297[0m [1m[94m|[0m             let mut arguments: Vec<usize> = Vec::new(); let mut head = String::new();
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1022015Z     [1m[94m|[0m                                                                        [1m[33m^^^^^^^^^^^^^[0m [1m[33mthis value is reassigned later and never used[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1022410Z [1m[94m...[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1023118Z [1m[94m300[0m [1m[94m|[0m                 a::Expr::Call { callee, args } => { head = raw(&caller, caller.tree.exprs[*callee].span)?; arguments = args.clone(); }
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1024008Z     [1m[94m|[0m                                                     [1m[94m----[0m [1m[94m`head` is overwritten here before the previous value is read[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1024329Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1184393Z [1m[33mwarning[0m[1m: unused variable: `begin`[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1185455Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/structure_refactor.rs:546:38
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1186317Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1186989Z [1m[94m546[0m [1m[94m|[0m                         if let Some((begin, end)) = label(&unit, node.span, unit.tree.exprs[*value].span, field) {
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1187705Z     [1m[94m|[0m                                      [1m[33m^^^^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_begin`[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1188039Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1188190Z [1m[33mwarning[0m[1m: unused variable: `end`[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1188798Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/structure_refactor.rs:546:45
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1189305Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1189721Z [1m[94m546[0m [1m[94m|[0m                         if let Some((begin, end)) = label(&unit, node.span, unit.tree.exprs[*value].span, field) {
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1190375Z     [1m[94m|[0m                                             [1m[33m^^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_end`[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.1190682Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.3109650Z [1m[33mwarning[0m[1m: unused variable: `raw`[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.3110419Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/semantic.rs:432:24
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.3110953Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.3111388Z [1m[94m432[0m [1m[94m|[0m     for (index, (path, raw)) in inputs.iter().enumerate() { by_path.insert(path.clone(), index); }
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.3111988Z     [1m[94m|[0m                        [1m[33m^^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_raw`[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.3112293Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.3288371Z [1m[33mwarning[0m[1m: unused variable: `ty`[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.3289175Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/semantic_facts.rs:191:17
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.3289718Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.3290060Z [1m[94m191[0m [1m[94m|[0m     for (index, ty) in program.types.iter().enumerate() {
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.3290823Z     [1m[94m|[0m                 [1m[33m^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_ty`[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.3291127Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4704147Z [1m[33mwarning[0m[1m: variants `ForeignCommand`, `Image`, `Channel`, and `NullDevice` are never constructed[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4705486Z   [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/elaborate/capabilities.rs:21:5
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4706601Z    [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4706971Z [1m[94m 5[0m [1m[94m|[0m pub(super) enum Value {
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4707533Z    [1m[94m|[0m                 [1m[94m-----[0m [1m[94mvariants in this enum[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4707980Z [1m[94m...[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4708327Z [1m[94m21[0m [1m[94m|[0m     ForeignCommand,
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4708740Z    [1m[94m|[0m     [1m[33m^^^^^^^^^^^^^^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4709152Z [1m[94m22[0m [1m[94m|[0m     ForeignSession,
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4709587Z [1m[94m23[0m [1m[94m|[0m     Image,
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4710262Z    [1m[94m|[0m     [1m[33m^^^^^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4710627Z [1m[94m24[0m [1m[94m|[0m     Channel,
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4711004Z    [1m[94m|[0m     [1m[33m^^^^^^^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4711336Z [1m[94m...[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4711654Z [1m[94m29[0m [1m[94m|[0m     NullDevice,
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4711913Z    [1m[94m|[0m     [1m[33m^^^^^^^^^^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4712137Z    [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4712584Z    [1m[94m= [0m[1mnote[0m: `Value` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4713129Z    [1m[94m= [0m[1mnote[0m: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4713363Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4713518Z [1m[33mwarning[0m[1m: method `origin` is never used[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4714431Z   [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/elaborate/definition_types/semantic.rs:21:19
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4715029Z    [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4715264Z [1m[94m11[0m [1m[94m|[0m impl SourceBindings {
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4715633Z    [1m[94m|[0m [1m[94m-------------------[0m [1m[94mmethod in this implementation[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4715952Z [1m[94m...[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4716285Z [1m[94m21[0m [1m[94m|[0m     pub(super) fn origin(&self, name: &str) -> Option<LocalTarget> {
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4716659Z    [1m[94m|[0m                   [1m[33m^^^^^^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4716818Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4717016Z [1m[33mwarning[0m[1m: function `reference_probe_checked` is never used[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4717667Z     [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/interpreter.rs:2764:4
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4718169Z      [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4718504Z [1m[94m2764[0m [1m[94m|[0m fn reference_probe_checked<T>(value: Result<T, RunError>) -> T {
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4718882Z      [1m[94m|[0m    [1m[33m^^^^^^^^^^^^^^^^^^^^^^^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4719039Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4719232Z [1m[33mwarning[0m[1m: function `assert_reference_reuse` is never used[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4719864Z     [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/interpreter.rs:2768:15
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4720355Z      [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4720615Z [1m[94m2768[0m [1m[94m|[0m pub(crate) fn assert_reference_reuse() {
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4720951Z      [1m[94m|[0m               [1m[33m^^^^^^^^^^^^^^^^^^^^^^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4721123Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4721287Z [1m[33mwarning[0m[1m: function `write_function` is never used[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4721884Z     [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/ir_text.rs:1146:15
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4722515Z      [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4722828Z [1m[94m1146[0m [1m[94m|[0m pub(crate) fn write_function(function: &Function) -> String {
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4723192Z      [1m[94m|[0m               [1m[33m^^^^^^^^^^^^^^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4723350Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4723515Z [1m[33mwarning[0m[1m: function `cache_contracts` is never used[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4724628Z   [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/native.rs:15:15
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4725434Z    [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4726097Z [1m[94m15[0m [1m[94m|[0m pub(crate) fn cache_contracts() { cache::contracts(); }
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4726453Z    [1m[94m|[0m               [1m[33m^^^^^^^^^^^^^^^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4726619Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4726787Z [1m[33mwarning[0m[1m: function `fixture` is never used[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4727388Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/native/cache.rs:212:4
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4728086Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4728532Z [1m[94m212[0m [1m[94m|[0m fn fixture(padding: usize, existing: bool) -> (Assembler, Label, Label, BTreeMap<Vec<u8>, Label>) {
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4728963Z     [1m[94m|[0m    [1m[33m^^^^^^^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4729109Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4729280Z [1m[33mwarning[0m[1m: function `fixture_body` is never used[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4729893Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/native/cache.rs:230:4
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4730384Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4730591Z [1m[94m230[0m [1m[94m|[0m fn fixture_body(
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4730848Z     [1m[94m|[0m    [1m[33m^^^^^^^^^^^^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4730995Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4731181Z [1m[33mwarning[0m[1m: function `fixture_finish` is never used[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4731795Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/native/cache.rs:259:4
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4732301Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4732731Z [1m[94m259[0m [1m[94m|[0m fn fixture_finish(mut a: Assembler, symbols: &BTreeMap<Vec<u8>, Label>) -> (Vec<u8>, Vec<(usize, u8)>) {
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4733170Z     [1m[94m|[0m    [1m[33m^^^^^^^^^^^^^^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4733316Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4733483Z [1m[33mwarning[0m[1m: function `contracts` is never used[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4734281Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/native/cache.rs:267:15
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4734779Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4735022Z [1m[94m267[0m [1m[94m|[0m pub(super) fn contracts() {
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4735328Z     [1m[94m|[0m               [1m[33m^^^^^^^^^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4735486Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4735670Z [1m[33mwarning[0m[1m: associated function `fallible` is never used[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4736295Z   [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/native/entry.rs:48:19
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4736783Z    [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4736985Z [1m[94m47[0m [1m[94m|[0m impl Plan {
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4737337Z    [1m[94m|[0m [1m[94m---------[0m [1m[94massociated function in this implementation[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4737760Z [1m[94m48[0m [1m[94m|[0m     pub(super) fn fallible(grant: &EntryGrant) -> bool {
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4738103Z    [1m[94m|[0m                   [1m[33m^^^^^^^^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4738263Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4738403Z [1m[33mwarning[0m[1m: field `lock` is never read[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4738980Z   [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/structure_write.rs:65:5
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4739613Z    [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4739837Z [1m[94m59[0m [1m[94m|[0m pub struct Writer {
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4740156Z    [1m[94m|[0m            [1m[94m------[0m [1m[94mfield in this struct[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4740431Z [1m[94m...[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4740636Z [1m[94m65[0m [1m[94m|[0m     lock: File,
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4740884Z    [1m[94m|[0m     [1m[33m^^^^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:10.4741022Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0233901Z [1m[33mwarning[0m[1m: unnecessary parentheses around method argument[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0234934Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/host_network/broker.lkj:675:20
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0235793Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0236126Z [1m[94m675[0m [1m[94m|[0m     a.immediate(C, (!0x800u64));
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0236460Z     [1m[94m|[0m                    [1m[33m^[0m         [1m[33m^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0236758Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0237313Z     [1m[94m= [0m[1mnote[0m: `#[warn(unused_parens)]` (part of `#[warn(unused)]`) on by default
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0237695Z [1m[96mhelp[0m: remove these parentheses
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0237943Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0238258Z [1m[94m675[0m [91m- [0m    a.immediate(C, [91m([0m!0x800u64[91m)[0m);
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0238617Z [1m[94m675[0m [92m+ [0m    a.immediate(C, !0x800u64);
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0238869Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0238960Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0243325Z [1m[33mwarning[0m[1m: unnecessary parentheses around block return value[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0244493Z     [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/store.rs:1078:37
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0245316Z      [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0245756Z [1m[94m1078[0m [1m[94m|[0m         None => { *overflow = true; (!0usize) }
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0246342Z      [1m[94m|[0m                                     [1m[33m^[0m       [1m[33m^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0246774Z      [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0247370Z [1m[96mhelp[0m: remove these parentheses
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0247845Z      [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0248458Z [1m[94m1078[0m [91m- [0m        None => { *overflow = true; [91m([0m!0usize[91m)[0m }
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0249218Z [1m[94m1078[0m [92m+ [0m        None => { *overflow = true; !0usize }
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0249640Z      [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0249827Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0250914Z [1m[33mwarning[0m[1m: unnecessary parentheses around function argument[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0251819Z     [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/store.rs:1102:68
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0252433Z      [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0252962Z [1m[94m1102[0m [1m[94m|[0m     assert!(io_interval(0usize, Some(20usize), (!0usize) - 5usize, (!0usize)).is_none());
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0301979Z      [1m[94m|[0m                                                                    [1m[33m^[0m       [1m[33m^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0302455Z      [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0302748Z [1m[96mhelp[0m: remove these parentheses
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0303076Z      [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0303695Z [1m[94m1102[0m [91m- [0m    assert!(io_interval(0usize, Some(20usize), (!0usize) - 5usize, [91m([0m!0usize[91m)[0m).is_none());
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0304704Z [1m[94m1102[0m [92m+ [0m    assert!(io_interval(0usize, Some(20usize), (!0usize) - 5usize, !0usize).is_none());
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0305187Z      [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0305316Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0305580Z [1m[33mwarning[0m[1m: unnecessary parentheses around function argument[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0306515Z     [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/store.rs:1105:20
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0307734Z      [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0308277Z [1m[94m1105[0m [1m[94m|[0m     assert!(io_add((!0usize), 1usize, &mut overflow) == (!0usize) && overflow);
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0308933Z      [1m[94m|[0m                    [1m[33m^[0m       [1m[33m^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0309348Z      [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0309671Z [1m[96mhelp[0m: remove these parentheses
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0310020Z      [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0310591Z [1m[94m1105[0m [91m- [0m    assert!(io_add([91m([0m!0usize[91m)[0m, 1usize, &mut overflow) == (!0usize) && overflow);
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0311412Z [1m[94m1105[0m [92m+ [0m    assert!(io_add(!0usize, 1usize, &mut overflow) == (!0usize) && overflow);
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0311965Z      [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0312111Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0312447Z [1m[33mwarning[0m[1m: unnecessary parentheses around function argument[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0313166Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/test_generators/reduction.lkj:294:26
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0314094Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0314378Z [1m[94m294[0m [1m[94m|[0m     let mut pairs = vec![(!0usize); tokens.len()];
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0314740Z     [1m[94m|[0m                          [1m[33m^[0m       [1m[33m^[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0315005Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0315221Z [1m[96mhelp[0m: remove these parentheses
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0315466Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0315777Z [1m[94m294[0m [91m- [0m    let mut pairs = vec![[91m([0m!0usize[91m)[0m; tokens.len()];
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0316188Z [1m[94m294[0m [92m+ [0m    let mut pairs = vec![!0usize; tokens.len()];
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0316468Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.0316562Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.8306916Z [1m[33mwarning[0m[1m: unused variable: `code`[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.8308527Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/test_generators.rs:559:29
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.8309601Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.8310985Z [1m[94m559[0m [1m[94m|[0m [1m[94m...[0m   } else if let Some((code, diagnostic, message)) = driver::native_trap(path, selection.native().program(), runtime, &capture.r[1m[94m...[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.8311923Z     [1m[94m|[0m                           [1m[33m^^^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_code`[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.8312473Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.8313448Z     [1m[94m= [0m[1mnote[0m: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.8314051Z 
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.8314301Z [1m[33mwarning[0m[1m: unused variable: `message`[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.8315333Z    [1m[94m--> [0m/home/runner/work/lkjscript/lkjscript/target/witness/release/build/lkjscript/eddaccbbc58179ff/out/source/src/test_generators.rs:559:47
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.8316259Z     [1m[94m|[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.8317323Z [1m[94m559[0m [1m[94m|[0m [1m[94m...[0m   } else if let Some((code, diagnostic, message)) = driver::native_trap(path, selection.native().program(), runtime, &capture.r[1m[94m...[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.8318664Z     [1m[94m|[0m                                             [1m[33m^^^^^^^[0m [1m[33mhelp: if this is intentional, prefix it with an underscore: `_message`[0m
+witness	Run bash witness/check.sh	2026-11-16T08:33:58.8319180Z 
+witness	Run bash witness/check.sh	2026-11-16T08:34:34.1835944Z ok Rust witness: 276 values/output cases, 344 verdicts
+witness	Run bash witness/check.sh	2026-11-16T08:34:35.3904455Z ok directory rename_new native: absent success, 7 occupied destinations, public/raw basenames, UTF-8/raw bytes, regular-only read and readonly File
+witness	Run bash witness/check.sh	2026-11-16T08:34:35.4016194Z ok directory boundary: destination created at renameat2 entry was never overwritten
+witness	Run bash witness/check.sh	2026-11-16T08:34:35.4129714Z ok directory boundary: read retained inode after pathname replacement
+witness	Run bash witness/check.sh	2026-11-16T08:34:35.4265288Z ok directory rename_new native: ENOSYS/EOPNOTSUPP propagate without a replacing fallback
+witness	Run bash witness/check.sh	2026-11-16T08:34:37.0813136Z ok directory rename_new interpreter: absent success, 7 occupied destinations, public/raw basenames, UTF-8/raw bytes, regular-only read and readonly File
+witness	Run bash witness/check.sh	2026-11-16T08:34:37.5891526Z ok directory boundary: destination created at renameat2 entry was never overwritten
+witness	Run bash witness/check.sh	2026-11-16T08:34:37.9788050Z ok directory boundary: read retained inode after pathname replacement
+witness	Run bash witness/check.sh	2026-11-16T08:34:38.7200199Z ok directory rename_new interpreter: ENOSYS/EOPNOTSUPP propagate without a replacing fallback
+witness	Run bash witness/check.sh	2026-11-16T08:34:38.7495086Z ok directory rename_new witness: absent success, 7 occupied destinations, public/raw basenames, UTF-8/raw bytes, regular-only read and readonly File
+witness	Run bash witness/check.sh	2026-11-16T08:34:38.7615170Z ok directory boundary: destination created at renameat2 entry was never overwritten
+witness	Run bash witness/check.sh	2026-11-16T08:34:38.7735180Z ok directory boundary: read retained inode after pathname replacement
+witness	Run bash witness/check.sh	2026-11-16T08:34:38.7876967Z ok directory rename_new witness: ENOSYS/EOPNOTSUPP propagate without a replacing fallback
+witness	Run bash witness/check.sh	2026-11-16T08:34:38.9263996Z ok directory rename_new: independent checked-IR mutable authority, ReadDirectory refusal, arity, byte-view and result signatures
+witness	Run bash witness/check.sh	2026-11-16T08:34:38.9347272Z ok directory rename_new suite: 3 routes, 4.737 s, load 1.22 0.75 0.31 1/266 3817 -> 1.20 0.75 0.32 5/267 4002
+witness	Run bash witness/check.sh	2026-11-16T08:34:39.9266235Z ok directory identity: exact dev/ino, same-inode alias and retained parent after pathname replacement
+witness	Run bash witness/check.sh	2026-11-16T08:34:39.9379275Z ok directory identity native: lengths 0/15/17 refuse without changes; raw/helper metadata EIO preserves caller bytes
+witness	Run bash witness/check.sh	2026-11-16T08:34:40.1910485Z ok directory identity: exact dev/ino, same-inode alias and retained parent after pathname replacement
+witness	Run bash witness/check.sh	2026-11-16T08:34:40.4610651Z ok directory identity interpreter: lengths 0/15/17 refuse without changes; raw/helper metadata EIO preserves caller bytes
+witness	Run bash witness/check.sh	2026-11-16T08:34:40.4702647Z ok directory identity: exact dev/ino, same-inode alias and retained parent after pathname replacement
+witness	Run bash witness/check.sh	2026-11-16T08:34:40.4825209Z ok directory identity witness: lengths 0/15/17 refuse without changes; raw/helper metadata EIO preserves caller bytes
+witness	Run bash witness/check.sh	2026-11-16T08:34:40.5248499Z ok directory identity: checked-IR mutable Directory and mutable byte-view boundary, arity and result
+witness	Run bash witness/check.sh	2026-11-16T08:34:40.5320996Z ok directory identity suite: 3 routes, 1.580 s, load 1.20 0.75 0.32 1/267 4009 -> 1.18 0.76 0.32 1/267 4116
+witness	Run bash witness/check.sh	2026-11-16T08:34:40.5359078Z ok optional Rust witness and compiler byte identity
+witness	Post Run actions/checkout@v4	﻿2026-11-16T08:34:40.5466830Z Post job cleanup.
+witness	Post Run actions/checkout@v4	2026-11-16T08:34:40.6160280Z [command]/usr/bin/git version
+witness	Post Run actions/checkout@v4	2026-11-16T08:34:40.6200454Z git version 2.56.1
+witness	Post Run actions/checkout@v4	2026-11-16T08:34:40.6266122Z Temporarily overriding HOME='/home/runner/work/_temp/8bb69385-2346-44cb-bc37-a85f55c04819' before making global git config changes
+witness	Post Run actions/checkout@v4	2026-11-16T08:34:40.6276023Z Adding repository directory to the temporary git global config as a safe directory
+witness	Post Run actions/checkout@v4	2026-11-16T08:34:40.6276891Z [command]/usr/bin/git config --global --add safe.directory /home/runner/work/lkjscript/lkjscript
+witness	Post Run actions/checkout@v4	2026-11-16T08:34:40.6298552Z [command]/usr/bin/git config --local --name-only --get-regexp core\.sshCommand
+witness	Post Run actions/checkout@v4	2026-11-16T08:34:40.6343165Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'core\.sshCommand' && git config --local --unset-all 'core.sshCommand' || :"
+witness	Post Run actions/checkout@v4	2026-11-16T08:34:40.6627255Z [command]/usr/bin/git config --local --name-only --get-regexp http\.https\:\/\/github\.com\/\.extraheader
+witness	Post Run actions/checkout@v4	2026-11-16T08:34:40.6650228Z http.https://github.com/.extraheader
+witness	Post Run actions/checkout@v4	2026-11-16T08:34:40.6659841Z [command]/usr/bin/git config --local --unset-all http.https://github.com/.extraheader
+witness	Post Run actions/checkout@v4	2026-11-16T08:34:40.6692663Z [command]/usr/bin/git submodule foreach --recursive sh -c "git config --local --name-only --get-regexp 'http\.https\:\/\/github\.com\/\.extraheader' && git config --local --unset-all 'http.https://github.com/.extraheader' || :"
+witness	Post Run actions/checkout@v4	2026-11-16T08:34:40.6957447Z [command]/usr/bin/git config --local --name-only --get-regexp ^includeIf\.gitdir:
+witness	Post Run actions/checkout@v4	2026-11-16T08:34:40.6988361Z [command]/usr/bin/git submodule foreach --recursive git config --local --show-origin --name-only --get-regexp remote.origin.url
+witness	Complete job	﻿2026-11-16T08:34:40.7345631Z Cleaning up orphan processes
+witness	Complete job	2026-11-16T08:34:40.7664788Z ##[warning]Node.js 20 is deprecated. The following actions target Node.js 20 but are being forced to run on Node.js 24: actions/checkout@v4. For more information see: https://github.blog/changelog/2025-09-19-deprecation-of-node-20-on-github-actions-runners/

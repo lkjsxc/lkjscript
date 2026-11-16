@@ -43,3 +43,5 @@ aff46525d057e1195fa3d5fb2dda2d324d5a2884ab791069d485451f0294ed46  bench/compiler
 85dc8bd5e5595e891a224a3b9532936a25e67e9d6d697ef1adc4917ccb74a17f  bench/compiler-replay-scope-data/cold-gate.time
 da8ceaf3914b9526aa901dad9940b55d5043ea05d9926b2229388e8e113c21a9  bench/compiler-replay-scope-data/cold-gate.meta
 ebe405f68682d0ccc29fa18faa40799ebab337c8e74516b788f9843fe7ae6b2e  bench/compiler-replay-scope-data/cold-gate.mutation
+418f72555ed64d50e1a28cc31425de10255c18cc2853c0f8f70ebbb2d8e1847e  bench/compiler-replay-scope-data/ci-gate.log
+ef7c94e56957afa101b02b242f8b1f106221f9406d19aa70579c6b835a404088  bench/compiler-replay-scope-data/ci-witness.log
