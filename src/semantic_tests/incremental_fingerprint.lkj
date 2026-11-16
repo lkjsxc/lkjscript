@@ -1,0 +1,301 @@
+//! Fixed fingerprint vectors: the oracle is captured from the unchanged producer.
+use crate::{ast, elaborate, resolve, source};
+
+fn multi_inputs() -> Vec<(String, Vec<u8>)> {
+    vec![
+        ("src/main.lkj".to_string(), "mod alpha;\nmod empty;\nmod beta;\ntrait Contract { fn declared(&self) -> i64; }\nfn first(value:i64)->i64 { value + 1i64 }\nfn second(value:i64)->i64 { value + 2i64 }\npub fn main()->i64 { first(1i64)+second(2i64)+alpha::left()+beta::right() }\n".as_bytes().to_vec()),
+        ("src/beta.lkj".to_string(), "pub fn right()->i64 { 26i64 }\n".as_bytes().to_vec()),
+        ("src/empty.lkj".to_string(), "pub const FLAG: bool = true;\n".as_bytes().to_vec()),
+        ("src/alpha.lkj".to_string(), "pub fn left()->i64 { 10i64 }\n".as_bytes().to_vec()),
+        ("unused-note.bin".to_string(), vec![0u8, 255u8, 65u8, 124u8]),
+        ("unused-empty.bin".to_string(), Vec::<u8>::new()),
+    ]
+}
+
+fn include_inputs() -> Vec<(String, Vec<u8>)> {
+    vec![
+        ("inc/main.lkj".to_string(), "mod child;\npub fn main()->u64 { include_bytes!(\"child.lkj\")[0] as u64 + include_bytes!(\"data.bin\")[0] as u64 + include_str!(\"message.txt\").len() as u64 }\n".as_bytes().to_vec()),
+        ("inc/child.lkj".to_string(), "pub fn answer()->i64 { 40i64 }\n".as_bytes().to_vec()),
+        ("inc/data.bin".to_string(), vec![0u8, 255u8, 10u8, 3u8]),
+        ("inc/message.txt".to_string(), "π\n".as_bytes().to_vec()),
+    ]
+}
+
+fn case_name(case: usize) -> String {
+    match case {
+        0 => "multi-base".to_string(),
+        1 => "multi-reversed-functions".to_string(),
+        2 => "duplicate-parsed-later".to_string(),
+        3 => "duplicate-parsed-first".to_string(),
+        4 => "missing-bodyless-source".to_string(),
+        5 => "duplicate-first-truncated".to_string(),
+        6 => "ignored-invalid-function-file".to_string(),
+        7 => "reversed-body-bounds".to_string(),
+        8 => "body-past-eof".to_string(),
+        9 => "overlapping-bodies".to_string(),
+        10 => "type-past-eof".to_string(),
+        11 => "unparsed-order".to_string(),
+        12 => "unparsed-duplicate".to_string(),
+        13 => "include-base".to_string(),
+        14 => "include-parsed-body".to_string(),
+        15 => "include-binary-payload".to_string(),
+        16 => "include-string-payload".to_string(),
+        _ => panic!("unknown fingerprint fixture {case}"),
+    }
+}
+
+fn resolved(root: &str, inputs: &[(String, Vec<u8>)]) -> ast::Program {
+    // Raw loading preserves the binary include containing 0xff. A SourceBundle
+    // contains UTF-8 Strings and cannot represent this exact fixed input.
+    let parsed = source::load(
+        root,
+        None,
+        &mut |path: &str| -> Result<Option<Vec<u8>>, String> {
+            for (name, bytes) in inputs {
+                if name.as_str() == path {
+                    return Ok(Some(bytes.clone()));
+                }
+            }
+            Ok(None)
+        },
+    ).unwrap();
+    resolve::resolve(&parsed).unwrap()
+}
+
+fn function_index(program: &ast::Program, name: &str) -> usize {
+    for (index, function) in program.functions.iter().enumerate() {
+        if function.name.as_str() == name {
+            return index;
+        }
+    }
+    panic!("missing fixture function {name}")
+}
+
+fn file_index(program: &ast::Program, path: &str) -> usize {
+    for (index, file) in program.files.iter().enumerate() {
+        if file.path.as_str() == path {
+            return index;
+        }
+    }
+    panic!("missing fixture source {path}")
+}
+
+fn input_length(inputs: &[(String, Vec<u8>)], path: &str) -> usize {
+    for (name, bytes) in inputs {
+        if name.as_str() == path {
+            return bytes.len();
+        }
+    }
+    panic!("missing fixture input {path}")
+}
+
+fn prepend(
+    inputs: Vec<(String, Vec<u8>)>, path: &str, bytes: Vec<u8>,
+) -> Vec<(String, Vec<u8>)> {
+    let mut result = vec![(path.to_string(), bytes)];
+    for input in inputs {
+        result.push(input);
+    }
+    result
+}
+
+fn fixture(case: usize) -> (ast::Program, Vec<(String, Vec<u8>)>) {
+    assert!(case < 17usize);
+    let mut inputs = if case < 13usize { multi_inputs() } else { include_inputs() };
+    // Include payloads must change before parsing so their expanded AST literals
+    // agree with the exact modified input bytes.
+    if case == 14usize {
+        assert_eq!(inputs[1].0, "inc/child.lkj");
+        inputs[1].1 = "pub fn answer()->i64 { 41i64 }\n".as_bytes().to_vec();
+    } else if case == 15usize {
+        assert_eq!(inputs[2].0, "inc/data.bin");
+        inputs[2].1 = vec![1u8, 255u8, 10u8, 3u8];
+    } else if case == 16usize {
+        assert_eq!(inputs[3].0, "inc/message.txt");
+        inputs[3].1 = "ρ\n".as_bytes().to_vec();
+    }
+    let mut program = if case < 13usize {
+        resolved("src/main.lkj", &inputs)
+    } else {
+        resolved("inc/main.lkj", &inputs)
+    };
+
+    match case {
+        1 => {
+            // This permutes fingerprint coordinates, not an admitted source AST.
+            let mut reversed: Vec<ast::Function> = Vec::new();
+            while let Some(function) = program.functions.pop() {
+                reversed.push(function);
+            }
+            program.functions = reversed;
+        }
+        2 => {
+            inputs.push((
+                "src/alpha.lkj".to_string(),
+                "ignored later duplicate\n".as_bytes().to_vec(),
+            ));
+        }
+        3 => {
+            inputs = prepend(
+                inputs, "src/alpha.lkj",
+                "pub fn left()->i64 { 11i64 }\n".as_bytes().to_vec(),
+            );
+        }
+        4 => {
+            let mut kept = Vec::new();
+            let mut removed = 0usize;
+            for input in inputs {
+                if input.0 == "src/empty.lkj" {
+                    removed += 1usize;
+                } else {
+                    kept.push(input);
+                }
+            }
+            assert_eq!(removed, 1usize);
+            inputs = kept;
+        }
+        5 => {
+            inputs = prepend(inputs, "src/alpha.lkj", Vec::new());
+        }
+        6 => {
+            let first = function_index(&program, "first");
+            let invalid_file = program.files.len();
+            let invalid_body = program.blocks.len();
+            program.functions[first].span.file = invalid_file;
+            program.functions[first].body = Some(invalid_body);
+        }
+        7 => {
+            let first = function_index(&program, "first");
+            let body = program.functions[first].body.unwrap();
+            program.blocks[body].span.start = program.blocks[body].span.end + 1usize;
+        }
+        8 => {
+            let first = function_index(&program, "first");
+            let body = program.functions[first].body.unwrap();
+            program.blocks[body].span.end = input_length(&inputs, "src/main.lkj") + 1usize;
+        }
+        9 => {
+            let first = function_index(&program, "first");
+            let second = function_index(&program, "second");
+            let first_body = program.functions[first].body.unwrap();
+            let second_body = program.functions[second].body.unwrap();
+            program.blocks[second_body].span.start = program.blocks[first_body].span.start;
+        }
+        10 => {
+            let file = file_index(&program, "src/main.lkj");
+            let mut selected = None;
+            for index in 0usize..program.types.len() {
+                if program.types[index].span.file == file {
+                    selected = Some(index);
+                    break;
+                }
+            }
+            let index = selected.unwrap();
+            program.types[index].span.end = input_length(&inputs, "src/main.lkj") + 1usize;
+        }
+        11 => {
+            let last = inputs.pop().unwrap();
+            let previous = inputs.pop().unwrap();
+            assert_eq!(last.0, "unused-empty.bin");
+            assert_eq!(previous.0, "unused-note.bin");
+            inputs.push(last);
+            inputs.push(previous);
+        }
+        12 => {
+            inputs.push(("unused-note.bin".to_string(), vec![1u8, 2u8]));
+        }
+        _ => {}
+    }
+    (program, inputs)
+}
+
+fn record(case: usize) -> String {
+    let (program, inputs) = fixture(case);
+    let fingerprint = elaborate::incremental::fingerprint(&program, &inputs);
+    let must_refuse = case == 4usize || case == 5usize || case == 7usize
+        || case == 8usize || case == 9usize || case == 10usize;
+    assert_eq!(fingerprint.is_none(), must_refuse, "fixed fingerprint outcome");
+    let mut out = format!("case {case} {}\n", case_name(case));
+    match fingerprint {
+        None => out.push_str("none\n"),
+        Some(value) => {
+            out.push_str(&format!("some {} {}\n", value.shape.as_str(), value.bodies.len()));
+            for (index, body) in value.bodies.iter().enumerate() {
+                if body.is_empty() {
+                    out.push_str(&format!("body {index} empty\n"));
+                } else {
+                    out.push_str(&format!("body {index} {}\n", body.as_str()));
+                }
+            }
+        }
+    }
+    out.push_str("end\n");
+    out
+}
+
+/// The baseline harness calls this; it never calls expected() or run().
+pub fn dump() -> String {
+    let mut out = "lkjscript-fingerprint-goldens 1\n".to_string();
+    for case in 0usize..17usize {
+        out.push_str(&record(case));
+    }
+    out.push_str("complete 17\n");
+    out
+}
+
+/// Replace only this item with the reviewed fixed baseline records before
+/// publishing the closed tests. A missing oracle cannot silently pass.
+fn expected(case: usize) -> String {
+    match case {
+        0usize => "case 0 multi-base\nsome 752e231696fcc692c58024672e12b5cee58a412366ca7f965d9c6fb409056509 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
+        1usize => "case 1 multi-reversed-functions\nsome 5b781036c20507d1014e988ce8a23c4170000726a8dfa6842f38d0929ba407e9 6\nbody 0 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nbody 1 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 2 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 3 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 4 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 5 empty\nend\n".to_string(),
+        2usize => "case 2 duplicate-parsed-later\nsome 752e231696fcc692c58024672e12b5cee58a412366ca7f965d9c6fb409056509 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
+        3usize => "case 3 duplicate-parsed-first\nsome 752e231696fcc692c58024672e12b5cee58a412366ca7f965d9c6fb409056509 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 20df9286b5b47e7f8d1c878dfba28ed577d2c52dc3aaf66e4aa4f50097420cde\nend\n".to_string(),
+        4usize => "case 4 missing-bodyless-source\nnone\nend\n".to_string(),
+        5usize => "case 5 duplicate-first-truncated\nnone\nend\n".to_string(),
+        6usize => "case 6 ignored-invalid-function-file\nsome 676570df0edf73d053dad87f9d0e915a5e5e52f1ec75767d8c08ef01b212777e 6\nbody 0 empty\nbody 1 empty\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
+        7usize => "case 7 reversed-body-bounds\nnone\nend\n".to_string(),
+        8usize => "case 8 body-past-eof\nnone\nend\n".to_string(),
+        9usize => "case 9 overlapping-bodies\nnone\nend\n".to_string(),
+        10usize => "case 10 type-past-eof\nnone\nend\n".to_string(),
+        11usize => "case 11 unparsed-order\nsome a5390be69ef4d933adc0c95c9172135fe38af3df6cc848be5107a78ae534ca18 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
+        12usize => "case 12 unparsed-duplicate\nsome 271ba43e04fbebed96514c31726cd330effc5a48adeb0a6788996dcc00123797 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
+        13usize => "case 13 include-base\nsome 18116cbdd0d3c394f6b0e1e79c59f647ad812825bce8e0be9d65da792079e412 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n".to_string(),
+        14usize => "case 14 include-parsed-body\nsome 1c9574a214cbddec85bf1633bc568961dff1cc680aaac6da88abdab0b7a82eb9 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 7c661f9a5e9dbdc8c3c46376af8060132c245f34dd18859e01cfaa6e9ffbfb49\nend\n".to_string(),
+        15usize => "case 15 include-binary-payload\nsome adf535fda264c48390312dc3256e239ef833c6e3ef0ec72950e2378777843ac8 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n".to_string(),
+        16usize => "case 16 include-string-payload\nsome a48eeda0c8db8278db9c45affa110bc0f2641bdebd477a5eb0be29473d0c1607 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n".to_string(),
+        _ => panic!("unknown fingerprint golden {case}"),
+    }
+}
+
+fn assert_case(case: usize) {
+    assert_eq!(record(case), expected(case), "fixed complete fingerprint vector");
+}
+
+fn fixed_topology_vectors() {
+    for case in vec![0usize, 1usize, 6usize] {
+        assert_case(case);
+    }
+}
+fn input_selection_and_extra_order() {
+    for case in vec![2usize, 3usize, 4usize, 5usize, 11usize, 12usize] {
+        assert_case(case);
+    }
+}
+fn region_and_type_refusals() {
+    for case in vec![7usize, 8usize, 9usize, 10usize] {
+        assert_case(case);
+    }
+}
+fn expanded_include_vectors() {
+    for case in vec![13usize, 14usize, 15usize, 16usize] {
+        assert_case(case);
+    }
+}
+pub fn run() -> usize {
+    fixed_topology_vectors();
+    input_selection_and_extra_order();
+    region_and_type_refusals();
+    expanded_include_vectors();
+    4usize
+}

@@ -145,6 +145,7 @@ pub fn core() -> usize {
     count += function_owners::run();
     count += library_demand::run();
     count += reference_capture::run();
+    count += incremental_fingerprint::run();
     count += source_contracts::run();
     count += return_contracts::run();
     count += array_repeat::run();
@@ -199,3 +200,5 @@ fn derived_source_case(
     }
     source_case_at(name, root, library, files, expected, root, expected_line, 0)
 }
+
+mod incremental_fingerprint;
