@@ -1,0 +1,11 @@
+{
+   "capture" : "complete",
+   "evidence_mirror_removal" : "pending committed-record guard",
+   "gateway_request" : "compiler-scale-refusal-cleanup-047-execute-owned-run-key",
+   "gnu_exit" : 0,
+   "guard" : "before passed",
+   "private_key_bytes_read" : false,
+   "raw_stderr_empty" : true,
+   "run_and_key_absent" : true,
+   "wrapper_exit" : 0
+}

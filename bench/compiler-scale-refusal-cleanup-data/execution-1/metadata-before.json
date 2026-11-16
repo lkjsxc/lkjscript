@@ -1,0 +1,23 @@
+[
+   {
+      "bytes_definition" : "Sum of regular-file st_size; directory metadata excluded; file contents unread.",
+      "directories" : 27,
+      "logical_file_bytes" : 146363341,
+      "path" : "target/compiler-scale-refusal-run.tCSZMe",
+      "regular_files" : 2309
+   },
+   {
+      "bytes_definition" : "Sum of regular-file st_size; directory metadata excluded; file contents unread.",
+      "directories" : 1,
+      "logical_file_bytes" : 137,
+      "path" : "/tmp/compiler-scale-refusal-key.aD8jW6",
+      "regular_files" : 2
+   },
+   {
+      "bytes_definition" : "Sum of regular-file st_size; directory metadata excluded; file contents unread.",
+      "directories" : 1,
+      "logical_file_bytes" : 308668,
+      "path" : "target/compiler-scale-refusal-evidence.62fa76f4-1",
+      "regular_files" : 92
+   }
+]
