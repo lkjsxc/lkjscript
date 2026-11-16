@@ -1,0 +1,296 @@
+{
+   "canonical" : {
+      "before_after_records_equal" : true,
+      "bytes" : 32588975,
+      "current_bytes_match" : true,
+      "sha256" : "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db"
+   },
+   "current_absence" : [
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-adoption-acceptance-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-bootstrap-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-cache-cleanup-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-cache-cleanup-acceptance-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-ci-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-commit-acceptance-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-check-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-desired-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-gate-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-gate-acceptance-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-integration-preparation-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-preliminary-retention-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-preparation-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-query-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-query-acceptance-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-seed-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-semantics-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-semantics-2"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-semantics-3"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-semantics-4"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-setup-acceptance-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-setup-acceptance-2"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-setup-launch-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-setup-launch-2"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-setup-preparation-1"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-setup-preparation-2"
+      },
+      {
+         "absent" : true,
+         "errno" : "ENOENT",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1"
+      }
+   ],
+   "excluded_preparation_files_hash_verified" : 6,
+   "excluded_roots" : [
+      {
+         "current" : {
+            "dev" : 144,
+            "gid" : 1001,
+            "inode" : 37594311,
+            "mode" : "0700",
+            "uid" : 1001
+         },
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-preparation-1",
+         "prior_identity_verified" : true,
+         "prior_source" : "committed original prefix inventory; root identity fields only"
+      },
+      {
+         "current" : {
+            "dev" : 144,
+            "gid" : 1001,
+            "inode" : 37684096,
+            "mode" : "0700",
+            "uid" : 1001
+         },
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2",
+         "prior_identity_verified" : true,
+         "prior_source" : "committed original prefix inventory; root identity fields only"
+      },
+      {
+         "current" : {
+            "dev" : 144,
+            "gid" : 1001,
+            "inode" : 37720456,
+            "mode" : "0700",
+            "uid" : 1001
+         },
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-trial-preparation-2",
+         "prior_identity_verified" : true,
+         "prior_source" : "committed original prefix inventory; root identity fields only"
+      },
+      {
+         "current" : {
+            "dev" : 144,
+            "gid" : 1001,
+            "inode" : 37748924,
+            "mode" : "0700",
+            "uid" : 1001
+         },
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2",
+         "prior_identity_verified" : false,
+         "qualification" : "Historical inode/device/owner identity not recorded in the available comparison inventory; current owned-directory presence and the recorded population/modes/sizes are checked separately."
+      },
+      {
+         "current" : {
+            "dev" : 144,
+            "gid" : 1001,
+            "inode" : 37748911,
+            "mode" : "0700",
+            "uid" : 1001
+         },
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-launch-2",
+         "prior_identity_verified" : false,
+         "qualification" : "Historical inode/device/owner identity not recorded in the available comparison inventory; current owned-directory presence and the recorded population/modes/sizes are checked separately."
+      }
+   ],
+   "execution" : {
+      "end_ns" : "1794857248093657391",
+      "gnu_time" : {
+         "exit_status" : 0,
+         "maxrss_kib" : "303264",
+         "system_s" : "3.24",
+         "user_s" : "25.82",
+         "wall_s" : "29.55"
+      },
+      "guard_elapsed_seconds" : 29.5235149860382,
+      "inner_status" : 0,
+      "load_after" : [
+         "1.69",
+         "1.14",
+         "1.16"
+      ],
+      "load_before" : [
+         "1.11",
+         "0.99",
+         "1.11"
+      ],
+      "outer_status" : 0,
+      "start_ns" : "1794857218531376599",
+      "wrapper_elapsed_ns" : "29562280792"
+   },
+   "execution_guard_commit" : "ce05f3a1536b3759b25a4a787873ced64e1e9be7",
+   "guard_sha256" : "e182101cf27ff0f2bed93a015ecfd2cc93aef1d13234eb2809eccbe361042e64",
+   "limits" : [
+      "This is an independent saved-record, source-pin, ordering and current-state audit; the cleanup guard was not rerun, and archived recovery payloads were not decoded again.",
+      "No claim of historical nanosecond filesystem metadata: the frozen map has none. Exact outer capture nanoseconds remain decimal strings.",
+      "Three kept roots have prior inode/device/owner/mode identities and match; the two comparison roots lack historical inode identities in the examined inventory, so only current presence plus complete recorded population/modes/sizes are asserted.",
+      "Unrecorded contents of other excluded roots and credentials were not inspected; there is no blanket claim of unchanged credential bytes."
+   ],
+   "map_commit" : "d84cac6edcee59e2c2ad631fb6ca15d63340a1c8",
+   "map_sha256" : "ff159c384304fb66cd5aa644a06485a5cec2bcc4aab393ccd679a3b7f6faa4bd",
+   "no_compression" : true,
+   "no_guard_rerun" : true,
+   "no_key_read" : true,
+   "no_original_mutation" : true,
+   "no_workload" : true,
+   "original_python_violation" : {
+      "actual_interpreter" : "/usr/bin/python3",
+      "distinct_perl_execution" : true,
+      "preserved" : true,
+      "qualification" : "The earlier mapper and its syntax run violated the no-Python instruction. Their original captures and .py source are retained truthfully; the source is stored as inert .py.txt with original-path mapping. This outcome audit does not retroactively authorize that run."
+   },
+   "progress" : {
+      "all_29_preflights_before_first_mutation" : true,
+      "complete_preflight_event_index_zero_based" : 30,
+      "event_counts" : {
+         "begin" : 1,
+         "complete" : 1,
+         "complete_preflight" : 1,
+         "removed_directory" : 90,
+         "rmdir_intent" : 119,
+         "root_absent" : 29,
+         "root_preflight_verified" : 29,
+         "unlink_intent" : 3050,
+         "unlinked" : 3050
+      },
+      "expected_directories_including_roots" : 119,
+      "expected_logical_bytes" : 160418647,
+      "expected_unique_files" : 3050,
+      "first_mutation_intent_index_zero_based" : 31,
+      "full_exact_sequence_matches" : true,
+      "progress_sha256" : "ee2f6de3bfe576821f74636490061a3ede2bf173641c2467b88c0920ce31355f",
+      "records" : 6370
+   },
+   "protected_comparison_metadata" : {
+      "complete_population_modes_sizes_match" : true,
+      "directories_including_roots" : 32,
+      "logical_file_bytes" : 254521215,
+      "payloads_read" : false,
+      "regular_files" : 501
+   },
+   "release_sha256" : "2a6d1df2af2a004b516d04b58508c218f3ebc234766080f91877eeb4bbe32ce2",
+   "schema" : 1,
+   "status" : "accepted completed Perl cleanup"
+}

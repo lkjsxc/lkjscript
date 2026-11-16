@@ -1,0 +1,192 @@
+[
+   {
+      "bytes" : 497,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/argv.json",
+      "sha256" : "2f7a6f3a3ee63088ec3f2490efedf1c9f2cbd79064599c956aba92ce2e43b4a2"
+   },
+   {
+      "bytes" : 83,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/canonical.after",
+      "sha256" : "a0365672f1a34788c3ca767a0e2eb92e46cd9888cadd7df274209ffb3f126ebd"
+   },
+   {
+      "bytes" : 83,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/canonical.before",
+      "sha256" : "a0365672f1a34788c3ca767a0e2eb92e46cd9888cadd7df274209ffb3f126ebd"
+   },
+   {
+      "bytes" : 298,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/controls.after",
+      "sha256" : "fef3f8fccebded528f0d7d1c0c5837a74f62a3812b9f24ae474eabe6bcb81d8c"
+   },
+   {
+      "bytes" : 298,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/controls.before",
+      "sha256" : "fef3f8fccebded528f0d7d1c0c5837a74f62a3812b9f24ae474eabe6bcb81d8c"
+   },
+   {
+      "bytes" : 32,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/cwd",
+      "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3"
+   },
+   {
+      "bytes" : 20,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/end.ns",
+      "sha256" : "2cea8185ceb96565fa1aa8244b6dee92883c88e3841e71f9942feea09448d5b9"
+   },
+   {
+      "bytes" : 31,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/end.utc",
+      "sha256" : "5405e13baba80416686d6abf728e3c274d95b5bee8e6fcd4d13be539ef944c1f"
+   },
+   {
+      "bytes" : 207,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/free-space",
+      "sha256" : "2dd0500f37163092137c1b2dffc34719e5efd0d15a34ba5dec9114478485052a"
+   },
+   {
+      "bytes" : 2261,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/guard-result/invocation.json",
+      "sha256" : "82a6bbe657aac8a30a0cafa0219c79c3c356f3a713b937ef0ccf07bac53d9db5"
+   },
+   {
+      "bytes" : 1456939,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/guard-result/progress.jsonl",
+      "sha256" : "ee2f6de3bfe576821f74636490061a3ede2bf173641c2467b88c0920ce31355f"
+   },
+   {
+      "bytes" : 2772,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/guard-result/release.json",
+      "sha256" : "2a6d1df2af2a004b516d04b58508c218f3ebc234766080f91877eeb4bbe32ce2"
+   },
+   {
+      "bytes" : 2835,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/guard-result/result.json",
+      "sha256" : "b60d462c1f3fba1244a1a429fc9b20595fb5173528bc94b19c1f757ad6197ae3"
+   },
+   {
+      "bytes" : 2,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/guard-result/status",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+   },
+   {
+      "bytes" : 30,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/load-after",
+      "sha256" : "8564a8f778c50ccc5e44e7e0c7e68359c8e67faae682093255ef62d233aa3901"
+   },
+   {
+      "bytes" : 30,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/load-before",
+      "sha256" : "0245c0d34e4889586e1e2a449c924d68c07fe0c58890198a7ff668e65d2433de"
+   },
+   {
+      "bytes" : 2772,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/release.json",
+      "sha256" : "2a6d1df2af2a004b516d04b58508c218f3ebc234766080f91877eeb4bbe32ce2"
+   },
+   {
+      "bytes" : 2322,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/run.sh",
+      "sha256" : "48a12d2a42a3bbeea77e23a503d3e1477c60e8f182c29ceb1ab720ce26866a52"
+   },
+   {
+      "bytes" : 20,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/start.ns",
+      "sha256" : "2342aed592639d8858506d11dd8e6a442d691015ccbeefb910ebdca9917748be"
+   },
+   {
+      "bytes" : 31,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/start.utc",
+      "sha256" : "ceb644e871e898e7a2076a8863d878ea1d392eab80ef9618dc3f187f7dd481a8"
+   },
+   {
+      "bytes" : 2,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/status",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+   },
+   {
+      "bytes" : 0,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/stderr",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+      "bytes" : 91,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/stdout",
+      "sha256" : "7d3251f90799d9e0893a10142c9f43fed5263e1aa255ede65008d09a5d69d503"
+   },
+   {
+      "bytes" : 72,
+      "path" : "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/cleanup-execution-2/time",
+      "sha256" : "35f291f809b7dec2dd69a02d4f69387dbc84127f66d357fb809a39b914fbe26d"
+   },
+   {
+      "bytes" : 2261,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-cleanup-execution-2/invocation.json",
+      "sha256" : "82a6bbe657aac8a30a0cafa0219c79c3c356f3a713b937ef0ccf07bac53d9db5"
+   },
+   {
+      "bytes" : 1456939,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-cleanup-execution-2/progress.jsonl",
+      "sha256" : "ee2f6de3bfe576821f74636490061a3ede2bf173641c2467b88c0920ce31355f"
+   },
+   {
+      "bytes" : 2772,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-cleanup-execution-2/release.json",
+      "sha256" : "2a6d1df2af2a004b516d04b58508c218f3ebc234766080f91877eeb4bbe32ce2"
+   },
+   {
+      "bytes" : 2835,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-cleanup-execution-2/result.json",
+      "sha256" : "b60d462c1f3fba1244a1a429fc9b20595fb5173528bc94b19c1f757ad6197ae3"
+   },
+   {
+      "bytes" : 2,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-cleanup-execution-2/status",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+   },
+   {
+      "bytes" : 22174,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-cleanup-preparation-2/guard.pl",
+      "sha256" : "e182101cf27ff0f2bed93a015ecfd2cc93aef1d13234eb2809eccbe361042e64"
+   },
+   {
+      "bytes" : 2772,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-cleanup-preparation-2/release.json",
+      "sha256" : "2a6d1df2af2a004b516d04b58508c218f3ebc234766080f91877eeb4bbe32ce2"
+   },
+   {
+      "bytes" : 416,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-preparation-1/manifest.sha256",
+      "sha256" : "f244c488ed53a3dfee07c3940f6924d792f87ae5f216cfe3d7cd41c52652b2fd"
+   },
+   {
+      "bytes" : 98,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-preparation-1/metadata-validation.txt",
+      "sha256" : "879a1d4ea46125aa2808c18ca93a9880cb69eef43a18d87de4366bff78ecb2bf"
+   },
+   {
+      "bytes" : 224,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-preparation-1/order.tsv",
+      "sha256" : "a1a0bfe629286f7a4f9cb50468ac40bb075d61b24b703c7ac4474161f7cce81f"
+   },
+   {
+      "bytes" : 5916,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-preparation-1/pins.pending.json",
+      "sha256" : "08998b2ff406ab8be9d79746f189ab821c57ab9bf1bbeabf45a44a3965588a07"
+   },
+   {
+      "bytes" : 10350,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-preparation-1/plan.md",
+      "sha256" : "249af04e480480490f059b89af48b7469730c8e98c49c5627d21514ee11b9f80"
+   },
+   {
+      "bytes" : 2596,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-preparation-1/preparation-provenance.md",
+      "sha256" : "48418d7606876d23a57859c74960caa345828d75e4327814e546952af5c7d8de"
+   },
+   {
+      "bytes" : 32588975,
+      "path" : "/home/coder/workspace/lkjscript/target/lkjscript",
+      "sha256" : "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db"
+   }
+]

@@ -1,0 +1,13 @@
+{
+  "schema": 1,
+  "failed_request": "compiler-reference-capture-cleanup-acceptance-run-1456",
+  "failed_audit_exit": 255,
+  "failed_diagnostic": "outer capture population",
+  "failed_helper_sha256": "a9e62a958bc1b8db28956f375d4a8732f5304edd2e4ca4120a5d1df15691e832",
+  "failed_source_retained": "audit-v1-population-assumption.pl",
+  "failed_capture_prefix": "Original unprefixed stdout/stderr/time/status/argv and related control files",
+  "cause": "The root added guard-result to the existing outer capture after the initial directory listing. This directory contains the five retained original guard records.",
+  "correction": "Require guard-result explicitly and verify all five retained files byte-for-byte against target execution records; all other audit rules unchanged.",
+  "cleanup_or_guard_rerun": false,
+  "new_workload": false
+}

@@ -1,0 +1,50 @@
+[
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "ce05f3a1536b3759b25a4a787873ced64e1e9be7:bench/compiler-reference-capture-data/cleanup-preparation-2/guard.pl"
+      ],
+      "bytes" : 22174,
+      "sha256" : "e182101cf27ff0f2bed93a015ecfd2cc93aef1d13234eb2809eccbe361042e64",
+      "status" : 0
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "d84cac6edcee59e2c2ad631fb6ca15d63340a1c8:bench/compiler-reference-capture-data/cleanup-mapping/compiler-reference-capture-recovery-map-1.json"
+      ],
+      "bytes" : 2208851,
+      "sha256" : "ff159c384304fb66cd5aa644a06485a5cec2bcc4aab393ccd679a3b7f6faa4bd",
+      "status" : 0
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "d84cac6edcee59e2c2ad631fb6ca15d63340a1c8:bench/compiler-reference-capture-data/cleanup-mapping/compiler-reference-capture-cleanup-inventory-1.json"
+      ],
+      "bytes" : 48868,
+      "sha256" : "c6784f5da5078be87ee4c6f20401477e2096eaa7a14adb85b17b370896347da7",
+      "status" : 0
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "d84cac6edcee59e2c2ad631fb6ca15d63340a1c8:bench/compiler-reference-capture-data/comparison-recovery/inventory.json"
+      ],
+      "bytes" : 232796,
+      "sha256" : "6080e1092485e6addfdb2ff9659a6416efa56478822a583d381561ebc035f981",
+      "status" : 0
+   }
+]

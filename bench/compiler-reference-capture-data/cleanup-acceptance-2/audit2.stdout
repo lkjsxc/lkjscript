@@ -1,0 +1,4 @@
+PASS: 6370 exact progress records; 3050 unique unlink intents/completions; 119 exact directory intents/removals; 29 current ENOENT
+All 29 preflights and complete_preflight precede the first mutation; canonical b01eabfa unchanged
+Five excluded roots exist; three recorded identities match; six kept preparation hashes and 501-file/32-directory comparison metadata match
+No cleanup rerun, workload, compression, key read or original mutation
