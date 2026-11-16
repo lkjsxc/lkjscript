@@ -1,0 +1,15 @@
+revision=20d5f7e98fe4501d441b3ac357733a8a7ba942e7
+fixture=/home/coder/workspace/lkjscript-compiler-pinned-query-20261116/target/compiler-query-cache-witness-20261116
+source=/home/coder/workspace/lkjscript-compiler-pinned-query-20261116/target/compiler-query-cache-witness-20261116/source
+store=/home/coder/workspace/lkjscript-compiler-pinned-query-20261116/target/compiler-query-cache-witness-20261116/store
+key=/home/coder/workspace/lkjscript-compiler-pinned-query-20261116/target/compiler-query-cache-witness-20261116/key
+producer_sha256=51708066a1c150ba51800697751b887ad279792f8b4e4d4a57d5df3e291d934c
+reader_sha256=fac8db084310bc8168493cb040944d8e463652a1f680534c91c56a6d0da3bc1a
+memory_bytes=4294967296
+store_budget_bytes=2147483648
+inline_limit=0
+file_cache_reset=false
+free_kib_before=115668964
+snapshot=cc171466d0b2b5ff3319737d33b7ff633bd572a749f0916fc7e4babfe3a85280
+LKJSCRIPT_SNAPSHOT cc171466d0b2b5ff3319737d33b7ff633bd572a749f0916fc7e4babfe3a85280 source=0ce5d020f8ba1b1c17f56ad7fc4e637bd3dd46e2d7cc7b9228271c6fedbbebf6 checked-ir=0e7c945857c1904ed07f21967c0c1e14207f3ee3d3a2aa16cabb6461003ec180
+sequence=cold-index,unchanged-index,old-reader-source-slice,candidate-reader-source-slice

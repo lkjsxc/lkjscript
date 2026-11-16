@@ -1,0 +1,11 @@
+phase	kind	identity	status	exact_stdout	candidate_answer_sha256	oracle_answer_sha256	load_before	load_after
+oracle-not-benchmark	uses	driver::Memo	0	yes	9d1d9483ab5fcbafa5010c18e0d8b97defa3487ad5ed8f25dd26a9084cd04654	9d1d9483ab5fcbafa5010c18e0d8b97defa3487ad5ed8f25dd26a9084cd04654	3.07/4.20/4.55	3.07/4.20/4.55
+oracle-not-benchmark	callers	driver::compile	0	yes	49be1dcf4a1f32770810c9eeae673f36cacb465bac74f7e9d6cab48141186cb1	49be1dcf4a1f32770810c9eeae673f36cacb465bac74f7e9d6cab48141186cb1	3.07/4.20/4.55	3.07/4.20/4.55
+oracle-not-benchmark	callees	driver::execute_source	0	yes	c26a2b906271dcc64b8a0cb7b16293cd9d82e23fc074fe6440f31c5f524f003c	c26a2b906271dcc64b8a0cb7b16293cd9d82e23fc074fe6440f31c5f524f003c	3.07/4.20/4.55	3.07/4.20/4.55
+oracle-not-benchmark	impls	store::QueryAccess	0	yes	a93aeebbad3cd747444fa97e4e7e4940ce98446aff2ba511e4394643a159ed4f	a93aeebbad3cd747444fa97e4e7e4940ce98446aff2ba511e4394643a159ed4f	3.07/4.20/4.55	3.07/4.20/4.55
+oracle-not-benchmark	impls	store::QueryReader	0	yes	f5c07da652ca704b087f0142d2661dd16eee545a4af7196c3541855e50830af6	f5c07da652ca704b087f0142d2661dd16eee545a4af7196c3541855e50830af6	3.07/4.20/4.55	3.07/4.20/4.55
+oracle-not-benchmark	instances	semantic_store::open	0	yes	bbd02c8d457fef45eea9e6368580e94a954db29966109d1088144ac22a235f59	bbd02c8d457fef45eea9e6368580e94a954db29966109d1088144ac22a235f59	3.07/4.20/4.55	3.07/4.20/4.55
+oracle-not-benchmark	type	driver::Options::field:store_bytes	0	yes	0930f95c78ac1624fb37f00acc53532403c8a71579d4c86a59446ba452ea954d	0930f95c78ac1624fb37f00acc53532403c8a71579d4c86a59446ba452ea954d	3.07/4.20/4.55	3.07/4.20/4.55
+oracle-not-benchmark	layout	driver::Options	0	yes	ef1b6d2aff2c61b763cac16efb8641eddb7704e0aea0957dff80e6db885e7c4a	ef1b6d2aff2c61b763cac16efb8641eddb7704e0aea0957dff80e6db885e7c4a	3.07/4.20/4.55	3.07/4.20/4.55
+oracle-not-benchmark	dependents	semantic_store::Snapshot	0	yes	a383582e764548f5790a5dccf94b664fb532b2eb6c6cd5c9c9479ad867f454f3	a383582e764548f5790a5dccf94b664fb532b2eb6c6cd5c9c9479ad867f454f3	3.07/4.20/4.55	3.07/4.20/4.55
+oracle-not-benchmark	text	driver::compile	0	yes	7ba2ae34fff12cf92323bed475ac7e2b390b06088b5fc443ad16246a2d1bccca	7ba2ae34fff12cf92323bed475ac7e2b390b06088b5fc443ad16246a2d1bccca	3.07/4.20/4.55	3.07/4.20/4.55
