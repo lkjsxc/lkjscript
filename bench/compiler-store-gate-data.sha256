@@ -20,3 +20,6 @@ ed8cd10c4fcae79d14c8327b5ad58a3dce726207afb322fc29dcb6abecd73692  bench/compiler
 76817c9f8cebd3219873d664ca31cc52c10e7ea1d3cf396f199cf69051323311  bench/compiler-store-gate-data/witness.log
 31e700ca2de8b3b6b25945ce7863dc0ca6712bab8a07677d2a32ad671a7c9288  bench/compiler-store-gate-data/witness.meta
 da9c554a3a46aaed950412d083cdcd26f3bc2c2a04739d74de24773aa0979274  bench/compiler-store-gate-data/witness.time
+9f901ab92fad2bdaa2ef214b17e1e1d6d03d726b6a7c5ad86a44dfbd931fb555  bench/compiler-store-gate-data/accepted-cold.log
+cdd8bbdac1202ee2c29e2b9def36a682a1e1d51721771eb4e7ff478849b8df93  bench/compiler-store-gate-data/accepted-cold.time
+07fe86f113d6be5c172bfdbe1a977c7048edd17f6bb432ec5dbbc1eb5daba643  bench/compiler-store-gate-data/accepted-cold.meta
