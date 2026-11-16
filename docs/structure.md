@@ -10,8 +10,19 @@ trusted program representation.
 Build with `--index --store DIRECTORY --store-key KEY` and retain the printed
 snapshot identity. Query with the same source/library selector and explicit
 `--snapshot ID`. The selector identifies the build context; query never opens
-the source tree. Without a pin, a valid old latest-pointer record is possible,
-so the answer explicitly says `freshness=not-asserted`.
+the source tree. The version-two snapshot identity includes its producing
+compiler's exact executable digest. An explicit pin authenticates a locator,
+root and the requested pages without reading the current executable. The answer
+reports `producer=HEX`, `validation=authenticated-producing-compiler` and
+`current-check=not-performed`: the facts were admitted by that producing compiler.
+The query reader cannot turn historical evidence into a current checker proof,
+image admission or gate reuse. Unpinned lookup and ordinary compilation keep
+the existing current-producer authentication path.
+
+Every answer says `freshness=not-asserted`. Without a pin, a valid old
+latest-pointer record is possible; a historical explicit pin also does not
+claim that the current source tree still matches it. Missing, incompatible or
+corrupt pinned data refuses without falling back to another snapshot or producer.
 
 Every fact begins with an identity and a level. Generic declarations, resolved
 references and inferred definition types are `source-claim`. Monomorphic

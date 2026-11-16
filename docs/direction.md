@@ -109,6 +109,7 @@ Long-lived object graphs use ordinary owning arenas and typed generational handl
 --store grants a disposable Directory; --store-key grants a private 32-byte secret.
 Keep the key outside every source/library/program read grant, including include_bytes!.
 Key readers and compiler replacers are equally trusted; HMAC binds exact compiler bytes, target, dependency identity and result bytes.
+Pinned queries may inspect authenticated historical snapshots without hashing the reader; snapshot identity binds producing compiler bytes, and provenance never supplies current admission or proof reuse.
 Only admitted originals or authenticated prior proofs skip body checks; revalidate shared structure.
 The scale ladder selects separately checked definition/instance bodies and checked dependency-interface identities; recursive type/destructor interfaces form components. The current global graph/pack remains a measured migration wall, not the chosen ten-million-line checking unit (bench/scale.md). Graph packs still bind types, destructors, signatures, contracts and exact bodies; native fragments retain relocations. Multi-entry builds share exact-namespace fragment snapshots and flush once; only ordinary builds retain whole images.
 Front checkpoints reuse only stable source/arena spans, declarations, expanded string/byte literals, type spellings, catalogs and IR storage/call skeletons.

@@ -1644,9 +1644,11 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
                     if let Ok(identity) = String::from_utf8(stored) {
                         let selector = crate::semantic_store::selector(&options.path, &options.source_directory, &options.library_directory, options.no_library);
                         if let Some(store) = memo.store.as_mut() {
-                            if let Ok(snapshot) = crate::semantic_store::open(store, &selector, &Some(identity)) {
-                                world.stdout().write(format!("LKJSCRIPT_SNAPSHOT {} source={} checked-ir={}\n", snapshot.identity, snapshot.source, snapshot.checked_ir).as_bytes());
-                                ready = true;
+                            if let Ok(snapshot) = crate::semantic_store::open(&mut *store, &selector, &Some(identity)) {
+                                if store.query_locator_retained(&snapshot.identity, &selector, &snapshot.root) {
+                                    world.stdout().write(format!("LKJSCRIPT_SNAPSHOT {} source={} checked-ir={}\n", snapshot.identity, snapshot.source, snapshot.checked_ir).as_bytes());
+                                    ready = true;
+                                }
                             }
                         }
                     }
@@ -1806,19 +1808,38 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
     Ok(deliver(world, outcome, true))
 }
 
+
+fn query_snapshot(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8, String> {
+    let identity = options.query.snapshot.as_ref().ok_or("E_QUERY_SNAPSHOT explicit snapshot is missing")?;
+    let selector = crate::semantic_store::selector(&options.path, &options.source_directory,
+        &options.library_directory, options.no_library);
+    let mut reader = store::QueryReader::open(world, &options.store_directory, &options.store_key,
+        options.store_bytes, identity, &selector)?;
+    stats.mark("snapshot_auth")?;
+    stats.count("producer_bytes_hashed", 0usize);
+    let output = crate::semantic_query::run(&mut reader, &selector, &options.query)?;
+    world.stdout().write(output.as_bytes());
+    stats.mark("semantic_query")?;
+    Ok(0u8)
+}
 pub fn main(mut world: World) {
     let result = match options(world.args()) {
         Err(problem) => Err(problem),
         Ok(options) => match Stats::new(&mut world, options.stats) {
             Err(problem) => Err(problem),
             Ok(mut stats) => {
-                let mut memo = Memo::new(&mut world, &options);
-                let _ = stats.mark("producer_hash");
-                let result = execute(&mut world, &options, &mut stats, &mut memo);
-                let _ = stats.mark("other");
-                if let Some(store) = memo.store.as_mut() { store.finish(); }
-                let _ = stats.mark("store_io");
-                memo.stats(&mut stats);
+                let result = if options.command == "query" && options.query.snapshot.is_some() {
+                    query_snapshot(&mut world, &options, &mut stats)
+                } else {
+                    let mut memo = Memo::new(&mut world, &options);
+                    let _ = stats.mark("producer_hash");
+                    let result = execute(&mut world, &options, &mut stats, &mut memo);
+                    let _ = stats.mark("other");
+                    if let Some(store) = memo.store.as_mut() { store.finish(); }
+                    let _ = stats.mark("store_io");
+                    memo.stats(&mut stats);
+                    result
+                };
                 let stopped = if result.is_ok() { "done" } else { "failed" };
                 let measured = stats.finish(&mut world, stopped);
                 match measured {

@@ -503,16 +503,32 @@ Generic queries cover current instances, not all future substitutions. Dependent
 are conservative recorded signature dependencies; remaining evidence gaps prevent
 exhaustive rename proofs.
 
-An authenticated snapshot root binds selector, source digest, exact checked IR and
-a radix-tree root. Every bounded page has an authenticated content identity and an
-ordered key range. Lookups follow only the requested path, without source reads.
-Cursor state is authenticated for the exact snapshot/question/depth and carries a
-bounded depth-first traversal stack; cycles on that path are skipped. A malformed
-or missing page refuses before any answer is written and invalidates the snapshot
-selection so the next indexed build repairs it. Corruption is never checker proof.
-A mutable stored pointer cannot prove freshness against valid old-record replay.
-Without an explicit snapshot the answer states freshness=not-asserted; an explicit
-snapshot rejects substitution. Editing source files does not silently retarget an
+A version-two authenticated snapshot root binds the exact producing executable
+digest, selector, source digest, exact checked IR and radix-tree root. Its content
+identity therefore pins both facts and producer provenance. Every bounded page
+has an authenticated content identity and ordered key range. Lookups follow only
+the requested path, without source reads.
+
+An explicit pin uses a separately authenticated locator and a narrow query reader;
+it does not read or hash the current executable. The answer reports the producing
+compiler digest and `validation=authenticated-producing-compiler`. These are
+historical facts admitted by that producer, not an assertion that the current
+checker would admit them. This reader cannot create general store records, return
+`CheckedProgram`, or supply admission, image authority or gate reuse. Ordinary
+builds, current authority and unpinned lookup retain exact current-producer checks.
+Locator publication is accounted under its producing generation and follows
+complete root/page retention; eviction or corruption remains a disposable miss.
+
+Cursor state has an explicit query protocol version and authenticates the exact
+snapshot/question/depth under the selected producer. It carries a bounded
+depth-first traversal stack; cycles on that path are skipped. A malformed or
+missing locator/root/page refuses before any answer is written. There is no
+fallback from an explicit pin to latest, another producer or an unsigned hint.
+Invalidation makes the next indexed build repair a damaged selection.
+
+Every answer states `freshness=not-asserted`. A mutable latest pointer cannot prove
+freshness against valid old-record replay, and an explicit historical pin makes
+no claim about current source bytes. Editing source files does not retarget an
 existing snapshot. Text remains the stored repository projection.
 
 ## Rechecked optimization and prior proofs
