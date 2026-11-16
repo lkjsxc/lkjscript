@@ -1,0 +1,40 @@
+{
+  "schema": 1,
+  "kind": "cleanup preparation; no deletion",
+  "requests": [
+    {
+      "request_id": "compiler-scalar-cohort-cleanup-inspect-1353",
+      "exit": 0,
+      "stdout_ref": "/home/coder/.local/state/lkjyolo/outputs/pipe-fodkbciicoabefjbklfdphkkjinhinep.stdout",
+      "stderr_ref": "/home/coder/.local/state/lkjyolo/outputs/pipe-fodkbciicoabefjbklfdphkkjinhinep.stderr",
+      "purpose": "Read exact committed recovery names, retained policy and corrected proof; no fixture mutation"
+    },
+    {
+      "request_id": "compiler-scalar-cohort-cleanup-shape-1354",
+      "exit": 0,
+      "stdout_ref": "/home/coder/.local/state/lkjyolo/outputs/pipe-ncjdjeejlooeepholoapmefbdghppgpd.stdout",
+      "stderr_ref": "/home/coder/.local/state/lkjyolo/outputs/pipe-ncjdjeejlooeepholoapmefbdghppgpd.stderr",
+      "purpose": "Read inventory schema, canonical hash and existing pack verification implementation"
+    },
+    {
+      "request_id": "compiler-scalar-cohort-cleanup-prepare-1355",
+      "exit": 0,
+      "stdout_ref": "/home/coder/.local/state/lkjyolo/outputs/pipe-iemfpgipioljefcnldmbnelbhhbgceke.stdout",
+      "stderr_ref": "/home/coder/.local/state/lkjyolo/outputs/pipe-iemfpgipioljefcnldmbnelbhhbgceke.stderr",
+      "purpose": "Create only preparation directory and metadata snapshot; enumerate 337 file names and 22 directory identities, no content rehash of cohort"
+    }
+  ],
+  "snapshot_sha256": "529395e9b74464531137d27bc05b72df3d368bbe0c77edfbea97f68149efe132",
+  "guard_sha256": "486fcd8db56a2ccd1d36117df5621cb97fa5656320cfe15511ce509632f4bf27",
+  "no_guard_execution": true,
+  "no_cleanup": true,
+  "no_compiler_or_native": true,
+  "no_recompression": true,
+  "credential_access": "none",
+  "preparation_failure": {
+    "stage": "functions.exec JavaScript parse",
+    "diagnostic": "SyntaxError: Unexpected token '%'",
+    "nested_tool_submitted": false,
+    "attempted_request_id_not_submitted": "compiler-scalar-cohort-cleanup-plan-1357"
+  }
+}

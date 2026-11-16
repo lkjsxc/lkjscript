@@ -1,0 +1,167 @@
+{
+   "bytes" : 207027139,
+   "canonical" : {
+      "bytes" : 32584542,
+      "dev" : 144,
+      "ino" : 37081203,
+      "mode" : "0755",
+      "path" : "target/lkjscript",
+      "sha256" : "6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc"
+   },
+   "commit" : "0b0b27803d27b932a5b91cde2d766bd3c8bb82b9",
+   "credentials" : "Not read or enumerated; all paths outside the two literal roots are outside removal.",
+   "directories" : [
+      {
+         "dev" : 144,
+         "ino" : 37500479,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500491,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500492,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500495,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source/library"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500519,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source/seed"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500521,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source/src"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500526,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source/src/check"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500529,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source/src/check/scoped"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500536,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source/src/diagnostics"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500545,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500552,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/definition_types"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500591,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source/src/generics"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500595,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source/src/host_network"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500601,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source/src/interpreter"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500612,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source/src/native"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500632,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source/src/resolve"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500640,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500653,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/optimizer"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500669,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source/src/syntax"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500673,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/fixture/source/src/test_generators"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500480,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-simplify.20261116-1/raw"
+      },
+      {
+         "dev" : 144,
+         "ino" : 37500467,
+         "mode" : "0700",
+         "path" : "target/compiler-scalar-trial-capture.20261116-1"
+      }
+   ],
+   "files" : 337,
+   "kind" : "preparation metadata only; full file hashes deferred to released cleanup guard",
+   "parents" : [
+      {
+         "dev" : 144,
+         "ino" : 54169,
+         "path" : "/home/coder/workspace/lkjscript"
+      },
+      {
+         "dev" : 144,
+         "ino" : 17172529,
+         "path" : "/home/coder/workspace/lkjscript/target"
+      }
+   ],
+   "repo" : "/home/coder/workspace/lkjscript",
+   "roots" : [
+      "target/compiler-scalar-simplify.20261116-1",
+      "target/compiler-scalar-trial-capture.20261116-1"
+   ],
+   "schema" : 1
+}

@@ -1,0 +1,5 @@
+Preparation-only orchestration failure, preserved from functions.exec before nested tool invocation:
+Script error:
+SyntaxError: Unexpected token '%'
+
+Cause: a Bash ${actual%% *} expression appeared inside an unescaped JavaScript template literal while composing the prospective launcher. JavaScript rejected the input before any nested apply_patch call. The attempted request ID compiler-scalar-cohort-cleanup-plan-1357 was never submitted. No files changed, no guard ran, and no cohort access or deletion occurred. The corrected launcher uses Bash read fields instead of that expression. This is not a compiler, cohort, archive, or cleanup failure.
