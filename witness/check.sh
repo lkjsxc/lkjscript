@@ -11,7 +11,8 @@ fi
 export CARGO_PROFILE_RELEASE_CODEGEN_UNITS="${CARGO_PROFILE_RELEASE_CODEGEN_UNITS:-1}"
 cargo build --manifest-path witness/Cargo.toml --release --quiet
 mkdir -p target/witness
-"$CARGO_TARGET_DIR/release/lkjscript" build src/main.lkj --library-dir library --runtime-source library/runtime.lkj -o target/witness/compiler-output
+# Match the compiler producer policy in tools/bootstrap.sh.
+"$CARGO_TARGET_DIR/release/lkjscript" build src/main.lkj --library-dir library --runtime-source library/runtime.lkj --inline-limit 64 -o target/witness/compiler-output
 cmp target/lkjscript target/witness/compiler-output
 rm target/witness/compiler-output
 if command -v rustup >/dev/null 2>&1; then

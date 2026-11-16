@@ -50,7 +50,7 @@ Discard steps below 10%; the last coalescing trial gave under 1% CPU and was dis
 Scalar Clone lowers to Read. --inline-limit N copies small acyclic bodies and forwards dead temporaries.
 Recheck changed bodies; exact original bodies under unchanged shared graphs retain their proof.
 Keep the original interpreter/authority oracle and copied source locations; compare complete custom traps and reject the whole bad candidate.
-Default zero: measured cold self-build admission costs exceed code gains; inlining stays explicit. The 3x witness target remains unmet.
+Ordinary output defaults to zero. Build the compiler producer explicitly at limit64 after its measured 13.466% runtime gain; bootstrap and the Rust witness use that same policy (bench/compiler-native-inline64.md). The 4x/-O milestone remains unmet.
 
 ## One executable and bootstrap
 One static executable contains frontend, checker, backend, independent interpreter,
