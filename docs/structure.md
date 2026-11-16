@@ -260,8 +260,11 @@ symlink, FIFO, socket or directory cannot substitute for a regular source input.
 Ordinary build/query source loading is unchanged by this transaction rule.
 Expected-present reads are bounded by the captured length and require exact EOF.
 
-Source inputs cannot occupy a changed slot's reserved staging basename or any
-of the root lock, pending, generation and two metadata staging slots.
+Source inputs cannot occupy a changed leaf `NAME`'s staging basename
+`.NAME.lkjscript-next`, or the root `.lkjscript-edit.lock`,
+`.lkjscript-edit.pending`, `.lkjscript-edit.generation`,
+`..lkjscript-edit.pending.lkjscript-next` and
+`..lkjscript-edit.generation.lkjscript-next` slots.
 `E_EDIT_RESERVED_INPUT` identifies that refusal; differently spelled aliases of
 changed source slots use `E_EDIT_PARENT_ALIAS`. Checks use parent identity as
 well as basename, including inputs discovered only while checking the candidate.
@@ -305,14 +308,19 @@ Participating compiler reads reject that state. Use a consistent project scope
 for writers/readers; the compiler fences the selected project root, entry-file
 parent and explicit library root, not arbitrary independently managed nested
 projects. Precommit refusals do not publish candidate source; reserved
-lock/recovery metadata is outside the tracked projection. A dry run performs
-the same candidate and dependency checks without a writer lock or publication.
+lock/recovery metadata is outside the tracked projection. A dry run uses the same
+planning, candidate-checking and physical-precondition path without a
+source-transaction lock or publication; configured store caching may still write
+its disposable cache. Apply additionally requires a signing key, excludes it from
+source inputs and performs authenticated recovery. A key-free dry run refuses
+pending state instead of recovering it.
 
 The protocol assumes cooperating writers keep the parent namespace stable.
-Retaining parent handles prevents path substitution during that invocation,
-but recovery after a crash reacquires them; arbitrary parent renames or changes
-by nonparticipating processes are outside this contract. No global filesystem
-snapshot or stronger multi-directory atomicity is claimed.
+Retained handles keep writes on the acquired directory objects; they do not
+authenticate the continued pathname-to-parent mapping. Recovery after a crash
+reacquires those parents. Arbitrary parent renames or changes by nonparticipating
+processes are outside this contract. No global filesystem snapshot or stronger
+multi-directory atomicity is claimed.
 
 ## Comparing checked meaning
 
