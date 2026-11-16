@@ -13,6 +13,7 @@ pub struct Snapshot {
     pub facts: usize,
 }
 struct Entry { name: String, hash: String, value: Vec<u8> }
+#[derive(Clone)]
 pub struct Page { pub lines: Vec<String>, pub next: Option<usize> }
 
 pub fn selector(path: &str, source: &Option<String>, library: &Option<String>, no_library: bool) -> String {
@@ -177,12 +178,13 @@ pub fn open<Q: store::QueryAccess>(store: &mut Q, selector: &str, requested: &Op
 }
 
 pub struct Reader {
-    pub snapshot: Snapshot,
+    snapshot: Snapshot,
     pages: BTreeMap<String, Vec<u8>>,
+    fact_pages: BTreeMap<String, Option<Page>>,
     pub reads: usize,
 }
 impl Reader {
-    pub fn new(snapshot: Snapshot) -> Self { Self { snapshot, pages: BTreeMap::new(), reads: 0usize } }
+    pub fn new(snapshot: Snapshot) -> Self { Self { snapshot, pages: BTreeMap::new(), fact_pages: BTreeMap::new(), reads: 0usize } }
     fn node<Q: store::QueryAccess>(&mut self, store: &mut Q, identity: &str) -> Result<Vec<u8>, String> {
         if let Some(bytes) = self.pages.get(&identity.to_string()) { return Ok(bytes.clone()); }
         let bytes = match store.query_page(identity) {
@@ -248,8 +250,13 @@ impl Reader {
         }
     }
     pub fn page<Q: store::QueryAccess>(&mut self, store: &mut Q, kind: &str, identity: &str, number: usize) -> Result<Option<Page>, String> {
+        let key = leaf_key(kind, identity, number);
+        if let Some(page) = self.fact_pages.get(&key) { return Ok(page.clone()); }
         let result = self.page_checked(&mut *store, kind, identity, number);
-        if result.is_err() { store.invalidate_query_snapshot(&self.snapshot.identity, &self.snapshot.selector); }
+        match &result {
+            Ok(page) => { self.fact_pages.insert(key, page.clone()); }
+            Err(_) => { store.invalidate_query_snapshot(&self.snapshot.identity, &self.snapshot.selector); }
+        }
         result
     }
     fn page_checked<Q: store::QueryAccess>(&mut self, store: &mut Q, kind: &str, identity: &str, number: usize) -> Result<Option<Page>, String> {
