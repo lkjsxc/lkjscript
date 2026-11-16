@@ -1,0 +1,27 @@
+[
+  {
+    "path": "cohort",
+    "before": "compiler-copy-sites-20261116-1",
+    "after": "compiler-copy-sites-20261116-2"
+  },
+  {
+    "path": "release_path",
+    "before": "bench/compiler-profile-copy-sites-release-20261116.json",
+    "after": "bench/compiler-profile-copy-sites-release-20261116-2.json"
+  },
+  {
+    "path": "evidence_directory",
+    "before": "target/compiler-copy-sites-evidence.20261116-1",
+    "after": "target/compiler-copy-sites-evidence.20261116-2"
+  },
+  {
+    "path": "run_directory",
+    "before": "target/compiler-copy-sites-run.20261116-1",
+    "after": "target/compiler-copy-sites-run.20261116-2"
+  },
+  {
+    "path": "files.launcher.sha256",
+    "before": "47d085bc0cf1b0a48be56fcfda8efcec5cba85162dcdf9031f5da5ba7e6140e6",
+    "after": "abf52e1d5f22370a999e6e7765c4b28fe34671ff16430aa93da8d7112fd71bd6"
+  }
+]
