@@ -50,7 +50,8 @@ test ! -e "$fixture/source/.lkjscript-edit.generation"
 test -z "$(find "$fixture/source" -name '*.lkjscript-next' -print -quit)"
 printf '%s\n' 'pub fn value() -> i64 { 99i64 }' > "$fixture/competitor-expected"
 cmp "$fixture/competitor-expected" "$fixture/source/added/mod.lkj"
-cat "$fixture/run.out"
+# Retain both expected refusals in the caller log before removing the fixture.
+cat "$fixture/control.err" "$fixture/run.err" "$fixture/run.out"
 ended=$(date +%s%N)
 load_after=$(cat /proc/loadavg)
 awk -v elapsed="$((ended-started))" -v before="$load_before" -v after="$load_after" 'BEGIN { printf "ok alternate dependency race: %.3f s, load %s -> %s\n", elapsed/1000000000, before, after }'
