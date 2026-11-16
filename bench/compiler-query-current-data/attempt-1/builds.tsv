@@ -1,0 +1,1 @@
+phase	status	protocol_valid	wrapper_wall_ns	subprocess_wall_s	user_s	system_s	rss_kib	total_ms	producer_hash_ms	semantic_catalog_ms	semantic_index_ms	store_io_ms	build_reused	store_writes	ir_functions	ir_instructions	image_bytes	image_sha256	snapshot	source	checked_ir	load_before	load_after	errors

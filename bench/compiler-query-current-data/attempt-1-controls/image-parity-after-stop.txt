@@ -1,0 +1,1 @@
+Both native image copies were compared directly with the owned frozen producer after the harness stopped; both cmp commands exited0. This was offline file validation, not another compiler invocation.

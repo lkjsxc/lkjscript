@@ -1,0 +1,2 @@
+cwd=/home/coder/workspace/lkjscript-compiler-query-container-20261116
+bash bench/compiler-query-current.sh --compiler /home/coder/workspace/lkjscript/target/compiler-origin-container-gate.uQZd6X/canonical --identities bench/compiler-query-current-identities-62fa76f4.json --results target/compiler-query-current-62fa76f4

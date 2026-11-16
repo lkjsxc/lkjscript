@@ -1,0 +1,36 @@
+{
+  "cancelled": false,
+  "capture_status": "complete",
+  "duration_ms": 110280,
+  "exit_code": 1,
+  "finished": true,
+  "generation": "pipe-elmmaojdjipcefjalmglpkmflkffimna",
+  "request_id": "compiler-current50-poll-1071",
+  "signal": null,
+  "status": "done",
+  "stderr": "",
+  "stderr_capture_truncated": false,
+  "stderr_ref": {
+    "available": true,
+    "end_offset": 0,
+    "offset": 0,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-elmmaojdjipcefjalmglpkmflkffimna.stderr",
+    "total_bytes": 0
+  },
+  "stderr_truncated": false,
+  "stdout": "retained evidence=/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-62fa76f4 fixture=/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-run.TDPm4g key_directory=/tmp/compiler-query-current-key.seAq58 status=1\n",
+  "stdout_capture_truncated": false,
+  "stdout_ref": {
+    "available": true,
+    "end_offset": 300,
+    "offset": 300,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-elmmaojdjipcefjalmglpkmflkffimna.stdout",
+    "total_bytes": 300
+  },
+  "stdout_truncated": false,
+  "stream_mode": "pipes",
+  "timed_out": false,
+  "tool": "wait_for_exit",
+  "truncated": false,
+  "workdir": "/home/coder/workspace/lkjscript-compiler-query-container-20261116"
+}

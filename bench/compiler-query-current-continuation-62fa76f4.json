@@ -1,0 +1,80 @@
+{
+  "version": 1,
+  "protocol": "lkjscript-current50-checkpoint-continuation-1",
+  "repository": "/home/coder/workspace/lkjscript-compiler-query-container-20261116",
+  "results": "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-continuation-62fa76f4",
+  "original_evidence": "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-62fa76f4",
+  "imported_attempt": "bench/compiler-query-current-data/attempt-1",
+  "imported_attempt_manifest": "bench/compiler-query-current-data/attempt-1.manifest.sha256",
+  "validated_directory": "bench/compiler-query-current-data/offline-validation-2",
+  "fixture": "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-run.TDPm4g",
+  "key_directory": "/tmp/compiler-query-current-key.seAq58",
+  "producer_bytes": 32196802,
+  "prior_query_launches": 0,
+  "query_launches": 50,
+  "builds_repeated": 0,
+  "pins": {
+    "snapshot": "9ff914ad9f4ef15c9bc5c61cb5d0718abcfde00322243a7a52a73f6b08d3534e",
+    "source": "d01c7eb47d92c7aefc7490b83f9bbc05025f6197871a7f90c51dfcad1576bb2b",
+    "checked_ir": "4613bd709ee1d9238dca31e51b25d091abcd21a77f018090fedb8db8032c0fa2",
+    "producer": "34491766f5258dd3af3caf92db6b92dfeba09b405c00a8dd19cd955205c0d377",
+    "image_sha256": "34491766f5258dd3af3caf92db6b92dfeba09b405c00a8dd19cd955205c0d377"
+  },
+  "last_build_finish_ns": "1794826898674428422",
+  "original_harness_finish_utc": "2026-11-16T11:01:38Z",
+  "original_harness_exit": 1,
+  "original_harness_sha256": "e09435c6fd30b00ce33f5aa21af5e012f83c1705de1a9f6ac41259ed44bf934c",
+  "original_validator_sha256": "bc57855884da6aa7dc2aede7cb856e58032d9b488b1e3537bc3fc89669f0d1da",
+  "records": [
+    {
+      "path": "bench/compiler-query-current-data/attempt-1.manifest.sha256",
+      "sha256": "ab1b3b95fe8f14cd0202eaa6ffeeb01a274a43afd08102b4bb75ef252d91f963"
+    },
+    {
+      "path": "bench/compiler-query-current-data/offline-validation-2/builds.json",
+      "sha256": "1c3efd8040ab9325bde44bb7338e4632d5024ccf9bec12cb7d949f0ed4344ca7"
+    },
+    {
+      "path": "bench/compiler-query-current-data/offline-validation-2/pins.json",
+      "sha256": "df099c176412e90723cc3f26ee6601fc53e8838087951ad2d827b4e0b0ccd532"
+    },
+    {
+      "path": "bench/compiler-query-current-data/attempt-1/inputs-before.sha256",
+      "sha256": "533c5773742dae792ce8118c47aa136c5d8031fbd52fddd0c7ce2062228030ca"
+    },
+    {
+      "path": "bench/compiler-query-current-data/attempt-1/identities.json",
+      "sha256": "528887a19b33ea623444ac99cbba6b2ba625fec19285a75bd4b213185764bddf"
+    },
+    {
+      "path": "bench/compiler-query-current-continuation-validate.pl",
+      "sha256": "ab8df55c21037c5dae20d9b723155f113bc134d64b4a059406c073d486e47204"
+    },
+    {
+      "path": "bench/compiler-query-current-continue.sh",
+      "sha256": "ed7c55381ca3194b479e2da7bf9bbc7c8872d41af8a8c2bfdbfe1886040341e2"
+    },
+    {
+      "path": "bench/compiler-query-current-questions.tsv",
+      "sha256": "417a4adfe357aab04915c5cdee3ebe2f691ee46ca2fb74663735e5d35a6e81e9"
+    },
+    {
+      "path": "bench/compiler-query-current-identities-62fa76f4.json",
+      "sha256": "8f01fbd8008fb1d9804debd3c3d8628e844cc31f2f817a88af2961372aa2b6df"
+    }
+  ],
+  "query_memory_bytes": 2147483648,
+  "query_deadline_s": 30,
+  "kill_grace_s": 10,
+  "core_depth": 1,
+  "supplemental_depth": 2,
+  "limit": 96,
+  "bytes": 32768,
+  "metadata_prequeries": 0,
+  "map_walks": 0,
+  "census": 0,
+  "retries": 0,
+  "status": "prepared only; separate root execution release required",
+  "warm_sequence": "cold index; unchanged index; original validator failure; inspection and offline correction pause; fifty queries for the first time",
+  "pause_limitation": "The query segment is not an uninterrupted first-harness run. OS cache state and host load may change during the pause; no cache flush or metadata query is added."
+}

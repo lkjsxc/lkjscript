@@ -1,0 +1,9 @@
+source_commit=c17b7ded308b5db7848db7b22c38d891e31bd14c
+launch_request=compiler-current50-launch-1068
+launch_session=pipe-elmmaojdjipcefjalmglpkmflkffimna
+finished_request=compiler-current50-poll-1071
+compiler_builds=2
+compiler_build_exits=0,0
+query_launches=0
+harness_exit=1
+stop=offline_build_validation

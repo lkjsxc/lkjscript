@@ -1,0 +1,7 @@
+original_preparation_manifest=verified
+identity_release_manifest=verified
+failed_attempt_manifest=verified
+checkpoint_path_guard=exact_committed_path
+compiler_commands_started=0
+query_commands_started=0
+checks=syntax_and_offline_captured_record_validation_only
