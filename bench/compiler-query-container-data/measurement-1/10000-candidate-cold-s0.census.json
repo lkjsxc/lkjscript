@@ -1,0 +1,100 @@
+{
+   "budget" : {
+      "accounted_entry_bytes" : 2683023,
+      "accounted_total_bytes" : 2684397,
+      "entries" : 5,
+      "envelope_bytes" : 1374,
+      "envelope_sha256" : "97c7ed5220d1898db6e87485588869a85876eeec5d611f4330384efc95aaef49",
+      "families" : {
+         "check" : {
+            "bytes" : 38020,
+            "entries" : 1
+         },
+         "front" : {
+            "bytes" : 1204650,
+            "entries" : 1
+         },
+         "image" : {
+            "bytes" : 456536,
+            "entries" : 1
+         },
+         "inputs-image" : {
+            "bytes" : 24153,
+            "entries" : 1
+         },
+         "other" : {
+            "bytes" : 959664,
+            "entries" : 1
+         }
+      },
+      "generation_order" : [
+         "c05cbbd3953f20640f83828bab7917a788163a125fed990e0521b877c4035314"
+      ],
+      "missing_entries" : 0,
+      "payload_bytes" : 1284,
+      "physical_length_mismatches" : 0,
+      "status" : "authenticated",
+      "unindexed_regular_names" : [],
+      "within_capacity" : true,
+      "writer_capacity_bytes" : 2147483648
+   },
+   "files" : 7,
+   "fixed_header_bytes_read" : 540,
+   "fixed_snapshot_payload_bytes_read" : 0,
+   "inventory_header_manifest_sha256" : "36a5dda2072113b7260ecc34a08596e83c3abf201f9dd7765c0a206ceff0409d",
+   "measurement" : "untimed post-command metadata census; authenticates Budget and fixed snapshot fronts only",
+   "namespaces" : {
+      "budget-index" : {
+         "declared_front_or_payload_bytes" : 1284,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 1374
+      },
+      "budget-lock" : {
+         "declared_front_or_payload_bytes" : 0,
+         "files" : 1,
+         "fixed_header_bytes_read" : 0,
+         "framed_envelopes" : 0,
+         "stored_bytes" : 0
+      },
+      "check" : {
+         "declared_front_or_payload_bytes" : 37930,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 38020
+      },
+      "front" : {
+         "declared_front_or_payload_bytes" : 1204560,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 1204650
+      },
+      "image" : {
+         "declared_front_or_payload_bytes" : 456446,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 456536
+      },
+      "inputs-image" : {
+         "declared_front_or_payload_bytes" : 24063,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 24153
+      },
+      "other" : {
+         "declared_front_or_payload_bytes" : 959574,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 959664
+      }
+   },
+   "nonregular" : [],
+   "snapshots" : [],
+   "stored_bytes" : 2684397
+}

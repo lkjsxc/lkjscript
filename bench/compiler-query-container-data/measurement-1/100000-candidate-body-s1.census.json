@@ -1,0 +1,163 @@
+{
+   "budget" : {
+      "accounted_entry_bytes" : 647669539,
+      "accounted_total_bytes" : 647672242,
+      "entries" : 11,
+      "envelope_bytes" : 2703,
+      "envelope_sha256" : "f9dd6c8236ede3498fa05411edc5df1ee0034c46a9b974572e5a4c1433c229d2",
+      "families" : {
+         "check" : {
+            "bytes" : 374707,
+            "entries" : 1
+         },
+         "front" : {
+            "bytes" : 11847693,
+            "entries" : 1
+         },
+         "image" : {
+            "bytes" : 8946274,
+            "entries" : 2
+         },
+         "inputs-image" : {
+            "bytes" : 117175,
+            "entries" : 1
+         },
+         "inputs-semantic" : {
+            "bytes" : 117175,
+            "entries" : 1
+         },
+         "other" : {
+            "bytes" : 9906945,
+            "entries" : 2
+         },
+         "semantic-container-v3" : {
+            "bytes" : 616358886,
+            "entries" : 1
+         },
+         "semantic-latest-v3" : {
+            "bytes" : 490,
+            "entries" : 1
+         },
+         "semantic-locator-v3" : {
+            "bytes" : 194,
+            "entries" : 1
+         }
+      },
+      "generation_order" : [
+         "c05cbbd3953f20640f83828bab7917a788163a125fed990e0521b877c4035314"
+      ],
+      "missing_entries" : 0,
+      "payload_bytes" : 2613,
+      "physical_length_mismatches" : 0,
+      "status" : "authenticated",
+      "unindexed_regular_names" : [],
+      "within_capacity" : true,
+      "writer_capacity_bytes" : 2147483648
+   },
+   "files" : 13,
+   "fixed_header_bytes_read" : 1080,
+   "fixed_snapshot_payload_bytes_read" : 400,
+   "inventory_header_manifest_sha256" : "380f3e0ad30e2eae9f4bc6d51f659c90e373174ca795bf50056b7b9725efd9d9",
+   "measurement" : "untimed post-command metadata census; authenticates Budget and fixed snapshot fronts only",
+   "namespaces" : {
+      "budget-index" : {
+         "declared_front_or_payload_bytes" : 2613,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 2703
+      },
+      "budget-lock" : {
+         "declared_front_or_payload_bytes" : 0,
+         "files" : 1,
+         "fixed_header_bytes_read" : 0,
+         "framed_envelopes" : 0,
+         "stored_bytes" : 0
+      },
+      "check" : {
+         "declared_front_or_payload_bytes" : 374617,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 374707
+      },
+      "front" : {
+         "declared_front_or_payload_bytes" : 11847603,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 11847693
+      },
+      "image" : {
+         "declared_front_or_payload_bytes" : 8946094,
+         "files" : 2,
+         "fixed_header_bytes_read" : 180,
+         "framed_envelopes" : 2,
+         "stored_bytes" : 8946274
+      },
+      "inputs-image" : {
+         "declared_front_or_payload_bytes" : 117085,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 117175
+      },
+      "inputs-semantic" : {
+         "declared_front_or_payload_bytes" : 117085,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 117175
+      },
+      "other" : {
+         "declared_front_or_payload_bytes" : 9906765,
+         "files" : 2,
+         "fixed_header_bytes_read" : 180,
+         "framed_envelopes" : 2,
+         "stored_bytes" : 9906945
+      },
+      "semantic-container-v3" : {
+         "declared_front_or_payload_bytes" : 400,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 616358886
+      },
+      "semantic-latest-v3" : {
+         "declared_front_or_payload_bytes" : 400,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 490
+      },
+      "semantic-locator-v3" : {
+         "declared_front_or_payload_bytes" : 104,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 194
+      }
+   },
+   "nonregular" : [],
+   "snapshots" : [
+      {
+         "checked_ir" : "fd0933e6d1226a7c4a4f9aeb1ee676ae6a607faa7925d39feb5d0f0971275bd4",
+         "facts" : 2902333,
+         "file" : "semantic-container-v3-c05cbbd3953f20640f83828bab7917a788163a125fed990e0521b877c4035314-60028dbc63b9f3a1d09afb6c6547d391e2e0c2cc795bfcad2cc108805ab0fef3",
+         "fixed_front_authenticated" : true,
+         "identity" : "60028dbc63b9f3a1d09afb6c6547d391e2e0c2cc795bfcad2cc108805ab0fef3",
+         "locator_present" : true,
+         "node_authentication" : "not-performed-by-census",
+         "physical_bytes" : 616358886,
+         "producer" : "eed6ca32edcc182a92c4e697f4702ec685dff8e7778b0374a27552aa9c938947",
+         "root" : "19ab5b45ad41911bbc2c003601e7639f101e622d3af013a4d80356401eb3885c",
+         "root_length" : 1658,
+         "root_offset" : 616357228,
+         "selector" : "0d24fb0cf01c901bea149b0c3a7a6c7b69b834569b1c6d63c9512b96ac97dc5a",
+         "source" : "eeed3fc96e6e0409453a8c0ea53271a37cdecffcd8acb8a94b9e30286eb9aa49",
+         "total_bytes" : 616358886,
+         "version" : 3
+      }
+   ],
+   "stored_bytes" : 647672242
+}

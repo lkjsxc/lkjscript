@@ -1,0 +1,5 @@
+rung	producer	wall_s	load_before	load_after	driver_store_io_ms	exclusive_store_io_ns	metadata_ns	budget_read_ns	budget_seal_ns	budget_publish_ns	budget_authenticated_envelope_bytes	budget_published_envelope_bytes	budget_headers	budget_header_bytes	budget_manifest_bytes	budget_container_authenticated	budget_container_extent_checks
+10000	baseline	1.25	5.12,4.96,5.95	5.03,4.95,5.94	461.773	460990706	356960751	16692656	17992114	1621171	1632171	1632394	7065	635850	0	0	0
+10000	candidate	0.84	5.03,4.95,5.94	5.03,4.95,5.94	65.976	65257655	347660	68318	37019	110868	2480	2703	10	900	400	1	1
+100000	baseline	10.38	5.43,4.56,5.46	5.14,4.52,5.44	5683.738	5680135152	4524722790	165199107	195716975	7847789	16239456	16239679	70300	6327000	0	0	0
+100000	candidate	5.33	4.89,4.48,5.42	4.65,4.44,5.40	720.406	716289027	390915	73087	41087	208942	2480	2703	10	900	400	1	1

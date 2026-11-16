@@ -1,0 +1,1 @@
+{"exclusive_store_counter_sum_ns":0,"stats":{"peak_rss_bytes":4317184,"producer_bytes_hashed":0,"route":"compiler","semantic_query_ms":2.168,"snapshot_auth_ms":0.096,"stopped_stage":"done","total_ms":2.268},"status":"captured-stats-validated","store_io_categories":{},"store_io_summary":null}

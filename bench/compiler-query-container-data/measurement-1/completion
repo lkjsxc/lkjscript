@@ -1,0 +1,5 @@
+timed_build_sequence=complete
+correctness_failures=0
+retention_file=retention.tsv
+owned_fixture_retained_until_acceptance=true
+supervisor_status=0

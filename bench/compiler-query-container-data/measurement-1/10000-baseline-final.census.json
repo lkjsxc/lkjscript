@@ -1,0 +1,186 @@
+{
+   "budget" : {
+      "accounted_entry_bytes" : 86516236,
+      "accounted_total_bytes" : 88152259,
+      "entries" : 7082,
+      "envelope_bytes" : 1636023,
+      "envelope_sha256" : "78af714246193657c0f53648b071560ecc905c6f84ab11a14fae913cfeb47c39",
+      "families" : {
+         "check" : {
+            "bytes" : 38020,
+            "entries" : 1
+         },
+         "front" : {
+            "bytes" : 1204650,
+            "entries" : 1
+         },
+         "image" : {
+            "bytes" : 913072,
+            "entries" : 2
+         },
+         "inputs-image" : {
+            "bytes" : 24153,
+            "entries" : 1
+         },
+         "inputs-semantic" : {
+            "bytes" : 24153,
+            "entries" : 1
+         },
+         "other" : {
+            "bytes" : 959972,
+            "entries" : 3
+         },
+         "semantic-latest" : {
+            "bytes" : 466,
+            "entries" : 1
+         },
+         "semantic-locator-v2" : {
+            "bytes" : 388,
+            "entries" : 2
+         },
+         "semantic-page" : {
+            "bytes" : 83350430,
+            "entries" : 7068
+         },
+         "semantic-root" : {
+            "bytes" : 932,
+            "entries" : 2
+         }
+      },
+      "generation_order" : [
+         "2990f0a664e298f3f93e1e7b22e3237a388dc18d67fa3ad3648dc17f77377a72"
+      ],
+      "missing_entries" : 0,
+      "payload_bytes" : 1635933,
+      "physical_length_mismatches" : 0,
+      "status" : "authenticated",
+      "unindexed_regular_names" : [],
+      "within_capacity" : true,
+      "writer_capacity_bytes" : 2147483648
+   },
+   "files" : 7084,
+   "fixed_header_bytes_read" : 637470,
+   "fixed_snapshot_payload_bytes_read" : 752,
+   "inventory_header_manifest_sha256" : "2b81a814302930a7ed82bc31d7c2ac341514f320fc3b60e1e2d42e1912afab02",
+   "measurement" : "untimed post-command metadata census; authenticates Budget and fixed snapshot fronts only",
+   "namespaces" : {
+      "budget-index" : {
+         "declared_front_or_payload_bytes" : 1635933,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 1636023
+      },
+      "budget-lock" : {
+         "declared_front_or_payload_bytes" : 0,
+         "files" : 1,
+         "fixed_header_bytes_read" : 0,
+         "framed_envelopes" : 0,
+         "stored_bytes" : 0
+      },
+      "check" : {
+         "declared_front_or_payload_bytes" : 37930,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 38020
+      },
+      "front" : {
+         "declared_front_or_payload_bytes" : 1204560,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 1204650
+      },
+      "image" : {
+         "declared_front_or_payload_bytes" : 912892,
+         "files" : 2,
+         "fixed_header_bytes_read" : 180,
+         "framed_envelopes" : 2,
+         "stored_bytes" : 913072
+      },
+      "inputs-image" : {
+         "declared_front_or_payload_bytes" : 24063,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 24153
+      },
+      "inputs-semantic" : {
+         "declared_front_or_payload_bytes" : 24063,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 24153
+      },
+      "other" : {
+         "declared_front_or_payload_bytes" : 959702,
+         "files" : 3,
+         "fixed_header_bytes_read" : 270,
+         "framed_envelopes" : 3,
+         "stored_bytes" : 959972
+      },
+      "semantic-latest" : {
+         "declared_front_or_payload_bytes" : 376,
+         "files" : 1,
+         "fixed_header_bytes_read" : 90,
+         "framed_envelopes" : 1,
+         "stored_bytes" : 466
+      },
+      "semantic-locator-v2" : {
+         "declared_front_or_payload_bytes" : 208,
+         "files" : 2,
+         "fixed_header_bytes_read" : 180,
+         "framed_envelopes" : 2,
+         "stored_bytes" : 388
+      },
+      "semantic-page" : {
+         "declared_front_or_payload_bytes" : 82714310,
+         "files" : 7068,
+         "fixed_header_bytes_read" : 636120,
+         "framed_envelopes" : 7068,
+         "stored_bytes" : 83350430
+      },
+      "semantic-root" : {
+         "declared_front_or_payload_bytes" : 752,
+         "files" : 2,
+         "fixed_header_bytes_read" : 180,
+         "framed_envelopes" : 2,
+         "stored_bytes" : 932
+      }
+   },
+   "nonregular" : [],
+   "snapshots" : [
+      {
+         "checked_ir" : "a1457375ea1c7c3d4d1d2a0f445ea1dfcfd3ad9f86b3258f216457991b45bb5c",
+         "facts" : 343561,
+         "file" : "semantic-root-2990f0a664e298f3f93e1e7b22e3237a388dc18d67fa3ad3648dc17f77377a72-6ea71f57c65647a6500a9a06aec76f18892f721393a88c8129700de81fe58845",
+         "fixed_front_authenticated" : true,
+         "identity" : "6ea71f57c65647a6500a9a06aec76f18892f721393a88c8129700de81fe58845",
+         "locator_present" : true,
+         "node_authentication" : "not-performed-by-census",
+         "physical_bytes" : 466,
+         "producer" : "adc0b26f2c6db38710971b48ca88a6598078537959e04accbaae60a07a82ccc7",
+         "root" : "66dbf15fee767ecba4fd0fff9017c5f0a45f5fef621c440760c24d5b50c1361d",
+         "selector" : "7915c2a49ce036e74808552afb682e6f672060863553cb351d563872bb5733dc",
+         "source" : "27a01cd38de318945e3d775b46fe9ee3c743ed018124cba2b3d42b94a99a91c8",
+         "version" : 2
+      },
+      {
+         "checked_ir" : "ab27304e981ce96283e9a53f67524bf0516589cfc439b7e9428a8eea4782435f",
+         "facts" : 343561,
+         "file" : "semantic-root-2990f0a664e298f3f93e1e7b22e3237a388dc18d67fa3ad3648dc17f77377a72-d141c9820dbe434a56a37d438517a8ac2315a3493fc235db387b4e1b43f98753",
+         "fixed_front_authenticated" : true,
+         "identity" : "d141c9820dbe434a56a37d438517a8ac2315a3493fc235db387b4e1b43f98753",
+         "locator_present" : true,
+         "node_authentication" : "not-performed-by-census",
+         "physical_bytes" : 466,
+         "producer" : "adc0b26f2c6db38710971b48ca88a6598078537959e04accbaae60a07a82ccc7",
+         "root" : "ba121218700221dea52c70e01c0c2864e06265d5fc76682dd4a0d1596ad73738",
+         "selector" : "7915c2a49ce036e74808552afb682e6f672060863553cb351d563872bb5733dc",
+         "source" : "d1e1ac340ca307fcb2ec1972745f74aa51454659626d7abea0e8fbe60ba5d415",
+         "version" : 2
+      }
+   ],
+   "stored_bytes" : 88152259
+}

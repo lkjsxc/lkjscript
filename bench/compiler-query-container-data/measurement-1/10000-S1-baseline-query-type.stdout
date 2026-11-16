@@ -1,0 +1,3 @@
+"edit::target"	level=protocol	fact=query	version=2 producer=adc0b26f2c6db38710971b48ca88a6598078537959e04accbaae60a07a82ccc7 validation=authenticated-producing-compiler current-check=not-performed snapshot=6ea71f57c65647a6500a9a06aec76f18892f721393a88c8129700de81fe58845 source=27a01cd38de318945e3d775b46fe9ee3c743ed018124cba2b3d42b94a99a91c8 checked-ir=a1457375ea1c7c3d4d1d2a0f445ea1dfcfd3ad9f86b3258f216457991b45bb5c kind=type depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
+"edit::target"	level=source-claim	fact=declared-type	value="fn(u64) -> u64"
+"edit::target"	level=protocol	fact=continuation	cursor=none facts=1 pages-read=4 traversal-steps=2

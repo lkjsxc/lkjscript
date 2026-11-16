@@ -1,0 +1,1 @@
+/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-container-run.jKz4Mn/generator shape /home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-container-run.jKz4Mn/frozen 
