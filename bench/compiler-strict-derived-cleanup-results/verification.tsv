@@ -1,0 +1,8 @@
+check	result	records
+bench/compiler-strict-derived.results.sha256	passed	57
+bench/compiler-strict-derived.prepared.sha256	passed	35
+bench/compiler-strict-derived.producer-evidence.sha256	passed	9
+bench/compiler-strict-derived-cleanup.prepared.sha256	passed	9
+bench/compiler-history-comment-rename.sha256	passed	22
+fixture_absence	passed	1
+metadata_copies_unchanged	passed	2

@@ -1,0 +1,4 @@
+utc_before=2026-11-16T11:58:47Z load_before=0.89 1.41 1.60 6/5480 1005323
+guards=passed same_user_processes=40 descriptors=580 pending=absent staging=absent key_content=not-read
+remove_fixture=/home/coder/workspace/lkjscript-compiler-strict-derived-20261116/target/compiler-strict-derived.ZQv7cu files=3706 logical_bytes=71949767
+removed=true elapsed_seconds=0.285055876 utc_after=2026-11-16T11:58:47Z load_after=0.89 1.41 1.60 2/5480 1005380

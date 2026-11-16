@@ -1,0 +1,4 @@
+0ce6f900067446d081dad5b1239409d971a74bd3bb088bcc4093c9327d28b894  bench/compiler-strict-derived-cleanup.pl
+a8cfa01bf8db01e07cc80a8191b5c018ab1354942acb44b7a33f840739fc1d94  bench/compiler-strict-derived-cleanup-data/inventory.pl
+cd14246fcb33f4bc4993b7cfd1b515733137ccd02675a9287a3e5e2a661b27b0  bench/compiler-strict-derived-cleanup.prepared.sha256
+1bf4789f9d168ff6482d850cf1b7c7e4c994fc3c5fd0e1e2bdc4cdb52b608dd4  bench/compiler-history-comment-rename.sha256
