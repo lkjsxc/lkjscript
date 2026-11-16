@@ -1,0 +1,1 @@
+one sequential compression worker; 4 GiB AS; 900s timeout; 10s TERM grace; no compiler/native/performance/deletion

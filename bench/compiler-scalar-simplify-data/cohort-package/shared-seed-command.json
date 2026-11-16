@@ -1,0 +1,19 @@
+{
+   "argv" : [
+      "/bin/bash",
+      "-o",
+      "pipefail",
+      "-c",
+      "/usr/bin/gzip -dc -- '/home/coder/workspace/lkjscript/target/compiler-scalar-cohort-package-1/artifacts/cf3cd4568e4b7581aefff46cc92f93a6f145d861f46481df76d1e861fd0d0c64.source.tar.gz' | /usr/bin/tar -xOf - -- 'seed/lkjscript.gz' | /usr/bin/gzip -dc"
+   ],
+   "no_output_file_created" : true,
+   "outputs" : [
+      "target/compiler-scalar-simplify.20261116-1/fixture/expected",
+      "target/compiler-scalar-simplify.20261116-1/fixture/output-A1",
+      "target/compiler-scalar-simplify.20261116-1/fixture/output-A2",
+      "target/compiler-scalar-simplify.20261116-1/fixture/output-A3",
+      "target/compiler-scalar-simplify.20261116-1/fixture/output-B1",
+      "target/compiler-scalar-simplify.20261116-1/fixture/output-B2",
+      "target/compiler-scalar-simplify.20261116-1/fixture/output-B3"
+   ]
+}

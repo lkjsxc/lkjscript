@@ -1,0 +1,110 @@
+[
+   {
+      "bytes" : 32,
+      "copy" : "retention-proposal/cwd",
+      "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/cwd"
+   },
+   {
+      "bytes" : 31,
+      "copy" : "retention-proposal/end.utc",
+      "sha256" : "83f9812b9bf1987b72d6af70c94fc20bf0a225b17cb7ca503e9c448d47650404",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/end.utc"
+   },
+   {
+      "bytes" : 254250,
+      "copy" : "retention-proposal/inventory.json",
+      "sha256" : "235e976799d2640bf6599068204d7955bd359673696b3e657387b021f822a070",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/inventory.json"
+   },
+   {
+      "bytes" : 13195,
+      "copy" : "retention-proposal/inventory.pl",
+      "sha256" : "a03dc4991a55f7051733a841eb7c06ec3e1729917bcbe13f27097008dbd6c03c",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/inventory.pl"
+   },
+   {
+      "bytes" : 47632,
+      "copy" : "retention-proposal/inventory.sha256",
+      "sha256" : "0829c64a27a40e0ca0e8622ceb114f7a7ddb3e507aee154480d11d082921713c",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/inventory.sha256"
+   },
+   {
+      "bytes" : 3145,
+      "copy" : "retention-proposal/later-artifacts.json",
+      "sha256" : "5f99c5746ce18811468904ff4ff6a979fa994634f242df518a2076abaed6e1de",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/later-artifacts.json"
+   },
+   {
+      "bytes" : 15,
+      "copy" : "retention-proposal/load-after",
+      "sha256" : "8fd240343d956345d917b58053df2ca4b1589ddb0dee8f7fa6e60dd4640dba79",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/load-after"
+   },
+   {
+      "bytes" : 15,
+      "copy" : "retention-proposal/load-before",
+      "sha256" : "8fd240343d956345d917b58053df2ca4b1589ddb0dee8f7fa6e60dd4640dba79",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/load-before"
+   },
+   {
+      "bytes" : 1323,
+      "copy" : "retention-proposal/manifest.sha256",
+      "sha256" : "1a93aa925b1c9037023eb1ef80ec5fb323ba351384bec7d32d4a0d8cddc3fc3f",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/manifest.sha256"
+   },
+   {
+      "bytes" : 5172,
+      "copy" : "retention-proposal/proposal.md",
+      "sha256" : "1558b7a7872f7014e6bad817cb987526d0523581e9a716ba9a5b7e4d6e335150",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/proposal.md"
+   },
+   {
+      "bytes" : 10168,
+      "copy" : "retention-proposal/raw-members.nul",
+      "sha256" : "f3b5f94fedde2c46dd7548dc3dd3ab1a102c12b5d4a8c55868a3065de2522de0",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/raw-members.nul"
+   },
+   {
+      "bytes" : 20332,
+      "copy" : "retention-proposal/raw-members.sha256",
+      "sha256" : "223c383b6b034ad7597878fab30aa2e95f76320a878d83a9656159949c39b1cc",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/raw-members.sha256"
+   },
+   {
+      "bytes" : 119931,
+      "copy" : "retention-proposal/recovery-map.tsv",
+      "sha256" : "577cd7acdcf6e43cb1cb7d8f0aa228581a38d99b8da9b6f8aadb7113a60c5403",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/recovery-map.tsv"
+   },
+   {
+      "bytes" : 31,
+      "copy" : "retention-proposal/start.utc",
+      "sha256" : "3e4bd33b36b550cdd2891e4ba71965d583f99e1b4cd264bea6b6060c9f1bcfaf",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/start.utc"
+   },
+   {
+      "bytes" : 2,
+      "copy" : "retention-proposal/status",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/status"
+   },
+   {
+      "bytes" : 266,
+      "copy" : "retention-proposal/stderr",
+      "sha256" : "1e3cee7dad331693fa4e499dd568c1822a40fc7dcb58aff0d83bd9fd4afa884e",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/stderr"
+   },
+   {
+      "bytes" : 1628,
+      "copy" : "retention-proposal/stdout",
+      "sha256" : "fe80762592aa1db3d2d296a63b8bd6c28e46e7fb9af94142e2841c846747b59e",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/stdout"
+   },
+   {
+      "bytes" : 69,
+      "copy" : "retention-proposal/time",
+      "sha256" : "8ac50417a8345496730c3094b6cabed1afdfd9bd93afd523ab1a94e9aebb0efb",
+      "source" : "target/compiler-scalar-cohort-retention-proposal-1/time"
+   }
+]

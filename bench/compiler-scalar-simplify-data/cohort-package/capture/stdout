@@ -1,0 +1,8 @@
+create raw-records
+create target/compiler-scalar-simplify.20261116-1/fixture/producer-A
+create target/compiler-scalar-simplify.20261116-1/fixture/producer-B
+create target/compiler-scalar-simplify.20261116-1/fixture/source.tar
+verified target/compiler-scalar-simplify.20261116-1/fixture/producer-A original=22937783 compressed=4530022
+verified target/compiler-scalar-simplify.20261116-1/fixture/producer-B original=22929591 compressed=4529831
+verified target/compiler-scalar-simplify.20261116-1/fixture/source.tar original=7434240 compressed=3824641
+PASS raw=154 source_members=172 new_gzips=3 existing_E=verified_once shared_seed_outputs=7 proposal_copies=18

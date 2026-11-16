@@ -1,0 +1,21 @@
+{
+  "request_id": "compiler-scalar-cohort-package-correction-1350",
+  "recording": "Recorded after execution from the exact submitted gateway command; original captured status/time/load retained.",
+  "cwd": "/home/coder/workspace/lkjscript",
+  "argv": [
+    "/usr/bin/time",
+    "-o",
+    "/home/coder/workspace/lkjscript/target/compiler-scalar-cohort-package-1/capture/correction.time",
+    "-f",
+    "wall_s=%e user_s=%U system_s=%S maxrss_kib=%M exit_status=%x",
+    "/usr/bin/timeout",
+    "--signal=TERM",
+    "--kill-after=10s",
+    "900s",
+    "/usr/bin/prlimit",
+    "--as=4294967296",
+    "--",
+    "perl",
+    "/home/coder/workspace/lkjscript/target/compiler-scalar-cohort-package-1/correct-report.pl"
+  ]
+}

@@ -1,0 +1,18 @@
+[
+   {
+      "kind" : "raw-records",
+      "shell" : "/usr/bin/tar --format=ustar --mtime=@0 --owner=0 --group=0 --numeric-owner --hard-dereference --no-recursion --null --verbatim-files-from -C '/home/coder/workspace/lkjscript' -T '/home/coder/workspace/lkjscript/target/compiler-scalar-cohort-package-1/raw-members.nul' -cf - | /usr/bin/gzip -n -9 > '/home/coder/workspace/lkjscript/target/compiler-scalar-cohort-package-1/raw-cohort-records.tar.gz'"
+   },
+   {
+      "kind" : "target/compiler-scalar-simplify.20261116-1/fixture/producer-A",
+      "shell" : "/usr/bin/gzip -n -9 -c -- '/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/producer-A' > '/home/coder/workspace/lkjscript/target/compiler-scalar-cohort-package-1/artifacts/c7b8d970ace8f836a559f21fd7d95867fd718b9e95160d686442380afa330db1.producer-A.gz'"
+   },
+   {
+      "kind" : "target/compiler-scalar-simplify.20261116-1/fixture/producer-B",
+      "shell" : "/usr/bin/gzip -n -9 -c -- '/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/producer-B' > '/home/coder/workspace/lkjscript/target/compiler-scalar-cohort-package-1/artifacts/12b1f645c3ae4085c998cde9b6d3c920bc6c4ca547839654586c196e9aaaad11.producer-B.gz'"
+   },
+   {
+      "kind" : "target/compiler-scalar-simplify.20261116-1/fixture/source.tar",
+      "shell" : "/usr/bin/gzip -n -9 -c -- '/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source.tar' > '/home/coder/workspace/lkjscript/target/compiler-scalar-cohort-package-1/artifacts/cf3cd4568e4b7581aefff46cc92f93a6f145d861f46481df76d1e861fd0d0c64.source.tar.gz'"
+   }
+]
