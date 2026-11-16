@@ -1,0 +1,25 @@
+attempt=outer-launch-before-harness
+request=compiler-inline64-campaign-20261116-007
+exit_status=1
+stderr=/bin/bash: line 1: target/compiler-native-inline64.run.log: No such file or directory
+harness_started=false
+compiler_started=false
+timed_observations=0
+repair=Create the new worktree's target directory before outer log redirection.
+
+attempt=single-preselected-campaign
+request=compiler-inline64-campaign-20261116-010
+exit_status=0
+harness_started=true
+compiler_started=true
+timed_observations=9
+execution_observations=6
+execution_order=0,64,64,0,0,64
+oracle=passed
+completed=true
+last_phase=oracle/inline64/1
+fixture=target/compiler-native-inline64.ZLwgj2
+evidence=independently-accepted-by-root
+cleanup=completed
+fixture_status=absent
+cleanup_request=compiler-inline64-cleanup-20261116-023

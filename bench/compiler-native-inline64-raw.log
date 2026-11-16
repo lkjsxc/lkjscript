@@ -1,0 +1,219 @@
+[construct.inline0.1]
+start bytes=35
+1794796043447222148	2.62 2.51 2.87
+capture bytes=72
+1794796043447222148	1794796061055984930	2.62 2.51 2.87	2.70 2.54 2.87	0
+time bytes=24
+17.60	17.10	0.05	572488
+arguments bytes=660
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/emitter
+build
+src/main.lkj
+--source-dir
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source
+--library-dir
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source/library
+--runtime-source
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source/library/runtime.lkj
+--no-store
+--inline-limit
+0
+--stats
+-o
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/producer-0
+stdout bytes=0
+stderr bytes=797
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"done","total_ms":17605.111,"assemble_ms":56.840,"build_ir_ms":4801.000,"check_ms":0.014,"check_body_ms":5179.350,"check_verification_ms":0.011,"emit_ms":771.439,"key_hash_ms":0.006,"load_parse_ms":769.406,"native_encode_ms":0.011,"other_ms":37.621,"producer_hash_ms":0.003,"resolve_ms":171.695,"runtime_ms":28.316,"store_io_ms":0.016,"type_ms":5787.886,"write_ms":1.477,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_bytes":16197882,"emitted_reused":0,"front_definitions":2714,"front_functions":10072,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"ir_functions":10072,"ir_instructions":928672,"test_rerun":0,"test_reused":0,"peak_rss_bytes":586227712}
+
+[construct.inline64.1]
+start bytes=35
+1794796061069179112	2.70 2.54 2.87
+capture bytes=72
+1794796061069179112	1794796089059694581	2.70 2.54 2.87	2.78 2.55 2.86	0
+time bytes=24
+27.98	27.34	0.07	886276
+arguments bytes=662
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/emitter
+build
+src/main.lkj
+--source-dir
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source
+--library-dir
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source/library
+--runtime-source
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source/library/runtime.lkj
+--no-store
+--inline-limit
+64
+--stats
+-o
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/producer-64
+stdout bytes=0
+stderr bytes=856
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"done","total_ms":27985.975,"assemble_ms":77.913,"build_ir_ms":4824.614,"check_ms":0.012,"check_body_ms":14675.897,"check_optimized_ms":0.006,"check_verification_ms":0.018,"emit_ms":1167.830,"inline_ms":558.499,"key_hash_ms":0.006,"load_parse_ms":720.546,"native_encode_ms":0.010,"other_ms":88.538,"producer_hash_ms":0.003,"resolve_ms":164.417,"runtime_ms":27.928,"store_io_ms":0.016,"type_ms":5677.336,"write_ms":2.363,"build_reused":0,"checked_local_reused":4455,"checked_reused":0,"emitted_bytes":22939898,"emitted_reused":0,"front_definitions":2714,"front_functions":10072,"front_reused":0,"inline_accepted":1,"inline_attempts":1,"inline_calls":30619,"inline_functions":5617,"inline_rejected":0,"ir_functions":10072,"ir_instructions":928672,"test_rerun":0,"test_reused":0,"peak_rss_bytes":907546624}
+
+[execute.inline0.1]
+start bytes=35
+1794796089078533662	2.78 2.55 2.86
+capture bytes=72
+1794796089078533662	1794796106446494319	2.78 2.55 2.86	2.83 2.58 2.86	0
+time bytes=24
+17.36	16.88	0.04	564936
+arguments bytes=651
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/producer-0
+build
+src/main.lkj
+--source-dir
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source
+--library-dir
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source/library
+--runtime-source
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source/library/runtime.lkj
+--no-store
+--inline-limit
+0
+-o
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/output
+stdout bytes=0
+stderr bytes=0
+
+[execute.inline64.1]
+start bytes=35
+1794796106472907886	2.83 2.58 2.86
+capture bytes=72
+1794796106472907886	1794796121452124036	2.83 2.58 2.86	2.91 2.61 2.87	0
+time bytes=24
+14.97	14.59	0.04	571804
+arguments bytes=652
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/producer-64
+build
+src/main.lkj
+--source-dir
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source
+--library-dir
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source/library
+--runtime-source
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source/library/runtime.lkj
+--no-store
+--inline-limit
+0
+-o
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/output
+stdout bytes=0
+stderr bytes=0
+
+[execute.inline64.2]
+start bytes=35
+1794796121478376682	2.91 2.61 2.87
+capture bytes=72
+1794796121478376682	1794796136328495075	2.91 2.61 2.87	2.55 2.55 2.85	0
+time bytes=24
+14.84	14.48	0.05	570960
+arguments bytes=652
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/producer-64
+build
+src/main.lkj
+--source-dir
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source
+--library-dir
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source/library
+--runtime-source
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source/library/runtime.lkj
+--no-store
+--inline-limit
+0
+-o
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/output
+stdout bytes=0
+stderr bytes=0
+
+[execute.inline0.2]
+start bytes=35
+1794796136354822764	2.55 2.55 2.85
+capture bytes=72
+1794796136354822764	1794796153584090560	2.55 2.55 2.85	2.84 2.61 2.86	0
+time bytes=24
+17.22	16.78	0.05	566156
+arguments bytes=651
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/producer-0
+build
+src/main.lkj
+--source-dir
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source
+--library-dir
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source/library
+--runtime-source
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source/library/runtime.lkj
+--no-store
+--inline-limit
+0
+-o
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/output
+stdout bytes=0
+stderr bytes=0
+
+[execute.inline0.3]
+start bytes=35
+1794796153610430894	2.84 2.61 2.86
+capture bytes=72
+1794796153610430894	1794796170799969549	2.84 2.61 2.86	2.51 2.55 2.83	0
+time bytes=24
+17.18	16.81	0.04	565060
+arguments bytes=651
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/producer-0
+build
+src/main.lkj
+--source-dir
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source
+--library-dir
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source/library
+--runtime-source
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source/library/runtime.lkj
+--no-store
+--inline-limit
+0
+-o
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/output
+stdout bytes=0
+stderr bytes=0
+
+[execute.inline64.3]
+start bytes=35
+1794796170825243641	2.51 2.55 2.83
+capture bytes=72
+1794796170825243641	1794796185807954130	2.51 2.55 2.83	2.39 2.52 2.82	0
+time bytes=24
+14.98	14.54	0.05	571680
+arguments bytes=652
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/producer-64
+build
+src/main.lkj
+--source-dir
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source
+--library-dir
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source/library
+--runtime-source
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source/library/runtime.lkj
+--no-store
+--inline-limit
+0
+-o
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/output
+stdout bytes=0
+stderr bytes=0
+
+[oracle.inline64.1]
+start bytes=35
+1794796185832482281	2.39 2.52 2.82
+capture bytes=72
+1794796185832482281	1794796191198381087	2.39 2.52 2.82	2.28 2.50 2.81	0
+time bytes=21
+5.36	5.13	0.14	42692
+arguments bytes=244
+bash
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/source/tools/optimizer-test.sh
+/home/coder/workspace/lkjscript-compiler-inline64-20261116/target/compiler-native-inline64.ZLwgj2/producer-64
+stdout bytes=148
+ok optimizer (original admission and oracle, exact options, proof reuse, native/profile identity, cross-file traps, self-image, executed mutations)
+stderr bytes=0
+
