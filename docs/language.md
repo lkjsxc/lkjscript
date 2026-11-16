@@ -410,7 +410,7 @@ Native scalar results use a driver-owned raw eight-byte descriptor. Private trap
 User trap records are one bounded `PATH:LINE: RCODE message` line (at most 2048 bytes), with controls/backslashes escaped and overlong paths/messages marked `...`; native failure reporting uses preallocated storage and one complete write, retrying EINTR/short writes.
 Standalone failures exit 1 and use only granted Stderr (or World), then granted Stdout if stderr fails; without either grant they are silent. Run/test supervisors keep a private result channel and their own output authority. Both routes format scalars identically.
 
---stats reports phase milliseconds, IR/code counts and peak RSS. --source-dir grants
+--stats reports phase milliseconds, IR/code counts and peak RSS; stored builds append [authenticated-store byte/timing attribution](../bench/compiler-cache-io.protocol.md). --source-dir grants
 the source root; --library-dir/--runtime-source replace embedded components explicitly.
 --help gives options. Test expectation headers declare value, output bytes, diagnostic
 or trap; pending headers name the missing intended feature. The gate compares exact

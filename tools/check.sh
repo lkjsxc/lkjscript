@@ -140,6 +140,7 @@ parallel_step 1 semantic-query timeout --kill-after=10s 600s bash tools/semantic
 parallel_step 1 associated-query timeout --kill-after=10s 600s bash tools/associated-query-test.sh "$check_binary"
 parallel_step 1 query-signature timeout --kill-after=10s 600s bash tools/query-signature-test.sh "$check_binary"
 parallel_step 1 query-store timeout --kill-after=10s 600s bash tools/query-store-test.sh "$check_binary"
+parallel_step 1 semantic-index-page timeout --kill-after=10s 600s bash tools/semantic-index-page-test.sh "$check_binary"
 parallel_step 1 query-publication timeout --kill-after=10s 600s bash tools/query-publication-test.sh "$check_binary"
 parallel_step 1 directory-publication timeout --kill-after=10s 600s bash tools/directory-rename-new-test.sh "$check_binary"
 parallel_step 1 directory-identity timeout --kill-after=10s 600s bash tools/directory-identity-test.sh "$check_binary"
@@ -158,6 +159,7 @@ parallel_step 1 profiler timeout --kill-after=10s 600s sh tools/profile-test.sh 
 parallel_step 1 optimizer timeout --kill-after=10s 600s bash tools/optimizer-test.sh "$check_binary"
 parallel_step 1 resources timeout --kill-after=10s 600s bash tools/resource-test.sh "$check_binary"
 parallel_step 1 diagnostic-cases diagnostic_cases
+parallel_step 1 cache-io timeout --kill-after=10s 600s bash tools/cache-io-test.sh "$check_binary"
 parallel_step 2 store timeout --kill-after=10s 600s bash tools/store-test.sh "$check_binary"
 parallel_step 2 program-directory timeout --kill-after=10s 600s bash tools/program-directory-test.sh "$check_binary"
 parallel_step 2 http timeout --kill-after=10s 600s sh tools/http-test.sh --compiler "$check_binary" --seconds 0 --out target/gate/http-profiles

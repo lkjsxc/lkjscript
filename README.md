@@ -56,6 +56,8 @@ check source/IR byte identity. Select one route with `--engine native` or
 produce one line; failures identify the entry and route. See the
 [case format](tests/conformance/README.md). `--help` lists options; `--stats`
 reports phase times, counts and peak RSS on stderr.
+Stored builds also report [accepted payload/publication bytes and disjoint store
+phase durations](bench/compiler-cache-io.protocol.md) when stats are enabled.
 
 `build --profile` adds CPU sampling and a function-address map to the executable.
 Each process writes its own `OUTPUT.samples.PID` file, with a twenty-digit PID.
