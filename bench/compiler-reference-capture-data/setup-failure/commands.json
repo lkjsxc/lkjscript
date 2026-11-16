@@ -1,0 +1,122 @@
+[
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "a276bf3748810dbe7b4dc461ecee4ad17e6ec51b:bench/compiler-reference-capture-data/setup-preparation/README.md"
+      ],
+      "bytes" : 6235,
+      "exit" : 0,
+      "sha256" : "aae235f810044572d155c6efa336d0d69bc6957551686a11c664fac4addceb9d"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "a276bf3748810dbe7b4dc461ecee4ad17e6ec51b:bench/compiler-reference-capture-data/setup-preparation/controls.json"
+      ],
+      "bytes" : 3885,
+      "exit" : 0,
+      "sha256" : "abe754855357068173144f2270f352d85965397be20ed985560d4f17ceb441d0"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "a276bf3748810dbe7b4dc461ecee4ad17e6ec51b:bench/compiler-reference-capture-data/setup-preparation/controls.manifest.sha256"
+      ],
+      "bytes" : 306,
+      "exit" : 0,
+      "sha256" : "edb63ca8c50e2659c12e057225f3adb7a774aa3fa9091ee277e872770b4d2d58"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "a276bf3748810dbe7b4dc461ecee4ad17e6ec51b:bench/compiler-reference-capture-data/setup-preparation/setup.pl"
+      ],
+      "bytes" : 21147,
+      "exit" : 0,
+      "sha256" : "e7e2eaadb3cc4c4b10b30867ada0e4943eb52aa5f43b86b4223885d32d1a14de"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "a276bf3748810dbe7b4dc461ecee4ad17e6ec51b:bench/compiler-reference-capture-data/setup-preparation/setup.sh"
+      ],
+      "bytes" : 7263,
+      "exit" : 0,
+      "sha256" : "03249530cdd87b6ed77f2b953ac6229e8097202619e99890ddd46565ecccc265"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "7d0731e99aeaf241c4334fc5ff065a341fb388c8:seed/lkjscript.gz"
+      ],
+      "bytes" : 6547345,
+      "exit" : 0,
+      "sha256" : "505be947525d53b4db1bff6c85cb77622cb2f5dc7e7d7fe92b772ee3b8ffc3e2"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "0b0b27803d27b932a5b91cde2d766bd3c8bb82b9:bench/scale.lkj"
+      ],
+      "bytes" : 20625,
+      "exit" : 0,
+      "sha256" : "557d6b124fe739f17c678c77b92e5f6259d87ebca69c2a56aca411071c5ff1e9"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "0b0b27803d27b932a5b91cde2d766bd3c8bb82b9:bench/compiler-query-container-data/measurement-1/shape"
+      ],
+      "bytes" : 68884,
+      "exit" : 0,
+      "sha256" : "0457f8f9424882d2e3160a568f280193d49b9b046a5fae2d6e2d0b6da047072c"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "a276bf3748810dbe7b4dc461ecee4ad17e6ec51b:bench/compiler-reference-capture-data/preliminary/verification.json"
+      ],
+      "bytes" : 803828,
+      "exit" : 0,
+      "sha256" : "8736cbf695c9bb3e1c99860460ad2ba7bd0c6d0dd96bc916fb92fd0dc8f29463"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "a276bf3748810dbe7b4dc461ecee4ad17e6ec51b:bench/compiler-reference-capture-data/preliminary/preliminary-roots.tar.gz"
+      ],
+      "bytes" : 7839018,
+      "exit" : 0,
+      "sha256" : "35ced5f584174c20a884dd3feeb988c188bf4350d0276831a6c52ac15e7088bc"
+   }
+]

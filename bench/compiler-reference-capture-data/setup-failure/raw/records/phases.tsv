@@ -1,0 +1,6 @@
+phase	outcome	command_status	capture_validation_status
+recover-inputs	failed	255	0
+prepare-factory	not-run	unavailable	unavailable
+generator-build	not-run	unavailable	unavailable
+generate-100k	not-run	unavailable	unavailable
+freeze-artifacts	not-run	unavailable	unavailable

@@ -1,0 +1,3 @@
+PASS observed failure preserved: setup/recover=255 capture_validation=0 later_phases=4 not-run
+original_files=61 original_bytes=50006352 raw_copies=56 artifacts=5
+No compiler/generator/A-B execution or extracted source tree; actual A and copied artifacts match fixed recovery pins

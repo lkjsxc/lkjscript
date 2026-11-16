@@ -1,0 +1,34 @@
+{
+   "original_cohort" : "closed; zero native or measured commands; all twelve A/B rows not-run",
+   "read_only_diagnosis_requests" : [
+      "compiler-reference-capture-setup-path-diagnosis-20261116-272",
+      "compiler-reference-capture-setup-pax-diagnosis-20261116-273"
+   ],
+   "records" : [
+      {
+         "bytes" : 1536,
+         "expected_git_blob" : "cf9216200811582da57ecb6d89518b96bb7ef297",
+         "path" : "diagnosed-pax-0000-and-next-header.bin",
+         "pax_header_offset" : 7436288,
+         "pax_payload_bytes" : 133,
+         "payload" : "133 path=tests/semantics/ir/language__check__tests__whole_enum_mutation_invalidates_both_saved_predicates_and_proven_tags_0000.lkjir\n",
+         "regular_header_offset" : 7437312,
+         "regular_raw_name" : "cf9216200811582da57ecb6d89518b96bb7ef297.data",
+         "sha256" : "14faf83942ed6b196457780736a78498e3fed1d350ed62ef3d4e07bdb558e6e2"
+      },
+      {
+         "bytes" : 1536,
+         "expected_git_blob" : "e924a3afe523c681cc0e1a6a794bc89f260963f9",
+         "path" : "diagnosed-pax-0001-and-next-header.bin",
+         "pax_header_offset" : 7438848,
+         "pax_payload_bytes" : 133,
+         "payload" : "133 path=tests/semantics/ir/language__check__tests__whole_enum_mutation_invalidates_both_saved_predicates_and_proven_tags_0001.lkjir\n",
+         "regular_header_offset" : 7439872,
+         "regular_raw_name" : "e924a3afe523c681cc0e1a6a794bc89f260963f9.data",
+         "sha256" : "720dca02162e4de86e386488a67afb122c61112b78948c8fa8c1ec7b226534fb"
+      }
+   ],
+   "schema" : "compiler-reference-capture-pax-diagnosis-2",
+   "source_archive" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-preparation-1/source.tar",
+   "source_sha256" : "79aa24a9eb6f8e7940b4424fc20839759a79dd8d480b1b746f7e29b17171d806"
+}

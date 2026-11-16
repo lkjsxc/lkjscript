@@ -1,0 +1,1 @@
+["/usr/bin/time","-f","wall_s=%e\\nuser_s=%U\\nsystem_s=%S\\nmax_rss_kib=%M\\nexit=%x","-o","archive-validation-1/time","/usr/bin/timeout","--kill-after=10s","900s","/usr/bin/prlimit","--as=4294967296","--","/usr/bin/perl","setup.pl","validate-archive","/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2","controls.json"]

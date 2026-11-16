@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "audit_request": "compiler-reference-capture-setup-failure-audit-1410",
+  "audit_stdout_ref": "/home/coder/.local/state/lkjyolo/outputs/pipe-jkojnghnigciegpoicahoeimpgbhibmd.stdout",
+  "audit_stderr_ref": "/home/coder/.local/state/lkjyolo/outputs/pipe-jkojnghnigciegpoicahoeimpgbhibmd.stderr",
+  "root_inspection_request": "compiler-reference-capture-setup-refusal-v1509",
+  "root_inspection_exit": 1,
+  "root_inspection_stdout_copy": "reads/root-inspection-v1509.stdout",
+  "root_inspection_stderr_copy": "reads/root-inspection-v1509.stderr",
+  "root_inspection_qualification": "Read-only missing argv filename; correct argv.json audited. No mutation or rerun.",
+  "inspection_request": "compiler-reference-capture-setup-failure-inspect-1404",
+  "recovery_mapping_request": "compiler-reference-capture-setup-recovery-map-1405",
+  "proof_schema_request": "compiler-reference-capture-setup-proof-schema-1406",
+  "summary_request": "compiler-reference-capture-setup-failure-summary-1411"
+}

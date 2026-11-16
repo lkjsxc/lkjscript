@@ -1,0 +1,33 @@
+{
+   "directory_members" : 42,
+   "extraction_performed" : false,
+   "original_cohort" : "closed; all twelve A/B rows not-run",
+   "pax_paths" : [
+      {
+         "following_header_offset" : 7437312,
+         "following_header_sha256" : "4113e3a72e940cce7bd871f55f0d5c856ae0cc441fef8f34cef22fc13ce27411",
+         "following_raw_path" : "cf9216200811582da57ecb6d89518b96bb7ef297.data",
+         "header_offset" : 7436288,
+         "path" : "tests/semantics/ir/language__check__tests__whole_enum_mutation_invalidates_both_saved_predicates_and_proven_tags_0000.lkjir",
+         "payload" : "133 path=tests/semantics/ir/language__check__tests__whole_enum_mutation_invalidates_both_saved_predicates_and_proven_tags_0000.lkjir\n",
+         "raw_header_path" : "cf9216200811582da57ecb6d89518b96bb7ef297.paxheader",
+         "record_bytes" : 1024,
+         "record_sha256" : "e0bfd98705b7020d723606a565d96de3927df2addf69e952e257c03cab28bf25"
+      },
+      {
+         "following_header_offset" : 7439872,
+         "following_header_sha256" : "bb4f6b27cd61866e1800e91047a83b09bcb7ea8d19a740d313c5f0e351ac2bdf",
+         "following_raw_path" : "e924a3afe523c681cc0e1a6a794bc89f260963f9.data",
+         "header_offset" : 7438848,
+         "path" : "tests/semantics/ir/language__check__tests__whole_enum_mutation_invalidates_both_saved_predicates_and_proven_tags_0001.lkjir",
+         "payload" : "133 path=tests/semantics/ir/language__check__tests__whole_enum_mutation_invalidates_both_saved_predicates_and_proven_tags_0001.lkjir\n",
+         "raw_header_path" : "e924a3afe523c681cc0e1a6a794bc89f260963f9.paxheader",
+         "record_bytes" : 1024,
+         "record_sha256" : "36972c4e7b529fdb10f092c6a5c8ed846bee84ee76205a58476a1208a4541743"
+      }
+   ],
+   "raw_associations" : 1784,
+   "regular_members" : 1742,
+   "setup2" : "not executed; run root absent",
+   "stdout_sha256" : "b12dd4846a04caabf7fe1eaa79f09501814067c4348208f6409e3ad6a64d66db"
+}

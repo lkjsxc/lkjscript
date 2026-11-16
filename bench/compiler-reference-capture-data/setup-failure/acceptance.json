@@ -1,0 +1,119 @@
+{
+   "absent_outputs" : [
+      "compiler-input",
+      "factory",
+      "generator",
+      "generated-100k",
+      "setup-summary.json",
+      "artifacts.sha256",
+      "records/prepare-factory",
+      "records/generator-build",
+      "records/generate-100k",
+      "records/freeze-artifacts"
+   ],
+   "artifacts" : [
+      {
+         "bytes" : 20625,
+         "path" : "artifacts/scale-generator-source.lkj",
+         "recovery" : "0b0b27803d27b932a5b91cde2d766bd3c8bb82b9:bench/scale.lkj",
+         "sha256" : "557d6b124fe739f17c678c77b92e5f6259d87ebca69c2a56aca411071c5ff1e9",
+         "verification" : "byte-equal to exact Git blob"
+      },
+      {
+         "bytes" : 68884,
+         "path" : "artifacts/shape",
+         "recovery" : "0b0b27803d27b932a5b91cde2d766bd3c8bb82b9:bench/compiler-query-container-data/measurement-1/shape",
+         "sha256" : "0457f8f9424882d2e3160a568f280193d49b9b046a5fae2d6e2d0b6da047072c",
+         "verification" : "byte-equal to exact Git blob"
+      },
+      {
+         "bytes" : 6547345,
+         "path" : "artifacts/baseline-A.gz",
+         "recovery" : "7d0731e99aeaf241c4334fc5ff065a341fb388c8:seed/lkjscript.gz",
+         "sha256" : "505be947525d53b4db1bff6c85cb77622cb2f5dc7e7d7fe92b772ee3b8ffc3e2",
+         "verification" : "byte-equal to exact Git blob"
+      },
+      {
+         "bytes" : 32584542,
+         "path" : "producer-A",
+         "recovery" : "7d0731e99aeaf241c4334fc5ff065a341fb388c8:seed/lkjscript.gz (decompressed)",
+         "sha256" : "6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc",
+         "verification" : "actual complete bytes hash/size match frozen decompressed baseline identity; setup performed recovery; this audit does not repeat decompression"
+      },
+      {
+         "bytes" : 10741760,
+         "path" : "artifacts/compiler-source.tar",
+         "recovery_archive" : "bench/compiler-reference-capture-data/preliminary/preliminary-roots.tar.gz",
+         "recovery_archive_bytes" : 7839018,
+         "recovery_archive_sha256" : "35ced5f584174c20a884dd3feeb988c188bf4350d0276831a6c52ac15e7088bc",
+         "recovery_commit" : "a276bf3748810dbe7b4dc461ecee4ad17e6ec51b",
+         "recovery_member" : "target/compiler-reference-capture-preparation-1/source.tar",
+         "sha256" : "79aa24a9eb6f8e7940b4424fc20839759a79dd8d480b1b746f7e29b17171d806",
+         "verification" : "actual hash/size matches existing committed full-byte member proof; exact committed archive digest checked; no duplicate extraction/compression in this audit"
+      }
+   ],
+   "capture_validation_status" : 0,
+   "controls_manifest_sha256" : "edb63ca8c50e2659c12e057225f3adb7a774aa3fa9091ee277e872770b4d2d58",
+   "copied_raw_control_records" : 56,
+   "failed_phase" : "recover-inputs",
+   "first_failure" : "unexpected/duplicate archive file",
+   "input_bytes" : 50006352,
+   "input_files" : 61,
+   "later_phases" : [
+      {
+         "command_status" : null,
+         "outcome" : "not-run",
+         "phase" : "prepare-factory"
+      },
+      {
+         "command_status" : null,
+         "outcome" : "not-run",
+         "phase" : "generator-build"
+      },
+      {
+         "command_status" : null,
+         "outcome" : "not-run",
+         "phase" : "generate-100k"
+      },
+      {
+         "command_status" : null,
+         "outcome" : "not-run",
+         "phase" : "freeze-artifacts"
+      }
+   ],
+   "launch_files" : 15,
+   "no_ab_executed" : true,
+   "no_compiler_native_or_setup_rerun" : true,
+   "no_decompression_or_compression" : true,
+   "no_generator_construction_or_execution" : true,
+   "no_key_or_store_read" : true,
+   "no_original_mutation" : true,
+   "no_performance_data" : true,
+   "no_source_extraction" : true,
+   "original_command_status" : 255,
+   "outer_load_after" : "2.07 2.24 2.84\n",
+   "outer_load_before" : "2.07 2.24 2.84\n",
+   "outer_time" : {
+      "exit_status" : 255,
+      "maxrss_kib" : "128436",
+      "system_s" : "0.06",
+      "user_s" : "0.33",
+      "wall_s" : "0.40"
+   },
+   "proof_boundary" : "Fixed controls plus saved phase/command records and exact existing/absent artifact population establish the observed failure boundary; this is not syscall observation or a diagnosis of archive validity.",
+   "recovery_load_after" : "2.07 2.24 2.84\n",
+   "recovery_load_before" : "2.07 2.24 2.84\n",
+   "recovery_time" : {
+      "exit" : 255,
+      "max_rss_kib" : "128436",
+      "system_s" : "0.04",
+      "user_s" : "0.28",
+      "wall_s" : "0.32"
+   },
+   "release_commit" : "a276bf3748810dbe7b4dc461ecee4ad17e6ec51b",
+   "root_inspection_qualification" : "compiler-reference-capture-setup-refusal-v1509 separately exited 1 while reading a guessed missing argv filename; actual argv.json is present and verified. This read-only inspection did not cause or retry the original status-255 setup failure.",
+   "run_files" : 46,
+   "schema" : 1,
+   "source_recovery_qualification" : "Uses the committed previously accepted complete byte-equality member proof and exact archive digest; no new archive reconstruction or duplicate gzip is performed.",
+   "status" : "accepted observed preparation failure; setup did not complete"
+}

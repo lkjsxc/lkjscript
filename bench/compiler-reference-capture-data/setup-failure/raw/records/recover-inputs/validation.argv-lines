@@ -1,0 +1,7 @@
+/usr/bin/perl
+/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-1/control/setup.pl
+validate
+/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-1
+/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-1/control/controls.json
+recover-inputs
+255

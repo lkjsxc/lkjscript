@@ -1,0 +1,84 @@
+{
+   "corrected_preparation" : "Separate proposal only; original result and its execution release are not reused",
+   "measured_commands" : 0,
+   "outcome" : "closed-after-setup-failure",
+   "phase" : "recover-inputs",
+   "protocol_sha256" : "249af04e480480490f059b89af48b7469730c8e98c49c5627d21514ee11b9f80",
+   "resumption_allowed" : false,
+   "rows" : [
+      {
+         "input" : "new-100k",
+         "outcome" : "not-run",
+         "phase" : "A1",
+         "reason" : "Original cohort terminated by its first setup failure, before source extraction or any compiler/generator command"
+      },
+      {
+         "input" : "new-100k",
+         "outcome" : "not-run",
+         "phase" : "B1",
+         "reason" : "Original cohort terminated by its first setup failure, before source extraction or any compiler/generator command"
+      },
+      {
+         "input" : "new-100k",
+         "outcome" : "not-run",
+         "phase" : "B2",
+         "reason" : "Original cohort terminated by its first setup failure, before source extraction or any compiler/generator command"
+      },
+      {
+         "input" : "new-100k",
+         "outcome" : "not-run",
+         "phase" : "A2",
+         "reason" : "Original cohort terminated by its first setup failure, before source extraction or any compiler/generator command"
+      },
+      {
+         "input" : "new-100k",
+         "outcome" : "not-run",
+         "phase" : "A3",
+         "reason" : "Original cohort terminated by its first setup failure, before source extraction or any compiler/generator command"
+      },
+      {
+         "input" : "new-100k",
+         "outcome" : "not-run",
+         "phase" : "B3",
+         "reason" : "Original cohort terminated by its first setup failure, before source extraction or any compiler/generator command"
+      },
+      {
+         "input" : "compiler",
+         "outcome" : "not-run",
+         "phase" : "A1",
+         "reason" : "Original cohort terminated by its first setup failure, before source extraction or any compiler/generator command"
+      },
+      {
+         "input" : "compiler",
+         "outcome" : "not-run",
+         "phase" : "B1",
+         "reason" : "Original cohort terminated by its first setup failure, before source extraction or any compiler/generator command"
+      },
+      {
+         "input" : "compiler",
+         "outcome" : "not-run",
+         "phase" : "B2",
+         "reason" : "Original cohort terminated by its first setup failure, before source extraction or any compiler/generator command"
+      },
+      {
+         "input" : "compiler",
+         "outcome" : "not-run",
+         "phase" : "A2",
+         "reason" : "Original cohort terminated by its first setup failure, before source extraction or any compiler/generator command"
+      },
+      {
+         "input" : "compiler",
+         "outcome" : "not-run",
+         "phase" : "A3",
+         "reason" : "Original cohort terminated by its first setup failure, before source extraction or any compiler/generator command"
+      },
+      {
+         "input" : "compiler",
+         "outcome" : "not-run",
+         "phase" : "B3",
+         "reason" : "Original cohort terminated by its first setup failure, before source extraction or any compiler/generator command"
+      }
+   ],
+   "setup_release_commit" : "a276bf3748810dbe7b4dc461ecee4ad17e6ec51b",
+   "setup_status" : 255
+}

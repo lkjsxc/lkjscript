@@ -1,0 +1,282 @@
+--- setup1/setup.sh
++++ setup2/setup.sh
+@@ -2,7 +2,7 @@
+ set -euo pipefail
+ umask 077
+ REPO=/home/coder/workspace/lkjscript
+-RUN="$REPO/target/compiler-reference-capture-measurement-1"
++RUN="$REPO/target/compiler-reference-capture-measurement-2"
+ PREP=$(cd -- "$(dirname -- "$0")" && pwd -P)
+ if [[ $# != 2 || "$1" != --execute-after-root-release || ! "$2" =~ ^[0-9a-f]{64}$ ]]; then
+     printf '%s\n' 'Preparation only. Exact root release and control-manifest hash are required.' >&2
+--- setup1/setup.pl
++++ setup2/setup.pl
+@@ -12,8 +12,8 @@
+ use File::Basename qw(dirname);
+ 
+ my ($mode, $root, $config_path, $phase_name, $phase_status) = @ARGV;
+-die "usage: setup.pl recover|factory|freeze ROOT CONTROLS | validate ROOT CONTROLS PHASE STATUS\n"
+-    unless defined($mode) && ((@ARGV == 3 && $mode =~ /\A(?:recover|factory|freeze)\z/)
++die "usage: setup.pl recover|factory|freeze|validate-archive ROOT CONTROLS | validate ROOT CONTROLS PHASE STATUS\n"
++    unless defined($mode) && ((@ARGV == 3 && $mode =~ /\A(?:recover|factory|freeze|validate-archive)\z/)
+         || (@ARGV == 5 && $mode eq 'validate'));
+ my $json = JSON::PP->new->canonical->pretty;
+ sub read_regular {
+@@ -45,15 +45,20 @@
+     die "$label size mismatch\n" if defined($pin->{bytes}) && length($bytes) != $pin->{bytes};
+ }
+ my $config = decode_json(read_regular($config_path));
+-die "wrong scope\n" unless $root eq '/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-1'
++die "wrong scope\n" unless $root eq '/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2'
+     && $config->{run_root} eq $root && $config->{repository} eq '/home/coder/workspace/lkjscript';
+ my $repo = $config->{repository};
+ my @root_st = lstat $root;
+-die "unsafe owned root\n" unless @root_st && S_ISDIR($root_st[2]) && $root_st[4] == $> && abs_path($root) eq $root;
++if ($mode eq 'validate-archive') {
++    die "validation-only root must remain absent\n" if @root_st;
++} else {
++    die "unsafe owned root\n" unless @root_st && S_ISDIR($root_st[2]) && $root_st[4] == $> && abs_path($root) eq $root;
++}
+ die "comparison is not part of setup\n" if $config->{comparison_authorized};
+ my $art = "$root/artifacts";
+ sub note_command {
+     my (@argv) = @_;
++    return if $mode eq 'validate-archive';
+     sysopen my $file, "$root/records/metadata-subcommands.jsonl", O_WRONLY | O_APPEND | O_CREAT | O_NOFOLLOW, 0600 or die $!;
+     print {$file} JSON::PP->new->canonical->encode({ mode => $mode, argv => \@argv }), "\n" or die $!;
+     close $file or die $!;
+@@ -118,14 +123,87 @@
+     $tar->read($path, $compressed) or die "archive read failed: " . Archive::Tar->error . "\n";
+     return $tar;
+ }
+-sub source_extract {
+-    my ($destination) = @_;
+-    die "destination already exists\n" if lstat $destination;
+-    my $source = read_regular("$art/compiler-source.tar");
++sub tar_octal {
++    my ($field) = @_;
++    $field =~ s/[\0 ]+\z//;
++    $field =~ s/\A +//;
++    die "unsupported raw tar number\n" unless $field =~ /\A[0-7]+\z/;
++    return oct($field);
++}
++sub tar_text {
++    my ($field) = @_;
++    $field =~ /\A([^\0]*)\0*\z/s or die "nonzero raw tar string padding\n";
++    return $1;
++}
++sub raw_source_members {
++    my ($source) = @_;
++    my (@members, @pax, $pending, $global, $ended);
++    my $offset = 0;
++    while ($offset + 512 <= length($source)) {
++        my $header = substr($source, $offset, 512);
++        if ($header eq "\0" x 512) {
++            die "missing tar terminator or nonzero trailer\n" unless length($source) - $offset >= 1024
++                && substr($source, $offset) eq "\0" x (length($source) - $offset);
++            die "unconsumed per-file PAX path\n" if defined $pending;
++            $ended = 1;
++            last;
++        }
++        die "unsupported source tar header\n" unless substr($header, 257, 8) eq "ustar\00000";
++        my $checksum = tar_octal(substr($header, 148, 8));
++        my $checked = $header;
++        substr($checked, 148, 8) = ' ' x 8;
++        die "raw tar checksum mismatch\n" unless unpack('%32C*', $checked) == $checksum;
++        my $name = tar_text(substr($header, 0, 100));
++        my $prefix = tar_text(substr($header, 345, 155));
++        my $type = substr($header, 156, 1);
++        my $size = tar_octal(substr($header, 124, 12));
++        my $mode_bits = tar_octal(substr($header, 100, 8));
++        die "unexpected source link name\n" unless tar_text(substr($header, 157, 100)) eq '';
++        my $end = $offset + 512 + 512 * int(($size + 511) / 512);
++        die "raw tar extent exceeds source\n" if $end > length($source);
++        my $content = substr($source, $offset + 512, $size);
++        die "nonzero raw member padding\n" unless substr($source, $offset + 512 + $size, $end - $offset - 512 - $size)
++            eq "\0" x ($end - $offset - 512 - $size);
++        my $raw_path = safe_name(length($prefix) ? "$prefix/$name" : $name, $type eq '5');
++        die "PAX path must immediately precede a regular member\n" if defined($pending) && $type ne '0';
++        if ($type eq 'g') {
++            die "unexpected global PAX metadata\n" if $global++ || @members || @pax || $raw_path ne 'pax_global_header'
++                || $content ne ("52 comment=" . $config->{compiler_input}{revision} . "\n");
++        } elsif ($type eq 'x') {
++            $content =~ /\A([1-9][0-9]{0,5}) path=([^\n]*)\n\z/s or die "unsupported per-file PAX record\n";
++            my ($record_length, $path) = ($1, $2);
++            die "incorrect PAX byte length\n" unless $record_length == length($content);
++            $path = safe_name($path, 0);
++            $pending = { header_offset => $offset, raw_header_path => $raw_path, path => $path,
++                payload => $content, record_bytes => $end - $offset,
++                record_sha256 => sha256_hex(substr($source, $offset, $end - $offset)) };
++        } elsif ($type eq '0' || $type eq '5') {
++            die "directory has a payload\n" if $type eq '5' && $size != 0;
++            my $path = defined($pending) ? $pending->{path} : $raw_path;
++            if (defined $pending) {
++                push @pax, { %$pending, following_header_offset => $offset, following_raw_path => $raw_path,
++                    following_header_sha256 => sha256_hex($header) };
++                undef $pending;
++            }
++            push @members, { path => $path, raw_path => $raw_path, type => $type, mode => $mode_bits,
++                bytes => $size, sha256 => sha256_hex($content), header_offset => $offset };
++        } else {
++            die "unsupported source tar member type\n";
++        }
++        $offset = $end;
++    }
++    die "incomplete source tar framing\n" unless $ended && $global == 1;
++    return { members => \@members, pax_paths => \@pax };
++}
++sub source_verified {
++    my ($archive) = @_;
++    my $source = read_regular($archive);
+     assert_pin($source, $config->{compiler_input}, 'compiler archive');
+     my ($expected, $directories) = expected_git($config->{compiler_input}{revision});
+-    my $tar = load_tar("$art/compiler-source.tar", 0);
++    my $raw = raw_source_members($source);
++    my $tar = load_tar($archive, 0);
+     my (%seen, %seen_dirs, @files, $global);
++    my $position = 0;
+     for my $member ($tar->get_files) {
+         if ($member->type eq 'g') {
+             die "unexpected global PAX metadata\n" if $global++ || $member->name ne 'pax_global_header'
+@@ -134,14 +212,22 @@
+         }
+         my $is_dir = $member->is_dir;
+         die "special archive member\n" unless $is_dir || $member->is_file;
+-        my $path = safe_name($member->full_path, $is_dir);
++        die "extra decoded archive member\n" unless $position < @{$raw->{members}};
++        my $record = $raw->{members}[$position++];
++        my $decoded_path = safe_name($member->full_path, $is_dir);
++        my $bytes = $member->get_content;
++        $bytes = '' unless defined $bytes;
++        die "raw/decoded archive association mismatch\n" unless $record->{type} eq ($is_dir ? '5' : '0')
++            && ($decoded_path eq $record->{raw_path} || $decoded_path eq $record->{path})
++            && $member->mode == $record->{mode} && length($bytes) == $record->{bytes}
++            && sha256_hex($bytes) eq $record->{sha256};
++        my $path = safe_name($record->{path}, $is_dir);
+         die "unexpected archive root member\n" if $path eq '';
+         if ($is_dir) {
+             die "unexpected/duplicate archive directory\n" unless $directories->{$path} && !$seen_dirs{$path}++;
+             next;
+         }
+         die "unexpected/duplicate archive file\n" unless exists($expected->{$path}) && !$seen{$path}++;
+-        my $bytes = $member->get_content;
+         my $oid = sha1_hex("blob " . length($bytes) . "\0" . $bytes);
+         die "Git content mismatch: $path\n" unless $oid eq $expected->{$path}{git_blob};
+         die "unsafe archive permissions\n" if $member->mode & 07000;
+@@ -149,11 +235,19 @@
+         die "archive executable-mode mismatch\n" unless $exec == ($expected->{$path}{git_mode} eq '100755');
+         push @files, { path => $path, %{digest_record($bytes)}, %{$expected->{$path}}, archive_mode => $member->mode, data => $bytes };
+     }
++    die "incomplete raw/decoded archive pairing\n" unless $position == @{$raw->{members}};
+     die "incomplete source archive\n" unless keys(%seen) == keys(%$expected) && keys(%seen_dirs) == keys(%$directories);
++    assert_pin(read_regular($archive), $config->{compiler_input}, 'compiler archive after verification');
++    return { files => \@files, directories => [sort keys %$directories], raw => $raw };
++}
++sub source_extract {
++    my ($destination) = @_;
++    die "destination already exists\n" if lstat $destination;
++    my $verified = source_verified("$art/compiler-source.tar");
+     mkdir($destination, 0700) or die $!;
+-    for my $directory (sort { length($a) <=> length($b) || $a cmp $b } keys %$directories) { ensure_dir($destination, $directory); }
++    for my $directory (sort { length($a) <=> length($b) || $a cmp $b } @{$verified->{directories}}) { ensure_dir($destination, $directory); }
+     my @manifest;
+-    for my $file (sort { $a->{path} cmp $b->{path} } @files) {
++    for my $file (sort { $a->{path} cmp $b->{path} } @{$verified->{files}}) {
+         my %entry = %$file;
+         my $bytes = delete $entry{data};
+         new_file("$destination/$entry{path}", $bytes, $entry{git_mode} eq '100755' ? 0700 : 0600);
+@@ -203,6 +297,20 @@
+     my ($path, $entries) = @_;
+     new_file($path, join('', map { "$_->{sha256}  $_->{path}\n" } @$entries));
+ }
++if ($mode eq 'validate-archive') {
++    my $verified = source_verified($config->{compiler_input}{path});
++    my @files;
++    for my $file (@{$verified->{files}}) { my %entry = %$file; delete $entry{data}; push @files, \%entry; }
++    print $json->encode({ schema => 'compiler-reference-capture-source-validation-2',
++        archive => digest_record(read_regular($config->{compiler_input}{path})),
++        revision => $config->{compiler_input}{revision}, regular_members => scalar(@files),
++        directory_members => scalar(@{$verified->{directories}}),
++        raw_associations => $verified->{raw}{members}, pax_paths => $verified->{raw}{pax_paths},
++        files => \@files, extraction_performed => JSON::PP::false, commands => [
++            ['git', '-C', $repo, 'ls-tree', '-r', '-z', '--full-tree', $config->{compiler_input}{revision}, '--', 'src', 'library', 'tests']
++        ] });
++    exit 0;
++}
+ if ($mode eq 'validate') {
+     die "invalid phase record selector\n" unless $phase_name =~ /\A(?:recover-inputs|prepare-factory|generator-build|generate-100k|freeze-artifacts)\z/
+         && $phase_status =~ /\A[0-9]+\z/ && $phase_status <= 255;
+--- setup1/controls.json
++++ setup2/controls.json
+@@ -1,7 +1,7 @@
+ {
+   "schema": "compiler-reference-capture-setup-controls-1",
+   "repository": "/home/coder/workspace/lkjscript",
+-  "run_root": "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-1",
++  "run_root": "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2",
+   "comparison_authorized": false,
+   "accepted_plan": {
+     "path": "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-preparation-1/plan.md",
+@@ -75,5 +75,21 @@
+     "workers": 1
+   },
+   "source_mode": "fresh private projection only; original archive and tracked files remain unchanged",
+-  "artifacts_policy": "Preserve every failure and partial artifact. No deletion or retry. Retain actual generator plus verified gzip, exact source archive and factory main before/after/diff, and verified generated archive/member inventory."
++  "artifacts_policy": "Preserve every failure and partial artifact. No deletion or retry. Retain actual generator plus verified gzip, exact source archive and factory main before/after/diff, and verified generated archive/member inventory.",
++  "proposal_status": "SEPARATE_CORRECTION_PREPARATION_ONLY",
++  "proposed_cohort": "compiler-reference-capture-20261116-2",
++  "setup_released": false,
++  "original_cohort": {
++    "id": "compiler-reference-capture-20261116-1",
++    "status": "CLOSED_AFTER_SETUP_FAILURE",
++    "setup_root": "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-1",
++    "controls_manifest_sha256": "edb63ca8c50e2659c12e057225f3adb7a774aa3fa9091ee277e872770b4d2d58",
++    "stopped_phase": "recover-inputs",
++    "exit_status": 255,
++    "native_commands_run": 0,
++    "measured_builds_run": 0,
++    "all_twelve_comparison_rows": "not-run",
++    "reason": "Pinned Git archive contains two per-file PAX paths not applied by Archive::Tar2.40; original protocol stops on first setup failure.",
++    "resumable": false
++  }
+ }
+--- setup1/README.md
++++ setup2/README.md
+@@ -1,15 +1,15 @@
+-# Reference-capture input setup: frozen proposal
++# Reference-capture input setup 2: corrected archive preparation
+ 
+-**Preparation and syntax checks only. No setup has run.** This harness contains no A/B comparison and cannot authorize one; it does not use the forthcoming candidate.
++**Setup 2 preparation only. Setup 2 has not run.** Setup 1 stopped in archive verification with exit 255 before extraction or any compiler/generator command. Its controls and failed measurement-1 remain unchanged. Under the original first-failure rule, cohort1 is closed and all twelve A/B rows are not-run. This is a separately proposed correction/cohort2, not a retry or resumption of that release. Root must explicitly record and release the new protocol boundary before any setup2 workload. This harness contains no A/B comparison and cannot authorize one; it does not use the forthcoming candidate.
+ 
+ ## Scope and future invocation
+ 
+-The only run root is `/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-1`. It must be absent. The script never deletes a path, retries a phase, changes tracked source, reads an operation key, creates a store, scans processes/FDs, or starts an observer. It uses only the requested UTC/time/load/free-space observations.
++The only run root is `/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2`. It must be absent. The script never deletes a path, retries a phase, changes tracked source, reads an operation key, creates a store, scans processes/FDs, or starts an observer. It uses only the requested UTC/time/load/free-space observations.
+ 
+-After the root accepts and pins this complete control manifest, a distinct release may invoke:
++Only after root records the separate-cohort boundary and accepts/pins this complete new control manifest may a distinct setup2 release invoke:
+ 
+ ```text
+-bash target/compiler-reference-capture-setup-preparation-1/setup.sh
++bash target/compiler-reference-capture-setup-preparation-2/setup.sh
+   --execute-after-root-release EXACT_CONTROLS_MANIFEST_SHA256
+ ```
+ 
+@@ -31,7 +31,7 @@
+ 
+ A is recovered from `7d0731e99aeaf241c4334fc5ff065a341fb388c8:seed/lkjscript.gz`; the mutable main target is never used. The compressed SHA is 505be947525d53b4db1bff6c85cb77622cb2f5dc7e7d7fe92b772ee3b8ffc3e2, and decoded A is 6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc/32,584,542B.
+ 
+-Compiler source.tar is 79aa24a9eb6f8e7940b4424fc20839759a79dd8d480b1b746f7e29b17171d806/10,741,760B. The helper obtains the complete expected src/library/tests file set from exact Git c887b7c5aca7bb80d70ca26d7dfdf1a44213a163. Every archive file must match its Git blob identity; all 1,742 regular paths and all expected parent directories must occur exactly once. It rejects traversal, absolute/control-character/backslash paths, links, special files, duplicates, unknown entries and set-ID modes. Standard Git global PAX commit metadata, if returned by Archive::Tar, is accepted only with the exact commit. Content is fully verified before extraction. Archive modes are recorded; extracted files use private owner-only modes while retaining the executable/non-executable distinction.
++Compiler source.tar is 79aa24a9eb6f8e7940b4424fc20839759a79dd8d480b1b746f7e29b17171d806/10,741,760B. The helper obtains the complete expected src/library/tests file set from exact Git c887b7c5aca7bb80d70ca26d7dfdf1a44213a163. Every archive file must match its Git blob identity; all 1,742 regular paths and all expected parent directories must occur exactly once. It rejects traversal, absolute/control-character/backslash paths, links, special files, duplicates, unknown entries and set-ID modes. Raw USTAR headers, checksums, bounded extents and zero padding are checked independently before pairing every regular/directory member with Archive::Tar's decoded sequence. Only the exact global Git commit record and a single path-only per-file PAX record immediately followed by its regular member are accepted; the PAX record's decimal length counts raw bytes. The decoded path must match that raw member's header path or its validated PAX path, and its type, size, mode and content digest must agree. Git path/blob/mode and complete-set checks remain mandatory. This narrowly validates the pinned Git archive; it is not a general archive facility. Content is fully verified before extraction. Archive modes are recorded; extracted files use private owner-only modes while retaining the executable/non-executable distinction.
+ 
+ Generator source and the old documented shape are read from their exact pinned Git blobs in controls.json. No fresh census runs. The only factory difference must be src/main.lkj, with every other path/content/mode unchanged.
+ 
+@@ -46,3 +46,7 @@
+ All output stays in the owned run root. `artifacts/` contains exact source archive, copied generator/shape, factory before/after/diff, generated source tar and gzip, member inventory, workload, generator gzip and build stats. The actual A and generator remain at the run root. Source/factory recovery is exact source.tar plus the single pinned main replacement; gzip recovery is checked byte-for-byte. `artifacts.sha256` and `setup-summary.json` bind the completed recoverable artifacts.
+ 
+ Root must review and durably retain/commit the complete generated-input archive and controls before any A/B release. This harness makes no performance, old-specimen identity, 1M, full-gate or candidate-CI claim. No cleanup mode exists.
++
++## Read-only preparation control
++
++The separately authorized command `perl setup.pl validate-archive /home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2 controls.json` requires the future run root to remain absent. It reads the pinned source archive and exact Git inventory, prints every verified association and the two PAX records, and performs no extraction, setup phase or native execution. Its stdout/stderr/status/time/load are retained outside measurement-2. Exact copies of each diagnosed 1,024-byte PAX record plus the immediately following 512-byte regular header are retained in this preparation. Setup 1 evidence is referenced without modification.
