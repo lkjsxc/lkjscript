@@ -1,0 +1,24 @@
+"driver::structure::edit" level=source-claim operation-target
+"meaning" level=source-claim operation-target
+"meaning::compare" level=source-claim operation-target
+"structure_edit::plan" level=source-claim operation-target
+"structure_edit::rename" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/driver/structure.lkj" level=source-claim file before=f15843e78df9df2f64f5a31e8ecc8e5331f1eafc098f5d5814c5c43c62f4f625 after=3f03f86e852216ddae94a0f60d4b97ece9e3fd35ae3b247b077d418a9d7bc893
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/meaning.lkj" level=source-claim file before=42abb3c80a98214880112ce6ffb55b23c8b1330b2fe3bfffd6f0c5230cd63b79 after=02e64016ecc626f9032a28b4fad85369ae2996ad01644d9af15c3cc3664458cb
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/structure_edit.lkj" level=source-claim file before=596767d6172db8272e565f5f9cfcbc5a525902d9ad341a165910388a43c251b9 after=3a4af04ee59ae3545e365f3dc58c8f5704b1fa33888b965d3e079199e70209ad
+transaction sites=5 files=3 identities=5
+"driver::structure::edit" level=source-claim changed=body
+"meaning::authority_fact" level=source-claim changed=added
+"meaning::authority_fact::param:fact" level=source-claim changed=added
+"meaning::compare" level=source-claim changed=body
+"structure_edit::plan" level=source-claim changed=body
+"structure_edit::rename" level=source-claim changed=removed
+"structure_edit::rename::param:catalog" level=source-claim changed=removed
+"structure_edit::rename::param:inputs" level=source-claim changed=removed
+"structure_edit::rename::param:name" level=source-claim changed=removed
+"structure_edit::rename::param:patches" level=source-claim changed=removed
+"structure_edit::rename::param:target" level=source-claim changed=removed
+program level=checked-ir authority-delta=none
+program level=checked-ir before=2a1fae52002bebc3d0f4d48da3f43527ebe6845b9ecfdef17f85afd6b8d47b3d after=7e86231e715e0511bb5aa285333aed11e3c1287d184d0b92b1fdcc9c7d9760ea checked-instances=12193 fresh-checked=0 proof-reused=12193 frontend-resumed=0 library-validation=demanded
+transaction source-before=f29592862d4fdb40ac5da8a31982dbfe0bf8b72d6c31abba4c3afa1beb99d4d3 source-after=f075b60ddb33941ce9c71ce6788d14403811baf55a192707e689c236f3a01afc mode=apply
+replay desired=7e86231e715e0511bb5aa285333aed11e3c1287d184d0b92b1fdcc9c7d9760ea candidate=7e86231e715e0511bb5aa285333aed11e3c1287d184d0b92b1fdcc9c7d9760ea verified=true operations=5

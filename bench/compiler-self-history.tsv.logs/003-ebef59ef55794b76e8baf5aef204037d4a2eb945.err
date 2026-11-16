@@ -1,0 +1,2 @@
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":46411.926,"build_ir_ms":12516.842,"check_ms":0.012,"check_body_ms":13489.172,"check_verification_ms":0.664,"front_encode_ms":363.410,"front_miss_ms":0.004,"key_hash_ms":1513.085,"load_parse_ms":2426.885,"resolve_ms":449.088,"semantic_catalog_ms":1795.523,"source_read_ms":26.445,"store_io_ms":223.551,"type_ms":13199.910,"ir_functions":12379,"ir_instructions":1191187,"peak_rss_bytes":1259745280}
+"program" E_REPLAY_NO_OPERATIONS no selected item changes; text-only gaps are compared separately

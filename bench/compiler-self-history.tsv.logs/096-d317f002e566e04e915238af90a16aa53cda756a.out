@@ -1,0 +1,177 @@
+"impl:store::Budget#472b2a105d59a4e6" level=source-claim operation-target
+"impl:store::Store#bd97a54a9612a574" level=source-claim operation-target
+"store" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/store.lkj" level=source-claim file before=351d7a4a42f889ff3af394ba3e94cb012b793771a48a331ba011d5f7b2323f67 after=20e98585d785a46235496f40eeacbca77090d943a7c0496d789d5de19ab548be
+transaction sites=3 files=1 identities=3
+"<store::QueryReader as store::QueryAccess>::invalidate_query_snapshot" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::invalidate_query_snapshot::param:identity" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::invalidate_query_snapshot::param:selector" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::invalidate_query_snapshot::param:self" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::open_query_cursor" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::open_query_cursor::param:bytes" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::open_query_cursor::param:question" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::open_query_cursor::param:self" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::query_bound_root" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::query_bound_root::param:self" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::query_cursor" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::query_cursor::param:payload" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::query_cursor::param:question" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::query_cursor::param:self" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::query_latest" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::query_latest::param:_selector" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::query_latest::param:self" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::query_page" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::query_page::param:identity" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::query_page::param:self" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::query_producer" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::query_producer::param:self" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::query_root" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::query_root::param:identity" level=source-claim changed=added
+"<store::QueryReader as store::QueryAccess>::query_root::param:self" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::invalidate_query_snapshot" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::invalidate_query_snapshot::param:identity" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::invalidate_query_snapshot::param:selector" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::invalidate_query_snapshot::param:self" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::open_query_cursor" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::open_query_cursor::param:bytes" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::open_query_cursor::param:question" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::open_query_cursor::param:self" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::query_bound_root" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::query_bound_root::param:self" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::query_cursor" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::query_cursor::param:payload" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::query_cursor::param:question" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::query_cursor::param:self" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::query_latest" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::query_latest::param:selector" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::query_latest::param:self" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::query_page" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::query_page::param:identity" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::query_page::param:self" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::query_producer" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::query_producer::param:self" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::query_root" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::query_root::param:identity" level=source-claim changed=added
+"<store::Store as store::QueryAccess>::query_root::param:self" level=source-claim changed=added
+"impl:<store::QueryReader as store::QueryAccess>#8e4c396c6219ef53" level=source-claim changed=added
+"impl:<store::Store as store::QueryAccess>#8e4c396c6219ef53" level=source-claim changed=added
+"impl:store::Budget#472b2a105d59a4e6" level=source-claim changed=text-only
+"impl:store::QueryReader#2337e8f125be80a8" level=source-claim changed=added
+"impl:store::Store#36346a31ffeb1790" level=source-claim changed=added
+"impl:store::Store#bd97a54a9612a574" level=source-claim changed=text-only
+"store::Budget::decode" level=source-claim changed=body
+"store::Budget::encode" level=source-claim changed=body
+"store::Budget::forget" level=source-claim changed=body
+"store::Budget::growth" level=source-claim changed=body
+"store::Budget::remember" level=source-claim changed=body
+"store::QueryAccess" level=source-claim changed=added
+"store::QueryAccess::invalidate_query_snapshot" level=source-claim changed=added
+"store::QueryAccess::invalidate_query_snapshot::param:identity" level=source-claim changed=added
+"store::QueryAccess::invalidate_query_snapshot::param:selector" level=source-claim changed=added
+"store::QueryAccess::invalidate_query_snapshot::param:self" level=source-claim changed=added
+"store::QueryAccess::open_query_cursor" level=source-claim changed=added
+"store::QueryAccess::open_query_cursor::param:bytes" level=source-claim changed=added
+"store::QueryAccess::open_query_cursor::param:question" level=source-claim changed=added
+"store::QueryAccess::open_query_cursor::param:self" level=source-claim changed=added
+"store::QueryAccess::query_bound_root" level=source-claim changed=added
+"store::QueryAccess::query_bound_root::param:self" level=source-claim changed=added
+"store::QueryAccess::query_cursor" level=source-claim changed=added
+"store::QueryAccess::query_cursor::param:payload" level=source-claim changed=added
+"store::QueryAccess::query_cursor::param:question" level=source-claim changed=added
+"store::QueryAccess::query_cursor::param:self" level=source-claim changed=added
+"store::QueryAccess::query_latest" level=source-claim changed=added
+"store::QueryAccess::query_latest::param:selector" level=source-claim changed=added
+"store::QueryAccess::query_latest::param:self" level=source-claim changed=added
+"store::QueryAccess::query_page" level=source-claim changed=added
+"store::QueryAccess::query_page::param:identity" level=source-claim changed=added
+"store::QueryAccess::query_page::param:self" level=source-claim changed=added
+"store::QueryAccess::query_producer" level=source-claim changed=added
+"store::QueryAccess::query_producer::param:self" level=source-claim changed=added
+"store::QueryAccess::query_root" level=source-claim changed=added
+"store::QueryAccess::query_root::param:identity" level=source-claim changed=added
+"store::QueryAccess::query_root::param:self" level=source-claim changed=added
+"store::QueryReader" level=source-claim changed=added
+"store::QueryReader::field:capacity" level=source-claim changed=added
+"store::QueryReader::field:directory" level=source-claim changed=added
+"store::QueryReader::field:identity" level=source-claim changed=added
+"store::QueryReader::field:producer" level=source-claim changed=added
+"store::QueryReader::field:producer_slot" level=source-claim changed=added
+"store::QueryReader::field:root" level=source-claim changed=added
+"store::QueryReader::field:secret" level=source-claim changed=added
+"store::QueryReader::field:selector" level=source-claim changed=added
+"store::QueryReader::open" level=source-claim changed=added
+"store::QueryReader::open::param:capacity" level=source-claim changed=added
+"store::QueryReader::open::param:identity" level=source-claim changed=added
+"store::QueryReader::open::param:key" level=source-claim changed=added
+"store::QueryReader::open::param:path" level=source-claim changed=added
+"store::QueryReader::open::param:selector" level=source-claim changed=added
+"store::QueryReader::open::param:world" level=source-claim changed=added
+"store::QueryReader::raw" level=source-claim changed=added
+"store::QueryReader::raw::param:identity" level=source-claim changed=added
+"store::QueryReader::raw::param:limit" level=source-claim changed=added
+"store::QueryReader::raw::param:namespace" level=source-claim changed=added
+"store::QueryReader::raw::param:self" level=source-claim changed=added
+"store::Store::invalidate_query_snapshot" level=source-claim changed=body
+"store::Store::open_query_cursor" level=source-claim changed=body
+"store::Store::publish" level=source-claim changed=body
+"store::Store::publish_named" level=source-claim changed=added
+"store::Store::publish_named::param:bytes" level=source-claim changed=added
+"store::Store::publish_named::param:name" level=source-claim changed=added
+"store::Store::publish_named::param:self" level=source-claim changed=added
+"store::Store::publish_query_locator" level=source-claim changed=added
+"store::Store::publish_query_locator::param:identity" level=source-claim changed=added
+"store::Store::publish_query_locator::param:root" level=source-claim changed=added
+"store::Store::publish_query_locator::param:selector" level=source-claim changed=added
+"store::Store::publish_query_locator::param:self" level=source-claim changed=added
+"store::Store::query_cursor" level=source-claim changed=body
+"store::Store::query_locator_retained" level=source-claim changed=added
+"store::Store::query_locator_retained::param:identity" level=source-claim changed=added
+"store::Store::query_locator_retained::param:root" level=source-claim changed=added
+"store::Store::query_locator_retained::param:selector" level=source-claim changed=added
+"store::Store::query_locator_retained::param:self" level=source-claim changed=added
+"store::Store::query_producer" level=source-claim changed=added
+"store::Store::query_producer::param:self" level=source-claim changed=added
+"store::Store::writable" level=source-claim changed=body
+"store::authenticate_query_cursor" level=source-claim changed=added
+"store::authenticate_query_cursor::param:bytes" level=source-claim changed=added
+"store::authenticate_query_cursor::param:producer" level=source-claim changed=added
+"store::authenticate_query_cursor::param:question" level=source-claim changed=added
+"store::authenticate_query_cursor::param:secret" level=source-claim changed=added
+"store::indexed_name" level=source-claim changed=added
+"store::indexed_name::param:name" level=source-claim changed=added
+"store::invalidate_store_query_snapshot" level=source-claim changed=added
+"store::invalidate_store_query_snapshot::param:identity" level=source-claim changed=added
+"store::invalidate_store_query_snapshot::param:selector" level=source-claim changed=added
+"store::invalidate_store_query_snapshot::param:store" level=source-claim changed=added
+"store::owned_entry" level=source-claim changed=added
+"store::owned_entry::param:name" level=source-claim changed=added
+"store::owned_entry::param:producer" level=source-claim changed=added
+"store::query_cursor_key" level=source-claim changed=added
+"store::query_cursor_key::param:producer" level=source-claim changed=added
+"store::query_cursor_key::param:question" level=source-claim changed=added
+"store::query_digest" level=source-claim changed=added
+"store::query_digest::param:identity" level=source-claim changed=added
+"store::query_hex" level=source-claim changed=added
+"store::query_hex::param:bytes" level=source-claim changed=added
+"store::query_locator_identity" level=source-claim changed=added
+"store::query_locator_identity::param:name" level=source-claim changed=added
+"store::query_locator_name" level=source-claim changed=added
+"store::query_locator_name::param:identity" level=source-claim changed=added
+"store::query_locator_producer" level=source-claim changed=added
+"store::read_query_locator" level=source-claim changed=added
+"store::read_query_locator::param:capacity" level=source-claim changed=added
+"store::read_query_locator::param:directory" level=source-claim changed=added
+"store::read_query_locator::param:identity" level=source-claim changed=added
+"store::read_query_locator::param:secret" level=source-claim changed=added
+"store::read_store_secret" level=source-claim changed=added
+"store::read_store_secret::param:key" level=source-claim changed=added
+"store::read_store_secret::param:world" level=source-claim changed=added
+"store::seal_query_cursor" level=source-claim changed=added
+"store::seal_query_cursor::param:payload" level=source-claim changed=added
+"store::seal_query_cursor::param:producer" level=source-claim changed=added
+"store::seal_query_cursor::param:question" level=source-claim changed=added
+"store::seal_query_cursor::param:secret" level=source-claim changed=added
+program level=checked-ir authority-delta=none
+program level=checked-ir before=63029913311f6934f912907d94a85b8eb011d0612ec2d01b0c614c6a02a1294e after=6ead92bdb354bd84516dbe3481ebfc42b8af500da1d38e67494e997497d93b40 checked-instances=12402 fresh-checked=18 proof-reused=12384 frontend-resumed=0 library-validation=demanded
+transaction source-before=96c05414ac7db8f6e0edcfac486f96c0b18f9aa550f3ef7dd2262b6a09da592b source-after=11dd037c24c30b52ea8ad0f04a734b239c6be7adc93ee361c2fbef323334d961 mode=apply
+replay desired=6ead92bdb354bd84516dbe3481ebfc42b8af500da1d38e67494e997497d93b40 candidate=6ead92bdb354bd84516dbe3481ebfc42b8af500da1d38e67494e997497d93b40 verified=true operations=21

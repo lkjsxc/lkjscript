@@ -1,0 +1,11 @@
+"host_network::foreign_session::exchange" level=source-claim operation-target
+"native::foreign_session::exchange" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/host_network/foreign_session.lkj" level=source-claim file before=53894f5fb1a5cbbc732e0fa30b7a590dc6fef32a1bfd2ad6206190d303817e2a after=ac4e8d2452968fd8edd0ec20e5706693bcc22c902dc6e485b9dd00020efc38bf
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/native/foreign_session.lkj" level=source-claim file before=9baafbeac0b2b8b12857bfd591cf243ed5e02bbd886a39d0e59ee6af2e0a9561 after=0119ee8bf9d3f104eaff590b8c0e3d3b67a2f752bcf7ff75bf3697190812eefc
+transaction sites=2 files=2 identities=2
+"host_network::foreign_session::exchange" level=source-claim changed=body
+"native::foreign_session::exchange" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=e1c516bcb0004dbeab3243f0a17f9fbd6e5756ddcdcdfae14fd9f9d712863535 after=f1ecfaac70e9be5c78d01f4935e7b3a9782e037eb7e812aa52f533c46bc7a87c checked-instances=10689 fresh-checked=10689 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=11a2f9127c6266acd8ba6113e169bb0a62e1f1372325bbfb70869d6652c2ae8e source-after=1a84986ec0f876b8d513b3a5b1c332938449de2580a4c11f632f24948ea1bcd0 mode=apply
+replay desired=f1ecfaac70e9be5c78d01f4935e7b3a9782e037eb7e812aa52f533c46bc7a87c candidate=f1ecfaac70e9be5c78d01f4935e7b3a9782e037eb7e812aa52f533c46bc7a87c verified=true operations=2

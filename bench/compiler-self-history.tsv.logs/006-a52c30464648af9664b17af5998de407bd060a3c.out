@@ -1,0 +1,10 @@
+"structure_refactor::functions" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/structure_refactor.lkj" level=source-claim file before=5f95410f137d2138bbe41dfdc3381b3b391d9ac6358f266ce9bc692477b87d08 after=e40242a89d6714ba051fe3163f1db114f45c42980916542534d6785703cc5729
+transaction sites=1 files=1 identities=1
+"structure_refactor::functions" level=source-claim changed=text-only
+"structure_refactor::functions::annotations" level=source-claim changed=text-only
+"structure_refactor::functions::annotations::intrinsic" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=2b0b9ce49e9bdbaea976f914c5d61d06d12af85039736317f3e49b35a26d5943 after=63029913311f6934f912907d94a85b8eb011d0612ec2d01b0c614c6a02a1294e checked-instances=12379 fresh-checked=12379 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=5f3f035dfc427d08673609fe5ccf407ff4ff4c2b896e54831f53003f77fe37e1 source-after=96c05414ac7db8f6e0edcfac486f96c0b18f9aa550f3ef7dd2262b6a09da592b mode=apply
+replay desired=63029913311f6934f912907d94a85b8eb011d0612ec2d01b0c614c6a02a1294e candidate=63029913311f6934f912907d94a85b8eb011d0612ec2d01b0c614c6a02a1294e verified=true operations=1

@@ -1,0 +1,17 @@
+"driver::Memo" level=source-claim operation-target
+"driver::compile_snapshot" level=source-claim operation-target
+"driver::structure::replace_snapshot" level=source-claim operation-target
+"impl:driver::Memo#cd1d47acb34bab99" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/driver.lkj" level=source-claim file before=b7e5739f206714834b2f61af3adc117532a57042d7e88bba080e10afa5c755ef after=12fdb72103028fc1aefd0f7741554ce7baad1744be7d16c4ee842c7692c3d91f
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/driver/structure.lkj" level=source-claim file before=a77a8dfa80d533d345fb2e07152c13de3a5d594343605ae0f15074eabd5e3761 after=270f010fdd87103b7510f6a803a55d9435adf64d950c210d69634e7a8a949d10
+transaction sites=4 files=2 identities=4
+"driver::Memo" level=source-claim changed=signature
+"driver::Memo::field:embedded_sources" level=source-claim changed=added
+"driver::Memo::new" level=source-claim changed=body
+"driver::compile_snapshot" level=source-claim changed=body
+"driver::structure::replace_snapshot" level=source-claim changed=body
+"impl:driver::Memo#cd1d47acb34bab99" level=source-claim changed=text-only
+program level=checked-ir authority-delta=none
+program level=checked-ir before=080967e15be0dfffbb18e24d2745a1d69a4c78204db95afd06fe4c89c3663180 after=88214aecd0c65bbea34c07448dcec7821a842ed027fea3add46635ddc9a1aec7 checked-instances=12206 fresh-checked=12206 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=28fff8c28645ba0fd869dea84c68c1480a69650c147ccbfca51746db793a311e source-after=681f908dd609dbd28a51eaac20422dbd843db478a24686eeeccf7ffc676ad85b mode=apply
+replay desired=88214aecd0c65bbea34c07448dcec7821a842ed027fea3add46635ddc9a1aec7 candidate=88214aecd0c65bbea34c07448dcec7821a842ed027fea3add46635ddc9a1aec7 verified=true operations=4

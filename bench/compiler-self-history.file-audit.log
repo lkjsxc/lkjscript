@@ -1,0 +1,2 @@
+file_facts=63 exact_historical_before=63 exact_target_text=48 target_text_differs=15
+counted_commits=30 outside_language_commits=7 outside_language_paths=30 all_changed_language_within_compiler_scope=23

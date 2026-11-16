@@ -1,0 +1,75 @@
+"driver::structure::compare" level=source-claim operation-target
+"driver::structure::entries" level=source-claim operation-target
+"meaning" level=source-claim operation-target
+"meaning::closure_identity" level=source-claim operation-target
+"meaning::compare" level=source-claim operation-target
+"meaning::remap_type" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/driver/structure.lkj" level=source-claim file before=204946010bb44720956e95eb23c553cdc677770ec27f92e96619fab923b015a0 after=379f55f852561b45c24ee2532d3e28bdb1d753b0200007b6dea73d90ec74d086
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/meaning.lkj" level=source-claim file before=7da53c98104e38da9b31d090f4aba840a080353c5032fc6afd979c3849ded1f2 after=9b546a4b26b08ea26bdf11bfe8130baa3feb99f34ab647d8010249d2d512005e
+transaction sites=6 files=2 identities=6
+"driver::structure::compare" level=source-claim changed=body
+"driver::structure::entries" level=source-claim changed=body
+"meaning::closure_identity" level=source-claim changed=body
+"meaning::compare" level=source-claim changed=signature,body
+"meaning::remap_type" level=source-claim changed=signature,body
+"meaning::remap_type::param:diagnostic_metadata" level=source-claim changed=added
+"meaning::verified" level=source-claim changed=added
+"meaning::verified::Fact" level=source-claim changed=added
+"meaning::verified::Fact::field:after" level=source-claim changed=added
+"meaning::verified::Fact::field:before" level=source-claim changed=added
+"meaning::verified::Fact::field:identity" level=source-claim changed=added
+"meaning::verified::Fact::field:kind" level=source-claim changed=added
+"meaning::verified::authorities" level=source-claim changed=added
+"meaning::verified::authorities::param:catalog" level=source-claim changed=added
+"meaning::verified::authorities::param:checked" level=source-claim changed=added
+"meaning::verified::authority_sets" level=source-claim changed=added
+"meaning::verified::authority_sets::param:catalog" level=source-claim changed=added
+"meaning::verified::authority_sets::param:checked" level=source-claim changed=added
+"meaning::verified::changes" level=source-claim changed=added
+"meaning::verified::changes::param:after" level=source-claim changed=added
+"meaning::verified::changes::param:before" level=source-claim changed=added
+"meaning::verified::changes::param:new" level=source-claim changed=added
+"meaning::verified::changes::param:old" level=source-claim changed=added
+"meaning::verified::components" level=source-claim changed=added
+"meaning::verified::components::param:edges" level=source-claim changed=added
+"meaning::verified::delta" level=source-claim changed=added
+"meaning::verified::delta::param:kind" level=source-claim changed=added
+"meaning::verified::delta::param:new" level=source-claim changed=added
+"meaning::verified::delta::param:old" level=source-claim changed=added
+"meaning::verified::delta::param:out" level=source-claim changed=added
+"meaning::verified::destructors" level=source-claim changed=added
+"meaning::verified::destructors::param:catalog" level=source-claim changed=added
+"meaning::verified::destructors::param:checked" level=source-claim changed=added
+"meaning::verified::fingerprints" level=source-claim changed=added
+"meaning::verified::fingerprints::param:labels" level=source-claim changed=added
+"meaning::verified::fingerprints::param:layouts" level=source-claim changed=added
+"meaning::verified::fingerprints::param:names" level=source-claim changed=added
+"meaning::verified::fingerprints::param:program" level=source-claim changed=added
+"meaning::verified::instance" level=source-claim changed=added
+"meaning::verified::instance::param:catalog" level=source-claim changed=added
+"meaning::verified::instance::param:index" level=source-claim changed=added
+"meaning::verified::instance::param:program" level=source-claim changed=added
+"meaning::verified::instance::param:shapes" level=source-claim changed=added
+"meaning::verified::join" level=source-claim changed=added
+"meaning::verified::join::param:values" level=source-claim changed=added
+"meaning::verified::layout" level=source-claim changed=added
+"meaning::verified::layout::param:out" level=source-claim changed=added
+"meaning::verified::layout::param:value" level=source-claim changed=added
+"meaning::verified::remap" level=source-claim changed=added
+"meaning::verified::remap::param:labels" level=source-claim changed=added
+"meaning::verified::remap::param:mapping" level=source-claim changed=added
+"meaning::verified::remap::param:ty" level=source-claim changed=added
+"meaning::verified::shapes" level=source-claim changed=added
+"meaning::verified::shapes::param:checked" level=source-claim changed=added
+"meaning::verified::text" level=source-claim changed=added
+"meaning::verified::text::param:out" level=source-claim changed=added
+"meaning::verified::text::param:value" level=source-claim changed=added
+"meaning::verified::type_identities" level=source-claim changed=added
+"meaning::verified::type_identities::param:checked" level=source-claim changed=added
+"meaning::verified::word" level=source-claim changed=added
+"meaning::verified::word::param:out" level=source-claim changed=added
+"meaning::verified::word::param:value" level=source-claim changed=added
+program level=checked-ir authority-delta=none
+program level=checked-ir before=71919a350c8c4bd14020cbd2241333ddfef4c642ddb992d89b1b5bc32fe44658 after=a865577daa8dc1bc28935efcb0c5ad6796a5ca23b8421ffcff3041350271913c checked-instances=11476 fresh-checked=7 proof-reused=11469 frontend-resumed=0 library-validation=demanded
+transaction source-before=99cb11b9eac0f94a0905f1c0517eb034ee9fea0e6a424db1230357c5fa8fbab5 source-after=963c2c72aa0bb6759e6af375273cdafcab29b22fc849f567a439fec9e5b939ae mode=apply
+replay desired=a865577daa8dc1bc28935efcb0c5ad6796a5ca23b8421ffcff3041350271913c candidate=a865577daa8dc1bc28935efcb0c5ad6796a5ca23b8421ffcff3041350271913c verified=true operations=6

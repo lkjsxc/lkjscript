@@ -18,6 +18,8 @@ scan=${7:-300}
 memory_bytes=${LKJSCRIPT_HISTORY_MEMORY_BYTES:-4294967296}
 timeout_seconds=${LKJSCRIPT_HISTORY_TIMEOUT_SECONDS:-240}
 store_bytes=${LKJSCRIPT_HISTORY_STORE_BYTES:-2147483648}
+keep_fixture=${LKJSCRIPT_HISTORY_KEEP_FIXTURE:-0}
+[[ $keep_fixture == 0 || $keep_fixture == 1 ]] || exit 2
 history_head=$(git -C "$repository" rev-parse --verify "${LKJSCRIPT_HISTORY_HEAD:-HEAD}^{commit}")
 compiler_bytes=$(stat -c %s "$compiler")
 compiler_sha=$(sha256sum "$compiler" | cut -d ' ' -f 1)
@@ -77,7 +79,14 @@ free_space() {
 if [[ $resume == 0 ]]; then : > "$output.space"; fi
 free_space "$history_head" "$history_head" || exit 2
 fixture=$(mktemp -d "$PWD/target/compiler-history.XXXXXX")
-trap 'rm -rf "$fixture"' EXIT
+cleanup() {
+    if [[ $keep_fixture == 1 ]]; then
+        printf 'retained_fixture=%s\n' "$fixture" >> "$output.meta"
+    else
+        rm -rf "$fixture"
+    fi
+}
+trap cleanup EXIT
 trap 'exit 129' HUP
 trap 'exit 130' INT
 trap 'exit 143' TERM
@@ -92,6 +101,7 @@ if [[ $resume == 0 ]]; then
     printf '%s\n' "$specification" > "$output.meta"
     printf 'history_head=%s\ncompiler_origin=%s\n' "$history_head" "$compiler_origin" >> "$output.meta"
     sha256sum "$compiler" >> "$output.meta"
+    printf 'harness_sha256=%s\n' "$(sha256sum "$0" | cut -d ' ' -f 1)" >> "$output.meta"
     printf 'library_policy=historical-roots-when-both-present-else-frozen-compiler-embedded-on-both-sides\nstop_file=%s.stop\n' "$output" >> "$output.meta"
 else
     printf 'resume=true previous_attempted=%s previous_passed=%s store_state=cold load=%s\n' \
@@ -263,7 +273,8 @@ PERL
         if [[ -e "$fixture/before/.lkjscript-edit.pending" ]]; then
             (
                 cd "$fixture"
-                "$compiler" edit "$source_root" --source-dir "$fixture/before" \
+                prlimit --as="$memory_bytes" -- timeout --kill-after=5s "$timeout_seconds" \
+                    "$compiler" edit "$source_root" --source-dir "$fixture/before" \
                     --recover --no-store --store-key "$private_key"
             ) > "$stem.recovery" 2>&1
         fi

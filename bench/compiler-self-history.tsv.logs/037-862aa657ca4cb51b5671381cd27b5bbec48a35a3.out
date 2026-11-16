@@ -1,0 +1,22 @@
+"semantic" level=source-claim operation-target
+"semantic::catalog_mode" level=source-claim operation-target
+"semantic::references::local_reference" level=source-claim operation-target
+"structure_refactor::functions" level=source-claim operation-target
+"structure_refactor::signature" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/semantic.lkj" level=source-claim file before=8e731387871ed8802b266111f0d3c5e8100368cab525e0a664fa3f8ab2e17e95 after=0b19047d59c417df35df001d2950082cea87d261ceb0252b94c1f328aded0e42
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/semantic/references.lkj" level=source-claim file before=389221a24d211e02497efeeb9ece5eb853168fe694e5adac8183d532ec6c5802 after=3511184b6c58dc5f24538a969b4f21ccfdf58320c9983d5a1b961f26a90ac2a4
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/structure_refactor.lkj" level=source-claim file before=3ae49a405f6f8eecb40b6254c7c76fa862c20b7fc8c988474b1b7e9caad9c246 after=6debbca3945ff228f2f7cd5e3e0c98c53f6a71eb15d1dc4acd54459311edf63d
+transaction sites=5 files=3 identities=5
+"semantic::catalog_mode" level=source-claim changed=body
+"semantic::parameter_identity" level=source-claim changed=added
+"semantic::parameter_identity::param:name" level=source-claim changed=added
+"semantic::parameter_identity::param:owner" level=source-claim changed=added
+"semantic::parameter_identity::param:position" level=source-claim changed=added
+"semantic::references::local_reference" level=source-claim changed=body
+"structure_refactor::functions" level=source-claim changed=text-only
+"structure_refactor::functions::inline" level=source-claim changed=body
+"structure_refactor::signature" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=6f4226327d849320e064049651d5c85499ce459fd646e02974ff33317273a83a after=1b1cbda7b6111eeaf2370823db542d2ab6b77ef6f3028f9e04ea945b2f614474 checked-instances=12453 fresh-checked=12453 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=af82d542b402bb8cc5909da025ffd0c666e4187d46b8917835571b38425d830d source-after=0b4a1df02eae2c3fc2f116b33f0cd91ff02df2683784b555efb9ea8b6bfa6d48 mode=apply
+replay desired=1b1cbda7b6111eeaf2370823db542d2ab6b77ef6f3028f9e04ea945b2f614474 candidate=1b1cbda7b6111eeaf2370823db542d2ab6b77ef6f3028f9e04ea945b2f614474 verified=true operations=5

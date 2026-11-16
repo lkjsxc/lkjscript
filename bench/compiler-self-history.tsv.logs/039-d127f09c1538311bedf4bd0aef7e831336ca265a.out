@@ -1,0 +1,23 @@
+"test_generators::compare" level=source-claim operation-target
+"test_generators::execute_ir" level=source-claim operation-target
+"test_generators::self_test" level=source-claim operation-target
+"test_runner" level=source-claim operation-target
+"test_runner::same_source" level=source-claim operation-target
+"test_runner::trap_code" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/test_generators.lkj" level=source-claim file before=5dca9cc1b0becd32805ffe4ab56063b9d23b6f7be760e17650c79e354012f491 after=0ecbb0289b99498019a96de4ed558942ae357b0a703ddd961827484dd8598a8b
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/test_runner.lkj" level=source-claim file before=8c5a205023b2e69ebac848499e0522714c73edbf4eb87b81e98b6750d670701c after=773c4b57abc401244c4005283ae83a82c1183194cc6c695668a79ac942db889f
+transaction sites=7 files=2 identities=6
+"test_generators::compare" level=source-claim changed=body
+"test_generators::execute_ir" level=source-claim changed=body
+"test_generators::self_test" level=source-claim changed=body
+"test_runner::custom_trap" level=source-claim changed=added
+"test_runner::custom_trap::param:text" level=source-claim changed=added
+"test_runner::raw_trap_code" level=source-claim changed=added
+"test_runner::raw_trap_code::param:text" level=source-claim changed=added
+"test_runner::same_source" level=source-claim changed=body
+"test_runner::same_source_custom_traps_preserve_message_code_and_file" level=source-claim changed=added
+"test_runner::trap_code" level=source-claim changed=body
+"ir:test_runner::same_source_custom_traps_preserve_message_code_and_file" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+program level=checked-ir before=cfccfb4fab7b1a8af4b76e81440ed940ae1884f6b412936d17e19491c2b69e2a after=d8b91d2e16df6483be37403b894a7665bfaa87772d52e05298eebc4ea485b480 checked-instances=9611 fresh-checked=9611 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=cbfe89bfb3e6532601d5f9214d6f6a1fa795153613395625d858cf1be5a6e5ed source-after=c55bb9f8bafe28a5267ee6a126cf595d0e21c10bc4fbf4268f3b4c7f6f5864b5 mode=apply
+replay desired=d8b91d2e16df6483be37403b894a7665bfaa87772d52e05298eebc4ea485b480 candidate=d8b91d2e16df6483be37403b894a7665bfaa87772d52e05298eebc4ea485b480 verified=true operations=8

@@ -1,0 +1,16 @@
+"impl:semantic_store::Reader#a12b2efe61535204" level=source-claim operation-target
+"semantic_store::Page" level=source-claim operation-target
+"semantic_store::Reader" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/semantic_store.lkj" level=source-claim file before=b51636169265749cb8657a10e0f1c76b6ac003c407345db13d1256f7c5c002b2 after=5cf9b7ed04ddc1c12d5f49f46da760de5d5fa44ecb17612697f5076b5751bb1e
+transaction sites=3 files=1 identities=3
+"impl:semantic_store::Reader#a12b2efe61535204" level=source-claim changed=text-only
+"semantic_store::Page" level=source-claim changed=signature
+"semantic_store::Reader" level=source-claim changed=signature
+"semantic_store::Reader::field:fact_pages" level=source-claim changed=added
+"semantic_store::Reader::field:snapshot" level=source-claim changed=signature
+"semantic_store::Reader::new" level=source-claim changed=body
+"semantic_store::Reader::page" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=a730bbd14c9b9071833031f67d872890451123d7029442699e1117f6aa3ae7b7 after=8c6a1148f6029b6203be02fabdbae9bb8f11702bf1fc34acbf40c171b55be1bb checked-instances=12455 fresh-checked=0 proof-reused=12455 frontend-resumed=0 library-validation=demanded
+transaction source-before=1f91fe4cc98a6a538b72fe6a78faac48809e4d2ac1aac858d55492e34b032f55 source-after=dcad3643a46d571264dffb30405bbfe1f5118ce480f68fe73d4d123d7585eec4 mode=apply
+replay desired=8c6a1148f6029b6203be02fabdbae9bb8f11702bf1fc34acbf40c171b55be1bb candidate=8c6a1148f6029b6203be02fabdbae9bb8f11702bf1fc34acbf40c171b55be1bb verified=true operations=3

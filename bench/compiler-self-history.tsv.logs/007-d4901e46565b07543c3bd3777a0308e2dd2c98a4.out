@@ -1,0 +1,8 @@
+"driver::execute_source" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/driver.lkj" level=source-claim file before=63e625dc3d5ceb20341f562c9175018a451d06b9286b23e185581517387e5284 after=0ec41f30c2c876ace6d35ba2a24dc2b6d9ed1fe227f339a2ac4b41eb2a3b3a90
+transaction sites=1 files=1 identities=1
+"driver::execute_source" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=596a071dfaa6ee734989f4753fb6887b9e29ecac9ad0ab9a6c3a1af7999d3913 after=a730bbd14c9b9071833031f67d872890451123d7029442699e1117f6aa3ae7b7 checked-instances=12438 fresh-checked=12438 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=0993ac095a78c46317c8bd4cfb3cb9691eec83c0410a331d48c782db2dd3f287 source-after=1f91fe4cc98a6a538b72fe6a78faac48809e4d2ac1aac858d55492e34b032f55 mode=apply
+replay desired=a730bbd14c9b9071833031f67d872890451123d7029442699e1117f6aa3ae7b7 candidate=a730bbd14c9b9071833031f67d872890451123d7029442699e1117f6aa3ae7b7 verified=true operations=1

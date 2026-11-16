@@ -1,0 +1,21 @@
+"driver::structure" level=source-claim operation-target
+"driver::structure::edit" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/driver/structure.lkj" level=source-claim file before=3f03f86e852216ddae94a0f60d4b97ece9e3fd35ae3b247b077d418a9d7bc893 after=a77a8dfa80d533d345fb2e07152c13de3a5d594343605ae0f15074eabd5e3761
+transaction sites=2 files=1 identities=2
+"driver::structure::changes_library" level=source-claim changed=added
+"driver::structure::changes_library::param:before" level=source-claim changed=added
+"driver::structure::changes_library::param:draft" level=source-claim changed=added
+"driver::structure::changes_library::param:options" level=source-claim changed=added
+"driver::structure::edit" level=source-claim changed=body
+"driver::structure::replay_target" level=source-claim changed=added
+"driver::structure::replay_target::param:before" level=source-claim changed=added
+"driver::structure::replay_target::param:desired_read" level=source-claim changed=added
+"driver::structure::replay_target::param:old_catalog" level=source-claim changed=added
+"driver::structure::replay_target::param:options" level=source-claim changed=added
+"driver::structure::replay_target::param:request" level=source-claim changed=added
+"driver::structure::replay_target::param:stats" level=source-claim changed=added
+"driver::structure::replay_target::param:world" level=source-claim changed=added
+program level=checked-ir authority-delta=none
+program level=checked-ir before=4f81eb8236ad5dd7eac1fac712a0cf7135e3490f106403ce1aac5f9a2976b4aa after=080967e15be0dfffbb18e24d2745a1d69a4c78204db95afd06fe4c89c3663180 checked-instances=12206 fresh-checked=0 proof-reused=12206 frontend-resumed=0 library-validation=demanded
+transaction source-before=89014287cd01a40830c0c2d2a91a64ac579de5c66b2190da944bd7b362ee87df source-after=28fff8c28645ba0fd869dea84c68c1480a69650c147ccbfca51746db793a311e mode=apply
+replay desired=080967e15be0dfffbb18e24d2745a1d69a4c78204db95afd06fe4c89c3663180 candidate=080967e15be0dfffbb18e24d2745a1d69a4c78204db95afd06fe4c89c3663180 verified=true operations=3

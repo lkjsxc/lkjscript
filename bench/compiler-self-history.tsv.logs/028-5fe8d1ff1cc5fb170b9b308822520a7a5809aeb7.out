@@ -1,0 +1,12 @@
+"impl:elaborate::Builder<'_, '_>#05202ac1ccc5dcd2" level=source-claim operation-target
+"impl:elaborate::Builder<'_, '_>#9f72a2bf64ce25d4" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/elaborate/diagnostic_edits.lkj" level=source-claim file before=ac67202652884e29646c1d428e029d581bf76e8923c4a68950fcac2f99c05a39 after=cc8e40302de5d239fa6090e2c9738fcc4f01452a5eb655f33ed3d6e51e12eb26
+transaction sites=2 files=1 identities=2
+"elaborate::Builder<'_, '_>::iterator_diagnostic" level=source-claim changed=body
+"elaborate::Builder<'_, '_>::receiver_diagnostic" level=source-claim changed=body
+"impl:elaborate::Builder<'_, '_>#05202ac1ccc5dcd2" level=source-claim changed=text-only
+"impl:elaborate::Builder<'_, '_>#9f72a2bf64ce25d4" level=source-claim changed=text-only
+program level=checked-ir authority-delta=none
+program level=checked-ir before=02df3a4a213e1f075d14fd7088d376eb408410475ceaf2a5a8fe22a12790fcb0 after=d045a29c16e017fc166832f33b7af0621b6a23b9ad60e8b02c4ab7c31c6ab426 checked-instances=9639 fresh-checked=0 proof-reused=9639 frontend-resumed=0 library-validation=demanded
+transaction source-before=37b835e6a271dcadd8590a370eb353fd7a76b902e9a6489b4e5b30fc04d87d95 source-after=a2d20855d5526a16460b22c2bca9005800523fbd75cdd9ac44e66f79b583dd41 mode=apply
+replay desired=d045a29c16e017fc166832f33b7af0621b6a23b9ad60e8b02c4ab7c31c6ab426 candidate=d045a29c16e017fc166832f33b7af0621b6a23b9ad60e8b02c4ab7c31c6ab426 verified=true operations=2

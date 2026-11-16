@@ -1,0 +1,27 @@
+"impl:<Vec<u8> as interpreter::Host>#461ac9100d59091c" level=source-claim operation-target
+"interpreter" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/interpreter.lkj" level=source-claim file before=a9276a4685fcdf3dd7b6ca877664f5cfed7f6b9d4fb1d55afa9013a91b079744 after=cbfba013209c03e4bc8209561f41cfee35e53c03ace8905da945d9f4ae96018e
+transaction sites=2 files=1 identities=2
+"<Vec<u8> as interpreter::Host>::exchange_foreign" level=source-claim changed=added
+"<Vec<u8> as interpreter::Host>::exchange_foreign::param:_duration" level=source-claim changed=added
+"<Vec<u8> as interpreter::Host>::exchange_foreign::param:_request" level=source-claim changed=added
+"<Vec<u8> as interpreter::Host>::exchange_foreign::param:_response" level=source-claim changed=added
+"<Vec<u8> as interpreter::Host>::exchange_foreign::param:_session" level=source-claim changed=added
+"<Vec<u8> as interpreter::Host>::exchange_foreign::param:self" level=source-claim changed=added
+"<Vec<u8> as interpreter::Host>::finish_foreign" level=source-claim changed=added
+"<Vec<u8> as interpreter::Host>::finish_foreign::param:_duration" level=source-claim changed=added
+"<Vec<u8> as interpreter::Host>::finish_foreign::param:_session" level=source-claim changed=added
+"<Vec<u8> as interpreter::Host>::finish_foreign::param:self" level=source-claim changed=added
+"<Vec<u8> as interpreter::Host>::start_foreign" level=source-claim changed=added
+"<Vec<u8> as interpreter::Host>::start_foreign::param:_arguments" level=source-claim changed=added
+"<Vec<u8> as interpreter::Host>::start_foreign::param:_command" level=source-claim changed=added
+"<Vec<u8> as interpreter::Host>::start_foreign::param:_duration" level=source-claim changed=added
+"<Vec<u8> as interpreter::Host>::start_foreign::param:_root" level=source-claim changed=added
+"<Vec<u8> as interpreter::Host>::start_foreign::param:_sink" level=source-claim changed=added
+"<Vec<u8> as interpreter::Host>::start_foreign::param:self" level=source-claim changed=added
+"impl:<Vec<u8> as interpreter::Host>#04dfeee5b1fec380" level=source-claim changed=added
+"impl:<Vec<u8> as interpreter::Host>#461ac9100d59091c" level=source-claim changed=removed
+program level=checked-ir authority-delta=none
+program level=checked-ir before=1b12d515403f5cadba6e7deb15bbdc490c12f4aefcc75c3f8208513a6f41582e after=1b12d515403f5cadba6e7deb15bbdc490c12f4aefcc75c3f8208513a6f41582e checked-instances=10689 fresh-checked=10689 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=51b8f90243985b4391825a5df914119773d21c2d451dab094282e9121250d512 source-after=d356e63eeca2144fcc422cfcef25ba7ffac940edf3a9e1aa630d42391307221c mode=apply
+replay desired=1b12d515403f5cadba6e7deb15bbdc490c12f4aefcc75c3f8208513a6f41582e candidate=1b12d515403f5cadba6e7deb15bbdc490c12f4aefcc75c3f8208513a6f41582e verified=true operations=2

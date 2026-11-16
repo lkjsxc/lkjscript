@@ -1,0 +1,36 @@
+"elaborate::diagnostic_edits" level=source-claim operation-target
+"impl:elaborate::Builder<'_, '_>#85e559883f5bc1b6" level=source-claim operation-target
+"impl:elaborate::Builder<'_, '_>#9f72a2bf64ce25d4" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/elaborate.lkj" level=source-claim file before=dfa534e3a72f009e95fdd2f4fe842d39244ca8355c447ff4d6d81bc2448f657e after=fcbc9f812c7e575d4f797aafb31c0b40dde7257ad74a32c08651f87fbee53fc0
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/elaborate/diagnostic_edits.lkj" level=source-claim file before=727c0b6b99dfe8cd6fb281c044e28e58a379f7ff150e7c62ff934dc02dedaa2a after=fb662a9844b8d37783e9ab896b0097fbe0d7e07d47dc9c572cc67db18f90cdd8
+transaction sites=3 files=2 identities=3
+"elaborate::Builder<'_, '_>::array_expr" level=source-claim changed=body
+"elaborate::Builder<'_, '_>::block_with_context" level=source-claim changed=body
+"elaborate::Builder<'_, '_>::call" level=source-claim changed=body
+"elaborate::Builder<'_, '_>::empty_array_diagnostic" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::empty_array_diagnostic::param:expected" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::empty_array_diagnostic::param:self" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::empty_array_diagnostic::param:span" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::iterator_diagnostic" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::iterator_diagnostic::param:arguments" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::iterator_diagnostic::param:problem" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::iterator_diagnostic::param:self" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::iterator_diagnostic::param:span" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::iterator_diagnostic::param:target" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::iterator_diagnostic::param:values" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::local_constant_diagnostic" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::local_constant_diagnostic::param:index" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::local_constant_diagnostic::param:self" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::receiver_diagnostic" level=source-claim changed=body
+"elaborate::Builder<'_, '_>::split_count_diagnostic" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::split_count_diagnostic::param:expression" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::split_count_diagnostic::param:problem" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::split_count_diagnostic::param:self" level=source-claim changed=added
+"elaborate::Builder<'_, '_>::split_count_diagnostic::param:span" level=source-claim changed=added
+"impl:elaborate::Builder<'_, '_>#05202ac1ccc5dcd2" level=source-claim changed=added
+"impl:elaborate::Builder<'_, '_>#85e559883f5bc1b6" level=source-claim changed=text-only
+"impl:elaborate::Builder<'_, '_>#9f72a2bf64ce25d4" level=source-claim changed=text-only
+program level=checked-ir authority-delta=none
+program level=checked-ir before=baa094a17d7c42c27117e994f0bbdd30b5eee7e5f0b5d7cf52a833e00602767e after=8dc2d96c424be31f34ddf5ecfaaa48c6af275eb162d3ab87af0f66518de5b205 checked-instances=9412 fresh-checked=9412 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=c2ca388f15e720545704c49515dccb45823bdd15753df3722a74d3ea184df0ef source-after=6aeb137e1f1a2a13d7144f7300fc0634e678406462a5f6c31a2e729532721a69 mode=apply
+replay desired=8dc2d96c424be31f34ddf5ecfaaa48c6af275eb162d3ab87af0f66518de5b205 candidate=8dc2d96c424be31f34ddf5ecfaaa48c6af275eb162d3ab87af0f66518de5b205 verified=true operations=3

@@ -1,0 +1,2 @@
+src/semantic_tests/optimizer.rs
+src/semantic_tests/optimizer/wrappers.rs

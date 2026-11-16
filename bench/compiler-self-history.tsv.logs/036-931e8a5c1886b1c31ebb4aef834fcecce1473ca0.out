@@ -1,0 +1,15 @@
+"driver::complete_semantic_trap" level=source-claim operation-target
+"impl:interpreter::Interpreter<'_, H>#0371d1800a672cef" level=source-claim operation-target
+"native::messages" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/driver.lkj" level=source-claim file before=106f8aee7afac3d3bba8a6f45374430b068d4ccd788da641172302b369ce7293 after=935ac892840b65dcad01584fa2a6abb4b6d5c3d4e3589e1c986d257f435e702b
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/interpreter.lkj" level=source-claim file before=1af9e1241678000dd66539d02b5ce2067f0ea60b48af6fc86c18f3efd04d4635 after=a5eb15486d96dd4fbc5b9dd8ae8e9b03422c010a6c6286b46a7f623e42464309
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/native.lkj" level=source-claim file before=7733f51a47d5f158f49281cbd7eb13384eb1beeb40bc82efca39c295057c188b after=76de8ea7503f6d1a7bfb8f96374aa106d86ce0073c1bfbb114e23ac534104e55
+transaction sites=3 files=3 identities=3
+"driver::complete_semantic_trap" level=source-claim changed=body
+"impl:interpreter::Interpreter<'_, H>#0371d1800a672cef" level=source-claim changed=text-only
+"interpreter::Interpreter<'_, H>::step" level=source-claim changed=body
+"native::messages" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=2d519a874bfb99fbac3d7ae5aa542aff83ac86cc9b644b84fd1cbdd6e25d91ac after=b476ec67a27a1f676b05b300c05be42c35a6e799c3c80ed26ce6b129e58850bf checked-instances=9592 fresh-checked=9592 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=91a7b03c00dd87eaeabbbf85c93c375f927f41486e866488275743febbaa22bb source-after=05adc65cbae2fbda929fbfd58bf7d7855a426f31038586974ea2a7238920ad04 mode=apply
+replay desired=b476ec67a27a1f676b05b300c05be42c35a6e799c3c80ed26ce6b129e58850bf candidate=b476ec67a27a1f676b05b300c05be42c35a6e799c3c80ed26ce6b129e58850bf verified=true operations=3

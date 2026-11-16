@@ -1,0 +1,35 @@
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":1149.493,"key_hash_ms":29.442,"load_parse_ms":1063.777,"source_read_ms":12.673,"peak_rss_bytes":109559808}
+src/driver.lkj:44:1: E_PARSE expected an expression
+src/driver.lkj:131:1: E_PARSE expected `=>`, found `<<`
+src/driver.lkj:441:6: E_PARSE expected `;` after expression
+src/driver.lkj:594:1: E_PARSE expected an expression
+src/driver.lkj:596:17: E_PARSE expected `}`, found `.`
+src/driver.lkj:736:12: E_PARSE expected `;` after expression
+src/driver.lkj:789:12: E_PARSE expected `;` after expression
+src/driver.lkj:826:12: E_PARSE expected `;` after expression
+src/driver.lkj:846:12: E_PARSE expected `;` after expression
+src/driver.lkj:993:12: E_PARSE expected `;` after expression
+src/driver.lkj:996:12: E_PARSE expected `;` after expression
+src/driver.lkj:1948:5: E_PARSE expected `;` after expression
+src/driver.lkj:1981:1: E_PARSE expected an identifier
+src/driver.lkj:2008:6: E_PARSE expected `;` after expression
+src/driver.lkj:2347:1: E_PARSE unterminated block
+src/driver.lkj:44:1: E_BLOCKED statement: not analyzed after E_PARSE
+src/driver.lkj:120:9: E_BLOCKED statement: not analyzed after E_PARSE
+src/driver.lkj:441:1: E_BLOCKED statement: not analyzed after E_PARSE
+src/driver.lkj:594:1: E_BLOCKED statement: not analyzed after E_PARSE
+src/driver.lkj:595:12: E_BLOCKED statement: not analyzed after E_PARSE
+src/driver.lkj:736:1: E_BLOCKED statement: not analyzed after E_PARSE
+src/driver.lkj:789:1: E_BLOCKED statement: not analyzed after E_PARSE
+src/driver.lkj:826:1: E_BLOCKED statement: not analyzed after E_PARSE
+src/driver.lkj:846:1: E_BLOCKED statement: not analyzed after E_PARSE
+src/driver.lkj:993:1: E_BLOCKED statement: not analyzed after E_PARSE
+src/driver.lkj:996:1: E_BLOCKED statement: not analyzed after E_PARSE
+src/driver.lkj:1948:1: E_BLOCKED statement: not analyzed after E_PARSE
+src/driver.lkj:1979:1: E_BLOCKED statement: not analyzed after E_PARSE
+src/driver.lkj:2008:1: E_BLOCKED statement: not analyzed after E_PARSE
+src/driver.lkj:579:5: E_BLOCKED statement: not analyzed after E_PARSE
+src/driver.lkj:526:1: E_BLOCKED statement: not analyzed after E_PARSE
+src/driver.lkj:118:5: E_BLOCKED statement: not analyzed after E_PARSE
+src/driver.lkj:57:1: E_BLOCKED item: not analyzed after E_PARSE
+src/main.lkj:0:0: E_BLOCKED semantic phase: source errors prevent complete name resolution and semantic checking

@@ -1,0 +1,15 @@
+"diagnostics::borrow_edits" level=source-claim operation-target
+"diagnostics::borrow_edits::advice" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/diagnostics/borrow_edits.lkj" level=source-claim file before=2f60506616cabf28ececbd3ae45a62be5f73b5c71cea8af003f1ed90d8a789e9 after=f2076b57e6696e485f03ab9e2dda3997372b26abebf997fcef40a64c3cfc1501
+transaction sites=2 files=1 identities=2
+"diagnostics::borrow_edits::advice" level=source-claim changed=body
+"diagnostics::borrow_edits::owned_result" level=source-claim changed=added
+"diagnostics::borrow_edits::owned_result::param:callee" level=source-claim changed=added
+"diagnostics::borrow_edits::owned_result::param:program" level=source-claim changed=added
+"diagnostics::borrow_edits::qualified" level=source-claim changed=added
+"diagnostics::borrow_edits::qualified::param:module" level=source-claim changed=added
+"diagnostics::borrow_edits::qualified::param:name" level=source-claim changed=added
+program level=checked-ir authority-delta=none
+program level=checked-ir before=402c62704481e4c8dcce9a48895f599953e32d408a74f8b9d95e7b7e5ce6245d after=2b9fde9ae7f3cfb765e4dd2ee7d39dff2a8a8a7b7b1466c1b018297e460a05ed checked-instances=9516 fresh-checked=9516 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=6d74842a48378cd927ef979c767c7b04fa6fc513ec6151637ea726dcb397b77b source-after=5ac7806fb569c4009c606e87cd335d76db4b75aca8ace92fdd051d0ec959afc8 mode=apply
+replay desired=2b9fde9ae7f3cfb765e4dd2ee7d39dff2a8a8a7b7b1466c1b018297e460a05ed candidate=2b9fde9ae7f3cfb765e4dd2ee7d39dff2a8a8a7b7b1466c1b018297e460a05ed verified=true operations=3

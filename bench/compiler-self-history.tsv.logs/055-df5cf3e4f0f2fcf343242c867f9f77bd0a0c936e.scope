@@ -1,0 +1,2 @@
+src/semantic_tests.rs
+src/semantic_tests/scalar_clone.rs

@@ -1,0 +1,17 @@
+"driver" level=source-claim operation-target
+"driver::build_entries" level=source-claim operation-target
+"driver::execute_source" level=source-claim operation-target
+"semantic_facts::build_emitted" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/driver.lkj" level=source-claim file before=034b83626301e1167722d61eed53c1828af610cec92cef3cfd00769d928ecd2c after=a5d1255b3422d451d6b51b31f40765cb08efb797f29d96123a193013692c486b
+"/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/semantic_facts.lkj" level=source-claim file before=bc156e4ec4e9b1e50714d1dfcf8d86f2a70132a6595064b9de5b0074ff51eae5 after=778b7a313c1eec55a166b5696ddcc46296c356fec6e34c2c762f7a77b1e38a9c
+transaction sites=4 files=2 identities=4
+"driver::build_entries" level=source-claim changed=body
+"driver::checked_authority" level=source-claim changed=added
+"driver::checked_authority::param:checked" level=source-claim changed=added
+"driver::checked_authority::param:report" level=source-claim changed=added
+"driver::execute_source" level=source-claim changed=body
+"semantic_facts::build_emitted" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=a865577daa8dc1bc28935efcb0c5ad6796a5ca23b8421ffcff3041350271913c after=d09a76e42bf7a59f255c131e9504f9ceed898e3b20692e1caa5a02b32eaa306c checked-instances=11477 fresh-checked=11477 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=9edcde4f52f02b5c332d8df64c1ba98f904a35e3ffd55a8a48c5ca0eecc9d5c2 source-after=28caabd80c0814b8479c0bf4c2d8744a87ab8225c5dab8176c5fe5973c42f6a3 mode=apply
+replay desired=d09a76e42bf7a59f255c131e9504f9ceed898e3b20692e1caa5a02b32eaa306c candidate=d09a76e42bf7a59f255c131e9504f9ceed898e3b20692e1caa5a02b32eaa306c verified=true operations=4
