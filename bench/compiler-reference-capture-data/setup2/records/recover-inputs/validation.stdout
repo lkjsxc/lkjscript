@@ -1,0 +1,14 @@
+{
+   "complete_metrics" : true,
+   "outer_end_ns" : 1794852766204046572,
+   "outer_start_ns" : 1794852765602121399,
+   "phase" : "recover-inputs",
+   "status" : 0,
+   "timing" : {
+      "exit" : 0,
+      "max_rss_kib" : "128740",
+      "system_s" : "0.07",
+      "user_s" : "0.51",
+      "wall_s" : "0.59"
+   }
+}

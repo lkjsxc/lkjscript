@@ -1,0 +1,4 @@
+Scalar found where operator expected (Missing operator before "$directory"?) at /home/coder/workspace/lkjscript/target/compiler-reference-capture-setup-acceptance-2/audit.pl line 45, near "s{/\z}{}if$directory"
+Unknown regexp modifier "/f" at /home/coder/workspace/lkjscript/target/compiler-reference-capture-setup-acceptance-2/audit.pl line 45, at end of line
+syntax error at /home/coder/workspace/lkjscript/target/compiler-reference-capture-setup-acceptance-2/audit.pl line 45, near "s{/\z}{}if$directory"
+/home/coder/workspace/lkjscript/target/compiler-reference-capture-setup-acceptance-2/audit.pl had compilation errors.

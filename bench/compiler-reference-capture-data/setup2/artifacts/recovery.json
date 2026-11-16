@@ -1,0 +1,12 @@
+{
+   "baseline" : {
+      "bytes" : 32584542,
+      "sha256" : "6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc"
+   },
+   "extraction" : "content matches exact Git blobs; private owner-only modes",
+   "source_archive" : {
+      "bytes" : 10741760,
+      "sha256" : "79aa24a9eb6f8e7940b4424fc20839759a79dd8d480b1b746f7e29b17171d806"
+   },
+   "source_files" : 1742
+}

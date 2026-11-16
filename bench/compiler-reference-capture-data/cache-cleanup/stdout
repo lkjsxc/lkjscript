@@ -1,0 +1,22 @@
+{
+   "mode" : "cooperative enumerated non-atomic deletion; stop on any drift",
+   "roots" : [
+      {
+         "cache_recovery" : "rebuildable; committed bootstrap and full gate evidence retained",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-bootstrap-store-1",
+         "postcondition" : "ENOENT",
+         "removed_bytes" : 245629076,
+         "removed_directories" : 1,
+         "removed_files" : 13
+      },
+      {
+         "cache_recovery" : "rebuildable; committed bootstrap and full gate evidence retained",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-gate-store-1",
+         "postcondition" : "ENOENT",
+         "removed_bytes" : 323185818,
+         "removed_directories" : 5,
+         "removed_files" : 16050
+      }
+   ],
+   "status" : "complete"
+}

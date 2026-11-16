@@ -1,0 +1,14 @@
+{
+   "complete_metrics" : true,
+   "outer_end_ns" : 1794852768777557775,
+   "outer_start_ns" : 1794852766699015134,
+   "phase" : "generator-build",
+   "status" : 0,
+   "timing" : {
+      "exit" : 0,
+      "max_rss_kib" : "118424",
+      "system_s" : "0.00",
+      "user_s" : "2.00",
+      "wall_s" : "2.07"
+   }
+}

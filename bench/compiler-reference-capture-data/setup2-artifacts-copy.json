@@ -1,0 +1,996 @@
+{
+   "bytes" : 13988344,
+   "destination" : "bench/compiler-reference-capture-data/setup2",
+   "files" : 159,
+   "records" : [
+      {
+         "bytes" : 1915,
+         "path" : "artifacts.sha256",
+         "sha256" : "694f2b21c4c4ea2c8445912680bd2f5db8e34fe4cf5d0ada15b332b3ca500683",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts.sha256"
+      },
+      {
+         "bytes" : 540860,
+         "path" : "artifacts/compiler-archive-members.json",
+         "sha256" : "217e0169bddf3f180f081f143a37acc9759134b586bd155751d6d7468edb0302",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts/compiler-archive-members.json"
+      },
+      {
+         "bytes" : 399199,
+         "path" : "artifacts/compiler-inputs.json",
+         "sha256" : "2e2e0ec2121c90767780b063cfba0cbe048f9d39914a3c0294e4e42641dcde4c",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts/compiler-inputs.json"
+      },
+      {
+         "bytes" : 10741760,
+         "path" : "artifacts/compiler-source.tar",
+         "sha256" : "79aa24a9eb6f8e7940b4424fc20839759a79dd8d480b1b746f7e29b17171d806",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts/compiler-source.tar"
+      },
+      {
+         "bytes" : 399200,
+         "path" : "artifacts/factory-after.json",
+         "sha256" : "f85504c91b7e06b218092e02c28853a9c14b624247e03a8aaec49962fcbaa4cf",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts/factory-after.json"
+      },
+      {
+         "bytes" : 540860,
+         "path" : "artifacts/factory-archive-members.json",
+         "sha256" : "217e0169bddf3f180f081f143a37acc9759134b586bd155751d6d7468edb0302",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts/factory-archive-members.json"
+      },
+      {
+         "bytes" : 399199,
+         "path" : "artifacts/factory-before.json",
+         "sha256" : "2e2e0ec2121c90767780b063cfba0cbe048f9d39914a3c0294e4e42641dcde4c",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts/factory-before.json"
+      },
+      {
+         "bytes" : 22192,
+         "path" : "artifacts/factory-main.diff",
+         "sha256" : "8a9c99695a31e10b5c35be0218652d380442f9d61dfbc6a2ff15bfe2e23851d2",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts/factory-main.diff"
+      },
+      {
+         "bytes" : 1039,
+         "path" : "artifacts/factory-main.original.lkj.txt",
+         "sha256" : "7f7d43c94196d6ef9641bebf3f764fc5f3691f84c3bc8dcd137c7deb4eedd07a",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts/factory-main.original.lkj"
+      },
+      {
+         "bytes" : 405428,
+         "path" : "artifacts/generated-100k.tar.gz",
+         "sha256" : "57ead08d82ea53ba4d833b2689cbf1158550931b8cf288aac3363644d2dab07c",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts/generated-100k.tar.gz"
+      },
+      {
+         "bytes" : 30959,
+         "path" : "artifacts/generated-members.json",
+         "sha256" : "cfc023b8d4224c66853c1545b6cdca391203f32c94654d7d9c51c77f6b694cb7",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts/generated-members.json"
+      },
+      {
+         "bytes" : 12644,
+         "path" : "artifacts/generated-members.sha256",
+         "sha256" : "2fe98d661332250cf410dfde36c5c364c3059756fdf7a02f0122bf8395e0e1ca",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts/generated-members.sha256"
+      },
+      {
+         "bytes" : 991,
+         "path" : "artifacts/generator-build-stats.json",
+         "sha256" : "e4d85ac048476417c93b2ff7397ffd9200aaa8bd892f3b200e8a18512dc50337",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts/generator-build-stats.json"
+      },
+      {
+         "bytes" : 335011,
+         "path" : "artifacts/generator.gz",
+         "sha256" : "3b7f282a8fd1c0d373741fe9c81b5a2afcae365888b0c45ea4736fa123015f91",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts/generator.gz"
+      },
+      {
+         "bytes" : 382,
+         "path" : "artifacts/recovery.json",
+         "sha256" : "4a3e352a96f8da4f22882f71ab1e563d50afc2279bd6f1d444a00758797f072c",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts/recovery.json"
+      },
+      {
+         "bytes" : 20625,
+         "path" : "artifacts/scale-generator-source.lkj.txt",
+         "sha256" : "557d6b124fe739f17c678c77b92e5f6259d87ebca69c2a56aca411071c5ff1e9",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts/scale-generator-source.lkj"
+      },
+      {
+         "bytes" : 68884,
+         "path" : "artifacts/shape",
+         "sha256" : "0457f8f9424882d2e3160a568f280193d49b9b046a5fae2d6e2d0b6da047072c",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts/shape"
+      },
+      {
+         "bytes" : 262,
+         "path" : "artifacts/workload.txt",
+         "sha256" : "d4ea2dc094f268b2413c0c0edd1bea23cb6338adeb6a97e236cbed65a15cee3a",
+         "source" : "target/compiler-reference-capture-measurement-2/artifacts/workload.txt"
+      },
+      {
+         "bytes" : 7966,
+         "path" : "control/README.md",
+         "sha256" : "692615962bf1ec16ed5c30bf3498bc775d5dca7e8725f456df7cf652931f2846",
+         "source" : "target/compiler-reference-capture-measurement-2/control/README.md"
+      },
+      {
+         "bytes" : 4699,
+         "path" : "control/controls.json",
+         "sha256" : "133e8583796adc165c9be906c61cf35c48b3fe90125608b1e394d3eaeb62633c",
+         "source" : "target/compiler-reference-capture-measurement-2/control/controls.json"
+      },
+      {
+         "bytes" : 306,
+         "path" : "control/controls.manifest.sha256",
+         "sha256" : "fe8321b36a88864b33dd3c8bda9a71ab954f9dae14926d3ba9e45fbb564af847",
+         "source" : "target/compiler-reference-capture-measurement-2/control/controls.manifest.sha256"
+      },
+      {
+         "bytes" : 27115,
+         "path" : "control/setup.pl",
+         "sha256" : "e63ceaf5d170884e7d1c9d10f0d8dbb7cb52853968d64eaa7b4f66951d1903c2",
+         "source" : "target/compiler-reference-capture-measurement-2/control/setup.pl"
+      },
+      {
+         "bytes" : 7263,
+         "path" : "control/setup.sh",
+         "sha256" : "886f005cbfe9f2267be1b66ff3fa5fe405ba4597d0d24212091ab70061ca9dce",
+         "source" : "target/compiler-reference-capture-measurement-2/control/setup.sh"
+      },
+      {
+         "bytes" : 162,
+         "path" : "outer/argv",
+         "sha256" : "b2d8bec2025d3ff637f14b30e011bd2df9d969e8ce306b01ee201e50b19cb60b",
+         "source" : "target/compiler-reference-capture-setup-launch-2/argv"
+      },
+      {
+         "bytes" : 145,
+         "path" : "outer/controls-after.sha256",
+         "sha256" : "de373fd607bc48a2f7f0a2463045bf3d8e1828ea3383ac2e307ec70e6b5f396d",
+         "source" : "target/compiler-reference-capture-setup-launch-2/controls-after.sha256"
+      },
+      {
+         "bytes" : 145,
+         "path" : "outer/controls-before.sha256",
+         "sha256" : "de373fd607bc48a2f7f0a2463045bf3d8e1828ea3383ac2e307ec70e6b5f396d",
+         "source" : "target/compiler-reference-capture-setup-launch-2/controls-before.sha256"
+      },
+      {
+         "bytes" : 32,
+         "path" : "outer/cwd",
+         "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3",
+         "source" : "target/compiler-reference-capture-setup-launch-2/cwd"
+      },
+      {
+         "bytes" : 20,
+         "path" : "outer/end.ns",
+         "sha256" : "42a0bd5e736c11970fcfa71535d13ca2ae550d1a0233e128bd9c0cf297ac81de",
+         "source" : "target/compiler-reference-capture-setup-launch-2/end.ns"
+      },
+      {
+         "bytes" : 21,
+         "path" : "outer/end.utc",
+         "sha256" : "00f99415828da8fe414cc500f96c2860d4c5f1d4c76a2be18aa041ecb114fac3",
+         "source" : "target/compiler-reference-capture-setup-launch-2/end.utc"
+      },
+      {
+         "bytes" : 15,
+         "path" : "outer/load-after",
+         "sha256" : "873f66ef7d9e30c4fcfa713c2f9d5d97a6c50da945c559f906601576525d57b6",
+         "source" : "target/compiler-reference-capture-setup-launch-2/load-after"
+      },
+      {
+         "bytes" : 15,
+         "path" : "outer/load-before",
+         "sha256" : "646f76d51c67dee21f71d0d875f2bf085ebb1001e765f3b6dc032db645f6906d",
+         "source" : "target/compiler-reference-capture-setup-launch-2/load-before"
+      },
+      {
+         "bytes" : 41,
+         "path" : "outer/release-commit",
+         "sha256" : "49179904269440ea8e4222b6ba33e3c46de08e8e6866cc278824bbeb27eda01a",
+         "source" : "target/compiler-reference-capture-setup-launch-2/release-commit"
+      },
+      {
+         "bytes" : 20,
+         "path" : "outer/start.ns",
+         "sha256" : "6bc67b64d1d33e3ded3bef0e0d4cc45f9874ea12d715cc1d4d7a4948a837777d",
+         "source" : "target/compiler-reference-capture-setup-launch-2/start.ns"
+      },
+      {
+         "bytes" : 21,
+         "path" : "outer/start.utc",
+         "sha256" : "c52b174a0160be9e2eba83812728a26cb08601b4e8bf9abf1e10375c4720610d",
+         "source" : "target/compiler-reference-capture-setup-launch-2/start.utc"
+      },
+      {
+         "bytes" : 2,
+         "path" : "outer/status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+         "source" : "target/compiler-reference-capture-setup-launch-2/status"
+      },
+      {
+         "bytes" : 0,
+         "path" : "outer/stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "source" : "target/compiler-reference-capture-setup-launch-2/stderr"
+      },
+      {
+         "bytes" : 297,
+         "path" : "outer/stdout",
+         "sha256" : "1c07f1639f04e2242a32ad39a620748f8502d87df8ada1b127d9da5c94f8a7f5",
+         "source" : "target/compiler-reference-capture-setup-launch-2/stdout"
+      },
+      {
+         "bytes" : 70,
+         "path" : "outer/time",
+         "sha256" : "aa2253fec86f9c5db5a4c33db17d2694c693c5f59e80a0c9a7330c3fa1091100",
+         "source" : "target/compiler-reference-capture-setup-launch-2/time"
+      },
+      {
+         "bytes" : 67,
+         "path" : "records/completion",
+         "sha256" : "aeee8301dfbf04c42c6b63794d2b62e71b10fc5747636b8ee68faecfc644b307",
+         "source" : "target/compiler-reference-capture-measurement-2/records/completion"
+      },
+      {
+         "bytes" : 20,
+         "path" : "records/end.ns",
+         "sha256" : "831de58eee0974091362aeec35f7f1c11b87ddaaa13a03434a70ec0070be6a7b",
+         "source" : "target/compiler-reference-capture-measurement-2/records/end.ns"
+      },
+      {
+         "bytes" : 21,
+         "path" : "records/end.utc",
+         "sha256" : "00f99415828da8fe414cc500f96c2860d4c5f1d4c76a2be18aa041ecb114fac3",
+         "source" : "target/compiler-reference-capture-measurement-2/records/end.utc"
+      },
+      {
+         "bytes" : 51,
+         "path" : "records/environment",
+         "sha256" : "fcb70922f8509afaa03d0440c1a38300a34abedcf88f017e9c0db919031b62c2",
+         "source" : "target/compiler-reference-capture-measurement-2/records/environment"
+      },
+      {
+         "bytes" : 312,
+         "path" : "records/freeze-artifacts/argv.json",
+         "sha256" : "e3fcdf202ca6a94bf954e63317c2f2793f98fd96f35b6fc50b3267fa36f85ec5",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/argv.json"
+      },
+      {
+         "bytes" : 32,
+         "path" : "records/freeze-artifacts/cwd",
+         "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/cwd"
+      },
+      {
+         "bytes" : 32,
+         "path" : "records/freeze-artifacts/cwd.actual",
+         "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/cwd.actual"
+      },
+      {
+         "bytes" : 20,
+         "path" : "records/freeze-artifacts/end.ns",
+         "sha256" : "0378d22fb24a9c1047bc025ce5bf04c96d53c56ac3d96a22e1eb80a9871b9230",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/end.ns"
+      },
+      {
+         "bytes" : 21,
+         "path" : "records/freeze-artifacts/end.utc",
+         "sha256" : "00f99415828da8fe414cc500f96c2860d4c5f1d4c76a2be18aa041ecb114fac3",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/end.utc"
+      },
+      {
+         "bytes" : 13,
+         "path" : "records/freeze-artifacts/free-bytes",
+         "sha256" : "d17d1b9da676c506328bd1e4d7f033108fb543cfcdd83251734277c362be543f",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/free-bytes"
+      },
+      {
+         "bytes" : 15,
+         "path" : "records/freeze-artifacts/load-after",
+         "sha256" : "873f66ef7d9e30c4fcfa713c2f9d5d97a6c50da945c559f906601576525d57b6",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/load-after"
+      },
+      {
+         "bytes" : 15,
+         "path" : "records/freeze-artifacts/load-before",
+         "sha256" : "873f66ef7d9e30c4fcfa713c2f9d5d97a6c50da945c559f906601576525d57b6",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/load-before"
+      },
+      {
+         "bytes" : 20,
+         "path" : "records/freeze-artifacts/start.ns",
+         "sha256" : "68ae4fd100a619a3e1f4375d3da35aec57ebd55c98ee743e87084ca6fe58f11b",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/start.ns"
+      },
+      {
+         "bytes" : 21,
+         "path" : "records/freeze-artifacts/start.utc",
+         "sha256" : "251d1baa0120091cd8117b8ec08cf57184048f9829c06b852b56018596d8931f",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/start.utc"
+      },
+      {
+         "bytes" : 0,
+         "path" : "records/freeze-artifacts/stats.raw",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/stats.raw"
+      },
+      {
+         "bytes" : 2,
+         "path" : "records/freeze-artifacts/status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/status"
+      },
+      {
+         "bytes" : 0,
+         "path" : "records/freeze-artifacts/stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/stderr"
+      },
+      {
+         "bytes" : 10,
+         "path" : "records/freeze-artifacts/stdin",
+         "sha256" : "cab66070a27e6d3f01242d7f83f55429e42dd6f7e37a06997150cf58a6bf8fe0",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/stdin"
+      },
+      {
+         "bytes" : 103,
+         "path" : "records/freeze-artifacts/stdout",
+         "sha256" : "c27a1957de450f8b8d9a3407d9568775172572c1986cb052ad8f43b68d7200d9",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/stdout"
+      },
+      {
+         "bytes" : 63,
+         "path" : "records/freeze-artifacts/time",
+         "sha256" : "76770911b2f83ba545d48f0c59f88df2471eee696862978bdb3133f0e2d86a5d",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/time"
+      },
+      {
+         "bytes" : 321,
+         "path" : "records/freeze-artifacts/validation.argv-lines",
+         "sha256" : "a55dac31a3adbf1936a2a851730a6f0c7b0c6ce3394880af974042e1c0d30826",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/validation.argv-lines"
+      },
+      {
+         "bytes" : 2,
+         "path" : "records/freeze-artifacts/validation.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/validation.status"
+      },
+      {
+         "bytes" : 0,
+         "path" : "records/freeze-artifacts/validation.stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/validation.stderr"
+      },
+      {
+         "bytes" : 314,
+         "path" : "records/freeze-artifacts/validation.stdout",
+         "sha256" : "d1a01e79a1ac9e1c7d9eec7d876a8a284a20a574ff9180f679f0e105836973dd",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/validation.stdout"
+      },
+      {
+         "bytes" : 602,
+         "path" : "records/freeze-artifacts/wrapper-argv.json",
+         "sha256" : "0ce6ff3b432ec5648dd78a1370429b01f4224bb12386bec9363c0f1c81b3ebec",
+         "source" : "target/compiler-reference-capture-measurement-2/records/freeze-artifacts/wrapper-argv.json"
+      },
+      {
+         "bytes" : 222,
+         "path" : "records/generate-100k/argv.json",
+         "sha256" : "eb4fa1f26f2599ab5a7d92390c90ccba2f0d1c59ec651aa4f68c73988a5ba1b7",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/argv.json"
+      },
+      {
+         "bytes" : 80,
+         "path" : "records/generate-100k/cwd",
+         "sha256" : "5905569f2c6d97b0baf0f81178b933aa01d49df652e43d6fd01dfb1ce787bc93",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/cwd"
+      },
+      {
+         "bytes" : 80,
+         "path" : "records/generate-100k/cwd.actual",
+         "sha256" : "5905569f2c6d97b0baf0f81178b933aa01d49df652e43d6fd01dfb1ce787bc93",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/cwd.actual"
+      },
+      {
+         "bytes" : 20,
+         "path" : "records/generate-100k/end.ns",
+         "sha256" : "640b9158e4de355fd415ed742c2b8070e572aaa72ae1273c2f65fcf76553e2e5",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/end.ns"
+      },
+      {
+         "bytes" : 21,
+         "path" : "records/generate-100k/end.utc",
+         "sha256" : "251d1baa0120091cd8117b8ec08cf57184048f9829c06b852b56018596d8931f",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/end.utc"
+      },
+      {
+         "bytes" : 13,
+         "path" : "records/generate-100k/free-bytes",
+         "sha256" : "d17d1b9da676c506328bd1e4d7f033108fb543cfcdd83251734277c362be543f",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/free-bytes"
+      },
+      {
+         "bytes" : 15,
+         "path" : "records/generate-100k/load-after",
+         "sha256" : "873f66ef7d9e30c4fcfa713c2f9d5d97a6c50da945c559f906601576525d57b6",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/load-after"
+      },
+      {
+         "bytes" : 15,
+         "path" : "records/generate-100k/load-before",
+         "sha256" : "873f66ef7d9e30c4fcfa713c2f9d5d97a6c50da945c559f906601576525d57b6",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/load-before"
+      },
+      {
+         "bytes" : 20,
+         "path" : "records/generate-100k/start.ns",
+         "sha256" : "1055d3693e08d836cc8871e869830b8393a841a8a7a3358517942c57d184256d",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/start.ns"
+      },
+      {
+         "bytes" : 21,
+         "path" : "records/generate-100k/start.utc",
+         "sha256" : "4c810779cf874b32aa81e83d29714f5a398c00bc69590562dadb5fc3e07f2100",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/start.utc"
+      },
+      {
+         "bytes" : 0,
+         "path" : "records/generate-100k/stats.raw",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/stats.raw"
+      },
+      {
+         "bytes" : 2,
+         "path" : "records/generate-100k/status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/status"
+      },
+      {
+         "bytes" : 0,
+         "path" : "records/generate-100k/stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/stderr"
+      },
+      {
+         "bytes" : 96,
+         "path" : "records/generate-100k/stdin",
+         "sha256" : "6fc8c96ad90b41174caa0961266b8fd7cd8eb9f2c8c1109eab8b2c0ed50ebace",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/stdin"
+      },
+      {
+         "bytes" : 262,
+         "path" : "records/generate-100k/stdout",
+         "sha256" : "d4ea2dc094f268b2413c0c0edd1bea23cb6338adeb6a97e236cbed65a15cee3a",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/stdout"
+      },
+      {
+         "bytes" : 62,
+         "path" : "records/generate-100k/time",
+         "sha256" : "dc9205a4ece63177f8be0676d2094153bf34a13e7d815adc9cd2e503014ae2d7",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/time"
+      },
+      {
+         "bytes" : 318,
+         "path" : "records/generate-100k/validation.argv-lines",
+         "sha256" : "50b8ff4b4c71b77f7d9376c52ae527c7017f9c9651d0436733dab78ef244a95c",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/validation.argv-lines"
+      },
+      {
+         "bytes" : 2,
+         "path" : "records/generate-100k/validation.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/validation.status"
+      },
+      {
+         "bytes" : 0,
+         "path" : "records/generate-100k/validation.stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/validation.stderr"
+      },
+      {
+         "bytes" : 310,
+         "path" : "records/generate-100k/validation.stdout",
+         "sha256" : "3f57502677176b5813130ccf0c8a510f2f08221a0ee859b6ee6ac8bc61fd7541",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/validation.stdout"
+      },
+      {
+         "bytes" : 509,
+         "path" : "records/generate-100k/wrapper-argv.json",
+         "sha256" : "baeb664f05710f4d1b761ec9b3b44fc8697d9dcc13fbcc43def66fb3ed931a5b",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generate-100k/wrapper-argv.json"
+      },
+      {
+         "bytes" : 607,
+         "path" : "records/generator-build/argv.json",
+         "sha256" : "ead9fd3ab2ceb1c7954dacf66a74d7389a8e2c512efb8eecaff7e87684fce3e1",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/argv.json"
+      },
+      {
+         "bytes" : 88,
+         "path" : "records/generator-build/cwd",
+         "sha256" : "921fd525febb0a8ff9e037cbd83aeeee80511e14a52a1f0e4dc9b9ff924b8e8a",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/cwd"
+      },
+      {
+         "bytes" : 88,
+         "path" : "records/generator-build/cwd.actual",
+         "sha256" : "921fd525febb0a8ff9e037cbd83aeeee80511e14a52a1f0e4dc9b9ff924b8e8a",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/cwd.actual"
+      },
+      {
+         "bytes" : 20,
+         "path" : "records/generator-build/end.ns",
+         "sha256" : "98658d87d7002532149eb414b2687b8f8922d5b16fb2e34baf57b7b704dfd915",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/end.ns"
+      },
+      {
+         "bytes" : 21,
+         "path" : "records/generator-build/end.utc",
+         "sha256" : "4c810779cf874b32aa81e83d29714f5a398c00bc69590562dadb5fc3e07f2100",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/end.utc"
+      },
+      {
+         "bytes" : 13,
+         "path" : "records/generator-build/free-bytes",
+         "sha256" : "d17d1b9da676c506328bd1e4d7f033108fb543cfcdd83251734277c362be543f",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/free-bytes"
+      },
+      {
+         "bytes" : 15,
+         "path" : "records/generator-build/load-after",
+         "sha256" : "873f66ef7d9e30c4fcfa713c2f9d5d97a6c50da945c559f906601576525d57b6",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/load-after"
+      },
+      {
+         "bytes" : 15,
+         "path" : "records/generator-build/load-before",
+         "sha256" : "646f76d51c67dee21f71d0d875f2bf085ebb1001e765f3b6dc032db645f6906d",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/load-before"
+      },
+      {
+         "bytes" : 20,
+         "path" : "records/generator-build/start.ns",
+         "sha256" : "5d804c84fce8a7d4f8398c49fa170ed383ddf18265e3a5f151330a0b5804bda7",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/start.ns"
+      },
+      {
+         "bytes" : 21,
+         "path" : "records/generator-build/start.utc",
+         "sha256" : "99b0f4e36e497a6b156412a727c0973823297a25bec9db1afed4f5c75077699c",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/start.utc"
+      },
+      {
+         "bytes" : 786,
+         "path" : "records/generator-build/stats.raw",
+         "sha256" : "1db404df5989356de2b8856d4604ed556dcf26c4f41600c9cafbc4d544139f2a",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/stats.raw"
+      },
+      {
+         "bytes" : 2,
+         "path" : "records/generator-build/status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/status"
+      },
+      {
+         "bytes" : 786,
+         "path" : "records/generator-build/stderr",
+         "sha256" : "1db404df5989356de2b8856d4604ed556dcf26c4f41600c9cafbc4d544139f2a",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/stderr"
+      },
+      {
+         "bytes" : 10,
+         "path" : "records/generator-build/stdin",
+         "sha256" : "cab66070a27e6d3f01242d7f83f55429e42dd6f7e37a06997150cf58a6bf8fe0",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/stdin"
+      },
+      {
+         "bytes" : 0,
+         "path" : "records/generator-build/stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/stdout"
+      },
+      {
+         "bytes" : 64,
+         "path" : "records/generator-build/time",
+         "sha256" : "0abaa79a50d4dd457d9675159cb05a5d25698b43a1a5110cafeaaafe6a73ba19",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/time"
+      },
+      {
+         "bytes" : 320,
+         "path" : "records/generator-build/validation.argv-lines",
+         "sha256" : "57b894feb77b07cff98bc78ed840c4eef82123421daccd75a7e0c69c4511c7b6",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/validation.argv-lines"
+      },
+      {
+         "bytes" : 2,
+         "path" : "records/generator-build/validation.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/validation.status"
+      },
+      {
+         "bytes" : 0,
+         "path" : "records/generator-build/validation.stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/validation.stderr"
+      },
+      {
+         "bytes" : 314,
+         "path" : "records/generator-build/validation.stdout",
+         "sha256" : "eb4220c25b005a4291209f93301c577e9a8d032aa5566ad4e4d1e732a7b86caf",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/validation.stdout"
+      },
+      {
+         "bytes" : 896,
+         "path" : "records/generator-build/wrapper-argv.json",
+         "sha256" : "7fd3ab913f8b325d4d9c3233de7e30468d92c207bc7c5a4b086a3d21f2094a4e",
+         "source" : "target/compiler-reference-capture-measurement-2/records/generator-build/wrapper-argv.json"
+      },
+      {
+         "bytes" : 9,
+         "path" : "records/last-phase",
+         "sha256" : "37a40f08d8548dba289b9b0bb35bcf63b359f6d37ee86044ebc6b6da080b9ec1",
+         "source" : "target/compiler-reference-capture-measurement-2/records/last-phase"
+      },
+      {
+         "bytes" : 189,
+         "path" : "records/launch.argv-lines",
+         "sha256" : "f5ec1c04fbe3fbf1f658daeb9e047274c2235e5cfd4a29e613cfcb83cfe96226",
+         "source" : "target/compiler-reference-capture-measurement-2/records/launch.argv-lines"
+      },
+      {
+         "bytes" : 32,
+         "path" : "records/launch.cwd",
+         "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3",
+         "source" : "target/compiler-reference-capture-measurement-2/records/launch.cwd"
+      },
+      {
+         "bytes" : 15,
+         "path" : "records/load-after",
+         "sha256" : "873f66ef7d9e30c4fcfa713c2f9d5d97a6c50da945c559f906601576525d57b6",
+         "source" : "target/compiler-reference-capture-measurement-2/records/load-after"
+      },
+      {
+         "bytes" : 15,
+         "path" : "records/load-before",
+         "sha256" : "646f76d51c67dee21f71d0d875f2bf085ebb1001e765f3b6dc032db645f6906d",
+         "source" : "target/compiler-reference-capture-measurement-2/records/load-before"
+      },
+      {
+         "bytes" : 1486,
+         "path" : "records/metadata-subcommands.jsonl",
+         "sha256" : "78810c94f2473e4b22459ff6516c7e8494d6f2ea78b499d9830c8c8241862f8b",
+         "source" : "target/compiler-reference-capture-measurement-2/records/metadata-subcommands.jsonl"
+      },
+      {
+         "bytes" : 168,
+         "path" : "records/phases.tsv",
+         "sha256" : "71c2cc1311274fbed6e10e6f7657cfcc2649b962049549a4ce0f5764450f9404",
+         "source" : "target/compiler-reference-capture-measurement-2/records/phases.tsv"
+      },
+      {
+         "bytes" : 313,
+         "path" : "records/prepare-factory/argv.json",
+         "sha256" : "1eb9e16c055de860727112a5f98f98d189f143784020e0f92315ba578029d537",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/argv.json"
+      },
+      {
+         "bytes" : 32,
+         "path" : "records/prepare-factory/cwd",
+         "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/cwd"
+      },
+      {
+         "bytes" : 32,
+         "path" : "records/prepare-factory/cwd.actual",
+         "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/cwd.actual"
+      },
+      {
+         "bytes" : 20,
+         "path" : "records/prepare-factory/end.ns",
+         "sha256" : "bbb1a3a3e9bd1bac9bac2296dde34fac3bd1ba63bc34c5c63540d953463f787e",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/end.ns"
+      },
+      {
+         "bytes" : 21,
+         "path" : "records/prepare-factory/end.utc",
+         "sha256" : "99b0f4e36e497a6b156412a727c0973823297a25bec9db1afed4f5c75077699c",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/end.utc"
+      },
+      {
+         "bytes" : 13,
+         "path" : "records/prepare-factory/free-bytes",
+         "sha256" : "55f656fb813e57a38c04da2879b39d7f0300538f57986b697200690414adab58",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/free-bytes"
+      },
+      {
+         "bytes" : 15,
+         "path" : "records/prepare-factory/load-after",
+         "sha256" : "646f76d51c67dee21f71d0d875f2bf085ebb1001e765f3b6dc032db645f6906d",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/load-after"
+      },
+      {
+         "bytes" : 15,
+         "path" : "records/prepare-factory/load-before",
+         "sha256" : "646f76d51c67dee21f71d0d875f2bf085ebb1001e765f3b6dc032db645f6906d",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/load-before"
+      },
+      {
+         "bytes" : 20,
+         "path" : "records/prepare-factory/start.ns",
+         "sha256" : "3008bb55eb320f77dedc4631824ef693fa3ff8bb40f845c49cee0210b81befd5",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/start.ns"
+      },
+      {
+         "bytes" : 21,
+         "path" : "records/prepare-factory/start.utc",
+         "sha256" : "99b0f4e36e497a6b156412a727c0973823297a25bec9db1afed4f5c75077699c",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/start.utc"
+      },
+      {
+         "bytes" : 0,
+         "path" : "records/prepare-factory/stats.raw",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/stats.raw"
+      },
+      {
+         "bytes" : 2,
+         "path" : "records/prepare-factory/status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/status"
+      },
+      {
+         "bytes" : 0,
+         "path" : "records/prepare-factory/stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/stderr"
+      },
+      {
+         "bytes" : 10,
+         "path" : "records/prepare-factory/stdin",
+         "sha256" : "cab66070a27e6d3f01242d7f83f55429e42dd6f7e37a06997150cf58a6bf8fe0",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/stdin"
+      },
+      {
+         "bytes" : 78,
+         "path" : "records/prepare-factory/stdout",
+         "sha256" : "8ef4489f8b883f9ff8e1acae3ab239da0ffb862f23735ec1c18a8fdb568539ed",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/stdout"
+      },
+      {
+         "bytes" : 63,
+         "path" : "records/prepare-factory/time",
+         "sha256" : "fd92ca6fd41ac4b938a8ae202d4afd1a7e062dd1af5f9628e0d54c682368254a",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/time"
+      },
+      {
+         "bytes" : 320,
+         "path" : "records/prepare-factory/validation.argv-lines",
+         "sha256" : "9b3fd7c89c656c5045914b0ac07c46471ec3905911bfb5f3e2cdb455767c68cf",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/validation.argv-lines"
+      },
+      {
+         "bytes" : 2,
+         "path" : "records/prepare-factory/validation.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/validation.status"
+      },
+      {
+         "bytes" : 0,
+         "path" : "records/prepare-factory/validation.stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/validation.stderr"
+      },
+      {
+         "bytes" : 313,
+         "path" : "records/prepare-factory/validation.stdout",
+         "sha256" : "1a0873e0af32e5ed9f0f87491d6c7f6e54bec32e84a7f14dd1e84c6ae7c982e9",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/validation.stdout"
+      },
+      {
+         "bytes" : 602,
+         "path" : "records/prepare-factory/wrapper-argv.json",
+         "sha256" : "da6a9705b8dd4612715f1041131f143dbc6193c1efc9d2c721953c220e134024",
+         "source" : "target/compiler-reference-capture-measurement-2/records/prepare-factory/wrapper-argv.json"
+      },
+      {
+         "bytes" : 313,
+         "path" : "records/recover-inputs/argv.json",
+         "sha256" : "c98f112c2d1e18f3013eae844126c3b45fe41425f4feb0b3752e458a9dfcfa90",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/argv.json"
+      },
+      {
+         "bytes" : 32,
+         "path" : "records/recover-inputs/cwd",
+         "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/cwd"
+      },
+      {
+         "bytes" : 32,
+         "path" : "records/recover-inputs/cwd.actual",
+         "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/cwd.actual"
+      },
+      {
+         "bytes" : 20,
+         "path" : "records/recover-inputs/end.ns",
+         "sha256" : "711b434ec33889168a9b2895d237ecccfa65114ff459ed6bac94f7e6f62f1f2c",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/end.ns"
+      },
+      {
+         "bytes" : 21,
+         "path" : "records/recover-inputs/end.utc",
+         "sha256" : "99b0f4e36e497a6b156412a727c0973823297a25bec9db1afed4f5c75077699c",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/end.utc"
+      },
+      {
+         "bytes" : 13,
+         "path" : "records/recover-inputs/free-bytes",
+         "sha256" : "0bd4a1c8d2e961ee7210846a14c836fd965955ef7a89060ed3a1264c206d6795",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/free-bytes"
+      },
+      {
+         "bytes" : 15,
+         "path" : "records/recover-inputs/load-after",
+         "sha256" : "646f76d51c67dee21f71d0d875f2bf085ebb1001e765f3b6dc032db645f6906d",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/load-after"
+      },
+      {
+         "bytes" : 15,
+         "path" : "records/recover-inputs/load-before",
+         "sha256" : "646f76d51c67dee21f71d0d875f2bf085ebb1001e765f3b6dc032db645f6906d",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/load-before"
+      },
+      {
+         "bytes" : 20,
+         "path" : "records/recover-inputs/start.ns",
+         "sha256" : "fa0d8ef1d53d20b18a1e85de42cff279bc854b9f15bf11e759c90e03b7b4a73d",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/start.ns"
+      },
+      {
+         "bytes" : 21,
+         "path" : "records/recover-inputs/start.utc",
+         "sha256" : "c52b174a0160be9e2eba83812728a26cb08601b4e8bf9abf1e10375c4720610d",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/start.utc"
+      },
+      {
+         "bytes" : 0,
+         "path" : "records/recover-inputs/stats.raw",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/stats.raw"
+      },
+      {
+         "bytes" : 2,
+         "path" : "records/recover-inputs/status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/status"
+      },
+      {
+         "bytes" : 0,
+         "path" : "records/recover-inputs/stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/stderr"
+      },
+      {
+         "bytes" : 10,
+         "path" : "records/recover-inputs/stdin",
+         "sha256" : "cab66070a27e6d3f01242d7f83f55429e42dd6f7e37a06997150cf58a6bf8fe0",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/stdin"
+      },
+      {
+         "bytes" : 67,
+         "path" : "records/recover-inputs/stdout",
+         "sha256" : "cb9a31a31190e4e2a3a5e373988d1f590641c8391632e590b6526c860b8d3c16",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/stdout"
+      },
+      {
+         "bytes" : 64,
+         "path" : "records/recover-inputs/time",
+         "sha256" : "4fa0784b72c78117b8449e165d9d00291b02d94be34140ea650fb3b51898320a",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/time"
+      },
+      {
+         "bytes" : 319,
+         "path" : "records/recover-inputs/validation.argv-lines",
+         "sha256" : "e699c2f47ab9f80f25546659ed64359ba365fffe70022137d1d695b8f619d6e3",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/validation.argv-lines"
+      },
+      {
+         "bytes" : 2,
+         "path" : "records/recover-inputs/validation.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/validation.status"
+      },
+      {
+         "bytes" : 0,
+         "path" : "records/recover-inputs/validation.stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/validation.stderr"
+      },
+      {
+         "bytes" : 313,
+         "path" : "records/recover-inputs/validation.stdout",
+         "sha256" : "5ff684d045bef38876b620ad5e92e2a78190d1bc7206b1e222e02ce58cde6c6b",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/validation.stdout"
+      },
+      {
+         "bytes" : 601,
+         "path" : "records/recover-inputs/wrapper-argv.json",
+         "sha256" : "bdddbfba56f5c44f2c2f942d7d8d4227631ee1cef30ad7d6ab5a64c513564319",
+         "source" : "target/compiler-reference-capture-measurement-2/records/recover-inputs/wrapper-argv.json"
+      },
+      {
+         "bytes" : 65,
+         "path" : "records/released-controls.sha256",
+         "sha256" : "6379cc1916b686c1c34e43e10891d0710bcd890a893a64d812e23a5bcaaf396e",
+         "source" : "target/compiler-reference-capture-measurement-2/records/released-controls.sha256"
+      },
+      {
+         "bytes" : 20,
+         "path" : "records/start.ns",
+         "sha256" : "a6f9f27e4843a0260286ce7d91c336c8d04196a7ff240fc855cb723f2ad986c0",
+         "source" : "target/compiler-reference-capture-measurement-2/records/start.ns"
+      },
+      {
+         "bytes" : 21,
+         "path" : "records/start.utc",
+         "sha256" : "c52b174a0160be9e2eba83812728a26cb08601b4e8bf9abf1e10375c4720610d",
+         "source" : "target/compiler-reference-capture-measurement-2/records/start.utc"
+      },
+      {
+         "bytes" : 2,
+         "path" : "records/status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+         "source" : "target/compiler-reference-capture-measurement-2/records/status"
+      },
+      {
+         "bytes" : 4552,
+         "path" : "setup-summary.json",
+         "sha256" : "e08b9aa27dcb08da50bf6f296c0bf347f322d0fb2a64d8594999a43920d95ece",
+         "source" : "target/compiler-reference-capture-measurement-2/setup-summary.json"
+      }
+   ],
+   "recovery" : {
+      "compiler_input" : {
+         "archive" : "artifacts/compiler-source.tar",
+         "inventory" : "artifacts/compiler-inputs.json",
+         "sha256" : "79aa24a9eb6f8e7940b4424fc20839759a79dd8d480b1b746f7e29b17171d806"
+      },
+      "factory" : {
+         "after" : "artifacts/factory-after.json",
+         "base" : "compiler_input",
+         "before" : "artifacts/factory-before.json",
+         "original" : "artifacts/factory-main.original.lkj.txt",
+         "replace_path" : "src/main.lkj",
+         "with" : "artifacts/scale-generator-source.lkj.txt"
+      },
+      "generated_tree" : {
+         "archive" : "artifacts/generated-100k.tar.gz",
+         "inventory" : "artifacts/generated-members.json",
+         "sha256" : "57ead08d82ea53ba4d833b2689cbf1158550931b8cf288aac3363644d2dab07c",
+         "uncompressed_tar_sha256" : "ae6b1704d0796e9c2437c7e4ebefe25995c493fedca7308fe0a2fc6c42857cb4"
+      },
+      "generator" : {
+         "archive" : "artifacts/generator.gz",
+         "expanded_bytes" : 1642167,
+         "expanded_sha256" : "be23723deaf08b25756a497a674a3455a75415851ebf5ae4a746dc16024e882c",
+         "sha256" : "3b7f282a8fd1c0d373741fe9c81b5a2afcae365888b0c45ea4736fa123015f91"
+      },
+      "producer_A" : {
+         "expanded_bytes" : 32584542,
+         "expanded_sha256" : "6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc",
+         "git_revision" : "7d0731e99aeaf241c4334fc5ff065a341fb388c8",
+         "gzip_sha256" : "505be947525d53b4db1bff6c85cb77622cb2f5dc7e7d7fe92b772ee3b8ffc3e2",
+         "path" : "seed/lkjscript.gz"
+      }
+   },
+   "source" : "target/compiler-reference-capture-measurement-2"
+}

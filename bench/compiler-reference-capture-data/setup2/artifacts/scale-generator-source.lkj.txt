@@ -1,0 +1,426 @@
+//! A source-shape census and deterministic large-program generator.
+//! Census facts are source claims, not checked type/effect/layout authority.
+mod ast;
+mod diagnostic;
+mod diagnostics;
+mod json;
+mod names;
+mod resolve;
+mod source;
+mod syntax;
+use std::collections::BTreeMap;
+
+struct Shape { lines: usize, calls: usize, params: usize, generic: bool, depth: usize }
+struct Nominal { fields: usize, edges: usize, variants: usize }
+struct Profile { functions: Vec<Shape>, types: Vec<Nominal>, modules: Vec<usize> }
+struct Callable { path: String, params: usize, generic: bool }
+struct Random { state: u64 }
+impl Random {
+    fn pick(&mut self, n: usize) -> usize {
+        self.state ^= self.state << 13u64;
+        self.state ^= self.state >> 7u64;
+        self.state ^= self.state << 17u64;
+        (self.state % n as u64) as usize
+    }
+}
+fn io<T>(value: Result<T, i64>, label: &str) -> Result<T, String> {
+    value.map_err(|errno| format!("{label}: errno {errno}"))
+}
+fn lines(text: &str) -> usize {
+    let mut count = 0usize;
+    for byte in text.bytes() { if byte == b'\n' { count += 1; } }
+    if !text.is_empty() && !text.ends_with("\n") { count += 1; }
+    count
+}
+fn split_count(text: &str, separator: &str) -> usize {
+    let mut count = 0usize;
+    for _part in text.split(separator) { count += 1usize; }
+    count
+}
+fn depth(module: &str) -> usize {
+    if module.is_empty() { 0usize } else { split_count(module, "::") }
+}
+fn print_error(problem: &diagnostic::Diagnostic) -> String {
+    format!("{}:{}:{} {} {}", problem.path, problem.line, problem.column, problem.code, problem.message)
+}
+fn field_edges(program: &ast::Program, ty: usize) -> usize {
+    let mut pending = vec![ty];
+    let mut count = 0usize;
+    while let Some(index) = pending.pop() {
+        match &program.types[index].kind {
+            ast::Type::Path(path) => {
+                if let Some(declaration) = path.declaration {
+                    if matches!(program.declarations[declaration].item,
+                        ast::Item::Struct(_) | ast::Item::Enum(_) | ast::Item::Alias(_)) { count += 1; }
+                }
+                for argument in &path.args { pending.push(*argument); }
+            }
+            ast::Type::Ref { inner, .. } | ast::Type::Slice(inner) | ast::Type::Array { inner, .. } => pending.push(*inner),
+            ast::Type::Tuple(items) => { for item in items { pending.push(*item); } }
+            ast::Type::Function { params, result } => {
+                for parameter in params { pending.push(*parameter); }
+                pending.push(*result);
+            }
+            _ => {}
+        }
+    }
+    count
+}
+fn census(root: &mut Directory) -> Result<String, String> {
+    let mut texts: BTreeMap<String, String> = BTreeMap::new();
+    let parsed = source::load("src/main.lkj", Some("library/lib.lkj"), &mut |path: &str| {
+        let mut file = match root.open(path) {
+            Ok(file) => file,
+            Err(2) => return Ok(None),
+            Err(errno) => return Err(format!("{path}: errno {errno}")),
+        };
+        let bytes = io(file.read_to_end(), path)?;
+        if path.ends_with(".lkj") {
+            let text = String::from_utf8(bytes.clone()).map_err(|_| -> String { format!("{path}: not UTF-8") })?;
+            texts.insert(path.to_string(), text);
+        }
+        Ok(Some(bytes))
+    }).map_err(|problem| print_error(&problem))?;
+    let program = resolve::resolve(&parsed).map_err(|problem| print_error(&problem))?;
+    let mut source_lines = 0usize;
+    let mut source_bytes = 0usize;
+    let mut source_files = 0usize;
+    for file in &program.files {
+        if let Some(text) = texts.get(&file.path) { source_lines += lines(text); source_bytes += text.len(); source_files += 1usize; }
+    }
+    let mut spans: Vec<(usize, usize, usize)> = Vec::new();
+    for (index, function) in program.functions.iter().enumerate() {
+        if texts.contains_key(&program.files[function.span.file].path) {
+            if let Some(body) = function.body {
+                spans.push((function.span.file, program.blocks[body].span.start, index));
+            }
+        }
+    }
+    spans.sort();
+    let mut calls = vec![0usize; program.functions.len()];
+    for expression in &program.exprs {
+        if !matches!(expression.kind, ast::Expr::Call { .. } | ast::Expr::Method { .. }) { continue; }
+        let mut left = 0usize;
+        let mut right = spans.len();
+        while left < right {
+            let middle = left + (right - left) / 2usize;
+            let value = &spans[middle];
+            if (value.0, value.1) <= (expression.span.file, expression.span.start) { left = middle + 1; }
+            else { right = middle; }
+        }
+        while left > 0usize {
+            left -= 1;
+            let (file, start, index) = spans[left];
+            if file != expression.span.file { break; }
+            let function = &program.functions[index];
+            if start <= expression.span.start && expression.span.end <= function.span.end {
+                calls[index] += 1;
+                break;
+            }
+        }
+    }
+    let mut out = format!("lkjscript-scale-shape 1\nsource_lines {source_lines}\nsource_bytes {source_bytes}\nsource_files {source_files}\n");
+    let mut modules: BTreeMap<String, usize> = BTreeMap::new();
+    let mut function_count = 0usize;
+    let mut call_count = 0usize;
+    let mut generic_count = 0usize;
+    let mut field_count = 0usize;
+    let mut edge_count = 0usize;
+    let mut max_depth = 0usize;
+    for (index, function) in program.functions.iter().enumerate() {
+        if function.body.is_none() { continue; }
+        let path = &program.files[function.span.file].path;
+        if let Some(text) = texts.get(path) {
+            let count = lines(&text[function.span.start..function.span.end]);
+            let level = depth(&function.module);
+            let generic = !function.generics.is_empty();
+            function_count += 1;
+            call_count += calls[index];
+            if generic { generic_count += 1; }
+            if level > max_depth { max_depth = level; }
+            let prior = modules.get(path).copied().unwrap_or(0usize);
+            modules.insert(path.clone(), prior + 1usize);
+            out.push_str(&format!("function {count} {} {} {} {level}\n", calls[index], function.params.len(), if generic { 1usize } else { 0usize }));
+        }
+    }
+    for value in &program.structs {
+        if !texts.contains_key(&program.files[value.span.file].path) { continue; }
+        let mut edges = 0usize;
+        for field in &value.fields { edges += field_edges(&program, field.ty); }
+        out.push_str(&format!("type {} {edges} 0\n", value.fields.len()));
+        field_count += value.fields.len();
+        edge_count += edges;
+    }
+    for value in &program.enums {
+        if !texts.contains_key(&program.files[value.span.file].path) { continue; }
+        let mut fields = 0usize;
+        let mut edges = 0usize;
+        for variant in &value.variants {
+            fields += variant.fields.len();
+            for field in &variant.fields { edges += field_edges(&program, field.ty); }
+        }
+        out.push_str(&format!("type {fields} {edges} {}\n", value.variants.len()));
+        field_count += fields;
+        edge_count += edges;
+    }
+    for count in modules.values() { out.push_str(&format!("module {count}\n")); }
+    out.push_str(&format!("functions {function_count}\ncall_sites {call_count}\ngeneric_functions {generic_count}\nnominal_fields {field_count}\nnominal_edges {edge_count}\nmaximum_module_depth {max_depth}\n"));
+    Ok(out)
+}
+fn number(text: &str) -> Result<usize, String> { text.parse::<usize>().map_err(|_| format!("invalid number: {text}")) }
+fn profile(text: &str) -> Result<Profile, String> {
+    let mut result = Profile { functions: Vec::new(), types: Vec::new(), modules: Vec::new() };
+    let mut records = text.split('\n');
+    if records.next() != Some("lkjscript-scale-shape 1") { return Err("unknown shape format".to_string()); }
+    for record in records {
+        let mut parts: Vec<String> = Vec::new();
+        for part in record.split(' ') { parts.push(part.to_string()); }
+        if parts.is_empty() { continue; }
+        match parts[0].as_str() {
+            "function" => {
+                if parts.len() != 6usize { return Err("invalid function shape".to_string()); }
+                result.functions.push(Shape { lines: number(&parts[1])?, calls: number(&parts[2])?,
+                    params: number(&parts[3])?, generic: number(&parts[4])? != 0usize, depth: number(&parts[5])? });
+            }
+            "type" => {
+                if parts.len() != 4usize { return Err("invalid nominal shape".to_string()); }
+                result.types.push(Nominal { fields: number(&parts[1])?, edges: number(&parts[2])?, variants: number(&parts[3])? });
+            }
+            "module" => {
+                if parts.len() != 2usize || number(&parts[1])? == 0usize { return Err("invalid module shape".to_string()); }
+                result.modules.push(number(&parts[1])?);
+            }
+            _ => {}
+        }
+    }
+    if result.functions.is_empty() || result.types.is_empty() || result.modules.is_empty() {
+        return Err("empty empirical shape".to_string());
+    }
+    Ok(result)
+}
+fn write(root: &mut Directory, path: &str, text: &str) -> Result<(), String> {
+    let mut file = io(root.create(path), path)?;
+    io(file.write_all(text.as_bytes()), path)
+}
+fn call(target: &Callable, value: &str, token: usize) -> String {
+    let mut out = target.path.clone();
+    let kind = match token % 3usize { 0usize => "u8", 1usize => "u32", _ => "u64" };
+    if target.generic { out.push_str(&format!("::<{kind}>")); }
+    out.push('(');
+    for index in 0usize..target.params {
+        if index != 0usize { out.push(','); }
+        out.push_str(value);
+    }
+    if target.generic {
+        if target.params != 0usize { out.push(','); }
+        out.push_str(&format!("{value} as {kind}"));
+    }
+    out.push(')');
+    out
+}
+fn root_source(modules: &[String]) -> String {
+    let mut out = "pub mod edit;\n".to_string();
+    for index in 0usize..modules.len() { out.push_str(&format!("pub mod m{index};\n")); }
+    let mut current: Vec<String> = modules.to_vec();
+    let mut level = 0usize;
+    while current.len() > 1usize {
+        let mut next: Vec<String> = Vec::new();
+        let mut begin = 0usize;
+        while begin < current.len() {
+            let end = if current.len() - begin > 32usize { begin + 32usize } else { current.len() };
+            let name = format!("dispatch_{level}_{}", next.len());
+            out.push_str(&format!("fn {name}(x: u64) -> u64 {{\nlet mut value = x;\n"));
+            for target in &current[begin..end] { out.push_str(&format!("value ^= {target}(value);\n")); }
+            out.push_str("value }\n");
+            next.push(name);
+            begin = end;
+        }
+        current = next;
+        level += 1;
+    }
+    if current.is_empty() { out.push_str("pub fn main() -> u64 { edit::target(0u64) }\n"); }
+    else { out.push_str(&format!("pub fn main() -> u64 {{ {}(0u64) }}\n", current[0])); }
+    out
+}
+fn root_lines(modules: usize) -> usize {
+    let mut result = 2usize + modules;
+    let mut count = modules;
+    while count > 1usize {
+        let parents = count / 32usize + if count % 32usize == 0usize { 0usize } else { 1usize };
+        result += count + 3usize * parents;
+        count = parents;
+    }
+    result
+}
+fn make_function(index: usize, shape: &Shape, path: &str, prior: &[Callable],
+    random: &mut Random, budget: usize, first: bool, fields: usize, edges: usize, variants: usize) -> (String, Callable) {
+    let mut out = format!("pub fn f{index}");
+    if shape.generic { out.push_str("<T: Copy>"); }
+    out.push('(');
+    for parameter in 0usize..shape.params {
+        if parameter != 0usize { out.push(','); }
+        out.push_str(&format!("p{parameter}: u64"));
+    }
+    if shape.generic {
+        if shape.params != 0usize { out.push(','); }
+        out.push_str("token: T");
+    }
+    out.push_str(") -> u64 {\n");
+    out.push_str(if shape.params == 0usize { "let mut value = 0u64;\n" } else { "let mut value = p0;\n" });
+    if shape.generic { out.push_str("let _ = token;\n"); }
+    if index < 8usize { out.push_str("value ^= crate::edit::target(value);\n"); }
+    if first {
+        out.push_str("let record = Record { value,");
+        for field in 0usize..fields {
+            if field < edges { out.push_str(&format!("edge_{field}: Vec::new(),")); }
+            else { out.push_str(&format!("word_{field}: value,")); }
+        }
+        out.push_str("};\nvalue ^= record.value;\n");
+        if variants != 0usize {
+            out.push_str(&format!("let choice = Choice::V{}(value);\n", random.pick(variants)));
+            out.push_str("value = match choice {");
+            for variant in 0usize..variants { out.push_str(&format!("Choice::V{variant}(word) => word ^ {variant}u64,")); }
+            out.push_str("};\n");
+        }
+    }
+    let minimum = lines(&out) + 1usize;
+    let requested = if shape.lines > minimum { shape.lines } else { minimum };
+    let length = if requested > budget { budget } else { requested };
+    let mut available = length - minimum;
+    let wanted_calls = if shape.calls > available { available } else { shape.calls };
+    if !prior.is_empty() {
+        for site in 0usize..wanted_calls {
+            let chosen = random.pick(prior.len());
+            out.push_str(&format!("value ^= {};\n", call(&prior[chosen], "value", index + site)));
+            available -= 1;
+        }
+    }
+    while available > 0usize {
+        let constant = random.pick(65536usize);
+        match available % 4usize {
+            0usize => out.push_str(&format!("if value & 1u64 == 0u64 {{ value ^= {constant}u64; }}\n")),
+            1usize => out.push_str(&format!("value = ((value << 1u64) | (value >> 63u64)) ^ {constant}u64;\n")),
+            _ => out.push_str(&format!("value ^= {constant}u64;\n")),
+        }
+        available -= 1;
+    }
+    out.push_str("value }\n");
+    (out, Callable { path: format!("{path}::f{index}"), params: shape.params, generic: shape.generic })
+}
+fn generate(root: &mut Directory, model: &Profile, wanted: usize, seed: u64) -> Result<String, String> {
+    if wanted < 100usize { return Err("a shape workload needs at least 100 lines".to_string()); }
+    let initial = seed.wrapping_mul(0x9e3779b97f4a7c15u64);
+    let mut random = Random { state: if initial == 0u64 { 1u64 } else { initial } };
+    let edit = "pub fn target(value: u64) -> u64 {\nvalue ^ 1u64\n}\n";
+    write(root, "edit.lkj", edit)?;
+    let mut emitted = lines(edit);
+    let mut bytes = edit.len();
+    let mut functions: Vec<Callable> = Vec::new();
+    let mut modules: Vec<String> = Vec::new();
+    let mut generated_types = 0usize;
+    let mut generated_fields = 0usize;
+    let mut generated_variants = 0usize;
+    let mut generated_edges = 0usize;
+    let mut generated_generics = 0usize;
+    let mut generated_calls = 0usize;
+    loop {
+        let module = modules.len();
+        let sample = &model.functions[random.pick(model.functions.len())];
+        let level = if sample.depth == 0usize { 1usize } else { sample.depth };
+        let typ = &model.types[random.pick(model.types.len())];
+        let nominal_fields = if typ.variants == 0usize { typ.fields } else { typ.fields / typ.variants };
+        let fields = if nominal_fields == 0usize { 0usize } else { nominal_fields - 1usize };
+        let edges = if typ.edges > fields { fields } else { typ.edges };
+        let enum_lines = if typ.variants == 0usize { 0usize } else { typ.variants + 2usize };
+        let fixed = (level - 1usize) * 2usize + fields + 6usize + enum_lines;
+        let overhead = root_lines(module + 1usize);
+        if emitted + fixed + overhead + 10usize >= wanted { break; }
+        let mut path = format!("crate::m{module}");
+        let mut text = String::new();
+        for nested in 1usize..level {
+            text.push_str(&format!("pub mod d{nested} {{\n"));
+            path.push_str(&format!("::d{nested}"));
+        }
+        text.push_str("pub struct Record {\npub value: u64,\n");
+        for field in 0usize..fields {
+            if field < edges { text.push_str(&format!("pub edge_{field}: Vec<Record>,\n")); }
+            else { text.push_str(&format!("pub word_{field}: u64,\n")); }
+        }
+        text.push_str("}\n");
+        if typ.variants != 0usize {
+            text.push_str("pub enum Choice {\n");
+            for variant in 0usize..typ.variants { text.push_str(&format!("V{variant}(u64),\n")); }
+            text.push_str("}\n");
+        }
+        let mut members: Vec<usize> = Vec::new();
+        let count = model.modules[random.pick(model.modules.len())];
+        for member in 0usize..count {
+            let remaining = wanted - emitted - overhead - lines(&text) - (level - 1usize) - 3usize - members.len();
+            if remaining < 10usize { break; }
+            let item = &model.functions[random.pick(model.functions.len())];
+            let index = functions.len();
+            let (body, callable) = make_function(index, item, &path, &functions, &mut random,
+                remaining - 1usize, member == 0usize, fields, edges, typ.variants);
+            generated_calls += split_count(body.as_str(), "value ^= crate::") - 1usize;
+            if item.generic { generated_generics += 1usize; }
+            text.push_str(&body);
+            members.push(index);
+            functions.push(callable);
+        }
+        if members.is_empty() { return Err("generator could not fit a module body".to_string()); }
+        text.push_str("pub fn run(x: u64) -> u64 {\nlet mut value = x;\n");
+        for index in &members { text.push_str(&format!("value ^= {};\n", call(&functions[*index], "value", *index))); }
+        text.push_str("value }\n");
+        for _nested in 1usize..level { text.push_str("}\n"); }
+        emitted += lines(&text);
+        bytes += text.len();
+        generated_types += if typ.variants == 0usize { 1usize } else { 2usize };
+        generated_variants += typ.variants;
+        generated_fields += fields + 1usize;
+        generated_edges += edges;
+        write(root, &format!("m{module}.lkj"), &text)?;
+        modules.push(format!("{path}::run"));
+    }
+    let mut main = root_source(&modules);
+    let mut filler = 0usize;
+    while emitted + lines(&main) < wanted {
+        main.push_str(&format!("pub const RUNG_TAIL_{filler}: u64 = {filler}u64;\n"));
+        filler += 1usize;
+    }
+    emitted += lines(&main);
+    bytes += main.len();
+    if emitted != wanted { return Err(format!("line accounting: wanted {wanted}, generated {emitted}")); }
+    write(root, "main.lkj", &main)?;
+    let dependents = if functions.len() < 8usize { functions.len() } else { 8usize };
+    let report = format!("seed {seed}\nlines {emitted}\nsource_bytes {bytes}\nfiles {}\nfunctions {}\ngeneric_functions {generated_generics}\ncall_sites {generated_calls}\nnominal_types {generated_types}\nnominal_fields {generated_fields}\nnominal_variants {generated_variants}\nnominal_edges {generated_edges}\ntail_constants {filler}\nedit_identity edit::target\nsignature_direct_dependents {dependents}\n",
+        modules.len() + 2usize, functions.len());
+    write(root, "workload.txt", &report)?;
+    Ok(report)
+}
+fn execute(world: &mut World) -> Result<(), String> {
+    let raw = world.args();
+    let mut args: Vec<String> = Vec::new();
+    for bytes in raw { args.push(String::from_utf8(bytes).map_err(|_| -> String { "arguments are not UTF-8".to_string() })?); }
+    if args.len() == 2usize && args[0] == "shape" {
+        let mut root = io(world.directory(&args[1]), "source root")?;
+        let text = census(&mut root)?;
+        world.stdout().write(text.as_bytes());
+        return Ok(());
+    }
+    if args.len() == 4usize && args[0] == "generate" {
+        let input = io(world.stdin().read_to_end(), "shape input")?;
+        let input = String::from_utf8(input).map_err(|_| -> String { "shape is not UTF-8".to_string() })?;
+        let model = profile(&input)?;
+        let mut root = io(world.directory(&args[1]), "output root")?;
+        let text = generate(&mut root, &model, number(&args[2])?, number(&args[3])? as u64)?;
+        world.stdout().write(text.as_bytes());
+        return Ok(());
+    }
+    Err("usage: scale shape REPOSITORY | scale generate OUTPUT LINES SEED < SHAPE".to_string())
+}
+pub fn main(mut world: World) {
+    if let Err(problem) = execute(&mut world) {
+        world.stderr().write(format!("E_SCALE {problem}\n").as_bytes());
+        world.set_exit_status(1u8);
+    }
+}

@@ -1,0 +1,4 @@
+Source archive: all 1,742 Git members, 42 directories and two PAX paths verified; factory differs only at main
+PASS five phases; exact 1,742 inputs; generator=be23723deaf08b25756a497a674a3455a75415851ebf5ae4a746dc16024e882c; generated=169 files/100000 lines/3923070 bytes
+Existing generator/seed/generated archive gzips decode exactly; all 170 generated archive members match
+Original cohort remains closed; no A/B commands or new workloads executed by this audit

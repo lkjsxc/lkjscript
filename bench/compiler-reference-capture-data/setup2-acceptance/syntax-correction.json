@@ -1,0 +1,16 @@
+{
+  "schema": 1,
+  "original_helper_sha256": "7745521bcfa7720d258c905aa5a10a02cac50bc1a12859fd48fb4bbc24426b47",
+  "original_request": "compiler-reference-capture-setup2-audit-run-1427",
+  "original_exit": 255,
+  "original_phase": "syntax-1",
+  "original_capture": "captures/syntax-1",
+  "original_data_audit_executed": false,
+  "correction": "Insert whitespace between the trailing substitution delimiter and conditional if $directory in safe_path; no audit rule changes.",
+  "preserved_original": "audit-v1-syntax-failure.pl",
+  "new_capture_phases": [
+    "syntax-2",
+    "audit-2"
+  ],
+  "setup_or_compiler_or_generator_rerun": false
+}

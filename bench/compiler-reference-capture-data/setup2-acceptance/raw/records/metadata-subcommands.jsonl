@@ -1,0 +1,7 @@
+{"argv":["git","-C","/home/coder/workspace/lkjscript","show","7d0731e99aeaf241c4334fc5ff065a341fb388c8:seed/lkjscript.gz"],"mode":"recover"}
+{"argv":["git","-C","/home/coder/workspace/lkjscript","show","0b0b27803d27b932a5b91cde2d766bd3c8bb82b9:bench/scale.lkj"],"mode":"recover"}
+{"argv":["git","-C","/home/coder/workspace/lkjscript","show","0b0b27803d27b932a5b91cde2d766bd3c8bb82b9:bench/compiler-query-container-data/measurement-1/shape"],"mode":"recover"}
+{"argv":["git","-C","/home/coder/workspace/lkjscript","ls-tree","-r","-z","--full-tree","c887b7c5aca7bb80d70ca26d7dfdf1a44213a163","--","src","library","tests"],"mode":"recover"}
+{"argv":["git","-C","/home/coder/workspace/lkjscript","ls-tree","-r","-z","--full-tree","c887b7c5aca7bb80d70ca26d7dfdf1a44213a163","--","src","library","tests"],"mode":"factory"}
+{"argv":["diff","-u","--label","src/main.lkj","--label","src/main.lkj","/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/artifacts/factory-main.original.lkj","/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/artifacts/scale-generator-source.lkj"],"mode":"factory"}
+{"argv":["tar","--sort=name","--format=ustar","--mtime=@0","--owner=0","--group=0","--numeric-owner","-cf","/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/artifacts/generated-100k.tar","-C","/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/generated-100k","."],"mode":"freeze"}

@@ -1,0 +1,14 @@
+{
+   "complete_metrics" : true,
+   "outer_end_ns" : 1794852770788600565,
+   "outer_start_ns" : 1794852769991816066,
+   "phase" : "freeze-artifacts",
+   "status" : 0,
+   "timing" : {
+      "exit" : 0,
+      "max_rss_kib" : "68764",
+      "system_s" : "0.04",
+      "user_s" : "0.72",
+      "wall_s" : "0.79"
+   }
+}

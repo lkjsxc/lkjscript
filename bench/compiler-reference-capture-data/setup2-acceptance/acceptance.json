@@ -1,0 +1,304 @@
+{
+   "all_reread_inputs_unchanged" : true,
+   "baseline" : {
+      "bytes" : 32584542,
+      "sha256" : "6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc"
+   },
+   "controls_manifest_sha256" : "fe8321b36a88864b33dd3c8bda9a71ab954f9dae14926d3ba9e45fbb564af847",
+   "factory" : {
+      "complete_population_and_modes_match" : true,
+      "only_changed_path" : "src/main.lkj",
+      "unchanged_files" : 1741
+   },
+   "generated" : {
+      "all_archive_members_byte_equal" : true,
+      "archive_bytes" : 4055040,
+      "archive_sha256" : "ae6b1704d0796e9c2437c7e4ebefe25995c493fedca7308fe0a2fc6c42857cb4",
+      "directories" : 0,
+      "gzip_bytes" : 405428,
+      "gzip_sha256" : "57ead08d82ea53ba4d833b2689cbf1158550931b8cf288aac3363644d2dab07c",
+      "lines" : 100000,
+      "regular_members" : 170,
+      "source_bytes" : 3923070,
+      "source_files" : 169
+   },
+   "generator" : {
+      "bytes" : 1642167,
+      "sha256" : "be23723deaf08b25756a497a674a3455a75415851ebf5ae4a746dc16024e882c"
+   },
+   "generator_stats" : {
+      "assemble_ms" : 5.482,
+      "build_ir_ms" : 637.618,
+      "build_reused" : 0,
+      "check_body_ms" : 596.386,
+      "check_ms" : 0.016,
+      "check_verification_ms" : 0.012,
+      "checked_local_reused" : 0,
+      "checked_reused" : 0,
+      "emit_ms" : 65.505,
+      "emitted_bytes" : 1642167,
+      "emitted_reused" : 0,
+      "front_definitions" : 1025,
+      "front_functions" : 1582,
+      "front_reused" : 0,
+      "inline_accepted" : 0,
+      "inline_attempts" : 0,
+      "inline_calls" : 0,
+      "inline_functions" : 0,
+      "inline_rejected" : 0,
+      "ir_functions" : 1582,
+      "ir_instructions" : 123530,
+      "key_hash_ms" : 0.004,
+      "load_parse_ms" : 140.692,
+      "native_encode_ms" : 0.006,
+      "other_ms" : 5.518,
+      "peak_rss_bytes" : 121266176,
+      "producer_hash_ms" : 0.003,
+      "resolve_ms" : 32.393,
+      "route" : "compiler",
+      "runtime_ms" : 13.34,
+      "stopped_stage" : "done",
+      "store_io_ms" : 0.01,
+      "test_rerun" : 0,
+      "test_reused" : 0,
+      "total_ms" : 2073.256,
+      "type_ms" : 576.037,
+      "write_ms" : 0.214
+   },
+   "gzip_recovery" : {
+      "baseline" : {
+         "bytes" : 32584542,
+         "sha256" : "6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc"
+      },
+      "generated_tar" : {
+         "bytes" : 4055040,
+         "sha256" : "ae6b1704d0796e9c2437c7e4ebefe25995c493fedca7308fe0a2fc6c42857cb4"
+      },
+      "generator" : {
+         "bytes" : 1642167,
+         "sha256" : "be23723deaf08b25756a497a674a3455a75415851ebf5ae4a746dc16024e882c"
+      },
+      "method" : "bounded in-memory decoding of existing gzip bytes; no output gzip or reconstructed tree written"
+   },
+   "input_bytes" : 81474072,
+   "inputs_checked" : 3817,
+   "limitations" : [
+      "No claim of identity with cleaned historical generated sources.",
+      "Construction/generation timings are setup observations, not A/B performance evidence.",
+      "Full recorded metadata and bounded offline checks establish this result; no process/FD/syscall observation."
+   ],
+   "no_compiler_native_generator_or_setup_execution" : true,
+   "no_compression" : true,
+   "no_key_or_store_read" : true,
+   "no_original_mutation" : true,
+   "original_cohort" : {
+      "all_twelve_ab_rows" : "not-run",
+      "closure_record_sha256" : "3044ab88c1ee8feca00fa3b46e3b2953a80c9bb7c133a7946cf38f71331550f3",
+      "resumable" : false,
+      "status" : "CLOSED_AFTER_SETUP_FAILURE"
+   },
+   "outer_load_after" : "2.66 1.89 2.31\n",
+   "outer_load_before" : "2.54 1.86 2.30\n",
+   "outer_time" : {
+      "exit_status" : 0,
+      "maxrss_kib" : "128740",
+      "system_s" : "0.25",
+      "user_s" : "4.88",
+      "wall_s" : "5.25"
+   },
+   "phases" : [
+      {
+         "argv" : [
+            "/usr/bin/perl",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/control/setup.pl",
+            "recover",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/control/controls.json"
+         ],
+         "capture_validation_status" : 0,
+         "cwd" : "/home/coder/workspace/lkjscript",
+         "end_ns" : 1794852766204046572,
+         "load_after" : "2.54 1.86 2.30\n",
+         "load_before" : "2.54 1.86 2.30\n",
+         "phase" : "recover-inputs",
+         "start_ns" : 1794852765602121399,
+         "status" : 0,
+         "timing" : {
+            "exit" : 0,
+            "max_rss_kib" : "128740",
+            "system_s" : "0.07",
+            "user_s" : "0.51",
+            "wall_s" : "0.59"
+         }
+      },
+      {
+         "argv" : [
+            "/usr/bin/perl",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/control/setup.pl",
+            "factory",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/control/controls.json"
+         ],
+         "capture_validation_status" : 0,
+         "cwd" : "/home/coder/workspace/lkjscript",
+         "end_ns" : 1794852766646850134,
+         "load_after" : "2.54 1.86 2.30\n",
+         "load_before" : "2.54 1.86 2.30\n",
+         "phase" : "prepare-factory",
+         "start_ns" : 1794852766256028628,
+         "status" : 0,
+         "timing" : {
+            "exit" : 0,
+            "max_rss_kib" : "63868",
+            "system_s" : "0.05",
+            "user_s" : "0.32",
+            "wall_s" : "0.38"
+         }
+      },
+      {
+         "argv" : [
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/producer-A",
+            "build",
+            "src/main.lkj",
+            "--source-dir",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/factory",
+            "--library-dir",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/factory/library",
+            "--runtime-source",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/factory/library/runtime.lkj",
+            "--inline-limit",
+            "0",
+            "--no-store",
+            "--stats",
+            "-o",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/generator"
+         ],
+         "capture_validation_status" : 0,
+         "cwd" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/factory",
+         "end_ns" : 1794852768777557775,
+         "load_after" : "2.66 1.89 2.31\n",
+         "load_before" : "2.54 1.86 2.30\n",
+         "phase" : "generator-build",
+         "start_ns" : 1794852766699015134,
+         "status" : 0,
+         "timing" : {
+            "exit" : 0,
+            "max_rss_kib" : "118424",
+            "system_s" : "0.00",
+            "user_s" : "2.00",
+            "wall_s" : "2.07"
+         }
+      },
+      {
+         "argv" : [
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/generator",
+            "generate",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/generated-100k",
+            "100000",
+            "20261116"
+         ],
+         "capture_validation_status" : 0,
+         "cwd" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2",
+         "end_ns" : 1794852769939007926,
+         "load_after" : "2.66 1.89 2.31\n",
+         "load_before" : "2.66 1.89 2.31\n",
+         "phase" : "generate-100k",
+         "start_ns" : 1794852768829832532,
+         "status" : 0,
+         "timing" : {
+            "exit" : 0,
+            "max_rss_kib" : "2108",
+            "system_s" : "0.00",
+            "user_s" : "1.07",
+            "wall_s" : "1.10"
+         }
+      },
+      {
+         "argv" : [
+            "/usr/bin/perl",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/control/setup.pl",
+            "freeze",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2/control/controls.json"
+         ],
+         "capture_validation_status" : 0,
+         "cwd" : "/home/coder/workspace/lkjscript",
+         "end_ns" : 1794852770788600565,
+         "load_after" : "2.66 1.89 2.31\n",
+         "load_before" : "2.66 1.89 2.31\n",
+         "phase" : "freeze-artifacts",
+         "start_ns" : 1794852769991816066,
+         "status" : 0,
+         "timing" : {
+            "exit" : 0,
+            "max_rss_kib" : "68764",
+            "system_s" : "0.04",
+            "user_s" : "0.72",
+            "wall_s" : "0.79"
+         }
+      }
+   ],
+   "recovery" : {
+      "baseline_git_seed" : "7d0731e99aeaf241c4334fc5ff065a341fb388c8:seed/lkjscript.gz",
+      "existing_run_artifacts" : "Root retains the original compiler-source.tar, generated-100k.tar.gz, generator.gz, source/factory manifests, exact controls and original records before any comparison release. This audit copies bounded metadata only.",
+      "generator_gzip_sha256" : "3b7f282a8fd1c0d373741fe9c81b5a2afcae365888b0c45ea4736fa123015f91",
+      "source_tar_sha256" : "79aa24a9eb6f8e7940b4424fc20839759a79dd8d480b1b746f7e29b17171d806"
+   },
+   "release_commit" : "5e1b82f3cf23654e04d0904e948c202c96723c0d",
+   "schema" : 1,
+   "setup2" : {
+      "all_command_and_validation_statuses_zero" : true,
+      "comparison_commands" : 0,
+      "generation_commands" : 1,
+      "generator_build_commands" : 1,
+      "outer_status" : 0,
+      "phase_count" : 5
+   },
+   "source" : {
+      "all_git_blob_identities_match" : true,
+      "all_live_compiler_files_match" : true,
+      "archive" : {
+         "bytes" : 10741760,
+         "entry" : "src/main.lkj",
+         "expected_output" : "First successful A1 output at the frozen physical selectors; all six outputs must compare byte-identically. No seed fixed-point claim.",
+         "member_inventory_status" : "Must verify complete path/type/size/hash inventory against archive and pinned Git trees during authorized setup, before timed release.",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-preparation-1/source.tar",
+         "regular_members" : 1742,
+         "revision" : "c887b7c5aca7bb80d70ca26d7dfdf1a44213a163",
+         "runtime_path" : "library/runtime.lkj",
+         "runtime_sha256" : "eeeb173d23c597d7b666aca949a32ba171fa5407be4173ad4626abe1ad295d14",
+         "sha256" : "79aa24a9eb6f8e7940b4424fc20839759a79dd8d480b1b746f7e29b17171d806",
+         "trees" : {
+            "library" : "25bdb8ff8567b941790d3951c78e896b23e26e8e",
+            "src" : "c710586b4d1b7ab476fd179a7d2c699477a2054a",
+            "tests" : "e2b30ac0f2fa8f897f366293189d6af552a41980"
+         }
+      },
+      "directories" : 42,
+      "pax_paths" : [
+         {
+            "following_header_offset" : 7437312,
+            "following_raw_path" : "cf9216200811582da57ecb6d89518b96bb7ef297.data",
+            "path" : "tests/semantics/ir/language__check__tests__whole_enum_mutation_invalidates_both_saved_predicates_and_proven_tags_0000.lkjir",
+            "payload_bytes" : 805,
+            "payload_sha256" : "6c1c1d8311d5fdfa14a4a356c5c2bb2026d34d6db0b2791f405750eda1613ef7",
+            "record_bytes" : 133,
+            "record_offset" : 7436288,
+            "record_sha256" : "f64a033347106348638ccdb242cff1c8edaf387e9ba9279a2661de54300df02c"
+         },
+         {
+            "following_header_offset" : 7439872,
+            "following_raw_path" : "e924a3afe523c681cc0e1a6a794bc89f260963f9.data",
+            "path" : "tests/semantics/ir/language__check__tests__whole_enum_mutation_invalidates_both_saved_predicates_and_proven_tags_0001.lkjir",
+            "payload_bytes" : 805,
+            "payload_sha256" : "2f9281761b26b0031b7403fcd3fa3fc5207300f017108c92308d7ebfcccb0162",
+            "record_bytes" : 133,
+            "record_offset" : 7438848,
+            "record_sha256" : "500c3abbc3d145d40df8957c65d0568105079c251dc100afa76a4f5c4c8f07ac"
+         }
+      ],
+      "regular_members" : 1742,
+      "revision" : "c887b7c5aca7bb80d70ca26d7dfdf1a44213a163"
+   },
+   "status" : "accepted completed separate setup2; not an A/B release"
+}

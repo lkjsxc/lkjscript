@@ -1,0 +1,9 @@
+setup.sh: OK
+setup.pl: OK
+controls.json: OK
+README.md: OK
+setup.sh: OK
+setup.pl: OK
+controls.json: OK
+README.md: OK
+Setup complete at /home/coder/workspace/lkjscript/target/compiler-reference-capture-measurement-2. No A/B build has run; root archive review and a distinct release remain required.

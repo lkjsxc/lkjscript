@@ -1,0 +1,6 @@
+phase	outcome	command_status	capture_validation_status
+recover-inputs	ok	0	0
+prepare-factory	ok	0	0
+generator-build	ok	0	0
+generate-100k	ok	0	0
+freeze-artifacts	ok	0	0

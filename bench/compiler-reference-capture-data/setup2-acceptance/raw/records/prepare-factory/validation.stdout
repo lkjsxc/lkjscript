@@ -1,0 +1,14 @@
+{
+   "complete_metrics" : true,
+   "outer_end_ns" : 1794852766646850134,
+   "outer_start_ns" : 1794852766256028628,
+   "phase" : "prepare-factory",
+   "status" : 0,
+   "timing" : {
+      "exit" : 0,
+      "max_rss_kib" : "63868",
+      "system_s" : "0.05",
+      "user_s" : "0.32",
+      "wall_s" : "0.38"
+   }
+}
