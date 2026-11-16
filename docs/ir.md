@@ -193,6 +193,9 @@ The intrinsic signatures are checked in `src/check.lkj` and `src/check/io.lkj`:
 | `file_rewind file_executable directory_rewind` | Seek to byte zero or make a File executable; return zero or negative errno. |
 | `directory_read` | Exclusively borrow Directory/ReadDirectory and read Linux directory records into mutable bytes; return count or negative errno. |
 | `directory_create directory_remove directory_rename` | Mutate NUL-terminated basenames through exclusive Directory references. Reject slash, empty name, dot and dot-dot. Return zero or negative errno. |
+| `directory_rename_new` | `(&mut directory, &[u8] old, &[u8] new) -> i64`: same held parent, validated NUL-terminated basenames, atomic absent-only rename. An occupied destination is never replaced; unsupported syscall/filesystem errors have no fallback. |
+| `directory_open_regular` | `(&mut directory, &[u8] name) -> Result<file,i64>`: one validated basename; retain its inode without following a final symlink, require a regular file, then reopen that inode read-only. |
+| `directory_identity` | `(&mut directory, &mut [u8]) -> i64`: require exactly 16 output bytes; write little-endian device/inode from the held directory. Invalid length, non-directory or any metadata error leaves every output byte unchanged. |
 | `clock_read` | Clock plus mutable bytes of length at least 16. Write little-endian i64 seconds/nanoseconds from CLOCK_MONOTONIC; return zero or negative errno. |
 | `clock_unix_seconds` | `(&mut clock) -> Result<i64, i64>`: signed CLOCK_REALTIME seconds since Unix epoch; negative successful timestamps remain distinct from positive errno. |
 | `clock_unix_nanoseconds` | `(&mut clock) -> Result<usize, i64>`: CLOCK_REALTIME nanoseconds since Unix epoch, which may jump; negative or unrepresentable timestamps return EOVERFLOW (75). |
@@ -250,6 +253,21 @@ duplicate and writable conversion operations do not. Read opens acquire O_PATH,
 check regular-file mode on that inode, and only then reopen the same inode for
 reading, so a named FIFO/device is never data-opened. mtime and contents refer to
 that same acquired inode even after atomic replacement.
+
+Absent-only rename uses Linux x86-64 renameat2 with RENAME_NOREPLACE in the
+same acquired directory. Both names reject slash, empty name, dot, dot-dot,
+interior NUL and a missing trailing NUL. It has no check-then-replacing-rename
+path. Directory regular-open uses O_PATH|O_NOFOLLOW before fstat and data
+access; symlinks, directories, FIFOs and devices refuse without a data open.
+The retained identity descriptor stays alive through the read-only reopen.
+
+Directory identity observes st_dev and st_ino from fstat of the same held
+descriptor, requires S_IFDIR, and copies only those two u64 values after
+successful validation. Kernel metadata is read into private scratch, never
+directly into the caller's 16-byte result. The ordinary library helper
+`std::io::directory_identity` returns `Result<[u8;16],i64>` and needs an
+exclusive Directory borrow. These values describe a held kernel directory;
+they may be recycled after release and do not enter semantic/image identities.
 
 Storage creation preserves the Directory's acquired identity and constrains paths
 with openat2 RESOLVE_BENEATH|RESOLVE_NO_MAGICLINKS.

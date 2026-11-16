@@ -2329,6 +2329,12 @@ fn compile_snapshot(
     for index in 0..loaded.program.files.len() {
         loaded.program.files[index].path = diagnostic_source_path(&loaded.program.files[index].path, options);
     }
+    for index in 0..loaded.program.loaded_modules.len() {
+        if !loaded.program.loaded_modules[index].alternate.is_empty() {
+            loaded.program.loaded_modules[index].alternate =
+                diagnostic_source_path(&loaded.program.loaded_modules[index].alternate, options);
+        }
+    }
     for index in 0..memo.source_inputs.len() {
         memo.source_inputs[index].0 = diagnostic_source_path(&memo.source_inputs[index].0, options);
     }

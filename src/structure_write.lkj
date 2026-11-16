@@ -36,10 +36,6 @@ fn relative(scope: &str, path: &str) -> Result<String, String> {
     if !valid_path(&value) { return Err(failure("only .lkj sources beneath the root may be published")); }
     Ok(value)
 }
-fn read(root: &mut Directory, path: &str) -> Result<Vec<u8>, String> {
-    let mut file = io(root.open(path), "open source snapshot")?;
-    io(file.read_to_end(), "read source snapshot")
-}
 fn remove(root: &mut Directory, name: &str) -> Result<(), String> {
     match root.remove(name) {
         Ok(()) | Err(2i64) => Ok(()),
@@ -87,19 +83,7 @@ impl Writer {
         Ok(Self { root, scope: scope.to_string(), secret, entropy: world.entropy(), lock })
     }
     pub fn private_source_digest(&self) -> [u8; 32] { sha256::digest(&self.secret) }
-    pub fn key_digest(&self) -> String { sha256::hex_digest(&self.secret) }
     fn key(&self) -> String { sha256::hex_digest(self.scope.as_bytes()) }
-    pub fn verify_inputs(&mut self, inputs: &[(String, Vec<u8>)]) -> Result<(), String> {
-        for (path, bytes) in inputs {
-            if bytes.len() == 32usize && sha256::hex_digest(bytes) == self.key_digest() {
-                return Err(failure("a source input contains the transaction signing key"));
-            }
-            let name = match relative(&self.scope, path) { Ok(name) => name, Err(_) => continue };
-            let current = read(&mut self.root, &name)?;
-            if current != *bytes { return Err(format!("{} E_EDIT_STALE source changed while the candidate was checked", path)); }
-        }
-        Ok(())
-    }
     fn pending(&mut self) -> Result<Option<Intent>, String> {
         let mut file = match self.root.open_regular(".lkjscript-edit.pending") {
             Ok(file) => file,
@@ -172,17 +156,6 @@ impl Writer {
             .map_err(|problem| -> String { format!("{problem}; intent retained") })?;
         self.complete(&intent, &mut prepared)
             .map_err(|problem| -> String { format!("{problem}; intent retained") })
-    }
-    pub fn publish(&mut self, draft: &structure_edit::Draft) -> Result<(), String> {
-        // Present-only callers retain their existing convenience entry point.
-        // Creation must use the Prepared value held across candidate checking.
-        for change in &draft.changes {
-            if matches!(&change.before, structure_edit::PreviousText::Absent) {
-                return Err(failure("source creation requires preparation retained through checking"));
-            }
-        }
-        let mut prepared = self.prepare(draft)?;
-        self.publish_prepared(draft, &mut prepared)
     }
 }
 

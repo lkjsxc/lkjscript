@@ -472,6 +472,9 @@ fn model_output_preserves_bytes_drop_order_and_trap_prefix() {
 
 pub(super) struct FailingHost(pub(super) Vec<u8>);
 impl interpreter::Host for FailingHost {
+    fn directory_identity(&mut self, _directory: u64, _bytes: &mut [u8]) -> Result<(), i64> { Err(38) }
+    fn rename_new_entry(&mut self, _directory: u64, _old: &[u8], _new: &[u8]) -> Result<(), i64> { Err(38) }
+    fn open_regular_file(&mut self, _directory: u64, _name: &[u8]) -> Result<u64, i64> { Err(38) }
     fn image_buffer(&mut self, _image:u64, _bytes:&[u8])->Result<u64,i64> { Err(95) }
     fn map_readonly_file(&mut self, _file:u64)->Result<(u64,Vec<u8>),i64> { Err(95) }
     fn open_image(&mut self, _bytes: &[u8]) -> Result<u64, i64> { Err(95) }

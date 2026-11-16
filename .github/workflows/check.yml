@@ -5,8 +5,9 @@ jobs:
     runs-on: ubuntu-latest
     container: debian:bookworm-slim
     steps:
-      - name: Checkout dependencies
-        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl
+      - name: Gate dependencies
+        # C builds independent syscall witnesses; the compiler bootstraps from its seed.
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl gcc libc6-dev
       - uses: actions/checkout@v4
       - name: Seed-only native gate
         env:

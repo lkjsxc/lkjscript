@@ -110,10 +110,9 @@ pub trait Host {
         to: u64,
         new_name: &[u8],
     ) -> Result<(), i64>;
-    // Optional hosts fail closed until they implement each retained-directory effect.
-    fn directory_identity(&mut self, _directory: u64, _bytes: &mut [u8]) -> Result<(), i64> { Err(38) }
-    fn rename_new_entry(&mut self, _directory: u64, _old: &[u8], _new: &[u8]) -> Result<(), i64> { Err(38) }
-    fn open_regular_file(&mut self, _directory: u64, _name: &[u8]) -> Result<u64, i64> { Err(38) }
+    fn directory_identity(&mut self, _directory: u64, _bytes: &mut [u8]) -> Result<(), i64>;
+    fn rename_new_entry(&mut self, _directory: u64, _old: &[u8], _new: &[u8]) -> Result<(), i64>;
+    fn open_regular_file(&mut self, _directory: u64, _name: &[u8]) -> Result<u64, i64>;
     fn file_executable(&mut self, file: u64) -> Result<(), i64>;
     fn file_seal(&mut self, file: u64) -> Result<(), i64>;
     fn monotonic_time(&mut self, bytes: &mut [u8]) -> Result<(), i64>;
@@ -131,6 +130,9 @@ pub trait Host {
     fn drop_process(&mut self, child: u64);
 }
 impl Host for Vec<u8> {
+    fn directory_identity(&mut self, _directory: u64, _bytes: &mut [u8]) -> Result<(), i64> { Err(38) }
+    fn rename_new_entry(&mut self, _directory: u64, _old: &[u8], _new: &[u8]) -> Result<(), i64> { Err(38) }
+    fn open_regular_file(&mut self, _directory: u64, _name: &[u8]) -> Result<u64, i64> { Err(38) }
     fn image_buffer(&mut self, _image:u64, _bytes:&[u8])->Result<u64,i64> { Err(95) }
     fn map_readonly_file(&mut self, _file:u64)->Result<(u64,Vec<u8>),i64> { Err(95) }
     fn open_image(&mut self, _bytes: &[u8]) -> Result<u64, i64> { Err(95) }

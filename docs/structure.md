@@ -143,6 +143,38 @@ within the same module. Refactor planners extend these forms; their supported
 cases, evaluation order and explicit decision sites are in
 [refactors](structure-refactors.md).
 
+An `add-item` operation can also supply the complete source of one new external
+module in a `projection`:
+
+```json
+{
+  "version": 1,
+  "operations": [
+    {"op": "add-item", "id": "crate", "source": "pub mod added;",
+     "projection": {"path": "src/added.lkj",
+                    "source": "pub fn value() -> i64 { 42 }"}}
+  ]
+}
+```
+
+Here the entry is `src/main.lkj` and `--source-dir` selects the project root.
+The path is normalized, relative to that root, and must be the loader's actual
+`added.lkj` or `added/mod.lkj` candidate. The selected semantic parent and
+physical parent directory must already exist. An empty module source is valid;
+absence is distinct from an existing empty file. The declaration must contain
+exactly one enabled external module. Creating directories, deleting source
+files, adding a new parent module in the same request and spanning separately
+checked roots remain explicit gaps.
+
+The frontend records each successfully loaded module's identity, selected file
+and alternate candidate. Inline modules use their nearest loaded ancestor.
+Insertion into an empty external module uses that provenance rather than a
+child-item guess. Both candidates become captured negative dependencies before
+checking; the candidate must load the proposed file under the intended identity
+and parent. An occupied alternate or a later change to either captured candidate
+refuses. Creating an explicit library module promotes the transaction to full
+library validation just as changing an existing library body does.
+
 Renames and moves rewrite exact resolved declaration/use spans. Import aliases
 retain their local spelling. These operations must also preserve the
 checked-meaning digest. In a mixed request, the rename/move subset is separately
@@ -186,9 +218,13 @@ Include-only inputs inherit the longest directory correspondence proved by
 those item pairs; ambiguous mappings refuse.
 
 The planner chooses body/item replacement, addition or removal. It preserves
-untouched source bytes. Changed imports or module framing, existing declaration
-reordering, new files, splits/joins and changed include-only data require
-explicit operations. Repeated reads of one path must contain identical bytes.
+untouched source bytes. A scoped replay can introduce a separately selected new
+external-module declaration beneath an existing loaded parent, supplying its
+complete body as the same explicit projection form. Empty existing modules are
+paired from loader provenance. Other new files, changed imports or unsupported
+module framing, existing declaration reordering, splits/joins and changed
+include-only data still refuse. A new physical directory or new semantic parent
+is not inferred. Repeated reads of one path must contain identical bytes.
 Unchanged binary data is compared as bytes, never tokenized as source.
 
 Before publication the candidate's checked-meaning digest must equal the
@@ -209,20 +245,51 @@ The loader records embedded origin before assigning diagnostic paths. A physical
 `include_bytes!` input with the same displayed path cannot turn embedded code
 into editable source, even when its length and all later spans match.
 
-One writer holds `.lkjscript-edit.lock`. The compiler validates all original
-source bytes and the actual positive/negative dependency read set, then syncs
-an authenticated `.lkjscript-edit.pending` intent containing old/new bytes.
-That durable intent is the commit point. Recovery validates its fixed
-authentication envelope before allocating/decoding the payload, and verifies
-that every affected file is still exactly old or new before writing any file.
+One writer holds `.lkjscript-edit.lock`. Preparation retains the project root
+and each existing output parent as Directory capabilities. A changed slot is the
+parent's observed device/inode pair plus its basename; two path spellings of the
+same slot refuse before any intent. Equal basenames in distinct parents are valid.
+These identities describe held kernel objects, not semantic or image identities.
 
-The generation stamp is published and synced before the first projected source
-file. Each source replacement uses a private same-directory temporary, file
-fsync, atomic rename and parent-directory fsync. Once all new files are durable,
-the intent is removed and its directory synced. The generation stamp is a
-reader fence, not an authentication proof. Ordinary compiler reads reject a
-pending transaction and check the relevant generation stamps before and after
-compilation; the stored-image fast path also checks them before publication.
+The compiler validates original and newly discovered candidate dependencies
+against those retained parents. A differently spelled input alias of a changed
+slot refuses, including a previously absent library probe. Exact physical input
+spelling is required for the byte overlay; normalization does not manufacture
+that correspondence. Final input leaves are opened with `open_regular`, so a
+symlink, FIFO, socket or directory cannot substitute for a regular source input.
+Ordinary build/query source loading is unchanged by this transaction rule.
+Expected-present reads are bounded by the captured length and require exact EOF.
+
+Source inputs cannot occupy a changed slot's reserved staging basename or any
+of the root lock, pending, generation and two metadata staging slots.
+`E_EDIT_RESERVED_INPUT` identifies that refusal; differently spelled aliases of
+changed source slots use `E_EDIT_PARENT_ALIAS`. Checks use parent identity as
+well as basename, including inputs discovered only while checking the candidate.
+
+The authenticated version-two intent encodes old state as explicit `null`
+(absent) or text (present, including empty text); missing or malformed old state
+refuses. Version-one intents are unsupported and have no migration path.
+Recovery authenticates the fixed envelope before allocating or decoding its
+payload. It then validates every affected leaf as absent, exact old bytes or
+exact new bytes, as applicable, before writing any projected source. Only
+`ENOENT` beneath an already-held existing parent establishes creation absence.
+
+After checking all source and dependency preconditions, the writer syncs the
+authenticated `.lkjscript-edit.pending` intent. That durable intent is the
+commit point. Source staging starts only after it. Each output uses a private
+same-parent temporary and file fsync; the generation stamp is published and
+synced before the first source leaf. Replacements use atomic rename. Creations
+use `rename_new`, which refuses an occupied destination without overwriting it
+and has no fallback when the host lacks the atomic operation. Each affected
+parent is synced. Once all new files are durable, stages and intent are removed
+and the root is synced.
+
+Pending/generation reads open existing regular leaves without creating them or
+opening special leaves for data. Recovery without an intent cleans only the two
+known root metadata staging names; it does not delete arbitrary per-source
+stages. The generation stamp is a reader fence, not an authentication proof.
+Participating compiler reads reject a pending transaction and bracket compilation
+with the relevant generation stamps; stored-image publication uses that fence too.
 
 ```sh
 lkjscript edit src/main.lkj --source-dir . --recover \
@@ -230,14 +297,22 @@ lkjscript edit src/main.lkj --source-dir . --recover \
 ```
 
 After a killed writer, authenticated recovery finishes the committed new
-projection; before a durable intent, the old projection remains. Multiple
+projection; before a durable intent, the old projection remains. An error after
+that commit point requires recovery and does not promise rollback. Multiple
 filesystem renames are not a simultaneous OS transaction. Uncoordinated readers,
 including Git, can observe an intermediate mixture until recovery completes.
 Participating compiler reads reject that state. Use a consistent project scope
 for writers/readers; the compiler fences the selected project root, entry-file
 parent and explicit library root, not arbitrary independently managed nested
-projects. Refusals do not publish candidate source; reserved lock/recovery
-metadata is outside the tracked projection.
+projects. Precommit refusals do not publish candidate source; reserved
+lock/recovery metadata is outside the tracked projection. A dry run performs
+the same candidate and dependency checks without a writer lock or publication.
+
+The protocol assumes cooperating writers keep the parent namespace stable.
+Retaining parent handles prevents path substitution during that invocation,
+but recovery after a crash reacquires them; arbitrary parent renames or changes
+by nonparticipating processes are outside this contract. No global filesystem
+snapshot or stronger multi-directory atomicity is claimed.
 
 ## Comparing checked meaning
 

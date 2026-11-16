@@ -76,13 +76,51 @@ fn replace_snapshot(before: &Memo, after: &mut Memo, draft: &structure_edit::Dra
     }
     Ok(())
 }
-fn unchanged_inputs(world: &mut World, before: &Memo, after: &Memo) -> Result<(), String> {
+fn unchanged_inputs(world: &mut World, before: &Memo, after: &Memo,
+    prepared: Option<&structure_write::Prepared>) -> Result<(), String> {
     for (key, value) in &after.input_snapshot {
         let expected = before.input_snapshot.get(key).unwrap_or(value);
-        let mut root = world.directory(&key.0).map_err(|errno: i64| -> String { format!("E_EDIT_IO open {}: errno {errno}", key.0) })?;
-        let actual = super::read(&mut root, &key.1)?;
-        if actual != expected.0 {
-            return Err(format!("{} E_EDIT_STALE source dependency changed during checking", semantic::quote(&physical(&key.0, &key.1))));
+        let physical_path = physical(&key.0, &key.1);
+        let stale = format!("{} E_EDIT_STALE source dependency changed during checking", semantic::quote(&physical_path));
+        let mut root = world.directory(&key.0)
+            .map_err(|errno: i64| -> String { format!("E_EDIT_IO open {}: errno {errno}", key.0) })?;
+        let (parent, name) = super::location(&key.1);
+        let mut owner = match root.open_directory(&parent) {
+            Ok(owner) => owner,
+            Err(2i64) | Err(20i64) if expected.0.is_none() => continue,
+            Err(errno) => return Err(format!("{} E_EDIT_IO open source parent: errno {errno}", semantic::quote(&physical_path))),
+        };
+        if let Some(prepared) = prepared {
+            let identity = std::io::directory_identity(&mut owner)
+                .map_err(|errno: i64| -> String { format!("{} E_EDIT_IO identify source parent: errno {errno}", semantic::quote(&physical_path)) })?;
+            // The spelling must be exactly the one replace_snapshot overlays.
+            prepared.check_input(&identity, &name, &physical_path)?;
+        }
+        let mut file = match owner.open_regular(&name) {
+            Ok(file) => file,
+            Err(2i64) if expected.0.is_none() => continue,
+            Err(errno) => return Err(format!("{} E_EDIT_IO open regular source dependency: errno {errno}", semantic::quote(&physical_path))),
+        };
+        let bytes = match &expected.0 {
+            Some(bytes) => bytes,
+            None => return Err(stale),
+        };
+        // Compare only the captured length plus one EOF byte. A changed file
+        // cannot demand an unbounded allocation during publication validation.
+        let mut at = 0usize;
+        let mut buffer = [0u8; 8192];
+        while at < bytes.len() {
+            let remaining = bytes.len() - at;
+            let size = if remaining < buffer.len() { remaining } else { buffer.len() };
+            let count = file.read(&mut buffer[..size])
+                .map_err(|errno: i64| -> String { format!("{} E_EDIT_IO read source dependency: errno {errno}", semantic::quote(&physical_path)) })?;
+            if count == 0usize || buffer[..count] != bytes[at..at + count] { return Err(stale); }
+            at += count;
+        }
+        let mut extra = [0u8; 1];
+        if file.read(&mut extra)
+            .map_err(|errno: i64| -> String { format!("{} E_EDIT_IO read source dependency boundary: errno {errno}", semantic::quote(&physical_path)) })? != 0usize {
+            return Err(stale);
         }
     }
     Ok(())
@@ -201,8 +239,9 @@ fn replay_target(world: &mut World, request: &Request, options: &Options,
     desired_memo.private_source_digest = before.private_source_digest;
     let desired = super::compile(world, &desired_options, stats, &mut desired_memo)?;
     let desired_catalog = desired_memo.catalog.take().ok_or("E_REPLAY_SOURCE desired tree requires source, not raw IR")?;
-    let operations = crate::structure_replay::request(old_catalog, &before.source_inputs,
-        &desired_catalog, &desired_memo.source_inputs)?;
+    let scope = options.source_directory.as_ref().map_or(".", |value| value.as_str());
+    let operations = crate::structure_replay::request_with_scope(old_catalog, &before.source_inputs,
+        &desired_catalog, &desired_memo.source_inputs, scope)?;
     let identity = meaning::identity(desired.original().checked());
     finish(&mut desired_memo);
     *desired_read = Some(desired_memo);
@@ -260,6 +299,7 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
         operations = target.0; desired_identity = target.1;
     }
     let mut draft = structure_edit::plan(&old_catalog, &before.source_inputs, &operations)?;
+    prepare_projections(world, &active_options, &mut before, &old_catalog, &mut draft)?;
     if changes_library(&active_options, &before, &draft) {
         // Reuse the same pinned positive/negative read sets and writer lock.
         // All sides of the transaction now admit every library definition.
@@ -273,7 +313,12 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
             operations = target.0; desired_identity = target.1;
         }
         draft = structure_edit::plan(&old_catalog, &before.source_inputs, &operations)?;
+        prepare_projections(world, &active_options, &mut before, &old_catalog, &mut draft)?;
     }
+    let mut prepared = match writer.as_mut() {
+        Some(writer) => writer.prepare(&draft)?,
+        None => structure_write::prepare(world, scope, &draft)?,
+    };
     let original_identity = meaning::identity(old.original().checked());
     if !preserving.is_empty() && preserving.len() != operations.operations.len() {
         let preserving_request = structure_edit::Request { snapshot: operations.snapshot.clone(), operations: preserving.clone() };
@@ -300,6 +345,7 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
         .map_err(|problem| -> String { format!("transaction E_EDIT_CHECK identities={} {problem}",
             semantic::quote(&joined(&draft.identities))) })?;
     let new_catalog = after.catalog.take().ok_or("E_EDIT_SOURCE candidate source catalog is missing")?;
+    verify_projections(scope, &old_catalog, &new_catalog, &draft)?;
     let candidate_identity = meaning::identity(new.original().checked());
     if !preserving.is_empty() && preserving.len() == operations.operations.len()
         && original_identity != candidate_identity {
@@ -309,8 +355,9 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
         return Err(format!("transaction E_REPLAY_MEANING desired={} candidate={}; no source was published",
             desired_identity, candidate_identity));
     }
-    unchanged_inputs(world, &before, &after)?;
-    if let Some(desired_memo) = &desired_read { unchanged_inputs(world, desired_memo, desired_memo)?; }
+    prepared.verify(&draft)?;
+    unchanged_inputs(world, &before, &after, Some(&prepared))?;
+    if let Some(desired_memo) = &desired_read { unchanged_inputs(world, desired_memo, desired_memo, None)?; }
     let mut report = structure_edit::report(&draft);
     report.push_str(&source_delta(&old_catalog, &new_catalog));
     report.push_str(&authority_delta(old.original().checked(), &old_catalog, new.original().checked(), &new_catalog));
@@ -330,7 +377,7 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
     if let Some(writer) = writer.as_mut() {
         // The independent checker has admitted this entire candidate. The journal
         // carries only its text projection and grants no reusable checker proof.
-        writer.publish(&draft)?;
+        writer.publish_prepared(&draft, &mut prepared)?;
     }
     finish(&mut after);
     world.stdout().write(report.as_bytes());
@@ -377,4 +424,143 @@ pub(crate) mod consistency {
         }
         Ok(())
     }
+}
+
+fn missing_source(world: &mut World, root: &str, path: &str) -> Result<bool, String> {
+    let mut directory = world.directory(root)
+        .map_err(|errno: i64| -> String { format!("E_EDIT_IO open {root}: errno {errno}") })?;
+    let (parent, name) = super::location(path);
+    let mut owner = match directory.open_directory(&parent) {
+        Ok(owner) => owner,
+        // This is a negative dependency observation, not permission to create
+        // a leaf. Prepared separately requires every changed parent to exist.
+        Err(2i64) | Err(20i64) => return Ok(true),
+        Err(errno) => return Err(format!("E_EDIT_IO open dependency parent {parent}: errno {errno}")),
+    };
+    match owner.open_regular(&name) {
+        Ok(file) => { drop(file); Ok(false) },
+        Err(2i64) => Ok(true),
+        Err(errno) => Err(format!("{} E_EDIT_IO inspect source dependency: errno {errno}", semantic::quote(&physical(root, path)))),
+    }
+}
+
+fn projection_paths(catalog: &semantic::Catalog, projection: &structure_edit::Projection) -> Result<(String, String, String), String> {
+    let mut selected: Option<usize> = None;
+    let mut width = 0usize;
+    for (index, source) in catalog.module_sources.iter().enumerate() {
+        let prefix = format!("{}::", source.identity);
+        let matches = if source.identity == "crate" {
+            projection.parent != "std" && !projection.parent.starts_with("std::")
+        } else {
+            projection.parent == source.identity || projection.parent.starts_with(&prefix)
+        };
+        let score = if source.identity == "crate" { 0usize } else { source.identity.len() + 1usize };
+        if matches && (selected.is_none() || score > width) { selected = Some(index); width = score; }
+    }
+    let index = selected.ok_or_else(|| structure_edit::error(&projection.identity, "PROJECTION", "parent has no loaded module provenance"))?;
+    let source = &catalog.module_sources[index];
+    let (parent, leaf) = super::location(&source.file);
+    let mut directory = if source.identity == "crate" || source.identity == "std" || leaf == "mod.lkj" {
+        parent
+    } else if source.file.ends_with(".lkj") {
+        source.file[..source.file.len() - 4usize].to_string()
+    } else { return Err(structure_edit::error(&projection.identity, "PROJECTION", "loaded module is not an .lkj source")); };
+    let suffix = if projection.parent == source.identity {
+        ""
+    } else if source.identity == "crate" {
+        projection.parent.as_str()
+    } else {
+        &projection.parent[source.identity.len() + 2usize..]
+    };
+    if !suffix.is_empty() {
+        for part in suffix.split("::") { directory = physical(&directory, part); }
+    }
+    let name = match projection.identity.rfind("::") {
+        Some(at) => &projection.identity[at + 2usize..],
+        None => projection.identity.as_str(),
+    };
+    let direct = physical(&directory, &format!("{name}.lkj"));
+    let nested = physical(&directory, &format!("{name}/mod.lkj"));
+    Ok((source.file.clone(), direct, nested))
+}
+
+fn relative_input(root: &str, file: &str) -> Result<String, String> {
+    let root = normal(root);
+    let file = normal(file);
+    if root == "." && !file.starts_with('/') { return Ok(file); }
+    if root == "/" && file.starts_with('/') { return Ok(file[1usize..].to_string()); }
+    let prefix = format!("{root}/");
+    if file.starts_with(&prefix) { return Ok(file[prefix.len()..].to_string()); }
+    Err(structure_edit::error(&file, "ROOT", "projection is outside its parent's captured source directory"))
+}
+
+fn prepare_projections(world: &mut World, options: &Options, before: &mut Memo,
+    catalog: &semantic::Catalog, draft: &mut structure_edit::Draft) -> Result<(), String> {
+    let scope = options.source_directory.as_ref().map_or(".", |value| value.as_str());
+    for projection in &draft.projections {
+        let file = physical(scope, &projection.path);
+        let (parent_file, direct, nested) = projection_paths(catalog, projection)?;
+        if file != normal(&direct) && file != normal(&nested) {
+            return Err(structure_edit::error(&projection.identity, "PROJECTION",
+                "path is neither loader candidate for this module declaration"));
+        }
+        if before.embedded_sources.contains(&normal(&parent_file)) {
+            return Err(structure_edit::error(&projection.identity, "EMBEDDED",
+                "module parent is embedded; supply an explicit editable --library-dir"));
+        }
+        for change in &draft.changes {
+            if normal(&change.file) == file {
+                return Err(structure_edit::error(&projection.identity, "OVERLAP", "projection also has another file change"));
+            }
+        }
+        let mut roots: BTreeSet<String> = BTreeSet::new();
+        for ((root, path), _) in &before.input_snapshot {
+            if physical(root, path) == normal(&parent_file) { roots.insert(root.clone()); }
+        }
+        if roots.is_empty() {
+            return Err(structure_edit::error(&projection.identity, "PROJECTION", "loaded parent has no physical source read"));
+        }
+        // Both candidates are negative inputs. Candidate loading consumes this
+        // same pinned set, and unchanged_inputs rechecks it before publication.
+        for root in roots {
+            let candidates: Vec<String> = vec![direct.clone(), nested.clone()];
+            for candidate in candidates {
+                let path = relative_input(&root, &candidate)?;
+                let key = (root.clone(), path.clone());
+                if let Some((bytes, _)) = before.input_snapshot.get(&key) {
+                    if bytes.is_some() {
+                        return Err(structure_edit::error(&projection.identity, "EXISTS", "a module candidate was already present in the source snapshot"));
+                    }
+                }
+                if !missing_source(world, &root, &path)? {
+                    return Err(structure_edit::error(&projection.identity, "EXISTS", "a module candidate is already occupied"));
+                }
+                before.input_snapshot.insert(key, (None, None));
+            }
+        }
+        draft.changes.push(structure_edit::Change { file,
+            before: structure_edit::PreviousText::Absent, after: projection.source.clone() });
+    }
+    Ok(())
+}
+
+fn verify_projections(scope: &str, before: &semantic::Catalog, after: &semantic::Catalog,
+    draft: &structure_edit::Draft) -> Result<(), String> {
+    for projection in &draft.projections {
+        let file = physical(scope, &projection.path);
+        let (_, direct, nested) = projection_paths(before, projection)?;
+        let alternate = if file == normal(&direct) { normal(&nested) } else { normal(&direct) };
+        let mut count = 0usize;
+        for source in &after.module_sources {
+            if source.identity == projection.identity && source.parent == projection.parent
+                && normal(&source.file) == file && normal(&source.alternate) == alternate {
+                count += 1usize;
+            }
+        }
+        if count != 1usize {
+            return Err(structure_edit::error(&projection.identity, "PROJECTION",
+                "checked candidate did not select this projection as exactly this module's source"));
+        }
+    }
+    Ok(())
 }
