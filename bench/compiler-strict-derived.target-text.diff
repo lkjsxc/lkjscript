@@ -1,0 +1,31 @@
+--- desired/src/ast.lkj
++++ published/src/ast.lkj
+@@ -445,7 +445,6 @@
+ }
+ 
+ 
+-/// Actual loader-selected source for a module or crate root; includes are not modules.
+ #[derive(Clone)]
+ pub struct LoadedModule {
+     pub scope: ModuleId,
+--- desired/src/semantic.lkj
++++ published/src/semantic.lkj
+@@ -37,7 +37,6 @@
+     pub end: usize,
+ }
+ 
+-/// Source-loader provenance, never inferred from arbitrary positive file reads.
+ #[derive(Clone)]
+ pub struct ModuleSource {
+     pub identity: String,
+--- desired/src/structure_edit.lkj
++++ published/src/structure_edit.lkj
+@@ -39,8 +39,6 @@
+     pub after: Vec<u8>,
+ }
+ 
+-/// A proposed external-module projection. Only the driver may bind its path
+-/// to an absent source change after pinning loader and directory evidence.
+ #[derive(Clone)]
+ pub struct Projection {
+     pub identity: String,

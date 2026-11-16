@@ -1,0 +1,2 @@
+ordinal	revision	parent	status	exit_code	operations	stdout_lines	wall_s	user_s	sys_s	peak_kib	load_before	load_after	reason	library_environment	source_root
+3	0a410badb7e96ed9f6cf185df7d1f781d71c5fdb	579cf55e88177b9c9a4c59e2ff6c1bf7829e2878	passed	0	25	99	67.18	64.94	0.58	1258692	1.39,1.77,2.03	2.12,1.94,2.07	desired-checked-meaning-and-full-language-scope	historical-roots	src/main.lkj

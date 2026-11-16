@@ -1,0 +1,5 @@
+verified new_planned=1 new_launched=1 new_passed=1 new_operations=25 prior_strict_inside_named_window=29 conditional_union=30
+new_required_file_facts=5 exact_historical_before=5 exact_target_text=2 target_text_differs=3 missing_result_rows=0
+claim=complete-changed-language-coverage-plus-selected-root-canonical-checked-meaning
+not_claimed=serialized-IR-byte-identity,non-language-Git-effects,unmeasured-cases
+reason desired-checked-meaning-and-full-language-scope 1
