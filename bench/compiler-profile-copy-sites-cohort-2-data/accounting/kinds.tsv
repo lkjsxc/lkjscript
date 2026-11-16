@@ -1,0 +1,17 @@
+kind	name_json	samples	intervals
+0	"unknown"	0	0
+1	"inline copy"	1503	68092
+2	"checks"	258	81171
+3	"call instruction"	112	72623
+4	"frame load/store"	1033	424234
+5	"other memory"	1954	365699
+6	"arithmetic / comparison / conversion"	1965	465039
+7	"branch"	463	259283
+8	"allocator"	1710	2
+9	"runtime"	451	4
+10	"register-to-register move"	1909	516873
+11	"address formation (LEA)"	1299	438057
+12	"immediate constant"	980	339843
+13	"argument setup / result capture"	152	38323
+14	"prologue / epilogue"	691	12835
+15	"return"	178	24374

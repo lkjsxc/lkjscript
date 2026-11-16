@@ -1,0 +1,133 @@
+{
+   "complete" : true,
+   "counters" : {
+      "completed_T" : "14658",
+      "copy_kind_K" : "1503",
+      "detail_D" : "1503",
+      "detail_minus_copy_in_flight" : "0",
+      "function_self_total" : "14658",
+      "function_unattributed" : "0",
+      "in_flight_policy" : "no bucket or row was decremented; the possible detail-leading sample is not located",
+      "mapped" : "1503",
+      "overlapping_inclusive_sum_not_total" : "263750",
+      "serial_S" : "14658",
+      "serial_minus_completed" : "0",
+      "unmapped" : "0"
+   },
+   "coverage" : {
+      "bucket_sample_denominator" : "D (mapped plus unmapped), which can be K+1 for one interrupted handler",
+      "buckets" : "all raw copy rows, exact widths and origin/roles/flags, including zero-count sites; unmapped kept separate",
+      "function_map" : "all selected slots, with explicit unemitted sentinel",
+      "function_marginals" : "all symbol rows including zero counters; inclusive rows overlap",
+      "kind_marginals" : "all 16, including unknown",
+      "retained_input_semantics" : "hashes bind bytes read; no freshness or kernel-sealing claim",
+      "semantic_eligibility" : "not assessed; no SROA, escape, ownership, traffic, removable-time or causal claims"
+   },
+   "format" : "LKJPROF4",
+   "inputs" : {
+      "companion" : {
+         "bytes" : "57649044",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-copy-sites-run.20261116-2/selected-native.lkjir",
+         "sha256" : "32c0f43dbde125e43f2ca5a0c6d8548ba0f1774ce3b51bc62d94a6488af0fdca"
+      },
+      "detail" : {
+         "bytes" : "53808",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-copy-sites-evidence.20261116-2/06-copy-detail/stdout",
+         "sha256" : "06093752531ea752f7081548166f33cc95c71aad381e72d2713e35f5bcaab25d"
+      },
+      "helper" : {
+         "bytes" : "31550",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-copy-sites-run.20261116-2/accounting.pl",
+         "sha256" : "0f938e92e961d94581f4424804f798c67cb168269af3de0734f4e7703d8fcb57"
+      },
+      "profile" : {
+         "bytes" : "55464197",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-copy-sites-run.20261116-2/producer-profile64.samples.00000000000002892325",
+         "sha256" : "7849d4dd69906491d07664f493eb0f4fd8340cfde3760f6e4f168dbbde95f302"
+      },
+      "summary" : {
+         "bytes" : "1363",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-copy-sites-evidence.20261116-2/05-summary/stdout",
+         "sha256" : "868fcefd7af95d0995f9873aed3f0f64d14e9a5477d3b6634237a369428154bf"
+      }
+   },
+   "integers" : "all observed integer values are exact decimal strings",
+   "official" : {
+      "command_success_and_capture_completeness" : "separate launcher records; stdout alone is not an execution attestation",
+      "continuation" : "4:7849d4dd69906491d07664f493eb0f4fd8340cfde3760f6e4f168dbbde95f302:32c0f43dbde125e43f2ca5a0c6d8548ba0f1774ce3b51bc62d94a6488af0fdca:200",
+      "detail_accounting_matches" : true,
+      "detail_claim" : "checked-ir",
+      "detail_exact_first_page_prefix_matches" : true,
+      "detail_limit" : "200",
+      "detail_max_bytes" : "1048576",
+      "detail_profile_and_companion_digests_match" : true,
+      "detail_rows" : "200",
+      "summary_integer_marginals_match" : true,
+      "summary_percentages" : "syntax/range checked; displayed f64 truncations are not accounting inputs",
+      "type_names_and_operand_layouts" : "checked only by the recorded official detail command; not rechecked by this helper"
+   },
+   "outputs" : {
+      "function-map.tsv" : {
+         "bytes" : "273718",
+         "sha256" : "611d9f8410331236b89d6ed60984182517f80e95f4bec3da3ceb8df887fbe3fc"
+      },
+      "functions.tsv" : {
+         "bytes" : "592384",
+         "sha256" : "d18f243f1bfcdb1e48e1fd75adcdc2a6218c4a34e5d5b9fa988319984917d333"
+      },
+      "kinds.tsv" : {
+         "bytes" : "527",
+         "sha256" : "3deff6be9399a187c6e18a8268131d1af906def1b5d64cb9a2b2b70079878121"
+      },
+      "roles.tsv" : {
+         "bytes" : "765",
+         "sha256" : "f1cd0fb4aa03624a9f5da77c58067de87ba5f9f0354e41bf8825330cc66febe4"
+      },
+      "width-roles.tsv" : {
+         "bytes" : "14134",
+         "sha256" : "0cb596a91ce9cb9e577ff71ab5f1cbe3f42ff4c1b84dbe4b1bf2dd6ff103313e"
+      },
+      "widths.tsv" : {
+         "bytes" : "872",
+         "sha256" : "59624f7924fb93bd0fcb9e95f3b87a44fea26daf3fb4c71c0dee89c876335eaa"
+      }
+   },
+   "perl" : {
+      "bigint_version" : "1.999837",
+      "iv_bytes" : "8",
+      "uv_bytes" : "8",
+      "version" : "5.38.2"
+   },
+   "schema" : "lkjscript-copy-site-accounting-1",
+   "tables" : {
+      "C" : "68092",
+      "F" : "10072",
+      "alignment_bytes" : "0",
+      "code_end" : "26788041",
+      "code_start" : "4198400",
+      "copy_bytes" : "4902624",
+      "copy_offset" : "50400421",
+      "copy_row_bytes" : "72",
+      "counters_bytes" : "128",
+      "counters_count" : "16",
+      "counters_offset" : "50400293",
+      "encoded_increment_over_otherwise_equal_v3" : "5063856",
+      "file_bytes" : "55464197",
+      "header_bytes" : "160",
+      "increment_is_a_format_calculation_not_an_observed_old_new_delta" : true,
+      "kind_bytes" : "49703232",
+      "kind_count" : "3106452",
+      "kind_offset" : "697061",
+      "kind_row_bytes" : "16",
+      "map_bytes" : "161152",
+      "map_offset" : "55303045",
+      "map_row_bytes" : "16",
+      "names_bytes" : "319749",
+      "names_offset" : "377312",
+      "nonzero_copy_sites" : "822",
+      "symbol_count" : "5893",
+      "symbol_row_bytes" : "64",
+      "symbols_bytes" : "377152",
+      "symbols_offset" : "160"
+   }
+}

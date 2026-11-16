@@ -1,0 +1,9 @@
+{
+   "all_archive_files_match" : true,
+   "archive_bytes" : 484524,
+   "archive_sha256" : "2e428b8a01bd00d8780c04c3ab22dbb1b6782b3091a591be63a9bb3f65813ac0",
+   "files" : 208,
+   "logical_bytes" : 2060223,
+   "schema" : "compiler-cohort-2-root-retention-1",
+   "source_manifest_sha256" : "7ae411e4d3c317db96e3728a57e2dae19d7079b1c470251ed65503bdf78b9d6d"
+}

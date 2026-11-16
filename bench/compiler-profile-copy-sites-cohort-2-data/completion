@@ -1,0 +1,6 @@
+supervisor_exit=0
+completed=true
+last_phase=preservation
+reason=success
+finished_utc=2026-11-16T14:08:10Z
+run=/home/coder/workspace/lkjscript/target/compiler-copy-sites-run.20261116-2

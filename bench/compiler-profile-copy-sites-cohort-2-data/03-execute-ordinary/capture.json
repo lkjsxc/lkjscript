@@ -1,0 +1,17 @@
+{
+   "capture" : "complete",
+   "end_ns" : "1794838053132696457",
+   "end_utc" : "2026-11-16T14:07:33Z",
+   "errors" : [],
+   "gnu_exit" : "0",
+   "load_after" : "2.51 2.73 2.73",
+   "load_before" : "2.83 2.80 2.76",
+   "outcome" : "ok",
+   "rss_kib" : "521892",
+   "start_ns" : "1794838037925159936",
+   "start_utc" : "2026-11-16T14:07:17Z",
+   "status" : "0",
+   "system_s" : "0.11",
+   "user_s" : "14.69",
+   "wall_s" : "15.20"
+}

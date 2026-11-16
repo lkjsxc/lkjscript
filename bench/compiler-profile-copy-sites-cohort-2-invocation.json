@@ -1,0 +1,85 @@
+{
+  "schema": "compiler-copy-sites-invocation-1",
+  "request_id": "compiler-copy-sites-fixed-witness-20261116-cohort2-once",
+  "command": "bash bench/compiler-profile-copy-sites.sh run bench/compiler-profile-copy-sites-release-20261116-2.json",
+  "cwd": "/home/coder/workspace/lkjscript",
+  "release_commit": "88789cac357a455f8e752e6d820f59ce3cc38fb7",
+  "initial": {
+    "cancelled": false,
+    "capture_status": "capturing",
+    "duration_ms": 1011,
+    "exit_code": null,
+    "finished": false,
+    "generation": "pipe-eekigilbclgieeclkelncoidhimggajj",
+    "request_id": "compiler-copy-sites-fixed-witness-20261116-cohort2-once",
+    "session_id": "pipe-eekigilbclgieeclkelncoidhimggajj",
+    "signal": null,
+    "status": "done",
+    "stderr": "",
+    "stderr_capture_truncated": false,
+    "stderr_ref": {
+      "available": true,
+      "end_offset": 0,
+      "offset": 0,
+      "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-eekigilbclgieeclkelncoidhimggajj.stderr",
+      "total_bytes": 0
+    },
+    "stderr_truncated": false,
+    "stdout": "",
+    "stdout_capture_truncated": false,
+    "stdout_ref": {
+      "available": true,
+      "end_offset": 0,
+      "offset": 0,
+      "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-eekigilbclgieeclkelncoidhimggajj.stdout",
+      "total_bytes": 0
+    },
+    "stdout_truncated": false,
+    "stream_mode": "pipes",
+    "timed_out": false,
+    "tool": "exec_command",
+    "truncated": false,
+    "workdir": "/home/coder/workspace/lkjscript"
+  },
+  "final_wait": {
+    "cancelled": false,
+    "capture_status": "complete",
+    "duration_ms": 105417,
+    "exit_code": 0,
+    "finished": true,
+    "generation": "pipe-eekigilbclgieeclkelncoidhimggajj",
+    "request_id": "compiler-v1271-complete-cohort-two",
+    "signal": null,
+    "status": "done",
+    "stderr": "",
+    "stderr_capture_truncated": false,
+    "stderr_ref": {
+      "available": true,
+      "end_offset": 0,
+      "offset": 0,
+      "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-eekigilbclgieeclkelncoidhimggajj.stderr",
+      "total_bytes": 0
+    },
+    "stderr_truncated": false,
+    "stdout": "completed=true status=0 phase=preservation evidence=/home/coder/workspace/lkjscript/target/compiler-copy-sites-evidence.20261116-2\n",
+    "stdout_capture_truncated": false,
+    "stdout_ref": {
+      "available": true,
+      "end_offset": 694,
+      "offset": 694,
+      "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-eekigilbclgieeclkelncoidhimggajj.stdout",
+      "total_bytes": 694
+    },
+    "stdout_truncated": false,
+    "stream_mode": "pipes",
+    "timed_out": false,
+    "tool": "wait_for_exit",
+    "truncated": false,
+    "workdir": "/home/coder/workspace/lkjscript"
+  },
+  "complete_stdout": {
+    "sha256": "361d5340aab64717d7f9e75ba0af326ecf2addba9e2b7d90cadfd08c8a79a8fb",
+    "bytes": 694,
+    "text": "phase=01-construct-ordinary status=0 capture=0 load=3.11 2.81 2.76 -> 3.31 2.88 2.78\nphase=02-construct-profile status=0 capture=0 load=3.31 2.88 2.78 -> 2.83 2.80 2.76\nphase=03-execute-ordinary status=0 capture=0 load=2.83 2.80 2.76 -> 2.51 2.73 2.73\nphase=04-execute-profile status=0 capture=0 load=2.51 2.73 2.73 -> 2.25 2.66 2.71\nphase=05-summary status=0 capture=0 load=2.25 2.66 2.71 -> 2.25 2.66 2.71\nphase=06-copy-detail status=0 capture=0 load=2.25 2.66 2.71 -> 2.74 2.74 2.74\nphase=07-accounting status=0 capture=0 load=2.74 2.74 2.74 -> 2.60 2.71 2.73\ncompleted=true status=0 phase=preservation evidence=/home/coder/workspace/lkjscript/target/compiler-copy-sites-evidence.20261116-2\n"
+  }
+}
