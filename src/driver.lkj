@@ -1726,6 +1726,15 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
             };
             memo.catalog = Some(catalog);
             memo.remember(options, "semantic", snapshot.identity.as_bytes());
+            // The memo writes can evict the current producer generation. The
+            // already verified pages survive our writes only if its root does.
+            let store = memo.store.as_mut().ok_or("E_QUERY_STORE index needs an authenticated store")?;
+            let root_page = vec![snapshot.root.clone()];
+            if !store.query_pages_retained(&root_page) || store.get("semantic-root", &snapshot.identity).is_none()
+                || !store.query_locator_retained(&snapshot.identity, &selector, &snapshot.root) {
+                store.invalidate_query_snapshot(&snapshot.identity, &selector);
+                return Err("E_QUERY_STORE index was evicted during memo publication; increase --store-bytes".to_string());
+            }
             world.stdout().write(format!("LKJSCRIPT_SNAPSHOT {} source={} checked-ir={}\n", snapshot.identity, snapshot.source, snapshot.checked_ir).as_bytes());
             stats.mark("semantic_index")?;
         }
