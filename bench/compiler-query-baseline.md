@@ -35,7 +35,7 @@ Source outlines, signatures, and item text are labelled `source-claim`; authorit
 | `outline native::PreparedImage` | 78 | 785 | 2 | 248.241 | 246.718 | 1.505 | 7.53 → 7.53 |
 | `authority authority::analyze` | 1980 | 611 | 1 | 267.014 | 265.956 | 1.040 | 7.53 → 7.53 |
 
-The 100 ms whole-command target is **not met**. These commands took 248–282 ms. The authenticated page traversal took 0.89–9.39 ms; hashing the exact executing producer took 246.7–280.5 ms. Removing or memoizing that identity check across unauthenticated process starts would weaken the existing trust rule, so this implementation retains it. The native hash/code-generation work is being measured separately.
+The 100 ms whole-command target is **not met**. These commands took 248–282 ms. The authenticated page traversal took 0.89–9.39 ms; the producer-setup phase, including hashing the exact executing executable, took 246.7–280.5 ms. That phase brackets all of `Memo::new`, including key/store setup, so it does not isolate hash time. Removing or memoizing that identity check across unauthenticated process starts would weaken the existing trust rule, so this implementation retains it. The native hash/code-generation work is being measured separately.
 
 ## Shared retrieval evidence and whole-file bounds
 

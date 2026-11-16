@@ -49,7 +49,7 @@ bound. Each measured command gets a 2 GiB external address-space limit and
 hashing. No file-cache reset is claimed.
 
 [The forty-row TSV](compiler-query-final.tsv) preserves external wall time,
-compiler total, producer hashing, index lookup, user/kernel CPU, RSS, both load
+compiler total, producer setup, index lookup, user/kernel CPU, RSS, both load
 observations, facts, bytes and continuation status. The table below retains the
 same twenty pairs; all three load averages happened to remain the same across
 each pair. The TSV remains authoritative if displayed precision differs.
@@ -76,6 +76,8 @@ Within the cold row, source read was 12.633 ms, parse 1,022.712 ms, resolve
 7,788.638 ms, catalog construction 16,673.274 ms and index publication
 88,293.382 ms. Producer authentication was 171.606 ms. These phases share the
 cold row's paired load observation; they are not separate repeat measurements.
+The `producer_hash` phase brackets all of `Memo::new`, including private-key and
+store setup as well as executable hashing; its duration does not isolate hashing.
 Index construction and publication therefore remain material cold-build costs.
 
 ## Twenty bounded pairs
@@ -109,10 +111,10 @@ The two 96-fact continuations are `driver::execute_source` and
 `source::load_report`. Their first pages obey the byte bound but are incomplete
 slices; an agent must use the stated cursor or narrow its question.
 
-External wall time ranges from 179.356 to 1,404.952 ms. Exact producer hashing
-alone ranges from 173.953 to 308.307 ms across these forty commands. The
+External wall time ranges from 179.356 to 1,404.952 ms. Producer setup, including
+exact executable hashing, ranges from 173.953 to 308.307 ms across these forty commands. The
 `ir::ReturnSource` slice has 1,206.076 ms in the recorded index phase, 196.606 ms
-in producer hashing and 0.18 s of user CPU. The timing mechanism records elapsed
+in producer setup and 0.18 s of user CPU. The timing mechanism records elapsed
 time in that phase. The cause of this outlier was not established; neither an
 I/O explanation nor a scheduler explanation is claimed. It is included in the
 range and in the failure of the latency target.
