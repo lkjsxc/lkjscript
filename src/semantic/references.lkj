@@ -427,3 +427,23 @@ pub(super) fn untyped_local(program: &a::Program, bindings: &BTreeMap<(String, S
     }
     None
 }
+
+pub(super) fn self_constructor(result: &mut Catalog, files: &[SourceText], program: &a::Program,
+    function: usize, owner: &str, node: &a::ExprNode) -> Option<(String, String)> {
+    // Self is bound by the resolved method owner, never by enclosing text.
+    let a::FunctionOwner::Implementation(implementation) = program.function_owner(a::FunctionId { index: function }) else { return None; };
+    let a::Type::Path(receiver) = &program.types[program.impls[implementation.index].target].kind else { return None; };
+    let declaration = receiver.declaration?;
+    if !matches!(program.declarations[declaration].item, a::Item::Struct(_)) { return None; }
+    let target = declaration_identity(program, declaration, &result.function_ids)?;
+    let span = path_token(&files[node.span.file], node.span).and_then(|index| {
+        let token = &files[node.span.file].tokens[index];
+        if token.text == "Self" { Some(a::Span { file: node.span.file, ..token.span }) } else { None }
+    });
+    match span {
+        Some(span) => record_site(result, files, owner.to_string(), target.clone(), span, "alias-constructor", true),
+        None => record_site(result, files, owner.to_string(), target.clone(),
+            a::Span { end: node.span.start, ..node.span }, "implicit-source", false),
+    }
+    Some((target, type_name(program, program.impls[implementation.index].target)))
+}

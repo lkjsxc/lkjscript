@@ -368,4 +368,54 @@ REQUEST
 "$compiler" edit main.lkj --source-dir "$fixture/library-rename" --library-dir "$PWD/library" --no-store --store-key "$fixture/key" --dry-run --request "$fixture/library-rename.json" > "$fixture/library-rename.out" 2> "$fixture/library-rename.err" || { cat "$fixture/library-rename.err" >&2; fail 'real-library free-function rename'; }
 grep -Eq 'mode=dry-run' "$fixture/library-rename.out" || fail 'missing checked real-library rename plan'
 
+# Self record constructors follow the resolved implementation owner and keep
+# their spelling under rename; generic target arguments remain in type claims.
+mkdir "$fixture/self-source" "$fixture/self-store"
+cat > "$fixture/self-source/main.lkj" <<'SOURCE'
+mod types { pub struct Item { pub value: i64 } impl Item { pub fn new() -> Self { Self { value: 21i64 } } } }
+mod generic { pub struct Record<T> { pub value: T } impl<T> Record<T> { pub fn new(value: T) -> Self { Self { value } } } }
+use types::Item as Alias;
+fn main() -> i64 { (types::Item { value: 21i64 }).value + (Alias { value: 21i64 }).value + (generic::Record { value: 5i64 }).value }
+SOURCE
+self_common=(main.lkj --source-dir "$fixture/self-source" --no-library --store "$fixture/self-store" --store-key "$fixture/key")
+"$compiler" build "${self_common[@]}" --index -o "$fixture/self-image" > "$fixture/self-build.log" 2>&1 || { cat "$fixture/self-build.log" >&2; fail 'Self record index'; }
+self_snapshot=$(sed -n 's/^LKJSCRIPT_SNAPSHOT \([0-9a-f]*\) .*/\1/p' "$fixture/self-build.log")
+self_query() { "$compiler" query "${self_common[@]}" --snapshot "$self_snapshot" --kind "$1" --id "$2" --limit 80; }
+self_query references types::Item::new > "$fixture/self-references"
+grep -Eq '^"types::Item".*kind=alias-constructor$' "$fixture/self-references" || fail 'Self nominal constructor identity missing'
+grep -Eq '^"types::Item::field:value".*kind=constructor-field$' "$fixture/self-references" || fail 'Self field identity missing'
+read -r self_start self_end <<< "$(sed -n 's/^"types::Item".*start=\([0-9]*\) end=\([0-9]*\) kind=alias-constructor$/\1 \2/p' "$fixture/self-references")"
+[[ $(dd if="$fixture/self-source/main.lkj" bs=1 skip="$self_start" count="$((self_end - self_start))" status=none) == Self ]] || fail 'Self constructor span was not the exact token'
+self_query references 'generic::Record<T>::new' > "$fixture/self-generic"
+grep -Eq '^"generic::Record".*kind=alias-constructor$' "$fixture/self-generic" || fail 'generic Self nominal identity missing'
+printf '%s\n' '{"version":1,"operations":[{"op":"rename","id":"types::Item","name":"Renamed"}]}' > "$fixture/self-request"
+"$compiler" edit main.lkj --source-dir "$fixture/self-source" --no-library --no-store --store-key "$fixture/key" --request "$fixture/self-request" > "$fixture/self-plan" 2> "$fixture/self-error" || { cat "$fixture/self-error" >&2; fail 'Self nominal rename'; }
+grep -Fq 'Self { value: 21i64 }' "$fixture/self-source/main.lkj" || fail 'nominal rename changed Self spelling'
+test "$("$compiler" run "$fixture/self-source/main.lkj" --no-library --no-store)" = 47
+printf '%s\n' '{"version":1,"operations":[{"op":"add-field","id":"generic::Record","source":"pub tag: i64","value":"0i64"}]}' > "$fixture/self-request"
+"$compiler" edit main.lkj --source-dir "$fixture/self-source" --no-library --no-store --store-key "$fixture/key" --request "$fixture/self-request" > "$fixture/self-plan" 2> "$fixture/self-error" || { cat "$fixture/self-error" >&2; fail 'generic Self field propagation'; }
+test "$("$compiler" run "$fixture/self-source/main.lkj" --no-library --no-store)" = 47
+# Undemanded library bodies expose source claims without inventing the owner
+# of Self inside a nested free function or an abstract trait default.
+mkdir "$fixture/self-untyped" "$fixture/self-library" "$fixture/self-untyped-store"
+printf '%s\n' 'fn main() -> i64 { 0i64 }' > "$fixture/self-untyped/main.lkj"
+cat > "$fixture/self-library/lib.lkj" <<'SOURCE'
+pub struct Actual { pub value: i64 }
+impl Actual {
+    pub fn construct() -> Self { Self { value: 1i64 } }
+    pub fn outer() -> i64 { fn nested_self_constructor() -> i64 { let _ = Self { value: 2i64 }; 0i64 } 0i64 }
+}
+pub trait Abstract { fn make() -> Self { Self { value: 3i64 } } }
+SOURCE
+self_untyped_common=(main.lkj --source-dir "$fixture/self-untyped" --library-dir "$fixture/self-library" --store "$fixture/self-untyped-store" --store-key "$fixture/key")
+"$compiler" build "${self_untyped_common[@]}" --index -o "$fixture/self-untyped-image" > "$fixture/self-untyped-build.log" 2>&1 || { cat "$fixture/self-untyped-build.log" >&2; fail 'undemanded Self index'; }
+self_untyped_snapshot=$(sed -n 's/^LKJSCRIPT_SNAPSHOT \([0-9a-f]*\) .*/\1/p' "$fixture/self-untyped-build.log")
+for identity in std::nested_self_constructor std::Abstract::make; do
+    "$compiler" query "${self_untyped_common[@]}" --snapshot "$self_untyped_snapshot" --kind references --id "$identity" > "$fixture/self-unresolved"
+    grep -Eq 'kind=constructor claim=partial' "$fixture/self-unresolved" || fail "Self borrowed an unproved nominal owner: $identity"
+    if grep -Eq 'kind=alias-constructor' "$fixture/self-unresolved"; then fail "Self acquired an enclosing implementation: $identity"; fi
+done
+"$compiler" query "${self_untyped_common[@]}" --snapshot "$self_untyped_snapshot" --kind references --id std::Actual::construct > "$fixture/self-resolved"
+grep -Eq '^"std::Actual".*kind=alias-constructor$' "$fixture/self-resolved" || fail 'resolved owner missing from an undemanded inherent method'
+
 printf 'ok semantic-query: identities, source/IR levels, ordinary authority, all question kinds, bounded authenticated cursor, source-free lookup, physical move/formatting, explicit snapshot replay and five index attacks\n'

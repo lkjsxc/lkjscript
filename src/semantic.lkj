@@ -600,7 +600,13 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             let file = &files[node.span.file];
             let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) else { continue; };
             let key = (file.path.clone(), node.span.start, node.span.end);
-            let ty = evidence.as_ref().and_then(|evidence| evidence.expressions.get(&expression)).cloned();
+            let self_record = matches!(&node.kind, a::Expr::Struct { path, .. } if path.name == "Self");
+            let self_claim = if self_record {
+                source_functions.get(&owner).and_then(|function| self_constructor(
+                    &mut result, &files, program, *function, &owner, node))
+            } else { None };
+            let ty = evidence.as_ref().and_then(|evidence| evidence.expressions.get(&expression)).cloned()
+                .or_else(|| self_claim.as_ref().map(|claim| claim.1.clone()));
             if result.expression_types.contains_key(&key) {
                 let previous = result.expression_types.get_mut(&key).unwrap();
                 let agrees = match (&*previous, &ty) {
@@ -629,8 +635,14 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                         continue;
                     }
                     let resolved = resolver.value_path(node.scope, path, node.span).ok();
-                    let target = resolved.as_ref().and_then(|path| value_identity(program, path, &result.function_ids));
-                    if let Some(target) = &target {
+                    let target = if self_record { self_claim.as_ref().map(|claim| claim.0.clone()) }
+                        else { resolved.as_ref().and_then(|path| value_identity(program, path, &result.function_ids)) };
+                    if self_record {
+                        if target.is_none() {
+                            record_site(&mut result, &files, owner.clone(), "Self".to_string(),
+                                a::Span { end: node.span.start, ..node.span }, "constructor", false);
+                        }
+                    } else if let Some(target) = &target {
                         path_reference(&mut result, &files, owner.clone(), target.clone(), node.span,
                             if matches!(node.kind, a::Expr::Struct { .. }) { "constructor" } else { "value" },
                             &resolver, node.scope, matches!(node.kind, a::Expr::Struct { .. }));
