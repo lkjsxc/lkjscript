@@ -1,0 +1,1 @@
+/usr/bin/time -q -f elapsed_s=%e\nuser_s=%U\nsystem_s=%S\npeak_kib=%M -o cleanup.time bash bench/compiler-generated-source-cleanup.sh

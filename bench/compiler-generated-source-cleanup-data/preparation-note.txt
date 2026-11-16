@@ -1,0 +1,1 @@
+A functions.exec JavaScript template was rejected before any gateway command or file mutation; its Bash array expansions were then encoded literally. No cleanup attempt occurred at that preparation error.

@@ -1,0 +1,8 @@
+# Retrospective exact command transcription from gateway request
+# compiler-generated-source-cleanup-run-20261116-094.
+# Cwd: /home/coder/workspace/lkjscript-compiler-generated-source-20261116
+/usr/bin/time -q -f 'elapsed_s=%e\nuser_s=%U\nsystem_s=%S\npeak_kib=%M' \
+  -o bench/compiler-generated-source-cleanup-data/cleanup.time \
+  bash bench/compiler-generated-source-cleanup.sh \
+  > bench/compiler-generated-source-cleanup-data/stdout \
+  2> bench/compiler-generated-source-cleanup-data/stderr
