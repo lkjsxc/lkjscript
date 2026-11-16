@@ -161,13 +161,23 @@ and read-only audit helper are covered by
 `compiler-strict-recent.results.sha256`. The original preparation files and
 all previous history experiments remain unchanged.
 
-For independent review the complete fixture is still retained at:
+For independent review the complete fixture was retained at:
 
 ```text
 /home/coder/workspace/lkjscript-compiler-strict-recent-20261116/target/compiler-strict-recent.TAz4Df
 ```
 
-It contains only this campaign's copied producer, private key, store, and exact
-case archives. No compiler or audit job is active. Cleanup awaits root's evidence
-acceptance and uses the already reviewed guarded cleanup path. Textual evidence
-will remain after cleanup; no further execution is authorized by this report.
+Root accepted report SHA-256
+`f46d2f35f9034ba543b696e20cb85c585dad2e165c09f8d365d12deae3bfd268`
+and results-manifest SHA-256
+`6236d0320da8b9363131bb2920b5d1bf08a170d599459c67b76584f6fdd323e0`
+before cleanup. The reviewed guarded cleanup then removed only this fixture,
+including its copied producer, private key, store, and all case archives;
+absence was verified. The cleanup records preserve its actual result and
+before/after UTC and load observations.
+
+All original runtime rows, arguments, diagnostics, source-state digests, and
+proof/audit records remain unchanged. Their retained-fixture path is historical;
+the fixture no longer exists. No compiler or audit job is active. The full
+archive-state audit required the retained fixture and preceded its removal.
+No further execution is authorized by this report.
