@@ -433,6 +433,7 @@ enum Obligation {
 }
 struct Infer<'a, 'b> {
     source_function: usize,
+    capture_references: bool,
     capture_frames: Vec<closures::Frame>,
     callable_parameters: BTreeMap<String, (Vec<Variable>, Variable)>,
     projections: Vec<BTreeMap<(a::DeclarationId, String), Variable>>,
@@ -1129,7 +1130,9 @@ impl Infer<'_, '_> {
                 } else {
                     value
                 };
-                self.definition.semantic_bindings.push((pattern, value));
+                if self.capture_references {
+                    self.definition.semantic_bindings.push((pattern, value));
+                }
                 self.bindings.push_origin((name, value), super::semantic::LocalTarget::Pattern(pattern));
             }
             a::Pattern::Tuple(fields) => {
@@ -1421,7 +1424,9 @@ impl Infer<'_, '_> {
             a::Expr::Path(path) => {
                 self.capture_path(id, &path.name);
                 if let Some((entry, value)) = self.bindings.entry(&path.name) {
-                    self.definition.local_paths.push((id, self.bindings.origin_at(entry)));
+                    if self.capture_references {
+                        self.definition.local_paths.push((id, self.bindings.origin_at(entry)));
+                    }
                     value
                 } else {
                     match self.names.value_path(node.scope, &path, span) {
@@ -2438,10 +2443,12 @@ pub(super) fn infer(
     names: &crate::resolve::Resolver<'_>,
     implementations: &crate::generics::ImplementationIndex,
     index: usize,
+    capture_references: bool,
 ) -> Result<DefinitionTypes> {
     let function = source.functions[index].clone();
     let mut inference = Infer {
         source_function: index,
+        capture_references,
         capture_frames: Vec::new(),
         callable_parameters: BTreeMap::new(),
         projections: Vec::new(),
@@ -2538,4 +2545,131 @@ pub(super) fn infer(
             .map_err(|problem| context(problem, "function result type differs"))?;
     }
     inference.finish()
+}
+
+pub(super) fn assert_reference_capture_recording(
+    definition: &DefinitionTypes,
+    capture_references: bool,
+) {
+    if capture_references {
+        assert!(!definition.local_paths.is_empty());
+        assert!(!definition.semantic_bindings.is_empty());
+    } else {
+        assert!(definition.local_paths.is_empty());
+        assert!(definition.semantic_bindings.is_empty());
+    }
+}
+
+pub(super) fn assert_reference_capture_deferred(source: &a::Program, index: usize) {
+    let names = crate::resolve::Resolver::new(source).unwrap();
+    let implementations = crate::generics::ImplementationIndex::new(source).unwrap();
+    let pattern = source.patterns.iter()
+        .position(|node| matches!(node.kind, a::Pattern::Tuple(_))).unwrap();
+    let children = match &source.patterns[pattern].kind {
+        a::Pattern::Tuple(children) => children.clone(),
+        _ => panic!("reference capture fixture lost its tuple pattern"),
+    };
+    assert_eq!(children.len(), 2usize);
+    let expression = source.exprs.iter()
+        .position(|node| matches!(&node.kind, a::Expr::Path(path) if path.name == "left"))
+        .unwrap();
+    for capture_references in vec![false, true] {
+        let mut inference = Infer {
+            source_function: index,
+            capture_references,
+            capture_frames: Vec::new(),
+            callable_parameters: BTreeMap::new(),
+            projections: Vec::new(),
+            source,
+            names: &names,
+            implementations: &implementations,
+            definition: DefinitionTypes {
+                nodes: Vec::new(),
+                expressions: BTreeMap::new(),
+                bindings: BTreeMap::new(),
+                closures: BTreeMap::new(),
+                local_paths: Vec::new(),
+                semantic_bindings: Vec::new(),
+            },
+            bindings: semantic::SourceBindings::default(),
+            environment: BTreeMap::new(),
+            result: 0,
+            waiting: Vec::new(),
+            obligations: Vec::new(),
+            queue: Vec::new(),
+            fallback: Vec::new(),
+            queued: Vec::new(),
+            field_types: BTreeMap::new(),
+            variant_fields: BTreeMap::new(),
+            loops: Vec::new(),
+        };
+        let subject = inference.operation_type();
+        assert!(inference.pattern_pending(pattern, subject));
+        // This branch calls the production defer_pattern, including both lexical
+        // origins and the Pattern obligation, rather than fabricating its result.
+        inference.bind_pattern_mode(pattern, subject, None).unwrap();
+        assert_eq!(inference.bindings.len(), 2usize);
+        assert_eq!(inference.obligations.len(), 1usize);
+        let deferred_names = match inference.obligations[0].as_ref().unwrap() {
+            Obligation::Pattern { pattern: saved, subject: value, mode, names } => {
+                assert_eq!(*saved, pattern);
+                assert_eq!(*value, subject);
+                assert!(mode.is_none());
+                names.clone()
+            }
+            _ => panic!("pending tuple did not create a Pattern obligation"),
+        };
+        assert_eq!(deferred_names.len(), 2usize);
+        for child in &children {
+            let binding_name: String = match &source.patterns[*child].kind {
+                a::Pattern::Bind { name, .. } => name.clone(),
+                _ => panic!("reference capture fixture lost a tuple binding"),
+            };
+            let (entry, value) = inference.bindings.entry(&binding_name).unwrap();
+            assert!(matches!(inference.bindings.origin_at(entry),
+                super::semantic::LocalTarget::Pattern(found) if found == *child));
+            let mut found = false;
+            for saved in &deferred_names {
+                if saved.0 == binding_name && saved.1 == value { found = true; }
+            }
+            assert!(found);
+            assert_eq!(inference.definition.nodes[value].producers, 1usize);
+        }
+        assert_eq!(inference.definition.semantic_bindings.len(),
+            if capture_references { 2usize } else { 0usize });
+        assert!(inference.definition.local_paths.is_empty());
+        let value = inference.expr(expression).unwrap();
+        assert_eq!(value, inference.bindings.get("left").unwrap());
+        assert_eq!(inference.definition.expressions.len(), 1usize);
+        assert_eq!(inference.definition.local_paths.len(),
+            if capture_references { 1usize } else { 0usize });
+        inference.solve().unwrap();
+        assert!(inference.obligations[0].is_some());
+        assert!(inference.queue.is_empty());
+        assert!(inference.waiting[inference.definition.root(subject)].contains(&0usize));
+        let integer = inference.atom("i64");
+        let tuple = inference.shaped(Shape::Tuple(vec![integer, integer]));
+        inference.unify(subject, tuple, source.patterns[pattern].span).unwrap();
+        inference.finish_operation(subject);
+        inference.solve().unwrap();
+        assert!(inference.obligations[0].is_none());
+        assert!(inference.queue.is_empty());
+        assert_eq!(inference.bindings.len(), 2usize);
+        for child in &children {
+            let binding_name: String = match &source.patterns[*child].kind {
+                a::Pattern::Bind { name, .. } => name.clone(),
+                _ => panic!("reference capture fixture lost a tuple binding"),
+            };
+            let (entry, value) = inference.bindings.entry(&binding_name).unwrap();
+            assert!(matches!(inference.bindings.origin_at(entry),
+                super::semantic::LocalTarget::Pattern(found) if found == *child));
+            assert!(inference.shape(value) == Some(Shape::Atom("i64".to_string())));
+            assert_eq!(inference.definition.nodes[inference.definition.root(value)].producers, 0usize);
+        }
+        // The deferred placeholders and the resolved bindings are both recorded
+        // in full mode; neither recording may suppress origins or solving.
+        assert_eq!(inference.definition.semantic_bindings.len(),
+            if capture_references { 4usize } else { 0usize });
+        assert_reference_capture_recording(&inference.definition, capture_references);
+    }
 }

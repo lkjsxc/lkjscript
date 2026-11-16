@@ -1,0 +1,70 @@
+1f9db54c4e8845aacc8d98e525bdd95c16c4bd064ad6aa92663d74607b9cbd84  library/arena.lkj
+de444027870ae8382b3a137e625df00cc3b91774b3aa3280bfe25456b40c6e2d  library/buffer.lkj
+8448ec831069dcb9af7255684f7cab55941450774d7207df05441e21da76c140  library/bytes.lkj
+0730b33f79922f2ef3b4eefa4595a9599a1ee284d895b29c939c3f6799f3b77a  tests/semantics/values/vector_equality_uses_eq_even_when_an_element_ne_override_disagrees_0.lkjir
+778b691a954da7532068aed28062a3f82e0f09df0282a8cc471b599155a04a0c  tests/semantics/values/vector_helpers_have_source_library_identity_0.lkjir
+5fa176741677cd4ad7d4bdfdac0ff65917b129e9c8346dffa1de99b01b12b69d  tests/semantics/values/verification_types_and_functions_do_not_enter_a_generic_string_artifact_0.lkjir
+6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc  /home/coder/workspace/lkjscript/target/lkjscript
+e34cdb687a9e7195e686f38bf53a6f55c1b38f7f1769f60605ba36361b6119b7  target/compiler-reference-capture-semantics-4/source-before.sha256
+e34cdb687a9e7195e686f38bf53a6f55c1b38f7f1769f60605ba36361b6119b7  target/compiler-reference-capture-semantics-4/source-after.sha256
+180a4bf01f9f8b8b141604133ca790c46b91d9041f1d888f68e0c582beb2cc84  target/compiler-reference-capture-semantics-4/producer-before.sha256
+180a4bf01f9f8b8b141604133ca790c46b91d9041f1d888f68e0c582beb2cc84  target/compiler-reference-capture-semantics-4/producer-after.sha256
+    let mut errors = Vec::new();
+    let count = source_cases::run(shard, workers, &mut errors);
+    (count, errors)
+}
+pub fn core() -> usize {
+    let mut count = units::run();
+    count += diagnostic_contracts::run();
+    count += function_owners::run();
+    count += library_demand::run();
+    count += reference_capture::run();
+    count += source_contracts::run();
+    count += return_contracts::run();
+    count += array_repeat::run();
+    count += scalar_clone::run();
+    count += interpreter_contracts::run();
+    count += entry_grants::run();
+    count += allocator::run();
+    count += resolver::run();
+    count += reuse::run();
+    count += ir_binary_admission::run();
+    count += recheck::run();
+    crate::interpreter::assert_reference_reuse();
+    count += 1;
+    count
+}
+pub fn closed() -> (usize, Vec<String>) {
+    let (count, errors) = sources(0usize, 1usize);
+    (count + core(), errors)
+}
+pub fn live(world: &mut World, trace: bool) -> usize {
+    allocator::observe(world) + optimizer::run(world, trace) + panic_messages::run(world, trace)
+{
+   "after_sha256" : "35aede47461e4b7204ae257d17bdfcd3476dbfb0e8335893818b584a665b418b",
+   "before_sha256" : "692108bead831fa967a603d697ef62fb9a79065a50077e600f8050aeb9a79c09",
+   "changes" : [
+      {
+         "count" : 2,
+         "new" : "let binding_name: String = match &source.patterns[*child].kind {",
+         "old" : "let name = match &source.patterns[*child].kind {"
+      },
+      {
+         "count" : 2,
+         "new" : "let (entry, value) = inference.bindings.entry(&binding_name).unwrap();",
+         "old" : "let (entry, value) = inference.bindings.entry(&name).unwrap();"
+      },
+      {
+         "count" : 1,
+         "new" : "if saved.0 == binding_name && saved.1 == value { found = true; }",
+         "old" : "if saved.0 == name && saved.1 == value { found = true; }"
+      },
+      {
+         "count" : 1,
+         "new" : "assert!(inference.shape(value) == Some(Shape::Atom(\"i64\".to_string())));",
+         "old" : "assert!(matches!(inference.shape(value), Some(Shape::Atom(name)) if name == \"i64\"));"
+      }
+   ],
+   "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-desired-1/src/elaborate/definition_types.lkj",
+   "reason" : "Attempt 3 located an unsized str match result in the new helper; use explicit owned binding names and direct derived Shape equality. No production inference rule changes."
+}

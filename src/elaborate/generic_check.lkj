@@ -121,8 +121,9 @@ pub(super) struct DefinitionEvidence {
 pub(super) fn validate_report<'source>(
     source: &'source a::Program,
     definitions: BTreeMap<usize, super::definition_types::DefinitionTypes>,
+    capture_references: bool,
 ) -> Result<(Compiler<'source>, DefinitionEvidence, Vec<a::Diagnostic>)> {
-    let mut compiler = Compiler::new(source)?;
+    let mut compiler = Compiler::new_with_capture(source, capture_references)?;
     let (evidence, problems) = validate_selected(source, &mut compiler, definitions, true)?;
     Ok((compiler, evidence, problems))
 }

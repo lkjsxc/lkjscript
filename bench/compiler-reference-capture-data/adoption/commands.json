@@ -1,0 +1,128 @@
+[
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "ls-tree",
+         "-r",
+         "-z",
+         "--full-tree",
+         "0b0b27803d27b932a5b91cde2d766bd3c8bb82b9",
+         "--",
+         "src",
+         "library",
+         "tests"
+      ],
+      "exit" : 0,
+      "signal" : 0
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "cat-file",
+         "--batch"
+      ],
+      "exit" : 0,
+      "objects" : 1742
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "diff",
+         "--no-index",
+         "--no-ext-diff",
+         "--no-renames",
+         "--",
+         "/home/coder/workspace/lkjscript/target/compiler-reference-capture-desired-1/src/elaborate.lkj",
+         "/home/coder/workspace/lkjscript/src/elaborate.lkj"
+      ],
+      "exit" : 1,
+      "signal" : 0
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "diff",
+         "--no-index",
+         "--no-ext-diff",
+         "--no-renames",
+         "--",
+         "/home/coder/workspace/lkjscript/target/compiler-reference-capture-desired-1/src/elaborate/definition_types.lkj",
+         "/home/coder/workspace/lkjscript/src/elaborate/definition_types.lkj"
+      ],
+      "exit" : 1,
+      "signal" : 0
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "diff",
+         "--no-index",
+         "--no-ext-diff",
+         "--no-renames",
+         "--",
+         "/home/coder/workspace/lkjscript/target/compiler-reference-capture-desired-1/src/semantic_tests.lkj",
+         "/home/coder/workspace/lkjscript/src/semantic_tests.lkj"
+      ],
+      "exit" : 1,
+      "signal" : 0
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "diff",
+         "--no-ext-diff",
+         "--no-renames",
+         "--numstat",
+         "-z",
+         "0b0b27803d27b932a5b91cde2d766bd3c8bb82b9",
+         "--",
+         "*.lkj"
+      ],
+      "exit" : 0,
+      "signal" : 0
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "ls-files",
+         "--others",
+         "--exclude-standard",
+         "-z",
+         "--",
+         "*.lkj"
+      ],
+      "exit" : 0,
+      "signal" : 0
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "diff",
+         "--no-index",
+         "--no-ext-diff",
+         "--no-renames",
+         "--numstat",
+         "--",
+         "/dev/null",
+         "/home/coder/workspace/lkjscript/src/semantic_tests/reference_capture.lkj"
+      ],
+      "exit" : 1,
+      "signal" : 0
+   }
+]

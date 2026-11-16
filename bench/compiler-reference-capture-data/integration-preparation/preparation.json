@@ -1,0 +1,85 @@
+{
+  "schema": 1,
+  "status": "frozen preparation; semantic source operations not executed",
+  "author_scope": "Only this untracked integration-preparation directory; desired and tracked language files read-only.",
+  "baseline_commit": "0b0b27803d27b932a5b91cde2d766bd3c8bb82b9",
+  "desired_freeze_authorization": "Root release after canonical-emitter preliminary attempt4; full desired source hash manifest before/after identical.",
+  "reads": [
+    {
+      "request": "compiler-reference-capture-integration-inspect-1362",
+      "exit": 2,
+      "classification": "setup-only inspection error",
+      "reason": "Two prior scalar transaction directories were sought under main but reside in the known isolated scalar worktree; full diagnostics preserved."
+    },
+    {
+      "request": "compiler-reference-capture-integration-read-1363",
+      "exit": 0
+    },
+    {
+      "request": "compiler-reference-capture-integration-records-1364",
+      "exit": 0
+    },
+    {
+      "request": "compiler-reference-capture-integration-freeze-read-1366",
+      "exit": 0
+    },
+    {
+      "request": "compiler-reference-capture-integration-items-1367",
+      "exit": 0
+    }
+  ],
+  "offline_request_preparation": {
+    "request": "compiler-reference-capture-integration-materialize-1369",
+    "helper_sha256": "59f85f557740ed5e2103194e3adc5a43b4f52fde70c375fac52e3ab5b0b8e3f4",
+    "status": 0,
+    "syntax_status": 0,
+    "wall_s": "0.03",
+    "maxrss_kib": 11844,
+    "load_before": [
+      "2.56",
+      "5.42",
+      "4.16"
+    ],
+    "load_after": [
+      "2.56",
+      "5.42",
+      "4.16"
+    ],
+    "argv": [
+      "/usr/bin/time",
+      "-o",
+      "/home/coder/workspace/lkjscript/target/compiler-reference-capture-integration-preparation-1/captures/time",
+      "-f",
+      "wall_s=%e user_s=%U system_s=%S maxrss_kib=%M exit_status=%x",
+      "/usr/bin/timeout",
+      "--signal=TERM",
+      "--kill-after=10s",
+      "900s",
+      "/usr/bin/prlimit",
+      "--as=4294967296",
+      "--",
+      "perl",
+      "/home/coder/workspace/lkjscript/target/compiler-reference-capture-integration-preparation-1/materialize.pl"
+    ],
+    "cwd": "/home/coder/workspace/lkjscript",
+    "record_qualification": "Retrospectively recorded from the exact submitted command; original captures retained unchanged.",
+    "verified": "Ten desired file digests against pinned full manifest, nine existing actual language files versus baseline Git, new module absence, exact registration deltas, complete source UTF-8 round trip.",
+    "not_claimed": "No full current/desired 1,743-file content audit was rerun here; later adoption audit must verify complete populations."
+  },
+  "shell_syntax": {
+    "request": "compiler-reference-capture-integration-finalize-1371",
+    "core": 0,
+    "tests": 0,
+    "no_script_execution": true
+  },
+  "pins": {
+    "request_sha256": "3721803e8ed288cbe6687f35cee818f6bf403310bac9c234adf1eeb650acbd37",
+    "commands_sha256": "537b1b999b17f40b96552a218e2a15f0f6156fce0766986b135612a6d69d7d2e",
+    "freeze_sha256": "dfe7d72cd6ebf0ee7f42ac3553585585b84b05f27817dfc94980bb564dbb0a82",
+    "host_tools_record_sha256": "0f8512495e92e8fdf76f4ad26a7c2b83fcc634fcb71796af35f17d8adf559db1"
+  },
+  "no_compiler_native_or_semantic_apply": true,
+  "no_tracked_language_writes": true,
+  "no_key_contents_read": true,
+  "no_credentials_created_or_removed": true
+}

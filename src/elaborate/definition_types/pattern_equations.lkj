@@ -51,7 +51,9 @@ impl Infer<'_, '_> {
                     if seen.insert(name.clone()) {
                         let value = self.operation_type();
                         names.push((name.clone(), value));
-                        self.definition.semantic_bindings.push((pattern, value));
+                        if self.capture_references {
+                            self.definition.semantic_bindings.push((pattern, value));
+                        }
                         self.bindings.push_origin((name, value), super::super::semantic::LocalTarget::Pattern(pattern));
                     }
                 }

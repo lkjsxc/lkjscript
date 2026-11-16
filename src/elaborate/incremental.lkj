@@ -264,15 +264,15 @@ pub fn resume<F: FnMut(&str)>(source: &a::Program, fingerprint: &Fingerprint, da
     if !input.done() { return None; }
     let original_types = original.types.clone();
     let original_destructors = original.destructors.clone();
-    let mut c = Compiler::new(source).ok()?;
+    let mut c = Compiler::new_with_capture(source, false).ok()?;
     c.types = original.types; c.functions = original.functions; c.destructors = original.destructors;
     restore(&mut c, &saved)?;
     mark("front_restore");
     let mut selected = Vec::new();
     for index in &changed { selected.push(*index); }
-    let inferred = diagnostic_inference::infer_selected(source, &c.names, &c.implementations, &selected);
+    let inferred = diagnostic_inference::infer_selected(source, &c.names, &c.implementations, &selected, false);
     if !inferred.problems.is_empty() { return None; }
-    let mut verifier = Compiler::new(source).ok()?;
+    let mut verifier = Compiler::new_with_capture(source, false).ok()?;
     let (evidence, problems) = generic_check::validate_demand(source, &mut verifier, inferred.definitions).ok()?;
     if !problems.is_empty() { return None; }
     c.definition_types = evidence.types;

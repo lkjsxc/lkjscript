@@ -1,0 +1,9 @@
+captured transaction/source/request/producer chains verified
+all 1742 initial source/library/test files match baseline Git
+all 10 reported publication hashes and 24 operations mapped to the captured chain
+PASS baseline=1742 final=1743 unchanged=1733
+retained_lines=585 credited=585 core=280 tests=305 added=564 deleted=21
+desired_exact=1740 differences=3
+desired_difference=src/elaborate.lkj nonblank_equal=0
+desired_difference=src/elaborate/definition_types.lkj nonblank_equal=0
+desired_difference=src/semantic_tests.lkj nonblank_equal=1

@@ -1,0 +1,102 @@
+{
+   "cwd" : "/home/coder/workspace/lkjscript",
+   "dry_run_policy" : "Optional arrays are for root review, not an authorization or requirement to launch extra commands.",
+   "limits" : {
+      "address_space_bytes" : 4294967296,
+      "compiler_workers" : 1,
+      "kill_after_seconds" : 10,
+      "timeout_seconds" : 900
+   },
+   "no_source_apply" : true,
+   "schema" : 1,
+   "stages" : [
+      {
+         "argv" : [
+            "/home/coder/workspace/lkjscript/target/lkjscript",
+            "edit",
+            "src/main.lkj",
+            "--source-dir",
+            "/home/coder/workspace/lkjscript",
+            "--library-dir",
+            "/home/coder/workspace/lkjscript/library",
+            "--against",
+            "src/main.lkj",
+            "--against-source-dir",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-desired-1",
+            "--against-library-dir",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-desired-1/library",
+            "--store-key",
+            "/home/coder/.local/state/lkjscript/store-key"
+         ],
+         "expected_changed_files" : [
+            "src/driver.lkj",
+            "src/elaborate.lkj",
+            "src/elaborate/definition_types.lkj",
+            "src/elaborate/definition_types/pattern_equations.lkj",
+            "src/elaborate/diagnostic_inference.lkj",
+            "src/elaborate/generic_check.lkj",
+            "src/elaborate/incremental.lkj"
+         ],
+         "name" : "core-replay",
+         "note" : "No --request. Actual emitted operation count and file facts are acceptance evidence, not guessed here.",
+         "optional_dry_run_argv" : [
+            "/home/coder/workspace/lkjscript/target/lkjscript",
+            "edit",
+            "src/main.lkj",
+            "--source-dir",
+            "/home/coder/workspace/lkjscript",
+            "--library-dir",
+            "/home/coder/workspace/lkjscript/library",
+            "--against",
+            "src/main.lkj",
+            "--against-source-dir",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-desired-1",
+            "--against-library-dir",
+            "/home/coder/workspace/lkjscript/target/compiler-reference-capture-desired-1/library",
+            "--store-key",
+            "/home/coder/.local/state/lkjscript/store-key",
+            "--dry-run"
+         ],
+         "selected_root" : "src/main.lkj"
+      },
+      {
+         "argv" : [
+            "/home/coder/workspace/lkjscript/target/lkjscript",
+            "edit",
+            "src/semantic_main.lkj",
+            "--source-dir",
+            "/home/coder/workspace/lkjscript",
+            "--library-dir",
+            "/home/coder/workspace/lkjscript/library",
+            "--request",
+            "target/compiler-reference-capture-integration-preparation-1/tests-request.json",
+            "--store-key",
+            "/home/coder/.local/state/lkjscript/store-key"
+         ],
+         "expected_changed_files" : [
+            "src/semantic_tests/reference_capture.lkj",
+            "src/semantic_tests.lkj",
+            "src/semantic_main.lkj"
+         ],
+         "name" : "explicit-test-root",
+         "note" : "Only after core apply is accepted. No --against on the test root.",
+         "optional_dry_run_argv" : [
+            "/home/coder/workspace/lkjscript/target/lkjscript",
+            "edit",
+            "src/semantic_main.lkj",
+            "--source-dir",
+            "/home/coder/workspace/lkjscript",
+            "--library-dir",
+            "/home/coder/workspace/lkjscript/library",
+            "--request",
+            "target/compiler-reference-capture-integration-preparation-1/tests-request.json",
+            "--store-key",
+            "/home/coder/.local/state/lkjscript/store-key",
+            "--dry-run"
+         ],
+         "request_sha256" : "3721803e8ed288cbe6687f35cee818f6bf403310bac9c234adf1eeb650acbd37",
+         "selected_root" : "src/semantic_main.lkj"
+      }
+   ],
+   "status" : "prospective only; root release required"
+}

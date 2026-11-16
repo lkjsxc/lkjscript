@@ -2472,7 +2472,8 @@ fn compile_snapshot(
     // The current frontend checkpoint omits definition/source-site evidence.
     // Full reference evidence cannot depend on whether that checkpoint was warm.
     // Declaration-only catalogs need no recorded body inference and may resume.
-    let front = if memo.store.is_some() && (!memo.capture_catalog || memo.catalog_items_only) && options.command != "check-library" {
+    let capture_references = memo.capture_catalog && !memo.catalog_items_only;
+    let front = if memo.store.is_some() && !capture_references && options.command != "check-library" {
         elaborate::incremental::fingerprint(&resolved, &memo.source_inputs)
     } else { None };
     stats.mark("key_hash")?;
@@ -2512,11 +2513,9 @@ fn compile_snapshot(
         }
         stats.mark("front_miss")?;
     }
-    let inferred = if options.command == "check-library" {
-        elaborate::infer_resolved_report_all_library(&resolved)
-    } else {
-        elaborate::infer_resolved_report(&resolved)
-    };
+    let inferred = elaborate::infer_resolved_report_with_capture(
+        &resolved, options.command == "check-library", capture_references,
+    );
     let definitions = match inferred {
         Ok(definitions) => definitions,
         Err(problems) => {
@@ -2530,7 +2529,7 @@ fn compile_snapshot(
     };
     stats.mark("type")?;
     let mut front_catalog = front.as_ref().map(|_| Vec::new());
-    let mut structural = if memo.capture_catalog && !memo.catalog_items_only { Some(elaborate::semantic::Evidence::default()) } else { None };
+    let mut structural = if capture_references { Some(elaborate::semantic::Evidence::default()) } else { None };
     let meaning = match elaborate::lower_definitions_recorded_semantic(definitions, &mut front_catalog, &mut structural) {
         Ok(meaning) => meaning,
         Err(problems) => {

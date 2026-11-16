@@ -6,6 +6,8 @@ mod entry_grants;
 mod function_owners;
 mod interpreter_contracts;
 mod library_demand;
+
+mod reference_capture;
 mod optimizer;
 mod panic_messages;
 mod resolver;
@@ -142,6 +144,7 @@ pub fn core() -> usize {
     count += diagnostic_contracts::run();
     count += function_owners::run();
     count += library_demand::run();
+    count += reference_capture::run();
     count += source_contracts::run();
     count += return_contracts::run();
     count += array_repeat::run();

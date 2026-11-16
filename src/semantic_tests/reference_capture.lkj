@@ -1,0 +1,300 @@
+//! Source-reference recording is optional work, never a change to checked IR.
+use crate::{ast, check, elaborate, interpreter, ir, ir_binary, resolve, source};
+use crate::elaborate::semantic::{Evidence, LocalTarget, MethodTarget};
+
+fn resolved(user: &str, library: &str) -> ast::Program {
+    let parsed = source::parse_bundle(&source::SourceBundle {
+        root: "case/main.lkj".to_string(),
+        library: Some("dependencies/library.lkj".to_string()),
+        files: vec![
+            source::SourceInput {
+                path: "case/main.lkj".to_string(),
+                text: user.to_string(),
+            },
+            source::SourceInput {
+                path: "dependencies/library.lkj".to_string(),
+                text: library.to_string(),
+            },
+        ],
+    }).unwrap();
+    resolve::resolve(&parsed).unwrap()
+}
+
+fn local_source() -> &'static str {
+    "struct Pair { left:i64, right:i64 }
+     fn pick(value:i64) -> i64 {
+         let value=value+1i64;
+         let pair=Pair { left:value, right:2i64 };
+         let projected=pair.left;
+         let Pair { left, right }=pair;
+         let (left,right)=(left,right);
+         let inner={ let left=3i64; left+right };
+         left+inner+projected-projected
+     }
+     fn main() -> i64 { pick(36i64) }"
+}
+
+fn generic_library() -> &'static str {
+    "pub trait Read { fn read(&self) -> i64; }
+     pub fn choose<T:Read>(value:T) -> i64 {
+         let call=|| value.read();
+         call()
+     }
+     pub fn unused() -> i64 { let value=9i64; value }"
+}
+
+fn generic_user() -> &'static str {
+    "struct Token;
+     impl Token { fn read(&self) -> i64 { 7 } }
+     impl std::Read for Token { fn read(&self) -> i64 { 42 } }
+     fn main() -> i64 { std::choose(Token) }"
+}
+
+fn checked(
+    program: &ast::Program,
+    all_library: bool,
+    capture_references: bool,
+) -> Result<ir::CheckedProgram, Vec<ast::Diagnostic>> {
+    let definitions = elaborate::infer_resolved_report_with_capture(
+        program, all_library, capture_references,
+    )?;
+    check::check_all(elaborate::lower_definitions(definitions)?)
+}
+
+fn same_checked(program: &ast::Program, all_library: bool) -> ir::CheckedProgram {
+    let off = checked(program, all_library, false).unwrap();
+    let on = checked(program, all_library, true).unwrap();
+    assert_eq!(
+        ir_binary::write(off.program()),
+        ir_binary::write(on.program()),
+        "reference recording changed independently checked IR"
+    );
+    on
+}
+
+fn value_is_42(checked: &ir::CheckedProgram) {
+    let program = checked.program();
+    let entry = program.functions.iter()
+        .position(|function| function.name == "main").unwrap();
+    let result = interpreter::run(program, entry, &[0u64; 0], &mut Vec::<u8>::new())
+        .unwrap_or_else(|error| panic!("{}: {}", error.code(), error.message));
+    match result.value {
+        interpreter::Scalar::Int { value, .. } => assert_eq!(value, 42u64),
+        _ => panic!("expected integer result"),
+    }
+}
+
+fn locals_shadowing_and_destructuring_preserve_ir() {
+    let program = resolved(
+        local_source(),
+        "pub fn unused() -> i64 { let value=9i64; value }",
+    );
+    for all_library in vec![false, true] {
+        let checked = same_checked(&program, all_library);
+        value_is_42(&checked);
+    }
+}
+
+fn demanded_generic_and_all_library_paths_preserve_ir() {
+    // Keep the definition-site trait/closure specimen from library_demand.
+    // The inherent method returns 7; the demanded generic contract returns 42.
+    let program = resolved(generic_user(), generic_library());
+    for all_library in vec![false, true] {
+        let checked = same_checked(&program, all_library);
+        let has_unused = checked.program().functions.iter()
+            .any(|function| function.name.ends_with("unused"));
+        assert_eq!(has_unused, all_library);
+        value_is_42(&checked);
+    }
+}
+
+fn problems(
+    program: &ast::Program,
+    all_library: bool,
+    capture_references: bool,
+) -> Vec<ast::Diagnostic> {
+    match checked(program, all_library, capture_references) {
+        Ok(_) => panic!("invalid body was accepted"),
+        Err(problems) => problems,
+    }
+}
+
+fn diagnostic_rows(
+    program: &ast::Program,
+    problems: &[ast::Diagnostic],
+) -> Vec<String> {
+    let mut rows = Vec::new();
+    for problem in problems {
+        rows.push(format!(
+            "{}|{}|{}|{}|{}|{}|{}",
+            problem.code, problem.path, program.files[problem.file].path,
+            problem.file, problem.line, problem.column, problem.message
+        ));
+    }
+    rows
+}
+
+fn all_library_validation_preserves_diagnostics() {
+    let program = resolved(
+        "fn main() -> i64 { 42 }",
+        "pub fn unused() -> i64 { true }",
+    );
+    same_checked(&program, false);
+    let off = problems(&program, true, false);
+    let on = problems(&program, true, true);
+    assert_eq!(off.len(), 1usize);
+    assert_eq!(off[0].code, "E_TYPE");
+    assert_eq!(program.files[off[0].file].path, "dependencies/library.lkj");
+    assert_eq!(diagnostic_rows(&program, &off), diagnostic_rows(&program, &on));
+}
+
+fn user_and_demanded_error_order_is_unchanged() {
+    let program = resolved(
+        "fn bad() -> i64 { true } fn main() -> i64 { std::bad() }",
+        "pub fn bad() -> i64 { true }",
+    );
+    for all_library in vec![false, true] {
+        let off = problems(&program, all_library, false);
+        let on = problems(&program, all_library, true);
+        assert_eq!(off.len(), 2usize);
+        assert!(off.iter().all(|problem| problem.code == "E_TYPE"));
+        assert_ne!(off[0].file, off[1].file);
+        assert_eq!(diagnostic_rows(&program, &off), diagnostic_rows(&program, &on));
+    }
+}
+
+fn local_target(target: &LocalTarget) -> String {
+    match target {
+        LocalTarget::Parameter(index) => format!("parameter:{index}"),
+        LocalTarget::Pattern(index) => format!("pattern:{index}"),
+        LocalTarget::Unavailable => "unavailable".to_string(),
+    }
+}
+
+fn method_target(target: &MethodTarget) -> String {
+    match target {
+        MethodTarget::Builtin => "builtin".to_string(),
+        MethodTarget::Source(index) => format!("source:{index}"),
+        MethodTarget::Trait(index) => format!("trait:{index}"),
+        MethodTarget::BuiltinTrait(name) => format!("builtin-trait:{name}"),
+        MethodTarget::InstanceDependent => "instance-dependent".to_string(),
+    }
+}
+
+fn evidence_rows(evidence: &Evidence) -> Vec<String> {
+    let mut rows = Vec::new();
+    for index in &evidence.definitions {
+        rows.push(format!("definition:{index}"));
+    }
+    for (index, value) in &evidence.expressions {
+        rows.push(format!("expression:{index}:{value}"));
+    }
+    for (index, value) in &evidence.bindings {
+        rows.push(format!("binding:{index}:{value}"));
+    }
+    for (index, target) in &evidence.locals {
+        rows.push(format!("local:{index}:{}", local_target(target)));
+    }
+    for (index, target) in &evidence.methods {
+        rows.push(format!("method:{index}:{}", method_target(target)));
+    }
+    for (index, target) in &evidence.fields {
+        rows.push(format!("field:{index}:{target}"));
+    }
+    for index in &evidence.builtin_fields {
+        rows.push(format!("builtin-field:{index}"));
+    }
+    rows
+}
+
+fn off_to_full_export_refuses_before_publication() {
+    // The constant-only source also proves that the mode, not vector emptiness,
+    // controls whether a full export is allowed.
+    for source_case in 0usize..2usize {
+        let user = if source_case == 0usize { "fn main() -> i64 { 42 }" } else { local_source() };
+        let program = resolved(user, "pub fn unused() -> i64 { 9 }");
+        for all_library in vec![false, true] {
+            let definitions = elaborate::infer_resolved_report_with_capture(
+                &program, all_library, false,
+            ).unwrap();
+            let mut catalog = Some(vec![41u8, 43u8]);
+            let mut structural = Some(Evidence::default());
+            let errors = match elaborate::lower_definitions_recorded_semantic(
+                definitions, &mut catalog, &mut structural,
+            ) {
+                Ok(_) => panic!("capture-off inference authorized a full export"),
+                Err(errors) => errors,
+            };
+            assert_eq!(errors.len(), 1usize);
+            assert_eq!(errors[0].code, "E_SEMANTIC_CAPTURE");
+            assert_eq!(catalog, Some(vec![41u8, 43u8]));
+            assert!(evidence_rows(&structural.unwrap()).is_empty());
+
+            let full = elaborate::infer_resolved_report_with_capture(
+                &program, all_library, true,
+            ).unwrap();
+            let (_, _, evidence) = exported(full);
+            assert!(!evidence.definitions.is_empty());
+        }
+    }
+}
+
+fn exported(
+    definitions: elaborate::TypedDefinitions<'_>,
+) -> (ir::CheckedProgram, Vec<u8>, Evidence) {
+    let mut catalog = Some(Vec::new());
+    let mut structural = Some(Evidence::default());
+    let lowered = elaborate::lower_definitions_recorded_semantic(
+        definitions, &mut catalog, &mut structural,
+    ).unwrap();
+    let checked = check::check_all(lowered).unwrap();
+    (checked, catalog.unwrap(), structural.unwrap())
+}
+
+fn legacy_full_exports_match_explicit_full_capture() {
+    for source_case in 0usize..2usize {
+        let user = if source_case == 0usize { local_source() } else { generic_user() };
+        let library = if source_case == 0usize { "pub fn unused() -> i64 { 9 }" } else { generic_library() };
+        let program = resolved(user, library);
+        for legacy in 0usize..3usize {
+            let definitions = match legacy {
+                0 => elaborate::infer_resolved_report(&program).unwrap(),
+                1 => elaborate::infer_resolved_report_all_library(&program).unwrap(),
+                _ => elaborate::infer_resolved_all(&program).unwrap(),
+            };
+            let explicit = elaborate::infer_resolved_report_with_capture(
+                &program, legacy == 1usize, true,
+            ).unwrap();
+            let (old_ir, old_catalog, old_evidence) = exported(definitions);
+            let (new_ir, new_catalog, new_evidence) = exported(explicit);
+            assert_eq!(ir_binary::write(old_ir.program()), ir_binary::write(new_ir.program()));
+            assert_eq!(old_catalog, new_catalog);
+            assert_eq!(evidence_rows(&old_evidence), evidence_rows(&new_evidence));
+            assert!(!old_evidence.definitions.is_empty());
+            assert!(!old_evidence.locals.is_empty());
+            let mut parameter = false;
+            let mut pattern = false;
+            for (_, target) in &old_evidence.locals {
+                match target {
+                    LocalTarget::Parameter(_) => parameter = true,
+                    LocalTarget::Pattern(_) => pattern = true,
+                    LocalTarget::Unavailable => {}
+                }
+            }
+            assert!(parameter && pattern);
+        }
+    }
+}
+
+pub fn run() -> usize {
+    locals_shadowing_and_destructuring_preserve_ir();
+    demanded_generic_and_all_library_paths_preserve_ir();
+    all_library_validation_preserves_diagnostics();
+    user_and_demanded_error_order_is_unchanged();
+    off_to_full_export_refuses_before_publication();
+    legacy_full_exports_match_explicit_full_capture();
+    // The separate internal assertion deliberately forces pending defer_pattern,
+    // a missing-definition fallback, and verifier reset/mismatch boundaries.
+    elaborate::assert_reference_capture();
+    7usize
+}

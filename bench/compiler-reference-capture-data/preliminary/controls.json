@@ -1,0 +1,64 @@
+{
+   "attempts" : [
+      {
+         "attempt" : 1,
+         "build_exit" : 1,
+         "build_time" : "Command exited with non-zero status 1\nwall_s=16.89 user_s=16.48 system_s=0.11 maxrss_kib=596556\n",
+         "load_after" : "2.08 1.43 1.56\n",
+         "load_before" : "1.42 1.27 1.52\n",
+         "run_exit" : null,
+         "stderr_sha256" : "37e2b796b57c0764151d1973f3f0ba6f96d16543f0a84c1ad0c953480017cf32"
+      },
+      {
+         "attempt" : 2,
+         "build_exit" : 1,
+         "build_time" : "Command exited with non-zero status 1\nwall_s=16.97 user_s=16.41 system_s=0.14 maxrss_kib=585244\n",
+         "load_after" : "1.52 1.91 1.90\n",
+         "load_before" : "1.32 1.90 1.90\n",
+         "run_exit" : null,
+         "stderr_sha256" : "00f30e211f01f83845037bcb25f0e68bbff95d99ec999003261156afcadcdc9b"
+      },
+      {
+         "attempt" : 3,
+         "build_exit" : 1,
+         "build_time" : "Command exited with non-zero status 1\nwall_s=18.68 user_s=18.09 system_s=0.20 maxrss_kib=583112\n",
+         "load_after" : "2.95 1.99 1.91\n",
+         "load_before" : "1.17 1.64 1.80\n",
+         "run_exit" : null,
+         "stderr_sha256" : "7160fa247db357ea1b6156497f82859ecbfa236a1fc158de1aad1b81195e4e2f"
+      },
+      {
+         "attempt" : 4,
+         "build_exit" : "0",
+         "build_time" : "wall_s=18.22 user_s=17.73 system_s=0.19 maxrss_kib=583164\n",
+         "load_after" : "6.77 6.30 3.80\n",
+         "load_before" : "8.02 6.50 3.82\n",
+         "run_exit" : "0",
+         "stderr_sha256" : "62f2b44fa4322946cfd18fa18d0a54f68ae699b0d345720acab7b7d4e83116fb"
+      }
+   ],
+   "core_check" : {
+      "load_after" : "1.40 1.64 1.87\n",
+      "load_before" : "1.28 1.64 1.87\n",
+      "status" : "0\n",
+      "time" : "wall_s=19.77 user_s=19.12 system_s=0.21 maxrss_kib=678068\n"
+   },
+   "fourth_run" : {
+      "load_after" : "12.60 8.18 4.62\n",
+      "load_before" : "6.77 6.30 3.80\n",
+      "status" : "0\n",
+      "stderr" : "closed semantics 728 contracts, 0 failures\n",
+      "stdout" : "",
+      "time" : "wall_s=61.26 user_s=58.82 system_s=0.71 maxrss_kib=89456\n"
+   },
+   "native" : {
+      "bytes" : 21095338,
+      "path" : "target/compiler-reference-capture-semantics-4/semantics",
+      "sha256" : "9da231621d686f79a870feee8d1ea04fe59da282783dc446dd527d9d34f7bac9"
+   },
+   "root_review_claim" : "728 contracts, zero failures; exact raw native stderr/stdout are retained in the sole archive",
+   "source_manifest" : {
+      "path" : "target/compiler-reference-capture-semantics-4/source-after.sha256",
+      "sha256" : "e34cdb687a9e7195e686f38bf53a6f55c1b38f7f1769f60605ba36361b6119b7"
+   }
+}

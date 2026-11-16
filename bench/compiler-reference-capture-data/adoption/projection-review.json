@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "kind": "complete bounded desired-projection hunk review after machine audit",
+  "audit_request": "compiler-reference-capture-audit-run-1378",
+  "inspection_request": "compiler-reference-capture-audit-diffs-1379",
+  "reviewed_patches": [
+    {
+      "path": "projection-diffs/src__elaborate.lkj.patch",
+      "omitted_detached_comment_lines": 3,
+      "other_difference": "blank-line placement",
+      "code_token_difference": false,
+      "item_order_difference": false
+    },
+    {
+      "path": "projection-diffs/src__elaborate__definition_types.lkj.patch",
+      "omitted_detached_comment_lines": 3,
+      "other_difference": "none",
+      "code_token_difference": false,
+      "item_order_difference": false
+    },
+    {
+      "path": "projection-diffs/src__semantic_tests.lkj.patch",
+      "omitted_detached_comment_lines": 0,
+      "other_difference": "one added blank line before new external module",
+      "code_token_difference": false,
+      "item_order_difference": false
+    }
+  ],
+  "omitted_desired_comments_not_credited": 6,
+  "preserved_raw_patches": true,
+  "source_correction_requested": false,
+  "scope": "Only the complete actual-vs-desired hunks in these three files; no general whitespace/comment stripping equivalence is claimed.",
+  "no_source_change": true,
+  "no_compiler_or_native": true
+}

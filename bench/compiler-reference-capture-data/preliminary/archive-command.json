@@ -1,0 +1,36 @@
+{
+   "command" : [
+      "/bin/bash",
+      "-c",
+      "one fixed tar | gzip pipeline; exact source is embedded in pack.pl"
+   ],
+   "compression_workers" : 1,
+   "contract" : "one deterministic archive; no retry or extraction; all original bytes retained in exactly one member per path",
+   "external_address_space_bytes" : 4294967296,
+   "gzip" : [
+      "gzip",
+      "-n",
+      "-6"
+   ],
+   "output" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-preliminary-retention-1/preliminary-roots.tar.gz",
+   "tar" : [
+      "tar",
+      "--sort=name",
+      "--mtime=@0",
+      "--owner=0",
+      "--group=0",
+      "--numeric-owner",
+      "--format=gnu",
+      "--no-recursion",
+      "--verbatim-files-from",
+      "--null",
+      "-C",
+      "/home/coder/workspace/lkjscript",
+      "-cf",
+      "-",
+      "-T",
+      "/home/coder/workspace/lkjscript/target/compiler-reference-capture-preliminary-retention-1/archive-members.nul"
+   ],
+   "termination_grace_seconds" : 10,
+   "watchdog_seconds" : 900
+}

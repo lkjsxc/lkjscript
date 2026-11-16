@@ -1,0 +1,400 @@
+frontend constructor-routing refusal; this evidence extension does not change
+language admission. `uses` and `references` include the source claims, while
+`callers` and `callees` continue to describe checked monomorphic calls only.
+
+## One checked request
+
+```sh
+lkjscript edit src/main.lkj --source-dir . --library-dir library \
+  --request changes.json --store-key /private/compiler.key --dry-run
+lkjscript edit src/main.lkj --source-dir . --library-dir library \
+  --request changes.json --store-key /private/compiler.key
+```
+
+```json
+{
+  "version": 1,
+  "operations": [
+    {"op": "replace-body", "id": "math::increment", "source": "{ value + 2 }"},
+    {"op": "add-item", "id": "math", "before": "math::next",
+     "source": "pub fn twice(value: i64) -> i64 { value * 2 }"}
+  ]
+}
+```
+
+All operations name the same original snapshot. They are planned together;
+later operations do not look up a partially renamed or moved tree. Nonoverlapping
+edits and independent insertions share one candidate. Distinct overlapping
+writes refuse; insertions at the same boundary retain request order. Untouched
+item bytes are copied exactly. Removing an item also removes its otherwise
+empty indentation and trailing line break; detached comments remain text.
+
+The optional request `snapshot` is the source-input digest printed as
+`source=`, not the immutable query snapshot ID. Each operation can carry
+`expect`, the exact item's text digest from its metadata. Stale bytes, ambiguous
+scope, incomplete required references and overlapping writes produce
+identity-addressed `E_EDIT_*` refusals.
+
+The basic operations are `replace-body`, `replace-item`, `add-item`,
+`remove-item`, `rename` and `move`. Replacement source must parse as exactly
+one body or one item and is elaborated in its real surrounding scope, including
+visibility, generics and imports. `add-item` names a module; `before` is an
+optional existing child identity. The basic move planner only changes position
+within the same module. Refactor planners extend these forms; their supported
+cases, evaluation order and explicit decision sites are in
+[refactors](structure-refactors.md).
+
+An `add-item` operation can also supply the complete source of one new external
+module in a `projection`:
+
+```json
+{
+  "version": 1,
+  "operations": [
+    {"op": "add-item", "id": "crate", "source": "pub mod added;",
+     "projection": {"path": "src/added.lkj",
+                    "source": "pub fn value() -> i64 { 42 }"}}
+  ]
+}
+```
+
+Here the entry is `src/main.lkj` and `--source-dir` selects the project root.
+The path is normalized, relative to that root, and must be the loader's actual
+`added.lkj` or `added/mod.lkj` candidate. The selected semantic parent and
+physical parent directory must already exist. An empty module source is valid;
+absence is distinct from an existing empty file. The declaration must contain
+exactly one enabled external module. Creating directories, deleting source
+files, adding a new parent module in the same request and spanning separately
+checked roots remain explicit gaps.
+
+The frontend records each successfully loaded module's identity, selected file
+and alternate candidate. Inline modules use their nearest loaded ancestor.
+Insertion into an empty external module uses that provenance rather than a
+child-item guess. Both candidates become captured negative dependencies before
+checking; the candidate must load the proposed file under the intended identity
+and parent. An occupied alternate or a later change to either captured candidate
+refuses. Creating an explicit library module promotes the transaction to full
+library validation just as changing an existing library body does.
+
+Renames and moves rewrite exact resolved declaration/use spans. Import aliases
+retain their local spelling. These operations must also preserve the
+checked-meaning digest. In a mixed request, the rename/move subset is separately
+elaborated and checked for that postcondition before the complete candidate is
+accepted. This conservative condition can reject a request whose relocations
+would only become valid after other operations; split or restate it explicitly.
+Moves require the full reference catalog, including outgoing references in the
+relocated item; declaration-only capture cannot establish that proof.
+
+A transaction that touches an explicit library file promotes validation to all
+library definitions, including bodies the selected program never calls. The
+original, rename/move subset, candidate and any replay target use that same
+mode. Promotion retains the writer lock, parsed request and pinned source read
+sets; it never rereads a different request or silently changes the original
+source snapshot. The report states `library-validation=all` or `demanded`.
+This conservative whole-library pass can refuse an already-invalid unused body
+and adds checking cost until definition-level validation is available.
+
+The plan names changed identities/files and sites, authority gained/lost per
+entry, original/candidate checked meaning, fresh/reused instance counts and
+frontend resumption. Dry run performs candidate elaboration and checking, but
+does not publish source. Body/item replacement may intentionally change
+behavior; successful type/ownership checking is not a claim of behavioral
+equivalence.
+
+The implementation currently captures and checks a whole source program on both
+sides. Smaller declaration catalogs remove reference collection from body/item
+replacement, but do not make its total cost independent of program size.
+Recorded signature dependents are conservative source relations, not yet a
+complete per-definition interface reuse boundary. Scale costs and the first
+resource refusal are in [the ladder](../bench/scale.md).
+
+## Replaying a checked target
+
+`edit SOURCE --source-dir ROOT --against DESIRED_SOURCE` derives one request
+from two independently checked source catalogs. `--against-source-dir` selects
+the target's source Directory independently of the editable `--source-dir`;
+its `--against` entry is resolved beneath that grant. `--against-library-dir`
+selects the target's library; `--dry-run` prints the same plan without publication.
+The source option requires `--against`; an unavailable explicit Directory refuses
+without falling back to the working directory. Use explicit source/library roots
+for both trees and keep the private key outside every one of those grants.
+Without the option, the existing entry-based source selection still applies:
+a relative desired entry uses the current directory, an absolute entry uses `/`.
+Different include-path spellings can still make the conservative file pairing
+refuse; the option does not infer aliases or broaden the correspondence rule.
+A request file and `--against` are mutually exclusive. Existing declarations are
+paired by stable source identity and source files by an unambiguous bijection.
+Include-only inputs inherit the longest directory correspondence proved by
+those item pairs; ambiguous mappings refuse.
+
+The planner chooses body/item replacement, addition or removal. It preserves
+untouched source bytes. A scoped replay can introduce a separately selected new
+external-module declaration beneath an existing loaded parent, supplying its
+complete body as the same explicit projection form. Empty existing modules are
+paired from loader provenance. Other new files, changed imports or unsupported
+module framing, existing declaration reordering, splits/joins and changed
+include-only data still refuse. A new physical directory or new semantic parent
+is not inferred. Repeated reads of one path must contain identical bytes.
+Unchanged binary data is compared as bytes, never tokenized as source.
+
+Before publication the candidate's checked-meaning digest must equal the
+desired program's digest. The report prints both and `verified=true`; both
+input read sets are validated again. This proves equality under the same
+current checker and selected libraries. It does not claim to reproduce the
+output of a historical compiler producer. The history harness freezes its
+revision population and compiler bytes, records compatibility environments
+and refusals, and applies explicit external memory/time limits.
+
+## Publication and recovery
+
+Apply/recovery requires a private 32-byte authentication key outside every
+source/library read grant. The same private-key source-digest exclusion used
+for child images applies during elaboration. Embedded library text can be
+queried, but editing it requires an explicit editable `--library-dir`.
+The loader records embedded origin before assigning diagnostic paths. A physical
+`include_bytes!` input with the same displayed path cannot turn embedded code
+into editable source, even when its length and all later spans match.
+
+One writer holds `.lkjscript-edit.lock`. Preparation retains the project root
+and each existing output parent as Directory capabilities. A changed slot is the
+parent's observed device/inode pair plus its basename; two path spellings of the
+same slot refuse before any intent. Equal basenames in distinct parents are valid.
+These identities describe held kernel objects, not semantic or image identities.
+
+The compiler validates original and newly discovered candidate dependencies
+against those retained parents. A differently spelled input alias of a changed
+slot refuses, including a previously absent library probe. Exact physical input
+spelling is required for the byte overlay; normalization does not manufacture
+that correspondence. Final input leaves are opened with `open_regular`, so a
+symlink, FIFO, socket or directory cannot substitute for a regular source input.
+Ordinary build/query source loading is unchanged by this transaction rule.
+Expected-present reads are bounded by the captured length and require exact EOF.
+docs/structure.md:10:Build with `--index --store DIRECTORY --store-key KEY` and retain the printed
+docs/structure.md:152:lkjscript edit src/main.lkj --source-dir . --library-dir library \
+docs/structure.md:153:  --request changes.json --store-key /private/compiler.key --dry-run
+docs/structure.md:154:lkjscript edit src/main.lkj --source-dir . --library-dir library \
+docs/structure.md:155:  --request changes.json --store-key /private/compiler.key
+docs/structure.md:205:Here the entry is `src/main.lkj` and `--source-dir` selects the project root.
+docs/structure.md:257:`edit SOURCE --source-dir ROOT --against DESIRED_SOURCE` derives one request
+docs/structure.md:258:from two independently checked source catalogs. `--against-source-dir` selects
+docs/structure.md:259:the target's source Directory independently of the editable `--source-dir`;
+docs/structure.md:260:its `--against` entry is resolved beneath that grant. `--against-library-dir`
+docs/structure.md:352:lkjscript edit src/main.lkj --source-dir . --recover \
+docs/structure.md:353:  --store-key /private/compiler.key
+docs/structure.md:382:`--against-source-dir` selects the other source Directory with the same rules
+docs/structure.md:383:as replay; `--against-library-dir` selects the other library closure. Default output is
+src/driver/structure.lkj:33:        else if matches!(name, "--request" | "--against" | "--against-source-dir" | "--against-library-dir" | "--limit" | "--id") {
+src/driver/structure.lkj:39:                "--against-source-dir" => against_source = Some(values[at].clone()),
+src/driver/structure.lkj:40:                "--against-library-dir" => against_library = values[at].clone(),
+src/driver/structure.lkj:48:        return Err("E_USAGE --against-source-dir requires --against SOURCE".to_string());
+src/driver/structure.lkj:264:        return Err("E_EDIT_ROOT use a relative source path with --source-dir PROJECT_ROOT".to_string());
+src/driver/structure.lkj:271:        let key = request.options.store_key.as_ref().ok_or("E_EDIT_KEY apply/recovery requires --store-key PRIVATE_KEY outside source roots")?;
+src/driver/structure.lkj:378:        old_catalog.input_digest, new_catalog.input_digest, if request.dry { "dry-run" } else { "apply" }));
+target/compiler-reference-capture-preparation-1/private-binding-context-v5.json
+target/compiler-reference-capture-preparation-1/private-predicate-loop-v4.json
+target/compiler-reference-capture-preparation-1/private-predicate-context-v3.json
+target/compiler-reference-capture-preparation-1/reference-capture-tests-v2-fixes.json
+target/compiler-reference-capture-preparation-1/reference-capture-tests-v1.txt
+target/compiler-reference-capture-preparation-1/semantic-query-test.note.md
+target/compiler-reference-capture-preparation-1/semantic-query-test.syntax.status
+target/compiler-reference-capture-preparation-1/semantic-query-test.syntax.stderr
+target/compiler-reference-capture-preparation-1/semantic-query-test.syntax.stdout
+target/compiler-reference-capture-preparation-1/semantic-query-test.syntax.argv
+target/compiler-reference-capture-preparation-1/semantic-query-test.diff
+target/compiler-reference-capture-preparation-1/semantic-query-test.desired.sh
+target/compiler-reference-capture-preparation-1/integrated-projection-v1.json
+target/compiler-reference-capture-preparation-1/reference-capture-tests.md
+target/compiler-reference-capture-preparation-1/internal-tests-v1/manifest.sha256
+target/compiler-reference-capture-preparation-1/internal-tests-v1/FINAL.md
+target/compiler-reference-capture-preparation-1/internal-tests-v1/projection-v2.json
+target/compiler-reference-capture-preparation-1/internal-tests-v1/elaborate-assert-reference-capture-v2.txt
+target/compiler-reference-capture-preparation-1/internal-tests-v1/README.md
+target/compiler-reference-capture-preparation-1/internal-tests-v1/projection.json
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-deferred.txt
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-recording.txt
+target/compiler-reference-capture-preparation-1/internal-tests-v1/elaborate-assert-reference-capture.txt
+target/compiler-reference-capture-preparation-1/core-projection-v1.json
+target/compiler-reference-capture-preparation-1/prepare-core.stderr
+target/compiler-reference-capture-preparation-1/prepare-core.stdout
+target/compiler-reference-capture-preparation-1/prepare-core.syntax.stderr
+target/compiler-reference-capture-preparation-1/prepare-core.syntax.stdout
+target/compiler-reference-capture-preparation-1/prepare-core.pl
+target/compiler-reference-capture-preparation-1/core-replacements-v1.json
+target/compiler-reference-capture-preparation-1/desired-before.sha256
+target/compiler-reference-capture-preparation-1/archive.sha256
+target/compiler-reference-capture-preparation-1/source.tar
+target/compiler-reference-capture-preparation-1/canonical-producer.sha256
+target/compiler-reference-capture-preparation-1/source-pins
+target/compiler-reference-capture-preparation-1/space
+target/compiler-reference-capture-preparation-1/load
+target/compiler-reference-capture-preparation-1/prepared.utc
+target/compiler-reference-capture-preparation-1/proposal-pins.json
+target/compiler-reference-capture-preparation-1/proposal.md
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/git-status
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/numstat
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/desired-unchanged
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/source-after.sha256
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/status
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/finished.utc
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/finished.ns
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/load-after
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/time
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/stderr
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/stdout
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/git-status
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/load-before
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/started.ns
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/numstat
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/started.utc
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/source-after.sha256
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/wrapper-argv
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/argv
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/desired-production-before.sha256
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/status
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/source-before.sha256
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/finished.utc
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/head
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/finished.ns
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/cwd
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/load-after
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/time
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/stderr
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/stdout
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/load-before
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/started.ns
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/started.utc
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/wrapper-argv
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/argv
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/request.json
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/source-before.sha256
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/head
+/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/cwd
+    if let Err(error) = result {
+        errors.push(error);
+    }
+}
+pub fn sources(shard: usize, workers: usize) -> (usize, Vec<String>) {
+    let mut errors = Vec::new();
+    let count = source_cases::run(shard, workers, &mut errors);
+    (count, errors)
+}
+pub fn core() -> usize {
+    let mut count = units::run();
+    count += diagnostic_contracts::run();
+    count += function_owners::run();
+    count += library_demand::run();
+    count += reference_capture::run();
+    count += source_contracts::run();
+    count += return_contracts::run();
+    count += array_repeat::run();
+    count += scalar_clone::run();
+    count += interpreter_contracts::run();
+    count += entry_grants::run();
+    count += allocator::run();
+    count += resolver::run();
+    count += reuse::run();
+    count += ir_binary_admission::run();
+    count += recheck::run();
+    crate::interpreter::assert_reference_reuse();
+    count += 1;
+    count
+}
+pub fn closed() -> (usize, Vec<String>) {
+    let (count, errors) = sources(0usize, 1usize);
+    (count + core(), errors)
+}
+pub fn live(world: &mut World, trace: bool) -> usize {
+    allocator::observe(world) + optimizer::run(world, trace) + panic_messages::run(world, trace)
+}
+
+fn source_case(
+//! Source-reference recording is optional work, never a change to checked IR.
+use crate::{ast, check, elaborate, interpreter, ir, ir_binary, resolve, source};
+use crate::elaborate::semantic::{Evidence, LocalTarget, MethodTarget};
+
+fn resolved(user: &str, library: &str) -> ast::Program {
+    let parsed = source::parse_bundle(&source::SourceBundle {
+        root: "case/main.lkj".to_string(),
+        library: Some("dependencies/library.lkj".to_string()),
+        files: vec![
+            source::SourceInput {
+                path: "case/main.lkj".to_string(),
+                text: user.to_string(),
+            },
+            source::SourceInput {
+                path: "dependencies/library.lkj".to_string(),
+                text: library.to_string(),
+            },
+        ],
+    }).unwrap();
+    resolve::resolve(&parsed).unwrap()
+}
+
+fn local_source() -> &'static str {
+    "struct Pair { left:i64, right:i64 }
+     fn pick(value:i64) -> i64 {
+         let value=value+1i64;
+         let pair=Pair { left:value, right:2i64 };
+         let projected=pair.left;
+         let Pair { left, right }=pair;
+         let (left,right)=(left,right);
+         let inner={ let left=3i64; left+right };
+         left+inner+projected-projected
+     }
+     fn main() -> i64 { pick(36i64) }"
+}
+
+fn generic_library() -> &'static str {
+    "pub trait Read { fn read(&self) -> i64; }
+     pub fn choose<T:Read>(value:T) -> i64 {
+         let call=|| value.read();
+         call()
+     }
+     pub fn unused() -> i64 { let value=9i64; value }"
+}
+
+fn generic_user() -> &'static str {
+    "struct Token;
+     impl Token { fn read(&self) -> i64 { 7 } }
+     impl std::Read for Token { fn read(&self) -> i64 { 42 } }
+     fn main() -> i64 { std::choose(Token) }"
+}
+
+fn checked(
+    program: &ast::Program,
+    all_library: bool,
+    capture_references: bool,
+) -> Result<ir::CheckedProgram, Vec<ast::Diagnostic>> {
+    let definitions = elaborate::infer_resolved_report_with_capture(
+        program, all_library, capture_references,
+    )?;
+    check::check_all(elaborate::lower_definitions(definitions)?)
+}
+
+fn same_checked(program: &ast::Program, all_library: bool) -> ir::CheckedProgram {
+    let off = checked(program, all_library, false).unwrap();
+    let on = checked(program, all_library, true).unwrap();
+    assert_eq!(
+        ir_binary::write(off.program()),
+        ir_binary::write(on.program()),
+        "reference recording changed independently checked IR"
+    );
+    on
+}
+
+fn value_is_42(checked: &ir::CheckedProgram) {
+    let program = checked.program();
+    let entry = program.functions.iter()
+        .position(|function| function.name == "main").unwrap();
+    let result = interpreter::run(program, entry, &[0u64; 0], &mut Vec::<u8>::new())
+        .unwrap_or_else(|error| panic!("{}: {}", error.code(), error.message));
+    match result.value {
+        interpreter::Scalar::Int { value, .. } => assert_eq!(value, 42u64),
+        _ => panic!("expected integer result"),
+    }
+}
+
+fn locals_shadowing_and_destructuring_preserve_ir() {
+    let program = resolved(
+        local_source(),
+        "pub fn unused() -> i64 { let value=9i64; value }",

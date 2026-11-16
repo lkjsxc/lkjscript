@@ -1,0 +1,36 @@
+{
+  "cancelled": false,
+  "capture_status": "complete",
+  "duration_ms": 1374,
+  "exit_code": 0,
+  "finished": true,
+  "generation": "pipe-cijjgphfcbhneibjjadbgphknkjdiaho",
+  "request_id": "compiler-reference-capture-retention-poll-294",
+  "signal": null,
+  "status": "done",
+  "stderr": "",
+  "stderr_capture_truncated": false,
+  "stderr_ref": {
+    "available": true,
+    "end_offset": 0,
+    "offset": 0,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-cijjgphfcbhneibjjadbgphknkjdiaho.stderr",
+    "total_bytes": 0
+  },
+  "stderr_truncated": false,
+  "stdout": "inventory-complete files=1884 directories=50 bytes=42874424; starting sole archive\nverified archive=35ced5f584174c20a884dd3feeb988c188bf4350d0276831a6c52ac15e7088bc bytes=7839018 members=1934 files=1884 directories=50 payload=42874424\nwall_s=1.32 user_s=1.23 system_s=0.08 maxrss_kib=137708 exit_status=0\n",
+  "stdout_capture_truncated": false,
+  "stdout_ref": {
+    "available": true,
+    "end_offset": 305,
+    "offset": 305,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-cijjgphfcbhneibjjadbgphknkjdiaho.stdout",
+    "total_bytes": 305
+  },
+  "stdout_truncated": false,
+  "stream_mode": "pipes",
+  "timed_out": false,
+  "tool": "wait_for_exit",
+  "truncated": false,
+  "workdir": "/home/coder/workspace/lkjscript"
+}

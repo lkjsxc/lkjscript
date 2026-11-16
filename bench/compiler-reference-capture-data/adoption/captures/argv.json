@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "gateway_request": "compiler-reference-capture-audit-run-1378",
+  "cwd": "/home/coder/workspace/lkjscript",
+  "argv": [
+    "/usr/bin/time",
+    "-o",
+    "/home/coder/workspace/lkjscript/target/compiler-reference-capture-adoption-acceptance-1/captures/time",
+    "-f",
+    "wall_s=%e user_s=%U system_s=%S maxrss_kib=%M exit_status=%x",
+    "/usr/bin/timeout",
+    "--signal=TERM",
+    "--kill-after=10s",
+    "300s",
+    "/usr/bin/prlimit",
+    "--as=4294967296",
+    "--",
+    "perl",
+    "/home/coder/workspace/lkjscript/target/compiler-reference-capture-adoption-acceptance-1/audit.pl"
+  ],
+  "argv_record_qualification": "Retrospectively transcribed from the exact submitted gateway command; original captures unchanged.",
+  "auditor_sha256": "74549b9833f3be11d6b668c959bd73c513f346b96a48ad8c36370aa54f08bf2f",
+  "status": 0,
+  "wall_s": "0.20",
+  "maxrss_kib": 19724,
+  "load_before": [
+    "3.85",
+    "3.81",
+    "3.77"
+  ],
+  "load_after": [
+    "3.85",
+    "3.81",
+    "3.77"
+  ],
+  "no_live_canonical_read": true,
+  "no_compiler_or_native": true,
+  "metadata_inspection_qualification": "1375 attempted to read tests-operation-1/numstat, which does not exist; the actual file is numstat-tracked and the auditor independently recomputed all retained deltas. Preserve that inspection stderr; it is not an operation or audit failure."
+}

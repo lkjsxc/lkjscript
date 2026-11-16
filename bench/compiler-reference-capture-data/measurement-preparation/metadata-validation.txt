@@ -1,0 +1,1 @@
+metadata-only validation: pending setup/candidate, no-store, no threshold, exact twelve-row order

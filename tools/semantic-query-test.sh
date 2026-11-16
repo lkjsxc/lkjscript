@@ -538,4 +538,133 @@ done
 "$compiler" query "${self_untyped_common[@]}" --snapshot "$self_untyped_snapshot" --kind references --id std::Actual::construct > "$fixture/self-resolved"
 grep -Eq '^"std::Actual".*kind=alias-constructor$' "$fixture/self-resolved" || fail 'resolved owner missing from an undemanded inherent method'
 
+# Ordinary checkpoints omit source-site evidence. Indexing the same tree must
+# rebuild complete references, while a complete unchanged snapshot may be reused.
+capture_checkpoint_regression() {
+    local source_root="$fixture/capture-source"
+    local warm_store="$fixture/capture-warm-store"
+    local cold_before="$fixture/capture-cold-before"
+    local cold_after="$fixture/capture-cold-after"
+    local -a common=()
+    local snapshot= first_snapshot= changed_snapshot=
+    mkdir "$source_root" "$warm_store" "$cold_before" "$cold_after"
+    cat > "$source_root/main.lkj" <<'SOURCE'
+pub fn main() -> i64 { shadowed() }
+pub fn scalar(value: i64) -> i64 { value + 1 }
+pub fn shadowed() -> i64 { let before = scalar(1); { let scalar = before; let _ = scalar; } scalar(before) }
+pub fn local_generic<T>(value: T) -> T { let held = value; held }
+SOURCE
+    cp "$source_root/main.lkj" "$fixture/capture-before.lkj"
+    capture_stat() {
+        local value
+        value=$(sed -n "s/.*\"$2\":\\([0-9][0-9]*\\).*/\\1/p" "$1")
+        [[ "$value" =~ ^[0-9]+$ ]] || fail "missing or repeated capture statistic $2 in $1"
+        printf '%s\n' "$value"
+    }
+    capture_build() {
+        local phase=$1 store=$2
+        shift 2
+        common=(main.lkj --source-dir "$source_root" --no-library --store "$store" --store-key "$fixture/key")
+        "$compiler" build "${common[@]}" "$@" --stats -o "$fixture/capture-program" \
+            > "$fixture/capture-$phase.log" 2>&1 || {
+                cat "$fixture/capture-$phase.log" >&2
+                fail "capture build $phase"
+            }
+    }
+    capture_index() {
+        local phase=$1
+        capture_build "$@" --index
+        snapshot=$(sed -n 's/^LKJSCRIPT_SNAPSHOT \([0-9a-f]*\) .*/\1/p' "$fixture/capture-$phase.log")
+        [[ ${#snapshot} == 64 ]] || fail "capture snapshot $phase"
+    }
+    capture_facts() {
+        local phase=$1 held scalar_binding fact cursor
+        query references shadowed --limit 80 --bytes 32768 > "$fixture/capture-$phase-shadowed"
+        [[ $(grep -Ec '^"scalar".*kind=value' "$fixture/capture-$phase-shadowed") == 2 ]] ||
+            fail "capture lost a shadowed free call: $phase"
+        grep -Eq 'binding:scalar:0.*kind=local-value' "$fixture/capture-$phase-shadowed" ||
+            fail "capture lost the shadowed local: $phase"
+        if grep -Eq 'kind=lexical-name' "$fixture/capture-$phase-shadowed"; then
+            fail "capture left a typed local ambiguous: $phase"
+        fi
+        scalar_binding=$(sed -n 's/^"\([^"]*::binding:scalar:0\)".*kind=local-value.*/\1/p' "$fixture/capture-$phase-shadowed")
+        [[ -n "$scalar_binding" ]] || fail "capture scalar binding identity: $phase"
+        query type "$scalar_binding" --limit 80 --bytes 32768 > "$fixture/capture-$phase-shadow-type"
+        grep -Eq 'fact=inferred-type.*value="i64"' "$fixture/capture-$phase-shadow-type" ||
+            fail "capture lost the local inferred type: $phase"
+
+        query references local_generic --limit 80 --bytes 32768 > "$fixture/capture-$phase-generic"
+        grep -Eq '^"local_generic::param:value".*kind=local-value' "$fixture/capture-$phase-generic" ||
+            fail "capture lost the generic parameter reference: $phase"
+        grep -Eq 'binding:held:0.*kind=local-value' "$fixture/capture-$phase-generic" ||
+            fail "capture lost the generic binding reference: $phase"
+        query outline local_generic --limit 80 --bytes 32768 > "$fixture/capture-$phase-outline"
+        held=$(sed -n 's/^"\([^"]*::binding:held:0\)".*/\1/p' "$fixture/capture-$phase-outline" | head -n 1)
+        [[ -n "$held" ]] || fail "capture generic binding identity: $phase"
+        query type "$held" --limit 80 --bytes 32768 > "$fixture/capture-$phase-held-type"
+        grep -Eq 'fact=inferred-type.*value="T"' "$fixture/capture-$phase-held-type" ||
+            fail "capture lost the generic definition type: $phase"
+        for fact in shadowed shadow-type generic outline held-type; do
+            cursor=$(sed -n 's/.*cursor=\([^ ]*\) facts=.*/\1/p' "$fixture/capture-$phase-$fact")
+            [[ "$cursor" == none ]] || fail "capture fact response is incomplete: $phase/$fact"
+            [[ $(wc -c < "$fixture/capture-$phase-$fact") -le 32768 ]] ||
+                fail "capture fact response exceeded its bound: $phase/$fact"
+        done
+    }
+    capture_same_facts() {
+        local fact
+        for fact in shadowed shadow-type generic outline held-type; do
+            cmp "$fixture/capture-$1-$fact" "$fixture/capture-$2-$fact" ||
+                fail "capture facts differ: $1/$2/$fact"
+        done
+    }
+    capture_fresh_index() {
+        local phase=$1
+        capture_index "$@"
+        [[ $(capture_stat "$fixture/capture-$phase.log" build_reused) == 0 ]] ||
+            fail "capture index reused an incomplete ordinary image: $phase"
+        [[ $(capture_stat "$fixture/capture-$phase.log" front_reused) == 0 ]] ||
+            fail "capture index restored incomplete frontend evidence: $phase"
+        (( $(capture_stat "$fixture/capture-$phase.log" front_definitions) > 0 )) ||
+            fail "capture index did not perform full inference: $phase"
+        capture_facts "$phase"
+    }
+
+    capture_build ordinary "$warm_store"
+    [[ $(capture_stat "$fixture/capture-ordinary.log" front_reused) == 0 ]] ||
+        fail 'capture ordinary cold build reused frontend work'
+    capture_fresh_index from-ordinary "$warm_store"
+    first_snapshot=$snapshot
+    capture_fresh_index cold-before "$cold_before"
+    [[ "$snapshot" == "$first_snapshot" ]] || fail 'capture cold/warm source snapshot differs'
+    capture_same_facts from-ordinary cold-before
+
+    capture_index unchanged "$warm_store"
+    [[ "$snapshot" == "$first_snapshot" ]] || fail 'capture unchanged snapshot identity differs'
+    [[ $(capture_stat "$fixture/capture-unchanged.log" build_reused) == 1 ]] ||
+        fail 'capture unchanged complete snapshot was not reused'
+    [[ $(capture_stat "$fixture/capture-unchanged.log" front_definitions) == 0 ]] ||
+        fail 'capture unchanged indexed build repeated inference'
+    capture_facts unchanged
+    capture_same_facts from-ordinary unchanged
+
+    sed -i 's/let before = scalar(1);/let before = scalar(2);/' "$source_root/main.lkj"
+    grep -Fq 'let before = scalar(2);' "$source_root/main.lkj" || fail 'capture body edit missing'
+    cp "$source_root/main.lkj" "$fixture/capture-after.lkj"
+    capture_build body-ordinary "$warm_store"
+    [[ $(capture_stat "$fixture/capture-body-ordinary.log" build_reused) == 0 ]] ||
+        fail 'capture body edit replayed the old image'
+    (( $(capture_stat "$fixture/capture-body-ordinary.log" front_reused) > 0 )) ||
+        fail 'capture body edit did not resume its ordinary checkpoint'
+    [[ $(capture_stat "$fixture/capture-body-ordinary.log" front_definitions) == 1 ]] ||
+        fail 'capture body edit did not re-elaborate exactly one definition'
+    capture_fresh_index from-body "$warm_store"
+    changed_snapshot=$snapshot
+    [[ "$changed_snapshot" != "$first_snapshot" ]] || fail 'capture body edit kept the old snapshot'
+    capture_fresh_index cold-after "$cold_after"
+    [[ "$snapshot" == "$changed_snapshot" ]] || fail 'capture changed cold/warm snapshot differs'
+    capture_same_facts from-body cold-after
+}
+capture_checkpoint_regression
+
 printf 'ok semantic-query: identities, source/IR levels, ordinary authority, all question kinds, bounded authenticated cursor, source-free lookup, physical move/formatting, explicit cross-producer provenance, producer-bound admission, snapshot replay, eight locator and seven container/node attacks\n'

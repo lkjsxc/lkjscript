@@ -12,6 +12,7 @@ pub(super) fn infer_selected(
     names: &crate::resolve::Resolver<'_>,
     implementations: &crate::generics::ImplementationIndex,
     selected: &[usize],
+    capture_references: bool,
 ) -> Report {
     let mut definitions = BTreeMap::new();
     let mut problems = Vec::new();
@@ -20,7 +21,7 @@ pub(super) fn infer_selected(
         if source.functions[index].body.is_none() {
             continue;
         }
-        match definition_types::infer(source, names, implementations, index) {
+        match definition_types::infer(source, names, implementations, index, capture_references) {
             Ok(definition) => {
                 definitions.insert(index, definition);
             }

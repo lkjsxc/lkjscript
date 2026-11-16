@@ -1,0 +1,21 @@
+diff --git a/home/coder/workspace/lkjscript/target/compiler-reference-capture-desired-1/src/elaborate/definition_types.lkj b/home/coder/workspace/lkjscript/src/elaborate/definition_types.lkj
+index 555c5d82..cf320934 100644
+--- a/home/coder/workspace/lkjscript/target/compiler-reference-capture-desired-1/src/elaborate/definition_types.lkj
++++ b/home/coder/workspace/lkjscript/src/elaborate/definition_types.lkj
+@@ -2547,7 +2547,6 @@ pub(super) fn infer(
+     inference.finish()
+ }
+ 
+-// Internal invariant probe, called only by the separate native semantic suite.
+ pub(super) fn assert_reference_capture_recording(
+     definition: &DefinitionTypes,
+     capture_references: bool,
+@@ -2561,8 +2560,6 @@ pub(super) fn assert_reference_capture_recording(
+     }
+ }
+ 
+-// A source pattern alone cannot guarantee deferred inference. Start its real
+-// subject without a shape, then resolve the queued obligation through solve().
+ pub(super) fn assert_reference_capture_deferred(source: &a::Program, index: usize) {
+     let names = crate::resolve::Resolver::new(source).unwrap();
+     let implementations = crate::generics::ImplementationIndex::new(source).unwrap();

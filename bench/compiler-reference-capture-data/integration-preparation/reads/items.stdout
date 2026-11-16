@@ -1,0 +1,85 @@
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-deferred.txt:3:pub(super) fn assert_reference_capture_deferred(source: &a::Program, index: usize) {
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-deferred.txt:12:    assert_eq!(children.len(), 2usize);
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-deferred.txt:51:        assert_eq!(inference.bindings.len(), 2usize);
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-deferred.txt:52:        assert_eq!(inference.obligations.len(), 1usize);
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-deferred.txt:55:                assert_eq!(*saved, pattern);
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-deferred.txt:56:                assert_eq!(*value, subject);
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-deferred.txt:62:        assert_eq!(deferred_names.len(), 2usize);
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-deferred.txt:72:            assert_eq!(inference.definition.nodes[value].producers, 1usize);
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-deferred.txt:74:        assert_eq!(inference.definition.semantic_bindings.len(),
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-deferred.txt:78:        assert_eq!(value, inference.bindings.get("left").unwrap());
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-deferred.txt:79:        assert_eq!(inference.definition.expressions.len(), 1usize);
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-deferred.txt:80:        assert_eq!(inference.definition.local_paths.len(),
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-deferred.txt:93:        assert_eq!(inference.bindings.len(), 2usize);
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-deferred.txt:103:            assert_eq!(inference.definition.nodes[inference.definition.root(value)].producers, 0usize);
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-deferred.txt:107:        assert_eq!(inference.definition.semantic_bindings.len(),
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-deferred.txt:109:        assert_reference_capture_recording(&inference.definition, capture_references);
+target/compiler-reference-capture-preparation-1/internal-tests-v1/elaborate-assert-reference-capture-v2.txt:2:pub(crate) fn assert_reference_capture() {
+target/compiler-reference-capture-preparation-1/internal-tests-v1/elaborate-assert-reference-capture-v2.txt:14:    definition_types::assert_reference_capture_deferred(&source, target);
+target/compiler-reference-capture-preparation-1/internal-tests-v1/elaborate-assert-reference-capture-v2.txt:19:        assert_eq!(definitions.compiler.capture_references, capture_references);
+target/compiler-reference-capture-preparation-1/internal-tests-v1/elaborate-assert-reference-capture-v2.txt:20:        assert_eq!(definitions.verifier.capture_references, capture_references);
+target/compiler-reference-capture-preparation-1/internal-tests-v1/elaborate-assert-reference-capture-v2.txt:21:        definition_types::assert_reference_capture_recording(
+target/compiler-reference-capture-preparation-1/internal-tests-v1/elaborate-assert-reference-capture-v2.txt:33:        definition_types::assert_reference_capture_recording(&removed, capture_references);
+target/compiler-reference-capture-preparation-1/internal-tests-v1/elaborate-assert-reference-capture-v2.txt:41:        definition_types::assert_reference_capture_recording(
+target/compiler-reference-capture-preparation-1/internal-tests-v1/elaborate-assert-reference-capture-v2.txt:52:            assert_eq!(encoded, without_capture);
+target/compiler-reference-capture-preparation-1/internal-tests-v1/elaborate-assert-reference-capture-v2.txt:65:        assert_eq!(errors.len(), 1usize);
+target/compiler-reference-capture-preparation-1/internal-tests-v1/elaborate-assert-reference-capture-v2.txt:66:        assert_eq!(errors[0].code, "E_SEMANTIC_CAPTURE");
+target/compiler-reference-capture-preparation-1/internal-tests-v1/elaborate-assert-reference-capture-v2.txt:67:        assert_eq!(errors[0].message, "concrete and verification source-reference capture modes differ");
+target/compiler-reference-capture-preparation-1/internal-tests-v1/elaborate-assert-reference-capture-v2.txt:68:        assert_eq!(catalog, Some(vec![71u8, 19u8]));
+target/compiler-reference-capture-preparation-1/internal-tests-v1/definition-types-assert-recording.txt:2:pub(super) fn assert_reference_capture_recording(
+}
+fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, String> {
+    if !request.request.is_empty() && !request.against.is_empty() {
+        return Err("E_USAGE edit accepts either --request or --against, not both".to_string());
+    }
+    if request.recover && (!request.request.is_empty() || !request.against.is_empty()) {
+        return Err("E_USAGE --recover does not accept a new transaction".to_string());
+    }
+    if request.options.path.starts_with('/') {
+        return Err("E_EDIT_ROOT use a relative source path with --source-dir PROJECT_ROOT".to_string());
+    }
+    let scope = request.options.source_directory.as_ref().map_or(".", |value| value.as_str());
+    let mut writer = if request.dry {
+        if request.recover { return Err("E_USAGE --recover cannot be combined with --dry-run".to_string()); }
+        None
+    } else {
+        let key = request.options.store_key.as_ref().ok_or("E_EDIT_KEY apply/recovery requires --store-key PRIVATE_KEY outside source roots")?;
+        Some(structure_write::Writer::open(world, scope, key)?)
+    };
+    if let Some(writer) = writer.as_mut() {
+        let count = writer.recover()?;
+        if request.recover {
+            world.stdout().write(format!("transaction recovered-files={count}\n").as_bytes());
+            return Ok(0u8);
+        }
+    }
+    if request.request.is_empty() && request.against.is_empty() {
+        return Err("E_USAGE edit requires --request JSON_FILE or --against DESIRED_SOURCE".to_string());
+    }
+    let mut operations = if request.against.is_empty() {
+        structure_edit::parse(&super::read_path(world, &request.request)?)?
+    } else { structure_edit::Request { snapshot: String::new(), operations: Vec::new() } };
+    let mut desired_identity = String::new();
+    let mut desired_read: Option<Memo> = None;
+    let mut items_only = true;
+    let mut preserving: Vec<structure_edit::Operation> = Vec::new();
+    for operation in &operations.operations {
+        if !matches!(operation.kind.as_str(), "replace-body" | "replace-item" | "add-item" | "remove-item") { items_only = false; }
+        if matches!(operation.kind.as_str(), "rename" | "move") { preserving.push(operation.clone()); }
+    }
+    let mut active_options = request.options.clone();
+    let mut before = Memo::new(world, &active_options);
+    before.catalog_items_only = items_only;
+    before.capture_catalog = true;
+    if let Some(writer) = writer.as_ref() { before.private_source_digest = Some(writer.private_source_digest()); }
+    let mut old = super::compile(world, &active_options, stats, &mut before)?;
+{
+  "version": 1,
+  "operations": [
+    {
+      "op": "add-item",
+      "id": "semantic_tests::optimizer",
+      "source": "mod scalars;",
+      "projection": {
+        "path": "src/semantic_tests/optimizer/scalars.lkj",
+        "source": "//! Exact scalar rewrites retain the original IR as the behavioral oracle.\nuse super::*;\n\nstruct Invocation { function: usize, args: Vec<u64> }\nstruct Outcome {\n    selected: reuse::Selection,\n    constants: usize,\n    identities: usize,\n    branches: usize,\n    functions: usize,\n    trap_guard_rejections: usize,\n}\nfn instruction(op: ir::Op) -> ir::Instruction {\n    ir::Instruction { op, file: 

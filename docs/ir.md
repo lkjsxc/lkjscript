@@ -710,9 +710,18 @@ never an inferred default. Refactoring uses this source claim to retain original
 numeric/type context before independently checking the candidate. Nominal type
 labels use the resolver's already qualified declaration name exactly once.
 
+Source-reference recording is selected before inference and retained by both
+the concrete and generic-verification compilers. Ordinary and declaration-only
+requests omit only the local-path and binding-export vectors; lexical origins,
+constraints, closure capture, method selection and checked IR remain unchanged.
+Initial, demanded, fallback and resumed inference obey the retained mode. Asking
+for full export after capture-off inference, or mixing compiler/verifier modes,
+returns `E_SEMANTIC_CAPTURE` before taking or publishing either catalog.
+
 The current frontend checkpoint omits this evidence, so full reference/type
-capture re-infers definitions; unchanged indexed image/snapshot reuse still
-applies. Declaration-only capture retains item/body/file byte identities and
+capture re-infers definitions with recording enabled. An ordinary image or
+checkpoint alone cannot satisfy a full index; unchanged indexed image/snapshot
+reuse still requires the separately authenticated full semantic snapshot. Declaration-only capture retains item/body/file byte identities and
 digests, omits body binding/call-site/reference discovery, and explicitly marks
 `references_recorded=false` and every item's reference completeness false.
 It may resume the frontend checkpoint and serves whole-item/body operations;

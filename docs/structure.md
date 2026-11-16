@@ -123,8 +123,13 @@ repaired origin contract.
 `references-complete=false` and unresolved-reference facts are explicit limits,
 not evidence that an item has no uses. Declaration-only capture deliberately
 omits body references and never permits a rename proof from their absence.
-Compiler checkpoints can reuse this smaller capture; a full typed index must
-obtain the missing resolved/inferred evidence.
+Compiler checkpoints can reuse this smaller capture. Ordinary and declaration-only
+inference omit the two reference-export recording vectors while retaining binding
+origins, constraints and closure capture. Full recording must be chosen before
+inference; it cannot be promoted from empty vectors or a warm ordinary checkpoint.
+A full typed index re-infers the missing evidence unless a separate authenticated
+full snapshot can be reused. The frontend rejects a late full-export request with
+`E_SEMANTIC_CAPTURE` before changing the caller's catalogs.
 
 Associated calls such as `Widget::make()` and `Self::make()` publish an
 `associated-call` source reference only from a successful frontend selector.

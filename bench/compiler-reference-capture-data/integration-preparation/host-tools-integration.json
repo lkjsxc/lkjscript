@@ -1,0 +1,20 @@
+{
+   "language_lines" : 0,
+   "meaning" : "Install prepared lifecycle regression and synchronize seven additional closed core contract groups; no language-source mutation here.",
+   "rows" : [
+      {
+         "after_bytes" : 42468,
+         "after_sha256" : "b36bf7c4eed7906d573bd769d26de99a572d6f8f78f0a14bf54c3cec3c930162",
+         "before_bytes" : 35127,
+         "before_sha256" : "736795de2892c5c97e179a4a39b332d5265cb8f19ea625796b5a90e8ae2403a8",
+         "path" : "tools/semantic-query-test.sh"
+      },
+      {
+         "after" : "if [[ \"$entry\" == main ]]; then count=192; fi",
+         "after_sha256" : "9ff51ad89da9d63efd0d8c3bd771595f5b790ea15ceabd4b508e223e406aa629",
+         "before" : "if [[ \"$entry\" == main ]]; then count=185; fi",
+         "before_sha256" : "7fbcefa71899db076165385123e07c602060c9777dfb055f47226c67ff1b6282",
+         "path" : "tools/closed-semantics.sh"
+      }
+   ]
+}

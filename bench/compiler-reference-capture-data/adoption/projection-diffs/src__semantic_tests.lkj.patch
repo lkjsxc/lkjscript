@@ -1,0 +1,12 @@
+diff --git a/home/coder/workspace/lkjscript/target/compiler-reference-capture-desired-1/src/semantic_tests.lkj b/home/coder/workspace/lkjscript/src/semantic_tests.lkj
+index 12bdfb64..39d12274 100644
+--- a/home/coder/workspace/lkjscript/target/compiler-reference-capture-desired-1/src/semantic_tests.lkj
++++ b/home/coder/workspace/lkjscript/src/semantic_tests.lkj
+@@ -6,6 +6,7 @@ mod entry_grants;
+ mod function_owners;
+ mod interpreter_contracts;
+ mod library_demand;
++
+ mod reference_capture;
+ mod optimizer;
+ mod panic_messages;

@@ -1,0 +1,22 @@
+bench/compiler-reference-capture-data/adoption/captures/projection-review.stdout:8: trailing whitespace.
++ 
+bench/compiler-reference-capture-data/adoption/captures/projection-review.stdout:26: trailing whitespace.
++ 
+bench/compiler-reference-capture-data/adoption/captures/projection-review.stdout:43: trailing whitespace.
++ 
+bench/compiler-reference-capture-data/adoption/captures/projection-review.stdout:55: trailing whitespace.
++ 
+bench/compiler-reference-capture-data/adoption/captures/projection-review.stdout:63: trailing whitespace.
++ 
+bench/compiler-reference-capture-data/adoption/projection-diffs/src__elaborate.lkj.patch:8: trailing whitespace.
++ 
+bench/compiler-reference-capture-data/adoption/projection-diffs/src__elaborate.lkj.patch:26: trailing whitespace.
++ 
+bench/compiler-reference-capture-data/adoption/projection-diffs/src__elaborate.lkj.patch:43: trailing whitespace.
++ 
+bench/compiler-reference-capture-data/adoption/projection-diffs/src__elaborate__definition_types.lkj.patch:8: trailing whitespace.
++ 
+bench/compiler-reference-capture-data/adoption/projection-diffs/src__elaborate__definition_types.lkj.patch:16: trailing whitespace.
++ 
+bench/compiler-reference-capture-data/integration-preparation/reads/items.stdout:85: trailing whitespace.
++        "source": "//! Exact scalar rewrites retain the original IR as the behavioral oracle.\nuse super::*;\n\nstruct Invocation { function: usize, args: Vec<u64> }\nstruct Outcome {\n    selected: reuse::Selection,\n    constants: usize,\n    identities: usize,\n    branches: usize,\n    functions: usize,\n    trap_guard_rejections: usize,\n}\nfn instruction(op: ir::Op) -> ir::Instruction {\n    ir::Instruction { op, file: 

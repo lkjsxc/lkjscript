@@ -1,0 +1,3 @@
+LKJSCRIPT_STORE=target/compiler-reference-capture-bootstrap-store-1
+LKJSCRIPT_STORE_KEY=/home/coder/.local/state/lkjscript/store-key
+one compiler worker; 4GiB AS; 900s TERM; 10s grace

@@ -1,0 +1,222 @@
+[
+   {
+      "bytes" : 449,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/argv",
+      "sha256" : "5850c31e2e07973a1f52b104e83e6c1ad171b86b69eec3e5cbf70ddab3651b64"
+   },
+   {
+      "bytes" : 41,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/base-commit",
+      "sha256" : "8177176e5e375fdfaba678b494380b21038a7dbf17d19cdb5f007f8e3f679445"
+   },
+   {
+      "bytes" : 32,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/cwd",
+      "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3"
+   },
+   {
+      "bytes" : 20,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/end.ns",
+      "sha256" : "af07554525835fb69223ef9780f265cd457f692227e374315ad4971d9e7b5776"
+   },
+   {
+      "bytes" : 31,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/end.utc",
+      "sha256" : "133f964281738d1c7ee0664a23129b65940fa6a94173e9d5d637c6108b2dc014"
+   },
+   {
+      "bytes" : 85,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/limits",
+      "sha256" : "7e66624fb0dc8af5eaab800f74bfc84a2b889b8ec74fc762a47e3171437e4c7c"
+   },
+   {
+      "bytes" : 15,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/load-after",
+      "sha256" : "5fceddd420ed73daa7dd2c620ad63a873f9c0817cfc81b9bcb688d44805d5417"
+   },
+   {
+      "bytes" : 15,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/load-before",
+      "sha256" : "b9c2a4880f270ba092cbf994200ad7bffcd69bf6327dc86bd072f9d538ecf58c"
+   },
+   {
+      "bytes" : 115,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/producer-after.sha256",
+      "sha256" : "180a4bf01f9f8b8b141604133ca790c46b91d9041f1d888f68e0c582beb2cc84"
+   },
+   {
+      "bytes" : 115,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/producer-before.sha256",
+      "sha256" : "180a4bf01f9f8b8b141604133ca790c46b91d9041f1d888f68e0c582beb2cc84"
+   },
+   {
+      "bytes" : 212693,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/source-after.sha256",
+      "sha256" : "bba8c12acd22eb3cd7fadbf10c4bf24a16a019fbd762d87fdf4b2a27c819e37b"
+   },
+   {
+      "bytes" : 212693,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/source-before.sha256",
+      "sha256" : "5e6f3c87bc71ea1e927f4d67d4d9dce70fd55be92342d7bd75e5221618e31be7"
+   },
+   {
+      "bytes" : 20,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/start.ns",
+      "sha256" : "44cc7722915c5a9a19645c3c3c6a6bf3229bd698441697077a8321d41a14cb94"
+   },
+   {
+      "bytes" : 31,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/start.utc",
+      "sha256" : "7a461a1350ea9240bdde11adbd398ca64e8b701be68dbaa56d13b4c5735cd75e"
+   },
+   {
+      "bytes" : 2,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/status",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+   },
+   {
+      "bytes" : 0,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/stderr",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+      "bytes" : 7781,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/stdout",
+      "sha256" : "e43563d74e0430043ac994bc372649c7210d318a20f097632fb66bdd42a8089a"
+   },
+   {
+      "bytes" : 73,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/time",
+      "sha256" : "65c171852c966dcf8819ce851b35e63d09caa8bf9146bec5a018234e8e948cd5"
+   },
+   {
+      "bytes" : 4045,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-integration-preparation-1/commands.json",
+      "sha256" : "537b1b999b17f40b96552a218e2a15f0f6156fce0766986b135612a6d69d7d2e"
+   },
+   {
+      "bytes" : 212800,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-integration-preparation-1/desired-source.sha256",
+      "sha256" : "e34cdb687a9e7195e686f38bf53a6f55c1b38f7f1769f60605ba36361b6119b7"
+   },
+   {
+      "bytes" : 5621,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-integration-preparation-1/freeze.json",
+      "sha256" : "dfe7d72cd6ebf0ee7f42ac3553585585b84b05f27817dfc94980bb564dbb0a82"
+   },
+   {
+      "bytes" : 13178,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-integration-preparation-1/tests-request.json",
+      "sha256" : "3721803e8ed288cbe6687f35cee818f6bf403310bac9c234adf1eeb650acbd37"
+   },
+   {
+      "bytes" : 321,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/argv",
+      "sha256" : "3b841cc6454bcd02924f7ab68ca511867d430e73692595149d659f958375b053"
+   },
+   {
+      "bytes" : 41,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/base-commit",
+      "sha256" : "a687fed0ae17b132d7c96abd19eff936f6fe3134735e926ee000ddc6e9ff9d85"
+   },
+   {
+      "bytes" : 32,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/cwd",
+      "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3"
+   },
+   {
+      "bytes" : 212800,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/desired-after.sha256",
+      "sha256" : "e34cdb687a9e7195e686f38bf53a6f55c1b38f7f1769f60605ba36361b6119b7"
+   },
+   {
+      "bytes" : 212800,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/desired-before.sha256",
+      "sha256" : "e34cdb687a9e7195e686f38bf53a6f55c1b38f7f1769f60605ba36361b6119b7"
+   },
+   {
+      "bytes" : 20,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/end.ns",
+      "sha256" : "8f612ec651e944d6bdd98283c746b82432e000bc075dc0d1a995d8535ea549ec"
+   },
+   {
+      "bytes" : 31,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/end.utc",
+      "sha256" : "576ba542e379e8655eaf95717bb3fd638d0bf13ca8efa2023d3303a148761f99"
+   },
+   {
+      "bytes" : 99,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/limits",
+      "sha256" : "103e4d48e6a83a380516259e043024691e8e985adeb186ab193a985f4cdcc4ec"
+   },
+   {
+      "bytes" : 15,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/load-after",
+      "sha256" : "e73d9cb8fea4a8979ca3e473051aedd5be5a4943742345819bd1d2be301eb274"
+   },
+   {
+      "bytes" : 15,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/load-before",
+      "sha256" : "952aa0524d77caecd62636a50297e6dca07ec86a892e2cf2c1181cece372e360"
+   },
+   {
+      "bytes" : 115,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/producer-after.sha256",
+      "sha256" : "180a4bf01f9f8b8b141604133ca790c46b91d9041f1d888f68e0c582beb2cc84"
+   },
+   {
+      "bytes" : 115,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/producer-before.sha256",
+      "sha256" : "180a4bf01f9f8b8b141604133ca790c46b91d9041f1d888f68e0c582beb2cc84"
+   },
+   {
+      "bytes" : 145,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/request-after.sha256",
+      "sha256" : "951abf4fc80c4a86e2487a2e9d70291ff0ed27de63a170750731911b4be23a6c"
+   },
+   {
+      "bytes" : 145,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/request-before.sha256",
+      "sha256" : "951abf4fc80c4a86e2487a2e9d70291ff0ed27de63a170750731911b4be23a6c"
+   },
+   {
+      "bytes" : 212800,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/source-after.sha256",
+      "sha256" : "3bcdcb955f65b037311343b6fedf02384a39546c6a2711a6e7a926fdda43a45f"
+   },
+   {
+      "bytes" : 212693,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/source-before.sha256",
+      "sha256" : "bba8c12acd22eb3cd7fadbf10c4bf24a16a019fbd762d87fdf4b2a27c819e37b"
+   },
+   {
+      "bytes" : 20,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/start.ns",
+      "sha256" : "cd01543c256e36f838fb2804440a82629d43fb550b4dbd1babccbbaa0a355c33"
+   },
+   {
+      "bytes" : 31,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/start.utc",
+      "sha256" : "73aaf21bd4811a7cfa15a4a8337017fc0e6495524c9c001df1b68de522688407"
+   },
+   {
+      "bytes" : 2,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/status",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+   },
+   {
+      "bytes" : 0,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/stderr",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   {
+      "bytes" : 6465,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/stdout",
+      "sha256" : "d8e62954516adf15fb4007aaa42ab9f98bb0a73c35b63bd0a3cb8e1ed304bbe4"
+   },
+   {
+      "bytes" : 72,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/time",
+      "sha256" : "b82fd6011c58003ee5934c896ad953997d93c11d186460c333ca7f9ee8f46179"
+   }
+]

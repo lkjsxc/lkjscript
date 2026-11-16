@@ -1,0 +1,47 @@
+diff --git a/home/coder/workspace/lkjscript/target/compiler-reference-capture-desired-1/src/elaborate.lkj b/home/coder/workspace/lkjscript/src/elaborate.lkj
+index 1eeb3895..98765647 100644
+--- a/home/coder/workspace/lkjscript/target/compiler-reference-capture-desired-1/src/elaborate.lkj
++++ b/home/coder/workspace/lkjscript/src/elaborate.lkj
+@@ -273,8 +273,7 @@ pub fn infer_resolved_report_all_library(
+     infer_resolved_report_with_library(source, true, true)
+ }
+ 
+-/// Select source-reference recording before inference. Ordinary lowering may omit
+-/// these export-only vectors; full semantic export requires capture from the start.
++
+ pub fn infer_resolved_report_with_capture(
+     source: &a::Program,
+     all_library: bool,
+@@ -282,7 +281,6 @@ pub fn infer_resolved_report_with_capture(
+ ) -> std::result::Result<TypedDefinitions<'_>, Vec<a::Diagnostic>> {
+     infer_resolved_report_with_library(source, all_library, capture_references)
+ }
+-
+ fn infer_resolved_report_with_library(
+     source: &a::Program,
+     all_library: bool,
+@@ -632,6 +630,8 @@ fn elaborate_definitions(
+     Ok(program)
+ }
+ 
++
++
+ impl<'a> Compiler<'a> {
+     fn new(source: &'a a::Program) -> Result<Self> {
+         Ok(Self::with_indexes(
+@@ -718,7 +718,6 @@ impl<'a> Compiler<'a> {
+         c
+     }
+ }
+-
+ impl Compiler<'_> {
+     fn initialize_primitive_names(&mut self) {
+         for i in 0..self.types.len() {
+@@ -5061,7 +5060,6 @@ impl Builder<'_, '_> {
+     }
+ }
+ 
+-// Internal invariant probe, called only by the separate native semantic suite.
+ pub(crate) fn assert_reference_capture() {
+     let parsed = crate::source::parse_bundle(&crate::source::SourceBundle {
+         root: "reference-capture/main.lkj".to_string(),

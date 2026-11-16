@@ -1,0 +1,58 @@
+"closed_core" level=source-claim operation-target
+"semantic_tests" level=source-claim operation-target
+"semantic_tests::core" level=source-claim operation-target
+"semantic_tests::reference_capture" level=source-claim operation-target
+"semantic_tests::reference_capture" level=source-claim projection parent="semantic_tests" path="src/semantic_tests/reference_capture.lkj" bytes=11516 source=694b8163ad7a1216b22941187b0f740b5f46d46c37500f84017b6cb9742091c5
+"/home/coder/workspace/lkjscript/src/semantic_main.lkj" level=source-claim file before=547f53773affbd62e0c84902fcb135a4d992a1a17b5d004c1970571a37413de8 after=6e6fe4120f041247ccdff5679bff6aabb342dee9e537fbad4fb65e403de68ad6
+"/home/coder/workspace/lkjscript/src/semantic_tests.lkj" level=source-claim file before=f3efce27264edf5ff2897c2c161ea0e064c3eb8e256ad9b37d407514d1408a81 after=4d174b8311b10c29d417c0b7907a0d0d8a7de2797af5a915fb80fb932fd4c94f
+"/home/coder/workspace/lkjscript/src/semantic_tests/reference_capture.lkj" level=source-claim file before=absent after=694b8163ad7a1216b22941187b0f740b5f46d46c37500f84017b6cb9742091c5
+transaction sites=3 files=3 identities=4
+"closed_core" level=source-claim changed=body
+"semantic_tests::core" level=source-claim changed=body
+"semantic_tests::reference_capture" level=source-claim changed=added
+"semantic_tests::reference_capture::all_library_validation_preserves_diagnostics" level=source-claim changed=added
+"semantic_tests::reference_capture::checked" level=source-claim changed=added
+"semantic_tests::reference_capture::checked::param:all_library" level=source-claim changed=added
+"semantic_tests::reference_capture::checked::param:capture_references" level=source-claim changed=added
+"semantic_tests::reference_capture::checked::param:program" level=source-claim changed=added
+"semantic_tests::reference_capture::demanded_generic_and_all_library_paths_preserve_ir" level=source-claim changed=added
+"semantic_tests::reference_capture::diagnostic_rows" level=source-claim changed=added
+"semantic_tests::reference_capture::diagnostic_rows::param:problems" level=source-claim changed=added
+"semantic_tests::reference_capture::diagnostic_rows::param:program" level=source-claim changed=added
+"semantic_tests::reference_capture::evidence_rows" level=source-claim changed=added
+"semantic_tests::reference_capture::evidence_rows::param:evidence" level=source-claim changed=added
+"semantic_tests::reference_capture::exported" level=source-claim changed=added
+"semantic_tests::reference_capture::exported::param:definitions" level=source-claim changed=added
+"semantic_tests::reference_capture::generic_library" level=source-claim changed=added
+"semantic_tests::reference_capture::generic_user" level=source-claim changed=added
+"semantic_tests::reference_capture::legacy_full_exports_match_explicit_full_capture" level=source-claim changed=added
+"semantic_tests::reference_capture::local_source" level=source-claim changed=added
+"semantic_tests::reference_capture::local_target" level=source-claim changed=added
+"semantic_tests::reference_capture::local_target::param:target" level=source-claim changed=added
+"semantic_tests::reference_capture::locals_shadowing_and_destructuring_preserve_ir" level=source-claim changed=added
+"semantic_tests::reference_capture::method_target" level=source-claim changed=added
+"semantic_tests::reference_capture::method_target::param:target" level=source-claim changed=added
+"semantic_tests::reference_capture::off_to_full_export_refuses_before_publication" level=source-claim changed=added
+"semantic_tests::reference_capture::problems" level=source-claim changed=added
+"semantic_tests::reference_capture::problems::param:all_library" level=source-claim changed=added
+"semantic_tests::reference_capture::problems::param:capture_references" level=source-claim changed=added
+"semantic_tests::reference_capture::problems::param:program" level=source-claim changed=added
+"semantic_tests::reference_capture::resolved" level=source-claim changed=added
+"semantic_tests::reference_capture::resolved::param:library" level=source-claim changed=added
+"semantic_tests::reference_capture::resolved::param:user" level=source-claim changed=added
+"semantic_tests::reference_capture::run" level=source-claim changed=added
+"semantic_tests::reference_capture::same_checked" level=source-claim changed=added
+"semantic_tests::reference_capture::same_checked::param:all_library" level=source-claim changed=added
+"semantic_tests::reference_capture::same_checked::param:program" level=source-claim changed=added
+"semantic_tests::reference_capture::user_and_demanded_error_order_is_unchanged" level=source-claim changed=added
+"semantic_tests::reference_capture::value_is_42" level=source-claim changed=added
+"semantic_tests::reference_capture::value_is_42::param:checked" level=source-claim changed=added
+"ir:semantic_tests::reference_capture::all_library_validation_preserves_diagnostics" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:semantic_tests::reference_capture::demanded_generic_and_all_library_paths_preserve_ir" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:semantic_tests::reference_capture::legacy_full_exports_match_explicit_full_capture" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:semantic_tests::reference_capture::locals_shadowing_and_destructuring_preserve_ir" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:semantic_tests::reference_capture::off_to_full_export_refuses_before_publication" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:semantic_tests::reference_capture::run" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:semantic_tests::reference_capture::user_and_demanded_error_order_is_unchanged" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+program level=checked-ir before=8009f2a47d401f4048e677c381521db4d806a404ee2f7770b6814e2a7e0daf70 after=0b770ac6868af0bd5a3647b4bb003af31ba1bafdb45a0934a98d8b402854dc4d checked-instances=10532 fresh-checked=10532 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=fa0fc530a8b6e002a5ce222806e7184255f4112baabe75da037183077b740851 source-after=04aabd52eba1dd4eda3fc546357a1c375e7735a298df32458af1ca3587515354 mode=apply

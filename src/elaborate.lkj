@@ -115,6 +115,7 @@ struct Compiler<'a> {
     contracts: Option<generic_check::Contracts>,
     method_selections: generic_check::MethodSelections,
     definition_types: BTreeMap<usize, definition_types::DefinitionTypes>,
+    capture_references: bool,
     semantic_evidence: Option<semantic::Evidence>,
     closures: closures::Catalog,
     scoped_bodies: BTreeMap<usize, scoped_locals::Body>,
@@ -262,19 +263,28 @@ fn library_definition(source: &a::Program, index: usize) -> bool {
 pub fn infer_resolved_report(
     source: &a::Program,
 ) -> std::result::Result<TypedDefinitions<'_>, Vec<a::Diagnostic>> {
-    infer_resolved_report_with_library(source, false)
+    infer_resolved_report_with_library(source, false, true)
 }
 
 /// Validate every library definition when building or testing the toolchain.
 pub fn infer_resolved_report_all_library(
     source: &a::Program,
 ) -> std::result::Result<TypedDefinitions<'_>, Vec<a::Diagnostic>> {
-    infer_resolved_report_with_library(source, true)
+    infer_resolved_report_with_library(source, true, true)
 }
 
+
+pub fn infer_resolved_report_with_capture(
+    source: &a::Program,
+    all_library: bool,
+    capture_references: bool,
+) -> std::result::Result<TypedDefinitions<'_>, Vec<a::Diagnostic>> {
+    infer_resolved_report_with_library(source, all_library, capture_references)
+}
 fn infer_resolved_report_with_library(
     source: &a::Program,
     all_library: bool,
+    capture_references: bool,
 ) -> std::result::Result<TypedDefinitions<'_>, Vec<a::Diagnostic>> {
     if let std::result::Result::Err(error) = static_lifetimes::annotations(source) {
         return std::result::Result::Err(vec![error]);
@@ -285,7 +295,7 @@ fn infer_resolved_report_with_library(
     if let std::result::Result::Err(error) = static_lifetimes::outputs(source) {
         return std::result::Result::Err(vec![error]);
     }
-    let mut compiler = match Compiler::new(source) {
+    let mut compiler = match Compiler::new_with_capture(source, capture_references) {
         std::result::Result::Ok(compiler) => compiler,
         std::result::Result::Err(error) => return std::result::Result::Err(vec![error]),
     };
@@ -303,9 +313,10 @@ fn infer_resolved_report_with_library(
         &compiler.names,
         &compiler.implementations,
         &selected,
+        capture_references,
     );
     let (verifier, evidence, reported) =
-        match generic_check::validate_report(source, inferred.definitions) {
+        match generic_check::validate_report(source, inferred.definitions, capture_references) {
             std::result::Result::Ok(report) => report,
             std::result::Result::Err(error) => {
                 let mut errors = inferred.problems;
@@ -358,6 +369,18 @@ pub fn lower_definitions_recorded_semantic(
 ) -> std::result::Result<ir::Program, Vec<a::Diagnostic>> {
 
     let source = definitions.compiler.source;
+    if definitions.compiler.capture_references != definitions.verifier.capture_references
+        || (structural.is_some() && !definitions.compiler.capture_references)
+    {
+        let message = if definitions.compiler.capture_references != definitions.verifier.capture_references {
+            "concrete and verification source-reference capture modes differ"
+        } else {
+            "full source-reference capture was not enabled before inference"
+        };
+        let span = source.functions.first().map(|function| function.span)
+            .unwrap_or(a::Span { line: 1, column: 1, ..a::Span::default() });
+        return std::result::Result::Err(vec![err(span, "E_SEMANTIC_CAPTURE", message)]);
+    }
     let mut problems = definitions.problems;
     let meaning = match elaborate_definitions(
         source,
@@ -430,6 +453,7 @@ fn infer_demanded_definitions(
         &compiler.names,
         &compiler.implementations,
         &selected,
+        compiler.capture_references,
     );
     for problem in report.problems {
         problems.push(problem);
@@ -606,6 +630,8 @@ fn elaborate_definitions(
     Ok(program)
 }
 
+
+
 impl<'a> Compiler<'a> {
     fn new(source: &'a a::Program) -> Result<Self> {
         Ok(Self::with_indexes(
@@ -613,6 +639,11 @@ impl<'a> Compiler<'a> {
             crate::resolve::Resolver::new(source)?,
             crate::generics::ImplementationIndex::new(source)?,
         ))
+    }
+    fn new_with_capture(source: &'a a::Program, capture_references: bool) -> Result<Self> {
+        let mut compiler = Self::new(source)?;
+        compiler.capture_references = capture_references;
+        Ok(compiler)
     }
     fn with_indexes(
         source: &'a a::Program,
@@ -660,6 +691,7 @@ impl<'a> Compiler<'a> {
             contracts: None,
             method_selections: BTreeMap::new(),
             definition_types: BTreeMap::new(),
+            capture_references: true,
             semantic_evidence: None,
             closures: closures::Catalog::default(),
             scoped_bodies: BTreeMap::new(),
@@ -686,7 +718,6 @@ impl<'a> Compiler<'a> {
         c
     }
 }
-
 impl Compiler<'_> {
     fn initialize_primitive_names(&mut self) {
         for i in 0..self.types.len() {
@@ -1317,6 +1348,7 @@ impl Compiler<'_> {
                 &self.names,
                 &self.implementations,
                 instance.source,
+                self.capture_references,
             )?,
         };
         let inferred = definition.instantiate(self, &instance.substitutions);
@@ -5025,5 +5057,76 @@ impl Builder<'_, '_> {
             self.reachable = false;
             Ok(self.unit(span.line))
         }
+    }
+}
+
+pub(crate) fn assert_reference_capture() {
+    let parsed = crate::source::parse_bundle(&crate::source::SourceBundle {
+        root: "reference-capture/main.lkj".to_string(),
+        library: None,
+        files: vec![crate::source::SourceInput {
+            path: "reference-capture/main.lkj".to_string(),
+            text: "fn target(value:i64)->i64 { let local=value; let (left,right)=(local,2i64); left+right } fn main()->i64 { target(40i64) }".to_string(),
+        }],
+    }).unwrap();
+    let source = crate::resolve::resolve(&parsed).unwrap();
+    let target = source.functions.iter().position(|function| function.name == "target").unwrap();
+    assert!(source.functions[target].generics.is_empty());
+    definition_types::assert_reference_capture_deferred(&source, target);
+    let mut without_capture = Vec::new();
+    for capture_references in vec![false, true] {
+        let mut definitions = infer_resolved_report_with_capture(&source, false, capture_references).unwrap();
+        assert!(definitions.problems.is_empty());
+        assert_eq!(definitions.compiler.capture_references, capture_references);
+        assert_eq!(definitions.verifier.capture_references, capture_references);
+        definition_types::assert_reference_capture_recording(
+            definitions.evidence.types.get(&target).unwrap(), capture_references,
+        );
+        // validate_report already ran reset_definition_verification before
+        // installing these contracts. The false-mode assertion above detects
+        // any reset that restores the legacy true default.
+        assert!(definitions.verifier.contracts.is_some());
+        let mut compiler = definitions.compiler;
+        compiler.method_selections = definitions.evidence.methods;
+        compiler.definition_types = definitions.evidence.types;
+        compiler.closures.evidence = definitions.evidence.closures;
+        let removed = compiler.definition_types.remove(&target).unwrap();
+        definition_types::assert_reference_capture_recording(&removed, capture_references);
+        assert!(!compiler.definition_types.contains_key(&target));
+        let id = compiler.instantiate(target, BTreeMap::new()).unwrap();
+        // A known definition was removed. This invokes the real fallback in
+        // compile_function_body and inspects the definition it reinserts.
+        let function = compiler.compile_function_body(id, &Instance {
+            source: target, substitutions: BTreeMap::new(),
+        }).unwrap();
+        definition_types::assert_reference_capture_recording(
+            compiler.definition_types.get(&target).unwrap(), capture_references,
+        );
+        compiler.functions[id] = function;
+        let program = ir::Program {
+            sources: source_paths(&source), types: compiler.types,
+            functions: compiler.functions, destructors: compiler.destructors,
+        };
+        let checked = crate::check::check_all(program).unwrap();
+        let encoded = crate::ir_binary::write(checked.program());
+        if capture_references {
+            assert_eq!(encoded, without_capture);
+        } else {
+            without_capture = encoded;
+        }
+
+        let mut mismatched = infer_resolved_report_with_capture(&source, false, capture_references).unwrap();
+        assert!(mismatched.problems.is_empty());
+        mismatched.verifier.capture_references = !capture_references;
+        let mut catalog = Some(vec![71u8, 19u8]);
+        let mut structural = None;
+        let errors = lower_definitions_recorded_semantic(
+            mismatched, &mut catalog, &mut structural,
+        ).err().expect("mismatched source-reference modes were accepted");
+        assert_eq!(errors.len(), 1usize);
+        assert_eq!(errors[0].code, "E_SEMANTIC_CAPTURE");
+        assert_eq!(errors[0].message, "concrete and verification source-reference capture modes differ");
+        assert_eq!(catalog, Some(vec![71u8, 19u8]));
+        assert!(structural.is_none());
     }
 }

@@ -1,0 +1,9 @@
+6	7	src/driver.lkj
+108	5	src/elaborate.lkj
+136	2	src/elaborate/definition_types.lkj
+3	1	src/elaborate/definition_types/pattern_equations.lkj
+2	1	src/elaborate/diagnostic_inference.lkj
+2	1	src/elaborate/generic_check.lkj
+3	3	src/elaborate/incremental.lkj
+1	1	src/semantic_main.lkj
+3	0	src/semantic_tests.lkj
