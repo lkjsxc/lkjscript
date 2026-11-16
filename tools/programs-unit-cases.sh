@@ -100,13 +100,14 @@ run "$compiler" build src/gate_reuse_main.lkj --library-dir library "${reuse[@]}
 reused=0
 rerun=0
 observe() {
-    local image=$1 cases=$2 entry=$3 tag cached fresh proof extra
+    local image=$1 cases=$2 entry=$3 tag cached fresh proof closure extra
     run "$work/runner" "$image" "$image.authority" tools/programs-unit-cases.sh \
         "$cases" "$store_path" "$key_path" "$entry" >"$work/observation" 2>&1 \
         || { cat "$work/observation" >&2; return 1; }
     [[ $(wc -l <"$work/observation") -eq 1 ]] || { cat "$work/observation" >&2; return 1; }
-    read -r tag cached fresh proof extra <"$work/observation"
-    [[ "$tag" == LKJSCRIPT_CLOSED_GATE && "$proof" == proof=authenticated-exact-runner-sealed-ELF-and-input-contract && -z "$extra" ]] \
+    read -r tag cached fresh proof closure extra <"$work/observation"
+    [[ "$tag" == LKJSCRIPT_CLOSED_GATE && "$proof" == proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract \
+        && "$closure" =~ ^closure=[0-9a-f]{64}$ && -z "$extra" ]] \
         || { cat "$work/observation" >&2; return 1; }
     if [[ "$cached" == "reused=$cases" && "$fresh" == rerun=0 ]]; then
         reused=$((reused + cases))
