@@ -44,6 +44,92 @@ pub const KIND_RETURN: u8 = 15;
 pub const KIND_COUNT: usize = 16;
 
 
+
+pub const COPY_ORIGIN_BODY: u64 = 1;
+
+pub const COPY_ORIGIN_PARAMETER: u64 = 2;
+
+pub const COPY_ROLE_LOCAL: u64 = 1;
+
+pub const COPY_ROLE_PLACE: u64 = 2;
+
+pub const COPY_ROLE_CONSTRUCTOR_FIELD: u64 = 3;
+
+pub const COPY_ROLE_ARRAY_ELEMENT: u64 = 4;
+
+pub const COPY_ROLE_ABI_INCOMING: u64 = 5;
+
+pub const COPY_ROLE_PARAM_LOCAL: u64 = 6;
+
+pub const COPY_ROLE_ABI_RESULT: u64 = 7;
+
+pub const COPY_ROLE_VEC_ELEMENT: u64 = 8;
+
+pub const COPY_ROLE_RESULT_FIELD: u64 = 9;
+
+pub const COPY_ROLE_REPEAT_ELEMENT: u64 = 10;
+
+pub const COPY_ROLE_BOX_PAYLOAD: u64 = 11;
+
+pub const COPY_ROLE_REFERENT: u64 = 12;
+
+pub const COPY_ROLE_VIEW_HEADER: u64 = 13;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct CopySite {
+    pub start: usize,
+    pub end: usize,
+    pub function: usize,
+    pub instruction: usize,
+    pub subsite: usize,
+    pub ty: usize,
+    pub width: u64,
+    pub tags: u64,
+}
+
+pub fn valid_copy_tags(tags: u64) -> bool {
+    if tags & !0x0000000707ffffffu64 != 0 { return false; }
+    let origin = tags & 255u64;
+    let source = (tags >> 8u32) & 255u64;
+    let destination = (tags >> 16u32) & 255u64;
+    let source_flags = (tags >> 24u32) & 7u64;
+    let destination_flags = (tags >> 32u32) & 7u64;
+    if (source != COPY_ROLE_PLACE && source_flags != 0)
+        || (destination != COPY_ROLE_PLACE && destination_flags != 0) { return false; }
+    if origin == COPY_ORIGIN_PARAMETER {
+        return source == COPY_ROLE_ABI_INCOMING && destination == COPY_ROLE_PARAM_LOCAL;
+    }
+    if origin != COPY_ORIGIN_BODY { return false; }
+    (source == COPY_ROLE_LOCAL && (destination == COPY_ROLE_LOCAL
+        || destination == COPY_ROLE_PLACE || destination == COPY_ROLE_CONSTRUCTOR_FIELD
+        || destination == COPY_ROLE_ARRAY_ELEMENT || destination == COPY_ROLE_ABI_RESULT
+        || destination == COPY_ROLE_VEC_ELEMENT || destination == COPY_ROLE_REPEAT_ELEMENT
+        || destination == COPY_ROLE_BOX_PAYLOAD))
+        || (source == COPY_ROLE_PLACE && destination == COPY_ROLE_LOCAL)
+        || (source == COPY_ROLE_VEC_ELEMENT && destination == COPY_ROLE_RESULT_FIELD)
+        || (source == COPY_ROLE_REFERENT && destination == COPY_ROLE_LOCAL)
+        || (source == COPY_ROLE_VIEW_HEADER && destination == COPY_ROLE_VIEW_HEADER)
+}
+
+fn valid_copy_coordinates(site: &CopySite) -> bool {
+    let origin = site.tags & 255u64;
+    site.start < site.end && site.width != 0 && site.function != !0usize && site.ty != !0usize
+        && valid_copy_tags(site.tags)
+        && ((origin == COPY_ORIGIN_BODY && site.instruction != !0usize)
+            || (origin == COPY_ORIGIN_PARAMETER && site.instruction == !0usize))
+}
+
+pub(crate) fn copy_interval(kinds: &[(usize, u8)], start: usize, end: usize, length: usize) -> bool {
+    if start >= end || end > length { return false; }
+    let mut low = 0usize;
+    let mut high = kinds.len();
+    while low < high {
+        let middle = low + (high - low) / 2usize;
+        if kinds[middle].0 <= start { low = middle + 1usize; } else { high = middle; }
+    }
+    low != 0 && kinds[low - 1usize].1 == KIND_COPY
+        && (low == kinds.len() || kinds[low].0 >= end)
+}
 struct Reference {
     at: usize,
     label: Label,
@@ -57,6 +143,8 @@ pub(crate) struct Checkpoint {
     labels: usize,
     references: usize,
     kinds: usize,
+    copies: usize,
+    profile: bool,
 }
 pub(crate) struct FragmentReference {
     pub at: usize,
@@ -71,6 +159,7 @@ pub(crate) struct Fragment {
     pub symbols: Vec<(Label, Vec<u8>)>,
     pub site: Span,
     pub kinds: Vec<(usize, u8)>,
+    pub copies: Vec<CopySite>,
 }
 
 pub struct Assembler {
@@ -83,12 +172,14 @@ pub struct Assembler {
     scope_kind: u8,
     region_kind: u8,
     kinds: Vec<(usize, u8)>,
+    copies: Vec<CopySite>,
 }
 impl Default for Assembler {
     fn default() -> Self {
         Self::new()
     }
 }
+
 impl Assembler {
     pub fn new() -> Self {
         Self {
@@ -107,12 +198,30 @@ impl Assembler {
             scope_kind: KIND_UNKNOWN,
             region_kind: KIND_UNKNOWN,
             kinds: Vec::new(),
+            copies: Vec::new(),
         }
     }
 
 
     pub(crate) fn enable_profile(&mut self) {
         self.profile = true;
+    }
+    pub(crate) fn copy_sites_enabled(&self) -> bool {
+        self.profile && (self.region_kind == KIND_UNKNOWN || self.region_kind == KIND_COPY)
+    }
+    pub(crate) fn record_copy_site(&mut self, site: CopySite) {
+        if !self.copy_sites_enabled() { return; }
+        if !valid_copy_coordinates(&site)
+            || !copy_interval(&self.kinds, site.start, site.end, self.bytes.len())
+            || self.copies.last().is_some_and(|previous| previous.end > site.start)
+        {
+            self.fail("invalid profiled copy-site interval");
+            return;
+        }
+        self.copies.push(site);
+    }
+    pub(crate) fn take_copy_sites(&mut self) -> Vec<CopySite> {
+        std::mem::replace(&mut self.copies, Vec::new())
     }
     pub(crate) fn scope_kind(&mut self, kind: u8) -> u8 {
         let previous = self.scope_kind;
@@ -176,6 +285,8 @@ impl Assembler {
             labels: self.labels.len(),
             references: self.references.len(),
             kinds: self.kinds.len(),
+            copies: self.copies.len(),
+            profile: self.profile,
         }
     }
     pub(crate) fn fragment(
@@ -183,7 +294,11 @@ impl Assembler {
         checkpoint: Checkpoint,
         symbols: Vec<(Label, Vec<u8>)>,
     ) -> Option<Fragment> {
-        if self.problem.is_some() {
+        if self.problem.is_some() || checkpoint.profile != self.profile
+            || checkpoint.bytes > self.bytes.len() || checkpoint.labels > self.labels.len()
+            || checkpoint.references > self.references.len() || checkpoint.copies > self.copies.len()
+            || (checkpoint.copies != 0 && self.copies[checkpoint.copies - 1usize].end > checkpoint.bytes)
+        {
             return None;
         }
         let mut positions = Vec::new();
@@ -196,6 +311,8 @@ impl Assembler {
         }
         let mut references = Vec::new();
         for reference in &self.references[checkpoint.references..] {
+            if reference.at < checkpoint.bytes || reference.at > self.bytes.len()
+                || self.bytes.len() - reference.at < 4usize { return None; }
             references.push(FragmentReference {
                 at: reference.at - checkpoint.bytes,
                 label: reference.label,
@@ -216,6 +333,19 @@ impl Assembler {
                 }
             }
         }
+        let mut copies = Vec::new();
+        for site in &self.copies[checkpoint.copies..] {
+            if !self.profile || site.start < checkpoint.bytes || site.end > self.bytes.len() {
+                return None;
+            }
+            let mut relative = *site;
+            relative.start -= checkpoint.bytes;
+            relative.end -= checkpoint.bytes;
+            if !valid_copy_coordinates(&relative)
+                || !copy_interval(&kinds, relative.start, relative.end, self.bytes.len() - checkpoint.bytes)
+            { return None; }
+            copies.push(relative);
+        }
         Some(Fragment {
             bytes: self.bytes[checkpoint.bytes..].to_vec(),
             label_base: checkpoint.labels,
@@ -224,6 +354,7 @@ impl Assembler {
             symbols,
             site: self.site,
             kinds,
+            copies,
         })
     }
     /// Append authenticated relocatable bytes only after a complete preflight.
@@ -235,7 +366,8 @@ impl Assembler {
         prefix: usize,
         symbols: &mut std::collections::BTreeMap<Vec<u8>, Label>,
     ) -> bool {
-        if bound >= prefix || prefix > self.labels.len()
+        if self.problem.is_some() || (self.profile && self.region_kind != KIND_UNKNOWN)
+            || bound >= prefix || prefix > self.labels.len()
             || self.labels[bound].is_some() || fragment.label_base < prefix
             || fragment.labels.len() > (!0usize) - fragment.label_base
         {
@@ -286,8 +418,25 @@ impl Assembler {
             }
             previous = *offset;
         }
-        // No validation failure may allocate a label or introduce a data symbol.
+        if !self.profile && !fragment.copies.is_empty() { return false; }
+        let mut previous_end = 0usize;
+        for site in &fragment.copies {
+            if !valid_copy_coordinates(site) || site.start < previous_end
+                || !copy_interval(&fragment.kinds, site.start, site.end, fragment.bytes.len())
+            { return false; }
+            previous_end = site.end;
+        }
         let offset = self.bytes.len();
+        if fragment.bytes.len() > (!0usize) - offset
+            || fragment.labels.len() > (!0usize) - self.labels.len()
+            || fragment.symbols.len() > (!0usize) - self.labels.len() - fragment.labels.len()
+            || fragment.copies.len() > (!0usize) - self.copies.len()
+            || fragment.kinds.len() > (!0usize) - self.kinds.len()
+        { return false; }
+        if let Some(first) = fragment.copies.first() {
+            if self.copies.last().is_some_and(|last| last.end > offset + first.start) { return false; }
+        }
+        // No validation failure may allocate a label or introduce a data symbol.
         let mut locals = Vec::new();
         for _ in &fragment.labels {
             locals.push(self.label());
@@ -317,6 +466,12 @@ impl Assembler {
         self.bytes.extend_from_slice(&fragment.bytes);
         for (position, kind) in &fragment.kinds {
             self.record_kind(offset + *position, *kind);
+        }
+        for site in &fragment.copies {
+            let mut rebased = *site;
+            rebased.start += offset;
+            rebased.end += offset;
+            self.copies.push(rebased);
         }
         for reference in &fragment.references {
             let label = match rebound.get(&reference.label) {

@@ -591,7 +591,7 @@ impl Body<'_> {
         self.a.imul(A, C);
         self.a.load(DI, R8, 0);
         self.a.rr(0x01, DI, A, true);
-        self.copy_from_local(DI, args[1], element);
+        self.copy_from_local(DI, args[1], element, 0usize);
         self.a.load(R8, BP, self.scratch[0]);
         self.a.load(A, BP, self.scratch[1]);
         self.a.immediate(C, 1);
@@ -625,7 +625,7 @@ impl Body<'_> {
         self.a.immediate(C, 1);
         self.a.store(DI, 0, C);
         self.a.lea(DI, DI, field as i64);
-        self.copy_value(DI, SI, element);
+        self.copy_value(DI, SI, element, 0usize);
         self.a.jump(done);
         self.a.bind(empty);
         self.a.immediate(A, 0);
@@ -694,7 +694,7 @@ impl Body<'_> {
         self.a.test(A, true);
         self.a.condition(4, done);
         self.a.load(DI, BP, self.scratch[0]);
-        self.copy_from_local(DI, src, inner);
+        self.copy_from_local(DI, src, inner, 0usize);
         self.a.load(A, BP, self.scratch[0]);
         self.a.immediate(C, stride);
         self.a.rr(0x01, A, C, true);
@@ -733,7 +733,7 @@ impl Body<'_> {
                 self.a.call(self.runtime.allocate);
                 self.a.store(BP, self.scratch[0], A);
                 self.a.mov(DI, A);
-                self.copy_from_local(DI, args[0], inner);
+                self.copy_from_local(DI, args[0], inner, 0usize);
                 self.a.load(A, BP, self.scratch[0]);
                 self.write(dst, A);
             }
@@ -777,7 +777,7 @@ impl Body<'_> {
                     self.write(dst, A);
                 } else {
                     self.local_address(dst, DI);
-                    self.copy_value(DI, SI, ty);
+                    self.copy_value(DI, SI, ty, 0usize);
                     self.mark(dst);
                 }
             }

@@ -9,17 +9,22 @@ pub(super) struct Context<'a> {
     pub records: &'a mut Records,
     pub prefix: usize,
 }
-fn word(bytes: &mut Vec<u8>, value: usize) {
+
+fn wide_word(bytes: &mut Vec<u8>, value: u64) {
     for index in 0..8 {
-        bytes.push(((value as u64) >> (index * 8)) as u8);
+        bytes.push((value >> (index * 8)) as u8);
     }
+}
+fn word(bytes: &mut Vec<u8>, value: usize) {
+    wide_word(bytes, value as u64);
 }
 fn span(bytes: &mut Vec<u8>, site: Span) {
     word(bytes, site.file);
     word(bytes, site.line);
     word(bytes, site.column);
 }
-fn take_word(bytes: &[u8], at: &mut usize) -> Option<usize> {
+
+fn take_wide_word(bytes: &[u8], at: &mut usize) -> Option<u64> {
     if *at > bytes.len() || bytes.len() - *at < 8 {
         return None;
     }
@@ -28,6 +33,11 @@ fn take_word(bytes: &[u8], at: &mut usize) -> Option<usize> {
         value |= (bytes[*at + index] as u64) << (index * 8);
     }
     *at += 8;
+    Some(value)
+}
+fn take_word(bytes: &[u8], at: &mut usize) -> Option<usize> {
+    let value = take_wide_word(bytes, at)?;
+    if value > (!0usize) as u64 { return None; }
     Some(value as usize)
 }
 fn take_span(bytes: &[u8], at: &mut usize) -> Option<Span> {
@@ -40,7 +50,7 @@ fn take_span(bytes: &[u8], at: &mut usize) -> Option<Span> {
     })
 }
 fn encode(fragment: &Fragment) -> Vec<u8> {
-    let mut out = "LKJCODE2".as_bytes().to_vec();
+    let mut out = "LKJCODE3".as_bytes().to_vec();
     word(&mut out, fragment.label_base);
     span(&mut out, fragment.site);
     word(&mut out, fragment.bytes.len());
@@ -66,10 +76,23 @@ fn encode(fragment: &Fragment) -> Vec<u8> {
         word(&mut out, *offset);
         word(&mut out, *kind as usize);
     }
+    if !fragment.kinds.is_empty() {
+        word(&mut out, fragment.copies.len());
+        for site in &fragment.copies {
+            word(&mut out, site.start);
+            word(&mut out, site.end);
+            word(&mut out, site.function);
+            word(&mut out, site.instruction);
+            word(&mut out, site.subsite);
+            word(&mut out, site.ty);
+            wide_word(&mut out, site.width);
+            wide_word(&mut out, site.tags);
+        }
+    }
     out
 }
 fn decode(bytes: &[u8]) -> Option<Fragment> {
-    if bytes.len() < 8 || &bytes[..8] != b"LKJCODE2" {
+    if bytes.len() < 8 || &bytes[..8] != b"LKJCODE3" {
         return None;
     }
     let mut at = 8;
@@ -127,10 +150,29 @@ fn decode(bytes: &[u8]) -> Option<Fragment> {
         if kind >= KIND_COUNT { return None; }
         kinds.push((offset, kind as u8));
     }
+    let mut copies = Vec::new();
+    if !kinds.is_empty() {
+        let count = take_word(bytes, &mut at)?;
+        if count > (bytes.len() - at) / 64usize { return None; }
+        for _ in 0..count {
+            let copy = crate::x86::CopySite {
+                start: take_word(bytes, &mut at)?,
+                end: take_word(bytes, &mut at)?,
+                function: take_word(bytes, &mut at)?,
+                instruction: take_word(bytes, &mut at)?,
+                subsite: take_word(bytes, &mut at)?,
+                ty: take_word(bytes, &mut at)?,
+                width: take_wide_word(bytes, &mut at)?,
+                tags: take_wide_word(bytes, &mut at)?,
+            };
+            if !valid_copy_tags(copy.tags) { return None; }
+            copies.push(copy);
+        }
+    }
     if at != bytes.len() {
         return None;
     }
-    Some(Fragment { bytes: code, label_base, labels, references, symbols, site, kinds })
+    Some(Fragment { bytes: code, label_base, labels, references, symbols, site, kinds, copies })
 }
 
 pub(super) fn namespace(
@@ -139,7 +181,7 @@ pub(super) fn namespace(
     grants: &[ir::EntryGrant],
     profile_path: Option<&str>,
 ) -> String {
-    let mut inputs = "lkjscript-native-functions-2\0linux-x86_64\0".as_bytes().to_vec();
+    let mut inputs = "lkjscript-native-functions-3\0linux-x86_64\0".as_bytes().to_vec();
     // Grant values and the selected entry do not occur in function bodies, but
     // grant count and profiler presence change the external label prefix.
     word(&mut inputs, grants.len());
@@ -156,6 +198,22 @@ pub(super) fn namespace(
     format!("native-{}", crate::sha256::hex_digest(&inputs))
 }
 
+
+fn valid_copies(fragment: &Fragment, selection: &Selection<'_>, function: usize) -> bool {
+    for site in &fragment.copies {
+        if site.function != function { return false; }
+        let (ty, tags) = match super::copy_contract(
+            selection.program, function, site.instruction, site.subsite,
+        ) {
+            Some(contract) => contract,
+            None => return false,
+        };
+        if site.ty != ty || site.tags != tags || selection.layout.storage(ty).bytes != site.width {
+            return false;
+        }
+    }
+    true
+}
 pub(super) fn emit(
     a: &mut Assembler,
     p: platform::Platform,
@@ -169,7 +227,9 @@ pub(super) fn emit(
     let key = cache.keys.function(index);
     if let Some(payload) = cache.records.get(cache.namespace, key) {
         if let Some(fragment) = decode(&payload) {
-            if a.append_fragment(&fragment, selection.functions[index], cache.prefix, literals) {
+            if valid_copies(&fragment, selection, index)
+                && a.append_fragment(&fragment, selection.functions[index], cache.prefix, literals)
+            {
                 for reference in &fragment.references {
                     if !selection.functions.is_empty() {
                         let start = selection.functions[0];
@@ -253,16 +313,39 @@ fn fixture_body(
     a.jump(done);
     a.immediate(A, 41);
     a.bind(done);
+    let kind = a.scope_kind(KIND_COPY);
+    let start = a.bytes.len();
+    a.load(A, SI, 0);
+    a.store(DI, 0, A);
+    let end = a.bytes.len();
+    a.scope_kind(kind);
+    a.record_copy_site(crate::x86::CopySite {
+        start, end, function: 3usize, instruction: 7usize, subsite: 0usize,
+        ty: ir::U64, width: 8u64,
+        tags: COPY_ORIGIN_BODY | (COPY_ROLE_LOCAL << 8u32) | (COPY_ROLE_LOCAL << 16u32),
+    });
+    let kind = a.scope_kind(KIND_COPY);
+    let start = a.bytes.len();
+    a.load(A, SI, 0);
+    a.store(DI, 0, A);
+    let end = a.bytes.len();
+    a.scope_kind(kind);
+    a.record_copy_site(crate::x86::CopySite {
+        start, end, function: 3usize, instruction: 8usize, subsite: 0usize,
+        ty: ir::U64, width: 8u64,
+        tags: COPY_ORIGIN_BODY | (COPY_ROLE_LOCAL << 8u32) | (COPY_ROLE_LOCAL << 16u32),
+    });
     a.ret();
     a.fragment(checkpoint, vec![(first, first_bytes), (second, second_bytes)]).unwrap()
 }
-fn fixture_finish(mut a: Assembler, symbols: &BTreeMap<Vec<u8>, Label>) -> (Vec<u8>, Vec<(usize, u8)>) {
+fn fixture_finish(mut a: Assembler, symbols: &BTreeMap<Vec<u8>, Label>) -> (Vec<u8>, Vec<(usize, u8)>, Vec<crate::x86::CopySite>) {
     let kinds = a.take_kinds();
+    let copies = a.take_copy_sites();
     for (bytes, label) in symbols {
         a.bind(*label);
         a.raw(bytes);
     }
-    (a.finish().unwrap(), kinds)
+    (a.finish().unwrap(), kinds, copies)
 }
 pub(super) fn contracts() {
     let (mut original, target, bound, mut symbols) = fixture(0, true);
@@ -295,4 +378,69 @@ pub(super) fn contracts() {
     broken.kinds[0].0 = 1;
     assert!(!a.append_fragment(&broken, bound, 2, &mut symbols));
     assert!(a.bytes == before && a.label_count() == labels && symbols.is_empty());
+    for mutation in 0usize..9usize {
+        let mut broken = decode(&encoded).unwrap();
+        match mutation {
+            0 => broken.copies[0].end = broken.bytes.len() + 1usize,
+            1 => broken.copies[0].end = broken.copies[0].start,
+            2 => broken.copies[0].width = 0u64,
+            3 => broken.copies[0].function = !0usize,
+            4 => broken.copies[0].ty = !0usize,
+            5 => broken.copies[0].instruction = !0usize,
+            6 => broken.copies[0].tags |= 1u64 << 63u32,
+            7 => broken.copies[0].tags |= 1u64 << 24u32,
+            _ => { let duplicate = broken.copies[0]; broken.copies.push(duplicate); }
+        }
+        assert!(!a.append_fragment(&broken, bound, 2, &mut symbols));
+        assert!(a.bytes == before && a.label_count() == labels && symbols.is_empty());
+        assert!(a.take_copy_sites().is_empty());
+    }
+    assert!(fragment.copies.len() == 2usize && fragment.copies[0].end == fragment.copies[1].start);
+    let mut overflow = encoded.clone();
+    let count_at = encoded.len() - fragment.copies.len() * 64usize - 8usize;
+    for index in 0usize..8usize { overflow[count_at + index] = 255u8; }
+    assert!(decode(&overflow).is_none());
+    let mut old = encoded.clone();
+    old[7] = b'2';
+    assert!(decode(&old).is_none());
+    let mut bad_tag = encoded.clone();
+    let last = bad_tag.len() - 1usize;
+    bad_tag[last] |= 128u8;
+    assert!(decode(&bad_tag).is_none());
+    let mut truncated_count = encoded[..encoded.len() - 64usize].to_vec();
+    assert!(decode(&truncated_count).is_none());
+    truncated_count.extend_from_slice(&[255u8; 8]);
+    assert!(decode(&truncated_count).is_none());
+    let mut plain = Assembler::new();
+    let target = plain.label();
+    let bound = plain.label();
+    plain.bind(target);
+    plain.ret();
+    let mut plain_symbols = BTreeMap::new();
+    let ordinary = fixture_body(&mut plain, target, bound, &mut plain_symbols);
+    assert!(ordinary.kinds.is_empty() && ordinary.copies.is_empty());
+    let mut ordinary_bytes = encode(&ordinary);
+    assert!(decode(&ordinary_bytes).unwrap().copies.is_empty());
+    // Ordinary encodings have no copy-count word, even when its value is zero.
+    ordinary_bytes.extend_from_slice(&[0u8; 8]);
+    assert!(decode(&ordinary_bytes).is_none());
+    for region in vec![KIND_RUNTIME, KIND_ALLOCATOR] {
+        let (mut guarded, _, bound, mut symbols) = fixture(5usize, false);
+        guarded.region_kind(region);
+        let before = guarded.bytes.clone();
+        let labels = guarded.label_count();
+        assert!(!guarded.append_fragment(&fragment, bound, 2usize, &mut symbols));
+        assert!(guarded.bytes == before && guarded.label_count() == labels && symbols.is_empty());
+        assert!(guarded.take_copy_sites().is_empty());
+        let mut excluded = Assembler::new();
+        excluded.enable_profile();
+        excluded.region_kind(region);
+        let target = excluded.label();
+        let bound = excluded.label();
+        excluded.bind(target);
+        excluded.ret();
+        let mut literals = BTreeMap::new();
+        let fragment = fixture_body(&mut excluded, target, bound, &mut literals);
+        assert!(fragment.copies.is_empty() && excluded.take_copy_sites().is_empty());
+    }
 }

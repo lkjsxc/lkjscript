@@ -13,3 +13,105 @@ fn main(mut world: World) {
     let result = recurse(96);
     world.stdout().write(format!("{result}\n").as_bytes());
 }
+
+#[derive(Clone, Copy)]
+struct CopyWide { words: [u64; 32] }
+
+fn copy_work(iterations: u64) -> u64 {
+    let mut value = CopyWide { words: [0u64; 32] };
+    let mut index = 0u64;
+    while index < iterations {
+        let copy = value;
+        let offset = (index as usize) & 31usize;
+        value.words[offset] = copy.words[(offset + 1usize) & 31usize] ^ index;
+        index += 1;
+    }
+    value.words[0] ^ value.words[31]
+}
+
+fn profile_value(value: u64) -> u64 { value }
+
+pub fn copy_once() -> u64 { profile_value(copy_work(32u64)) }
+
+pub fn copy_samples(mut world: World) {
+    let result = profile_value(copy_work(16000000u64));
+    world.stdout().write(format!("{result}\n").as_bytes());
+}
+
+#[derive(Clone, Copy)]
+struct CopyRoleByte { value: u8 }
+
+#[derive(Clone, Copy)]
+struct CopyRolePair { left: u64, right: u64 }
+
+#[derive(Clone, Copy)]
+struct CopyRoleFrame { tag: u64, small: CopyRolePair, enabled: bool, wide: CopyWide }
+
+#[derive(Clone, Copy)]
+enum CopyRoleChoice { Empty, Value(u8, CopyRolePair, u64, CopyWide) }
+
+fn copy_role_byte(value: CopyRoleByte) -> CopyRoleByte { value }
+
+fn copy_role_pair(value: CopyRolePair) -> CopyRolePair { value }
+
+fn copy_role_wide(value: CopyWide) -> CopyWide { value }
+
+fn copy_role_text<'a>(value: &'a str) -> &'a str { value }
+
+pub fn copy_roles() -> u64 {
+    let tiny = copy_role_byte(CopyRoleByte { value: 3u8 });
+    let pair = copy_role_pair(CopyRolePair { left: 11u64, right: 13u64 });
+    let local_copy = pair;
+    let wide = copy_role_wide(CopyWide { words: [17u64; 32] });
+    let mut frame = CopyRoleFrame { tag: 5u64, small: pair, enabled: true, wide };
+    let first = frame.small;
+    frame.small = CopyRolePair { left: 19u64, right: 23u64 };
+    let replaced = {
+        let reference = &mut frame;
+        let old = reference.small;
+        reference.small = pair;
+        old
+    };
+    let array = [first, replaced];
+    let mut repeated = [pair; 3];
+    repeated[1usize] = replaced;
+    let indexed = repeated[1usize];
+    let mut boxed = Box::new(pair);
+    let original_box = *boxed;
+    *boxed = indexed;
+    let cloned = pair.clone();
+    let mut values: Vec<CopyRolePair> = Vec::new();
+    values.push(array[0usize]);
+    values.push(array[1usize]);
+    let popped = match values.pop() {
+        Some(value) => value,
+        None => CopyRolePair { left: 0u64, right: 0u64 },
+    };
+    let selected = match CopyRoleChoice::Value(7u8, pair, 29u64, wide) {
+        CopyRoleChoice::Value(byte, value, tag, large) => {
+            assert!(byte == 7u8 && tag == 29u64 && large.words[31usize] == 17u64);
+            value
+        }
+        CopyRoleChoice::Empty => CopyRolePair { left: 0u64, right: 0u64 },
+    };
+    let text = copy_role_text("copy");
+    let bytes = text.as_bytes();
+    let old_wide = frame.wide;
+    frame.wide = CopyWide { words: [31u64; 32] };
+    assert!(tiny.value == 3u8 && local_copy.right == 13u64);
+    assert!(first.left == 11u64 && first.right == 13u64);
+    assert!(replaced.left == 19u64 && replaced.right == 23u64);
+    assert!(frame.tag == 5u64 && frame.enabled && frame.small.right == 13u64);
+    assert!(array[0usize].right == 13u64 && array[1usize].right == 23u64);
+    assert!(indexed.left == 19u64 && repeated[2usize].right == 13u64);
+    assert!(original_box.right == 13u64 && boxed.right == 23u64);
+    assert!(cloned.left == 11u64 && cloned.right == 13u64);
+    assert!(popped.left == 19u64 && popped.right == 23u64 && values.len() == 1usize);
+    assert!(selected.left == 11u64 && selected.right == 13u64);
+    assert!(old_wide.words[31usize] == 17u64 && frame.wide.words[31usize] == 31u64);
+    assert!(text.len() == 4usize && bytes.len() == 4usize && bytes[3usize] == b'y');
+    (tiny.value as u64) + local_copy.left + first.left + replaced.right
+        + indexed.right + original_box.right + boxed.left + cloned.right
+        + popped.right + selected.left + old_wide.words[0usize]
+        + frame.wide.words[31usize] + (bytes[0usize] as u64)
+}

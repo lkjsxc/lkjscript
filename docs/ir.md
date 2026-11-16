@@ -11,6 +11,12 @@ Files use `.lkjir` and begin with the exact first line `lkjscript-ir 1`.
 The revision describes the text format. Unsupported or absent headers are errors.
 `lkjscript ir SOURCE` writes it; `check`, `build`, `run`, `test` and `authority` accept it.
 
+`ir` serializes the admitted original program. Native emission may instead use
+a rechecked optimization of that program. `build --profile --profile-ir PATH`
+writes the exact checked IR selected for native emission, including the
+original fallback when an optimization candidate is rejected. See
+[native CPU profiles and selected IR](#native-cpu-profiles-and-selected-ir).
+
 Optional `source "path"` records assign diagnostic file indices in order. They
 carry no read authority. Nonempty maps require every function/instruction file
 index to exist; empty paths reject. Source emission binds actual source/library
@@ -462,6 +468,186 @@ The independent interpreter checks behavior without sharing checker or lowering
 logic; it is a differential oracle. Optimization output is rechecked and rejected
 output discarded, then native behavior is compared with interpretation of the
 original IR.
+
+## Native CPU profiles and selected IR
+
+CPU profiling is an explicit build option:
+
+```text
+lkjscript build SOURCE --profile --profile-ir PROGRAM.native.lkjir -o PROGRAM
+lkjscript profile PROGRAM.samples.PID
+lkjscript profile PROGRAM.samples.PID --copy-sites \
+  --profile-ir PROGRAM.native.lkjir --limit 100 --bytes 65536
+```
+
+`--profile` adds the existing CPU sampler and its output path to the executable.
+Each process writes its own `OUTPUT.samples.PID` file. The default `profile`
+report shows function self/inclusive counts and instruction-kind counts.
+
+`--profile-ir PATH` on a profiled build writes the exact IR selected for native
+emission. Emission and serialization use the same checked selection. Rejection
+of an optimization candidate selects the original program for both outputs.
+Ordinary `ir` output continues to describe the original admitted program.
+
+A companion request bypasses the early whole-image memo return. Frontend,
+checker and native-fragment reuse may still operate. An image-only cache hit
+does not supply the requested companion. Ordinary builds do not collect
+copy-site metadata or serialize/hash selected IR for this feature.
+
+### Output publication
+
+The driver retains both output directories and rejects destinations with the
+same held parent identity and basename, including aliases for the parent.
+It stages both contents, publishes the companion, then publishes the image.
+
+These two publications are not an atomic transaction. A failure can leave one
+destination replaced. The command returns nonzero and publishes no new image
+memo after a partial publication; it does not promise rollback of both paths.
+Successful publication requires both renames.
+
+The profile binds the exact companion bytes by SHA-256. A missing or different
+companion is refused by the detail reader. Identical companion bytes retained
+from an earlier build still satisfy this correspondence. The digest establishes
+neither freshness nor a common publication event.
+
+### Copy-site detail and bounds
+
+`--copy-sites` is accepted only by `profile`. It requires `--profile-ir` and
+explicit positive `--limit` and `--bytes` values. On this route,
+`--profile-ir` names the companion to read.
+
+Each detail row identifies a native copy interval, sample count, selected-IR
+function, instruction, subsite and type, fixed byte width, and source/destination
+roles. These numeric coordinates belong to the exact companion bytes. They
+are not stable source identities. Source locations survive inlining, but the
+profile does not reconstruct an inline-call chain.
+
+Rows sort by descending samples, then the complete
+`(function, instruction, subsite, start, end)` tuple. Names are quoted
+deterministically. The byte bound covers the complete encoded reply, including
+both header lines and its continuation. A bound too small for a complete next
+row and continuation is refused; rows are never cut in the middle.
+
+A continuation has the form
+`4:PROFILE_SHA256:COMPANION_SHA256:NEXT`. Supply it with `--cursor` to resume the
+same ordering. Both exact byte digests are part of the selector. Bounds may
+change between pages; changed profile or companion bytes invalidate the
+continuation. `cursor=none` marks the end. A continuation is a content selector,
+not an authenticated store token.
+
+The reader validates the complete profile and companion before returning any
+detail output. Parsing, independent IR checking and sorting follow artifact
+size; the output bounds do not make this an answer-size-bounded semantic-store
+query.
+
+### LKJPROF4 representation
+
+The reader requires `LKJPROF4`; older headers are rejected. Numeric fields are
+little-endian u64. Encoded sections are contiguous and appear in this order:
+
+1. The 160-byte header.
+2. The 64-byte symbol rows and their UTF-8 name bytes.
+3. The 16-byte instruction-kind rows.
+4. Sixteen u64 instruction-kind counters.
+5. The 72-byte copy-site rows.
+6. The 16-byte selected-function map rows, ending exactly at EOF.
+
+The header contains:
+
+| Offset | Bytes | Field |
+| ---: | ---: | --- |
+| 0 | 8 | `LKJPROF4` |
+| 8 | 8 | Symbol-row count |
+| 16 | 8 | Requested sample period, 1,000,000 ns |
+| 24 | 8 | Handler serial |
+| 32 / 40 | 8 each | Kind-table offset / row count |
+| 48 | 8 | Kind-counter offset |
+| 56 / 64 | 8 each | Code interval start / end |
+| 72 | 8 | Reserved zero |
+| 80 | 32 | Exact selected-IR companion SHA-256 |
+| 112 / 120 | 8 each | Copy-table offset / row count |
+| 128 / 136 | 8 each | Function-map offset / row count |
+| 144 | 8 | Unmapped-copy sample count |
+| 152 | 8 | Reserved zero |
+
+A symbol row contains eight words: native start/end, self count, inclusive
+count, last included serial, name offset/length, and frame position.
+A kind row contains its native interval start and kind; its end is the next
+row's start or the code end.
+
+A copy row contains nine words:
+
+| Offset | Field |
+| ---: | --- |
+| 0 / 8 | Nonempty half-open native interval start / end |
+| 16 | Sample count |
+| 24 | Selected-program function index |
+| 32 | Selected-IR instruction index |
+| 40 | Subsite index |
+| 48 | Copied-payload type index |
+| 56 | Positive fixed copied byte width |
+| 64 | Origin, roles and place flags |
+
+An incoming parameter copy uses the all-ones instruction sentinel and its
+parameter index as the subsite. Body copies use the actual selected-IR
+instruction index. Constructor subsites retain the original field or element
+index, including gaps for elements that emit no copy. Other transfers use
+subsite zero.
+
+Each function-map row contains a selected-program function index and the final
+symbol-row index. Every selected function has one map row. Unemitted functions
+use the all-ones symbol sentinel; a copy site's owner cannot use that sentinel.
+The symbol table also includes runtime and profiler helpers, so selected
+function indices and symbol-row indices are distinct.
+
+Tag bits are:
+
+| Bits | Meaning |
+| --- | --- |
+| 0–7 | Origin: 1 body instruction, 2 incoming parameter |
+| 8–15 | Source role |
+| 16–23 | Destination role |
+| 24–26 | Source-place flags |
+| 32–34 | Destination-place flags |
+| All others | Reserved zero |
+
+Role values are 1 Local, 2 TypedPlace, 3 ConstructorField, 4 ArrayElement,
+5 ABIIncoming, 6 ParamLocal, 7 ABIResult, 8 VecElement, 9 ResultVariantField,
+10 RepeatedArrayElement, 11 BoxPayload, 12 Referent and 13 ViewHeader.
+Place flags may combine: 1 local projection, 2 dereference and 4 collection
+projection. Nonzero place flags apply only to TypedPlace.
+
+The parser checks section sizes and arithmetic before indexed access. It
+requires valid symbol/function mappings, reserved fields and tags, and ordered
+nonoverlapping copy intervals contained within their owner and copy-kind
+interval. The detail reader additionally checks instruction, subsite, type,
+roles and width against the independently checked companion and native layout.
+
+### Sampling scope and trust
+
+Only intervals classified as the existing copy instruction kind receive
+copy-site attribution. Runtime/allocator overrides, variable-width runtime
+copy, Replace's byte-swap, and scalar/frame/address work outside those intervals
+remain excluded. Zero-size and storage-coalesced transfers emit no copy site.
+Unknown copy attribution increments the explicit unmapped counter.
+
+The signal handler increments a site or the unmapped counter before incrementing
+the copy-kind counter. Let D be all site counts plus unmapped, K the copy-kind
+count, T all completed kind counts and S the handler serial. Valid captures
+require `S - T` to be zero or one. Normally `D = K`; `D = K + 1` is accepted
+only when `S - T = 1` and is reported as one possibly in-flight detail sample.
+Larger differences, reverse differences and sum overflow reject. The reader
+does not decrement an arbitrary row to make the totals equal.
+
+The companion is diagnostic IR text. Neither it nor the sample file is an
+admission certificate, authenticated store snapshot or proof that a particular
+execution occurred. The detail reader independently checks the companion's IR
+before validating coordinates and layout. Profile counts remain observations
+supplied by the sample file.
+
+A machine copy interval does not prove a Copy type, freshness, nonescape or
+removable work. Multiplying samples by width does not measure dynamic byte
+traffic or recoverable execution time.
 
 ## Structural questions and snapshot identity
 

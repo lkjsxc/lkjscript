@@ -20,6 +20,10 @@ struct Options {
     engines: Vec<String>,
     stats: bool,
     profile: bool,
+    profile_ir: Option<String>,
+    profile_copy_sites: bool,
+    profile_limit_explicit: bool,
+    profile_bytes_explicit: bool,
     index: bool,
     query: crate::semantic_query::Options,
     roundtrip: bool,
@@ -42,7 +46,7 @@ struct Options {
 }
 
 fn usage() -> &'static str {
-    "lkjscript check|build|build-entries|run|test|ir|authority|query|edit|compare <source.lkj|program.lkjir|directory> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  build-entries  Write multiple entry images and matched authority reports\n  build-child  Write a transfer-only ELF and authenticated .admission\n  image-authority  Authenticate exact child bytes and canonical checked slots\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n  query  Ask a bounded question about an authenticated build snapshot\n  edit   Check and publish an identity-addressed transaction (--request JSON or --against SOURCE)\n  compare  Compare checked meaning with --against SOURCE\n  delta  Print frequent accepted forms that differ from Rust\n\n  --entry NAME                 Select an entry\n  --artifact NAME=ENTRY       Select an image for build-entries; -o names its directory\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  --index                     Publish a structural snapshot during a stored build\n  --kind QUESTION             Select a structural query (default outline)\n  --id ID                     Select an identity (default crate)\n  --snapshot HEX              Pin an immutable source snapshot\n  --cursor HEX                Continue the same authenticated question\n  --depth N --limit N --bytes N  Bound traversal, fact count and answer bytes\n  --inline-limit N            Recheck inlining of bodies with at most N IR operations\n  --no-opt                    Keep original checked IR for native emission\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --store DIR                 Reuse authenticated work beneath this Directory\n  --store-key PATH            Grant a private 32-byte key outside source roots\n  --image-key PATH            Private child-admission key outside all source grants\n  --admission PATH            Child admission record (default IMAGE.admission)\n  --store-bytes N             Bound disposable bytes (default 268435456)\n  --no-store                  Disable stored reuse\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
+    "lkjscript check|build|build-entries|run|test|ir|authority|query|edit|compare <source.lkj|program.lkjir|directory> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  build-entries  Write multiple entry images and matched authority reports\n  build-child  Write a transfer-only ELF and authenticated .admission\n  image-authority  Authenticate exact child bytes and canonical checked slots\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n  query  Ask a bounded question about an authenticated build snapshot\n  edit   Check and publish an identity-addressed transaction (--request JSON or --against SOURCE)\n  compare  Compare checked meaning with --against SOURCE\n  delta  Print frequent accepted forms that differ from Rust\n\n  --entry NAME                 Select an entry\n  --artifact NAME=ENTRY       Select an image for build-entries; -o names its directory\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  --profile-ir PATH           Write the exact selected native IR beside a profiled build\n  --copy-sites                Report profile sites with --profile-ir, --limit and --bytes\n  --index                     Publish a structural snapshot during a stored build\n  --kind QUESTION             Select a structural query (default outline)\n  --id ID                     Select an identity (default crate)\n  --snapshot HEX              Pin an immutable source snapshot\n  --cursor HEX                Continue the same authenticated question\n  --depth N --limit N --bytes N  Bound traversal, fact count and answer bytes\n  --inline-limit N            Recheck inlining of bodies with at most N IR operations\n  --no-opt                    Keep original checked IR for native emission\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --store DIR                 Reuse authenticated work beneath this Directory\n  --store-key PATH            Grant a private 32-byte key outside source roots\n  --image-key PATH            Private child-admission key outside all source grants\n  --admission PATH            Child admission record (default IMAGE.admission)\n  --store-bytes N             Bound disposable bytes (default 268435456)\n  --no-store                  Disable stored reuse\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
 }
 
 fn delta() -> &'static str {
@@ -87,6 +91,10 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         engines: vec!["native".to_string(), "interpreter".to_string()],
         stats: false,
         profile: false,
+        profile_ir: None,
+        profile_copy_sites: false,
+        profile_limit_explicit: false,
+        profile_bytes_explicit: false,
         index: false,
         query: crate::semantic_query::Options::new(),
         roundtrip: false,
@@ -115,6 +123,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         match option.as_str() {
             "--stats" => out.stats = true,
             "--profile" => out.profile = true,
+            "--copy-sites" => out.profile_copy_sites = true,
             "--index" => out.index = true,
             "--roundtrip" => out.roundtrip = true,
             "--no-opt" => out.inline_limit = Some(0),
@@ -124,7 +133,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
             "--no-store" => { out.store_directory = None; out.store_key = None; },
             "--entry" | "--artifact" | "-o" | "--engine" | "--engines" | "--source-dir" | "--library-dir"
             | "--runtime-source" | "--jobs" | "--witness" | "--grant" | "--store" | "--store-key" | "--store-bytes" | "--inline-limit" | "--image-key" | "--admission"
-            | "--kind" | "--id" | "--depth" | "--limit" | "--bytes" | "--snapshot" | "--cursor" => {
+            | "--kind" | "--id" | "--depth" | "--limit" | "--bytes" | "--snapshot" | "--cursor" | "--profile-ir" => {
                 at += 1;
                 if at == values.len() {
                     return Err(format!("E_USAGE {option} needs a value"));
@@ -134,10 +143,11 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
                     "--kind" => out.query.kind = value,
                     "--id" => out.query.identity = value,
                     "--depth" => out.query.depth = inline_limit(&value)?,
-                    "--limit" => out.query.limit = inline_limit(&value)?,
-                    "--bytes" => out.query.bytes = inline_limit(&value)?,
+                    "--limit" => { out.query.limit = inline_limit(&value)?; out.profile_limit_explicit = true; },
+                    "--bytes" => { out.query.bytes = inline_limit(&value)?; out.profile_bytes_explicit = true; },
                     "--snapshot" => out.query.snapshot = Some(value),
                     "--cursor" => out.query.cursor = Some(value),
+                    "--profile-ir" => out.profile_ir = Some(value),
                     "--entry" => out.entry = Some(value),
                     "--artifact" => out.artifacts.push(value),
                     "--grant" => out.grants.push(value),
@@ -221,6 +231,19 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         return Err("E_USAGE --index requires a source build with --store and --store-key".to_string());
     }
     if out.profile && out.command != "build" { return Err("E_USAGE --profile requires build".to_string()); }
+    if out.profile_copy_sites && out.command != "profile" {
+        return Err("E_USAGE --copy-sites requires profile".to_string());
+    }
+    if out.profile_ir.is_some()
+        && !(out.command == "build" && out.profile)
+        && !(out.command == "profile" && out.profile_copy_sites) {
+        return Err("E_USAGE --profile-ir requires build --profile or profile --copy-sites".to_string());
+    }
+    if out.profile_copy_sites && (out.profile_ir.is_none()
+        || !out.profile_limit_explicit || !out.profile_bytes_explicit
+        || out.query.limit == 0 || out.query.bytes == 0) {
+        return Err("E_USAGE --copy-sites requires --profile-ir and positive --limit/--bytes".to_string());
+    }
     if out.command != "runtime-ir" && out.command != "check-library" && out.path.is_empty() {
         return Err("E_USAGE a source or IR path is required".to_string());
     }
@@ -963,6 +986,77 @@ fn native_run(
     Ok(outcome)
 }
 
+
+fn stage_profile_output(
+    directory: &mut Directory, path: &str, name: &str, bytes: &[u8],
+    executable: bool, stamp: usize,
+) -> Result<String, String> {
+    let mut destination = 14695981039346656037u64;
+    for byte in name.as_bytes() {
+        destination = (destination ^ *byte as u64).wrapping_mul(1099511628211u64);
+    }
+    let temporary = format!(".lkjscript-{destination:x}-{stamp}.tmp");
+    let result = {
+        let mut file = directory.create(&temporary)
+            .map_err(|errno: i64| io(path, "create temporary", errno))?;
+        match file.write_all(bytes) {
+            Err(errno) => Err(io(path, "write", errno)),
+            Ok(()) => {
+                if executable {
+                    file.set_executable().map_err(|errno: i64| io(path, "set executable", errno))
+                } else { Ok(()) }
+            }
+        }
+    };
+    if let Err(problem) = result {
+        let _ = directory.remove(&temporary);
+        return Err(problem);
+    }
+    Ok(temporary)
+}
+
+fn publish_profile_pair(
+    world: &mut World, image_path: &str, image: &[u8],
+    companion_path: &str, companion: &[u8],
+) -> Result<(), String> {
+    let (image_parent, image_name) = location(image_path);
+    let (companion_parent, companion_name) = location(companion_path);
+    let mut image_directory = world.directory(&image_parent)
+        .map_err(|errno: i64| io(&image_parent, "open image directory", errno))?;
+    let mut companion_directory = world.directory(&companion_parent)
+        .map_err(|errno: i64| io(&companion_parent, "open companion directory", errno))?;
+    let image_identity = std::io::directory_identity(&mut image_directory)
+        .map_err(|errno: i64| io(&image_parent, "identify image directory", errno))?;
+    let companion_identity = std::io::directory_identity(&mut companion_directory)
+        .map_err(|errno: i64| io(&companion_parent, "identify companion directory", errno))?;
+    if image_identity == companion_identity && image_name == companion_name {
+        return Err("E_PROFILE_OUTPUT image and companion address the same retained parent and name".to_string());
+    }
+    let mut clock = world.clock();
+    let stamp = clock.nanoseconds().map_err(|errno: i64| io("clock", "read", errno))?;
+    let image_stage = stage_profile_output(&mut image_directory, image_path,
+        &image_name, image, true, stamp)?;
+    let companion_stage = match stage_profile_output(&mut companion_directory, companion_path,
+        &companion_name, companion, false, stamp) {
+        Ok(stage) => stage,
+        Err(problem) => {
+            let _ = image_directory.remove(&image_stage);
+            return Err(problem);
+        }
+    };
+    // Publish the companion before the image. Success and image memo publication
+    // require both renames; readers still verify the embedded companion digest.
+    if let Err(errno) = companion_directory.rename(&companion_stage, &companion_name) {
+        let _ = image_directory.remove(&image_stage);
+        let _ = companion_directory.remove(&companion_stage);
+        return Err(io(companion_path, "rename", errno));
+    }
+    if let Err(errno) = image_directory.rename(&image_stage, &image_name) {
+        let _ = image_directory.remove(&image_stage);
+        return Err(io(image_path, "rename", errno));
+    }
+    Ok(())
+}
 fn publish(world: &mut World, path: &str, bytes: &[u8], executable: bool) -> Result<(), String> {
     let (parent, name) = location(path);
     let mut directory = world
@@ -1601,7 +1695,14 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
     }
     if options.command == "profile" {
         let bytes = read_path(world, &options.path)?;
-        let report = crate::native::profiling::report(&bytes)?;
+        let report = if options.profile_copy_sites {
+            let companion = read_path(world, options.profile_ir.as_ref().unwrap())?;
+            crate::native::profiling::copy_report(&bytes, &companion,
+                options.query.limit, options.query.bytes,
+                options.query.cursor.as_ref().map(|value| value.as_str()))?
+        } else {
+            crate::native::profiling::report(&bytes)?
+        };
         world.stdout().write(report.as_bytes());
         return Ok(0);
     }
@@ -1637,7 +1738,7 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
         if options.observe { record(world, 0, "interpreter", true, &outcome); return Ok(outcome.status); }
         return Ok(deliver(world, outcome, true));
     }
-    if options.command == "build" && options.image_key.is_none() {
+    if options.command == "build" && options.image_key.is_none() && options.profile_ir.is_none() {
         let source_stamps = structure::consistency::capture(world, options)?;
         if let Some(bytes) = memo.lookup(world, options, "image", stats) {
             let path: String = match &options.output { Some(path) => path.clone(), None => format!("{}.elf", options.path) };
@@ -1717,7 +1818,15 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
         }.map_err(|problem| report(&options.path, problem))?;
         stats.count("emitted_bytes", bytes.len());
         stats.mark("native_encode")?;
-        publish(world, &path, &bytes, true)?;
+        if let Some(companion_path) = &options.profile_ir {
+            // Serialize the selection actually emitted, including a rejected-pass fallback.
+            let companion = ir_text::write(checked.native().program());
+            stats.count("profile_ir_bytes", companion.len());
+            stats.mark("profile_ir")?;
+            publish_profile_pair(world, &path, &bytes, companion_path, companion.as_bytes())?;
+        } else {
+            publish(world, &path, &bytes, true)?;
+        }
         stats.mark("write")?;
         if options.image_key.is_none() { memo.remember(options, "image", &bytes); }
         if options.index {

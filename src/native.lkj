@@ -271,6 +271,112 @@ fn copy_bytes(a: &mut Assembler, _p: platform::Platform, bytes: u64) {
     }
     a.scope_kind(kind);
 }
+
+fn copy_place_flags(place: &Place) -> u64 {
+    let mut flags = 0u64;
+    for projection in &place.projections {
+        flags |= match projection {
+            Projection::Field(_) | Projection::VariantField(_, _) => 1u64,
+            Projection::Deref => 2u64,
+            Projection::Index(_) => 4u64,
+        };
+    }
+    flags
+}
+
+pub(super) fn copy_contract(
+    program: &Program, function: usize, instruction: usize, subsite: usize,
+) -> Option<(usize, u64)> {
+    let body = program.functions.get(function)?;
+    let (ty, origin, source, destination, source_flags, destination_flags) = if instruction == !0usize {
+        if subsite >= body.params { return None; }
+        (body.locals.get(subsite)?.ty, COPY_ORIGIN_PARAMETER, COPY_ROLE_ABI_INCOMING,
+            COPY_ROLE_PARAM_LOCAL, 0u64, 0u64)
+    } else {
+        let (ty, source, destination, source_flags, destination_flags) = match &body.body.get(instruction)?.op {
+            Op::Read { place, .. } if subsite == 0 => {
+                let ty = crate::check::place_type(&program.types, body, place)?;
+                if place.projections.is_empty() {
+                    (ty, COPY_ROLE_LOCAL, COPY_ROLE_LOCAL, 0u64, 0u64)
+                } else {
+                    (ty, COPY_ROLE_PLACE, COPY_ROLE_LOCAL, copy_place_flags(place), 0u64)
+                }
+            }
+            Op::Assign { place, src } if subsite == 0 => {
+                crate::check::place_type(&program.types, body, place)?;
+                let ty = body.locals.get(*src)?.ty;
+                if place.projections.is_empty() {
+                    (ty, COPY_ROLE_LOCAL, COPY_ROLE_LOCAL, 0u64, 0u64)
+                } else {
+                    (ty, COPY_ROLE_LOCAL, COPY_ROLE_PLACE, 0u64, copy_place_flags(place))
+                }
+            }
+            Op::Struct { fields, .. } | Op::Variant { fields, .. } => {
+                (body.locals.get(*fields.get(subsite)?)?.ty, COPY_ROLE_LOCAL,
+                    COPY_ROLE_CONSTRUCTOR_FIELD, 0u64, 0u64)
+            }
+            Op::Array { elements, .. } => {
+                (body.locals.get(*elements.get(subsite)?)?.ty, COPY_ROLE_LOCAL,
+                    COPY_ROLE_ARRAY_ELEMENT, 0u64, 0u64)
+            }
+            Op::Return { src } if subsite == 0 => {
+                (body.locals.get(*src)?.ty, COPY_ROLE_LOCAL, COPY_ROLE_ABI_RESULT, 0u64, 0u64)
+            }
+            Op::Intrinsic { name, args, .. } if subsite == 0 => {
+                let (ty, source, destination) = match name {
+                    IntrinsicOp::VecPush if args.len() == 2 => (
+                        body.locals.get(args[1])?.ty, COPY_ROLE_LOCAL, COPY_ROLE_VEC_ELEMENT),
+                    IntrinsicOp::VecPop if args.len() == 1 => {
+                        let reference = body.locals.get(args[0])?.ty;
+                        let vector = match program.types.get(reference)?.kind {
+                            TypeKind::Ref { inner, .. } => inner,
+                            _ => return None,
+                        };
+                        let element = match program.types.get(vector)?.kind {
+                            TypeKind::Vec { inner } => inner,
+                            _ => return None,
+                        };
+                        (element, COPY_ROLE_VEC_ELEMENT, COPY_ROLE_RESULT_FIELD)
+                    }
+                    IntrinsicOp::ArrayRepeat if args.len() == 1 => (
+                        body.locals.get(args[0])?.ty, COPY_ROLE_LOCAL, COPY_ROLE_REPEAT_ELEMENT),
+                    IntrinsicOp::BoxNew if args.len() == 1 => (
+                        body.locals.get(args[0])?.ty, COPY_ROLE_LOCAL, COPY_ROLE_BOX_PAYLOAD),
+                    IntrinsicOp::Clone if args.len() == 1 => {
+                        let reference = body.locals.get(args[0])?.ty;
+                        let inner = match program.types.get(reference)?.kind {
+                            TypeKind::Ref { inner, .. } => inner,
+                            _ => return None,
+                        };
+                        (inner, COPY_ROLE_REFERENT, COPY_ROLE_LOCAL)
+                    }
+                    IntrinsicOp::StrAsBytes if args.len() == 1 => (
+                        body.locals.get(args[0])?.ty, COPY_ROLE_VIEW_HEADER, COPY_ROLE_VIEW_HEADER),
+                    _ => return None,
+                };
+                (ty, source, destination, 0u64, 0u64)
+            }
+            _ => return None,
+        };
+        (ty, COPY_ORIGIN_BODY, source, destination, source_flags, destination_flags)
+    };
+    program.types.get(ty)?;
+    let tags = origin | (source << 8u32) | (destination << 16u32)
+        | (source_flags << 24u32) | (destination_flags << 32u32);
+    if !valid_copy_tags(tags) { return None; }
+    Some((ty, tags))
+}
+
+fn record_copy(
+    a: &mut Assembler, program: &Program, function: usize, instruction: usize,
+    subsite: usize, start: usize, width: u64,
+) {
+    let end = a.bytes.len();
+    if start == end || width == 0 { return; }
+    if let Some((ty, tags)) = copy_contract(program, function, instruction, subsite) {
+        a.record_copy_site(CopySite { start, end, function, instruction, subsite, ty, width, tags });
+    }
+}
 fn epilogue(a: &mut Assembler) {
     let kind = a.scope_kind(KIND_PROLOGUE);
     a.mov(SP, BP);
@@ -293,6 +399,8 @@ struct Body<'a> {
     a: &'a mut Assembler,
     program: &'a Program,
     function: &'a Function,
+    function_index: usize,
+    instruction_index: usize,
     layout: &'a Layouts,
     platform: platform::Platform,
     runtime: RuntimeLabels,
@@ -395,7 +503,7 @@ impl<'a> Body<'a> {
     }
     // Small inline copies read every source word before writing any destination;
     // larger copies use inline directional rep movsb. Registers are caller-saved.
-    fn copy_value(&mut self, destination: u8, source: u8, ty: usize) {
+    fn copy_value(&mut self, destination: u8, source: u8, ty: usize, subsite: usize) {
         let bytes = self.layout.storage(ty).bytes;
         if destination == SI && source == DI {
             self.a.mov(R8, DI);
@@ -408,7 +516,11 @@ impl<'a> Body<'a> {
             self.a.mov(DI, destination);
             self.a.mov(SI, source);
         }
+        let start = if self.a.copy_sites_enabled() { self.a.bytes.len() } else { 0usize };
         copy_bytes(self.a, self.platform, bytes);
+        if self.a.copy_sites_enabled() {
+            record_copy(self.a, self.program, self.function_index, self.instruction_index, subsite, start, bytes);
+        }
     }
     fn copy_local(&mut self, destination: usize, source: usize) {
         if destination == source {
@@ -441,11 +553,11 @@ impl<'a> Body<'a> {
         } else {
             self.local_address(destination, DI);
             self.local_address(source, SI);
-            self.copy_value(DI, SI, ty);
+            self.copy_value(DI, SI, ty, 0usize);
             self.mark(destination);
         }
     }
-    fn copy_from_local(&mut self, destination: u8, source: usize, ty: usize) {
+    fn copy_from_local(&mut self, destination: u8, source: usize, ty: usize, subsite: usize) {
         let bytes = self.layout.storage(ty).bytes;
         let scalar = self.layout.storage(ty).scalar;
         if bytes == 0 {
@@ -457,7 +569,7 @@ impl<'a> Body<'a> {
                 .store_width(destination, 0, A, self.layout.storage(ty).bytes as u8);
         } else {
             self.local_address(source, SI);
-            self.copy_value(destination, SI, ty);
+            self.copy_value(destination, SI, ty, subsite);
         }
     }
     fn drop_at(&mut self, ty: usize, address: u8) {
@@ -804,7 +916,8 @@ impl<'a> Body<'a> {
         self.ownership.change(self.a, place, false);
         Ok(())
     }
-    fn emit(&mut self, instruction: &ir::Instruction) -> Result<(), Diagnostic> {
+    fn emit(&mut self, instruction: &ir::Instruction, at: usize) -> Result<(), Diagnostic> {
+        if self.a.copy_sites_enabled() { self.instruction_index = at; }
         self.site = Span {
             file: instruction.file.unwrap_or(self.function.file) + self.source_base,
             start: 0,
@@ -870,7 +983,7 @@ impl<'a> Body<'a> {
                     self.write_normalized(*dst, register);
                 } else {
                     self.local_address(*dst, DI);
-                    self.copy_value(DI, SI, ty);
+                    self.copy_value(DI, SI, ty, 0usize);
                     self.mark(*dst);
                 }
             }
@@ -921,7 +1034,7 @@ impl<'a> Body<'a> {
                         .store_width(DI, 0, A, self.layout.storage(ty).bytes as u8);
                 } else {
                     self.local_address(*src, SI);
-                    self.copy_value(DI, SI, ty);
+                    self.copy_value(DI, SI, ty, 0usize);
                 }
                 self.ownership.change(self.a, place, true);
             }
@@ -947,7 +1060,7 @@ impl<'a> Body<'a> {
                     self.local_address(*dst, DI);
                     self.a
                         .lea(DI, DI, (index as u64 * self.layout.stride(inner)) as i64);
-                    self.copy_from_local(DI, elements[index], inner);
+                    self.copy_from_local(DI, elements[index], inner, index);
                 }
                 self.mark(*dst);
             }
@@ -966,7 +1079,7 @@ impl<'a> Body<'a> {
                     self.a
                         .lea(DI, DI, self.layout.field_offset(ty, variant, index) as i64);
                     let field_ty = self.ty(fields[index]);
-                    self.copy_from_local(DI, fields[index], field_ty);
+                    self.copy_from_local(DI, fields[index], field_ty, index);
                 }
                 self.mark(*dst);
             }
@@ -1075,7 +1188,7 @@ impl<'a> Body<'a> {
                     self.a.load(DI, BP, slot);
                     self.local_address(*src, SI);
                     let result_ty = self.function.result;
-                    self.copy_value(DI, SI, result_ty);
+                    self.copy_value(DI, SI, result_ty, 0usize);
                     self.a.immediate(A, 0);
                 } else {
                     self.read(*src, A);
@@ -1212,7 +1325,11 @@ fn emit_function(
         if !storage.scalar {
             a.lea(DI, BP, slots[index]);
             a.load(SI, BP, incoming[index]);
+            let start = if a.copy_sites_enabled() { a.bytes.len() } else { 0usize };
             copy_bytes(a, p, storage.bytes);
+            if a.copy_sites_enabled() {
+                record_copy(a, program, function_index, !0usize, index, start, storage.bytes);
+            }
         }
     }
     a.scope_kind(KIND_PROLOGUE);
@@ -1222,6 +1339,8 @@ fn emit_function(
         a,
         program,
         function,
+        function_index,
+        instruction_index: !0usize,
         layout,
         platform: p,
         runtime,
@@ -1248,7 +1367,7 @@ fn emit_function(
             body.emit_rotation(&function.body[at + 6usize], source, destination, count, bits);
             at += 7usize;
         } else {
-            body.emit(&function.body[at])?;
+            body.emit(&function.body[at], at)?;
             at += 1usize;
         }
     }
@@ -1992,7 +2111,8 @@ fn prepare_program(
     if let Some(plan) = grant_plan { plan.data(&mut a, &mut data, data_offset); }
     if let Some(profile) = profile {
         let kinds = a.take_kinds();
-        profiling::data(&mut a, profile, &mut data, data_offset, profile_path.unwrap(), &symbols, code_end, &kinds);
+        let copies = a.take_copy_sites();
+        profiling::data(&mut a, profile, &mut data, data_offset, profile_path.unwrap(), &symbols, code_end, &kinds, program, &functions, &copies)?;
     }
     for (bytes, label) in &literals {
         a.data_label(*label, data_offset + data.len());

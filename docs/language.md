@@ -401,7 +401,7 @@ reproduction without Rust or Node. The optional witness lives under witness/.
 | lkjscript test PATH | Discover expectation cases or execute #[test]/IR test functions across native/interpreter routes; details on failure. |
 | lkjscript authority PATH | Entry grants and conservatively reachable operations/calls/owned cleanup, from checked IR alone. |
 | lkjscript delta | Frequent accepted rewrites for a writer who knows Rust; ordered from retained diagnostic cases. |
-| lkjscript build PATH --profile; lkjscript profile FILE | Sample CPU instruction/frame addresses to OUTPUT.samples.PID; report self/inclusive source functions in at most 40 lines. |
+| lkjscript build PATH --profile [--profile-ir IR]; lkjscript profile FILE [--copy-sites --profile-ir IR --limit N --bytes B] | Sample CPU instruction/frame addresses to OUTPUT.samples.PID; optionally retain exact selected native IR. The default function/kind summary remains at most 40 lines. Explicit copy-site detail requires the matching companion and positive row/byte bounds; see [profile contract](ir.md#native-cpu-profiles-and-selected-ir). |
 
 Program arguments after -- remain exact bytes; compiler arguments require UTF-8.
 Scalar runs print integer decimal, bool text, UTF-8 char (including NUL), or

@@ -4,7 +4,9 @@ use super::platform::{Platform, CODE_OFFSET, IMAGE_BASE, HOST_ERRNO, HOST_NAME, 
 use crate::x86::*;
 use std::collections::BTreeMap;
 
-const HEADER: usize = 80;
+const HEADER: usize = 160;
+
+const COPY_ROW: usize = 72;
 const ROW: usize = 64;
 const PERIOD_US: u64 = 1000;
 
@@ -16,6 +18,7 @@ pub struct Labels {
     lookup: Label,
     include: Label,
     classify: Label,
+    copy: Label,
     state: Label,
     table: Label,
     end: Label,
@@ -30,7 +33,7 @@ impl Labels {
     pub fn new(a: &mut Assembler) -> Self {
         Self {
             start: a.label(), handler: a.label(), restore: a.label(),
-            lookup: a.label(), include: a.label(), classify: a.label(), state: a.label(),
+            lookup: a.label(), include: a.label(), classify: a.label(), copy: a.label(), state: a.label(),
             table: a.label(), end: a.label(), path: a.label(), identity: a.label(),
             action: a.label(), timer: a.label(), altstack: a.label(), stack: a.label(),
         }
@@ -332,6 +335,14 @@ pub fn emit(a: &mut Assembler, p: Platform, l: Labels, path_len: usize) {
     a.bind(unknown_kind);
     a.immediate(A, KIND_UNKNOWN as u64);
     a.bind(count_kind);
+    let ordinary_kind = a.label();
+    a.immediate(C, KIND_COPY as u64);
+    a.compare(A, C);
+    a.condition(5, ordinary_kind);
+    // Detail commits first. One interrupted handler may lead the kind count by one.
+    a.call(l.copy);
+    a.immediate(A, KIND_COPY as u64);
+    a.bind(ordinary_kind);
     a.load(D, R12, 48);
     a.rr(0x01, D, R12, true);
     a.shift(A, 4, 3);
@@ -339,6 +350,50 @@ pub fn emit(a: &mut Assembler, p: Platform, l: Labels, path_len: usize) {
     a.load(A, D, 0);
     add(a, A, 1);
     a.store(D, 0, A);
+    a.ret();
+
+    // Copy-only binary search. R12/R13 and B/R14/R15 retain sample/unwind state.
+    a.bind(l.copy);
+    a.load(R9, R12, 112);
+    a.rr(0x01, R9, R12, true);
+    a.immediate(SI, 0);
+    a.load(DI, R12, 120);
+    let copy_search = a.label();
+    let copy_lower = a.label();
+    let copy_found = a.label();
+    let copy_absent = a.label();
+    a.bind(copy_search);
+    a.compare(SI, DI);
+    a.condition(3, copy_absent);
+    a.mov(C, SI);
+    a.rr(0x01, C, DI, true);
+    a.shift(C, 5, 1);
+    a.mov(R8, C);
+    a.shift(R8, 4, 6);
+    a.mov(D, C);
+    a.shift(D, 4, 3);
+    a.rr(0x01, R8, D, true);
+    a.rr(0x01, R8, R9, true);
+    a.load(A, R8, 0);
+    a.compare(R13, A);
+    a.condition(2, copy_lower);
+    a.load(A, R8, 8);
+    a.compare(R13, A);
+    a.condition(2, copy_found);
+    a.lea(SI, C, 1);
+    a.jump(copy_search);
+    a.bind(copy_lower);
+    a.mov(DI, C);
+    a.jump(copy_search);
+    a.bind(copy_found);
+    a.load(A, R8, 16);
+    add(a, A, 1);
+    a.store(R8, 16, A);
+    a.ret();
+    a.bind(copy_absent);
+    a.load(A, R12, 144);
+    add(a, A, 1);
+    a.store(R12, 144, A);
     a.ret();
 }
 
@@ -352,31 +407,149 @@ fn word(bytes: &mut Vec<u8>, value: u64) {
         bytes.push((value >> (i * 8)) as u8);
     }
 }
+
+fn profile_problem(message: &str) -> crate::diagnostic::Diagnostic {
+    crate::diagnostic::Diagnostic::new(crate::ast::Span::default(), "E_EMIT", message)
+}
+
+fn extent(start: usize, count: usize, width: usize, length: usize) -> Option<usize> {
+    if width == 0 || start > length || count > (length - start) / width { None }
+    else { Some(start + count * width) }
+}
+
+fn copy_matches(program: &crate::ir::Program, layouts: &super::layout::Layouts, site: &CopySite) -> bool {
+    if site.function >= program.functions.len() || site.ty >= program.types.len()
+        || site.width == 0 || !valid_copy_tags(site.tags) { return false; }
+    let Some((ty, tags)) = super::copy_contract(program, site.function, site.instruction, site.subsite) else {
+        return false;
+    };
+    ty == site.ty && tags == site.tags && layouts.storage(site.ty).bytes == site.width
+}
 pub fn data(
     a: &mut Assembler, l: Labels, bytes: &mut Vec<u8>, offset: usize,
     path: &str, symbols: &[(Label, String)], code_end: usize, kinds: &[(usize, u8)],
-) {
+    program: &crate::ir::Program, functions: &[Label], copies: &[CopySite],
+) -> Result<(), crate::diagnostic::Diagnostic> {
+    if functions.len() != program.functions.len() || code_end == 0 || code_end > a.bytes.len()
+        || kinds.is_empty() {
+        return Err(profile_problem("profile inputs do not describe the emitted program"));
+    }
+    let base = IMAGE_BASE + CODE_OFFSET as u64;
+    let Some(code_limit) = base.checked_add(code_end as u64) else {
+        return Err(profile_problem("profile address exceeds representation"));
+    };
+    let mut previous_kind = 0usize;
+    for (index, (start, kind)) in kinds.iter().enumerate() {
+        if *start >= code_end || *kind as usize >= KIND_COUNT || (index == 0 && *start != 0)
+            || (index != 0 && *start <= previous_kind) {
+            return Err(profile_problem("profile kind intervals are invalid"));
+        }
+        previous_kind = *start;
+    }
     let mut sorted: BTreeMap<usize, String> = BTreeMap::new();
     for (label, name) in symbols {
+        if *label >= a.label_count() { return Err(profile_problem("profile symbol label is invalid")); }
         if let Some(position) = a.position(*label) {
+            if position >= code_end { return Err(profile_problem("profile symbol is outside code")); }
             sorted.insert(position, name.clone());
         }
     }
-    let mut starts: Vec<usize> = Vec::new();
-    for (start, _) in &sorted { starts.push(*start); }
-    let mut table = vec![0u8; HEADER + starts.len() * ROW];
-    table[..8].copy_from_slice(b"LKJPROF3");
+    let mut starts = Vec::new();
+    let mut symbol_rows = BTreeMap::new();
+    for (start, _) in &sorted {
+        symbol_rows.insert(*start, starts.len());
+        starts.push(*start);
+    }
+    let mut map = Vec::new();
+    let mut mapped_symbols = vec![false; starts.len()];
+    for label in functions {
+        if *label >= a.label_count() { return Err(profile_problem("profile function label is invalid")); }
+        let symbol = match a.position(*label) {
+            None => !0usize,
+            Some(position) => match symbol_rows.get(&position) {
+                Some(symbol) => *symbol,
+                None => return Err(profile_problem("emitted function has no profile symbol")),
+            },
+        };
+        if symbol != !0usize {
+            if mapped_symbols[symbol] { return Err(profile_problem("profile functions share a symbol")); }
+            mapped_symbols[symbol] = true;
+        }
+        map.push(symbol);
+    }
+    let layouts = super::layout::Layouts::new(program)?;
+    let mut previous_end = 0usize;
+    let mut kind_index = 0usize;
+    for site in copies {
+        if site.start >= site.end || site.end > code_end || site.start < previous_end
+            || !copy_matches(program, &layouts, site) {
+            return Err(profile_problem("profile copy site does not match selected IR"));
+        }
+        let symbol = map[site.function];
+        if symbol == !0usize { return Err(profile_problem("profile copy owner was not emitted")); }
+        let end = if symbol + 1 < starts.len() { starts[symbol + 1] } else { code_end };
+        if site.start < starts[symbol] || site.end > end {
+            return Err(profile_problem("profile copy site crosses its function"));
+        }
+        while kind_index + 1 < kinds.len() && kinds[kind_index + 1].0 <= site.start { kind_index += 1; }
+        if kinds[kind_index].1 != KIND_COPY
+            || (kind_index + 1 < kinds.len() && kinds[kind_index + 1].0 < site.end) {
+            return Err(profile_problem("profile copy site crosses its instruction kind"));
+        }
+        previous_end = site.end;
+    }
+    let Some(symbol_bytes) = starts.len().checked_mul(ROW) else {
+        return Err(profile_problem("profile symbols exceed representation"));
+    };
+    let Some(header_end) = symbol_bytes.checked_add(HEADER) else {
+        return Err(profile_problem("profile symbols exceed representation"));
+    };
+    let mut table_length = header_end;
+    for (_, name) in &sorted {
+        let Some(next) = table_length.checked_add(name.len()) else {
+            return Err(profile_problem("profile names exceed representation"));
+        };
+        table_length = next;
+    }
+    for (count, width) in vec![(kinds.len(), 16usize), (KIND_COUNT, 8usize),
+        (copies.len(), COPY_ROW), (map.len(), 16usize)] {
+        let Some(length) = count.checked_mul(width) else {
+            return Err(profile_problem("profile tables exceed representation"));
+        };
+        let Some(next) = table_length.checked_add(length) else {
+            return Err(profile_problem("profile tables exceed representation"));
+        };
+        table_length = next;
+    }
+    let identity = crate::runtime_diagnostics::escaped(&format!("Profile {path}"), 512, false);
+    let Some(mut publication_end) = offset.checked_add(bytes.len()) else {
+        return Err(profile_problem("profile data exceeds representation"));
+    };
+    for length in vec![8usize, 32usize, 32usize, 24usize, 65536usize, 8usize,
+        identity.len(), path.len(), 22usize, table_length] {
+        let Some(next) = publication_end.checked_add(length) else {
+            return Err(profile_problem("profile data exceeds representation"));
+        };
+        publication_end = next;
+    }
+    if base.checked_add(publication_end as u64).is_none() {
+        return Err(profile_problem("profile data address exceeds representation"));
+    }
+    let mut table = vec![0u8; header_end];
+    table[..8].copy_from_slice(b"LKJPROF4");
     put(&mut table, 8, starts.len() as u64);
     put(&mut table, 16, PERIOD_US * 1000);
+    let selected_ir = crate::ir_text::write(program);
+    let digest = crate::sha256::digest(selected_ir.as_bytes());
+    table[80..112].copy_from_slice(&digest);
     for (index, (start, name)) in sorted.iter().enumerate() {
         let end = if index + 1 < starts.len() { starts[index + 1] } else { code_end };
-        let base = IMAGE_BASE + CODE_OFFSET as u64;
         let at = HEADER + index * ROW;
         put(&mut table, at, base + *start as u64);
         put(&mut table, at + 8, base + end as u64);
         let mut frame = 0;
         let mut cursor = *start;
-        while cursor + 4 <= end && cursor < *start + 256 {
+        while end - cursor >= 4 && cursor - *start < 256 {
             if a.bytes[cursor] == 0x55 && a.bytes[cursor + 1] == 0x48 && a.bytes[cursor + 2] == 0x89 && a.bytes[cursor + 3] == 0xe5 {
                 frame = base + cursor as u64 + 4;
                 break;
@@ -392,9 +565,8 @@ pub fn data(
     let kind_offset = table.len();
     put(&mut table, 32, kind_offset as u64);
     put(&mut table, 40, kinds.len() as u64);
-    let base = IMAGE_BASE + CODE_OFFSET as u64;
     put(&mut table, 56, base);
-    put(&mut table, 64, base + code_end as u64);
+    put(&mut table, 64, code_limit);
     for (start, kind) in kinds {
         word(&mut table, base + *start as u64);
         word(&mut table, *kind as u64);
@@ -402,13 +574,37 @@ pub fn data(
     let counter_offset = table.len();
     put(&mut table, 48, counter_offset as u64);
     for _ in 0..KIND_COUNT { word(&mut table, 0); }
+    let copy_offset = table.len();
+    put(&mut table, 112, copy_offset as u64);
+    put(&mut table, 120, copies.len() as u64);
+    for site in copies {
+        word(&mut table, base + site.start as u64);
+        word(&mut table, base + site.end as u64);
+        word(&mut table, 0);
+        word(&mut table, site.function as u64);
+        word(&mut table, site.instruction as u64);
+        word(&mut table, site.subsite as u64);
+        word(&mut table, site.ty as u64);
+        word(&mut table, site.width);
+        word(&mut table, site.tags);
+    }
+    let map_offset = table.len();
+    put(&mut table, 128, map_offset as u64);
+    put(&mut table, 136, map.len() as u64);
+    for (index, symbol) in map.iter().enumerate() {
+        word(&mut table, index as u64);
+        word(&mut table, *symbol as u64);
+    }
+    if table.len() != table_length {
+        return Err(profile_problem("profile table framing disagrees with its preflight"));
+    }
+    // All fallible validation precedes assembler/data publication.
     a.data_label(l.state, offset + bytes.len());
     word(bytes, 0);
     a.data_label(l.action, offset + bytes.len());
     word(bytes, 0);
     word(bytes, 0x0c000004); // SA_ONSTACK | SA_RESTORER | SA_SIGINFO
-    word(bytes, 0);
-    word(bytes, 0);
+    word(bytes, 0); word(bytes, 0);
     a.data_label(l.timer, offset + bytes.len());
     word(bytes, 0); word(bytes, PERIOD_US);
     word(bytes, 0); word(bytes, PERIOD_US);
@@ -416,7 +612,6 @@ pub fn data(
     word(bytes, 0); word(bytes, 0); word(bytes, 65536);
     a.data_label(l.stack, offset + bytes.len());
     bytes.extend_from_slice(&[0u8; 65536]);
-    let identity = crate::runtime_diagnostics::escaped(&format!("Profile {path}"), 512, false);
     a.data_label(l.identity, offset + bytes.len());
     word(bytes, identity.len() as u64);
     bytes.extend_from_slice(identity.as_bytes());
@@ -428,6 +623,7 @@ pub fn data(
     a.data_label(l.table, offset + bytes.len());
     bytes.extend_from_slice(&table);
     a.data_label(l.end, offset + bytes.len());
+    Ok(())
 }
 fn get(bytes: &[u8], at: usize) -> u64 {
     let mut value = 0u64;
@@ -452,67 +648,168 @@ fn display_name(name: &str) -> String {
     }
     result
 }
-pub fn report(bytes: &[u8]) -> Result<String, String> {
+
+struct Profile {
+    names: Vec<String>,
+    self_counts: Vec<u64>,
+    inclusive: Vec<u64>,
+    counts: Vec<u64>,
+    functions: Vec<usize>,
+    copy_offset: usize,
+    copy_count: usize,
+    serial: u64,
+    total: u64,
+    mapped: u64,
+    unmapped: u64,
+    in_flight: u64,
+}
+
+fn sample_copy(bytes: &[u8], at: usize) -> CopySite {
+    CopySite {
+        start: get(bytes, at) as usize, end: get(bytes, at + 8) as usize,
+        function: get(bytes, at + 24) as usize, instruction: get(bytes, at + 32) as usize,
+        subsite: get(bytes, at + 40) as usize, ty: get(bytes, at + 48) as usize,
+        width: get(bytes, at + 56), tags: get(bytes, at + 64),
+    }
+}
+
+fn parse_profile(bytes: &[u8]) -> Result<Profile, String> {
     let invalid = "E_PROFILE invalid or incomplete samples file";
-    if bytes.len() < HEADER || &bytes[..8] != b"LKJPROF3" {
+    if bytes.len() < HEADER || &bytes[..8] != b"LKJPROF4" || get(bytes, 16) != PERIOD_US * 1000
+        || get(bytes, 72) != 0 || get(bytes, 152) != 0 {
         return Err(invalid.to_string());
     }
     let count = get(bytes, 8) as usize;
-    if count > (bytes.len() - HEADER) / ROW {
-        return Err(invalid.to_string());
-    }
-    let serial = get(bytes, 24);
-    let mut names: Vec<String> = Vec::new();
-    let mut self_counts: Vec<u64> = Vec::new();
-    let mut inclusive: Vec<u64> = Vec::new();
-    for i in 0..count {
-        let row = HEADER + i * ROW;
-        let start = get(bytes, row + 40) as usize;
-        let len = get(bytes, row + 48) as usize;
-        if start > bytes.len() || len > bytes.len() - start {
-            return Err(invalid.to_string());
-        }
-        let name = match String::from_utf8(bytes[start..start + len].to_vec()) {
-            Ok(name) => name,
-            Err(_) => return Err(invalid.to_string()),
-        };
-        names.push(display_name(&name));
-        self_counts.push(get(bytes, row + 16));
-        inclusive.push(get(bytes, row + 24));
-    }
-    let kind_table = get(bytes, 32) as usize;
-    let kind_count = get(bytes, 40) as usize;
-    let counters = get(bytes, 48) as usize;
+    let Some(mut name_at) = extent(HEADER, count, ROW, bytes.len()) else { return Err(invalid.to_string()); };
     let code_start = get(bytes, 56);
     let code_end = get(bytes, 64);
-    if kind_table > bytes.len() || kind_count > (bytes.len() - kind_table) / 16
-        || counters > bytes.len() || KIND_COUNT > (bytes.len() - counters) / 8
-        || kind_count == 0 || code_end <= code_start
-    {
-        return Err(invalid.to_string());
+    if code_start >= code_end || code_end > !0usize as u64 { return Err(invalid.to_string()); }
+    let serial = get(bytes, 24);
+    let mut names = Vec::new();
+    let mut starts = Vec::new();
+    let mut ends = Vec::new();
+    let mut self_counts = Vec::new();
+    let mut inclusive = Vec::new();
+    let mut prior_end = code_start;
+    let mut self_total = 0u64;
+    for index in 0..count {
+        let at = HEADER + index * ROW;
+        let start = get(bytes, at);
+        let end = get(bytes, at + 8);
+        let frame = get(bytes, at + 56);
+        let name = get(bytes, at + 40) as usize;
+        let length = get(bytes, at + 48) as usize;
+        if start < code_start || start >= end || end > code_end || name != name_at
+            || (index != 0 && start != prior_end)
+            || (frame != 0 && (frame < start || frame > end))
+            || get(bytes, at + 16) > serial || get(bytes, at + 24) > serial
+            || get(bytes, at + 32) > serial {
+            return Err(invalid.to_string());
+        }
+        let Some(next) = extent(name, length, 1, bytes.len()) else { return Err(invalid.to_string()); };
+        let text = match String::from_utf8(bytes[name..next].to_vec()) {
+            Ok(text) => text,
+            Err(_) => return Err(invalid.to_string()),
+        };
+        let Some(total) = self_total.checked_add(get(bytes, at + 16)) else { return Err(invalid.to_string()); };
+        self_total = total;
+        names.push(text);
+        starts.push(start); ends.push(end);
+        self_counts.push(get(bytes, at + 16)); inclusive.push(get(bytes, at + 24));
+        name_at = next; prior_end = end;
     }
+    if count != 0 && prior_end != code_end { return Err(invalid.to_string()); }
+    let kind_offset = get(bytes, 32) as usize;
+    let kind_count = get(bytes, 40) as usize;
+    let counters = get(bytes, 48) as usize;
+    if kind_offset != name_at || kind_count == 0 { return Err(invalid.to_string()); }
+    let Some(kind_end) = extent(kind_offset, kind_count, 16, bytes.len()) else { return Err(invalid.to_string()); };
+    if counters != kind_end { return Err(invalid.to_string()); }
+    let Some(counter_end) = extent(counters, KIND_COUNT, 8, bytes.len()) else { return Err(invalid.to_string()); };
     let mut previous = 0u64;
     for index in 0..kind_count {
-        let at = kind_table + index * 16;
+        let at = kind_offset + index * 16;
         let start = get(bytes, at);
         let kind = get(bytes, at + 8);
         if kind >= KIND_COUNT as u64 || start < code_start || start >= code_end
-            || (index == 0 && start != code_start) || (index != 0 && start <= previous)
-        {
+            || (index == 0 && start != code_start) || (index != 0 && start <= previous) {
             return Err(invalid.to_string());
         }
         previous = start;
     }
+    let mut counts = Vec::new();
     let mut total = 0u64;
-    for kind in 0..KIND_COUNT {
-        let samples = get(bytes, counters + kind * 8);
-        if samples > !0u64 - total { return Err(invalid.to_string()); }
-        total += samples;
+    for index in 0..KIND_COUNT {
+        let value = get(bytes, counters + index * 8);
+        let Some(next) = total.checked_add(value) else { return Err(invalid.to_string()); };
+        total = next; counts.push(value);
     }
-    // The serial advances before category storage. Termination may interrupt one
-    // handler there; SIGPROF is blocked during its handler, so it cannot nest.
-    // Report completed category samples, retaining the serial for frame dedup.
-    if serial < total || serial - total > 1 { return Err(invalid.to_string()); }
+    if serial < total || serial - total > 1 || self_total > total { return Err(invalid.to_string()); }
+    let copy_offset = get(bytes, 112) as usize;
+    let copy_count = get(bytes, 120) as usize;
+    let map_offset = get(bytes, 128) as usize;
+    let map_count = get(bytes, 136) as usize;
+    if copy_offset != counter_end { return Err(invalid.to_string()); }
+    let Some(copy_end) = extent(copy_offset, copy_count, COPY_ROW, bytes.len()) else { return Err(invalid.to_string()); };
+    if map_offset != copy_end { return Err(invalid.to_string()); }
+    if extent(map_offset, map_count, 16, bytes.len()) != Some(bytes.len()) { return Err(invalid.to_string()); }
+    let mut functions = Vec::new();
+    let mut mapped_symbols = vec![false; count];
+    for index in 0..map_count {
+        let at = map_offset + index * 16;
+        let symbol = get(bytes, at + 8) as usize;
+        if get(bytes, at) != index as u64 { return Err(invalid.to_string()); }
+        if symbol != !0usize {
+            if symbol >= count || mapped_symbols[symbol] { return Err(invalid.to_string()); }
+            mapped_symbols[symbol] = true;
+        }
+        functions.push(symbol);
+    }
+    let mut prior_copy_end = code_start as usize;
+    let mut kind_index = 0usize;
+    let mut mapped = 0u64;
+    for index in 0..copy_count {
+        let at = copy_offset + index * COPY_ROW;
+        let site = sample_copy(bytes, at);
+        if site.start < code_start as usize || site.start >= site.end || site.end > code_end as usize
+            || site.start < prior_copy_end || site.function >= functions.len()
+            || site.width == 0 || !valid_copy_tags(site.tags) {
+            return Err(invalid.to_string());
+        }
+        let origin = site.tags & 255u64;
+        if (origin == COPY_ORIGIN_PARAMETER && site.instruction != !0usize)
+            || (origin == COPY_ORIGIN_BODY && site.instruction == !0usize) {
+            return Err(invalid.to_string());
+        }
+        let symbol = functions[site.function];
+        if symbol == !0usize || (site.start as u64) < starts[symbol] || (site.end as u64) > ends[symbol] {
+            return Err(invalid.to_string());
+        }
+        while kind_index + 1 < kind_count && get(bytes, kind_offset + (kind_index + 1) * 16) <= site.start as u64 {
+            kind_index += 1;
+        }
+        if get(bytes, kind_offset + kind_index * 16 + 8) != KIND_COPY as u64
+            || (kind_index + 1 < kind_count && get(bytes, kind_offset + (kind_index + 1) * 16) < site.end as u64) {
+            return Err(invalid.to_string());
+        }
+        let samples = get(bytes, at + 16);
+        let Some(next) = mapped.checked_add(samples) else { return Err(invalid.to_string()); };
+        mapped = next; prior_copy_end = site.end;
+    }
+    let unmapped = get(bytes, 144);
+    let Some(detail) = mapped.checked_add(unmapped) else { return Err(invalid.to_string()); };
+    let copy_samples = counts[KIND_COPY as usize];
+    if detail < copy_samples || detail - copy_samples > 1
+        || (detail != copy_samples && serial - total != 1) {
+        return Err(invalid.to_string());
+    }
+    Ok(Profile { names, self_counts, inclusive, counts, functions, copy_offset, copy_count,
+        serial, total, mapped, unmapped, in_flight: detail - copy_samples })
+}
+pub fn report(bytes: &[u8]) -> Result<String, String> {
+    let profile = parse_profile(bytes)?;
+    let total = profile.total;
+    let count = profile.names.len();
     let mut out = format!("CPU samples: {total}; requested period {} us; inclusive counts each function once per sample\n", get(bytes, 16) / 1000);
     for mode in 0..2 {
         out.push_str(if mode == 0 { "Top self time\n" } else { "Top inclusive time\n" });
@@ -522,23 +819,204 @@ pub fn report(bytes: &[u8]) -> Result<String, String> {
             let mut best = None;
             let mut largest = 0u64;
             for i in 0..count {
-                let value = if mode == 0 { self_counts[i] } else { inclusive[i] };
+                let value = if mode == 0 { profile.self_counts[i] } else { profile.inclusive[i] };
                 if !used[i] && value > largest { best = Some(i); largest = value; }
             }
             if let Some(i) = best {
                 used[i] = true;
                 out.push_str(&format!("{} {} {} {}\n",
-                    percent(self_counts[i], total), percent(inclusive[i], total),
-                    largest, names[i]));
+                    percent(profile.self_counts[i], total), percent(profile.inclusive[i], total),
+                    largest, display_name(&profile.names[i])));
             }
         }
     }
     out.push_str("Emitted instruction kinds (self samples)\n");
     out.push_str("kind self% samples class\n");
     for kind in 0..KIND_COUNT {
-        let samples = get(bytes, counters + kind * 8);
+        let samples = profile.counts[kind];
         out.push_str(&format!("kind {} {} {}\n", percent(samples, total), samples, kind_name(kind)));
     }
+    Ok(out)
+}
+
+fn quote_bound(text: &str, limit: usize) -> Result<String, String> {
+    let mut out = "\"".to_string();
+    let hex = b"0123456789abcdef";
+    for character in text.chars() {
+        let code = character as u32;
+        match character {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            _ => {
+                if code < 32 || code == 127 {
+                    out.push_str("\\u00");
+                    out.push(hex[((code >> 4) & 15) as usize] as char);
+                    out.push(hex[(code & 15) as usize] as char);
+                } else if code == 0x2028 { out.push_str("\\u2028"); }
+                else if code == 0x2029 { out.push_str("\\u2029"); }
+                else { out.push(character); }
+            }
+        }
+        if out.len() > limit { return Err("E_PROFILE_BOUND a complete detail row exceeds --bytes".to_string()); }
+    }
+    out.push('"');
+    if out.len() > limit { return Err("E_PROFILE_BOUND a complete detail row exceeds --bytes".to_string()); }
+    Ok(out)
+}
+
+fn copy_role(role: u64) -> &'static str {
+    if role == COPY_ROLE_LOCAL { return "local"; }
+    if role == COPY_ROLE_PLACE { return "typed-place"; }
+    if role == COPY_ROLE_CONSTRUCTOR_FIELD { return "constructor-field"; }
+    if role == COPY_ROLE_ARRAY_ELEMENT { return "array-element"; }
+    if role == COPY_ROLE_ABI_INCOMING { return "abi-incoming"; }
+    if role == COPY_ROLE_PARAM_LOCAL { return "parameter-local"; }
+    if role == COPY_ROLE_ABI_RESULT { return "abi-result"; }
+    if role == COPY_ROLE_VEC_ELEMENT { return "vector-element"; }
+    if role == COPY_ROLE_RESULT_FIELD { return "result-variant-field"; }
+    if role == COPY_ROLE_REPEAT_ELEMENT { return "repeated-array-element"; }
+    if role == COPY_ROLE_BOX_PAYLOAD { return "box-payload"; }
+    if role == COPY_ROLE_REFERENT { return "referent"; }
+    if role == COPY_ROLE_VIEW_HEADER { return "view-header"; }
+    "invalid"
+}
+
+fn copy_line(
+    site: &CopySite, samples: u64, symbol: usize, program: &crate::ir::Program, max_bytes: usize,
+) -> Result<String, String> {
+    let instruction = if site.instruction == !0usize { "parameter".to_string() } else { format!("{}", site.instruction) };
+    let source = copy_role((site.tags >> 8u64) & 255u64);
+    let destination = copy_role((site.tags >> 16u64) & 255u64);
+    let source_flags = (site.tags >> 24u64) & 7u64;
+    let destination_flags = (site.tags >> 32u64) & 7u64;
+    let mut out = format!("copy function={} instruction={instruction} subsite={} symbol={symbol} samples={samples} type={} width={} source={source} destination={destination} source-flags={source_flags} destination-flags={destination_flags} start={} end={} name=",
+        site.function, site.subsite, site.ty, site.width, site.start, site.end);
+    if out.len() > max_bytes { return Err("E_PROFILE_BOUND a complete detail row exceeds --bytes".to_string()); }
+    let name = quote_bound(&program.functions[site.function].name, max_bytes - out.len())?;
+    out.push_str(&name);
+    out.push_str(" type-name=");
+    if out.len() > max_bytes { return Err("E_PROFILE_BOUND a complete detail row exceeds --bytes".to_string()); }
+    let ty = quote_bound(&program.types[site.ty].name, max_bytes - out.len())?;
+    out.push_str(&ty); out.push('\n');
+    if out.len() > max_bytes { return Err("E_PROFILE_BOUND a complete detail row exceeds --bytes".to_string()); }
+    Ok(out)
+}
+
+fn copy_cursor(profile: &str, companion: &str, next: usize) -> String {
+    format!("4:{profile}:{companion}:{next}")
+}
+
+fn copy_position(cursor: Option<&str>, profile: &str, companion: &str, count: usize) -> Result<usize, String> {
+    let Some(cursor) = cursor else { return Ok(0); };
+    let invalid = "E_PROFILE_CURSOR continuation does not select these exact profile and IR bytes";
+    let mut fields = cursor.split(':');
+    if fields.next() != Some("4") || fields.next() != Some(profile) || fields.next() != Some(companion) {
+        return Err(invalid.to_string());
+    }
+    let Some(ordinal) = fields.next() else { return Err(invalid.to_string()); };
+    if fields.next().is_some() { return Err(invalid.to_string()); }
+    let value = match ordinal.parse::<usize>() {
+        Ok(value) => value,
+        Err(_) => return Err(invalid.to_string()),
+    };
+    if value > count || format!("{value}") != ordinal { return Err(invalid.to_string()); }
+    Ok(value)
+}
+
+fn copy_continuation(profile: &str, companion: &str, next: usize, count: usize, rows: usize) -> String {
+    let cursor = if next == count { "none".to_string() } else { copy_cursor(profile, companion, next) };
+    format!("continuation cursor={cursor} rows={rows} next={next} total-sites={count}\n")
+}
+
+fn fits(first: usize, second: usize, third: usize, limit: usize) -> bool {
+    let Some(size) = first.checked_add(second) else { return false; };
+    let Some(size) = size.checked_add(third) else { return false; };
+    size <= limit
+}
+
+pub fn copy_report(
+    bytes: &[u8], companion: &[u8], limit: usize, max_bytes: usize, cursor: Option<&str>,
+) -> Result<String, String> {
+    if limit == 0 || max_bytes == 0 {
+        return Err("E_PROFILE_BOUND copy detail requires positive --limit and --bytes".to_string());
+    }
+    let profile = parse_profile(bytes)?;
+    let companion_digest = crate::sha256::digest(companion);
+    if bytes[80..112] != companion_digest[..] {
+        return Err("E_PROFILE_IR companion bytes differ from selected native IR".to_string());
+    }
+    let profile_id = crate::sha256::hex_digest(bytes);
+    let companion_id = crate::sha256::hex_digest(companion);
+    let mut next = copy_position(cursor, &profile_id, &companion_id, profile.copy_count)?;
+    let source = match String::from_utf8(companion.to_vec()) {
+        Ok(source) => source,
+        Err(_) => return Err("E_PROFILE_IR companion is not UTF-8".to_string()),
+    };
+    let program = match crate::ir_text::read(&source) {
+        Ok(program) => program,
+        Err(_) => return Err("E_PROFILE_IR companion is not valid IR text".to_string()),
+    };
+    // Neither a profile digest nor serialized producer metadata grants admission.
+    let checked = match crate::check::check_all(program) {
+        Ok(checked) => checked,
+        Err(_) => return Err("E_PROFILE_IR companion failed independent IR checking".to_string()),
+    };
+    let program = checked.program();
+    if program.functions.len() != profile.functions.len() {
+        return Err("E_PROFILE_IR selected function map differs from companion".to_string());
+    }
+    for (index, function) in program.functions.iter().enumerate() {
+        let symbol = profile.functions[index];
+        if symbol == !0usize { continue; }
+        let expected = format!("{} [file {}:{}]", function.name, function.file, super::first_site(function).line);
+        if profile.names[symbol] != expected {
+            return Err("E_PROFILE_IR selected function symbol differs from companion".to_string());
+        }
+    }
+    let layouts = match super::layout::Layouts::new(program) {
+        Ok(layouts) => layouts,
+        Err(_) => return Err("E_PROFILE_IR companion has no representable native layout".to_string()),
+    };
+    let mut order: Vec<(u64, usize, usize, usize, usize, usize, usize)> = Vec::new();
+    for index in 0..profile.copy_count {
+        let at = profile.copy_offset + index * COPY_ROW;
+        let site = sample_copy(bytes, at);
+        if !copy_matches(program, &layouts, &site) {
+            return Err(format!("E_PROFILE_IR copy site {index} disagrees with checked operand roles or layout"));
+        }
+        order.push((!get(bytes, at + 16), site.function, site.instruction, site.subsite, site.start, site.end, index));
+    }
+    order.sort();
+    let mut out = format!("copy-sites version=4 profile={profile_id} companion={companion_id} companion-check=checked-ir serial={} total-samples={} copy-samples={} mapped={} unmapped={} in-flight={} sites={} order=samples-desc/function/instruction/subsite/start/end\n",
+        profile.serial, profile.total, profile.counts[KIND_COPY as usize], profile.mapped, profile.unmapped,
+        profile.in_flight, profile.copy_count);
+    out.push_str("scope=existing-kind-copy runtime=excluded variable-width-copy=excluded replace=excluded scalar-frame-address-work=excluded counters=sampled-native-observation\n");
+    let mut emitted = 0usize;
+    while next < order.len() && emitted < limit {
+        let index = order[next].6;
+        let at = profile.copy_offset + index * COPY_ROW;
+        let site = sample_copy(bytes, at);
+        let row = match copy_line(&site, get(bytes, at + 16), profile.functions[site.function], program, max_bytes) {
+            Ok(row) => row,
+            Err(problem) => {
+                if emitted == 0 { return Err(problem); }
+                break;
+            }
+        };
+        let tail = copy_continuation(&profile_id, &companion_id, next + 1, order.len(), emitted + 1);
+        if !fits(out.len(), row.len(), tail.len(), max_bytes) {
+            if emitted == 0 {
+                return Err("E_PROFILE_BOUND one complete row and continuation exceed --bytes".to_string());
+            }
+            break;
+        }
+        out.push_str(&row); next += 1; emitted += 1;
+    }
+    let tail = copy_continuation(&profile_id, &companion_id, next, order.len(), emitted);
+    if !fits(out.len(), tail.len(), 0, max_bytes) {
+        return Err("E_PROFILE_BOUND header and continuation exceed --bytes".to_string());
+    }
+    out.push_str(&tail);
     Ok(out)
 }
 fn kind_name(kind: usize) -> &'static str {

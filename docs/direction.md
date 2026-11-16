@@ -41,9 +41,9 @@ hello under a 4 GiB address-space limit.
 
 ## Profile first, then remove structural costs
 
-build --profile embeds function and operation-kind maps and opts into OUTPUT.samples.PID.
+build --profile embeds function, operation-kind and copy-site maps and opts into OUTPUT.samples.PID; --profile-ir PATH exports the exact checked native selection. Explicit --copy-sites detail requires that companion and positive --limit/--bytes bounds.
 A Linux CPU timer samples instruction pointers and real frame chains without a depth cap.
-Reports survive exit/signals and show self/inclusive functions and exclusive kinds
+Reports survive exit/signals; default summaries show self/inclusive functions and exclusive kinds
 in at most 37 lines, without DWARF or perf; the explicit option grants instrumentation.
 Measure self-built / witness opt=0 / witness -O and attribute transformations before optimizing; -O milestones are 4x, 3x and 2x, or a measured backend floor.
 Discard steps below 10%; the last coalescing trial gave under 1% CPU and was discarded. Structure queries, transactions and scale precede speed unless compiler speed is the measured scale wall.
