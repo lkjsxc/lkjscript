@@ -1,0 +1,14 @@
+{
+  "schema": 1,
+  "execution_request": "compiler-reference-capture-query-audit-run-1389",
+  "execution_exit_code": 0,
+  "capture_status": "complete",
+  "stdout_ref": "/home/coder/.local/state/lkjyolo/outputs/pipe-nljolhmnplabebljkifpcihbfoojgbif.stdout",
+  "stderr_ref": "/home/coder/.local/state/lkjyolo/outputs/pipe-nljolhmnplabebljkifpcihbfoojgbif.stderr",
+  "followup_summary_request": "compiler-reference-capture-query-audit-summary-1390",
+  "followup_stdout_ref": "/home/coder/.local/state/lkjyolo/outputs/pipe-aaeajnbihjgcehialkflnagenffomkbo.stdout",
+  "initial_unexecuted_helper_request": "compiler-reference-capture-query-audit-script-1386",
+  "pre_execution_correction_request": "compiler-reference-capture-query-audit-correct-1387",
+  "launcher_request": "compiler-reference-capture-query-launcher-1388",
+  "scope": "Only offline raw-record audit and its own outputs; no compiler/query/native/store/key access or compression."
+}

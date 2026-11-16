@@ -1,0 +1,31 @@
+--- review-v1/setup.sh
++++ setup.sh
+@@ -33,6 +33,28 @@
+     date -u +%Y-%m-%dT%H:%M:%SZ > "$RUN/records/end.utc"
+     date +%s%N > "$RUN/records/end.ns"
+     cut -d' ' -f1-3 /proc/loadavg > "$RUN/records/load-after"
++    local item record command_status capture_status outcome
++    printf 'phase\toutcome\tcommand_status\tcapture_validation_status\n' > "$RUN/records/phases.tsv"
++    for item in recover-inputs prepare-factory generator-build generate-100k freeze-artifacts; do
++        record="$RUN/records/$item"
++        command_status=unavailable
++        capture_status=unavailable
++        outcome=not-run
++        if [[ -d "$record" ]]; then
++            [[ ! -f "$record/status" ]] || IFS= read -r command_status < "$record/status"
++            [[ ! -f "$record/validation.status" ]] || IFS= read -r capture_status < "$record/validation.status"
++            if [[ -f "$record/refusal" ]]; then
++                outcome=preflight-refusal
++            elif [[ "$command_status" =~ ^[0-9]+$ && "$command_status" != 0 ]]; then
++                outcome=failed
++            elif [[ "$command_status" == 0 && "$capture_status" == 0 ]]; then
++                outcome=ok
++            else
++                outcome=incomplete
++            fi
++        fi
++        printf '%s\t%s\t%s\t%s\n' "$item" "$outcome" "$command_status" "$capture_status" >> "$RUN/records/phases.tsv"
++    done
+     if [[ "$result" == 0 ]]; then
+         printf '%s\n' 'setup-complete; generated archive verified; A/B remains unreleased' > "$RUN/records/completion"
+     else

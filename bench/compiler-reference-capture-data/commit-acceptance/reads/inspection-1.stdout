@@ -1,0 +1,376 @@
+commit bd8a9050a3786de9f227c6c4037f5acd43205f71
+Author:     lkjsxc <lkjsxc@gmail.com>
+AuthorDate: Mon Nov 16 17:57:08 2026 +0000
+Commit:     lkjsxc <lkjsxc@gmail.com>
+CommitDate: Mon Nov 16 17:57:08 2026 +0000
+
+    Skip export-only reference recording in ordinary compilation
+    
+    Select full source-reference capture before inference and preserve the mode
+    through verification, demand, fallback and ordinary checkpoint resumption.
+    Guard the two export-only vectors without suppressing lexical origins,
+    constraints or checked IR. Refuse late full export before publishing a catalog.
+    
+    Apply all 585 retained language lines through 24 audited semantic operations.
+    Retain every preliminary refusal and exact source/transaction evidence.
+    The candidate is a 32,588,975-byte b01eabfa fixed point at producer inline64.
+    
+    Cold four-worker gate: 5,455 fresh case requests, zero skips, 728 structural
+    contracts and 128 mutants/zero findings; 611.802 s, load 3.45 to 3.68.
+    Bootstrap: 79.97 s, load 1.58 to 2.78.
+    Focused query lifecycle: 8.33 s, load 2.42 to 5.64.
+    No memory saving, 1M relief or generated-code milestone is claimed yet.
+
+ .../adoption/acceptance.json                       |   243 +
+ .../adoption/audit.pl                              |   240 +
+ .../adoption/baseline-git.sha256                   |  1742 ++
+ .../adoption/captures/argv.json                    |    39 +
+ .../adoption/captures/cwd                          |     1 +
+ .../adoption/captures/end.ns                       |     1 +
+ .../adoption/captures/end.utc                      |     1 +
+ .../adoption/captures/inspection-core.stderr       |     0
+ .../adoption/captures/inspection-core.stdout       |    99 +
+ .../adoption/captures/inspection-final.stderr      |     1 +
+ .../adoption/captures/inspection-final.stdout      |    62 +
+ .../adoption/captures/load-after                   |     1 +
+ .../adoption/captures/load-before                  |     1 +
+ .../adoption/captures/projection-review.stderr     |     0
+ .../adoption/captures/projection-review.stdout     |   180 +
+ .../adoption/captures/start.ns                     |     1 +
+ .../adoption/captures/start.utc                    |     1 +
+ .../adoption/captures/status                       |     1 +
+ .../adoption/captures/stderr                       |     0
+ .../adoption/captures/stdout                       |     9 +
+ .../adoption/captures/syntax.status                |     1 +
+ .../adoption/captures/syntax.stderr                |     1 +
+ .../adoption/captures/syntax.stdout                |     0
+ .../adoption/captures/time                         |     1 +
+ .../adoption/commands.json                         |   128 +
+ .../adoption/input-pins.json                       |   222 +
+ .../adoption/inventory.json                        |   225 +
+ .../adoption/live-actual.sha256                    |  1743 ++
+ .../adoption/live-desired.sha256                   |  1743 ++
+ .../adoption/manifest.sha256                       |    36 +
+ .../projection-diffs/src__elaborate.lkj.patch      |    47 +
+ .../src__elaborate__definition_types.lkj.patch     |    21 +
+ .../projection-diffs/src__semantic_tests.lkj.patch |    12 +
+ .../adoption/projection-review.json                |    35 +
+ .../adoption/report.md                             |    56 +
+ .../adoption/retained-numstat-new.raw              |     1 +
+ .../adoption/retained-numstat-tracked.raw          |   Bin 0 -> 307 bytes
+ .../compiler-reference-capture-data/bootstrap/argv |   Bin 0 -> 243 bytes
+ .../bootstrap/canonical.sha256                     |     1 +
+ .../bootstrap/canonical.stat                       |     1 +
+ .../compiler-reference-capture-data/bootstrap/cwd  |     1 +
+ .../bootstrap/end.ns                               |     1 +
+ .../bootstrap/end.utc                              |     1 +
+ .../bootstrap/environment                          |     3 +
+ .../bootstrap/inputs.sha256                        |     3 +
+ .../bootstrap/load-after                           |     1 +
+ .../bootstrap/load-before                          |     1 +
+ .../bootstrap/source-after.sha256                  |  1743 ++
+ .../bootstrap/source-before.sha256                 |  1743 ++
+ .../bootstrap/start.ns                             |     1 +
+ .../bootstrap/start.utc                            |     1 +
+ .../bootstrap/status                               |     1 +
+ .../bootstrap/stderr                               |     0
+ .../bootstrap/stdout                               |     1 +
+ .../compiler-reference-capture-data/bootstrap/time |     1 +
+ .../integration-preparation/ADOPTION-AUDIT-PLAN.md |    38 +
+ .../integration-preparation/PLAN.md                |    63 +
+ .../captures/core-shell-syntax.status              |     1 +
+ .../captures/core-shell-syntax.stderr              |     0
+ .../captures/core-shell-syntax.stdout              |     0
+ .../integration-preparation/captures/cwd           |     1 +
+ .../integration-preparation/captures/end.utc       |     1 +
+ .../integration-preparation/captures/load-after    |     1 +
+ .../integration-preparation/captures/load-before   |     1 +
+ .../integration-preparation/captures/start.utc     |     1 +
+ .../integration-preparation/captures/status        |     1 +
+ .../integration-preparation/captures/stderr        |     0
+ .../integration-preparation/captures/stdout        |    13 +
+ .../integration-preparation/captures/syntax.status |     1 +
+ .../integration-preparation/captures/syntax.stderr |     1 +
+ .../integration-preparation/captures/syntax.stdout |     0
+ .../captures/test-shell-syntax.status              |     1 +
+ .../captures/test-shell-syntax.stderr              |     0
+ .../captures/test-shell-syntax.stdout              |     0
+ .../integration-preparation/captures/time          |     1 +
+ .../integration-preparation/commands.json          |   102 +
+ .../integration-preparation/core-apply.sh          |    14 +
+ .../integration-preparation/desired-source.sha256  |  1743 ++
+ .../integration-preparation/freeze.json            |   144 +
+ .../host-tools-integration.json                    |    20 +
+ .../integration-preparation/inventory.json         |   255 +
+ .../integration-preparation/manifest.sha256        |    41 +
+ .../integration-preparation/materialize.pl         |   102 +
+ .../integration-preparation/preparation.json       |    85 +
+ .../integration-preparation/producer.sha256        |     1 +
+ .../reads/docs-prior-2.stderr                      |     0
+ .../reads/docs-prior-2.stdout                      |   400 +
+ .../integration-preparation/reads/freeze.stderr    |     0
+ .../integration-preparation/reads/freeze.stdout    |    70 +
+ .../reads/inspection-1.stderr                      |     2 +
+ .../reads/inspection-1.stdout                      |   265 +
+ .../integration-preparation/reads/items.stderr     |     0
+ .../integration-preparation/reads/items.stdout     |    85 +
+ .../integration-preparation/reads/records-3.stderr |     0
+ .../integration-preparation/reads/records-3.stdout |   Bin 0 -> 21841 bytes
+ .../integration-preparation/test-apply.sh          |    12 +
+ .../integration-preparation/tests-request.json     |    25 +
+ .../measurement-preparation/manifest.sha256        |     5 +
+ .../metadata-validation.txt                        |     1 +
+ .../measurement-preparation/order.tsv              |    13 +
+ .../measurement-preparation/pins.pending.json      |   131 +
+ .../measurement-preparation/plan.md                |    87 +
+ .../preparation-provenance.md                      |    15 +
+ .../operations/core/argv                           |   Bin 0 -> 449 bytes
+ .../operations/core/base-commit                    |     1 +
+ .../operations/core/cwd                            |     1 +
+ .../operations/core/end.ns                         |     1 +
+ .../operations/core/end.utc                        |     1 +
+ .../operations/core/limits                         |     1 +
+ .../operations/core/load-after                     |     1 +
+ .../operations/core/load-before                    |     1 +
+ .../operations/core/numstat                        |     7 +
+ .../operations/core/producer-after.sha256          |     1 +
+ .../operations/core/producer-before.sha256         |     1 +
+ .../operations/core/source-after.sha256            |  1742 ++
+ .../operations/core/source-before.sha256           |  1742 ++
+ .../operations/core/start.ns                       |     1 +
+ .../operations/core/start.utc                      |     1 +
+ .../operations/core/status                         |     1 +
+ .../operations/core/stderr                         |     0
+ .../operations/core/stdout                         |    74 +
+ .../operations/core/time                           |     1 +
+ .../operations/tests/argv                          |   Bin 0 -> 321 bytes
+ .../operations/tests/base-commit                   |     1 +
+ .../operations/tests/cwd                           |     1 +
+ .../operations/tests/desired-after.sha256          |  1743 ++
+ .../operations/tests/desired-before.sha256         |  1743 ++
+ .../operations/tests/end.ns                        |     1 +
+ .../operations/tests/end.utc                       |     1 +
+ .../operations/tests/limits                        |     1 +
+ .../operations/tests/load-after                    |     1 +
+ .../operations/tests/load-before                   |     1 +
+ .../operations/tests/new-module-lines              |     1 +
+ .../operations/tests/numstat-tracked               |     9 +
+ .../operations/tests/producer-after.sha256         |     1 +
+ .../operations/tests/producer-before.sha256        |     1 +
+ .../operations/tests/request-after.sha256          |     1 +
+ .../operations/tests/request-before.sha256         |     1 +
+ .../operations/tests/source-after.sha256           |  1743 ++
+ .../operations/tests/source-before.sha256          |  1742 ++
+ .../operations/tests/start.ns                      |     1 +
+ .../operations/tests/start.utc                     |     1 +
+ .../operations/tests/status                        |     1 +
+ .../operations/tests/stderr                        |     0
+ .../operations/tests/stdout                        |    58 +
+ .../operations/tests/time                          |     1 +
+ .../preliminary/README.md                          |    32 +
+ .../preliminary/archive-command.json               |    36 +
+ .../preliminary/archive-component-statuses         |     2 +
+ .../preliminary/archive-members.nul                |   Bin 0 -> 186706 bytes
+ .../preliminary/archive-shell-status               |     1 +
+ .../preliminary/argv                               |   Bin 0 -> 368 bytes
+ .../preliminary/controls.json                      |    64 +
+ .../preliminary/cwd                                |     1 +
+ .../preliminary/finished.ns                        |     1 +
+ .../preliminary/finished.utc                       |     1 +
+ .../preliminary/gateway-completion.json            |    36 +
+ .../preliminary/gateway-launch.json                |    37 +
+ .../preliminary/gzip.stderr                        |     0
+ .../preliminary/inventory.json                     | 25147 +++++++++++++++++++
+ .../preliminary/launch.sh                          |    27 +
+ .../preliminary/limits                             |     1 +
+ .../preliminary/load-after                         |     1 +
+ .../preliminary/load-before                        |     1 +
+ .../preliminary/manifest.sha256                    |    33 +
+ .../preliminary/original-files.sha256              |  1884 ++
+ .../preliminary/pack.pl                            |   176 +
+ .../preliminary/preliminary-roots.tar.gz           |   Bin 0 -> 7839018 bytes
+ .../preliminary/space-before                       |     2 +
+ .../preliminary/started.ns                         |     1 +
+ .../preliminary/started.utc                        |     1 +
+ .../preliminary/status                             |     1 +
+ .../preliminary/stderr                             |     0
+ .../preliminary/stdout                             |     2 +
+ .../preliminary/syntax.status                      |     1 +
+ .../preliminary/syntax.stderr                      |     1 +
+ .../preliminary/syntax.stdout                      |     0
+ .../preliminary/tar.stderr                         |     0
+ .../preliminary/time                               |     1 +
+ .../preliminary/verification.json                  | 13238 ++++++++++
+ .../preparation-copy.json                          |   523 +
+ .../publication-copy.json                          |   624 +
+ .../source-publication/initial-whitespace-check.md |     7 +
+ .../initial-whitespace-check.stdout                |    22 +
+ bench/compiler-reference-capture.md                |    74 +
+ docs/direction.md                                  |     2 +-
+ docs/ir.md                                         |    13 +-
+ docs/status.md                                     |     6 +-
+ docs/structure.md                                  |     9 +-
+ src/driver.lkj                                     |    13 +-
+ src/elaborate.lkj                                  |   113 +-
+ src/elaborate/definition_types.lkj                 |   138 +-
+ .../definition_types/pattern_equations.lkj         |     4 +-
+ src/elaborate/diagnostic_inference.lkj             |     3 +-
+ src/elaborate/generic_check.lkj                    |     3 +-
+ src/elaborate/incremental.lkj                      |     6 +-
+ src/semantic_main.lkj                              |     2 +-
+ src/semantic_tests.lkj                             |     3 +
+ src/semantic_tests/reference_capture.lkj           |   300 +
+ tools/closed-semantics.sh                          |     2 +-
+ tools/semantic-query-test.sh                       |   129 +
+ 201 files changed, 67469 insertions(+), 30 deletions(-)
+target/compiler-reference-capture-adoption-acceptance-1/report.md:3:Result: the two successful semantic publications account for **585 / 585 retained .lkj added+deleted lines** from language baseline 0b0b27803d27b932a5b91cde2d766bd3c8bb82b9. No uncovered source delta was found. This is source-publication attribution, not a new compiler/test execution or performance result.
+target/compiler-reference-capture-adoption-acceptance-1/report.md:24:| Total | 24 | 23 | 10 | 585 |
+target/compiler-reference-capture-adoption-acceptance-1/report.md:32:The source/library and all-retained-.lkj denominators are both 585 for this delta. The two host shell-tool edits are separate and add no .lkj lines. No refused/transient desired edits, whole-item source lengths, JSON/report/Rust/archive bytes or repeated validation copies are counted.
+target/compiler-reference-capture-adoption-acceptance-1/acceptance.json:159:      "all_retained_lkj_denominator" : 585,
+target/compiler-reference-capture-adoption-acceptance-1/acceptance.json:217:      "operation_backed" : 585,
+target/compiler-reference-capture-adoption-acceptance-1/acceptance.json:218:      "src_library_denominator" : 585,
+target/compiler-reference-capture-adoption-acceptance-1/acceptance.json:219:      "total" : 585,
+target/compiler-reference-capture-adoption-acceptance-1/input-pins.json:5:      "sha256" : "5850c31e2e07973a1f52b104e83e6c1ad171b86b69eec3e5cbf70ddab3651b64"
+target/compiler-reference-capture-adoption-acceptance-1/input-pins.json:54:      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-core-operation-1/source-after.sha256",
+target/compiler-reference-capture-adoption-acceptance-1/input-pins.json:105:      "sha256" : "dfe7d72cd6ebf0ee7f42ac3553585585b84b05f27817dfc94980bb564dbb0a82"
+target/compiler-reference-capture-adoption-acceptance-1/input-pins.json:184:      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-tests-operation-1/source-after.sha256",
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:159:4a42f7705edf85ad31641b0afec6f89192585b18ff0eca9e75b835ae623b64e3  src/reuse.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:163:f85b5d25336462e58505a07d4426c94489e9df849306174c3719b8de5a8a91d0  src/semantic.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:431:fb18b9dc498674e28dfc205c4608778c1b0b8eae8500c058562e57bf1fc56ba8  tests/conformance/fail/named_local_unused_generic.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:433:adbb3b29f24fe279562d16c9db7d5d476a7c1d6000ce765854af802c76f43407  tests/conformance/fail/named_method_type_argument.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:471:9ea8b2a8e2305df519f87691bd21af3f92e585e2df7645f7aa4e72f947ad0155  tests/conformance/fail/range_slice_shared_mutate.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:520:77a98ca9d602637807ae0a5d1873a3205858d7134d6ffaa64477842703e6fc98  tests/conformance/fail/storage_alias_override.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:539:4d50d0cff00ab7ff5f2783f069e624206e4bb33cc346043359cd98b8585f09b7  tests/conformance/fail/type_alias_tied_arguments.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:609:332724eabd482550a709f7012fb58510167186acb48a34dfda39bd6f22672e53  tests/conformance/ir/enum_join_loses_tag.lkjir
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:632:08b127d1f573818009c7e40b065855599b88922812fd77bb76cafc07c018c679  tests/conformance/ir/forged_stop.lkjir
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:637:605e5a6b8650271c3b8d7b753d2b8d57775ffe97a4c7f5851f6a23071561938b  tests/conformance/ir/integer_wrapping_bool.lkjir
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:733:1cbeeb1543bbfbeb58502b8c5a058cafbacb959b51be72f9db62cdf440820a89  tests/conformance/output/capability_callback.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:738:5850cfbfbc131e53c857386f2c2b05db6654df8613858112b474a0f42e02551c  tests/conformance/output/closure_combinator_filter.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:791:224e91d11913ffec70ab7c9f00dd8b694838d5f392f585fdbf36fb331c28a04f  tests/conformance/pass/ancestor_visibility.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:834:010e288aeb953eab2ce0a3d6c1b0055de1ac99479103587030751f936fb3f585  tests/conformance/pass/enum_reference_alternatives.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:879:e7ffc4c2e7c541b738fded226632079b08534585a2361b469f4935acda8afdf7  tests/conformance/pass/import_unused_glob_ambiguity.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:1138:6dea9b6f9168ecece64177e2dbfb73ef983f1e3148fd928d2058544a1d9fd6ef  tests/diagnostics/nonexhaustive_variants.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:1140:6c58517a11a52066c5fba3ebecd0a360ab479e3971a406d8f38981c3e6e26d08  tests/diagnostics/owned_array_iteration.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:1237:33971215a71ad758f097deedc49958519ff9c1f57f008ede8f761e9ea3d7c234  tests/fixtures/process/region_fail_ir_move.lkjir
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:1683:bb67aadeb7158595829fe3422e7bf35ecb4422ee46c6cb0ccb55e5e2f2455aa0  tests/semantics/values/generic_clone_and_equality_use_declared_builtin_witnesses_0.lkjir
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256:1734:9cfdd2e2ae0b55ca7668154560a37deab956585dbfd54cc3922f8e3bb827956b  tests/semantics/values/supplied_prelude_bytes_control_behavior_and_diagnostics_0.lkjir
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:72:my$freeze=decode_json(pinned("$PREP/freeze.json",'dfe7d72cd6ebf0ee7f42ac3553585585b84b05f27817dfc94980bb564dbb0a82'));
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:80:my$core_after_bytes=evidence("$CORE/source-after.sha256");
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:82:my$test_after_bytes=evidence("$TEST/source-after.sha256");
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:140: die"apply publication missing\n"unless$out=~/^transaction source-before=[0-9a-f]{64} source-after=[0-9a-f]{64} mode=apply$/m;
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:159:4a42f7705edf85ad31641b0afec6f89192585b18ff0eca9e75b835ae623b64e3  src/reuse.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:163:f85b5d25336462e58505a07d4426c94489e9df849306174c3719b8de5a8a91d0  src/semantic.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:431:fb18b9dc498674e28dfc205c4608778c1b0b8eae8500c058562e57bf1fc56ba8  tests/conformance/fail/named_local_unused_generic.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:433:adbb3b29f24fe279562d16c9db7d5d476a7c1d6000ce765854af802c76f43407  tests/conformance/fail/named_method_type_argument.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:471:9ea8b2a8e2305df519f87691bd21af3f92e585e2df7645f7aa4e72f947ad0155  tests/conformance/fail/range_slice_shared_mutate.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:520:77a98ca9d602637807ae0a5d1873a3205858d7134d6ffaa64477842703e6fc98  tests/conformance/fail/storage_alias_override.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:539:4d50d0cff00ab7ff5f2783f069e624206e4bb33cc346043359cd98b8585f09b7  tests/conformance/fail/type_alias_tied_arguments.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:609:332724eabd482550a709f7012fb58510167186acb48a34dfda39bd6f22672e53  tests/conformance/ir/enum_join_loses_tag.lkjir
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:632:08b127d1f573818009c7e40b065855599b88922812fd77bb76cafc07c018c679  tests/conformance/ir/forged_stop.lkjir
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:637:605e5a6b8650271c3b8d7b753d2b8d57775ffe97a4c7f5851f6a23071561938b  tests/conformance/ir/integer_wrapping_bool.lkjir
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:733:1cbeeb1543bbfbeb58502b8c5a058cafbacb959b51be72f9db62cdf440820a89  tests/conformance/output/capability_callback.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:738:5850cfbfbc131e53c857386f2c2b05db6654df8613858112b474a0f42e02551c  tests/conformance/output/closure_combinator_filter.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:791:224e91d11913ffec70ab7c9f00dd8b694838d5f392f585fdbf36fb331c28a04f  tests/conformance/pass/ancestor_visibility.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:834:010e288aeb953eab2ce0a3d6c1b0055de1ac99479103587030751f936fb3f585  tests/conformance/pass/enum_reference_alternatives.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:879:e7ffc4c2e7c541b738fded226632079b08534585a2361b469f4935acda8afdf7  tests/conformance/pass/import_unused_glob_ambiguity.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:1138:6dea9b6f9168ecece64177e2dbfb73ef983f1e3148fd928d2058544a1d9fd6ef  tests/diagnostics/nonexhaustive_variants.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:1140:6c58517a11a52066c5fba3ebecd0a360ab479e3971a406d8f38981c3e6e26d08  tests/diagnostics/owned_array_iteration.lkj
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:1237:33971215a71ad758f097deedc49958519ff9c1f57f008ede8f761e9ea3d7c234  tests/fixtures/process/region_fail_ir_move.lkjir
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:1683:bb67aadeb7158595829fe3422e7bf35ecb4422ee46c6cb0ccb55e5e2f2455aa0  tests/semantics/values/generic_clone_and_equality_use_declared_builtin_witnesses_0.lkjir
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256:1734:9cfdd2e2ae0b55ca7668154560a37deab956585dbfd54cc3922f8e3bb827956b  tests/semantics/values/supplied_prelude_bytes_control_behavior_and_diagnostics_0.lkjir
+target/compiler-reference-capture-adoption-acceptance-1/captures/projection-review.stdout:103:      "all_retained_lkj_denominator" : 585,
+target/compiler-reference-capture-adoption-acceptance-1/captures/projection-review.stdout:161:      "operation_backed" : 585,
+target/compiler-reference-capture-adoption-acceptance-1/captures/projection-review.stdout:162:      "src_library_denominator" : 585,
+target/compiler-reference-capture-adoption-acceptance-1/captures/projection-review.stdout:163:      "total" : 585,
+target/compiler-reference-capture-adoption-acceptance-1/captures/stdout:5:retained_lines=585 credited=585 core=280 tests=305 added=564 deleted=21
+target/compiler-reference-capture-adoption-acceptance-1/captures/inspection-final.stdout:6:target/compiler-reference-capture-tests-operation-1/source-after.sha256
+target/compiler-reference-capture-adoption-acceptance-1/captures/inspection-final.stdout:45:transaction source-before=fa0fc530a8b6e002a5ce222806e7184255f4112baabe75da037183077b740851 source-after=04aabd52eba1dd4eda3fc546357a1c375e7735a298df32458af1ca3587515354 mode=apply
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:159:4a42f7705edf85ad31641b0afec6f89192585b18ff0eca9e75b835ae623b64e3  src/reuse.lkj
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:163:f85b5d25336462e58505a07d4426c94489e9df849306174c3719b8de5a8a91d0  src/semantic.lkj
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:430:fb18b9dc498674e28dfc205c4608778c1b0b8eae8500c058562e57bf1fc56ba8  tests/conformance/fail/named_local_unused_generic.lkj
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:432:adbb3b29f24fe279562d16c9db7d5d476a7c1d6000ce765854af802c76f43407  tests/conformance/fail/named_method_type_argument.lkj
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:470:9ea8b2a8e2305df519f87691bd21af3f92e585e2df7645f7aa4e72f947ad0155  tests/conformance/fail/range_slice_shared_mutate.lkj
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:519:77a98ca9d602637807ae0a5d1873a3205858d7134d6ffaa64477842703e6fc98  tests/conformance/fail/storage_alias_override.lkj
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:538:4d50d0cff00ab7ff5f2783f069e624206e4bb33cc346043359cd98b8585f09b7  tests/conformance/fail/type_alias_tied_arguments.lkj
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:608:332724eabd482550a709f7012fb58510167186acb48a34dfda39bd6f22672e53  tests/conformance/ir/enum_join_loses_tag.lkjir
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:631:08b127d1f573818009c7e40b065855599b88922812fd77bb76cafc07c018c679  tests/conformance/ir/forged_stop.lkjir
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:636:605e5a6b8650271c3b8d7b753d2b8d57775ffe97a4c7f5851f6a23071561938b  tests/conformance/ir/integer_wrapping_bool.lkjir
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:732:1cbeeb1543bbfbeb58502b8c5a058cafbacb959b51be72f9db62cdf440820a89  tests/conformance/output/capability_callback.lkj
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:737:5850cfbfbc131e53c857386f2c2b05db6654df8613858112b474a0f42e02551c  tests/conformance/output/closure_combinator_filter.lkj
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:790:224e91d11913ffec70ab7c9f00dd8b694838d5f392f585fdbf36fb331c28a04f  tests/conformance/pass/ancestor_visibility.lkj
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:833:010e288aeb953eab2ce0a3d6c1b0055de1ac99479103587030751f936fb3f585  tests/conformance/pass/enum_reference_alternatives.lkj
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:878:e7ffc4c2e7c541b738fded226632079b08534585a2361b469f4935acda8afdf7  tests/conformance/pass/import_unused_glob_ambiguity.lkj
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:1137:6dea9b6f9168ecece64177e2dbfb73ef983f1e3148fd928d2058544a1d9fd6ef  tests/diagnostics/nonexhaustive_variants.lkj
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:1139:6c58517a11a52066c5fba3ebecd0a360ab479e3971a406d8f38981c3e6e26d08  tests/diagnostics/owned_array_iteration.lkj
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:1236:33971215a71ad758f097deedc49958519ff9c1f57f008ede8f761e9ea3d7c234  tests/fixtures/process/region_fail_ir_move.lkjir
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:1682:bb67aadeb7158595829fe3422e7bf35ecb4422ee46c6cb0ccb55e5e2f2455aa0  tests/semantics/values/generic_clone_and_equality_use_declared_builtin_witnesses_0.lkjir
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256:1733:9cfdd2e2ae0b55ca7668154560a37deab956585dbfd54cc3922f8e3bb827956b  tests/semantics/values/supplied_prelude_bytes_control_behavior_and_diagnostics_0.lkjir
+target/compiler-reference-capture-integration-preparation-1/manifest.sha256:24:dfe7d72cd6ebf0ee7f42ac3553585585b84b05f27817dfc94980bb564dbb0a82  freeze.json
+target/compiler-reference-capture-integration-preparation-1/manifest.sha256:33:bf520d7d9149d724e6249f8bdc197f0bd8a313f8458510150f7ea7acce162dae  reads/inspection-1.stderr
+target/compiler-reference-capture-integration-preparation-1/inventory.json:147:         "sha256" : "dfe7d72cd6ebf0ee7f42ac3553585585b84b05f27817dfc94980bb564dbb0a82"
+target/compiler-reference-capture-integration-preparation-1/inventory.json:201:         "sha256" : "bf520d7d9149d724e6249f8bdc197f0bd8a313f8458510150f7ea7acce162dae"
+target/compiler-reference-capture-integration-preparation-1/preparation.json:78:    "freeze_sha256": "dfe7d72cd6ebf0ee7f42ac3553585585b84b05f27817dfc94980bb564dbb0a82",
+target/compiler-reference-capture-integration-preparation-1/freeze.json:2:   "base_commit" : "0b0b27803d27b932a5b91cde2d766bd3c8bb82b9",
+target/compiler-reference-capture-integration-preparation-1/freeze.json:131:   "source_manifest" : {
+target/compiler-reference-capture-integration-preparation-1/materialize.pl:30:die"desired changed during preliminary validation\n"unless raw("$CHECK/source-after.sha256")eq$m;
+target/compiler-reference-capture-integration-preparation-1/materialize.pl:78: base_commit=>$BASE,desired_root=>$DESIRED,source_manifest=>{records=>1743,sha256=>sha256_hex($m),copied_as=>'desired-source.sha256'},
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:159:4a42f7705edf85ad31641b0afec6f89192585b18ff0eca9e75b835ae623b64e3  src/reuse.lkj
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:163:f85b5d25336462e58505a07d4426c94489e9df849306174c3719b8de5a8a91d0  src/semantic.lkj
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:431:fb18b9dc498674e28dfc205c4608778c1b0b8eae8500c058562e57bf1fc56ba8  tests/conformance/fail/named_local_unused_generic.lkj
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:433:adbb3b29f24fe279562d16c9db7d5d476a7c1d6000ce765854af802c76f43407  tests/conformance/fail/named_method_type_argument.lkj
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:471:9ea8b2a8e2305df519f87691bd21af3f92e585e2df7645f7aa4e72f947ad0155  tests/conformance/fail/range_slice_shared_mutate.lkj
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:520:77a98ca9d602637807ae0a5d1873a3205858d7134d6ffaa64477842703e6fc98  tests/conformance/fail/storage_alias_override.lkj
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:539:4d50d0cff00ab7ff5f2783f069e624206e4bb33cc346043359cd98b8585f09b7  tests/conformance/fail/type_alias_tied_arguments.lkj
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:609:332724eabd482550a709f7012fb58510167186acb48a34dfda39bd6f22672e53  tests/conformance/ir/enum_join_loses_tag.lkjir
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:632:08b127d1f573818009c7e40b065855599b88922812fd77bb76cafc07c018c679  tests/conformance/ir/forged_stop.lkjir
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:637:605e5a6b8650271c3b8d7b753d2b8d57775ffe97a4c7f5851f6a23071561938b  tests/conformance/ir/integer_wrapping_bool.lkjir
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:733:1cbeeb1543bbfbeb58502b8c5a058cafbacb959b51be72f9db62cdf440820a89  tests/conformance/output/capability_callback.lkj
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:738:5850cfbfbc131e53c857386f2c2b05db6654df8613858112b474a0f42e02551c  tests/conformance/output/closure_combinator_filter.lkj
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:791:224e91d11913ffec70ab7c9f00dd8b694838d5f392f585fdbf36fb331c28a04f  tests/conformance/pass/ancestor_visibility.lkj
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:834:010e288aeb953eab2ce0a3d6c1b0055de1ac99479103587030751f936fb3f585  tests/conformance/pass/enum_reference_alternatives.lkj
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:879:e7ffc4c2e7c541b738fded226632079b08534585a2361b469f4935acda8afdf7  tests/conformance/pass/import_unused_glob_ambiguity.lkj
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:1138:6dea9b6f9168ecece64177e2dbfb73ef983f1e3148fd928d2058544a1d9fd6ef  tests/diagnostics/nonexhaustive_variants.lkj
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:1140:6c58517a11a52066c5fba3ebecd0a360ab479e3971a406d8f38981c3e6e26d08  tests/diagnostics/owned_array_iteration.lkj
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:1237:33971215a71ad758f097deedc49958519ff9c1f57f008ede8f761e9ea3d7c234  tests/fixtures/process/region_fail_ir_move.lkjir
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:1683:bb67aadeb7158595829fe3422e7bf35ecb4422ee46c6cb0ccb55e5e2f2455aa0  tests/semantics/values/generic_clone_and_equality_use_declared_builtin_witnesses_0.lkjir
+target/compiler-reference-capture-integration-preparation-1/desired-source.sha256:1734:9cfdd2e2ae0b55ca7668154560a37deab956585dbfd54cc3922f8e3bb827956b  tests/semantics/values/supplied_prelude_bytes_control_behavior_and_diagnostics_0.lkjir
+target/compiler-reference-capture-integration-preparation-1/reads/docs-prior-2.stdout:236:/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-core-apply-1/source-after.sha256
+target/compiler-reference-capture-integration-preparation-1/reads/docs-prior-2.stdout:249:/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-edit-tests-explicit-1/source-after.sha256
+target/compiler-reference-capture-integration-preparation-1/reads/freeze.stdout:9:e34cdb687a9e7195e686f38bf53a6f55c1b38f7f1769f60605ba36361b6119b7  target/compiler-reference-capture-semantics-4/source-after.sha256
+target/compiler-reference-capture-adoption-acceptance-1/manifest.sha256
+target/compiler-reference-capture-adoption-acceptance-1/inventory.json
+target/compiler-reference-capture-adoption-acceptance-1/projection-review.json
+target/compiler-reference-capture-adoption-acceptance-1/report.md
+target/compiler-reference-capture-adoption-acceptance-1/input-pins.json
+target/compiler-reference-capture-adoption-acceptance-1/commands.json
+target/compiler-reference-capture-adoption-acceptance-1/acceptance.json
+target/compiler-reference-capture-adoption-acceptance-1/retained-numstat-new.raw
+target/compiler-reference-capture-adoption-acceptance-1/retained-numstat-tracked.raw
+target/compiler-reference-capture-adoption-acceptance-1/live-desired.sha256
+target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256
+target/compiler-reference-capture-adoption-acceptance-1/baseline-git.sha256
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl
+target/compiler-reference-capture-adoption-acceptance-1/projection-diffs/src__semantic_tests.lkj.patch
+target/compiler-reference-capture-adoption-acceptance-1/projection-diffs/src__elaborate__definition_types.lkj.patch
+target/compiler-reference-capture-adoption-acceptance-1/projection-diffs/src__elaborate.lkj.patch
+target/compiler-reference-capture-adoption-acceptance-1/captures/projection-review.stderr
+target/compiler-reference-capture-adoption-acceptance-1/captures/projection-review.stdout
+target/compiler-reference-capture-adoption-acceptance-1/captures/inspection-final.stderr
+target/compiler-reference-capture-adoption-acceptance-1/captures/inspection-final.stdout
+target/compiler-reference-capture-adoption-acceptance-1/captures/inspection-core.stderr
+target/compiler-reference-capture-adoption-acceptance-1/captures/inspection-core.stdout
+target/compiler-reference-capture-adoption-acceptance-1/captures/argv.json
+target/compiler-reference-capture-adoption-acceptance-1/captures/load-after
+target/compiler-reference-capture-adoption-acceptance-1/captures/end.utc
+target/compiler-reference-capture-adoption-acceptance-1/captures/end.ns
+target/compiler-reference-capture-adoption-acceptance-1/captures/status
+target/compiler-reference-capture-adoption-acceptance-1/captures/time
+target/compiler-reference-capture-adoption-acceptance-1/captures/stderr
+target/compiler-reference-capture-adoption-acceptance-1/captures/stdout
+target/compiler-reference-capture-adoption-acceptance-1/captures/syntax.status
+target/compiler-reference-capture-adoption-acceptance-1/captures/syntax.stderr
+target/compiler-reference-capture-adoption-acceptance-1/captures/syntax.stdout
+target/compiler-reference-capture-adoption-acceptance-1/captures/load-before
+target/compiler-reference-capture-adoption-acceptance-1/captures/start.ns
+target/compiler-reference-capture-adoption-acceptance-1/captures/start.utc
+target/compiler-reference-capture-adoption-acceptance-1/captures/cwd

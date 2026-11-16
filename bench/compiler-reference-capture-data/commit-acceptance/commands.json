@@ -1,0 +1,357 @@
+[
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71:bench/compiler-reference-capture-data/adoption/acceptance.json"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 11658,
+      "stdout_sha256" : "e0d850b5f8bfea5b14573e694cd2ee64fe5682b1548138daa3a158f32e93729c"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71:bench/compiler-reference-capture-data/adoption/live-actual.sha256"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 212800,
+      "stdout_sha256" : "3bcdcb955f65b037311343b6fedf02384a39546c6a2711a6e7a926fdda43a45f"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71:bench/compiler-reference-capture-data/adoption/manifest.sha256"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 3213,
+      "stdout_sha256" : "60b8d81c0c5d1bca452c65a65689f5a0a16d76b0383b9e0868feab648ed2954a"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "rev-parse",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71^"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 41,
+      "stdout_sha256" : "a687fed0ae17b132d7c96abd19eff936f6fe3134735e926ee000ddc6e9ff9d85"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "rev-parse",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71:src"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 41,
+      "stdout_sha256" : "c183d04ac7669cd6cd15112e4ed8501ce772c9c51f41437a38d5272731e8f8ef"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "rev-parse",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71:library"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 41,
+      "stdout_sha256" : "007645a6f4f843f3f11e7345e54b878928dac137c96b65736291e92eea749d56"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "rev-parse",
+         "0b0b27803d27b932a5b91cde2d766bd3c8bb82b9:src"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 41,
+      "stdout_sha256" : "b0802ec8046a5a6d7b93f7c47effdb2e879de2ef14f17d38e53c6dbdbde5a23e"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "rev-parse",
+         "d03ad66bf672b3338ec7dd073560cf599e182303:src"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 41,
+      "stdout_sha256" : "b0802ec8046a5a6d7b93f7c47effdb2e879de2ef14f17d38e53c6dbdbde5a23e"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "rev-parse",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71:src"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 41,
+      "stdout_sha256" : "c183d04ac7669cd6cd15112e4ed8501ce772c9c51f41437a38d5272731e8f8ef"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "rev-parse",
+         "0b0b27803d27b932a5b91cde2d766bd3c8bb82b9:library"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 41,
+      "stdout_sha256" : "007645a6f4f843f3f11e7345e54b878928dac137c96b65736291e92eea749d56"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "rev-parse",
+         "d03ad66bf672b3338ec7dd073560cf599e182303:library"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 41,
+      "stdout_sha256" : "007645a6f4f843f3f11e7345e54b878928dac137c96b65736291e92eea749d56"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "rev-parse",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71:library"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 41,
+      "stdout_sha256" : "007645a6f4f843f3f11e7345e54b878928dac137c96b65736291e92eea749d56"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "rev-parse",
+         "0b0b27803d27b932a5b91cde2d766bd3c8bb82b9:tests"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 41,
+      "stdout_sha256" : "75e3957fcab671037cb49738627b9d28853d2b408adb0b699e9f8d11f24e7e81"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "rev-parse",
+         "d03ad66bf672b3338ec7dd073560cf599e182303:tests"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 41,
+      "stdout_sha256" : "75e3957fcab671037cb49738627b9d28853d2b408adb0b699e9f8d11f24e7e81"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "rev-parse",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71:tests"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 41,
+      "stdout_sha256" : "75e3957fcab671037cb49738627b9d28853d2b408adb0b699e9f8d11f24e7e81"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "ls-tree",
+         "-r",
+         "-z",
+         "--full-tree",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71",
+         "--",
+         "src",
+         "library",
+         "tests"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 190141,
+      "stdout_sha256" : "d6f32d5098f39851ed89cd9baa74382c2c0f3a822d1229f8113ae7f25470a207"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "cat-file",
+         "--batch"
+      ],
+      "exit" : 0,
+      "objects" : 1743
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "diff",
+         "--numstat",
+         "--no-renames",
+         "-z",
+         "d03ad66bf672b3338ec7dd073560cf599e182303",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71",
+         "--",
+         "*.lkj"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 354,
+      "stdout_sha256" : "985a465fc654dcf87d64410a0a78c68635c66f000f9a5c5ea1349f862e54464e"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "diff",
+         "--numstat",
+         "--no-renames",
+         "-z",
+         "0b0b27803d27b932a5b91cde2d766bd3c8bb82b9",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71",
+         "--",
+         "*.lkj"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 354,
+      "stdout_sha256" : "985a465fc654dcf87d64410a0a78c68635c66f000f9a5c5ea1349f862e54464e"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "diff",
+         "--name-only",
+         "--no-renames",
+         "-z",
+         "d03ad66bf672b3338ec7dd073560cf599e182303",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71",
+         "--",
+         "src",
+         "library",
+         "tests"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 308,
+      "stdout_sha256" : "59d435563a4153b11c4dfe879d92ec143bbed38a6bfba71c23f4a6a2c43561c0"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "diff",
+         "--name-only",
+         "--diff-filter=A",
+         "--no-renames",
+         "-z",
+         "d03ad66bf672b3338ec7dd073560cf599e182303",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 13011,
+      "stdout_sha256" : "f0b9f489276dfdba988599fd13961c2f1f8b35a544602ad940444bb133c7f7c7"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "0b0b27803d27b932a5b91cde2d766bd3c8bb82b9:docs/status.md"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 16651,
+      "stdout_sha256" : "86773cd9a0406c3fc44247e640b1dafebd03818d8a5efffaf629528331629f09"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "d03ad66bf672b3338ec7dd073560cf599e182303:docs/status.md"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 16651,
+      "stdout_sha256" : "86773cd9a0406c3fc44247e640b1dafebd03818d8a5efffaf629528331629f09"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71:docs/status.md"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 17038,
+      "stdout_sha256" : "3cccd01287d5419349b484fbd61e3a7b7dd9b9e516e77738d77f8a295aa31c7f"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71:bench/compiler-reference-capture-data/source-publication/initial-whitespace-check.md"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 553,
+      "stdout_sha256" : "ee1f33f97bc19b440fba781f28078ceccd179e675560a94da2c5493768879d2f"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71:bench/compiler-reference-capture-data/source-publication/initial-whitespace-check.stdout"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 1700,
+      "stdout_sha256" : "70ba5693a68e592ddc162311870c776b844f0bac87d4de2bd4f971e42e5ed324"
+   },
+   {
+      "argv" : [
+         "/usr/bin/git",
+         "-C",
+         "/home/coder/workspace/lkjscript",
+         "show",
+         "bd8a9050a3786de9f227c6c4037f5acd43205f71:bench/compiler-reference-capture-data/bootstrap/canonical.sha256"
+      ],
+      "exit" : 0,
+      "stdout_bytes" : 83,
+      "stdout_sha256" : "a0365672f1a34788c3ca767a0e2eb92e46cd9888cadd7df274209ffb3f126ebd"
+   }
+]

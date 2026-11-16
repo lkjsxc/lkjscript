@@ -1,0 +1,52 @@
+[
+   {
+      "added" : 6,
+      "deleted" : 7,
+      "path" : "src/driver.lkj"
+   },
+   {
+      "added" : 108,
+      "deleted" : 5,
+      "path" : "src/elaborate.lkj"
+   },
+   {
+      "added" : 136,
+      "deleted" : 2,
+      "path" : "src/elaborate/definition_types.lkj"
+   },
+   {
+      "added" : 3,
+      "deleted" : 1,
+      "path" : "src/elaborate/definition_types/pattern_equations.lkj"
+   },
+   {
+      "added" : 2,
+      "deleted" : 1,
+      "path" : "src/elaborate/diagnostic_inference.lkj"
+   },
+   {
+      "added" : 2,
+      "deleted" : 1,
+      "path" : "src/elaborate/generic_check.lkj"
+   },
+   {
+      "added" : 3,
+      "deleted" : 3,
+      "path" : "src/elaborate/incremental.lkj"
+   },
+   {
+      "added" : 1,
+      "deleted" : 1,
+      "path" : "src/semantic_main.lkj"
+   },
+   {
+      "added" : 3,
+      "deleted" : 0,
+      "path" : "src/semantic_tests.lkj"
+   },
+   {
+      "added" : 300,
+      "deleted" : 0,
+      "path" : "src/semantic_tests/reference_capture.lkj"
+   }
+]

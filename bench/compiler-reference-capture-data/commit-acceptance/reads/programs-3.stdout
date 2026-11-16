@@ -1,0 +1,15 @@
+bd8a9050a3786de9f227c6c4037f5acd43205f71:docs/status.md:35:## Programs
+docs/direction.md
+docs/ir.md
+docs/status.md
+docs/structure.md
+1f9db54c4e8845aacc8d98e525bdd95c16c4bd064ad6aa92663d74607b9cbd84  library/arena.lkj
+de444027870ae8382b3a137e625df00cc3b91774b3aa3280bfe25456b40c6e2d  library/buffer.lkj
+8448ec831069dcb9af7255684f7cab55941450774d7207df05441e21da76c140  library/bytes.lkj
+The first source-commit wrapper stopped before creating a commit because the
+whole staged whitespace check inspected immutable raw diff/inspection captures.
+Their space-prefixed blank context lines and truncated inspection output are
+part of the exact captured evidence. No product source violation was reported.
+The original output is retained unchanged. The publication check now applies to
+the actual source, tools, documentation and authored report; raw evidence bytes
+are preserved, not reformatted. No compiler, test or measured cohort was rerun.

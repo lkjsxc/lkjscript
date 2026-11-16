@@ -1,0 +1,19 @@
+--- review-v1/README.md
++++ README.md
+@@ -1,6 +1,6 @@
+ # Reference-capture input setup: frozen proposal
+ 
+-**Preparation and syntax checks only. No setup has run.** The root's four-worker gate is active. This harness contains no A/B comparison and cannot authorize one; it does not use the forthcoming candidate.
++**Preparation and syntax checks only. No setup has run.** This harness contains no A/B comparison and cannot authorize one; it does not use the forthcoming candidate.
+ 
+ ## Scope and future invocation
+ 
+@@ -41,7 +41,7 @@
+ 
+ ## Records and retention
+ 
+-Each phase retains exact argv and resource-wrapper argv, declared/actual cwd, stdin selector, free space, UTC/nanosecond start/end, three load averages before/after, raw stdout/stderr, GNU wall/user/system/RSS/exit, original status, extracted main stats and metadata-validation output. The validator requires complete timing/load/cwd captures. A nonzero command keeps its original status even if its timing validation also fails. The first failure stops; later phases are not launched.
++Each phase retains exact argv and resource-wrapper argv, declared/actual cwd, stdin selector, free space, UTC/nanosecond start/end, three load averages before/after, raw stdout/stderr, GNU wall/user/system/RSS/exit, original status, extracted main stats and metadata-validation output. The validator requires complete timing/load/cwd captures. A nonzero command keeps its original status even if its timing validation also fails. The first failure stops; later phases are not launched. The EXIT trap writes a fixed five-row `records/phases.tsv` distinguishing `ok`, `failed`, `preflight-refusal`, `incomplete` and `not-run`, alongside original command and capture-validation statuses. The existing overall status and last-phase records identify where setup stopped; unavailable captures are explicit.
+ 
+ All output stays in the owned run root. `artifacts/` contains exact source archive, copied generator/shape, factory before/after/diff, generated source tar and gzip, member inventory, workload, generator gzip and build stats. The actual A and generator remain at the run root. Source/factory recovery is exact source.tar plus the single pinned main replacement; gzip recovery is checked byte-for-byte. `artifacts.sha256` and `setup-summary.json` bind the completed recoverable artifacts.
+ 

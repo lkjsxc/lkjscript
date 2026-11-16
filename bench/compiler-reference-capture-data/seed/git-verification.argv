@@ -1,0 +1,1 @@
+git show HEAD:seed/lkjscript.gz | gzip -dc | cmp - target/lkjscript

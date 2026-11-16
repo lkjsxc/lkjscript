@@ -1,0 +1,17 @@
+[
+   {
+      "bytes" : 11658,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-adoption-acceptance-1/acceptance.json",
+      "sha256" : "e0d850b5f8bfea5b14573e694cd2ee64fe5682b1548138daa3a158f32e93729c"
+   },
+   {
+      "bytes" : 212800,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-adoption-acceptance-1/live-actual.sha256",
+      "sha256" : "3bcdcb955f65b037311343b6fedf02384a39546c6a2711a6e7a926fdda43a45f"
+   },
+   {
+      "bytes" : 3213,
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-adoption-acceptance-1/manifest.sha256",
+      "sha256" : "60b8d81c0c5d1bca452c65a65689f5a0a16d76b0383b9e0868feab648ed2954a"
+   }
+]

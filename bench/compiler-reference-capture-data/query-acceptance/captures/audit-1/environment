@@ -1,0 +1,1 @@
+LC_ALL=C; offline raw-record Perl audit only; 4 GiB AS; 300 s TERM; 10 s grace; no compiler/query/native/key/store access

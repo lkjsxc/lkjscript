@@ -1,0 +1,5 @@
+seven unique terminal build stats rows and five snapshot records verified
+PASS builds=7 stats_rows=7 snapshots=5 replies=25 parity_comparisons=15 fact_rows=60 reply_bytes=28865
+max_facts=5 max_reply_bytes=1680 all_cursors=none source_edit=one_literal
+before_snapshot=4324232149a7e4c86185e161a3eef9730a4b9b4fa514b515d18bced18c432b94
+after_snapshot=a247c0ba1a1112e55b2889936c5f1ab787ee072be53334e2f7292d5fb4bf6b9c

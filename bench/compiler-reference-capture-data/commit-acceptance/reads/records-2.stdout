@@ -1,0 +1,50 @@
+bd8a9050a3786de9f227c6c4037f5acd43205f71
+d03ad66bf672b3338ec7dd073560cf599e182303
+fadf7fec924166a6c04e73a4396882c96253451c
+Skip export-only reference recording in ordinary compilation
+6	7	src/driver.lkj
+108	5	src/elaborate.lkj
+136	2	src/elaborate/definition_types.lkj
+3	1	src/elaborate/definition_types/pattern_equations.lkj
+2	1	src/elaborate/diagnostic_inference.lkj
+2	1	src/elaborate/generic_check.lkj
+3	3	src/elaborate/incremental.lkj
+1	1	src/semantic_main.lkj
+3	0	src/semantic_tests.lkj
+300	0	src/semantic_tests/reference_capture.lkj
+target/compiler-reference-capture-adoption-acceptance-1/acceptance.json:2:   "all_baseline_files_match_git" : true,
+target/compiler-reference-capture-adoption-acceptance-1/acceptance.json:3:   "baseline_commit" : "0b0b27803d27b932a5b91cde2d766bd3c8bb82b9",
+target/compiler-reference-capture-adoption-acceptance-1/acceptance.json:11:   "host_tools" : "Two separately recorded shell edits are outside language adoption and do not invalidate the language baseline.",
+target/compiler-reference-capture-adoption-acceptance-1/acceptance.json:159:      "all_retained_lkj_denominator" : 585,
+target/compiler-reference-capture-adoption-acceptance-1/acceptance.json:160:      "boundary" : "Final baseline-to-current added+deleted .lkj lines only. No transient desired edits, refused attempts, whole replacement sizes, shell/JSON/report/Rust/archive lines credited.",
+target/compiler-reference-capture-adoption-acceptance-1/acceptance.json:217:      "operation_backed" : 585,
+target/compiler-reference-capture-adoption-acceptance-1/acceptance.json:218:      "src_library_denominator" : 585,
+target/compiler-reference-capture-adoption-acceptance-1/acceptance.json:219:      "total" : 585,
+target/compiler-reference-capture-adoption-acceptance-1/acceptance.json:225:         "baseline" : 32,
+target/compiler-reference-capture-adoption-acceptance-1/acceptance.json:230:         "baseline" : 184,
+target/compiler-reference-capture-adoption-acceptance-1/acceptance.json:235:         "baseline" : 1526,
+target/compiler-reference-capture-adoption-acceptance-1/report.md:3:Result: the two successful semantic publications account for **585 / 585 retained .lkj added+deleted lines** from language baseline 0b0b27803d27b932a5b91cde2d766bd3c8bb82b9. No uncovered source delta was found. This is source-publication attribution, not a new compiler/test execution or performance result.
+target/compiler-reference-capture-adoption-acceptance-1/report.md:7:All **1,742** initial files under src/library/tests were independently checked against their exact baseline Git blobs. The core after manifest equals the test transaction before manifest byte-for-byte. All **1,743** final files match both the publication captures and current bytes. There are nine changed existing files and one new file; **1,733** original files remain unchanged.
+target/compiler-reference-capture-adoption-acceptance-1/report.md:24:| Total | 24 | 23 | 10 | 585 |
+target/compiler-reference-capture-adoption-acceptance-1/report.md:32:The source/library and all-retained-.lkj denominators are both 585 for this delta. The two host shell-tool edits are separate and add no .lkj lines. No refused/transient desired edits, whole-item source lengths, JSON/report/Rust/archive bytes or repeated validation copies are counted.
+target/compiler-reference-capture-adoption-acceptance-1/report.md:56:acceptance.json is the immutable machine audit; projection-review.json records the subsequent complete hunk review. input-pins.json, baseline/live manifests, exact command records, raw stdout/stderr/time/status and all discrepancies are retained. One metadata inspection requested the nonexistent generic test numstat filename; its harmless missing-file diagnostic is retained separately. The actual audit independently recomputed numstat and used no missing record.
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:72:my$freeze=decode_json(pinned("$PREP/freeze.json",'dfe7d72cd6ebf0ee7f42ac3553585585b84b05f27817dfc94980bb564dbb0a82'));
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:80:my$core_after_bytes=evidence("$CORE/source-after.sha256");
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:82:my$test_after_bytes=evidence("$TEST/source-after.sha256");
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:112:my%git_hashes;my%baseline_changed;
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:117: my$sha=sha256_hex($b);die"baseline not exact Git $p\n"unless$sha eq$core_before->{$p};
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:118: $git_hashes{$p}=$sha;$baseline_changed{$p}=$b if$EXPECTED{$p};
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:122:save('baseline-git.sha256',raw_manifest(\%git_hashes));
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:123:print"all ".scalar(keys%blobs)." initial source/library/test files match baseline Git\n";
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:140: die"apply publication missing\n"unless$out=~/^transaction source-before=[0-9a-f]{64} source-after=[0-9a-f]{64} mode=apply$/m;
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:178:save('live-actual.sha256',raw_manifest($live));save('live-desired.sha256',raw_manifest($desired_live));
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:215:for my$p(keys%$core_before){my($group)=$p=~/\A([^\/]+)/;$groups{$group}{baseline}++;$groups{$group}{unchanged}++if$core_before->{$p}eq$live->{$p};}
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:220: baseline_commit=>$BASE,operation_producer=>'6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc',
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:222: original_population=>scalar(keys%$core_before),final_population=>scalar(keys%$live),all_baseline_files_match_git=>JSON::PP::true,
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:231: boundary=>'Final baseline-to-current added+deleted .lkj lines only. No transient desired edits, refused attempts, whole replacement sizes, shell/JSON/report/Rust/archive lines credited.'},
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:232: host_tools=>'Two separately recorded shell edits are outside language adoption and do not invalidate the language baseline.',
+target/compiler-reference-capture-adoption-acceptance-1/audit.pl:237:print"PASS baseline=".scalar(keys%$core_before)." final=".scalar(keys%$live)." unchanged=$unchanged\n";
+target/compiler-reference-capture-integration-preparation-1/freeze.json:3:   "baseline_changed_files" : [
+bench/compiler-reference-capture-data/publication-copy.json
+bench/compiler-reference-capture-data/source-publication/initial-whitespace-check.md
+bench/compiler-reference-capture-data/source-publication/initial-whitespace-check.stdout

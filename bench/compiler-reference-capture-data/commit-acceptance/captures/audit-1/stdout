@@ -1,0 +1,3 @@
+1,743 adopted source/library/test records match exact committed Git blobs
+PASS commit=bd8a9050a3786de9f227c6c4037f5acd43205f71 retained=585/585 additions=564 deletions=21 paths=10 extra_lkj_evidence=0
+Programs bytes=4146 sha256=235aa6c283d334688289ab73e472cae920d25b1e8cbad76cb4461f30d18cc9f4 unchanged across baseline,parent,commit

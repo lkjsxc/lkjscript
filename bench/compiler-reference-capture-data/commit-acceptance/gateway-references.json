@@ -1,0 +1,35 @@
+{
+  "schema": 1,
+  "audit_request": "compiler-reference-capture-commit-audit-run-1400",
+  "audit_stdout_ref": "/home/coder/.local/state/lkjyolo/outputs/pipe-khmaeimcfhdiecbfkpocpfejjlaekmnd.stdout",
+  "audit_stderr_ref": "/home/coder/.local/state/lkjyolo/outputs/pipe-khmaeimcfhdiecbfkpocpfejjlaekmnd.stderr",
+  "inspection_requests": [
+    {
+      "request": "compiler-reference-capture-commit-inspect-1393",
+      "exit": 2,
+      "stdout_copy": "reads/inspection-1.stdout",
+      "stderr_copy": "reads/inspection-1.stderr",
+      "qualification": "Read-only metadata inspection guessed a nonexistent target source-publication path; preserved, not a failed compiler or adoption audit."
+    },
+    {
+      "request": "compiler-reference-capture-commit-records-1394",
+      "exit": 0,
+      "stdout_copy": "reads/records-2.stdout",
+      "stderr_copy": "reads/records-2.stderr"
+    },
+    {
+      "request": "compiler-reference-capture-commit-programs-1395",
+      "exit": 0,
+      "stdout_copy": "reads/programs-3.stdout",
+      "stderr_copy": "reads/programs-3.stderr"
+    },
+    {
+      "request": "compiler-reference-capture-commit-pins-1396",
+      "exit": 0,
+      "stdout_copy": "reads/pins-4.stdout",
+      "stderr_copy": "reads/pins-4.stderr"
+    }
+  ],
+  "summary_request": "compiler-reference-capture-commit-summary-1401",
+  "summary_stdout_ref": "/home/coder/.local/state/lkjyolo/outputs/pipe-iilecjkokbkaekffimchgepidafbcimd.stdout"
+}

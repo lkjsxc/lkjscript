@@ -1,0 +1,2 @@
+LKJSCRIPT_QUERY_EVIDENCE=/home/coder/workspace/lkjscript/target/compiler-reference-capture-query-1/evidence
+one compiler worker;4GiB AS;900s TERM;10s grace;existing query suite with conditional recording regression
