@@ -1,0 +1,14 @@
+// expect: reject E_TYPE
+// cause: expected a Rust form.
+// pending: A generic trait method returning Option<String> loses closure context through as_ref().is_some_and(); name the missing closure input/result types or retain the declared return type.
+// rewrite: Match the returned Option with if let Some(root), then compare root with the expected value.
+trait QueryRoot { fn query_bound_root(&self) -> Option<String>; }
+struct Available {}
+impl QueryRoot for Available { fn query_bound_root(&self) -> Option<String> { Some("root".to_string()) } }
+fn differs<Q: QueryRoot>(reader: &mut Q, expected: &String) -> bool {
+    reader.query_bound_root().as_ref().is_some_and(|root| root != expected)
+}
+pub fn probe() -> bool {
+    let mut reader = Available {};
+    differs(&mut reader, &"root".to_string())
+}

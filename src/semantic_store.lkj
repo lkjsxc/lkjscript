@@ -5,6 +5,7 @@ use std::collections::BTreeMap;
 
 pub struct Snapshot {
     pub identity: String,
+    pub producer: String,
     pub source: String,
     pub checked_ir: String,
     pub root: String,
@@ -83,25 +84,28 @@ fn node(store: &mut store::Store, entries: Vec<Entry>, depth: usize, pages: &mut
     pages.push(identity.clone());
     Ok(identity)
 }
-fn snapshot_bytes(source: &str, checked_ir: &str, root: &str, selector: &str, facts: usize) -> Vec<u8> {
+fn snapshot_bytes(producer: &str, source: &str, checked_ir: &str, root: &str, selector: &str, facts: usize) -> Vec<u8> {
     let mut bytes = Vec::new();
-    store::push_word(&mut bytes, 1usize);
+    store::push_word(&mut bytes, 2usize);
+    store::push_bytes(&mut bytes, producer.as_bytes());
     store::push_bytes(&mut bytes, source.as_bytes()); store::push_bytes(&mut bytes, checked_ir.as_bytes());
     store::push_bytes(&mut bytes, root.as_bytes()); store::push_bytes(&mut bytes, selector.as_bytes());
     store::push_word(&mut bytes, facts);
     bytes
 }
 fn decode_snapshot(bytes: &[u8]) -> Option<Snapshot> {
+    if bytes.len() != 376usize { return None; }
     let mut reader = store::Reader::new(bytes);
-    if reader.word()? != 1usize { return None; }
+    if reader.word()? != 2usize { return None; }
+    let producer = reader.text()?;
     let source = reader.text()?;
     let checked_ir = reader.text()?;
     let root = reader.text()?;
     let selector = reader.text()?;
     let facts = reader.word()?;
-    if !reader.done() || !hexadecimal(&source) || !hexadecimal(&checked_ir)
+    if !reader.done() || !hexadecimal(&producer) || !hexadecimal(&source) || !hexadecimal(&checked_ir)
         || !hexadecimal(&root) || !hexadecimal(&selector) { return None; }
-    Some(Snapshot { identity: sha256::hex_digest(bytes), source, checked_ir, root, selector, facts })
+    Some(Snapshot { identity: sha256::hex_digest(bytes), producer, source, checked_ir, root, selector, facts })
 }
 pub fn publish(store: &mut store::Store, selector: &str, catalog: &semantic::Catalog, checked: &ir::CheckedProgram) -> Result<Snapshot, String> {
     publish_emitted(store, selector, catalog, checked, &BTreeMap::new())
@@ -131,27 +135,40 @@ pub fn publish_emitted(store: &mut store::Store, selector: &str, catalog: &seman
     let mut pages = Vec::new();
     let root = node(store, entries, 0usize, &mut pages)?;
     let checked_ir = sha256::hex_digest(&ir_binary::write(checked.program()));
-    let bytes = snapshot_bytes(&catalog.input_digest, &checked_ir, &root, selector, count);
+    let bytes = snapshot_bytes(&store.query_producer(), &catalog.input_digest, &checked_ir, &root, selector, count);
     let snapshot = decode_snapshot(&bytes).ok_or("E_QUERY_INDEX could not form snapshot")?;
     store.put("semantic-root", &snapshot.identity, &bytes);
+    if !store.publish_query_locator(&snapshot.identity, selector, &root) {
+        store.invalidate_query_snapshot(&snapshot.identity, selector);
+        return Err("E_QUERY_INDEX store refused authenticated snapshot locator publication".to_string());
+    }
     store.put("semantic-latest", selector, &bytes);
     // Publishing can be refused by the disposable store's budget or lock. Never
-    // print a usable snapshot identity until its fixed root was actually retained.
-    if store.get("semantic-root", &snapshot.identity).is_none() || !store.query_pages_retained(&pages) {
+    // print a usable identity until its root, locator and all pages were retained.
+    if store.get("semantic-root", &snapshot.identity).is_none() || !store.query_pages_retained(&pages)
+        || !store.query_locator_retained(&snapshot.identity, selector, &root) {
         store.invalidate_query_snapshot(&snapshot.identity, selector);
         return Err("E_QUERY_INDEX store refused complete snapshot publication; increase --store-bytes or retry".to_string());
     }
     Ok(snapshot)
 }
-pub fn open(store: &mut store::Store, selector: &str, requested: &Option<String>) -> Result<Snapshot, String> {
+pub fn open<Q: store::QueryAccess>(store: &mut Q, selector: &str, requested: &Option<String>) -> Result<Snapshot, String> {
     let bytes = match requested {
         Some(identity) => {
             if !hexadecimal(identity) { return Err("E_QUERY_SNAPSHOT expected a 64-digit snapshot identity".to_string()); }
-            store.get("semantic-root", identity)
+            store.query_root(identity)
         }
-        None => store.get("semantic-latest", selector),
+        None => store.query_latest(selector),
     }.ok_or("E_QUERY_SNAPSHOT no authenticated snapshot; build with --index and this store first")?;
     let snapshot = decode_snapshot(&bytes).ok_or("E_QUERY_SNAPSHOT invalid authenticated snapshot record")?;
+    if snapshot.producer != store.query_producer() {
+        return Err("E_QUERY_SNAPSHOT snapshot producer does not match authenticated provenance".to_string());
+    }
+    if let Some(root) = store.query_bound_root() {
+        if root != snapshot.root {
+            return Err("E_QUERY_SNAPSHOT snapshot root does not match authenticated locator".to_string());
+        }
+    }
     if snapshot.selector != selector { return Err("E_QUERY_SNAPSHOT snapshot belongs to another source selection".to_string()); }
     if requested.as_ref().is_some_and(|identity| identity != &snapshot.identity) {
         return Err("E_QUERY_SNAPSHOT requested snapshot identity does not match".to_string());
@@ -166,9 +183,9 @@ pub struct Reader {
 }
 impl Reader {
     pub fn new(snapshot: Snapshot) -> Self { Self { snapshot, pages: BTreeMap::new(), reads: 0usize } }
-    fn node(&mut self, store: &mut store::Store, identity: &str) -> Result<Vec<u8>, String> {
+    fn node<Q: store::QueryAccess>(&mut self, store: &mut Q, identity: &str) -> Result<Vec<u8>, String> {
         if let Some(bytes) = self.pages.get(&identity.to_string()) { return Ok(bytes.clone()); }
-        let bytes = match store.get("semantic-page", identity) {
+        let bytes = match store.query_page(identity) {
             Some(bytes) => bytes,
             None => {
                 store.invalidate_query_snapshot(&self.snapshot.identity, &self.snapshot.selector);
@@ -183,11 +200,11 @@ impl Reader {
         self.pages.insert(identity.to_string(), bytes.clone());
         Ok(bytes)
     }
-    fn value(&mut self, store: &mut store::Store, key: &str) -> Result<Option<Vec<u8>>, String> {
+    fn value<Q: store::QueryAccess>(&mut self, store: &mut Q, key: &str) -> Result<Option<Vec<u8>>, String> {
         let hash = sha256::hex_digest(key.as_bytes());
         let mut identity = self.snapshot.root.clone(); let mut depth = 0usize;
         loop {
-            let bytes = self.node(store, &identity)?;
+            let bytes = self.node(&mut *store, &identity)?;
             let mut input = store::Reader::new(&bytes);
             let version = input.word().ok_or("E_QUERY_INDEX malformed page")?;
             let kind = input.word().ok_or("E_QUERY_INDEX malformed page")?;
@@ -230,13 +247,13 @@ impl Reader {
             identity = child; depth += 1usize;
         }
     }
-    pub fn page(&mut self, store: &mut store::Store, kind: &str, identity: &str, number: usize) -> Result<Option<Page>, String> {
-        let result = self.page_checked(store, kind, identity, number);
+    pub fn page<Q: store::QueryAccess>(&mut self, store: &mut Q, kind: &str, identity: &str, number: usize) -> Result<Option<Page>, String> {
+        let result = self.page_checked(&mut *store, kind, identity, number);
         if result.is_err() { store.invalidate_query_snapshot(&self.snapshot.identity, &self.snapshot.selector); }
         result
     }
-    fn page_checked(&mut self, store: &mut store::Store, kind: &str, identity: &str, number: usize) -> Result<Option<Page>, String> {
-        let Some(bytes) = self.value(store, &leaf_key(kind, identity, number))? else { return Ok(None); };
+    fn page_checked<Q: store::QueryAccess>(&mut self, store: &mut Q, kind: &str, identity: &str, number: usize) -> Result<Option<Page>, String> {
+        let Some(bytes) = self.value(&mut *store, &leaf_key(kind, identity, number))? else { return Ok(None); };
         let mut reader = store::Reader::new(&bytes);
         if reader.word() != Some(1usize) { return Err("E_QUERY_INDEX invalid fact page".to_string()); }
         let next = reader.word().ok_or("E_QUERY_INDEX malformed fact page")?;
