@@ -176,6 +176,7 @@ parallel_step 1 foreign-child timeout --kill-after=10s 600s bash tools/foreign-c
 parallel_step 2 foreign-session timeout --kill-after=10s 600s bash tools/programs-foreign-session-test.sh --compiler "$check_binary"
 parallel_step 4 process-workers timeout --kill-after=10s 600s bash tools/programs-process-test.sh --compiler "$check_binary"
 parallel_step 1 object-graphs timeout --kill-after=10s 600s bash tools/programs-graph-test.sh --compiler "$check_binary"
+parallel_step 1 real-programs timeout --kill-after=10s 600s bash tools/real-programs-test.sh "$check_binary"
 parallel_step 2 runtime-admission timeout --kill-after=10s 600s bash tools/programs-admission-test.sh "$check_binary"
 parallel_step 4 pool-publication timeout --kill-after=10s 600s bash tools/programs-publication-test.sh --compiler "$check_binary"
 parallel_step "$check_suite_jobs" conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"

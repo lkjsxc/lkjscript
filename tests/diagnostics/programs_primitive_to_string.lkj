@@ -1,0 +1,8 @@
+// expect: reject E_UNSUPPORTED
+// cause: expected Rust form/support gap.
+// pending: Primitive Display/ToString library forwarding, with a format! rewrite.
+// The real-program corpus adapter accepts format!("{}", value) instead.
+pub fn probe() -> String {
+    let value = 7usize;
+    value.to_string()
+}

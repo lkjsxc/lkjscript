@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// cause: expected Rust form/support gap.
+// pending: Primitive associated constants should include usize::MAX.
+// The range no-poll control uses the exact portable equivalent !0usize.
+pub fn probe() -> usize { usize::MAX }

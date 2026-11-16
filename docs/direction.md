@@ -81,7 +81,7 @@ language design for Rust. Accepted programs agree; delete the witness when it bl
 needed forms or ceases to find useful differences. Source uses .lkj to identify lkjscript before reading; only actual Rust witness code uses .rs. Retain Rust shape; child.lkj/child/mod.lkj and program.lkj have no .rs alias or fallback.
 
 ## Program specimens (programs stream)
-[Runtime demand table](runtime-demands.md) orders work. Applications are specimens; site, journal and desk remain unchanged gate cases. The compiler is the first consumer.
+[Independent upstream programs](real-programs.md) now lead the programs stream; the [runtime demand table](runtime-demands.md) remains its runtime map. Applications, including site, journal and desk, stay unchanged specimens.
 Programs work in /home/coder/workspace/lkjscript-programs-20261115 on programs; fetch/rebase, bootstrap, four-worker gate, push HEAD:main. Never refresh seed here.
 Concurrency is process-isolated parallelism and readiness for idle work; no mutable shared address space or heap views. The [ordered pool library and map/channel specimens](../examples/process-workers.md) share only sealed immutable payloads.
 The compiler pays separate heaps and checked-unit serialization; no single-process speedup is claimed. Seeded actor protocol exploration is distinct from a thread-race detector.

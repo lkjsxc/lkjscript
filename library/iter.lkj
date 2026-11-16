@@ -78,6 +78,35 @@ impl<T> IterSource<T> for [T] {
     }
 }
 
+
+/// An unbounded usize iterator; advancing beyond usize::MAX traps.
+pub struct RangeFrom {
+    next_value: usize,
+}
+
+
+pub fn range_from(start: usize) -> RangeFrom {
+    RangeFrom { next_value: start }
+}
+
+
+impl Iterator for RangeFrom {
+    type Item = usize;
+    fn next(&mut self) -> Option<usize> {
+        let value = self.next_value;
+        self.next_value += 1usize;
+        Some(value)
+    }
+}
+
+
+impl IntoIterator for RangeFrom {
+    type IntoIter = Self;
+    fn into_iter(self) -> Self {
+        self
+    }
+}
+
 pub struct Enumerate<I> {
     iterator: I,
     index: usize,
@@ -228,6 +257,8 @@ impl<I: Iterator> IntoIterator for Chain<I> {
 }
 
 pub trait IteratorExt<I: Iterator> {
+    fn count(self) -> usize;
+    fn collect(self) -> Vec<I::Item>;
     fn enumerate(self) -> Enumerate<I>;
     fn take(self, remaining: usize) -> Take<I>;
     fn skip(self, remaining: usize) -> Skip<I>;
@@ -245,6 +276,12 @@ pub trait IteratorExt<I: Iterator> {
     fn position<F: FnMut(I::Item) -> bool>(&mut self, predicate: F) -> Option<usize>;
 }
 impl<I: Iterator> IteratorExt<I> for I {
+    fn count(self) -> usize {
+        count(self)
+    }
+    fn collect(self) -> Vec<I::Item> {
+        collect(self)
+    }
     fn enumerate(self) -> Enumerate<I> {
         enumerate(self)
     }
@@ -403,6 +440,27 @@ impl<I: Iterator, F: FnMut(&I::Item)> IntoIterator for Inspect<I, F> {
     fn into_iter(self) -> Self {
         self
     }
+}
+
+
+/// Consume every item in order, dropping each before requesting the next.
+pub fn count<I: Iterator>(mut iterator: I) -> usize {
+    let mut total = 0usize;
+    while let Some(value) = iterator.next() {
+        total += 1usize;
+        drop(value);
+    }
+    total
+}
+
+
+/// Collect into Vec; general FromIterator destinations are not provided.
+pub fn collect<I: Iterator>(mut iterator: I) -> Vec<I::Item> {
+    let mut values: Vec<I::Item> = Vec::new();
+    while let Some(value) = iterator.next() {
+        values.push(value);
+    }
+    values
 }
 
 /// Consume a sequence in order, carrying the checked accumulator through each call.

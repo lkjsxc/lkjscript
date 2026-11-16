@@ -1,0 +1,60 @@
+// The same pure corpus harness is compiled against the original Rust library.
+use crate::upstream::levenshtein;
+
+fn append_case(output: &mut String, id: usize, a: &str, b: &str) {
+    output.push_str(&format!("{}", id));
+    output.push(':');
+    output.push_str(&format!("{}", levenshtein(a, b)));
+    output.push('\n');
+}
+
+fn append_pair(output: &mut String, id: usize, a: &str, b: &str) -> usize {
+    append_case(output, id, a, b);
+    append_case(output, id + 1, b, a);
+    id + 2
+}
+
+pub fn output() -> String {
+    let alphabet = vec!["a".to_string(), "b".to_string(), "é".to_string(), "🦀".to_string()];
+    let mut values: Vec<String> = vec![String::new()];
+    let mut start = 0usize;
+    let mut end = 1usize;
+    for _depth in 0..3 {
+        for index in start..end {
+            for letter in 0..4 {
+                let mut value = values[index].clone();
+                value.push_str(alphabet[letter].as_str());
+                values.push(value);
+            }
+        }
+        start = end;
+        end = values.len();
+    }
+    assert_eq!(values.len(), 85);
+    let mut output = String::new();
+    let mut id = 0usize;
+    for left in 0..values.len() {
+        for right in 0..values.len() {
+            append_case(&mut output, id, values[left].as_str(), values[right].as_str());
+            id = id + 1;
+        }
+    }
+    assert_eq!(id, 7225);
+    id = append_pair(&mut output, id, "", "e\u{301}");
+    id = append_pair(&mut output, id, "", "é");
+    id = append_pair(&mut output, id, "é", "e\u{301}");
+    id = append_pair(&mut output, id, "\0a", "a\0");
+    id = append_pair(&mut output, id, "a\r\nb", "a\nb");
+    id = append_pair(&mut output, id, "👩‍💻", "👩💻");
+    let mut long_a = String::new();
+    let mut long_b = String::new();
+    for _index in 0..64 {
+        long_a.push('a');
+        long_b.push('a');
+    }
+    long_a.push('a');
+    long_b.push('b');
+    id = append_pair(&mut output, id, long_a.as_str(), long_b.as_str());
+    assert_eq!(id, 7239);
+    output
+}

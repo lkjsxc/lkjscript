@@ -1,0 +1,137 @@
+// expect: output 3132337c4334357c
+
+struct Mark {
+    out: Stdout,
+    byte: u8,
+}
+
+
+impl Drop for Mark {
+    fn drop(&mut self) {
+        self.out.write(&[self.byte]);
+    }
+}
+
+
+struct Observed<'a> {
+    calls: &'a mut usize,
+    index: usize,
+    end: usize,
+}
+
+
+impl<'a> Iterator for Observed<'a> {
+    type Item = i64;
+    fn next(&mut self) -> Option<i64> {
+        *self.calls += 1usize;
+        if self.index == self.end {
+            return None;
+        }
+        let value = self.index as i64;
+        self.index += 1usize;
+        Some(value)
+    }
+}
+
+
+
+struct NonFused<'a> {
+    calls: &'a mut usize,
+}
+
+
+impl<'a> Iterator for NonFused<'a> {
+    type Item = i64;
+    fn next(&mut self) -> Option<i64> {
+        let call = *self.calls;
+        *self.calls += 1usize;
+        if call == 0usize {
+            Some(7i64)
+        } else if call == 1usize {
+            None
+        } else {
+            Some(9i64)
+        }
+    }
+}
+
+fn scalar_cases() {
+    assert!("".chars().count() == 0usize);
+    assert!("a\u{e9}\u{65e5}\u{1f980}".chars().count() == 4usize);
+    let empty: Vec<String> = Vec::new();
+    assert!(empty.into_iter().count() == 0usize);
+    let words = vec!["first".to_string(), "second".to_string()];
+    assert!(std::iter::count(words.into_iter()) == 2usize);
+    let mut calls = 0usize;
+    {
+        let iterator = Observed { calls: &mut calls, index: 0usize, end: 3usize };
+        assert!(iterator.count() == 3usize);
+    }
+    assert!(calls == 4usize);
+    let mut empty_calls = 0usize;
+    {
+        let iterator = Observed { calls: &mut empty_calls, index: 0usize, end: 0usize };
+        assert!(iterator.count() == 0usize);
+    }
+    assert!(empty_calls == 1usize);
+    let characters: Vec<char> = "a\u{e9}\u{65e5}\u{1f980}".chars().collect();
+    assert!(characters.len() == 4usize);
+    assert!(characters[0usize] == 'a');
+    assert!(characters[1usize] == '\u{e9}');
+    assert!(characters[2usize] == '\u{65e5}');
+    assert!(characters[3usize] == '\u{1f980}');
+    let empty_characters: Vec<char> = "".chars().collect();
+    assert!(empty_characters.is_empty());
+    let mut collected_calls = 0usize;
+    let numbers: Vec<i64>;
+    {
+        let iterator = Observed { calls: &mut collected_calls, index: 0usize, end: 3usize };
+        numbers = std::iter::collect(iterator);
+    }
+    assert!(collected_calls == 4usize);
+    assert!(numbers.len() == 3usize);
+    assert!(numbers[0usize] == 0i64 && numbers[1usize] == 1i64 && numbers[2usize] == 2i64);
+    let words: Vec<String> = vec!["first".to_string(), "second".to_string()].into_iter().collect();
+    assert!(words.len() == 2usize);
+    assert!(words[0usize].as_str() == "first" && words[1usize].as_str() == "second");
+    assert!(std::iter::range_from(9usize).take(0usize).count() == 0usize);
+    let numbers: Vec<usize> = std::iter::range_from(7usize).take(4usize).collect();
+    assert!(numbers.len() == 4usize);
+    assert!(numbers[0usize] == 7usize && numbers[1usize] == 8usize);
+    assert!(numbers[2usize] == 9usize && numbers[3usize] == 10usize);
+    let mut count_calls = 0usize;
+    {
+        let iterator = NonFused { calls: &mut count_calls };
+        assert!(iterator.count() == 1usize);
+    }
+    assert!(count_calls == 2usize);
+    let mut collect_calls = 0usize;
+    let values: Vec<i64>;
+    {
+        let iterator = NonFused { calls: &mut collect_calls };
+        values = iterator.collect();
+    }
+    assert!(collect_calls == 2usize);
+    assert!(values.len() == 1usize && values[0usize] == 7i64);
+    assert!(std::iter::range_from(!0usize).take(0usize).count() == 0usize);
+}
+
+pub fn main(mut world: World) {
+    scalar_cases();
+    let mut output = world.stdout();
+    let values = vec![
+        Mark { out: world.stdout(), byte: b'1' },
+        Mark { out: world.stdout(), byte: b'2' },
+        Mark { out: world.stdout(), byte: b'3' },
+    ];
+    assert!(values.into_iter().count() == 3usize);
+    output.write(b"|");
+    let values = vec![
+        Mark { out: world.stdout(), byte: b'4' },
+        Mark { out: world.stdout(), byte: b'5' },
+    ];
+    let collected: Vec<Mark> = values.into_iter().collect();
+    output.write(b"C");
+    drop(collected);
+    output.write(b"|");
+}

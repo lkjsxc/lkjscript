@@ -1,0 +1,254 @@
+{
+   "accounting" : {
+      "handwritten_diagnostic_cases" : "uncredited",
+      "initial_root_scaffold_lines_uncredited" : 2,
+      "integration_header_lines_removed" : 2,
+      "original_range_value_workaround_sites" : 1,
+      "scope" : "Import and harness operations; no claim that a refused original was repaired by edit."
+   },
+   "corpus_request" : {
+      "operations" : [
+         {
+            "id" : "crate",
+            "op" : "add-item",
+            "projection" : {
+               "path" : "examples/real_programs/levenshtein/corpus.lkj",
+               "source" : "// The same pure corpus harness is compiled against the original Rust library.\nuse crate::upstream::levenshtein;\n\nfn append_case(output: &mut String, id: usize, a: &str, b: &str) {\n    output.push_str(&format!(\"{}\", id));\n    output.push(':');\n    output.push_str(&format!(\"{}\", levenshtein(a, b)));\n    output.push('\\n');\n}\n\nfn append_pair(output: &mut String, id: usize, a: &str, b: &str) -> usize {\n    append_case(output, id, a, b);\n    append_case(output, id + 1, b, a);\n    id + 2\n}\n\npub fn output() -> String {\n    let alphabet = vec![\"a\".to_string(), \"b\".to_string(), \"é\".to_string(), \"🦀\".to_string()];\n    let mut values: Vec<String> = vec![String::new()];\n    let mut start = 0usize;\n    let mut end = 1usize;\n    for _depth in 0..3 {\n        for index in start..end {\n            for letter in 0..4 {\n                let mut value = values[index].clone();\n                value.push_str(alphabet[letter].as_str());\n                values.push(value);\n            }\n        }\n        start = end;\n        end = values.len();\n    }\n    assert_eq!(values.len(), 85);\n    let mut output = String::new();\n    let mut id = 0usize;\n    for left in 0..values.len() {\n        for right in 0..values.len() {\n            append_case(&mut output, id, values[left].as_str(), values[right].as_str());\n            id = id + 1;\n        }\n    }\n    assert_eq!(id, 7225);\n    id = append_pair(&mut output, id, \"\", \"e\\u{301}\");\n    id = append_pair(&mut output, id, \"\", \"é\");\n    id = append_pair(&mut output, id, \"é\", \"e\\u{301}\");\n    id = append_pair(&mut output, id, \"\\0a\", \"a\\0\");\n    id = append_pair(&mut output, id, \"a\\r\\nb\", \"a\\nb\");\n    id = append_pair(&mut output, id, \"👩‍💻\", \"👩💻\");\n    let mut long_a = String::new();\n    let mut long_b = String::new();\n    for _index in 0..64 {\n        long_a.push('a');\n        long_b.push('a');\n    }\n    long_a.push('a');\n    long_b.push('b');\n    id = append_pair(&mut output, id, long_a.as_str(), long_b.as_str());\n    assert_eq!(id, 7239);\n    output\n}\n"
+            },
+            "source" : "mod corpus;"
+         },
+         {
+            "id" : "main",
+            "op" : "replace-item",
+            "source" : "fn main(mut output: Stdout) { let values = corpus::output(); output.write(values.as_bytes()); }"
+         }
+      ],
+      "version" : 1
+   },
+   "final_files" : {
+      "examples/real_programs/levenshtein/LICENSE" : {
+         "lines" : 22,
+         "sha256" : "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d"
+      },
+      "examples/real_programs/levenshtein/corpus.lkj" : {
+         "lines" : 60,
+         "sha256" : "b8a47d104a63d7a0d4ecf2e27da8111d0cb97cd0026733b9b0dc7a13b386e889"
+      },
+      "examples/real_programs/levenshtein/main.lkj" : {
+         "lines" : 6,
+         "sha256" : "0b249c038c00ab9af83a0deab32fc415a619916c241f62092e38282e9483f73f"
+      },
+      "examples/real_programs/levenshtein/upstream.lkj" : {
+         "lines" : 125,
+         "sha256" : "e118333ead31f962a23f2d6e1439b192bc007af3f5b58bffc400bff694d9ad0a"
+      }
+   },
+   "importer_request" : {
+      "operations" : [
+         {
+            "id" : "crate",
+            "op" : "add-item",
+            "projection" : {
+               "path" : "examples/real_programs/levenshtein/upstream.lkj",
+               "source" : "/**\n * `levenshtein-rs` - levenshtein\n *\n * MIT licensed.\n *\n * Copyright (c) 2016 Titus Wormer <tituswormer@gmail.com>\n */\n#[must_use]\npub fn levenshtein(a: &str, b: &str) -> usize {\n    let mut result = 0;\n\n    /* Shortcut optimizations / degenerate cases. */\n    if a == b {\n        return result;\n    }\n\n    let length_a = a.chars().count();\n    let length_b = b.chars().count();\n\n    if length_a == 0 {\n        return length_b;\n    }\n\n    if length_b == 0 {\n        return length_a;\n    }\n\n    /* Initialize the vector.\n     *\n     * This is why it’s fast, normally a matrix is used,\n     * here we use a single vector. */\n    let mut cache: Vec<usize> = std::iter::range_from(1).take(length_a).collect();\n\n    /* Loop. */\n    for (index_b, code_b) in b.chars().enumerate() {\n        result = index_b;\n        let mut distance_a = index_b;\n\n        for (index_a, code_a) in a.chars().enumerate() {\n            let distance_b = if code_a == code_b {\n                distance_a\n            } else {\n                distance_a + 1\n            };\n\n            distance_a = cache[index_a];\n\n            result = if distance_a > result {\n                if distance_b > result {\n                    result + 1\n                } else {\n                    distance_b\n                }\n            } else if distance_b > distance_a {\n                distance_a + 1\n            } else {\n                distance_b\n            };\n\n            cache[index_a] = result;\n        }\n    }\n\n    result\n}\n\n// UPSTREAM INTEGRATION TESTS: exact bodies, package header removed.\n\n#[test]\nfn empty_left() {\n    assert_eq!(levenshtein(\"\", \"a\"), 1);\n}\n\n#[test]\nfn empty_right() {\n    assert_eq!(levenshtein(\"a\", \"\"), 1);\n}\n\n#[test]\nfn empty_both() {\n    assert_eq!(levenshtein(\"\", \"\"), 0);\n}\n\n#[test]\nfn equal_long() {\n    assert_eq!(levenshtein(\"levenshtein\", \"levenshtein\"), 0);\n}\n\n#[test]\nfn case_sensitive() {\n    assert_eq!(levenshtein(\"DwAyNE\", \"DUANE\"), 2);\n    assert_eq!(levenshtein(\"dwayne\", \"DuAnE\"), 5);\n}\n\n#[test]\nfn ordering() {\n    assert_eq!(levenshtein(\"aarrgh\", \"aargh\"), 1);\n    assert_eq!(levenshtein(\"aargh\", \"aarrgh\"), 1);\n}\n\n#[test]\nfn should_work() {\n    assert_eq!(levenshtein(\"sitting\", \"kitten\"), 3);\n    assert_eq!(levenshtein(\"gumbo\", \"gambol\"), 2);\n    assert_eq!(levenshtein(\"saturday\", \"sunday\"), 3);\n    assert_eq!(levenshtein(\"a\", \"b\"), 1);\n    assert_eq!(levenshtein(\"ab\", \"ac\"), 1);\n    assert_eq!(levenshtein(\"ac\", \"bc\"), 1);\n    assert_eq!(levenshtein(\"abc\", \"axc\"), 1);\n    assert_eq!(levenshtein(\"xabxcdxxefxgx\", \"1ab2cd34ef5g6\"), 6);\n    assert_eq!(levenshtein(\"xabxcdxxefxgx\", \"abcdefg\"), 6);\n    assert_eq!(levenshtein(\"javawasneat\", \"scalaisgreat\"), 7);\n    assert_eq!(levenshtein(\"example\", \"samples\"), 3);\n    assert_eq!(levenshtein(\"sturgeon\", \"urgently\"), 6);\n    assert_eq!(levenshtein(\"levenshtein\", \"frankenstein\"), 6);\n    assert_eq!(levenshtein(\"distance\", \"difference\"), 5);\n    assert_eq!(levenshtein(\"kitten\", \"sitting\"), 3);\n    assert_eq!(levenshtein(\"Tier\", \"Tor\"), 2);\n}\n\n#[test]\nfn unicode() {\n    assert_eq!(levenshtein(\"😄\", \"😦\"), 1);\n    assert_eq!(levenshtein(\"😘\", \"😘\"), 0);\n}\n"
+            },
+            "source" : "mod upstream;"
+         }
+      ],
+      "version" : 1
+   },
+   "kind" : "checked foreign-source import and oracle comparison",
+   "oracle" : {
+      "assertion_count" : 26,
+      "corpus_rows" : 7239,
+      "full_output_sha256" : "56b8303689ee15edb00f079b6dfe9d289dc5501e463f5fdf7310ede62f833771",
+      "full_outputs_equal" : true,
+      "routes" : [
+         "native",
+         "interpreter",
+         "rustc-opt0",
+         "rustc-opt3"
+      ],
+      "test_count" : 8
+   },
+   "origin" : {
+      "adaptation" : {
+         "integration_header_lines" : 2,
+         "range_expression" : 1
+      },
+      "commit" : "9c4730b1973d4e61e187f8fe6d5f299ad5c991fc",
+      "files" : {
+         "license" : "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d",
+         "src/lib.rs" : "6f295e027783399df21c081465b2ebc2d3a499895635a839c1c00aae4455f267",
+         "tests/lib.rs" : "88c8be4758d544673107a4b932e5c00cef6cd7972dc7f9293ccfaa4e5e672665"
+      },
+      "license" : "MIT",
+      "name" : "levenshtein",
+      "origin" : "https://github.com/wooorm/levenshtein-rs",
+      "publication" : "checked add-item projection; initial root scaffold uncredited",
+      "schema" : 1,
+      "source_lines" : 65,
+      "test_lines" : 60,
+      "test_names" : [
+         "empty_left",
+         "empty_right",
+         "empty_both",
+         "equal_long",
+         "case_sensitive",
+         "ordering",
+         "should_work",
+         "unicode"
+      ],
+      "version" : "1.0.5"
+   },
+   "provenance" : {
+      "assertion_count" : 26,
+      "commit" : "9c4730b1973d4e61e187f8fe6d5f299ad5c991fc",
+      "exact_upstream_bytes" : true,
+      "files" : {
+         "license" : {
+            "bytes" : 1099,
+            "lines" : 22,
+            "sha256" : "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d"
+         },
+         "src/lib.rs" : {
+            "bytes" : 1476,
+            "lines" : 65,
+            "sha256" : "6f295e027783399df21c081465b2ebc2d3a499895635a839c1c00aae4455f267"
+         },
+         "tests/lib.rs" : {
+            "bytes" : 1627,
+            "lines" : 60,
+            "sha256" : "88c8be4758d544673107a4b932e5c00cef6cd7972dc7f9293ccfaa4e5e672665"
+         }
+      },
+      "inverse_range_replacements" : 1,
+      "kind" : "levenshtein-upstream-provenance",
+      "mutants_rejected" : 18,
+      "mutation_controls" : [
+         {
+            "name" : "missing range normalization",
+            "reason" : "provenance refusal: library must contain exactly one normalized range expression",
+            "rejected" : true
+         },
+         {
+            "name" : "extra normalized expression",
+            "reason" : "provenance refusal: library must contain exactly one normalized range expression",
+            "rejected" : true
+         },
+         {
+            "name" : "algorithm change",
+            "reason" : "provenance refusal: upstream bytes differ: src/lib.rs",
+            "rejected" : true
+         },
+         {
+            "name" : "deleted assertion",
+            "reason" : "provenance refusal: upstream bytes differ: tests/lib.rs",
+            "rejected" : true
+         },
+         {
+            "name" : "changed expected value",
+            "reason" : "provenance refusal: upstream bytes differ: tests/lib.rs",
+            "rejected" : true
+         },
+         {
+            "name" : "renamed test",
+            "reason" : "provenance refusal: upstream bytes differ: tests/lib.rs",
+            "rejected" : true
+         },
+         {
+            "name" : "excluded test",
+            "reason" : "provenance refusal: upstream bytes differ: tests/lib.rs",
+            "rejected" : true
+         },
+         {
+            "name" : "injected test",
+            "reason" : "provenance refusal: upstream bytes differ: tests/lib.rs",
+            "rejected" : true
+         },
+         {
+            "name" : "changed test literal bytes",
+            "reason" : "provenance refusal: upstream bytes differ: tests/lib.rs",
+            "rejected" : true
+         },
+         {
+            "name" : "changed boundary",
+            "reason" : "provenance refusal: projection must contain exactly one integration boundary",
+            "rejected" : true
+         },
+         {
+            "name" : "duplicate boundary",
+            "reason" : "provenance refusal: projection must contain exactly one integration boundary",
+            "rejected" : true
+         },
+         {
+            "name" : "unexpected integration header",
+            "reason" : "provenance refusal: upstream bytes differ: tests/lib.rs",
+            "rejected" : true
+         },
+         {
+            "name" : "trailing unaccounted source",
+            "reason" : "provenance refusal: upstream bytes differ: tests/lib.rs",
+            "rejected" : true
+         },
+         {
+            "name" : "changed license",
+            "reason" : "provenance refusal: upstream bytes differ: license",
+            "rejected" : true
+         },
+         {
+            "name" : "reordered manifest tests",
+            "reason" : "provenance refusal: ordered test names differ",
+            "rejected" : true
+         },
+         {
+            "name" : "false source count",
+            "reason" : "provenance refusal: source line count differs",
+            "rejected" : true
+         },
+         {
+            "name" : "wrong pinned commit",
+            "reason" : "provenance refusal: wrong pinned commit",
+            "rejected" : true
+         },
+         {
+            "name" : "false adaptation count",
+            "reason" : "provenance refusal: range adaptation count must be one",
+            "rejected" : true
+         }
+      ],
+      "projection_sha256" : "e118333ead31f962a23f2d6e1439b192bc007af3f5b58bffc400bff694d9ad0a",
+      "restored_header_lines" : 2,
+      "schema" : 1,
+      "temporary_files_created" : 0,
+      "test_count" : 8,
+      "test_names" : [
+         "empty_left",
+         "empty_right",
+         "empty_both",
+         "equal_long",
+         "case_sensitive",
+         "ordering",
+         "should_work",
+         "unicode"
+      ]
+   },
+   "records" : {
+      "algorithm-authority.out" : "\"upstream::levenshtein\"\tlevel=protocol\tfact=query\tversion=3 producer=a92e81e2d2c18fe1bd645a9b5e287c3a1a2af5eaffa1be16e400289590e7625a validation=authenticated-producing-compiler current-check=not-performed snapshot=13f967ac5581e241bc924a006153c4c81c038731671870c1a4af4ba575647e10 source=f858186042b9bd82b627b307e4878230e04605ec7d9e25da37de70f30eae0da6 checked-ir=b95b8bd9e632dd8a3d2d5f4abd6a63040859f0bd0c6a2b55c69cca5b2789dda0 kind=authority depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=stored-pointer\n\"ir:upstream::levenshtein\"\tlevel=checked-ir\tfact=authority\treachable-effects=\"\" ownership-cleanup=included\n\"upstream::levenshtein\"\tlevel=protocol\tfact=continuation\tcursor=none facts=1 pages-read=4 traversal-steps=2\n",
+      "bytes-check.err" : "/home/coder/workspace/lkjscript-specimens/projections/levenshtein/lib.lkj:17:20: E_UNSUPPORTED method count on str::Chars has 0 applicable implementations; help: use an implemented method or write an explicit loop\nlib.lkj:1:1: E_BLOCKED remaining semantic analysis: failed bodies are blocked; independent typed bodies were constructed and checked\n",
+      "corpus-native.time" : "wall_s=0.00 peak_rss_kib=264\nroute=native load=8.35->8.35\n",
+      "corpus-operation-fixed.out" : "\"crate\" level=source-claim operation-target\n\"main\" level=source-claim operation-target\n\"corpus\" level=source-claim operation-target\n\"corpus\" level=source-claim projection parent=\"crate\" path=\"examples/real_programs/levenshtein/corpus.lkj\" bytes=2018 source=b8a47d104a63d7a0d4ecf2e27da8111d0cb97cd0026733b9b0dc7a13b386e889\n\"./examples/real_programs/levenshtein/main.lkj\" level=source-claim file before=b8da4abf96f8b100fb7ab7cfed9798ed9fac3e12744a9b778563ed149a7690ae after=0b249c038c00ab9af83a0deab32fc415a619916c241f62092e38282e9483f73f\n\"examples/real_programs/levenshtein/corpus.lkj\" level=source-claim file before=absent after=b8a47d104a63d7a0d4ecf2e27da8111d0cb97cd0026733b9b0dc7a13b386e889\ntransaction sites=2 files=2 identities=3\n\"corpus\" level=source-claim changed=added\n\"corpus::append_case\" level=source-claim changed=added\n\"corpus::append_case::param:a\" level=source-claim changed=added\n\"corpus::append_case::param:b\" level=source-claim changed=added\n\"corpus::append_case::param:id\" level=source-claim changed=added\n\"corpus::append_case::param:output\" level=source-claim changed=added\n\"corpus::append_pair\" level=source-claim changed=added\n\"corpus::append_pair::param:a\" level=source-claim changed=added\n\"corpus::append_pair::param:b\" level=source-claim changed=added\n\"corpus::append_pair::param:id\" level=source-claim changed=added\n\"corpus::append_pair::param:output\" level=source-claim changed=added\n\"corpus::output\" level=source-claim changed=added\n\"main\" level=source-claim changed=signature,body\n\"main::param:output\" level=source-claim changed=added\n\"ir:main\" level=checked-ir authority-gained=\"effect:stdout_write,grant:0:Stdout\" authority-lost=\"\" entry-before=true entry-after=true\nprogram level=checked-ir before=277bc02b0930802da8a9d22b0926a055e3f01b34a3ba30192e08ad6d1151eb17 after=6fb472eaddf26df511bc9bb65cc1f9a5269f8e2813dee4ed6d1fcf0a024ce708 checked-instances=60 fresh-checked=60 proof-reused=0 frontend-resumed=0 library-validation=demanded\ntransaction source-before=1cc8d6ea2681c3ee5370fc61b1c0ebf575c5242cd8e41c47b2609367b67e06c1 source-after=f858186042b9bd82b627b307e4878230e04605ec7d9e25da37de70f30eae0da6 mode=apply\n",
+      "corpus-operation.err" : "transaction E_EDIT_CHECK identities=\"crate,main,corpus\" ./examples/real_programs/levenshtein/corpus.lkj:5:22: E_UNSUPPORTED method to_string on usize has 0 applicable implementations; help: use an implemented method or write an explicit loop\nexamples/real_programs/levenshtein/main.lkj:1:1: E_BLOCKED remaining semantic analysis: failed bodies are blocked; independent typed bodies were constructed and checked\n",
+      "corpus-rust0.time" : "wall_s=0.00 peak_rss_kib=1980\nroute=rust0 load=8.35->8.35\n",
+      "corpus-rust3.time" : "wall_s=0.00 peak_rss_kib=2040\nroute=rust3 load=8.35->8.35\n",
+      "import-dry.out" : "\"crate\" level=source-claim operation-target\n\"upstream\" level=source-claim operation-target\n\"upstream\" level=source-claim projection parent=\"crate\" path=\"examples/real_programs/levenshtein/upstream.lkj\" bytes=3136 source=e118333ead31f962a23f2d6e1439b192bc007af3f5b58bffc400bff694d9ad0a\n\"./examples/real_programs/levenshtein/main.lkj\" level=source-claim file before=c4ea6cacd9823f8df065d600f5de62e7240d5919e4f6a286b2c9c13163058acc after=b8da4abf96f8b100fb7ab7cfed9798ed9fac3e12744a9b778563ed149a7690ae\n\"examples/real_programs/levenshtein/upstream.lkj\" level=source-claim file before=absent after=e118333ead31f962a23f2d6e1439b192bc007af3f5b58bffc400bff694d9ad0a\ntransaction sites=1 files=2 identities=2\n\"upstream\" level=source-claim changed=added\n\"upstream::case_sensitive\" level=source-claim changed=added\n\"upstream::empty_both\" level=source-claim changed=added\n\"upstream::empty_left\" level=source-claim changed=added\n\"upstream::empty_right\" level=source-claim changed=added\n\"upstream::equal_long\" level=source-claim changed=added\n\"upstream::levenshtein\" level=source-claim changed=added\n\"upstream::levenshtein::param:a\" level=source-claim changed=added\n\"upstream::levenshtein::param:b\" level=source-claim changed=added\n\"upstream::ordering\" level=source-claim changed=added\n\"upstream::should_work\" level=source-claim changed=added\n\"upstream::unicode\" level=source-claim changed=added\n\"ir:upstream::case_sensitive\" level=checked-ir authority-gained=\"\" authority-lost=\"\" entry-before=false entry-after=true\n\"ir:upstream::empty_both\" level=checked-ir authority-gained=\"\" authority-lost=\"\" entry-before=false entry-after=true\n\"ir:upstream::empty_left\" level=checked-ir authority-gained=\"\" authority-lost=\"\" entry-before=false entry-after=true\n\"ir:upstream::empty_right\" level=checked-ir authority-gained=\"\" authority-lost=\"\" entry-before=false entry-after=true\n\"ir:upstream::equal_long\" level=checked-ir authority-gained=\"\" authority-lost=\"\" entry-before=false entry-after=true\n\"ir:upstream::ordering\" level=checked-ir authority-gained=\"\" authority-lost=\"\" entry-before=false entry-after=true\n\"ir:upstream::should_work\" level=checked-ir authority-gained=\"\" authority-lost=\"\" entry-before=false entry-after=true\n\"ir:upstream::unicode\" level=checked-ir authority-gained=\"\" authority-lost=\"\" entry-before=false entry-after=true\nprogram level=checked-ir before=0787d4e10a9d6f6f032b3d5364d202c9745ef3260a9f9d3a070e5aa0654ddaff after=277bc02b0930802da8a9d22b0926a055e3f01b34a3ba30192e08ad6d1151eb17 checked-instances=35 fresh-checked=35 proof-reused=0 frontend-resumed=0 library-validation=demanded\ntransaction source-before=f88af87f3cd3785c9c23a9bca13bf60df18ec903b8882cd8f9e4b8287852ff58 source-after=573cf4815df8d4e51ee20ffb9973017b80a234cd56598b1c8d71f9322a85e9c2 mode=dry-run\n",
+      "import.out" : "\"crate\" level=source-claim operation-target\n\"upstream\" level=source-claim operation-target\n\"upstream\" level=source-claim projection parent=\"crate\" path=\"examples/real_programs/levenshtein/upstream.lkj\" bytes=3136 source=e118333ead31f962a23f2d6e1439b192bc007af3f5b58bffc400bff694d9ad0a\n\"./examples/real_programs/levenshtein/main.lkj\" level=source-claim file before=c4ea6cacd9823f8df065d600f5de62e7240d5919e4f6a286b2c9c13163058acc after=b8da4abf96f8b100fb7ab7cfed9798ed9fac3e12744a9b778563ed149a7690ae\n\"examples/real_programs/levenshtein/upstream.lkj\" level=source-claim file before=absent after=e118333ead31f962a23f2d6e1439b192bc007af3f5b58bffc400bff694d9ad0a\ntransaction sites=1 files=2 identities=2\n\"upstream\" level=source-claim changed=added\n\"upstream::case_sensitive\" level=source-claim changed=added\n\"upstream::empty_both\" level=source-claim changed=added\n\"upstream::empty_left\" level=source-claim changed=added\n\"upstream::empty_right\" level=source-claim changed=added\n\"upstream::equal_long\" level=source-claim changed=added\n\"upstream::levenshtein\" level=source-claim changed=added\n\"upstream::levenshtein::param:a\" level=source-claim changed=added\n\"upstream::levenshtein::param:b\" level=source-claim changed=added\n\"upstream::ordering\" level=source-claim changed=added\n\"upstream::should_work\" level=source-claim changed=added\n\"upstream::unicode\" level=source-claim changed=added\n\"ir:upstream::case_sensitive\" level=checked-ir authority-gained=\"\" authority-lost=\"\" entry-before=false entry-after=true\n\"ir:upstream::empty_both\" level=checked-ir authority-gained=\"\" authority-lost=\"\" entry-before=false entry-after=true\n\"ir:upstream::empty_left\" level=checked-ir authority-gained=\"\" authority-lost=\"\" entry-before=false entry-after=true\n\"ir:upstream::empty_right\" level=checked-ir authority-gained=\"\" authority-lost=\"\" entry-before=false entry-after=true\n\"ir:upstream::equal_long\" level=checked-ir authority-gained=\"\" authority-lost=\"\" entry-before=false entry-after=true\n\"ir:upstream::ordering\" level=checked-ir authority-gained=\"\" authority-lost=\"\" entry-before=false entry-after=true\n\"ir:upstream::should_work\" level=checked-ir authority-gained=\"\" authority-lost=\"\" entry-before=false entry-after=true\n\"ir:upstream::unicode\" level=checked-ir authority-gained=\"\" authority-lost=\"\" entry-before=false entry-after=true\nprogram level=checked-ir before=0787d4e10a9d6f6f032b3d5364d202c9745ef3260a9f9d3a070e5aa0654ddaff after=277bc02b0930802da8a9d22b0926a055e3f01b34a3ba30192e08ad6d1151eb17 checked-instances=35 fresh-checked=35 proof-reused=0 frontend-resumed=0 library-validation=demanded\ntransaction source-before=f88af87f3cd3785c9c23a9bca13bf60df18ec903b8882cd8f9e4b8287852ff58 source-after=573cf4815df8d4e51ee20ffb9973017b80a234cd56598b1c8d71f9322a85e9c2 mode=apply\n",
+      "initial-query.out" : "\"crate\"\tlevel=protocol\tfact=query\tversion=3 producer=a92e81e2d2c18fe1bd645a9b5e287c3a1a2af5eaffa1be16e400289590e7625a validation=authenticated-producing-compiler current-check=not-performed snapshot=99ab9bce93a7ca1aaf5392a4aa7b2d107bb229d41dfe5d026fca8c1df5780202 source=f88af87f3cd3785c9c23a9bca13bf60df18ec903b8882cd8f9e4b8287852ff58 checked-ir=763f13ddc6c4b1db040d22c518df697a568d6dcaee1c1151a9c465f87709d229 kind=outline depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=stored-pointer\n\"main\"\tlevel=source-claim\tfact=signature\tkind=function text=\"fn main()\" bytes=9 complete=true\n\"crate\"\tlevel=protocol\tfact=continuation\tcursor=none facts=1 pages-read=4 traversal-steps=2\n",
+      "original-check.err" : "/home/coder/workspace/lkjscript-specimens/levenshtein/src/lib.rs: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir\n",
+      "own-tests.out" : "ok 16 tests\n",
+      "rust-tests-opt0.out" : "\nrunning 8 tests\ntest case_sensitive ... ok\ntest empty_both ... ok\ntest empty_left ... ok\ntest empty_right ... ok\ntest equal_long ... ok\ntest ordering ... ok\ntest should_work ... ok\ntest unicode ... ok\n\ntest result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+      "rust-tests-opt3.out" : "\nrunning 8 tests\ntest case_sensitive ... ok\ntest empty_both ... ok\ntest empty_left ... ok\ntest empty_right ... ok\ntest equal_long ... ok\ntest ordering ... ok\ntest should_work ... ok\ntest unicode ... ok\n\ntest result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
+      "with-library-check.err" : "/home/coder/workspace/lkjscript-specimens/projections/levenshtein/lib.lkj:32:34: E_UNSUPPORTED this expression form is not implemented yet\nlib.lkj:1:1: E_BLOCKED remaining semantic analysis: failed bodies are blocked; independent typed bodies were constructed and checked\n"
+   },
+   "schema" : 1
+}

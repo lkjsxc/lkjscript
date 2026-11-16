@@ -1,0 +1,9 @@
+// expect: reject E_UNSUPPORTED
+// cause: expected Rust form/support gap.
+// pending: Lower open-ended range values through ordinary checked iterator construction.
+// Upstream levenshtein 1.0.5 has one (1..) value. Its counted producer
+// normalization is std::iter::range_from(1), not an unmodified-source pass.
+pub fn probe() -> usize {
+    let values: Vec<usize> = (1..).take(4).collect();
+    values.len()
+}

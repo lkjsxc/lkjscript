@@ -1,0 +1,6 @@
+// Initial two-line root scaffold is uncredited bootstrap work.
+fn main(mut output: Stdout) { let values = corpus::output(); output.write(values.as_bytes()); }
+
+mod upstream;
+
+mod corpus;
