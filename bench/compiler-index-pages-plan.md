@@ -56,7 +56,11 @@ For each rung, in increasing order, execute exactly:
 Record wall, user/kernel CPU, peak RSS and load beside each timed command, source,
 producer and image hashes, all stdout/stderr, stats, store bytes, authenticated
 rooted page payload/envelope totals, exact logical-value/fact bytes by kind,
-pagination counts and full comparison outcomes. Authenticated byte totals are
+pagination counts and full comparison outcomes. After each indexed build, also census
+all semantic-page/root/latest/locator files and the .budget-index by file count,
+stored/envelope payload bytes and first-90-byte header reads. This static census
+is outside timed commands, makes no authentication claim, and does not change
+the declared build/query order. Authenticated byte totals are
 retained-payload measurements from the post-build oracle, not a claim about how
 many bytes the build dynamically authenticated. Query checks are correctness work,
 not a new latency campaign.

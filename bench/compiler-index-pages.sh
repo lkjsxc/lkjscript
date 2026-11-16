@@ -32,7 +32,7 @@ b=$(sha256sum "$candidate" | awk '{print $1}')
 [[ $a == 71b2fc066cd74e9e37cb3134173903c9b322b83472b9293f1a49df7c1d18f3b7 ]]
 [[ $b == 40464dda053795b93dbba1af93e41633b915b2b625b0007a7b95ec4d22f0f200 ]]
 printf 'baseline=%s\ncandidate=%s\nshape_revision=0b30ca8987bd4ba343ab45ab01751b6721c7151a\nseed=20261116\nmemory_limit_bytes=4294967296\ntimeout_seconds=900\nstore_budget_bytes=%s\n' "$a" "$b" "$budget" > "$evidence/protocol.meta"
-sha256sum bench/compiler-index-pages-plan.md bench/compiler-index-pages.sh bench/compiler-index-pages-compare.pl tools/semantic-index-page-test.sh src/semantic_store.lkj > "$evidence/implementation.sha256"
+sha256sum bench/compiler-index-pages-plan.md bench/compiler-index-pages.sh bench/compiler-index-pages-compare.pl bench/compiler-index-pages-census.pl tools/semantic-index-page-test.sh src/semantic_store.lkj > "$evidence/implementation.sha256"
 load() { awk '{printf "%s,%s,%s",$1,$2,$3}' /proc/loadavg; }
 measure() {
     local label=$1; shift
@@ -74,6 +74,7 @@ for rung in 10000 100000; do
         [[ ${#snapshot} == 64 ]]
         printf '%s\n' "$snapshot" > "$evidence/$rung-$mode.snapshot"
         find "$store" -maxdepth 1 -type f -printf '%s\n' | awk '{sum+=$1;n++} END{printf "files=%d\nstored_bytes=%.0f\n",n,sum}' > "$evidence/$rung-$mode-store.meta"
+        perl bench/compiler-index-pages-census.pl "$store" > "$evidence/$rung-$mode-store-census.json"
         sha256sum "$fixture/image-$rung-$mode" > "$evidence/$rung-$mode-image.sha256"
     done
     cmp "$fixture/image-$rung-baseline" "$fixture/image-$rung-candidate"
