@@ -1,0 +1,36 @@
+{
+  "cancelled": false,
+  "capture_status": "complete",
+  "duration_ms": 539,
+  "exit_code": 0,
+  "finished": true,
+  "generation": "pipe-hdbhgpihcoijefflidnbhekphbalcbmd",
+  "request_id": "compiler-current50-cleanup-execute-1105",
+  "signal": null,
+  "status": "done",
+  "stderr": "",
+  "stderr_capture_truncated": false,
+  "stderr_ref": {
+    "available": true,
+    "end_offset": 0,
+    "offset": 0,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-hdbhgpihcoijefflidnbhekphbalcbmd.stderr",
+    "total_bytes": 0
+  },
+  "stderr_truncated": false,
+  "stdout": "Removed exactly six owned paths: 2340 files, 892715727 logical bytes; committed text proofs and durable metadata preserved.\nwall_seconds=0.52 user_seconds=0.31 system_seconds=0.17 peak_rss_kib=12956 exit=0\n1.58 1.65 1.89 9/5651 806848\n1.58 1.65 1.89 3/5652 806963\n",
+  "stdout_capture_truncated": false,
+  "stdout_ref": {
+    "available": true,
+    "end_offset": 264,
+    "offset": 264,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-hdbhgpihcoijefflidnbhekphbalcbmd.stdout",
+    "total_bytes": 264
+  },
+  "stdout_truncated": false,
+  "stream_mode": "pipes",
+  "timed_out": false,
+  "tool": "exec_command",
+  "truncated": false,
+  "workdir": "/home/coder/workspace/lkjscript-compiler-query-container-20261116"
+}

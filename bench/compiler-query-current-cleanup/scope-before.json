@@ -1,0 +1,67 @@
+{
+  "request_id": "compiler-current50-cleanup-scope-1099",
+  "accepted_head": "6a834248a3b5e28912a034343de5640eff2f6a89",
+  "entries": [
+    {
+      "device": 144,
+      "directories": 50,
+      "files": 1879,
+      "inode": 36946644,
+      "logical_file_bytes": 891045312,
+      "other": 0,
+      "path": "target/compiler-query-current-run.TDPm4g",
+      "uid": 1001
+    },
+    {
+      "device": 144,
+      "directories": 1,
+      "files": 2,
+      "inode": 36946645,
+      "logical_file_bytes": 139,
+      "other": 0,
+      "path": "/tmp/compiler-query-current-key.seAq58",
+      "uid": 1001
+    },
+    {
+      "device": 144,
+      "directories": 2,
+      "files": 35,
+      "inode": 36946633,
+      "logical_file_bytes": 269674,
+      "other": 0,
+      "path": "target/compiler-query-current-62fa76f4",
+      "uid": 1001
+    },
+    {
+      "device": 144,
+      "directories": 2,
+      "files": 380,
+      "inode": 36959687,
+      "logical_file_bytes": 1308050,
+      "other": 0,
+      "path": "target/compiler-query-current-continuation-62fa76f4",
+      "uid": 1001
+    },
+    {
+      "device": 144,
+      "directories": 2,
+      "files": 22,
+      "inode": 36950088,
+      "logical_file_bytes": 46274,
+      "other": 0,
+      "path": "target/compiler-query-current-revalidated-62fa76f4",
+      "uid": 1001
+    },
+    {
+      "device": 144,
+      "directories": 2,
+      "files": 22,
+      "inode": 36951040,
+      "logical_file_bytes": 46278,
+      "other": 0,
+      "path": "target/compiler-query-current-revalidated-62fa76f4-2",
+      "uid": 1001
+    }
+  ],
+  "kind": "metadata-only before cleanup"
+}

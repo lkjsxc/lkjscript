@@ -1,0 +1,11 @@
+# Accepted current50 cleanup
+
+The root agent accepted result commit 6a834248a3b5e28912a034343de5640eff2f6a89 and independently audited the 403-record result manifest, all fifty raw replies, the 1,860 live source paths and canonical images. After the separate historical compiler command finished, it explicitly released the six literal paths in the reviewed guard 4c21c6d498ef37684fb325855744a1f841d7f28869b1cc6aece8375e184e165f.
+
+The guard ran once and succeeded: **six owned paths, 2,340 regular files and 892,715,727 logical bytes removed**. GNU time recorded **0.52 s wall, 0.31 s user, 0.17 s system and 12,956 KiB peak RSS**, with load **1.58/1.65/1.89 → 1.58/1.65/1.89**. This is cleanup cost, not a compiler or query observation. Gateway request compiler-current50-cleanup-execute-1105 completed with status 0.
+
+Before deleting anything, the guard proved all **459 disposable text copies** matched both their retained working files and exact blobs in accepted Git commit 6a834248. It checked fixture ownership, fixed scope inode/count metadata, the source manifest, all four owned executable/image files and the absent owner process. It did not read any private key bytes or authenticate/read the whole semantic container. The preflight.json record retains those correspondence facts; progress.json and accepted-cleanup.json retain successful exact-path removal.
+
+The after-absence.json record shows all six paths absent and the four durable edit metadata digests unchanged. The unrelated operation credential directory /tmp/compiler-container-key.m4u6F6, its metadata and ownership, the worktree, every committed report/control, the root canonical executable, main and global credentials were preserved. The process check was the existing cooperative argv/cwd ownership guard, with verified tool ancestry excluded; it is not a guarantee against hostile concurrent filesystem changes.
+
+No compiler, query, map walk, census, benchmark repetition or image execution occurred during cleanup. The initial Perl syntax failure was preparation only, before deletion; its exact diagnostic and the shell-exit qualification are retained in preparation-refusal.json. The corrected guard passed syntax checking before release. All cleanup logs, status, time/load records, invocation, ownership scope and final proof records are bound by manifest.sha256.

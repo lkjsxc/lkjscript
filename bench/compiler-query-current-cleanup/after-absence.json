@@ -1,0 +1,37 @@
+{
+   "absent" : [
+      {
+         "absent" : true,
+         "path" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-run.TDPm4g"
+      },
+      {
+         "absent" : true,
+         "path" : "/tmp/compiler-query-current-key.seAq58"
+      },
+      {
+         "absent" : true,
+         "path" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-62fa76f4"
+      },
+      {
+         "absent" : true,
+         "path" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-continuation-62fa76f4"
+      },
+      {
+         "absent" : true,
+         "path" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-revalidated-62fa76f4"
+      },
+      {
+         "absent" : true,
+         "path" : "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-revalidated-62fa76f4-2"
+      }
+   ],
+   "key_contents_read" : false,
+   "preserved_metadata" : {
+      "/home/coder/workspace/lkjscript-compiler-query-container-20261116/.lkjscript-edit.generation" : "ce49582f1b93e2b87f353866f9e508033cb205322ceccb9702b734eb812cf8fa",
+      "/home/coder/workspace/lkjscript-compiler-query-container-20261116/.lkjscript-edit.lock" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-case-migration/.lkjscript-edit.generation" : "e96a0e891392ab097354bcd3e01a728ab263058744954289d5f15acc1602ecb5",
+      "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-case-migration/.lkjscript-edit.lock" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "source_or_query_execution" : false,
+   "status" : "six-paths-absent"
+}

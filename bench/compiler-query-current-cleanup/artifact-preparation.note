@@ -1,0 +1,1 @@
+After successful cleanup, the first functions.exec used to prepare documentation failed while constructing its JavaScript string (ReferenceError: tmp is not defined), before any gateway call. No file change, cleanup repetition, compiler or query resulted. The quoting was corrected for the subsequent documentation-only write.

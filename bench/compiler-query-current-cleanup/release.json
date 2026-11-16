@@ -1,0 +1,22 @@
+{
+  "kind": "root-cleanup-execution-release",
+  "guard_sha256": "4c21c6d498ef37684fb325855744a1f841d7f28869b1cc6aece8375e184e165f",
+  "accepted_commit": "6a834248a3b5e28912a034343de5640eff2f6a89",
+  "authorized_paths": [
+    "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-run.TDPm4g",
+    "/tmp/compiler-query-current-key.seAq58",
+    "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-62fa76f4",
+    "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-continuation-62fa76f4",
+    "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-revalidated-62fa76f4",
+    "/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-revalidated-62fa76f4-2"
+  ],
+  "files": 2340,
+  "logical_file_bytes": 892715727,
+  "constraints": [
+    "Only six literal scopes in @spec.",
+    "Historical compiler command completed before cleanup release.",
+    "No compiler/query runs or whole-container read.",
+    "All 459 committed text correspondences, retained reports/controls, four durable metadata files and unrelated operation credential preserved.",
+    "Any refusal requires retaining it and stopping for root review."
+  ]
+}

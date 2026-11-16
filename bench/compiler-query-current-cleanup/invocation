@@ -1,0 +1,1 @@
+perl bench/compiler-query-current-cleanup/guarded-cleanup.pl --execute-reviewed-six-path-cleanup

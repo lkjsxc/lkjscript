@@ -1,0 +1,9 @@
+{
+  "kind": "static-preparation-only",
+  "request_id": "compiler-current50-cleanup-syntax-1102",
+  "guard_sha256": "8ce4a33f43f83a984b37face46966bd2f0c1be500c94b58763a0cf246089767b",
+  "stderr": "Global symbol \"$newline\" requires explicit package name (did you forget to declare \"my $newline\"?) at bench/compiler-query-current-cleanup/guarded-cleanup.pl line 65.\nBEGIN not safe after errors--compilation aborted at bench/compiler-query-current-cleanup/guarded-cleanup.pl line 153.\n",
+  "shell_exit_code": 0,
+  "qualification": "Perl syntax compilation failed before execution. The shell lacked set -e and its final diff command returned 0; this is not a successful syntax check. No cleanup or compiler/query ran.",
+  "correction": "Declare the newline buffer before the read/comparison expression."
+}
