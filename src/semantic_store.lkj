@@ -12,7 +12,15 @@ pub struct Snapshot {
     pub selector: String,
     pub facts: usize,
 }
-struct Entry { name: String, hash: String, value: Vec<u8> }
+struct Entry {
+    name: String,
+    hash: String,
+    record: usize,
+    start: usize,
+    end: usize,
+    next: Option<usize>,
+    value_bytes: usize,
+}
 #[derive(Clone)]
 pub struct Page { pub lines: Vec<String>, pub next: Option<usize> }
 
@@ -47,9 +55,9 @@ fn page(lines: &[String], next: Option<usize>) -> Vec<u8> {
     for line in lines { store::push_bytes(&mut bytes, line.as_bytes()); }
     bytes
 }
-fn node(store: &mut store::Store, entries: Vec<Entry>, depth: usize, pages: &mut Vec<String>) -> Result<String, String> {
+fn node(store: &mut store::Store, entries: Vec<Entry>, records: &[Vec<String>], depth: usize, pages: &mut Vec<String>) -> Result<String, String> {
     let mut size = 32usize;
-    for entry in &entries { size += entry.name.len() + entry.value.len() + 88usize; }
+    for entry in &entries { size += entry.name.len() + entry.value_bytes + 88usize; }
     let mut bytes = Vec::new();
     store::push_word(&mut bytes, 1usize);
     if entries.len() <= 64usize && size <= 32768usize {
@@ -61,7 +69,8 @@ fn node(store: &mut store::Store, entries: Vec<Entry>, depth: usize, pages: &mut
         for (_, entry) in ordered {
             store::push_bytes(&mut bytes, entry.name.as_bytes());
             store::push_bytes(&mut bytes, entry.hash.as_bytes());
-            store::push_bytes(&mut bytes, &entry.value);
+            let value = page(&records[entry.record][entry.start..entry.end], entry.next);
+            store::push_bytes(&mut bytes, &value);
         }
     } else {
         if depth >= 64usize { return Err("E_QUERY_INDEX a fact exceeds its page representation".to_string()); }
@@ -76,7 +85,7 @@ fn node(store: &mut store::Store, entries: Vec<Entry>, depth: usize, pages: &mut
         store::push_word(&mut bytes, groups.len());
         for (digit, group) in groups {
             store::push_word(&mut bytes, digit as usize);
-            let identity = node(store, group, depth + 1usize, pages)?;
+            let identity = node(store, group, records, depth + 1usize, pages)?;
             store::push_bytes(&mut bytes, identity.as_bytes());
         }
     }
@@ -113,9 +122,11 @@ pub fn publish(store: &mut store::Store, selector: &str, catalog: &semantic::Cat
 }
 pub fn publish_emitted(store: &mut store::Store, selector: &str, catalog: &semantic::Catalog, checked: &ir::CheckedProgram, native_sizes: &BTreeMap<String, usize>) -> Result<Snapshot, String> {
     let facts = semantic_facts::build_emitted(catalog, checked, native_sizes)?;
+    let mut records: Vec<Vec<String>> = Vec::new();
     let mut entries = Vec::new();
     let mut count = 0usize;
     for (name, lines) in facts.records {
+        let record = records.len();
         count += lines.len();
         let mut at = 0usize; let mut number = 0usize;
         loop {
@@ -128,13 +139,15 @@ pub fn publish_emitted(store: &mut store::Store, selector: &str, catalog: &seman
             }
             let next = if end < lines.len() { Some(number + 1usize) } else { None };
             let key = format!("{name}\t{number}");
-            entries.push(Entry { hash: sha256::hex_digest(key.as_bytes()), name: key, value: page(&lines[at..end], next) });
+            entries.push(Entry { hash: sha256::hex_digest(key.as_bytes()), name: key, record, start: at, end, next, value_bytes: size });
             at = end; number += 1usize;
             if next.is_none() { break; }
         }
+        records.push(lines);
     }
     let mut pages = Vec::new();
-    let root = node(store, entries, 0usize, &mut pages)?;
+    let root = node(store, entries, &records, 0usize, &mut pages)?;
+    drop(records);
     let checked_ir = sha256::hex_digest(&ir_binary::write(checked.program()));
     let bytes = snapshot_bytes(&store.query_producer(), &catalog.input_digest, &checked_ir, &root, selector, count);
     let snapshot = decode_snapshot(&bytes).ok_or("E_QUERY_INDEX could not form snapshot")?;
