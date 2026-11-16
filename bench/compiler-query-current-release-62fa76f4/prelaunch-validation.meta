@@ -1,0 +1,4 @@
+original_preparation_manifest=verified
+compiler_processes_started=0
+query_processes_started=0
+validation=offline_identity_git_hash_and_copied_text_records_only

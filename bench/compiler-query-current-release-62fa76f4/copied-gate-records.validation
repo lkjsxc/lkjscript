@@ -1,0 +1,9 @@
+bench/compiler-query-current-release-62fa76f4/canonical.meta: OK
+bench/compiler-query-current-release-62fa76f4/bootstrap.sh: OK
+bench/compiler-query-current-release-62fa76f4/source-inventory.sha256: OK
+bench/compiler-query-current-release-62fa76f4/gate.meta: OK
+bench/compiler-query-current-release-62fa76f4/gate.time: OK
+bench/compiler-query-current-release-62fa76f4/gate.status: OK
+bench/compiler-query-current-release-62fa76f4/gate.log: OK
+bench/compiler-query-current-release-62fa76f4/details-bootstrap.log: OK
+bench/compiler-query-current-release-62fa76f4/details-ir-mutation.log: OK
