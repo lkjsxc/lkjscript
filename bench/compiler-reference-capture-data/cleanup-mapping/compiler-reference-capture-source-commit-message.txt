@@ -1,0 +1,16 @@
+Skip export-only reference recording in ordinary compilation
+
+Select full source-reference capture before inference and preserve the mode
+through verification, demand, fallback and ordinary checkpoint resumption.
+Guard the two export-only vectors without suppressing lexical origins,
+constraints or checked IR. Refuse late full export before publishing a catalog.
+
+Apply all 585 retained language lines through 24 audited semantic operations.
+Retain every preliminary refusal and exact source/transaction evidence.
+The candidate is a 32,588,975-byte b01eabfa fixed point at producer inline64.
+
+Cold four-worker gate: 5,455 fresh case requests, zero skips, 728 structural
+contracts and 128 mutants/zero findings; 611.802 s, load 3.45 to 3.68.
+Bootstrap: 79.97 s, load 1.58 to 2.78.
+Focused query lifecycle: 8.33 s, load 2.42 to 5.64.
+No memory saving, 1M relief or generated-code milestone is claimed yet.

@@ -1,0 +1,77 @@
+{
+   "archive_member_source_files" : 1742,
+   "bytes" : 342778212,
+   "compiler_or_native_execution" : false,
+   "deletion" : false,
+   "directories" : 141,
+   "files" : 4468,
+   "generated_member_files" : 170,
+   "new_compression" : false,
+   "packaging_interpreter" : "/usr/bin/perl",
+   "providers" : 2716,
+   "regular_byte_comparisons" : 4468,
+   "retained_revision" : "d84cac6edcee59e2c2ad631fb6ca15d63340a1c8",
+   "schema" : "compiler-reference-capture-final-recovery-summary-1",
+   "scopes" : [
+      {
+         "bytes" : 254519936,
+         "directories" : 31,
+         "files" : 486,
+         "scope" : "compiler-reference-capture-comparison-2",
+         "verified_bytes" : 254519936,
+         "verified_files" : 486
+      },
+      {
+         "bytes" : 1279,
+         "directories" : 1,
+         "files" : 15,
+         "scope" : "compiler-reference-capture-comparison-launch-2",
+         "verified_bytes" : 1279,
+         "verified_files" : 15
+      },
+      {
+         "bytes" : 81473066,
+         "directories" : 96,
+         "files" : 3802,
+         "scope" : "compiler-reference-capture-measurement-2",
+         "verified_bytes" : 81473066,
+         "verified_files" : 3802
+      },
+      {
+         "bytes" : 158352,
+         "directories" : 5,
+         "files" : 55,
+         "scope" : "compiler-reference-capture-trial-preparation-2",
+         "verified_bytes" : 158352,
+         "verified_files" : 55
+      },
+      {
+         "bytes" : 894388,
+         "directories" : 4,
+         "files" : 68,
+         "scope" : "compiler-reference-capture-comparison-acceptance-2",
+         "verified_bytes" : 894388,
+         "verified_files" : 68
+      },
+      {
+         "bytes" : 5711591,
+         "directories" : 3,
+         "files" : 36,
+         "scope" : "compiler-reference-capture-comparison-recovery-2",
+         "verified_bytes" : 5711591,
+         "verified_files" : 36
+      },
+      {
+         "bytes" : 19600,
+         "directories" : 1,
+         "files" : 6,
+         "scope" : "compiler-reference-capture-measurement-preparation-1",
+         "verified_bytes" : 19600,
+         "verified_files" : 6
+      }
+   ],
+   "source_metadata_unchanged" : true,
+   "source_pax_records" : 2,
+   "status" : "complete",
+   "unresolved" : []
+}

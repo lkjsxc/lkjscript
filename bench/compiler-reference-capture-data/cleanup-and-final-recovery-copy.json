@@ -1,0 +1,245 @@
+{
+   "kind" : "exact-copy-before-final-closure",
+   "packages" : [
+      {
+         "bytes" : 7487088,
+         "count" : 31,
+         "destination" : "bench/compiler-reference-capture-data/final-recovery-1",
+         "files" : [
+            {
+               "mode" : 384,
+               "relative" : "coordinate-discovery.json",
+               "sha256" : "aaf761aeac90af7faba02e27418ab0df224c09df15f9a8e3aebb19deeab9f64e",
+               "size" : 90199
+            },
+            {
+               "mode" : 384,
+               "relative" : "git-read-commands.json",
+               "sha256" : "6ec5a51f548594f1dfa61042f550b971f2153aaeea8de93b26a0c21850f0e5e3",
+               "size" : 76590
+            },
+            {
+               "mode" : 384,
+               "relative" : "interpreter-confirmation.json",
+               "sha256" : "03a0a479eace2130e7720c0b23c22ccaa385a492c452106ad58439af6fed7e14",
+               "size" : 859
+            },
+            {
+               "mode" : 384,
+               "relative" : "inventory-end.utc",
+               "sha256" : "f909219367613e4e30364601bbf7e65cc1c342281baaf2fc7d1c90fe1a4b99cc",
+               "size" : 31
+            },
+            {
+               "mode" : 384,
+               "relative" : "inventory-load-after",
+               "sha256" : "67ead3163a708c16de14c038b013359ce776d3e3ec0736586e337872044ae9f9",
+               "size" : 15
+            },
+            {
+               "mode" : 384,
+               "relative" : "inventory-load-before",
+               "sha256" : "67ead3163a708c16de14c038b013359ce776d3e3ec0736586e337872044ae9f9",
+               "size" : 15
+            },
+            {
+               "mode" : 384,
+               "relative" : "inventory-start.utc",
+               "sha256" : "934ed577041d8d3c214b1d2fd71a646d02189c6f0561bab2a89f521a7614a572",
+               "size" : 31
+            },
+            {
+               "mode" : 384,
+               "relative" : "manifest.sha256",
+               "sha256" : "20ffa753d286b49f34401e0940d45d32c2e7b7c44bfa56881d67df5751e41c19",
+               "size" : 2604
+            },
+            {
+               "mode" : 420,
+               "relative" : "map.pl",
+               "sha256" : "fcbaa460654a371494ddf8064c240f6fcfb4b05afcfbc0eb1d476711af37a25d",
+               "size" : 20226
+            },
+            {
+               "mode" : 384,
+               "relative" : "mapping-capture/argv.json",
+               "sha256" : "978d3ebf507abfcbd222f4adb6b82407036722d6d8cb516e468c4bfc3795371a",
+               "size" : 398
+            },
+            {
+               "mode" : 384,
+               "relative" : "mapping-capture/cwd",
+               "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3",
+               "size" : 32
+            },
+            {
+               "mode" : 384,
+               "relative" : "mapping-capture/end.ns",
+               "sha256" : "52d248c47a2b8ca412782884967fa1954273ada4a18e951d6196cb5e5b90bdf9",
+               "size" : 20
+            },
+            {
+               "mode" : 384,
+               "relative" : "mapping-capture/end.utc",
+               "sha256" : "230d70744473421abe41be742630caf7e3597f6eb91b9998d94a3512f3ea7fbc",
+               "size" : 31
+            },
+            {
+               "mode" : 384,
+               "relative" : "mapping-capture/load-after",
+               "sha256" : "697095d623027b11de709b78d78542dedf9ed486248b1ee40d8134604169db93",
+               "size" : 15
+            },
+            {
+               "mode" : 384,
+               "relative" : "mapping-capture/load-before",
+               "sha256" : "84c4986ab4bfffa690b5ba5298fe18fbe61f0ec408b83fed16370b0393462afe",
+               "size" : 15
+            },
+            {
+               "mode" : 384,
+               "relative" : "mapping-capture/start.ns",
+               "sha256" : "adcbe22ffac9396e20af13bd7852c1e2af00fc33ff21525014f2b65178bd8c03",
+               "size" : 20
+            },
+            {
+               "mode" : 384,
+               "relative" : "mapping-capture/start.utc",
+               "sha256" : "aa0c7a5fb9646541820a3372f6bba72d0ae0fd262b84419d677a94ea3128ad76",
+               "size" : 31
+            },
+            {
+               "mode" : 384,
+               "relative" : "mapping-capture/status",
+               "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+               "size" : 2
+            },
+            {
+               "mode" : 384,
+               "relative" : "mapping-capture/stderr",
+               "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "size" : 0
+            },
+            {
+               "mode" : 384,
+               "relative" : "mapping-capture/stdout",
+               "sha256" : "203c3c2e18916634139b33cab5411edeec2f66ee6b6d9f6ac3523862b3ce7194",
+               "size" : 2252
+            },
+            {
+               "mode" : 384,
+               "relative" : "mapping-capture/time",
+               "sha256" : "b31c4b03c12796b6e61f813240bd9dc1f261a2654601b338bc155efda891b1af",
+               "size" : 61
+            },
+            {
+               "mode" : 384,
+               "relative" : "metadata-inventory.json",
+               "sha256" : "601d6cb24c4e77e26811e51128f466b4c50f3f63558e800d596d1178ade2064e",
+               "size" : 1964236
+            },
+            {
+               "mode" : 384,
+               "relative" : "recovery-map.json",
+               "sha256" : "036832967ed5d4cc55e27c109bea315bac79877ad80636bfea5f81de3cca7bc1",
+               "size" : 5318396
+            },
+            {
+               "mode" : 420,
+               "relative" : "report.md",
+               "sha256" : "523c28408ca07b48d96a0fba8f680eb3714abc813cd2f39816913019437ad49d",
+               "size" : 5799
+            },
+            {
+               "mode" : 420,
+               "relative" : "run-map.sh",
+               "sha256" : "3a60d62ecbe9ca373fd544b5d304cf588ebb392a31eae907ddef71e122190706",
+               "size" : 1325
+            },
+            {
+               "mode" : 384,
+               "relative" : "shell-syntax.stderr",
+               "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "size" : 0
+            },
+            {
+               "mode" : 384,
+               "relative" : "shell-syntax.stdout",
+               "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "size" : 0
+            },
+            {
+               "mode" : 384,
+               "relative" : "source-archive-pax.json",
+               "sha256" : "e70c6cb95760d5471dc66407101cadac5f8d4868527bee7689939486e141bebe",
+               "size" : 1533
+            },
+            {
+               "mode" : 384,
+               "relative" : "summary.json",
+               "sha256" : "203c3c2e18916634139b33cab5411edeec2f66ee6b6d9f6ac3523862b3ce7194",
+               "size" : 2252
+            },
+            {
+               "mode" : 384,
+               "relative" : "syntax.stderr",
+               "sha256" : "86d41f02a25f1de4862e01c5ead362cc1e30fdd2cfb66f512e10f8c09c86db88",
+               "size" : 100
+            },
+            {
+               "mode" : 384,
+               "relative" : "syntax.stdout",
+               "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "size" : 0
+            }
+         ],
+         "manifest" : "20ffa753d286b49f34401e0940d45d32c2e7b7c44bfa56881d67df5751e41c19",
+         "source" : "target/compiler-reference-capture-final-recovery-1"
+      },
+      {
+         "bytes" : 1464809,
+         "count" : 5,
+         "destination" : "bench/compiler-reference-capture-data/cleanup-execution-2/guard-result",
+         "files" : [
+            {
+               "mode" : 384,
+               "relative" : "invocation.json",
+               "sha256" : "82a6bbe657aac8a30a0cafa0219c79c3c356f3a713b937ef0ccf07bac53d9db5",
+               "size" : 2261
+            },
+            {
+               "mode" : 384,
+               "relative" : "progress.jsonl",
+               "sha256" : "ee2f6de3bfe576821f74636490061a3ede2bf173641c2467b88c0920ce31355f",
+               "size" : 1456939
+            },
+            {
+               "mode" : 384,
+               "relative" : "release.json",
+               "sha256" : "2a6d1df2af2a004b516d04b58508c218f3ebc234766080f91877eeb4bbe32ce2",
+               "size" : 2772
+            },
+            {
+               "mode" : 384,
+               "relative" : "result.json",
+               "sha256" : "b60d462c1f3fba1244a1a429fc9b20595fb5173528bc94b19c1f757ad6197ae3",
+               "size" : 2835
+            },
+            {
+               "mode" : 384,
+               "relative" : "status",
+               "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+               "size" : 2
+            }
+         ],
+         "names" : [
+            "invocation.json",
+            "progress.jsonl",
+            "release.json",
+            "result.json",
+            "status"
+         ],
+         "source" : "target/compiler-reference-capture-cleanup-execution-2"
+      }
+   ]
+}
