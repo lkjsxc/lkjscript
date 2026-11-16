@@ -1,0 +1,1 @@
+wall_s=1.01 user_s=0.81 system_s=0.12 maxrss_kib=236296 exit_status=0

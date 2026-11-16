@@ -1,0 +1,196 @@
+#!/usr/bin/env python3
+"""Finite offline recovery mapping only; no unlink, compression or workload execution."""
+import os,stat,json,hashlib,subprocess,io,tarfile,zlib,re,datetime,time
+from pathlib import Path
+REPO=Path('/home/coder/workspace/lkjscript')
+PREFIX='compiler-reference-capture-'
+REV='e68ea0eb29b755cb48df5034c57fb226a1f7c3c6'
+PRE='bench/compiler-reference-capture-data/'
+OLD=REPO/'target/compiler-reference-capture-cleanup-inventory-1.json'
+OUT=REPO/'target/compiler-reference-capture-recovery-map-1.json'
+OLD_SHA='c6784f5da5078be87ee4c6f20401477e2096eaa7a14adb85b17b370896347da7'
+SEEDS=[
+ ('7d0731e99aeaf241c4334fc5ff065a341fb388c8','505be947525d53b4db1bff6c85cb77622cb2f5dc7e7d7fe92b772ee3b8ffc3e2','6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc',32584542),
+ ('e5294c339d9aefbbafc2e951c997f4fefabcc9ad','c7912e43e0bbb26f814008a6616f3e8b2e4dbe09b45166e5b9523ce0461018ae','b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db',32588975)
+]
+KEEP={PREFIX+s for s in ['comparison-2','comparison-launch-2','measurement-2','trial-preparation-2']}
+DEPENDENCY={PREFIX+'measurement-preparation-1'}
+assert not OUT.exists()
+def sha(b):return hashlib.sha256(b).hexdigest()
+def blobsha(b):return hashlib.sha1(b'blob '+str(len(b)).encode()+b'\0'+b).hexdigest()
+def git(*args):
+ p=subprocess.run(['/usr/bin/git','-C',str(REPO),*args],capture_output=True)
+ if p.returncode:raise RuntimeError('Git refusal '+repr(args)+': '+p.stderr.decode(errors='replace'))
+ return p.stdout
+def regular_bytes(p,maxsize=134217728):
+ fd=os.open(p,os.O_RDONLY|os.O_NOFOLLOW)
+ try:
+  s=os.fstat(fd)
+  if not stat.S_ISREG(s.st_mode) or s.st_nlink!=1 or s.st_uid!=os.getuid() or s.st_size>maxsize:raise RuntimeError('unexpected regular input '+str(p))
+  with os.fdopen(fd,'rb',closefd=False) as f:b=f.read(maxsize+1)
+  if len(b)!=s.st_size:raise RuntimeError('changed input length '+str(p))
+  e=os.fstat(fd)
+  if (e.st_dev,e.st_ino,e.st_size,e.st_mtime_ns,e.st_ctime_ns)!=(s.st_dev,s.st_ino,s.st_size,s.st_mtime_ns,s.st_ctime_ns):raise RuntimeError('input changed during read '+str(p))
+  return b,s
+ finally:os.close(fd)
+oldb,_=regular_bytes(OLD);assert sha(oldb)==OLD_SHA
+old=json.loads(oldb)
+ROOTS=tuple(r['name'] for r in old['roots'] if r['name'] not in KEEP)
+assert len(ROOTS)==30
+tree={}
+byblob={}
+for entry in git('ls-tree','-r','-z','-l',REV,'--',PRE).split(b'\0'):
+ if not entry:continue
+ h,p=entry.split(b'\t',1);mode,kind,digest,size=h.decode().split();p=p.decode()
+ assert kind=='blob' and mode in ('100644','100755')
+ tree[p]={'blob':digest,'bytes':int(size),'mode':mode}
+ byblob.setdefault(digest,[]).append(p)
+for paths in byblob.values():paths.sort()
+batch=subprocess.Popen(['/usr/bin/git','-C',str(REPO),'cat-file','--batch'],stdin=subprocess.PIPE,stdout=subprocess.PIPE,stderr=subprocess.PIPE)
+cache={}
+reads={}
+def git_blob(path,revision=REV):
+ if revision==REV and path in tree:ident=tree[path]['blob']
+ else:
+  ident=git('rev-parse',revision+':'+path).decode().strip()
+ if ident not in cache:
+  batch.stdin.write((ident+'\n').encode());batch.stdin.flush()
+  hdr=batch.stdout.readline().decode().strip().split()
+  if len(hdr)!=3 or hdr[0]!=ident or hdr[1]!='blob':raise RuntimeError('Git blob header')
+  size=int(hdr[2]);assert size<=134217728
+  chunks=[];left=size
+  while left:
+   b=batch.stdout.read(left)
+   if not b:raise RuntimeError('Git blob incomplete')
+   chunks.append(b);left-=len(b)
+  b=b''.join(chunks);assert batch.stdout.read(1)==b'\n' and blobsha(b)==ident
+  cache[ident]=b
+ reads[(revision,path)]={'commit':revision,'path':path,'git_blob':ident,'bytes':len(cache[ident]),'sha256':sha(cache[ident])}
+ return cache[ident],reads[(revision,path)]
+def gunzip(b,cap):
+ d=zlib.decompressobj(31);out=d.decompress(b,cap+1)
+ if len(out)>cap or d.unconsumed_tail:raise RuntimeError('gzip cap')
+ out+=d.flush()
+ if len(out)>cap or not d.eof or d.unused_data:raise RuntimeError('gzip framing')
+ return out
+recovery=[]
+rbyblob={}
+def add_recovery(b,desc):
+ desc=dict(desc);desc['bytes']=len(b);desc['sha256']=sha(b)
+ i=len(recovery);recovery.append((desc,b));rbyblob.setdefault(blobsha(b),[]).append(i);return i
+archives=[]
+archive_exact={}
+for path,cap in [(PRE+'preliminary/preliminary-roots.tar.gz',134217728),(PRE+'gate-acceptance/raw-logs.tar.gz',16777216)]:
+ compressed,pin=git_blob(path);raw=gunzip(compressed,cap);count=0;bytesum=0;names=set()
+ with tarfile.open(fileobj=io.BytesIO(raw),mode='r:') as tf:
+  for m in tf:
+   name=m.name
+   while name.startswith('./'):name=name[2:]
+   name=name.rstrip('/')
+   if not name:continue
+   if name.startswith('/') or any(v in ('','..','.') for v in name.split('/')):raise RuntimeError('unsafe archive member')
+   if name in names:raise RuntimeError('duplicate archive member')
+   names.add(name)
+   if m.isdir():continue
+   if not m.isfile():raise RuntimeError('nonregular archive member')
+   f=tf.extractfile(m);assert f is not None;b=f.read();assert len(b)==m.size
+   i=add_recovery(b,{'kind':'committed-gzip-tar-member','commit':REV,'path':path,'archive_git_blob':pin['git_blob'],'archive_sha256':pin['sha256'],'member':name})
+   archive_exact[(path,name)]=i;count+=1;bytesum+=len(b)
+ archives.append({'commit':REV,'path':path,'gzip_sha256':pin['sha256'],'tar_sha256':sha(raw),'regular_members':count,'regular_bytes':bytesum,'method':'read-only in-memory gzip/tar decode, no extraction or recompression'})
+seeds=[]
+for rev,compressed_sha,expanded_sha,expanded_len in SEEDS:
+ b,pin=git_blob('seed/lkjscript.gz',rev);assert sha(b)==compressed_sha
+ expanded=gunzip(b,expanded_len);assert len(expanded)==expanded_len and sha(expanded)==expanded_sha
+ add_recovery(b,{'kind':'committed-git-blob','commit':rev,'path':'seed/lkjscript.gz','git_blob':pin['git_blob']})
+ add_recovery(expanded,{'kind':'committed-gzip-expansion','commit':rev,'path':'seed/lkjscript.gz','gzip_git_blob':pin['git_blob'],'gzip_sha256':sha(b)})
+ seeds.append({'commit':rev,'path':'seed/lkjscript.gz','gzip_sha256':sha(b),'gzip_bytes':len(b),'expanded_sha256':sha(expanded),'expanded_bytes':len(expanded)})
+# Exact ordinary group mappings; any mismatch can still use an explicitly named equal blob/member.
+DIRECT={
+ 'adoption-acceptance-1':'adoption','bootstrap-1':'bootstrap','cache-cleanup-1':'cache-cleanup',
+ 'cache-cleanup-acceptance-1':'cache-cleanup-acceptance','ci-1':'ci','commit-acceptance-1':'commit-acceptance',
+ 'core-operation-1':'operations/core','tests-operation-1':'operations/tests','gate-acceptance-1':'gate-acceptance',
+ 'integration-preparation-1':'integration-preparation','measurement-preparation-1':'measurement-preparation',
+ 'preliminary-retention-1':'preliminary','query-acceptance-1':'query-acceptance','seed-1':'seed',
+ 'setup-acceptance-1':'setup-failure','setup-acceptance-2':'setup2-acceptance',
+ 'setup-preparation-1':'setup-preparation','setup-preparation-2':'setup-preparation-2',
+ 'setup-launch-1':'setup-failure/raw/launch','setup-launch-2':'setup2-acceptance/raw/launch'
+}
+keyrx=re.compile(r'(^|[._-])(?:keys?|credentials?|secrets?|passwords?|tokens?)([._-]|$)|^id_(?:rsa|ed25519|ecdsa)$|\.(?:pem|p12|pfx)$',re.I)
+SAFE_TEST_NAMES={'string_map_keys.lkj','programs_image_key_grant_overlap.sh','byte_vector_keys_use_source_lexicographic_order_0.lkjir'}
+def find_recovery(name,rel,b):
+ preferred=PRE+DIRECT[name[len(PREFIX):]]+'/'+rel if name[len(PREFIX):] in DIRECT else None
+ if preferred in tree:
+  original,pin=git_blob(preferred)
+  if original==b:return {'kind':'committed-git-blob','commit':REV,'path':preferred,'git_blob':pin['git_blob'],'sha256':pin['sha256'],'bytes':len(b),'correspondence':'same relative path in committed group'}
+ ident=blobsha(b)
+ for path in byblob.get(ident,[]):
+  original,pin=git_blob(path)
+  if original==b:return {'kind':'committed-git-blob','commit':REV,'path':path,'git_blob':pin['git_blob'],'sha256':pin['sha256'],'bytes':len(b),'correspondence':'full byte-equal committed blob; original path retained separately'}
+ exact=archive_exact.get((PRE+'preliminary/preliminary-roots.tar.gz','target/'+name+'/'+rel))
+ if exact is not None and recovery[exact][1]==b:return dict(recovery[exact][0],correspondence='same original archive member path')
+ for i in rbyblob.get(ident,[]):
+  desc,original=recovery[i]
+  if original==b:return dict(desc,correspondence='full byte-equal named recovery; original path retained separately')
+ return None
+started=datetime.datetime.now(datetime.timezone.utc).isoformat();monotonic=time.monotonic()
+records=[];all_rows=[];catalog=[];catid={}
+def reference(desc):
+ key=json.dumps(desc,sort_keys=True,separators=(',',':'))
+ if key not in catid:catid[key]=len(catalog);catalog.append(desc)
+ return catid[key]
+for name in ROOTS:
+ root=REPO/'target'/name;s=root.lstat()
+ if not stat.S_ISDIR(s.st_mode) or s.st_uid!=os.getuid():raise RuntimeError('literal root type/owner')
+ start=len(all_rows);rows=[];unmapped=[];directories=[];exceptions=[];files=total=verified=0
+ for here,dirs,names in os.walk(root,followlinks=False):
+  for n in sorted(dirs+names):
+   p=Path(here)/n;t=p.lstat();rel=p.relative_to(root).as_posix()
+   metadata=[rel,t.st_uid,t.st_gid,format(stat.S_IMODE(t.st_mode),'04o'),t.st_size,t.st_nlink,t.st_dev,t.st_ino]
+   if stat.S_ISDIR(t.st_mode):
+    directories.append(metadata)
+    if t.st_uid!=os.getuid():exceptions.append({'path':rel,'reason':'foreign directory owner'})
+    continue
+   if not stat.S_ISREG(t.st_mode) or t.st_nlink!=1 or t.st_uid!=os.getuid():
+    exceptions.append({'path':rel,'reason':'nonregular/hardlink/foreign owner'});continue
+   files+=1;total+=t.st_size
+   if keyrx.search(n) and n not in SAFE_TEST_NAMES:
+    unmapped.append({'path':rel,'bytes':t.st_size,'reason':'key-like basename, contents deliberately not read'});rows.append(metadata+[None,None]);continue
+   b,t2=regular_bytes(p)
+   if (t.st_dev,t.st_ino,t.st_size,t.st_mtime_ns,t.st_ctime_ns)!=(t2.st_dev,t2.st_ino,t2.st_size,t2.st_mtime_ns,t2.st_ctime_ns):raise RuntimeError('inventory/read race')
+   desc=find_recovery(name,rel,b)
+   if desc is None:unmapped.append({'path':rel,'bytes':len(b),'sha256':sha(b),'reason':'no exact committed byte recovery found in fixed catalogs'})
+   else:verified+=1
+   rows.append(metadata+[sha(b),reference(desc) if desc is not None else None])
+ rows.sort(key=lambda v:v[0]);directories.sort(key=lambda v:v[0]);all_rows.extend(rows)
+ state='DEPENDENCY/KEEP' if name in DEPENDENCY else 'KEEP/RECOVERY-GAP' if unmapped or exceptions else 'RECOVERY-VERIFIED/NO-DELETION-RELEASE'
+ records.append({'name':name,'path':str(root),'state':state,'root_metadata':[s.st_uid,s.st_gid,format(stat.S_IMODE(s.st_mode),'04o'),s.st_dev,s.st_ino],
+ 'files':files,'logical_bytes':total,'recovered_files':verified,'unmapped':unmapped,'exceptions':exceptions,'directories':directories,
+ 'file_row_start':start,'file_row_count':len(rows),'file_rows_sha256':sha(json.dumps(rows,separators=(',',':')).encode())})
+ print(name,files,total,'recovered',verified,'gaps',len(unmapped),'exceptions',len(exceptions),flush=True)
+batch.stdin.close();assert batch.wait(timeout=10)==0
+assert batch.stderr.read()==b''
+current=[n for n in sorted(os.listdir(REPO/'target')) if n.startswith(PREFIX) and stat.S_ISDIR((REPO/'target'/n).lstat().st_mode)]
+unknown=[n for n in current if n not in ROOTS and n not in KEEP]
+result={
+ 'schema':1,'kind':'fixed-scope recovery mapping and prospective cleanup preflight; never deletion authorization',
+ 'recovery_commit':REV,'prior_inventory_sha256':OLD_SHA,'observed_start_utc':started,'observed_end_utc':datetime.datetime.now(datetime.timezone.utc).isoformat(),
+ 'elapsed_mapping_seconds':time.monotonic()-monotonic,
+ 'active_keep_not_traversed':[{'path':str(REPO/'target'/n),'reason':'comparison acceptance/archive pending or dependency'} for n in sorted(KEEP)],
+ 'unknown_keep_not_traversed':[str(REPO/'target'/n) for n in unknown],
+ 'roots':records,'file_row_fields':['relative_path','uid','gid','mode_octal4','size','nlink','dev','inode','sha256','recovery_catalog_index'],
+ 'file_rows':all_rows,'recovery_catalog':catalog,'archives_decoded_without_extracting':archives,'seed_recoveries':seeds,
+ 'committed_inputs_read':[reads[k] for k in sorted(reads)],'totals':{'roots':len(records),'files':sum(r['files'] for r in records),'logical_bytes':sum(r['logical_bytes'] for r in records),'recovered_files':sum(r['recovered_files'] for r in records),'unmapped_files':sum(len(r['unmapped']) for r in records),'exceptions':sum(len(r['exceptions']) for r in records)},
+ 'guard_contract':[
+ 'Future guard must use only these literal roots with recovery-complete status, excluding dependency/active/unknown roots, and require separate explicit deletion release.',
+ 'Before any unlink, recheck complete file/directory population, owner/type/link count, all stored metadata and hashes, and every named committed blob/archive-member/gzip recovery. Refuse all extras/missing/changed/unsafe entries and every unmapped row.',
+ 'Recovery references to equal-content records preserve full original bytes and original path/mode in this map; no assertion that a different historical event is interchangeable evidence.',
+ 'Never follow symlinks, inspect keys, delete unknown roots, traverse comparison roots, touch target/lkjscript or target/gate, or alter unrelated credentials/worktrees.',
+ 'After full preflight, a separately reviewed finite guard may unlink only enumerated files then remove enumerated empty directories deepest first. Stop on any unexpected failure. No atomic multi-root deletion guarantee; retain progress and require ENOENT for each completed root.',
+ 'This map does not authorize unlinks and does not read caches, process/FD state, future measurement outputs or credentials. No compression, source extraction or workload execution occurred.'
+ ]}
+encoded=(json.dumps(result,sort_keys=True,separators=(',',':'))+'\n').encode()
+fd=os.open(OUT,os.O_WRONLY|os.O_CREAT|os.O_EXCL,0o600)
+with os.fdopen(fd,'wb') as f:f.write(encoded)
+print('OUTPUT',OUT,'bytes',len(encoded),'sha256',sha(encoded),flush=True)
+print('TOTALS',json.dumps(result['totals'],sort_keys=True),flush=True)
+print('GAPS',json.dumps([{'root':r['name'],'unmapped':r['unmapped'],'exceptions':r['exceptions']} for r in records if r['unmapped'] or r['exceptions']],sort_keys=True),flush=True)

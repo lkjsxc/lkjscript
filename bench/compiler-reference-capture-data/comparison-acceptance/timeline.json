@@ -1,0 +1,132 @@
+[
+   {
+      "end_ns" : "1794854148052210174",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/preflight",
+      "start_ns" : "1794854147184957358"
+   },
+   {
+      "end_ns" : "1794854157749562565",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/01-new-100k-A1",
+      "start_ns" : "1794854148072273747"
+   },
+   {
+      "end_ns" : "1794854157827001380",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/validation-01-new-100k-A1",
+      "start_ns" : "1794854157768080530"
+   },
+   {
+      "end_ns" : "1794854167324476885",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/02-new-100k-B1",
+      "start_ns" : "1794854157845917193"
+   },
+   {
+      "end_ns" : "1794854167398177508",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/validation-02-new-100k-B1",
+      "start_ns" : "1794854167342325070"
+   },
+   {
+      "end_ns" : "1794854176528545603",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/03-new-100k-B2",
+      "start_ns" : "1794854167417236621"
+   },
+   {
+      "end_ns" : "1794854176600648841",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/validation-03-new-100k-B2",
+      "start_ns" : "1794854176548175390"
+   },
+   {
+      "end_ns" : "1794854185755201110",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/04-new-100k-A2",
+      "start_ns" : "1794854176617878352"
+   },
+   {
+      "end_ns" : "1794854185826913682",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/validation-04-new-100k-A2",
+      "start_ns" : "1794854185773089571"
+   },
+   {
+      "end_ns" : "1794854194968360006",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/05-new-100k-A3",
+      "start_ns" : "1794854185844988624"
+   },
+   {
+      "end_ns" : "1794854195040824333",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/validation-05-new-100k-A3",
+      "start_ns" : "1794854194987402919"
+   },
+   {
+      "end_ns" : "1794854204161161447",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/06-new-100k-B3",
+      "start_ns" : "1794854195059220689"
+   },
+   {
+      "end_ns" : "1794854204231296992",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/validation-06-new-100k-B3",
+      "start_ns" : "1794854204179632393"
+   },
+   {
+      "end_ns" : "1794854224534818791",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/07-compiler-A1",
+      "start_ns" : "1794854204249267688"
+   },
+   {
+      "end_ns" : "1794854224673598025",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/validation-07-compiler-A1",
+      "start_ns" : "1794854224553899385"
+   },
+   {
+      "end_ns" : "1794854244805101429",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/08-compiler-B1",
+      "start_ns" : "1794854224693047162"
+   },
+   {
+      "end_ns" : "1794854244945783362",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/validation-08-compiler-B1",
+      "start_ns" : "1794854244824598406"
+   },
+   {
+      "end_ns" : "1794854265272212950",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/09-compiler-B2",
+      "start_ns" : "1794854244964266421"
+   },
+   {
+      "end_ns" : "1794854265414061256",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/validation-09-compiler-B2",
+      "start_ns" : "1794854265291461609"
+   },
+   {
+      "end_ns" : "1794854285410815955",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/10-compiler-A2",
+      "start_ns" : "1794854265432124716"
+   },
+   {
+      "end_ns" : "1794854285553193847",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/validation-10-compiler-A2",
+      "start_ns" : "1794854285430321207"
+   },
+   {
+      "end_ns" : "1794854305852640828",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/11-compiler-A3",
+      "start_ns" : "1794854285570347866"
+   },
+   {
+      "end_ns" : "1794854305993616382",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/validation-11-compiler-A3",
+      "start_ns" : "1794854305872351877"
+   },
+   {
+      "end_ns" : "1794854326144105344",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/12-compiler-B3",
+      "start_ns" : "1794854306012268980"
+   },
+   {
+      "end_ns" : "1794854326286266407",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/validation-12-compiler-B3",
+      "start_ns" : "1794854326162231091"
+   },
+   {
+      "end_ns" : "1794854326803743396",
+      "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/records/postflight",
+      "start_ns" : "1794854326305284473"
+   }
+]

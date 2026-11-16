@@ -1,0 +1,62 @@
+{
+   "files" : [
+      {
+         "destination" : "bench/compiler-reference-capture-data/cleanup-mapping/compiler-reference-capture-cleanup-inventory-1.json",
+         "original_mode" : 384,
+         "sha256" : "c6784f5da5078be87ee4c6f20401477e2096eaa7a14adb85b17b370896347da7",
+         "size" : 48868,
+         "source" : "target/compiler-reference-capture-cleanup-inventory-1.json"
+      },
+      {
+         "destination" : "bench/compiler-reference-capture-data/cleanup-mapping/compiler-reference-capture-recovery-guard-proposal-1.md",
+         "original_mode" : 384,
+         "sha256" : "66690d98a8bb19dd7b6cd40cac1054778b676dae069b62d65a80b9df5e8d0474",
+         "size" : 7578,
+         "source" : "target/compiler-reference-capture-recovery-guard-proposal-1.md"
+      },
+      {
+         "destination" : "bench/compiler-reference-capture-data/cleanup-mapping/compiler-reference-capture-recovery-map-1.json",
+         "original_mode" : 384,
+         "sha256" : "ff159c384304fb66cd5aa644a06485a5cec2bcc4aab393ccd679a3b7f6faa4bd",
+         "size" : 2208851,
+         "source" : "target/compiler-reference-capture-recovery-map-1.json"
+      },
+      {
+         "destination" : "bench/compiler-reference-capture-data/cleanup-mapping/compiler-reference-capture-recovery-proposal-1.py.txt",
+         "original_mode" : 420,
+         "sha256" : "2a3c936de43eea1a34b8a351744cc2ecbabef29c261d3db88a81a5bdeb005ea4",
+         "size" : 14240,
+         "source" : "target/compiler-reference-capture-recovery-proposal-1.py"
+      },
+      {
+         "destination" : "bench/compiler-reference-capture-data/cleanup-mapping/compiler-reference-capture-recovery-run-1.json",
+         "original_mode" : 384,
+         "sha256" : "827415028ef636e981e58411404bddc6cc36ad704103acb81550a118ddec3739",
+         "size" : 3897,
+         "source" : "target/compiler-reference-capture-recovery-run-1.json"
+      },
+      {
+         "destination" : "bench/compiler-reference-capture-data/cleanup-mapping/compiler-reference-capture-recovery-syntax-1.json",
+         "original_mode" : 384,
+         "sha256" : "3945360ffb913581249fa31468712821d496c698f621043c8ab8f3f53f337bd6",
+         "size" : 693,
+         "source" : "target/compiler-reference-capture-recovery-syntax-1.json"
+      },
+      {
+         "destination" : "bench/compiler-reference-capture-data/cleanup-mapping/compiler-reference-capture-recovery-time-1.txt",
+         "original_mode" : 384,
+         "sha256" : "f8d7e35005f841a548a8041f5646c30d84ed97b0b8e6ad11b9568435bb91eb55",
+         "size" : 70,
+         "source" : "target/compiler-reference-capture-recovery-time-1.txt"
+      },
+      {
+         "destination" : "bench/compiler-reference-capture-data/cleanup-mapping/compiler-reference-capture-recovery-proof-1.sha256",
+         "original_mode" : 384,
+         "sha256" : "347e1900c21920ae9b0b6bfad44edd117721c45e4c0765019b90c74ec85c8729",
+         "size" : 860,
+         "source" : "target/compiler-reference-capture-recovery-proof-1.sha256"
+      }
+   ],
+   "kind" : "preserved-prohibited-mapper-evidence",
+   "warning" : "The original mapper and syntax check used Python 3 in violation of the explicit no-Python instruction. This copy records that violation, does not execute the mapper, and supplies no deletion acceptance. Python source is stored as non-executable .py.txt with its actual original path preserved."
+}

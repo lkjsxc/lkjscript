@@ -1,0 +1,476 @@
+{
+   "arithmetic" : [
+      {
+         "input" : "new-100k",
+         "metrics" : {
+            "cpu_s" : {
+               "A" : {
+                  "integer_samples" : [
+                     927,
+                     898,
+                     898
+                  ],
+                  "integer_sum" : 2723,
+                  "integer_unit" : "centisecond",
+                  "maximum" : 9.27,
+                  "mean" : 9.07666666666667,
+                  "mean_denominator" : 300,
+                  "mean_numerator" : 2723,
+                  "median" : 8.98,
+                  "minimum" : 8.98,
+                  "sum" : 27.23
+               },
+               "B" : {
+                  "integer_samples" : [
+                     926,
+                     899,
+                     897
+                  ],
+                  "integer_sum" : 2722,
+                  "integer_unit" : "centisecond",
+                  "maximum" : 9.26,
+                  "mean" : 9.07333333333333,
+                  "mean_denominator" : 300,
+                  "mean_numerator" : 2722,
+                  "median" : 8.99,
+                  "minimum" : 8.97,
+                  "sum" : 27.22
+               },
+               "mean_B_over_A" : 0.999632757987514,
+               "mean_ratio_denominator" : 2723,
+               "mean_ratio_numerator" : 2722,
+               "percent_B_minus_A" : -0.036724201248628
+            },
+            "max_rss_kib" : {
+               "A" : {
+                  "integer_samples" : [
+                     697408,
+                     720068,
+                     719664
+                  ],
+                  "integer_sum" : 2137140,
+                  "integer_unit" : "KiB",
+                  "maximum" : 720068,
+                  "mean" : 712380,
+                  "mean_denominator" : 3,
+                  "mean_numerator" : 2137140,
+                  "median" : 719664,
+                  "minimum" : 697408,
+                  "sum" : 2137140
+               },
+               "B" : {
+                  "integer_samples" : [
+                     698128,
+                     697564,
+                     712232
+                  ],
+                  "integer_sum" : 2107924,
+                  "integer_unit" : "KiB",
+                  "maximum" : 712232,
+                  "mean" : 702641.333333333,
+                  "mean_denominator" : 3,
+                  "mean_numerator" : 2107924,
+                  "median" : 698128,
+                  "minimum" : 697564,
+                  "sum" : 2107924
+               },
+               "mean_B_over_A" : 0.986329393488494,
+               "mean_ratio_denominator" : 2137140,
+               "mean_ratio_numerator" : 2107924,
+               "percent_B_minus_A" : -1.3670606511506
+            },
+            "wall_s" : {
+               "A" : {
+                  "integer_samples" : [
+                     967,
+                     913,
+                     911
+                  ],
+                  "integer_sum" : 2791,
+                  "integer_unit" : "centisecond",
+                  "maximum" : 9.67,
+                  "mean" : 9.30333333333333,
+                  "mean_denominator" : 300,
+                  "mean_numerator" : 2791,
+                  "median" : 9.13,
+                  "minimum" : 9.11,
+                  "sum" : 27.91
+               },
+               "B" : {
+                  "integer_samples" : [
+                     947,
+                     910,
+                     909
+                  ],
+                  "integer_sum" : 2766,
+                  "integer_unit" : "centisecond",
+                  "maximum" : 9.47,
+                  "mean" : 9.22,
+                  "mean_denominator" : 300,
+                  "mean_numerator" : 2766,
+                  "median" : 9.1,
+                  "minimum" : 9.09,
+                  "sum" : 27.66
+               },
+               "mean_B_over_A" : 0.991042637047653,
+               "mean_ratio_denominator" : 2791,
+               "mean_ratio_numerator" : 2766,
+               "percent_B_minus_A" : -0.895736295234684
+            }
+         }
+      },
+      {
+         "input" : "compiler",
+         "metrics" : {
+            "cpu_s" : {
+               "A" : {
+                  "integer_samples" : [
+                     1982,
+                     1972,
+                     1987
+                  ],
+                  "integer_sum" : 5941,
+                  "integer_unit" : "centisecond",
+                  "maximum" : 19.87,
+                  "mean" : 19.8033333333333,
+                  "mean_denominator" : 300,
+                  "mean_numerator" : 5941,
+                  "median" : 19.82,
+                  "minimum" : 19.72,
+                  "sum" : 59.41
+               },
+               "B" : {
+                  "integer_samples" : [
+                     1980,
+                     1994,
+                     1979
+                  ],
+                  "integer_sum" : 5953,
+                  "integer_unit" : "centisecond",
+                  "maximum" : 19.94,
+                  "mean" : 19.8433333333333,
+                  "mean_denominator" : 300,
+                  "mean_numerator" : 5953,
+                  "median" : 19.8,
+                  "minimum" : 19.79,
+                  "sum" : 59.53
+               },
+               "mean_B_over_A" : 1.0020198619761,
+               "mean_ratio_denominator" : 5941,
+               "mean_ratio_numerator" : 5953,
+               "percent_B_minus_A" : 0.201986197609827
+            },
+            "max_rss_kib" : {
+               "A" : {
+                  "integer_samples" : [
+                     749748,
+                     751124,
+                     745260
+                  ],
+                  "integer_sum" : 2246132,
+                  "integer_unit" : "KiB",
+                  "maximum" : 751124,
+                  "mean" : 748710.666666667,
+                  "mean_denominator" : 3,
+                  "mean_numerator" : 2246132,
+                  "median" : 749748,
+                  "minimum" : 745260,
+                  "sum" : 2246132
+               },
+               "B" : {
+                  "integer_samples" : [
+                     745784,
+                     740940,
+                     742076
+                  ],
+                  "integer_sum" : 2228800,
+                  "integer_unit" : "KiB",
+                  "maximum" : 745784,
+                  "mean" : 742933.333333333,
+                  "mean_denominator" : 3,
+                  "mean_numerator" : 2228800,
+                  "median" : 742076,
+                  "minimum" : 740940,
+                  "sum" : 2228800
+               },
+               "mean_B_over_A" : 0.992283623580449,
+               "mean_ratio_denominator" : 2246132,
+               "mean_ratio_numerator" : 2228800,
+               "percent_B_minus_A" : -0.771637641955147
+            },
+            "wall_s" : {
+               "A" : {
+                  "integer_samples" : [
+                     2028,
+                     1997,
+                     2027
+                  ],
+                  "integer_sum" : 6052,
+                  "integer_unit" : "centisecond",
+                  "maximum" : 20.28,
+                  "mean" : 20.1733333333333,
+                  "mean_denominator" : 300,
+                  "mean_numerator" : 6052,
+                  "median" : 20.27,
+                  "minimum" : 19.97,
+                  "sum" : 60.52
+               },
+               "B" : {
+                  "integer_samples" : [
+                     2010,
+                     2030,
+                     2012
+                  ],
+                  "integer_sum" : 6052,
+                  "integer_unit" : "centisecond",
+                  "maximum" : 20.3,
+                  "mean" : 20.1733333333333,
+                  "mean_denominator" : 300,
+                  "mean_numerator" : 6052,
+                  "median" : 20.12,
+                  "minimum" : 20.1,
+                  "sum" : 60.52
+               },
+               "mean_B_over_A" : 1,
+               "mean_ratio_denominator" : 6052,
+               "mean_ratio_numerator" : 6052,
+               "percent_B_minus_A" : 0
+            }
+         }
+      }
+   ],
+   "committed_controls" : {
+      "controls.json" : "bench/compiler-reference-capture-data/trial-preparation-2/controls.json",
+      "controls.manifest.sha256" : "bench/compiler-reference-capture-data/trial-preparation-2/controls.manifest.sha256",
+      "order.json" : "bench/compiler-reference-capture-data/trial-preparation-2/order.json",
+      "protocol.md" : "bench/compiler-reference-capture-data/trial-preparation-2/protocol.md",
+      "release.json" : "bench/compiler-reference-capture-data/trial-preparation-2/release.json",
+      "run.sh" : "bench/compiler-reference-capture-data/trial-preparation-2/run.sh",
+      "trial.pl" : "bench/compiler-reference-capture-data/trial-preparation-2/trial.pl"
+   },
+   "compiler_git_blob_matches" : 1742,
+   "final_slots" : 2,
+   "full_byte_comparisons" : 14,
+   "input_proof" : [
+      {
+         "bytes" : 3923332,
+         "directories" : 0,
+         "git_blob_matches" : 0,
+         "inventory_sha256" : "cfc023b8d4224c66853c1545b6cdca391203f32c94654d7d9c51c77f6b694cb7",
+         "name" : "new-100k",
+         "regular_files" : 170,
+         "source_bytes" : 3923070,
+         "source_files" : 169,
+         "source_lines" : 100000
+      },
+      {
+         "bytes" : 9356858,
+         "directories" : 42,
+         "git_blob_matches" : 1742,
+         "inventory_sha256" : "2e2e0ec2121c90767780b063cfba0cbe048f9d39914a3c0294e4e42641dcde4c",
+         "name" : "compiler",
+         "regular_files" : 1742,
+         "source_bytes" : 5828791,
+         "source_files" : 1132,
+         "source_lines" : 124530
+      }
+   ],
+   "interpretation" : [
+      "Each input has one fixed A1 B1 B2 A2 A3 B3 sequence; all three samples enter each mean.",
+      "Both ordinary compiler producers emitted byte-identical output per input at explicit inline0/no-store.",
+      "GNU centiseconds and integer RSS are authoritative; means and ratios are descriptive, not significance estimates.",
+      "Operating-system caches were not reset; preflight hashing and validation can warm caches, and shared-host load varies.",
+      "No allocation-site attribution, 1M-wall inference, generated-code speed claim, or 10-percent adoption threshold is supported or applied.",
+      "Archive recovery was already admitted by the pinned setup acceptance; this audit checks exact retained archive bytes and all live compiler members against Git blobs, without decompression.",
+      "No compiler, native image, original trial helper, compression, observer, credential or store payload operation ran during this audit."
+   ],
+   "measured_builds" : 12,
+   "metadata_commands" : 14,
+   "ordered_nonoverlapping_commands" : 26,
+   "outer" : {
+      "capture" : {
+         "end.ns" : 1794854326807118476,
+         "end.utc" : "2026-11-16T18:38:46Z",
+         "load-after" : "2.21 2.52 2.79",
+         "load-before" : "1.39 2.22 2.75",
+         "start.ns" : "1794854147144371690",
+         "start.utc" : "2026-11-16T18:35:47Z"
+      },
+      "timing" : {
+         "cpu_cs" : 17640,
+         "exit" : 0,
+         "max_rss_kib" : 751124,
+         "system_cs" : 173,
+         "system_s" : "1.73",
+         "user_cs" : 17467,
+         "user_s" : "174.67",
+         "wall_cs" : 17966,
+         "wall_s" : "179.66"
+      }
+   },
+   "outputs" : [
+      {
+         "bytes" : 4468259,
+         "full_byte_equal_to" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/01-new-100k-A1.image",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/01-new-100k-A1.image",
+         "sha256" : "42443b75fe211c9f9efa7c0ee26c9233280c38a124ec5e5b514666aab97ce361"
+      },
+      {
+         "bytes" : 4468259,
+         "full_byte_equal_to" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/01-new-100k-A1.image",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/02-new-100k-B1.image",
+         "sha256" : "42443b75fe211c9f9efa7c0ee26c9233280c38a124ec5e5b514666aab97ce361"
+      },
+      {
+         "bytes" : 4468259,
+         "full_byte_equal_to" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/01-new-100k-A1.image",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/03-new-100k-B2.image",
+         "sha256" : "42443b75fe211c9f9efa7c0ee26c9233280c38a124ec5e5b514666aab97ce361"
+      },
+      {
+         "bytes" : 4468259,
+         "full_byte_equal_to" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/01-new-100k-A1.image",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/04-new-100k-A2.image",
+         "sha256" : "42443b75fe211c9f9efa7c0ee26c9233280c38a124ec5e5b514666aab97ce361"
+      },
+      {
+         "bytes" : 4468259,
+         "full_byte_equal_to" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/01-new-100k-A1.image",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/05-new-100k-A3.image",
+         "sha256" : "42443b75fe211c9f9efa7c0ee26c9233280c38a124ec5e5b514666aab97ce361"
+      },
+      {
+         "bytes" : 4468259,
+         "full_byte_equal_to" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/01-new-100k-A1.image",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/06-new-100k-B3.image",
+         "sha256" : "42443b75fe211c9f9efa7c0ee26c9233280c38a124ec5e5b514666aab97ce361"
+      },
+      {
+         "bytes" : 4468259,
+         "full_byte_equal_to" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/01-new-100k-A1.image",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/outputs/new-100k.image",
+         "sha256" : "42443b75fe211c9f9efa7c0ee26c9233280c38a124ec5e5b514666aab97ce361"
+      },
+      {
+         "bytes" : 21489004,
+         "full_byte_equal_to" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/07-compiler-A1.image",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/07-compiler-A1.image",
+         "sha256" : "5ab411b7fb91498adc1453a08d96893f85c1d644a2e050b93b3e9dc850585597"
+      },
+      {
+         "bytes" : 21489004,
+         "full_byte_equal_to" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/07-compiler-A1.image",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/08-compiler-B1.image",
+         "sha256" : "5ab411b7fb91498adc1453a08d96893f85c1d644a2e050b93b3e9dc850585597"
+      },
+      {
+         "bytes" : 21489004,
+         "full_byte_equal_to" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/07-compiler-A1.image",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/09-compiler-B2.image",
+         "sha256" : "5ab411b7fb91498adc1453a08d96893f85c1d644a2e050b93b3e9dc850585597"
+      },
+      {
+         "bytes" : 21489004,
+         "full_byte_equal_to" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/07-compiler-A1.image",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/10-compiler-A2.image",
+         "sha256" : "5ab411b7fb91498adc1453a08d96893f85c1d644a2e050b93b3e9dc850585597"
+      },
+      {
+         "bytes" : 21489004,
+         "full_byte_equal_to" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/07-compiler-A1.image",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/11-compiler-A3.image",
+         "sha256" : "5ab411b7fb91498adc1453a08d96893f85c1d644a2e050b93b3e9dc850585597"
+      },
+      {
+         "bytes" : 21489004,
+         "full_byte_equal_to" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/07-compiler-A1.image",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/12-compiler-B3.image",
+         "sha256" : "5ab411b7fb91498adc1453a08d96893f85c1d644a2e050b93b3e9dc850585597"
+      },
+      {
+         "bytes" : 21489004,
+         "full_byte_equal_to" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/images/07-compiler-A1.image",
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-2/outputs/compiler.image",
+         "sha256" : "5ab411b7fb91498adc1453a08d96893f85c1d644a2e050b93b3e9dc850585597"
+      }
+   ],
+   "producer_proof" : [
+      {
+         "bytes" : 32584542,
+         "library_tree" : "25bdb8ff8567b941790d3951c78e896b23e26e8e",
+         "producer" : "A",
+         "seed_commit" : "7d0731e99aeaf241c4334fc5ff065a341fb388c8",
+         "seed_sha256" : "505be947525d53b4db1bff6c85cb77622cb2f5dc7e7d7fe92b772ee3b8ffc3e2",
+         "sha256" : "6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc",
+         "source_commit" : "d461c2d98e93aeed6061508ee80ab36b9eeaa04f",
+         "src_tree" : "c710586b4d1b7ab476fd179a7d2c699477a2054a"
+      },
+      {
+         "bytes" : 32588975,
+         "library_tree" : "25bdb8ff8567b941790d3951c78e896b23e26e8e",
+         "producer" : "B",
+         "seed_commit" : "e5294c339d9aefbbafc2e951c997f4fefabcc9ad",
+         "seed_sha256" : "c7912e43e0bbb26f814008a6616f3e8b2e4dbe09b45166e5b9523ce0461018ae",
+         "sha256" : "b01eabfa60015ad93d86dd991f5f64a59754811062b578e12737e2feb4e0d5db",
+         "source_commit" : "bd8a9050a3786de9f227c6c4037f5acd43205f71",
+         "src_tree" : "626c9c1f234f4d003a08820d9b69840535eff8b8"
+      }
+   ],
+   "release_commit" : "0547c7041de0710dbe6e3e98b590a9231fc32329",
+   "release_sha256" : "6ea5952f0c0f366f86a829a85bb82292d8a9a656cd488d52305287eaae63d3ff",
+   "retained_images" : 12,
+   "retained_release_proofs" : [
+      {
+         "commit" : "1404b4af81b2afa979993b0c426921321a6801f0",
+         "path" : "bench/compiler-reference-capture-data/setup2-acceptance/acceptance.json",
+         "purpose" : "setup-acceptance",
+         "sha256" : "157b7b5ce70e5fb6a5d7bafdb82428328133cb5ab4f17e01c881e8ed6a77c855",
+         "verified_bytes" : 12446
+      },
+      {
+         "bytes" : 10741760,
+         "commit" : "1404b4af81b2afa979993b0c426921321a6801f0",
+         "path" : "bench/compiler-reference-capture-data/setup2/artifacts/compiler-source.tar",
+         "purpose" : "input-recovery",
+         "sha256" : "79aa24a9eb6f8e7940b4424fc20839759a79dd8d480b1b746f7e29b17171d806",
+         "verified_bytes" : 10741760
+      },
+      {
+         "bytes" : 405428,
+         "commit" : "1404b4af81b2afa979993b0c426921321a6801f0",
+         "path" : "bench/compiler-reference-capture-data/setup2/artifacts/generated-100k.tar.gz",
+         "purpose" : "input-recovery",
+         "sha256" : "57ead08d82ea53ba4d833b2689cbf1158550931b8cf288aac3363644d2dab07c",
+         "verified_bytes" : 405428
+      },
+      {
+         "commit" : "1148e56a2a324e2bbe0e92cfdb4762025519cd5c",
+         "path" : "bench/compiler-reference-capture-data/gate-acceptance/audit.json",
+         "purpose" : "gate-acceptance",
+         "sha256" : "160abd74f68535404c35716bf742e5ce4a3f8435285a6dd0aa5031ce478c2cf1",
+         "verified_bytes" : 29705
+      },
+      {
+         "bytes" : 2070,
+         "commit" : "e68ea0eb29b755cb48df5034c57fb226a1f7c3c6",
+         "path" : "bench/compiler-reference-capture-data/ci/before-comparison.json",
+         "purpose" : "ci-observation",
+         "sha256" : "5a74482881fd2ffb7bcd820114dc07a863ad90d5dc12c813db031fe767e5a188",
+         "verified_bytes" : 2070
+      }
+   ],
+   "schema" : "compiler-reference-capture-independent-comparison-acceptance-2",
+   "setup_pins_verified" : 25,
+   "source_ci" : {
+      "head" : "1148e56a2a324e2bbe0e92cfdb4762025519cd5c",
+      "native_gate" : "success",
+      "observed_at" : "2026-11-16T18:33:29Z",
+      "qualification" : "Exact pushed candidate source and refreshed seed; final primary response and full retrieved log are durably retained. Native gate: 5455 fresh requests, zero skips, 1172.201 s at load 0.57 to 2.55.",
+      "run_id" : 43925403668,
+      "rust_witness" : "success",
+      "status" : "completed_success"
+   },
+   "source_regular_members" : 1912,
+   "status" : "accepted",
+   "summary_sha256" : "b531ef397e7420418562125d44fadc6399139ac3cc8c3c58c37d1a45c415c33c"
+}

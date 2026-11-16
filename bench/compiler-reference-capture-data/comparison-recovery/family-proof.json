@@ -1,0 +1,150 @@
+{
+   "contract" : "All fourteen original output paths were compared in full before deduplication. Each original is recovered as an independent file from its family representative, with its own inventoried mode.",
+   "families" : {
+      "compiler" : {
+         "aliases" : [
+            "compiler-reference-capture-comparison-2/images/07-compiler-A1.image",
+            "compiler-reference-capture-comparison-2/images/08-compiler-B1.image",
+            "compiler-reference-capture-comparison-2/images/09-compiler-B2.image",
+            "compiler-reference-capture-comparison-2/images/10-compiler-A2.image",
+            "compiler-reference-capture-comparison-2/images/11-compiler-A3.image",
+            "compiler-reference-capture-comparison-2/images/12-compiler-B3.image",
+            "compiler-reference-capture-comparison-2/outputs/compiler.image"
+         ],
+         "bytes" : 21489004,
+         "member" : "families/compiler.image",
+         "representative" : "compiler-reference-capture-comparison-2/images/07-compiler-A1.image",
+         "sha256" : "5ab411b7fb91498adc1453a08d96893f85c1d644a2e050b93b3e9dc850585597"
+      },
+      "new-100k" : {
+         "aliases" : [
+            "compiler-reference-capture-comparison-2/images/01-new-100k-A1.image",
+            "compiler-reference-capture-comparison-2/images/02-new-100k-B1.image",
+            "compiler-reference-capture-comparison-2/images/03-new-100k-B2.image",
+            "compiler-reference-capture-comparison-2/images/04-new-100k-A2.image",
+            "compiler-reference-capture-comparison-2/images/05-new-100k-A3.image",
+            "compiler-reference-capture-comparison-2/images/06-new-100k-B3.image",
+            "compiler-reference-capture-comparison-2/outputs/new-100k.image"
+         ],
+         "bytes" : 4468259,
+         "member" : "families/new-100k.image",
+         "representative" : "compiler-reference-capture-comparison-2/images/01-new-100k-A1.image",
+         "sha256" : "42443b75fe211c9f9efa7c0ee26c9233280c38a124ec5e5b514666aab97ce361"
+      }
+   },
+   "pre_dedup_full_byte_comparisons" : [
+      {
+         "bytes" : 4468259,
+         "family" : "new-100k",
+         "full_byte_equal" : true,
+         "mode" : 320,
+         "path" : "compiler-reference-capture-comparison-2/images/01-new-100k-A1.image",
+         "sha256" : "42443b75fe211c9f9efa7c0ee26c9233280c38a124ec5e5b514666aab97ce361"
+      },
+      {
+         "bytes" : 4468259,
+         "family" : "new-100k",
+         "full_byte_equal" : true,
+         "mode" : 320,
+         "path" : "compiler-reference-capture-comparison-2/images/02-new-100k-B1.image",
+         "sha256" : "42443b75fe211c9f9efa7c0ee26c9233280c38a124ec5e5b514666aab97ce361"
+      },
+      {
+         "bytes" : 4468259,
+         "family" : "new-100k",
+         "full_byte_equal" : true,
+         "mode" : 320,
+         "path" : "compiler-reference-capture-comparison-2/images/03-new-100k-B2.image",
+         "sha256" : "42443b75fe211c9f9efa7c0ee26c9233280c38a124ec5e5b514666aab97ce361"
+      },
+      {
+         "bytes" : 4468259,
+         "family" : "new-100k",
+         "full_byte_equal" : true,
+         "mode" : 320,
+         "path" : "compiler-reference-capture-comparison-2/images/04-new-100k-A2.image",
+         "sha256" : "42443b75fe211c9f9efa7c0ee26c9233280c38a124ec5e5b514666aab97ce361"
+      },
+      {
+         "bytes" : 4468259,
+         "family" : "new-100k",
+         "full_byte_equal" : true,
+         "mode" : 320,
+         "path" : "compiler-reference-capture-comparison-2/images/05-new-100k-A3.image",
+         "sha256" : "42443b75fe211c9f9efa7c0ee26c9233280c38a124ec5e5b514666aab97ce361"
+      },
+      {
+         "bytes" : 4468259,
+         "family" : "new-100k",
+         "full_byte_equal" : true,
+         "mode" : 320,
+         "path" : "compiler-reference-capture-comparison-2/images/06-new-100k-B3.image",
+         "sha256" : "42443b75fe211c9f9efa7c0ee26c9233280c38a124ec5e5b514666aab97ce361"
+      },
+      {
+         "bytes" : 21489004,
+         "family" : "compiler",
+         "full_byte_equal" : true,
+         "mode" : 320,
+         "path" : "compiler-reference-capture-comparison-2/images/07-compiler-A1.image",
+         "sha256" : "5ab411b7fb91498adc1453a08d96893f85c1d644a2e050b93b3e9dc850585597"
+      },
+      {
+         "bytes" : 21489004,
+         "family" : "compiler",
+         "full_byte_equal" : true,
+         "mode" : 320,
+         "path" : "compiler-reference-capture-comparison-2/images/08-compiler-B1.image",
+         "sha256" : "5ab411b7fb91498adc1453a08d96893f85c1d644a2e050b93b3e9dc850585597"
+      },
+      {
+         "bytes" : 21489004,
+         "family" : "compiler",
+         "full_byte_equal" : true,
+         "mode" : 320,
+         "path" : "compiler-reference-capture-comparison-2/images/09-compiler-B2.image",
+         "sha256" : "5ab411b7fb91498adc1453a08d96893f85c1d644a2e050b93b3e9dc850585597"
+      },
+      {
+         "bytes" : 21489004,
+         "family" : "compiler",
+         "full_byte_equal" : true,
+         "mode" : 320,
+         "path" : "compiler-reference-capture-comparison-2/images/10-compiler-A2.image",
+         "sha256" : "5ab411b7fb91498adc1453a08d96893f85c1d644a2e050b93b3e9dc850585597"
+      },
+      {
+         "bytes" : 21489004,
+         "family" : "compiler",
+         "full_byte_equal" : true,
+         "mode" : 320,
+         "path" : "compiler-reference-capture-comparison-2/images/11-compiler-A3.image",
+         "sha256" : "5ab411b7fb91498adc1453a08d96893f85c1d644a2e050b93b3e9dc850585597"
+      },
+      {
+         "bytes" : 21489004,
+         "family" : "compiler",
+         "full_byte_equal" : true,
+         "mode" : 320,
+         "path" : "compiler-reference-capture-comparison-2/images/12-compiler-B3.image",
+         "sha256" : "5ab411b7fb91498adc1453a08d96893f85c1d644a2e050b93b3e9dc850585597"
+      },
+      {
+         "bytes" : 21489004,
+         "family" : "compiler",
+         "full_byte_equal" : true,
+         "mode" : 493,
+         "path" : "compiler-reference-capture-comparison-2/outputs/compiler.image",
+         "sha256" : "5ab411b7fb91498adc1453a08d96893f85c1d644a2e050b93b3e9dc850585597"
+      },
+      {
+         "bytes" : 4468259,
+         "family" : "new-100k",
+         "full_byte_equal" : true,
+         "mode" : 493,
+         "path" : "compiler-reference-capture-comparison-2/outputs/new-100k.image",
+         "sha256" : "42443b75fe211c9f9efa7c0ee26c9233280c38a124ec5e5b514666aab97ce361"
+      }
+   ],
+   "schema" : "compiler-reference-capture-output-family-proof-2"
+}

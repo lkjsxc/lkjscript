@@ -1,0 +1,5 @@
+wall_s=1.44
+user_s=1.33
+system_s=0.08
+max_rss_kib=131484
+exit=0

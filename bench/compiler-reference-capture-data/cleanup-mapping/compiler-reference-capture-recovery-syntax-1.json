@@ -1,0 +1,26 @@
+{
+  "argv": [
+    "/usr/bin/python3",
+    "-c",
+    "import pathlib; p=pathlib.Path('/home/coder/workspace/lkjscript/target/compiler-reference-capture-recovery-proposal-1.py'); compile(p.read_bytes(), str(p), \"exec\")"
+  ],
+  "cwd": "/home/coder/workspace/lkjscript",
+  "end_ns": "1794855162010350606",
+  "end_utc": "2026-11-16T18:52:42.010353+00:00",
+  "helper_sha256": "2a3c936de43eea1a34b8a351744cc2ecbabef29c261d3db88a81a5bdeb005ea4",
+  "load_after": [
+    "0.90",
+    "1.36",
+    "1.96"
+  ],
+  "load_before": [
+    "0.90",
+    "1.36",
+    "1.96"
+  ],
+  "start_ns": "1794855161994727626",
+  "start_utc": "2026-11-16T18:52:41.994729+00:00",
+  "status": 0,
+  "stderr": "",
+  "stdout": ""
+}

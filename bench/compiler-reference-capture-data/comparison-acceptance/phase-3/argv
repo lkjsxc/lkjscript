@@ -1,0 +1,1 @@
+/usr/bin/time -f wall_s=%e\nuser_s=%U\nsystem_s=%S\nmax_rss_kib=%M\nexit=%x -o /home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-acceptance-2/phase-3/time /usr/bin/timeout --kill-after=10s 900s /usr/bin/prlimit --as=4294967296 -- /usr/bin/perl /home/coder/workspace/lkjscript/target/compiler-reference-capture-comparison-acceptance-2/audit-v3.pl
