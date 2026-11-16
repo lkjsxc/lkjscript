@@ -1,0 +1,10 @@
+{
+   "operations" : [
+      {
+         "id" : "store::cache_file",
+         "op" : "replace-item",
+         "source" : "/// Open an existing regular cache entry without creating or following a leaf.\n/// Missing, special and unreadable entries are disposable misses.\nfn cache_file(directory: &mut Directory, name: &str) -> Option<File> {\n    directory.open_regular(name).ok()\n}\n"
+      }
+   ],
+   "version" : 1
+}

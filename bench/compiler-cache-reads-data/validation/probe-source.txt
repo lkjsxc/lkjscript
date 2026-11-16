@@ -1,0 +1,40 @@
+mod diagnostic;
+mod ir;
+mod ir_binary;
+mod reuse;
+mod store;
+pub use std::sha256;
+use store::QueryAccess;
+fn main(mut world: World) {
+    let args = world.args();
+    assert!(args.len() == 3usize);
+    let mode = String::from_utf8(args[0].clone()).unwrap();
+    let directory = Some(String::from_utf8(args[1].clone()).unwrap());
+    let key_file = Some(String::from_utf8(args[2].clone()).unwrap());
+    let ordinary = sha256::hex_digest(b"cache read ordinary");
+    let identity = sha256::hex_digest(b"snapshot payload");
+    let page = sha256::hex_digest(b"page payload");
+    let selector = sha256::hex_digest(b"cache read selector");
+    if mode == "init" {
+        let mut cache = store::Store::open_bounded(&mut world, &directory, &key_file, 65536usize).unwrap();
+        cache.put("probe", &ordinary, b"ordinary payload");
+        cache.put("semantic-root", &identity, b"snapshot payload");
+        cache.put("semantic-page", &page, b"page payload");
+        assert!(cache.publish_query_locator(&identity, &selector, &page));
+        cache.finish();
+    } else if mode == "ordinary-hit" || mode == "ordinary-miss" {
+        let mut cache = store::Store::open_bounded(&mut world, &directory, &key_file, 65536usize).unwrap();
+        let value = cache.get("probe", &ordinary);
+        if mode == "ordinary-hit" { assert!(value.unwrap() == b"ordinary payload"[..].to_vec()); }
+        else { assert!(value.is_none()); }
+    } else if mode == "locator-miss" {
+        assert!(store::QueryReader::open(&mut world, &directory, &key_file, 65536usize, &identity, &selector).is_err());
+    } else {
+        let mut reader = store::QueryReader::open(&mut world, &directory, &key_file, 65536usize, &identity, &selector).unwrap();
+        assert!(reader.query_bound_root() == Some(page.clone()));
+        if mode == "root-hit" { assert!(reader.query_root(&identity).unwrap() == b"snapshot payload"[..].to_vec()); }
+        else if mode == "root-miss" { assert!(reader.query_root(&identity).is_none()); }
+        else if mode == "page-hit" { assert!(reader.query_page(&page).unwrap() == b"page payload"[..].to_vec()); }
+        else { assert!(mode == "page-miss" && reader.query_page(&page).is_none()); }
+    }
+}

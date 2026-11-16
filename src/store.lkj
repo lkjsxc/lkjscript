@@ -134,13 +134,12 @@ fn location(path: &str) -> (&str, &str) {
     }
 }
 
-// O_RDWR opens a FIFO without waiting for a peer; nonblocking reads then turn
-// hostile stream-like entries into misses. Read-only disposable entries may miss.
+/// Open an existing regular cache entry without creating or following a leaf.
+/// Missing, special and unreadable entries are disposable misses.
 fn cache_file(directory: &mut Directory, name: &str) -> Option<File> {
-    let mut file = directory.open_append(name).ok()?;
-    file.set_nonblocking(true).ok()?;
-    Some(file)
+    directory.open_regular(name).ok()
 }
+
 
 impl Store {
     /// Budget bookkeeping only, never authentication. Queries still verify each

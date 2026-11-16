@@ -1,0 +1,6 @@
+load_before=8.64 9.05 9.51
+started_ns=1794812880995887090
+argv= /home/coder/workspace/lkjscript-compiler-cache-reads-20261116/target/compiler-cache-reads-baseline build main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-cache-reads-20261116/target/compiler-cache-reads-observation.ZWqPda/source --no-library --inline-limit 0 --stats --store /home/coder/workspace/lkjscript-compiler-cache-reads-20261116/target/compiler-cache-reads-observation.ZWqPda/baseline-store --store-key /home/coder/workspace/lkjscript-compiler-cache-reads-20261116/target/compiler-cache-reads-observation.ZWqPda/key -o /home/coder/workspace/lkjscript-compiler-cache-reads-20261116/target/compiler-cache-reads-observation.ZWqPda/baseline-image
+status=0
+load_after=8.64 9.05 9.51
+ended_ns=1794812881468687148

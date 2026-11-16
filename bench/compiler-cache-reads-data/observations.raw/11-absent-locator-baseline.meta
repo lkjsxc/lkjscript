@@ -1,0 +1,6 @@
+load_before=8.64 9.05 9.51
+started_ns=1794812882684903393
+argv= /home/coder/workspace/lkjscript-compiler-cache-reads-20261116/target/compiler-cache-reads-baseline query main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-cache-reads-20261116/target/compiler-cache-reads-observation.ZWqPda/source --no-library --store /home/coder/workspace/lkjscript-compiler-cache-reads-20261116/target/compiler-cache-reads-observation.ZWqPda/missing-10 --store-key /home/coder/workspace/lkjscript-compiler-cache-reads-20261116/target/compiler-cache-reads-observation.ZWqPda/key --snapshot 0000000000000000000000000000000000000000000000000000000000000000 --kind meta --id crate
+status=1
+load_after=8.64 9.05 9.51
+ended_ns=1794812882686360765
