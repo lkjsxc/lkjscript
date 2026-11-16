@@ -1,0 +1,21 @@
+{
+  "version": 1,
+  "revision": null,
+  "src_tree": null,
+  "library_tree": null,
+  "runtime_blob": null,
+  "producer_sha256": null,
+  "producer_bytes": null,
+  "gate_revision": null,
+  "gate_producer_sha256": null,
+  "gate_evidence": [],
+  "factory_cwd": null,
+  "factory_argv": [],
+  "source_entry": "src/main.lkj",
+  "source_directory": null,
+  "source_grant": ".",
+  "library_dir": "library",
+  "runtime_source": "library/runtime.lkj",
+  "inline_limit": 64,
+  "questions_sha256": "417a4adfe357aab04915c5cdee3ebe2f691ee46ca2fb74663735e5d35a6e81e9"
+}
