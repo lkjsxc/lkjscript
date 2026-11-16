@@ -99,14 +99,18 @@ The smallest real contract mismatch is treating a generated semantic identity as
 
 The same parser expansion creates the generated Default impl and generated block/field-call expressions with defining spans, for named, tuple and unit structs. These are known related provenance cases. The pinned parser's only additional AST function/impl insertion beyond ordinary declarations is this Default expansion. Other built-in derived helpers inspected in `src/elaborate/derive_methods.lkj` are emitted as IR `$builtin:*` functions; that is not evidence that Clone has the same source-catalog defect. No production repair or replay retry was made in this campaign.
 
-## Durable evidence and retained fixture
+## Durable evidence and completed cleanup
 
 `compiler-strict-scoped.results.sha256` covers this report, the fixed preparation/pin/release records, all six original log sets, argument/cwd/grant records, timing and space tables, proof/file/archive/runtime/refusal tables, both auditors and their outputs, and the two text-only differences. The original `compiler-strict-recent.results.sha256` was reverified unchanged.
 
-All measured source archives, the copied producer, private key and store remain at this owned fixture for root's independent review:
+All measured source archives, the copied producer, private key and store were retained at this owned fixture for root's independent review:
 
 ```text
 /home/coder/workspace/lkjscript-compiler-strict-recent-20261116/target/compiler-strict-scoped.8wKkOL
 ```
 
-No compiler or audit job is active. Cleanup has not run. Only after the root accepts the evidence may the pre-reviewed guarded cleanup remove this fixture; the textual records remain. This report authorizes no further execution.
+Root accepted the evidence after independently rerunning both frozen auditors against the live fixture and comparing the proof/archive/runtime/refusal tables byte for byte. The accepted report SHA-256 was `7969415775e7531799de0214fec6cee726e94852793f0007d1ee1066b5f10704`; the accepted results-manifest SHA-256 was `fad8d739aea17d845abe02c3d5e1b20e7dd54df1131363df4d2c8612f857a21b`.
+
+Cleanup waited until the unrelated exclusive container timing campaign had drained. On 2026-11-16 at 09:37:02 UTC the pre-reviewed guarded cleanup removed only this fixture; absence was verified. Its before/after load observations were both 4.16 / 4.50 / 5.05. The copied compiler, private key, store and all case archives are gone. The cleanup records retain the actual result.
+
+All original observations, arguments, diagnostics, source-state digests and proof/audit records remain unchanged. Their fixture paths are historical. The full live archive audits preceded removal. No compiler or audit job is active, and this report authorizes no further execution.
