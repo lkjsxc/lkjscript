@@ -1,0 +1,36 @@
+{
+  "cancelled": false,
+  "capture_status": "complete",
+  "duration_ms": 14,
+  "exit_code": 2,
+  "finished": true,
+  "generation": "pipe-babgihcapgnfejaploakfkgdpjoefdme",
+  "request_id": "compiler-copy-sites-preflight-141-prototype-context-controls",
+  "signal": null,
+  "status": "done",
+  "stderr": "",
+  "stderr_capture_truncated": false,
+  "stderr_ref": {
+    "available": true,
+    "end_offset": 0,
+    "offset": 0,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-babgihcapgnfejaploakfkgdpjoefdme.stderr",
+    "total_bytes": 0
+  },
+  "stderr_truncated": false,
+  "stdout": "",
+  "stdout_capture_truncated": false,
+  "stdout_ref": {
+    "available": true,
+    "end_offset": 0,
+    "offset": 0,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-babgihcapgnfejaploakfkgdpjoefdme.stdout",
+    "total_bytes": 0
+  },
+  "stdout_truncated": false,
+  "stream_mode": "pipes",
+  "timed_out": false,
+  "tool": "exec_command",
+  "truncated": false,
+  "workdir": "/home/coder/workspace/lkjscript-compiler-scale-refusal-20261116"
+}

@@ -1,0 +1,6 @@
+supervisor_exit=1
+completed=false
+last_phase=preflight
+reason=release_preflight_failed
+finished_utc=2026-11-16T13:44:53Z
+run=/home/coder/workspace/lkjscript/target/compiler-copy-sites-run.20261116-1

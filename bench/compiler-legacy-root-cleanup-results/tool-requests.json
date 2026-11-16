@@ -1,0 +1,10 @@
+{
+   "absence_check" : "compiler-legacy-root-cleanup-postcheck-20261116-086",
+   "drain" : "compiler-legacy-root-cleanup-drain-20261116-083",
+   "invocation" : "compiler-legacy-root-cleanup-once-20261116-082",
+   "retained_bundle_check" : "compiler-legacy-root-cleanup-bundle-check-20261116-084",
+   "session" : "pipe-bjcdahpghcigenagkgajgbfbcahhopag",
+   "source_guard_commit" : "cd1a63435ee856a334fc08340b4748c987f4838b",
+   "source_manifest_sha256" : "436360a7987b8d34a015dede97589b60cd5b89ef565ee1bc8fd51e9e60945807",
+   "wrapper_preparation" : "compiler-legacy-root-cleanup-wrapper-20261116-081"
+}

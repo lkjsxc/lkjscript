@@ -1,0 +1,28 @@
+{
+   "absent_paths" : [
+      "/home/coder/workspace/lkjscript/target/compiler-origin-container-gate.uQZd6X",
+      "/home/coder/workspace/lkjscript/target/compiler-container-root-audit",
+      "/home/coder/workspace/lkjscript/target/compiler-generated-source-root-audit",
+      "/home/coder/workspace/lkjscript/target/compiler-strict-scoped-root-audit",
+      "/home/coder/workspace/lkjscript/target/compiler-current50-root-audit",
+      "/home/coder/workspace/lkjscript/target/compiler-strict-derived-root-audit",
+      "/home/coder/workspace/lkjscript/target/compiler-scale-refusal-root-audit"
+   ],
+   "bundle_commit" : "cd1a63435ee856a334fc08340b4748c987f4838b",
+   "compiler_executed" : false,
+   "deleted_directories" : 15,
+   "deleted_file_bytes" : 365876759,
+   "deleted_files" : 16365,
+   "disposable_cache_bytes" : 318819150,
+   "disposable_cache_content_archived" : false,
+   "disposable_cache_files" : 16049,
+   "elapsed_seconds" : 3.60540509223938,
+   "evidence_pin" : "f9e4581ae815ba041510d31421e6b588d66b4059",
+   "exit_status" : 0,
+   "finished_utc" : "2026-11-16T13:49:15Z",
+   "inventory_sha256" : "bda3ce9d26ec494ba97779315bd1d731cb35ecf97c326f80ce6e58d542d69b8e",
+   "private_key_read" : false,
+   "process_or_fd_observer" : false,
+   "started_utc" : "2026-11-16T13:49:12Z",
+   "state" : "complete"
+}

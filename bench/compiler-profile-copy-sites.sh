@@ -83,7 +83,11 @@ perl - "$repository" "$script" "$release" "$evidence" > "$evidence/preflight.jso
 use strict; use warnings;
 use JSON::PP (); use Digest::SHA (); use Cwd qw(abs_path);
 my ($repo,$script,$release,$out)=@ARGV;
-sub die_if { die "$_[1]\n" if $_[0]; }
+sub die_if ($$) {
+    die "E_COPY_RELEASE_GUARD expected condition and message\n"
+        unless @_ == 2 && defined($_[1]);
+    die "$_[1]\n" if $_[0];
+}
 sub raw {
     my ($p)=@_; my @s=lstat($p);
     die_if(!@s || !-f _ || -l _ || $s[3]!=1,"not a single-link regular file: $p");

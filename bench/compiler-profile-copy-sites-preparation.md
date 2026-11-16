@@ -1,12 +1,14 @@
 # Copy-site measurement preparation and review
 
-The prospective fixed-witness cohort has not run. Root reviewed the complete
-launcher and accounting helper, including the helper's final decimal-string
-correction, before installing these bench files. The future invocation still
-requires an exact committed release binding the passed source gate, fixed point,
-seed and inspected CI. Preparation changes no compiler or optimizer policy.
+This records the initial preparation committed at 6fc9099c. Root reviewed the
+complete launcher and accounting helper, including the helper's decimal-string
+correction, before installing those bench files. The later first invocation
+stopped in preflight before any compiler phase, as recorded in the
+[cohort-1 refusal](compiler-profile-copy-sites-cohort-1-refusal.md). Its narrowly
+corrected launcher still requires a distinct exact committed release. Neither
+preparation nor that correction changes compiler or optimizer policy.
 
-## Frozen preparation
+## Initial frozen preparation at 6fc9099c
 
 | File | SHA-256 |
 | --- | --- |
@@ -79,3 +81,16 @@ rerun to correct that offline count assumption.
 
 There is no new compiler construction, attribution measurement, speedup,
 optimization eligibility result or Rust-O comparison in this preparation.
+
+## Subsequent launcher correction
+
+The original launcher hash in the table identifies the initially reviewed
+snapshot, retained verbatim as
+[launcher.sh](compiler-profile-copy-sites-cohort-1-refusal-data/launcher.sh).
+The first runtime preflight exposed a Perl list-context defect that syntax
+checking did not detect. The current launcher is
+`abf52e1d5f22370a999e6e7765c4b28fe34671ff16430aa93da8d7112fd71bd6`:
+only its predicate helper gains a two-scalar prototype and explicit arity
+validation. The refusal report retains the original preparation manifest,
+all diagnostics, twelve pure controls and the single corrected read-only
+preflight. No workload phase was rerun or repaired within cohort 1.

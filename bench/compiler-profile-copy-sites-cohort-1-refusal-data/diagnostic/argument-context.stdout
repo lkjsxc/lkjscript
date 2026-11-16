@@ -1,0 +1,8 @@
+{"case":"release-relative","expected_unsafe":false,"fixed_arity":2,"fixed_unsafe":false,"original_arguments":["unsafe relative path"],"original_arity":1}
+{"case":"ordinary-relative","expected_unsafe":false,"fixed_arity":2,"fixed_unsafe":false,"original_arguments":["unsafe relative path"],"original_arity":1}
+{"case":"absolute","expected_unsafe":true,"fixed_arity":2,"fixed_unsafe":true,"original_arguments":[true,"unsafe relative path"],"original_arity":2}
+{"case":"parent","expected_unsafe":true,"fixed_arity":2,"fixed_unsafe":true,"original_arguments":[true,"unsafe relative path"],"original_arity":2}
+{"case":"inner-parent","expected_unsafe":true,"fixed_arity":2,"fixed_unsafe":true,"original_arguments":[true,"unsafe relative path"],"original_arity":2}
+{"case":"empty","expected_unsafe":true,"fixed_arity":2,"fixed_unsafe":true,"original_arguments":[true,"unsafe relative path"],"original_arity":2}
+{"case":"undefined","expected_unsafe":true,"fixed_arity":2,"fixed_unsafe":true,"original_arguments":[true,"unsafe relative path"],"original_arity":2}
+{"case":"reference","expected_unsafe":true,"fixed_arity":2,"fixed_unsafe":true,"original_arguments":["HASH","unsafe relative path"],"original_arity":2}

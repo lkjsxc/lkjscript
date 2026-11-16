@@ -1,0 +1,10 @@
+{
+  "scope": "candidate generation only; original launcher and cohort untouched",
+  "request_id": "compiler-copy-sites-preflight-141-prototype-context-controls",
+  "exit_code": 2,
+  "reason": "JavaScript replacement-string semantics converted the intended $$ prototype into $. Bash syntax passed; Perl syntax refused the single-scalar prototype before controls or fixed preflight invocation.",
+  "preserved_candidate": "compiler-profile-copy-sites.prototype-fix.sh",
+  "preserved_preflight": "preflight.prototype-fix.pl",
+  "preserved_stderr": "preflight-prototype-syntax.stderr",
+  "correction": "Use a literal replacement callback and retain the corrected candidate separately as v2."
+}

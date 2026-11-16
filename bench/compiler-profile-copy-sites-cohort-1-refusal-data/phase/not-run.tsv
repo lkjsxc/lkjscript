@@ -1,0 +1,7 @@
+01-construct-ordinary	not_run	release_preflight_failed
+02-construct-profile	not_run	release_preflight_failed
+03-execute-ordinary	not_run	release_preflight_failed
+04-execute-profile	not_run	release_preflight_failed
+05-summary	not_run	release_preflight_failed
+06-copy-detail	not_run	release_preflight_failed
+07-accounting	not_run	release_preflight_failed

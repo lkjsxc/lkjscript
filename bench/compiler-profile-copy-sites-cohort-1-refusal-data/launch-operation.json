@@ -1,0 +1,36 @@
+{
+  "cancelled": false,
+  "capture_status": "complete",
+  "duration_ms": 39,
+  "exit_code": 1,
+  "finished": true,
+  "generation": "pipe-gfcnnbabbnhkeogeiobkmhlobielikcm",
+  "request_id": "compiler-copy-sites-fixed-witness-20261116-once",
+  "signal": null,
+  "status": "done",
+  "stderr": "E_COPY_STOP release_preflight_failed\n",
+  "stderr_capture_truncated": false,
+  "stderr_ref": {
+    "available": true,
+    "end_offset": 37,
+    "offset": 37,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-gfcnnbabbnhkeogeiobkmhlobielikcm.stderr",
+    "total_bytes": 37
+  },
+  "stderr_truncated": false,
+  "stdout": "completed=false status=1 phase=preflight evidence=/home/coder/workspace/lkjscript/target/compiler-copy-sites-evidence.20261116-1\n",
+  "stdout_capture_truncated": false,
+  "stdout_ref": {
+    "available": true,
+    "end_offset": 129,
+    "offset": 129,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-gfcnnbabbnhkeogeiobkmhlobielikcm.stdout",
+    "total_bytes": 129
+  },
+  "stdout_truncated": false,
+  "stream_mode": "pipes",
+  "timed_out": false,
+  "tool": "exec_command",
+  "truncated": false,
+  "workdir": "/home/coder/workspace/lkjscript"
+}

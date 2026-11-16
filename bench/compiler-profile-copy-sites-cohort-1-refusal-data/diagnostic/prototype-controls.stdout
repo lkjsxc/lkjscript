@@ -1,0 +1,12 @@
+{"case":"release-relative","diagnostic":null,"status":"accepted"}
+{"case":"ordinary-relative","diagnostic":null,"status":"accepted"}
+{"case":"absolute","diagnostic":"unsafe relative path\n","status":"refused"}
+{"case":"parent","diagnostic":"unsafe relative path\n","status":"refused"}
+{"case":"inner-parent","diagnostic":"unsafe relative path\n","status":"refused"}
+{"case":"empty","diagnostic":"unsafe relative path\n","status":"refused"}
+{"case":"undefined","diagnostic":"unsafe relative path\n","status":"refused"}
+{"case":"reference","diagnostic":"unsafe relative path\n","status":"refused"}
+{"case":"missing-message","diagnostic":"E_COPY_RELEASE_GUARD expected condition and message\n","status":"refused"}
+{"case":"undefined-message","diagnostic":"E_COPY_RELEASE_GUARD expected condition and message\n","status":"refused"}
+{"case":"extra-argument","diagnostic":"E_COPY_RELEASE_GUARD expected condition and message\n","status":"refused"}
+{"case":"direct-false-match","status":"accepted"}

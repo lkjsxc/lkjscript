@@ -1,0 +1,11 @@
+Too many arguments for main::die_if at target/compiler-copy-sites-preflight-diagnostic.kGyrqc/preflight.prototype-fix.pl line 11, near ""not a single-link regular file: $p")"
+Too many arguments for main::die_if at target/compiler-copy-sites-preflight-diagnostic.kGyrqc/preflight.prototype-fix.pl line 16, near ""not an admissible regular file: $p")"
+Too many arguments for main::die_if at target/compiler-copy-sites-preflight-diagnostic.kGyrqc/preflight.prototype-fix.pl line 24, near ""invalid sha256")"
+Too many arguments for main::die_if at target/compiler-copy-sites-preflight-diagnostic.kGyrqc/preflight.prototype-fix.pl line 25, near ""invalid commit/tree")"
+Too many arguments for main::die_if at target/compiler-copy-sites-preflight-diagnostic.kGyrqc/preflight.prototype-fix.pl line 29, near ""unsafe relative path")"
+Too many arguments for main::die_if at target/compiler-copy-sites-preflight-diagnostic.kGyrqc/preflight.prototype-fix.pl line 33, near ""expected object")"
+Too many arguments for main::die_if at target/compiler-copy-sites-preflight-diagnostic.kGyrqc/preflight.prototype-fix.pl line 35, near ""unknown release field")"
+Too many arguments for main::die_if at target/compiler-copy-sites-preflight-diagnostic.kGyrqc/preflight.prototype-fix.pl line 36, near ""missing release field")"
+Too many arguments for main::die_if at target/compiler-copy-sites-preflight-diagnostic.kGyrqc/preflight.prototype-fix.pl line 40, near ""working file hash differs: $path")"
+Too many arguments for main::die_if at target/compiler-copy-sites-preflight-diagnostic.kGyrqc/preflight.prototype-fix.pl line 42, near ""committed bytes differ: $path")"
+target/compiler-copy-sites-preflight-diagnostic.kGyrqc/preflight.prototype-fix.pl has too many errors.
