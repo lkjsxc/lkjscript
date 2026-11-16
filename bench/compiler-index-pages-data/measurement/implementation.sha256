@@ -1,0 +1,6 @@
+e611f712c5161b011721150c0e80f76bcbef0c09b2e1a87e4e22cefb2898ad80  bench/compiler-index-pages-plan.md
+daabfc4e68d45bbbdea639183cf87ac5010a20a54887a285250923ca4cd7e0a0  bench/compiler-index-pages.sh
+badbe880a611fc5a9d5466e673e1da896f5860277875d5f04e371ccfab638841  bench/compiler-index-pages-compare.pl
+f192a668df918f4b9ad3dde62d53db19615d0ce4aacae4191c08c25deaf3d740  bench/compiler-index-pages-census.pl
+e42653608f957721a9a33b80e3683ac494563790a059c27fb0032ed0bbc7693a  tools/semantic-index-page-test.sh
+6e8fe0882e0a3cebb8a480be9231bc0f1393f67d053c9f04a05402f27d304b34  src/semantic_store.lkj

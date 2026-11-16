@@ -1,0 +1,10 @@
+"edit::target"	level=protocol	fact=query	version=2 producer=71b2fc066cd74e9e37cb3134173903c9b322b83472b9293f1a49df7c1d18f3b7 validation=authenticated-producing-compiler current-check=not-performed snapshot=9b72ecaed52cc8a1b722b857abcc21cd89c2637b2701ea829e7e17c8e7ebd323 source=e4870a4a95cdf7e36ab37c472cf444f595877aa5cc0371cf051b0a901777192d checked-ir=5860f4cb694e098996d8cfa730ed44869e972f398f5f4a0d3a3251fa2558337e kind=callers depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
+"m0::d1::f0"	level=checked-ir	fact=callers	caller-instance="ir:m0::d1::f0" callee-instance="ir:edit::target" mapping=source-claim cleanup=false
+"m0::d1::f1"	level=checked-ir	fact=callers	caller-instance="ir:m0::d1::f1" callee-instance="ir:edit::target" mapping=source-claim cleanup=false
+"m0::d1::f2"	level=checked-ir	fact=callers	caller-instance="ir:m0::d1::f2" callee-instance="ir:edit::target" mapping=source-claim cleanup=false
+"m0::d1::f3"	level=checked-ir	fact=callers	caller-instance="ir:m0::d1::f3" callee-instance="ir:edit::target" mapping=source-claim cleanup=false
+"m0::d1::f4"	level=checked-ir	fact=callers	caller-instance="ir:m0::d1::f4" callee-instance="ir:edit::target" mapping=source-claim cleanup=false
+"m0::d1::f5"	level=checked-ir	fact=callers	caller-instance="ir:m0::d1::f5" callee-instance="ir:edit::target" mapping=source-claim cleanup=false
+"m0::d1::f6"	level=checked-ir	fact=callers	caller-instance="ir:m0::d1::f6" callee-instance="ir:edit::target" mapping=source-claim cleanup=false
+"m0::d1::f7"	level=checked-ir	fact=callers	caller-instance="ir:m0::d1::f7" callee-instance="ir:edit::target" mapping=source-claim cleanup=false
+"edit::target"	level=protocol	fact=continuation	cursor=none facts=8 pages-read=5 traversal-steps=9

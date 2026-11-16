@@ -1,0 +1,51 @@
+{
+   "files" : 6902,
+   "header_bytes_read" : 621090,
+   "header_manifest_sha256" : "39d7f0db6b7a47fd0dcafd939310de8322ee6088beebdf6f4aa5baafb7d70e53",
+   "measurement" : "post-build file sizes and first 90 bytes; no authentication claim",
+   "namespaces" : {
+      "budget-index" : {
+         "declared_payload_bytes" : 1593966,
+         "files" : 1,
+         "framed_envelopes" : 1,
+         "header_bytes_read" : 90,
+         "stored_bytes" : 1594056
+      },
+      "other" : {
+         "declared_payload_bytes" : 2704116,
+         "files" : 8,
+         "framed_envelopes" : 7,
+         "header_bytes_read" : 630,
+         "stored_bytes" : 2704746
+      },
+      "semantic-latest" : {
+         "declared_payload_bytes" : 376,
+         "files" : 1,
+         "framed_envelopes" : 1,
+         "header_bytes_read" : 90,
+         "stored_bytes" : 466
+      },
+      "semantic-locator" : {
+         "declared_payload_bytes" : 104,
+         "files" : 1,
+         "framed_envelopes" : 1,
+         "header_bytes_read" : 90,
+         "stored_bytes" : 194
+      },
+      "semantic-page" : {
+         "declared_payload_bytes" : 81701336,
+         "files" : 6890,
+         "framed_envelopes" : 6890,
+         "header_bytes_read" : 620100,
+         "stored_bytes" : 82321436
+      },
+      "semantic-root" : {
+         "declared_payload_bytes" : 376,
+         "files" : 1,
+         "framed_envelopes" : 1,
+         "header_bytes_read" : 90,
+         "stored_bytes" : 466
+      }
+   },
+   "stored_bytes" : 86621364
+}

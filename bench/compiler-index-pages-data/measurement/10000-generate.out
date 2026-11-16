@@ -1,0 +1,14 @@
+seed 20261116
+lines 10000
+source_bytes 384223
+files 12
+functions 384
+generic_functions 17
+call_sites 4973
+nominal_types 14
+nominal_fields 24
+nominal_variants 19
+nominal_edges 10
+tail_constants 0
+edit_identity edit::target
+signature_direct_dependents 8

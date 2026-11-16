@@ -1,0 +1,2 @@
+Use of uninitialized value $maximum_depth in numeric gt (>) at bench/compiler-index-pages-compare.pl line 46.
+Use of uninitialized value $maximum_depth in numeric gt (>) at bench/compiler-index-pages-compare.pl line 46.

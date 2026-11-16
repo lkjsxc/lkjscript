@@ -1,0 +1,2 @@
+/home/coder/workspace/lkjscript-compiler-index-pages-20261116/target/compiler-index-page-oracle.L30VVI/src/compiler_index_page_main.lkj:1:1: E_TYPE unsized text cannot be an owned or collection element (type Vec<t1129>)
+/home/coder/workspace/lkjscript-compiler-index-pages-20261116/target/compiler-index-page-oracle.L30VVI/src/compiler_index_page_main.lkj:1:1: E_BLOCKED remaining semantic analysis: failed bodies are blocked; independent typed bodies were constructed and checked

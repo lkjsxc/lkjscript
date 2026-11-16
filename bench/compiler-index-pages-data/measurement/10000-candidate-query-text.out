@@ -1,0 +1,3 @@
+"edit::target"	level=protocol	fact=query	version=2 producer=40464dda053795b93dbba1af93e41633b915b2b625b0007a7b95ec4d22f0f200 validation=authenticated-producing-compiler current-check=not-performed snapshot=b53b59810ef70c8d912221d7261cbe4038a4000b77c7717851f46b68d04cdd33 source=19e56a299fe3bc7bd863f42b682e7155442cf5e66f3fa4777c2d229e2afd1761 checked-ir=2449c4d3f621d1045f33d28aebde48dcd556378135354023548d0fd5b6cc1021 kind=text depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
+"edit::target"	level=source-claim	fact=text	chunk=0000000000000000 value="pub fn target(value: u64) -> u64 {\u000avalue ^ 1u64\u000a}"
+"edit::target"	level=protocol	fact=continuation	cursor=none facts=1 pages-read=4 traversal-steps=2

@@ -1,0 +1,2 @@
+/home/coder/workspace/lkjscript-compiler-index-pages-20261116/target/compiler-index-page-oracle.gYMKmj/src/semantic_store.lkj:388:22: E_BORROW reply conflicts with shared borrow held by $ (created at 385:20)
+/home/coder/workspace/lkjscript-compiler-index-pages-20261116/target/compiler-index-page-oracle.gYMKmj/src/compiler_index_page_main.lkj:1:1: E_BLOCKED remaining semantic analysis: each invalid IR body stops at its diagnostic; no artifact is produced

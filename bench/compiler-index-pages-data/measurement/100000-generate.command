@@ -1,0 +1,1 @@
+/home/coder/workspace/lkjscript-compiler-index-pages-20261116/target/compiler-index-pages-run.D4yDIv/generator generate /home/coder/workspace/lkjscript-compiler-index-pages-20261116/target/compiler-index-pages-run.D4yDIv/source-100000 100000 20261116 

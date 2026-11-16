@@ -1,0 +1,5 @@
+# Retained evidence
+
+These are byte-for-byte copies of the operation, fixture setup and declared measurement outputs. No compiler executable, generated tree, authenticated store or private key is committed here. `measurement/*.command` is the original `printf '%q '` argv capture and deliberately retains its final separator space; it is evidence, not executable source. The corresponding `*.meta`, `*.time`, stdout/stderr and protocol pins record each observation. Empty output files are retained.
+
+`operation/` contains the exact three-operation request, the monitored source manifests before and after publication, and its successful result. `setup/` preserves all three refused oracle preparations, the successful fourth oracle, and the candidate build. `measurement/` preserves the sole fixed 10k/100k sequence, the complete per-producer query outputs and post-build representation census. The external fixture paths are historical locators; owned fixtures and keys are removed after report acceptance.
