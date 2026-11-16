@@ -1,0 +1,7 @@
+queries=50 raw_status_zero=50 first_time_original_query_files=0
+under_100ms=50 min_ns=2729156 median_ns=4461788 max_ns=60812180
+load_before=1.88,1.50,2.19 load_after=2.13,1.56,2.21
+all_reply_bytes=233757 owner_reply_bytes=42230 all_facts=844
+slice_median_bytes=3738 continuation_ordinals=8,36,41,43
+pause_ns=779069631557
+source_inventory=1860 canonical_images=3 bytes_each=32196802 producer_bytes_hashed_each=0

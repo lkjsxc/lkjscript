@@ -1,0 +1,9 @@
+6dd0e65b2def7430d0406969d9e05f79106637c7a43d555f8751d45ddff2aa2d  bench/compiler-query-current.acceptance.md
+c0cca141dbf2afb3b1383775bce173e7cf2809e8d339e3f982081014d1094f8c  bench/compiler-query-current-root-audit.pl
+1fc79b0ad0966aa5cca86c6d0cd4c97b066d5a5f3de8bd724adcfeee24bcf3cd  bench/compiler-query-current-root-audit-data/command.txt
+f46592d6ffe7ee00ce4367bd28a7283f2080fc5cd1e82c10973bb8b6cc78be61  bench/compiler-query-current-root-audit-data/load-after
+2ab9aac88cadee34257e1923840656c1b44ee475057be96a545afd74daca154a  bench/compiler-query-current-root-audit-data/load-before
+9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa  bench/compiler-query-current-root-audit-data/status
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  bench/compiler-query-current-root-audit-data/stderr
+ec1704cfcc4b99804e5121c68924b9bbee4f5da48bd2fc6948ea917bb0a0a119  bench/compiler-query-current-root-audit-data/stdout
+25e4044f791d99a33560abeb97ca56dd3e76f8a219c8cb002573ad75187e9127  bench/compiler-query-current-root-audit-data/time

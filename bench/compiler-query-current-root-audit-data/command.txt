@@ -1,0 +1,6 @@
+Retrospective exact argv transcription from gateway compiler-v1096-independent-current50-raw-audit; no command was rerun.
+Working directory: /home/coder/workspace/lkjscript
+Stdout: target/compiler-current50-root-audit/stdout
+Stderr: target/compiler-current50-root-audit/stderr
+/usr/bin/time -f 'wall_s=%e user_s=%U system_s=%S peak_rss_kib=%M exit=%x' -o target/compiler-current50-root-audit/time prlimit --as=4294967296 -- timeout --kill-after=10s 900s perl bench/compiler-query-current-root-audit.pl /home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-continuation-62fa76f4 /home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-62fa76f4 bench/compiler-query-current-questions.tsv /home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-query-current-run.TDPm4g bench/compiler-origin-container-integration-data/source-inventory.sha256
+The surrounding shell captured /proc/loadavg before and after, saved the actual command status, and did not replace a failed observation.
