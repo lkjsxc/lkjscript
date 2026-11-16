@@ -1,0 +1,6 @@
+compiler-copy-sites-candidate files=10 directories=3 bytes=219718 compressed_bytes=42213 members=exact sha256=all_match live_metadata=unchanged archive_owner=0:0 archive_mtime=0
+compiler-copy-sites-candidate-v2 files=4 directories=3 bytes=53083 compressed_bytes=11153 members=exact sha256=all_match live_metadata=unchanged archive_owner=0:0 archive_mtime=0
+compiler-copy-sites-role-fixture-candidate files=8 directories=1 bytes=22749 compressed_bytes=5893 members=exact sha256=all_match live_metadata=unchanged archive_owner=0:0 archive_mtime=0
+compiler-copy-sites-candidate/manifest.sha256 entries=9 full_nonself_coverage=yes
+compiler-copy-sites-candidate-v2/manifest.sha256 entries=3 full_nonself_coverage=yes
+compiler-copy-sites-role-fixture-candidate/manifest.sha256 entries=7 full_nonself_coverage=yes

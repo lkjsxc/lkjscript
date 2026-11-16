@@ -1,0 +1,6 @@
+116	7	src/driver.lkj
+132	12	src/native.lkj
+158	10	src/native/cache.lkj
+5	5	src/native/intrinsics.lkj
+539	61	src/native/profiling.lkj
+158	3	src/x86.lkj

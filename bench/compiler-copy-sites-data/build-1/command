@@ -1,0 +1,1 @@
+/usr/bin/prlimit --as=4294967296 -- /usr/bin/timeout --kill-after=10s 900s /home/coder/workspace/lkjscript/target/compiler-origin-container-gate.uQZd6X/canonical build src/main.lkj --library-dir library --runtime-source library/runtime.lkj --inline-limit 64 --no-store --stats -o target/compiler-copy-sites-integration-evidence/compiler 

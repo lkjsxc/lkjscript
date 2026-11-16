@@ -1,0 +1,5 @@
+SSE active requests=100 baseline_ns=7884724 with_idle_ns=7462080 peers=20 idle=10; proof load 3.16 2.76 2.24 1/5710 1496786 -> 3.16 2.76 2.24 1/5710 1497238
+SSE note push_ns=94426938 peers=20; proof load 3.16 2.76 2.24 1/5710 1496786 -> 3.16 2.76 2.24 1/5710 1497238
+ok SSE note/owner delivery, exact cursor replay, duplicate-free valid reconnect and explicit reset; proof load 3.16 2.76 2.24 1/5710 1496786 -> 3.16 2.76 2.24 1/5710 1497238
+Desk event service RSS: 856 KiB
+ok desk events suite: 2803 ms; load 3.26 2.77 2.25 2/5710 1496651 -> 3.16 2.76 2.24 1/5709 1497243; peers 20

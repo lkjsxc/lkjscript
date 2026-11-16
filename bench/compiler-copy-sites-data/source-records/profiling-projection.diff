@@ -1,0 +1,108 @@
+diff --git a/target/compiler-copy-sites-integrated/src/native/profiling.lkj b/src/native/profiling.lkj
+index 96168a6b..2e676e75 100644
+--- a/target/compiler-copy-sites-integrated/src/native/profiling.lkj
++++ b/src/native/profiling.lkj
+@@ -5,6 +5,7 @@ use crate::x86::*;
+ use std::collections::BTreeMap;
+ 
+ const HEADER: usize = 160;
++
+ const COPY_ROW: usize = 72;
+ const ROW: usize = 64;
+ const PERIOD_US: u64 = 1000;
+@@ -406,13 +407,16 @@ fn word(bytes: &mut Vec<u8>, value: u64) {
+         bytes.push((value >> (i * 8)) as u8);
+     }
+ }
++
+ fn profile_problem(message: &str) -> crate::diagnostic::Diagnostic {
+     crate::diagnostic::Diagnostic::new(crate::ast::Span::default(), "E_EMIT", message)
+ }
++
+ fn extent(start: usize, count: usize, width: usize, length: usize) -> Option<usize> {
+     if width == 0 || start > length || count > (length - start) / width { None }
+     else { Some(start + count * width) }
+ }
++
+ fn copy_matches(program: &crate::ir::Program, layouts: &super::layout::Layouts, site: &CopySite) -> bool {
+     if site.function >= program.functions.len() || site.ty >= program.types.len()
+         || site.width == 0 || !valid_copy_tags(site.tags) { return false; }
+@@ -644,6 +648,7 @@ fn display_name(name: &str) -> String {
+     }
+     result
+ }
++
+ struct Profile {
+     names: Vec<String>,
+     self_counts: Vec<u64>,
+@@ -658,6 +663,7 @@ struct Profile {
+     unmapped: u64,
+     in_flight: u64,
+ }
++
+ fn sample_copy(bytes: &[u8], at: usize) -> CopySite {
+     CopySite {
+         start: get(bytes, at) as usize, end: get(bytes, at + 8) as usize,
+@@ -666,6 +672,7 @@ fn sample_copy(bytes: &[u8], at: usize) -> CopySite {
+         width: get(bytes, at + 56), tags: get(bytes, at + 64),
+     }
+ }
++
+ fn parse_profile(bytes: &[u8]) -> Result<Profile, String> {
+     let invalid = "E_PROFILE invalid or incomplete samples file";
+     if bytes.len() < HEADER || &bytes[..8] != b"LKJPROF4" || get(bytes, 16) != PERIOD_US * 1000
+@@ -831,6 +838,7 @@ pub fn report(bytes: &[u8]) -> Result<String, String> {
+     }
+     Ok(out)
+ }
++
+ fn quote_bound(text: &str, limit: usize) -> Result<String, String> {
+     let mut out = "\"".to_string();
+     let hex = b"0123456789abcdef";
+@@ -855,6 +863,7 @@ fn quote_bound(text: &str, limit: usize) -> Result<String, String> {
+     if out.len() > limit { return Err("E_PROFILE_BOUND a complete detail row exceeds --bytes".to_string()); }
+     Ok(out)
+ }
++
+ fn copy_role(role: u64) -> &'static str {
+     if role == COPY_ROLE_LOCAL { return "local"; }
+     if role == COPY_ROLE_PLACE { return "typed-place"; }
+@@ -871,6 +880,7 @@ fn copy_role(role: u64) -> &'static str {
+     if role == COPY_ROLE_VIEW_HEADER { return "view-header"; }
+     "invalid"
+ }
++
+ fn copy_line(
+     site: &CopySite, samples: u64, symbol: usize, program: &crate::ir::Program, max_bytes: usize,
+ ) -> Result<String, String> {
+@@ -891,9 +901,11 @@ fn copy_line(
+     if out.len() > max_bytes { return Err("E_PROFILE_BOUND a complete detail row exceeds --bytes".to_string()); }
+     Ok(out)
+ }
++
+ fn copy_cursor(profile: &str, companion: &str, next: usize) -> String {
+     format!("4:{profile}:{companion}:{next}")
+ }
++
+ fn copy_position(cursor: Option<&str>, profile: &str, companion: &str, count: usize) -> Result<usize, String> {
+     let Some(cursor) = cursor else { return Ok(0); };
+     let invalid = "E_PROFILE_CURSOR continuation does not select these exact profile and IR bytes";
+@@ -910,15 +922,18 @@ fn copy_position(cursor: Option<&str>, profile: &str, companion: &str, count: us
+     if value > count || format!("{value}") != ordinal { return Err(invalid.to_string()); }
+     Ok(value)
+ }
++
+ fn copy_continuation(profile: &str, companion: &str, next: usize, count: usize, rows: usize) -> String {
+     let cursor = if next == count { "none".to_string() } else { copy_cursor(profile, companion, next) };
+     format!("continuation cursor={cursor} rows={rows} next={next} total-sites={count}\n")
+ }
++
+ fn fits(first: usize, second: usize, third: usize, limit: usize) -> bool {
+     let Some(size) = first.checked_add(second) else { return false; };
+     let Some(size) = size.checked_add(third) else { return false; };
+     size <= limit
+ }
++
+ pub fn copy_report(
+     bytes: &[u8], companion: &[u8], limit: usize, max_bytes: usize, cursor: Option<&str>,
+ ) -> Result<String, String> {

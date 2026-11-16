@@ -1,0 +1,9 @@
+/home/coder/workspace/lkjscript/target/compiler-copy-sites-integrated/src/x86.lkj:89:10: E_TYPE pattern requires the scrutinee's struct declaration
+/home/coder/workspace/lkjscript/target/compiler-copy-sites-integrated/src/native/profiling.lkj:513:5: E_TRAIT owned-array iteration requires an IntoIterator implementation; help: iterate by index, or use vec![elements] for owned literal elements (docs/language.md, Source library)
+LKJSCRIPT_EDITS {"version":1,"path":"/home/coder/workspace/lkjscript/target/compiler-copy-sites-integrated/src/native/profiling.lkj","code":"E_TRAIT","edits":[{"start":16399,"end":16399,"replacement":"vec!"}]}
+/home/coder/workspace/lkjscript/target/compiler-copy-sites-integrated/src/native/profiling.lkj:863:9: E_TYPE pattern requires the scrutinee's struct declaration
+/home/coder/workspace/lkjscript/target/compiler-copy-sites-integrated/src/native/profiling.lkj:882:89: E_UNSUPPORTED method to_string on usize has 0 applicable implementations; help: use an implemented method or write an explicit loop
+/home/coder/workspace/lkjscript/target/compiler-copy-sites-integrated/src/native/profiling.lkj:915:25: E_UNSUPPORTED method to_string on usize has 0 applicable implementations; help: use an implemented method or write an explicit loop
+/home/coder/workspace/lkjscript/target/compiler-copy-sites-integrated/src/native/cache.lkj:425:5: E_TRAIT owned-array iteration requires an IntoIterator implementation; help: iterate by index, or use vec![elements] for owned literal elements (docs/language.md, Source library)
+LKJSCRIPT_EDITS {"version":1,"path":"/home/coder/workspace/lkjscript/target/compiler-copy-sites-integrated/src/native/cache.lkj","code":"E_TRAIT","edits":[{"start":15880,"end":15880,"replacement":"vec!"}]}
+src/main.lkj:1:1: E_BLOCKED remaining semantic analysis: failed bodies are blocked; independent typed bodies were constructed and checked

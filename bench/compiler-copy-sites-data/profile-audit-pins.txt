@@ -1,0 +1,8 @@
+bd2bdedbbfeebaf64eb9369dd6b077ad0176a42e64a914a17b97b2d0f0b837a9  tools/profile-test.sh
+45e4407fd3510edfa7e943c1f4c26bce670b2ca181d86435f836fb599dce8ee6  target/compiler-copy-sites-integration-evidence/profile-regressions-1/stderr
+409fd4b3acc8f2664809831782c3a9b46127b535198a64fa0b33797757127729  target/compiler-copy-sites-integration-evidence/profile-regressions-1/stdout
+cc0645c57e90b60ac781207dedc39db295e3e26c5820aee0086556bfe01de0ec  target/compiler-copy-sites-integration-evidence/profile-regressions-1/command
+4a745ec4e5cf3b4fbef3648ee53d6474819df119ffe3906ce687568998883fa4  target/compiler-copy-sites-integration-evidence/profile-regressions-1/time
+df7aed663bd3721f787091e5b8b136f006ee94e33f83fab33430d8c97622612a  target/compiler-copy-sites-integration-evidence/profile-regressions-1/load.before
+68af50206876b7bd58e70d724195100ec5e63bc5e1fb60be587d9067f3120e22  target/compiler-copy-sites-integration-evidence/profile-regressions-1/load.after
+target/compiler-copy-sites-integration-evidence/compiler 32584542

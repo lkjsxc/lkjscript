@@ -1,0 +1,482 @@
++ set -eu
++ dirname tools/profile-test.sh
++ cd tools/..
++ compiler=/home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler
++ mktemp -d target/profile-test.XXXXXX
++ profile_test=target/profile-test.pVDI6z
++ profile_key_directory=
++ trap chmod u+w "$profile_test/publish-stage/blocked" 2>/dev/null || :; rm -rf "$profile_test"; if [ -n "$profile_key_directory" ]; then rm -rf "$profile_key_directory"; fi EXIT HUP INT TERM
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler build tests/fixtures/profile.lkj -o target/profile-test.pVDI6z/plain
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler build tests/fixtures/profile.lkj --profile -o target/profile-test.pVDI6z/sampled
++ target/profile-test.pVDI6z/plain
++ target/profile-test.pVDI6z/sampled
++ cmp target/profile-test.pVDI6z/plain.out target/profile-test.pVDI6z/sampled.out
++ cat
++ mkdir target/profile-test.pVDI6z/removed
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler build target/profile-test.pVDI6z/refusal.lkj --profile -o target/profile-test.pVDI6z/removed/sampled
++ mv target/profile-test.pVDI6z/removed/sampled target/profile-test.pVDI6z/refused
++ rmdir target/profile-test.pVDI6z/removed
++ profile_refusal_status=0
++ target/profile-test.pVDI6z/refused
++ profile_refusal_status=1
++ test 1 -eq 1
++ test ! -s target/profile-test.pVDI6z/refused.out
++ wc -l
++ test 1 -eq 1
++ grep -qxF target/profile-test.pVDI6z/refusal.lkj:1: R0007 Profile target/profile-test.pVDI6z/removed/sampled.samples openat: ENOENT (2) target/profile-test.pVDI6z/refused.err
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/sampled.samples.00000000000002761985
++ awk 
+  /^CPU samples:/ { total=$3+0; if (total < 10) exit 1 }
+  /^kind [0-9]/ {
+    if ($2 < 0 || $2 > 100 || $3 > total) exit 1
+    kinds++
+    kind_samples += $3
+    if ($4 == "arithmetic" && $3 > 0) arithmetic=1
+  }
+  /^[0-9]/ {
+    if ($1 < 0 || $1 > 100 || $2 < 0 || $2 > 100 || $3 > total) exit 1
+    if ($4 == "work" && $1 > 50) hot=1
+    if ($4 == "recurse" && $2 > 50) recursive=1
+    if ($4 == "main" && $2 > 50) root=1
+  }
+  END { if (NR > 37 || !hot || !recursive || !root || kinds != 16 || kind_samples != total || !arithmetic) exit 1 }
+ target/profile-test.pVDI6z/report
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler ir tests/fixtures/profile.lkj -o target/profile-test.pVDI6z/plain.lkjir
++ sed s/^fn "work" /fn "work\\ncontrol" / target/profile-test.pVDI6z/plain.lkjir
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler build target/profile-test.pVDI6z/named.lkjir --profile -o target/profile-test.pVDI6z/named
++ target/profile-test.pVDI6z/named
++ cmp target/profile-test.pVDI6z/plain.out target/profile-test.pVDI6z/named.out
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/named.samples.00000000000002762000
++ grep -qF work\u{a}control target/profile-test.pVDI6z/named.report
++ wc -l
++ test 28 -le 37
++ cp target/profile-test.pVDI6z/sampled.samples.00000000000002761985 target/profile-test.pVDI6z/invalid-metadata
++ printf \377\377\377\377\377\377\377\377
++ dd of=target/profile-test.pVDI6z/invalid-metadata bs=1 seek=48 conv=notrunc status=none
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/invalid-metadata
++ grep -q E_PROFILE target/profile-test.pVDI6z/error
++ cp target/profile-test.pVDI6z/sampled.samples.00000000000002761985 target/profile-test.pVDI6z/invalid-count
++ dd of=target/profile-test.pVDI6z/invalid-count bs=1 seek=24 conv=notrunc status=none
++ printf \377\377\377\377\377\377\377\377
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/invalid-count
++ grep -q E_PROFILE target/profile-test.pVDI6z/error
++ awk /^CPU samples:/ { print $3+0 } target/profile-test.pVDI6z/report
++ profile_samples=136
++ cp target/profile-test.pVDI6z/sampled.samples.00000000000002761985 target/profile-test.pVDI6z/serial--1
++ LC_ALL=C awk -v serial=135 
+        BEGIN {
+            for (byte=0; byte<8; byte++) {
+                printf "%c", serial % 256
+                serial=int(serial / 256)
+            }
+        }
+    
++ dd of=target/profile-test.pVDI6z/serial--1 bs=1 seek=24 conv=notrunc status=none
++ [ -1 = 1 ]
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/serial--1
++ grep -q E_PROFILE target/profile-test.pVDI6z/error
++ cp target/profile-test.pVDI6z/sampled.samples.00000000000002761985 target/profile-test.pVDI6z/serial-1
++ LC_ALL=C awk -v serial=137 
+        BEGIN {
+            for (byte=0; byte<8; byte++) {
+                printf "%c", serial % 256
+                serial=int(serial / 256)
+            }
+        }
+    
++ dd of=target/profile-test.pVDI6z/serial-1 bs=1 seek=24 conv=notrunc status=none
++ [ 1 = 1 ]
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/serial-1
++ cmp target/profile-test.pVDI6z/report target/profile-test.pVDI6z/interrupted.report
++ cp target/profile-test.pVDI6z/sampled.samples.00000000000002761985 target/profile-test.pVDI6z/serial-2
++ dd of=target/profile-test.pVDI6z/serial-2 bs=1 seek=24 conv=notrunc status=none
++ LC_ALL=C awk -v serial=138 
+        BEGIN {
+            for (byte=0; byte<8; byte++) {
+                printf "%c", serial % 256
+                serial=int(serial / 256)
+            }
+        }
+    
++ [ 2 = 1 ]
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/serial-2
++ grep -q E_PROFILE target/profile-test.pVDI6z/error
++ printf invalid samples\n
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/invalid
++ grep -q E_PROFILE target/profile-test.pVDI6z/error
++ cat
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler run tests/fixtures/profile.lkj --entry copy_once --engine interpreter --no-store
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler run tests/fixtures/profile.lkj --entry copy_once --engine native --inline-limit 64 --no-store
++ cmp target/profile-test.pVDI6z/copy-once.interpreter target/profile-test.pVDI6z/copy-once.native
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler run tests/fixtures/profile.lkj --entry copy_roles --engine interpreter --inline-limit 0 --no-store
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler run tests/fixtures/profile.lkj --entry copy_roles --engine native --inline-limit 0 --no-store
++ printf 297\n
++ cmp target/profile-test.pVDI6z/copy-roles.expected target/profile-test.pVDI6z/copy-roles.interpreter
++ cmp target/profile-test.pVDI6z/copy-roles.interpreter target/profile-test.pVDI6z/copy-roles.native
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler build tests/fixtures/profile.lkj --entry copy_roles --inline-limit 0 --no-store --profile --profile-ir target/profile-test.pVDI6z/copy-roles.lkjir -o target/profile-test.pVDI6z/copy-roles
++ target/profile-test.pVDI6z/copy-roles
++ test ! -s target/profile-test.pVDI6z/copy-roles.out
++ set -- target/profile-test.pVDI6z/copy-roles.samples.00000000000002762046
++ test 1 -eq 1
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-roles.samples.00000000000002762046 --copy-sites --profile-ir target/profile-test.pVDI6z/copy-roles.lkjir --limit 100000 --bytes 16777216
++ grep -q ^continuation cursor=none  target/profile-test.pVDI6z/copy-roles.report
++ perl target/profile-test.pVDI6z/copy-data.pl roles target/profile-test.pVDI6z/copy-roles.samples.00000000000002762046 target/profile-test.pVDI6z/copy-roles.lkjir
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler build tests/fixtures/profile.lkj --entry copy_samples --inline-limit 64 --no-store -o target/profile-test.pVDI6z/copy-plain
++ target/profile-test.pVDI6z/copy-plain
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler ir tests/fixtures/profile.lkj --entry copy_samples --inline-limit 64 --no-store -o target/profile-test.pVDI6z/original-inline.lkjir
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler ir tests/fixtures/profile.lkj --entry copy_samples --no-opt --no-store -o target/profile-test.pVDI6z/original-no-opt.lkjir
++ cmp target/profile-test.pVDI6z/original-inline.lkjir target/profile-test.pVDI6z/original-no-opt.lkjir
++ mktemp -d /tmp/compiler-profile-key.XXXXXX
++ profile_key_directory=/tmp/compiler-profile-key.HjdXtO
++ chmod 700 /tmp/compiler-profile-key.HjdXtO
++ umask 077
++ head -c 32 /dev/urandom
++ mkdir target/profile-test.pVDI6z/copy-store
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler build tests/fixtures/profile.lkj --entry copy_samples --inline-limit 64 --profile --profile-ir target/profile-test.pVDI6z/copy.lkjir --store target/profile-test.pVDI6z/copy-store --store-key /tmp/compiler-profile-key.HjdXtO/key --stats -o target/profile-test.pVDI6z/copy
++ perl target/profile-test.pVDI6z/copy-data.pl selection target/profile-test.pVDI6z/original-inline.lkjir target/profile-test.pVDI6z/copy.lkjir target/profile-test.pVDI6z/copy-cold.log
++ cp target/profile-test.pVDI6z/copy target/profile-test.pVDI6z/copy-cold
++ cp target/profile-test.pVDI6z/copy.lkjir target/profile-test.pVDI6z/copy-cold.lkjir
++ rm target/profile-test.pVDI6z/copy.lkjir
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler build tests/fixtures/profile.lkj --entry copy_samples --inline-limit 64 --profile --profile-ir target/profile-test.pVDI6z/copy.lkjir --store target/profile-test.pVDI6z/copy-store --store-key /tmp/compiler-profile-key.HjdXtO/key --stats -o target/profile-test.pVDI6z/copy
++ cmp target/profile-test.pVDI6z/copy-cold target/profile-test.pVDI6z/copy
++ cmp target/profile-test.pVDI6z/copy-cold.lkjir target/profile-test.pVDI6z/copy.lkjir
++ perl target/profile-test.pVDI6z/copy-data.pl warm target/profile-test.pVDI6z/copy-cold.log target/profile-test.pVDI6z/copy-warm.log target/profile-test.pVDI6z/copy.lkjir
++ target/profile-test.pVDI6z/copy
++ cmp target/profile-test.pVDI6z/copy-plain.out target/profile-test.pVDI6z/copy.out
++ set -- target/profile-test.pVDI6z/copy.samples.00000000000002762069
++ test 1 -eq 1
++ copy_samples=target/profile-test.pVDI6z/copy.samples.00000000000002762069
++ perl target/profile-test.pVDI6z/copy-data.pl binding target/profile-test.pVDI6z/copy.samples.00000000000002762069 target/profile-test.pVDI6z/copy.lkjir
++ copy_count=14
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069
++ wc -l
++ test 26 -le 37
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 100000 --bytes 16777216
++ :
++ perl target/profile-test.pVDI6z/copy-data.pl page target/profile-test.pVDI6z/copy-all.report target/profile-test.pVDI6z/copy.samples.00000000000002762069 target/profile-test.pVDI6z/copy.lkjir 0 100000 16777216 target/profile-test.pVDI6z/copy-all.rows
++ set -- none 14 14
++ test none = none
++ test 14 -eq 14
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096
++ :
++ perl target/profile-test.pVDI6z/copy-data.pl page target/profile-test.pVDI6z/copy-first.report target/profile-test.pVDI6z/copy.samples.00000000000002762069 target/profile-test.pVDI6z/copy.lkjir 0 1 4096 target/profile-test.pVDI6z/copy-pages.rows
++ set -- 4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:87e393a7c4ae323db7d7a629720b1a0409e40b37429bffc0517eef991e8bb3b0:1 1 14
++ copy_cursor=4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:87e393a7c4ae323db7d7a629720b1a0409e40b37429bffc0517eef991e8bb3b0:1
++ copy_next=1
++ test 4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:87e393a7c4ae323db7d7a629720b1a0409e40b37429bffc0517eef991e8bb3b0:1 != none
++ copy_first_cursor=4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:87e393a7c4ae323db7d7a629720b1a0409e40b37429bffc0517eef991e8bb3b0:1
++ copy_page=1
++ [ 4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:87e393a7c4ae323db7d7a629720b1a0409e40b37429bffc0517eef991e8bb3b0:1 != none ]
++ test 1 -le 64
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 64 --bytes 65536 --cursor 4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:87e393a7c4ae323db7d7a629720b1a0409e40b37429bffc0517eef991e8bb3b0:1
++ perl target/profile-test.pVDI6z/copy-data.pl page target/profile-test.pVDI6z/copy-page-1.report target/profile-test.pVDI6z/copy.samples.00000000000002762069 target/profile-test.pVDI6z/copy.lkjir 1 64 65536 target/profile-test.pVDI6z/copy-pages.rows
++ set -- none 14 14
++ copy_cursor=none
++ copy_next=14
++ copy_page=2
++ [ none != none ]
++ cmp target/profile-test.pVDI6z/copy-all.rows target/profile-test.pVDI6z/copy-pages.rows
++ wc -c
++ copy_first_bytes=896
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 896
++ cmp target/profile-test.pVDI6z/copy-first.report target/profile-test.pVDI6z/copy-exact.report
++ copy_refuse bound-first E_PROFILE_BOUND /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 895
++ case_name=bound-first
++ case_message=E_PROFILE_BOUND
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 895
++ test ! -s target/profile-test.pVDI6z/bound-first.out
++ grep -qF E_PROFILE_BOUND target/profile-test.pVDI6z/bound-first.err
++ copy_refuse bound-header E_PROFILE_BOUND /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 1
++ case_name=bound-header
++ case_message=E_PROFILE_BOUND
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 1
++ test ! -s target/profile-test.pVDI6z/bound-header.out
++ grep -qF E_PROFILE_BOUND target/profile-test.pVDI6z/bound-header.err
++ sha256sum target/profile-test.pVDI6z/copy.samples.00000000000002762069
++ cut -d   -f 1
++ copy_profile_id=05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86
++ sha256sum target/profile-test.pVDI6z/copy.lkjir
++ cut -d   -f 1
++ copy_ir_id=87e393a7c4ae323db7d7a629720b1a0409e40b37429bffc0517eef991e8bb3b0
++ copy_end_cursor=4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:87e393a7c4ae323db7d7a629720b1a0409e40b37429bffc0517eef991e8bb3b0:14
++ copy_refuse bound-empty E_PROFILE_BOUND /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 1 --cursor 4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:87e393a7c4ae323db7d7a629720b1a0409e40b37429bffc0517eef991e8bb3b0:14
++ case_name=bound-empty
++ case_message=E_PROFILE_BOUND
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 1 --cursor 4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:87e393a7c4ae323db7d7a629720b1a0409e40b37429bffc0517eef991e8bb3b0:14
++ test ! -s target/profile-test.pVDI6z/bound-empty.out
++ grep -qF E_PROFILE_BOUND target/profile-test.pVDI6z/bound-empty.err
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096 --cursor 4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:87e393a7c4ae323db7d7a629720b1a0409e40b37429bffc0517eef991e8bb3b0:14
++ :
++ perl target/profile-test.pVDI6z/copy-data.pl page target/profile-test.pVDI6z/copy-empty.report target/profile-test.pVDI6z/copy.samples.00000000000002762069 target/profile-test.pVDI6z/copy.lkjir 14 1 4096 target/profile-test.pVDI6z/copy-empty.rows
++ test ! -s target/profile-test.pVDI6z/copy-empty.rows
++ copy_refuse cursor-noncanonical E_PROFILE_CURSOR /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096 --cursor 4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:87e393a7c4ae323db7d7a629720b1a0409e40b37429bffc0517eef991e8bb3b0:00
++ case_name=cursor-noncanonical
++ case_message=E_PROFILE_CURSOR
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096 --cursor 4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:87e393a7c4ae323db7d7a629720b1a0409e40b37429bffc0517eef991e8bb3b0:00
++ test ! -s target/profile-test.pVDI6z/cursor-noncanonical.out
++ grep -qF E_PROFILE_CURSOR target/profile-test.pVDI6z/cursor-noncanonical.err
++ copy_refuse cursor-range E_PROFILE_CURSOR /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096 --cursor 4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:87e393a7c4ae323db7d7a629720b1a0409e40b37429bffc0517eef991e8bb3b0:15
++ case_name=cursor-range
++ case_message=E_PROFILE_CURSOR
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096 --cursor 4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:87e393a7c4ae323db7d7a629720b1a0409e40b37429bffc0517eef991e8bb3b0:15
++ test ! -s target/profile-test.pVDI6z/cursor-range.out
++ grep -qF E_PROFILE_CURSOR target/profile-test.pVDI6z/cursor-range.err
++ copy_refuse cursor-companion E_PROFILE_CURSOR /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096 --cursor 4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:1
++ case_name=cursor-companion
++ case_message=E_PROFILE_CURSOR
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096 --cursor 4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:1
++ test ! -s target/profile-test.pVDI6z/cursor-companion.out
++ grep -qF E_PROFILE_CURSOR target/profile-test.pVDI6z/cursor-companion.err
++ copy_refuse usage-bounds E_USAGE /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir
++ case_name=usage-bounds
++ case_message=E_USAGE
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir
++ test ! -s target/profile-test.pVDI6z/usage-bounds.out
++ grep -qF E_USAGE target/profile-test.pVDI6z/usage-bounds.err
++ copy_refuse usage-zero E_USAGE /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 0 --bytes 4096
++ case_name=usage-zero
++ case_message=E_USAGE
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 0 --bytes 4096
++ test ! -s target/profile-test.pVDI6z/usage-zero.out
++ grep -qF E_USAGE target/profile-test.pVDI6z/usage-zero.err
++ mkdir target/profile-test.pVDI6z/copy-mutations
++ perl target/profile-test.pVDI6z/copy-data.pl mutate target/profile-test.pVDI6z/copy.samples.00000000000002762069 target/profile-test.pVDI6z/copy.lkjir target/profile-test.pVDI6z/copy-mutations
++ copy_refuse invalid-range E_PROFILE /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-range
++ case_name=invalid-range
++ case_message=E_PROFILE
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-range
++ test ! -s target/profile-test.pVDI6z/invalid-range.out
++ grep -qF E_PROFILE target/profile-test.pVDI6z/invalid-range.err
++ copy_refuse invalid-owner E_PROFILE /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-owner
++ case_name=invalid-owner
++ case_message=E_PROFILE
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-owner
++ test ! -s target/profile-test.pVDI6z/invalid-owner.out
++ grep -qF E_PROFILE target/profile-test.pVDI6z/invalid-owner.err
++ copy_refuse invalid-sentinel E_PROFILE /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-sentinel
++ case_name=invalid-sentinel
++ case_message=E_PROFILE
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-sentinel
++ test ! -s target/profile-test.pVDI6z/invalid-sentinel.out
++ grep -qF E_PROFILE target/profile-test.pVDI6z/invalid-sentinel.err
++ copy_refuse invalid-tag E_PROFILE /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-tag
++ case_name=invalid-tag
++ case_message=E_PROFILE
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-tag
++ test ! -s target/profile-test.pVDI6z/invalid-tag.out
++ grep -qF E_PROFILE target/profile-test.pVDI6z/invalid-tag.err
++ copy_refuse invalid-map E_PROFILE /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-map
++ case_name=invalid-map
++ case_message=E_PROFILE
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-map
++ test ! -s target/profile-test.pVDI6z/invalid-map.out
++ grep -qF E_PROFILE target/profile-test.pVDI6z/invalid-map.err
++ copy_refuse invalid-tail E_PROFILE /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-tail
++ case_name=invalid-tail
++ case_message=E_PROFILE
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-tail
++ test ! -s target/profile-test.pVDI6z/invalid-tail.out
++ grep -qF E_PROFILE target/profile-test.pVDI6z/invalid-tail.err
++ copy_refuse invalid-short E_PROFILE /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-short
++ case_name=invalid-short
++ case_message=E_PROFILE
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-short
++ test ! -s target/profile-test.pVDI6z/invalid-short.out
++ grep -qF E_PROFILE target/profile-test.pVDI6z/invalid-short.err
++ copy_refuse invalid-instruction E_PROFILE_IR /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-instruction --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096
++ case_name=invalid-instruction
++ case_message=E_PROFILE_IR
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-instruction --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096
++ test ! -s target/profile-test.pVDI6z/invalid-instruction.out
++ grep -qF E_PROFILE_IR target/profile-test.pVDI6z/invalid-instruction.err
++ copy_refuse invalid-subsite E_PROFILE_IR /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-subsite --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096
++ case_name=invalid-subsite
++ case_message=E_PROFILE_IR
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-subsite --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096
++ test ! -s target/profile-test.pVDI6z/invalid-subsite.out
++ grep -qF E_PROFILE_IR target/profile-test.pVDI6z/invalid-subsite.err
++ copy_refuse invalid-type E_PROFILE_IR /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-type --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096
++ case_name=invalid-type
++ case_message=E_PROFILE_IR
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-type --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096
++ test ! -s target/profile-test.pVDI6z/invalid-type.out
++ grep -qF E_PROFILE_IR target/profile-test.pVDI6z/invalid-type.err
++ copy_refuse invalid-width E_PROFILE_IR /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-width --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096
++ case_name=invalid-width
++ case_message=E_PROFILE_IR
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/bad-width --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096
++ test ! -s target/profile-test.pVDI6z/invalid-width.out
++ grep -qF E_PROFILE_IR target/profile-test.pVDI6z/invalid-width.err
++ copy_refuse wrong-companion companion bytes differ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy-mutations/wrong.lkjir --limit 1 --bytes 4096
++ case_name=wrong-companion
++ case_message=companion bytes differ
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy.samples.00000000000002762069 --copy-sites --profile-ir target/profile-test.pVDI6z/copy-mutations/wrong.lkjir --limit 1 --bytes 4096
++ test ! -s target/profile-test.pVDI6z/wrong-companion.out
++ grep -qF companion bytes differ target/profile-test.pVDI6z/wrong-companion.err
++ copy_refuse unchecked-companion companion failed independent IR checking /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/unchecked.samples --copy-sites --profile-ir target/profile-test.pVDI6z/copy-mutations/unchecked.lkjir --limit 1 --bytes 4096
++ case_name=unchecked-companion
++ case_message=companion failed independent IR checking
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/unchecked.samples --copy-sites --profile-ir target/profile-test.pVDI6z/copy-mutations/unchecked.lkjir --limit 1 --bytes 4096
++ test ! -s target/profile-test.pVDI6z/unchecked-companion.out
++ grep -qF companion failed independent IR checking target/profile-test.pVDI6z/unchecked-companion.err
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-complete
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-complete --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096
++ flight=0
++ perl target/profile-test.pVDI6z/copy-data.pl in-flight target/profile-test.pVDI6z/count-complete.detail 0
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-serial-leading
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-serial-leading --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096
++ flight=0
++ perl target/profile-test.pVDI6z/copy-data.pl in-flight target/profile-test.pVDI6z/count-serial-leading.detail 0
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-site-leading
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-site-leading --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096
++ flight=1
++ perl target/profile-test.pVDI6z/copy-data.pl in-flight target/profile-test.pVDI6z/count-site-leading.detail 1
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-unmapped-leading
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-unmapped-leading --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096
++ flight=1
++ perl target/profile-test.pVDI6z/copy-data.pl in-flight target/profile-test.pVDI6z/count-unmapped-leading.detail 1
++ cmp target/profile-test.pVDI6z/count-complete.default target/profile-test.pVDI6z/count-serial-leading.default
++ copy_refuse count-detail-early E_PROFILE /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-detail-early
++ case_name=count-detail-early
++ case_message=E_PROFILE
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-detail-early
++ test ! -s target/profile-test.pVDI6z/count-detail-early.out
++ grep -qF E_PROFILE target/profile-test.pVDI6z/count-detail-early.err
++ copy_refuse count-detail-two E_PROFILE /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-detail-two
++ case_name=count-detail-two
++ case_message=E_PROFILE
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-detail-two
++ test ! -s target/profile-test.pVDI6z/count-detail-two.out
++ grep -qF E_PROFILE target/profile-test.pVDI6z/count-detail-two.err
++ copy_refuse count-detail-missing E_PROFILE /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-detail-missing
++ case_name=count-detail-missing
++ case_message=E_PROFILE
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-detail-missing
++ test ! -s target/profile-test.pVDI6z/count-detail-missing.out
++ grep -qF E_PROFILE target/profile-test.pVDI6z/count-detail-missing.err
++ copy_refuse count-serial-behind E_PROFILE /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-serial-behind
++ case_name=count-serial-behind
++ case_message=E_PROFILE
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-serial-behind
++ test ! -s target/profile-test.pVDI6z/count-serial-behind.out
++ grep -qF E_PROFILE target/profile-test.pVDI6z/count-serial-behind.err
++ copy_refuse count-serial-two E_PROFILE /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-serial-two
++ case_name=count-serial-two
++ case_message=E_PROFILE
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-serial-two
++ test ! -s target/profile-test.pVDI6z/count-serial-two.out
++ grep -qF E_PROFILE target/profile-test.pVDI6z/count-serial-two.err
++ copy_refuse count-overflow E_PROFILE /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-overflow
++ case_name=count-overflow
++ case_message=E_PROFILE
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-overflow
++ test ! -s target/profile-test.pVDI6z/count-overflow.out
++ grep -qF E_PROFILE target/profile-test.pVDI6z/count-overflow.err
++ copy_refuse cursor-profile E_PROFILE_CURSOR /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-complete --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096 --cursor 4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:87e393a7c4ae323db7d7a629720b1a0409e40b37429bffc0517eef991e8bb3b0:1
++ case_name=cursor-profile
++ case_message=E_PROFILE_CURSOR
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler profile target/profile-test.pVDI6z/copy-mutations/count-complete --copy-sites --profile-ir target/profile-test.pVDI6z/copy.lkjir --limit 1 --bytes 4096 --cursor 4:05da1e784d9a8bc1d97fb435745ecb2995907b9d5ba08ab4c391ff40087f9d86:87e393a7c4ae323db7d7a629720b1a0409e40b37429bffc0517eef991e8bb3b0:1
++ test ! -s target/profile-test.pVDI6z/cursor-profile.out
++ grep -qF E_PROFILE_CURSOR target/profile-test.pVDI6z/cursor-profile.err
++ mkdir target/profile-test.pVDI6z/publish-same target/profile-test.pVDI6z/publish-same/store
++ printf old same output\n
++ cp target/profile-test.pVDI6z/publish-same/image target/profile-test.pVDI6z/publish-same/expected
++ copy_refuse publish-same E_PROFILE_OUTPUT /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler build tests/fixtures/profile.lkj --entry copy_samples --inline-limit 64 --profile --profile-ir target/profile-test.pVDI6z/publish-same/image -o target/profile-test.pVDI6z/publish-same/image --store target/profile-test.pVDI6z/publish-same/store --store-key /tmp/compiler-profile-key.HjdXtO/key
++ case_name=publish-same
++ case_message=E_PROFILE_OUTPUT
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler build tests/fixtures/profile.lkj --entry copy_samples --inline-limit 64 --profile --profile-ir target/profile-test.pVDI6z/publish-same/image -o target/profile-test.pVDI6z/publish-same/image --store target/profile-test.pVDI6z/publish-same/store --store-key /tmp/compiler-profile-key.HjdXtO/key
++ test ! -s target/profile-test.pVDI6z/publish-same.out
++ grep -qF E_PROFILE_OUTPUT target/profile-test.pVDI6z/publish-same.err
++ cmp target/profile-test.pVDI6z/publish-same/image target/profile-test.pVDI6z/publish-same/expected
++ copy_no_publication target/profile-test.pVDI6z/publish-same/store target/profile-test.pVDI6z/publish-same
++ find target/profile-test.pVDI6z/publish-same/store -maxdepth 1 -type f ( -name image-* -o -name inputs-image-* ) -print
++ test -z 
++ find target/profile-test.pVDI6z/publish-same -name .lkjscript-*.tmp -print
++ test -z 
++ copy_refuse publish-parent-alias E_PROFILE_OUTPUT /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler build tests/fixtures/profile.lkj --entry copy_samples --inline-limit 64 --profile --profile-ir target/profile-test.pVDI6z/publish-same/./image -o target/profile-test.pVDI6z/publish-same/image --store target/profile-test.pVDI6z/publish-same/store --store-key /tmp/compiler-profile-key.HjdXtO/key
++ case_name=publish-parent-alias
++ case_message=E_PROFILE_OUTPUT
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler build tests/fixtures/profile.lkj --entry copy_samples --inline-limit 64 --profile --profile-ir target/profile-test.pVDI6z/publish-same/./image -o target/profile-test.pVDI6z/publish-same/image --store target/profile-test.pVDI6z/publish-same/store --store-key /tmp/compiler-profile-key.HjdXtO/key
++ test ! -s target/profile-test.pVDI6z/publish-parent-alias.out
++ grep -qF E_PROFILE_OUTPUT target/profile-test.pVDI6z/publish-parent-alias.err
++ cmp target/profile-test.pVDI6z/publish-same/image target/profile-test.pVDI6z/publish-same/expected
++ copy_no_publication target/profile-test.pVDI6z/publish-same/store target/profile-test.pVDI6z/publish-same
++ find target/profile-test.pVDI6z/publish-same/store -maxdepth 1 -type f ( -name image-* -o -name inputs-image-* ) -print
++ test -z 
++ find target/profile-test.pVDI6z/publish-same -name .lkjscript-*.tmp -print
++ test -z 
++ mkdir target/profile-test.pVDI6z/publish-stage target/profile-test.pVDI6z/publish-stage/store target/profile-test.pVDI6z/publish-stage/blocked
++ printf old image\n
++ printf old companion\n
++ cp target/profile-test.pVDI6z/publish-stage/image target/profile-test.pVDI6z/publish-stage/expected-image
++ cp target/profile-test.pVDI6z/publish-stage/blocked/companion target/profile-test.pVDI6z/publish-stage/expected-companion
++ chmod 0555 target/profile-test.pVDI6z/publish-stage/blocked
++ copy_refuse publish-stage target/profile-test.pVDI6z/publish-stage/blocked/companion:1:1: E_IO create temporary failed (errno 13) copy_without_dac_override /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler build tests/fixtures/profile.lkj --entry copy_samples --inline-limit 64 --profile --profile-ir target/profile-test.pVDI6z/publish-stage/blocked/companion -o target/profile-test.pVDI6z/publish-stage/image --store target/profile-test.pVDI6z/publish-stage/store --store-key /tmp/compiler-profile-key.HjdXtO/key
++ case_name=publish-stage
++ case_message=target/profile-test.pVDI6z/publish-stage/blocked/companion:1:1: E_IO create temporary failed (errno 13)
++ shift 2
++ copy_without_dac_override /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler build tests/fixtures/profile.lkj --entry copy_samples --inline-limit 64 --profile --profile-ir target/profile-test.pVDI6z/publish-stage/blocked/companion -o target/profile-test.pVDI6z/publish-stage/image --store target/profile-test.pVDI6z/publish-stage/store --store-key /tmp/compiler-profile-key.HjdXtO/key
++ test ! -s target/profile-test.pVDI6z/publish-stage.out
++ grep -qF target/profile-test.pVDI6z/publish-stage/blocked/companion:1:1: E_IO create temporary failed (errno 13) target/profile-test.pVDI6z/publish-stage.err
++ chmod u+w target/profile-test.pVDI6z/publish-stage/blocked
++ cmp target/profile-test.pVDI6z/publish-stage/image target/profile-test.pVDI6z/publish-stage/expected-image
++ cmp target/profile-test.pVDI6z/publish-stage/blocked/companion target/profile-test.pVDI6z/publish-stage/expected-companion
++ copy_no_publication target/profile-test.pVDI6z/publish-stage/store target/profile-test.pVDI6z/publish-stage
++ find target/profile-test.pVDI6z/publish-stage/store -maxdepth 1 -type f ( -name image-* -o -name inputs-image-* ) -print
++ test -z 
++ find target/profile-test.pVDI6z/publish-stage -name .lkjscript-*.tmp -print
++ test -z 
++ mkdir target/profile-test.pVDI6z/publish-image target/profile-test.pVDI6z/publish-image/store target/profile-test.pVDI6z/publish-image/image
++ printf old directory image\n
++ cp target/profile-test.pVDI6z/publish-image/image/marker target/profile-test.pVDI6z/publish-image/expected-marker
++ printf old companion\n
++ copy_refuse publish-image target/profile-test.pVDI6z/publish-image/image:1:1: E_IO rename failed (errno 21) /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler build tests/fixtures/profile.lkj --entry copy_samples --inline-limit 64 --profile --profile-ir target/profile-test.pVDI6z/publish-image/companion -o target/profile-test.pVDI6z/publish-image/image --store target/profile-test.pVDI6z/publish-image/store --store-key /tmp/compiler-profile-key.HjdXtO/key
++ case_name=publish-image
++ case_message=target/profile-test.pVDI6z/publish-image/image:1:1: E_IO rename failed (errno 21)
++ shift 2
++ /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler build tests/fixtures/profile.lkj --entry copy_samples --inline-limit 64 --profile --profile-ir target/profile-test.pVDI6z/publish-image/companion -o target/profile-test.pVDI6z/publish-image/image --store target/profile-test.pVDI6z/publish-image/store --store-key /tmp/compiler-profile-key.HjdXtO/key
++ test ! -s target/profile-test.pVDI6z/publish-image.out
++ grep -qF target/profile-test.pVDI6z/publish-image/image:1:1: E_IO rename failed (errno 21) target/profile-test.pVDI6z/publish-image.err
++ test -d target/profile-test.pVDI6z/publish-image/image
++ cmp target/profile-test.pVDI6z/publish-image/image/marker target/profile-test.pVDI6z/publish-image/expected-marker
++ cmp target/profile-test.pVDI6z/publish-image/companion target/profile-test.pVDI6z/copy.lkjir
++ copy_no_publication target/profile-test.pVDI6z/publish-image/store target/profile-test.pVDI6z/publish-image
++ find target/profile-test.pVDI6z/publish-image/store -maxdepth 1 -type f ( -name image-* -o -name inputs-image-* ) -print
++ test -z 
++ find target/profile-test.pVDI6z/publish-image -name .lkjscript-*.tmp -print
++ test -z 
++ printf ok profiler (ordinary report, selected IR, copy roles/value, fragment reuse, pagination/bounds, malformed coordinates, independent checking, interrupted accounting, publication refusals)\n
++ chmod u+w target/profile-test.pVDI6z/publish-stage/blocked
++ rm -rf target/profile-test.pVDI6z
++ [ -n /tmp/compiler-profile-key.HjdXtO ]
++ rm -rf /tmp/compiler-profile-key.HjdXtO

@@ -1,0 +1,4 @@
+alternate dependency witness: the exact negative alternate probe was never exercised
+"/home/coder/workspace/lkjscript/target/compiler-alternate-race.7XH7LI/source/added/mod.lkj" E_EDIT_STALE source dependency changed during checking
+ok alternate race: triggers=1 result=-ENOENT preserved=true compiler_status=1
+ok alternate dependency race: 0.096 s, load 3.27 2.45 2.09 4/5728 1476689 -> 3.27 2.45 2.09 4/5728 1476785

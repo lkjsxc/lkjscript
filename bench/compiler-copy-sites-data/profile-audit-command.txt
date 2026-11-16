@@ -1,0 +1,22 @@
+total 84
+-rw------- 1 coder coder   193 Nov 16 12:46 command
+-rw------- 1 coder coder    32 Nov 16 12:46 cwd
+-rw------- 1 coder coder    21 Nov 16 12:46 end.utc
+-rw------- 1 coder coder    30 Nov 16 12:46 load.after
+-rw------- 1 coder coder    30 Nov 16 12:46 load.before
+-rw------- 1 coder coder    21 Nov 16 12:46 start.utc
+-rw------- 1 coder coder     2 Nov 16 12:46 status
+-rw------- 1 coder coder 45556 Nov 16 12:46 stderr
+-rw------- 1 coder coder   187 Nov 16 12:46 stdout
+-rw------- 1 coder coder    50 Nov 16 12:46 time
+/usr/bin/prlimit --as=4294967296 -- /usr/bin/timeout --kill-after=10s 600s sh -x tools/profile-test.sh /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler 
+/home/coder/workspace/lkjscript
+0
+wall=6.27 user=5.97 sys=0.20 rss_kib=47264 exit=0
+0.89 1.34 1.69 5/5731 1432648
+1.59 1.47 1.73 3/5704 1433648
+ok profiler (ordinary report, selected IR, copy roles/value, fragment reuse, pagination/bounds, malformed coordinates, independent checking, interrupted accounting, publication refusals)
+bd2bdedbbfeebaf64eb9369dd6b077ad0176a42e64a914a17b97b2d0f0b837a9  target/compiler-copy-sites-integration-evidence/profile-test-1.sh
+184adbc8dd758c72474f268122602285468e99d2b21362216b9c5918b6e79fd4  tests/fixtures/profile.lkj
+6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc  target/compiler-copy-sites-integration-evidence/compiler
+  482 45556 target/compiler-copy-sites-integration-evidence/profile-regressions-1/stderr

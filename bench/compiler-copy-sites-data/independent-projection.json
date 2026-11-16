@@ -1,0 +1,69 @@
+{
+   "added_blank_lines" : 41,
+   "candidate_1_archive_files_verified" : 6,
+   "candidate_2_archive_files_verified" : 3,
+   "candidate_3_hash_updates_verified" : 2,
+   "compiler_executed" : false,
+   "files" : [
+      {
+         "applied_sha256" : "333d6ec927416917fa32269730a9a507fcfe31072a2191403a24161b5cf6c412",
+         "byte_identical" : false,
+         "desired_sha256" : "d4019617eafe16ac31e233cbd9d658d07e90da601304cde0bc8809b4249f953d",
+         "path" : "src/driver.lkj",
+         "projection_diff_sha256" : "d25065ded0cb536f06f42d86e2afafc9c92184c8b787188e45405f1827fa8748"
+      },
+      {
+         "applied_sha256" : "61d11c2b9caf4de3e3ee6bc533447da868a5c102e8dc05a63d1cf410790c95dc",
+         "byte_identical" : false,
+         "desired_sha256" : "8443ca135131e565c01d311533c4fc976dea74c7177f14d19fbb8f8dc86a54f4",
+         "path" : "src/native.lkj",
+         "projection_diff_sha256" : "fde9e66273182574472ab9974c64fa8b8a8708c5aea2b31644883acbe20945e1"
+      },
+      {
+         "applied_sha256" : "eef07f3b7f920e9b712a371329c2408a4b3a5f6c9b5d0644978be154471270be",
+         "byte_identical" : false,
+         "desired_sha256" : "2d5a6636f17c5d2e4f980537f10462f395f6135b5a3781b07ac8c7af0d7ec3cc",
+         "path" : "src/native/cache.lkj",
+         "projection_diff_sha256" : "b8bee901e0266a9acd6a4bd51bd996201889fc26c23cdcad3eda285521179cce"
+      },
+      {
+         "applied_sha256" : "22b0cb4fd6e6bbe469d514a7ba25cfdb4be64784a5df683aaa11cd3f014d97c8",
+         "byte_identical" : true,
+         "desired_sha256" : "22b0cb4fd6e6bbe469d514a7ba25cfdb4be64784a5df683aaa11cd3f014d97c8",
+         "path" : "src/native/intrinsics.lkj",
+         "projection_diff_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "applied_sha256" : "59a6bdc97617130af9b7a0fbd3964952b31a48f2aa11dfac73416a0dad22fbe5",
+         "byte_identical" : false,
+         "desired_sha256" : "a57da9cbc0627bdc83e416e4c2675c10e46270082e2cdfa4d3f65344c80af44e",
+         "path" : "src/native/profiling.lkj",
+         "projection_diff_sha256" : "ee5db378d7974d0797cba71995f0be9e569f4b6a1f684374ff050fba4f7ffd2f"
+      },
+      {
+         "applied_sha256" : "26a2d776163fa388969979f3cb2767567e3925254330efa1a7b0a5649d672d04",
+         "byte_identical" : false,
+         "desired_sha256" : "297c8b56d3fa8b2533245ad3a6c70af2097137020a502a3daa6fbfe283d72fac",
+         "path" : "src/x86.lkj",
+         "projection_diff_sha256" : "9881c22f8cdb743b02ea7bc7d8906ac71cc2e6f761ffec2dee02c3ca50f16d8c"
+      }
+   ],
+   "final_desired_source_files_verified" : 216,
+   "omitted_standalone_comments" : [
+      {
+         "path" : "src/native.lkj",
+         "text" : "// This diagnostic contract is read only after profiling was explicitly enabled."
+      },
+      {
+         "path" : "src/native.lkj",
+         "text" : "// Coordinates refer to the exact selected IR, never the pre-inline body."
+      },
+      {
+         "path" : "src/x86.lkj",
+         "text" : "// Copy metadata is diagnostic only and is collected solely in profile mode."
+      }
+   ],
+   "projection_diffs_reproduced" : 6,
+   "removed_blank_lines" : 4,
+   "substantive_projection_differences" : 0
+}

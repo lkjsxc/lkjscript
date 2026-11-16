@@ -1,0 +1,1 @@
+/usr/bin/prlimit --as=4294967296 -- /usr/bin/timeout --kill-after=10s 60s target/compiler-copy-sites-integration-evidence/compiler profile target/compiler-copy-sites-integration-evidence/roles.samples.00000000000002760523 --copy-sites --profile-ir target/compiler-copy-sites-integration-evidence/roles.lkjir --limit 1000 --bytes 1048576 

@@ -1,0 +1,36 @@
+diff --git a/target/compiler-copy-sites-integrated/src/native/cache.lkj b/src/native/cache.lkj
+index c2608513..29bde8a5 100644
+--- a/target/compiler-copy-sites-integrated/src/native/cache.lkj
++++ b/src/native/cache.lkj
+@@ -9,6 +9,7 @@ pub(super) struct Context<'a> {
+     pub records: &'a mut Records,
+     pub prefix: usize,
+ }
++
+ fn wide_word(bytes: &mut Vec<u8>, value: u64) {
+     for index in 0..8 {
+         bytes.push((value >> (index * 8)) as u8);
+@@ -22,6 +23,7 @@ fn span(bytes: &mut Vec<u8>, site: Span) {
+     word(bytes, site.line);
+     word(bytes, site.column);
+ }
++
+ fn take_wide_word(bytes: &[u8], at: &mut usize) -> Option<u64> {
+     if *at > bytes.len() || bytes.len() - *at < 8 {
+         return None;
+@@ -196,6 +198,7 @@ pub(super) fn namespace(
+     format!("native-{}", crate::sha256::hex_digest(&inputs))
+ }
+ 
++
+ fn valid_copies(fragment: &Fragment, selection: &Selection<'_>, function: usize) -> bool {
+     for site in &fragment.copies {
+         if site.function != function { return false; }
+@@ -211,7 +214,6 @@ fn valid_copies(fragment: &Fragment, selection: &Selection<'_>, function: usize)
+     }
+     true
+ }
+-
+ pub(super) fn emit(
+     a: &mut Assembler,
+     p: platform::Platform,

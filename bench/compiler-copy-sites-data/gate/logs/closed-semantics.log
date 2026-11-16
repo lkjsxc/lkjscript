@@ -1,0 +1,1 @@
+ok closed-semantics (0.552 s, load 2.50 -> 2.70; gate+119.530..120.082 s); cases reused=0 rerun=28 (authenticated exact stable runner, sealed ELF, checked closure and closed input contract)

@@ -1,0 +1,1 @@
+ok optimized-conformance (73.461 s, load 5.64 -> 4.76; gate+429.295..502.757 s); cases reused=0 rerun=813 (authenticated producer and input closure; misses/open effects rerun)

@@ -1,0 +1,5 @@
+standalone load 3.31 -> 3.31 ok foreign session: 64 ordered replies, deadline poison, EOF, transactional output, bounded restart; start_ns=1285776 request_ns=74132 spawn_request_ns=705409
+native load 3.31 -> 3.31 ok foreign session: 64 ordered replies, deadline poison, EOF, transactional output, bounded restart; start_ns=330080 request_ns=27351 spawn_request_ns=671260
+interpreter load 3.31 -> 3.12 ok foreign session: 64 ordered replies, deadline poison, EOF, transactional output, bounded restart; start_ns=5541733 request_ns=5990520 spawn_request_ns=153577732
+ok foreign session IR: 517 rejected attacks, two admitted controls; seed 901171
+ok foreign-session suite seconds=6.277; load 3.31 -> 3.03

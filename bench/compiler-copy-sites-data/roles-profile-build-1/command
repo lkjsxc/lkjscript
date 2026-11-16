@@ -1,0 +1,1 @@
+/usr/bin/prlimit --as=4294967296 -- /usr/bin/timeout --kill-after=10s 900s target/compiler-copy-sites-integration-evidence/compiler build tests/fixtures/profile.lkj --entry copy_roles --inline-limit 0 --no-store --profile --profile-ir target/compiler-copy-sites-integration-evidence/roles.lkjir --stats -o target/compiler-copy-sites-integration-evidence/roles 

@@ -1,0 +1,38 @@
+diff --git a/target/compiler-copy-sites-integrated/src/native.lkj b/src/native.lkj
+index 5a4d072f..00b7edca 100644
+--- a/target/compiler-copy-sites-integrated/src/native.lkj
++++ b/src/native.lkj
+@@ -271,8 +271,7 @@ fn copy_bytes(a: &mut Assembler, _p: platform::Platform, bytes: u64) {
+     }
+     a.scope_kind(kind);
+ }
+-// This diagnostic contract is read only after profiling was explicitly enabled.
+-// Coordinates refer to the exact selected IR, never the pre-inline body.
++
+ fn copy_place_flags(place: &Place) -> u64 {
+     let mut flags = 0u64;
+     for projection in &place.projections {
+@@ -284,6 +283,7 @@ fn copy_place_flags(place: &Place) -> u64 {
+     }
+     flags
+ }
++
+ pub(super) fn copy_contract(
+     program: &Program, function: usize, instruction: usize, subsite: usize,
+ ) -> Option<(usize, u64)> {
+@@ -366,6 +366,7 @@ pub(super) fn copy_contract(
+     if !valid_copy_tags(tags) { return None; }
+     Some((ty, tags))
+ }
++
+ fn record_copy(
+     a: &mut Assembler, program: &Program, function: usize, instruction: usize,
+     subsite: usize, start: usize, width: u64,
+@@ -376,7 +377,6 @@ fn record_copy(
+         a.record_copy_site(CopySite { start, end, function, instruction, subsite, ty, width, tags });
+     }
+ }
+-
+ fn epilogue(a: &mut Assembler) {
+     let kind = a.scope_kind(KIND_PROLOGUE);
+     a.mov(SP, BP);

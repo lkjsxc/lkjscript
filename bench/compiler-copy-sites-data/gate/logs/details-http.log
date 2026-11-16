@@ -1,0 +1,67 @@
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=1 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=5a51feb75689bb6dd3f116395ee6876581ac1134ec52fae0278fe001486bb2a6
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=1 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=eea29d01dcb9faf42fa2a522d3a15a662b79c020a7fedff6d03a74284c3fc938
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=1 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=d0e56d0ca1e4f92bf51ca322c6c7be980761f5883f7c6a344e0714649123c486
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=1 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=f0e561da1172370233a20fd20b1c64db0e95f3b3d95ba9da248e4bb0a8842cd4
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=1 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=dca41b5d0f600d57a6e0b4bed6942be8fd794f8bb7ab37b9c9c83c213e1145c9
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=1 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=5dbc856eed72727ccd764f7ec3758c549d963158784bc6d904cc5c8ec88d722f
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=1 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=aaffac5cf6cbb074239b51384c4ad47d7d426e8c317da3ffd23ca6d689ab0a14
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=1 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=c6d78eb6b2f377045fea0d0ff91e43ef5d52f2751a7fb9a7c29cf3c07a7f1a77
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=1 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=9d5f50013621cb87c568b0fa38342170ef00e168b088c185afabb79e84bb4228
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=1 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=377686d1f7a6c8efdaa63a122e998eec2bf9b34e6e00940e87f58a485d4cddb7
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=10 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=889bbf564f129a38e014fa2df2fd6b4b81e183546a06c4f3a953b2b4533bde80
+LKJSCRIPT_UNIT_GATE cases=10 observations=20 reused=0 rerun=20 source=library/http_protocol.lkj
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=1 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=392e23e55dba2337ff8563f080b1e257df7b2bfdbcf5da7bd75fe02bf19a79ad
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=1 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=8026cf856f568724f7bcb8b17a5efc4663adfb95985094534390225c9ea929a1
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=1 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=3d1ab0019021f1a2c319a9bca599fcc5858cd0e252a0a88a3cb122b223b3a12e
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=3 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=2abd8a5530603c998eb9c108b65ec2ac27fb4edb6660d64ef830ae68423262a2
+LKJSCRIPT_UNIT_GATE cases=3 observations=6 reused=0 rerun=6 source=library/http_policy.lkj
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=1 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=367f625ce3505d358c76984b953af474da4d3f4cc924765884b4f5479db61956
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=1 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=0d3554e806d8297fbc6ce1cd45e8b913fcf879433d7b309e1f8224a905bedef6
+LKJSCRIPT_UNIT_GATE cases=1 observations=2 reused=0 rerun=2 source=tools/http_client.lkj
+HTTP application deadlines: idle/request/write 60/2/2 seconds
+HTTP run: supervisor 2775356, server 2777731, port 45267, engine native, load 0 s, pipeline 32, path language.md, load verification full, UTC 2026-11-16T12:52:11Z; loadavg 3.26 2.77 2.25 3/5719 1495947
+ok http 29 functional cases, 12 persistent/pipelined requests
+ok http-get native and interpreter
+HTTP measurement loadavg: 3.16 2.76 2.24 3/5713 1497299
+HTTP memory after warmup: 1 samples; RSS first/last/min/max 1980/1980/1980/1980 KiB; virtual first/last 2099984/2099984 KiB; peak RSS 1980 KiB
+HTTP memory samples: target/gate/http-profiles/http.memory.00000000000002777731
+CPU samples: 3; requested period 1000 us; inclusive counts each function once per sample
+Top self time
+self% incl% samples function
+33.3 33.3 1 $platform::file_write
+33.3 33.3 1 $std::sequence::extend_from_slice$f52<Self=t15;T=t5;> [file 7:104]
+33.3 33.3 1 $std::buffer::read$f697<Self=t24;> [file 28:24]
+Top inclusive time
+self% incl% samples function
+0.0 100.0 3 $platform::entry
+0.0 100.0 3 main [file 0:63]
+0.0 100.0 3 $std::http_server::serve<H=t46;> [file 24:548]
+0.0 100.0 3 $std::http_server::run$f646<H=t46;Self=t16;> [file 24:482]
+0.0 100.0 3 $std::http_server::turn$f640<H=t46;Self=t17;> [file 24:392]
+0.0 66.6 2 $std::http_server::read_header_step$f635<H=t46;Self=t17;> [file 24:254]
+33.3 33.3 1 $platform::file_write
+Emitted instruction kinds (self samples)
+kind self% samples class
+kind 0.0 0 unknown
+kind 0.0 0 inline copy
+kind 0.0 0 checks
+kind 0.0 0 call instruction
+kind 0.0 0 frame load/store
+kind 0.0 0 other memory
+kind 33.3 1 arithmetic / comparison / conversion
+kind 0.0 0 branch
+kind 0.0 0 allocator
+kind 33.3 1 runtime
+kind 33.3 1 register-to-register move
+kind 0.0 0 address formation (LEA)
+kind 0.0 0 immediate constant
+kind 0.0 0 argument setup / result capture
+kind 0.0 0 prologue / epilogue
+kind 0.0 0 return
+HTTP profile samples: target/gate/http-profiles/http.samples.00000000000002777731
+ok buffered header expired behind response after 2013834983 ns; request deadline 1000000000 ns
+ok buffered body expired behind response after 2015153401 ns; request deadline 1000000000 ns
+ok later lookahead uses its own receive time; fresh idle request starts a new deadline
+HTTP deadline check 7225 ms; load 3.16 2.76 2.24 -> 3.31 2.79 2.26
+HTTP deadline cleanup complete: server/client-supervisor PIDs 2778500 2778529 reaped; port 41735 released; private files removed
+HTTP cleanup: started PIDs 2777731 2777736 2778399 2778412; all gone yes; temporary directory removed; port 45267 released

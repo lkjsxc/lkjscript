@@ -1,0 +1,45 @@
+"crate" level=source-claim operation-target
+"/home/coder/workspace/lkjscript/tests/fixtures/profile.lkj" level=source-claim file before=8899630364d9922f2de4c5ccfd667e1c582551dcad6800060c047a6a0534b7a5 after=184adbc8dd758c72474f268122602285468e99d2b21362216b9c5918b6e79fd4
+transaction sites=1 files=1 identities=1
+"CopyRoleByte" level=source-claim changed=added
+"CopyRoleByte::field:value" level=source-claim changed=added
+"CopyRoleChoice" level=source-claim changed=added
+"CopyRoleChoice::variant:Empty" level=source-claim changed=added
+"CopyRoleChoice::variant:Value" level=source-claim changed=added
+"CopyRoleChoice::variant:Value::field:0" level=source-claim changed=added
+"CopyRoleChoice::variant:Value::field:1" level=source-claim changed=added
+"CopyRoleChoice::variant:Value::field:2" level=source-claim changed=added
+"CopyRoleChoice::variant:Value::field:3" level=source-claim changed=added
+"CopyRoleFrame" level=source-claim changed=added
+"CopyRoleFrame::field:enabled" level=source-claim changed=added
+"CopyRoleFrame::field:small" level=source-claim changed=added
+"CopyRoleFrame::field:tag" level=source-claim changed=added
+"CopyRoleFrame::field:wide" level=source-claim changed=added
+"CopyRolePair" level=source-claim changed=added
+"CopyRolePair::field:left" level=source-claim changed=added
+"CopyRolePair::field:right" level=source-claim changed=added
+"CopyWide" level=source-claim changed=added
+"CopyWide::field:words" level=source-claim changed=added
+"copy_once" level=source-claim changed=added
+"copy_role_byte" level=source-claim changed=added
+"copy_role_byte::param:value" level=source-claim changed=added
+"copy_role_pair" level=source-claim changed=added
+"copy_role_pair::param:value" level=source-claim changed=added
+"copy_role_text" level=source-claim changed=added
+"copy_role_text::generic:'a" level=source-claim changed=added
+"copy_role_text::param:value" level=source-claim changed=added
+"copy_role_wide" level=source-claim changed=added
+"copy_role_wide::param:value" level=source-claim changed=added
+"copy_roles" level=source-claim changed=added
+"copy_samples" level=source-claim changed=added
+"copy_samples::param:world" level=source-claim changed=added
+"copy_work" level=source-claim changed=added
+"copy_work::param:iterations" level=source-claim changed=added
+"profile_value" level=source-claim changed=added
+"profile_value::param:value" level=source-claim changed=added
+"ir:copy_once" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:copy_roles" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:copy_samples" level=checked-ir authority-gained="effect:stdout_write,effect:world_stdout,grant:World" authority-lost="" entry-before=false entry-after=true
+program level=checked-ir before=9c0d0148fecbf5ba297df7fdf97ced14b4a0dbf62e85d1ec2ba384f996c6e81e after=48792404fbeb35c3ae9c28bc89d0d00d3bcc552ece5847b4480095f6515915b2 checked-instances=39 fresh-checked=39 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=2801249fe8c1fbd75d925a4cd08552f9d691a9dc5fc855207c791fd617310613 source-after=a1b6b6569d057d28a4a87b75dbbda444815b59caeeecb34619ee58bbe6b5b3b2 mode=apply
+replay desired=48792404fbeb35c3ae9c28bc89d0d00d3bcc552ece5847b4480095f6515915b2 candidate=48792404fbeb35c3ae9c28bc89d0d00d3bcc552ece5847b4480095f6515915b2 verified=true operations=14

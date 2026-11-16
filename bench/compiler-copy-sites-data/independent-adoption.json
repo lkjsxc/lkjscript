@@ -1,0 +1,29 @@
+{
+   "baseline" : "27c94440646d787efc4e7b43a712405288c22c61",
+   "baseline_blob_hashes_verified" : 1937,
+   "baseline_manifest_sha256" : "aa2912d32540817675dcb5f934662e6816a41ec138ed601f94d7ca461d31911d",
+   "baseline_path_set_exact" : true,
+   "changed_files" : [
+      "src/driver.lkj",
+      "src/native.lkj",
+      "src/native/cache.lkj",
+      "src/native/intrinsics.lkj",
+      "src/native/profiling.lkj",
+      "src/x86.lkj"
+   ],
+   "checked_meaning_from_retained_proof" : "241e20431bf668f7542324342181d868fc21dae82cf55bf8acc9c3446f227576",
+   "compiler_executed" : false,
+   "current_production_files_verified" : 216,
+   "current_production_source_scope" : [
+      "src",
+      "library"
+   ],
+   "current_untouched_production_files_verified" : 210,
+   "operation_added_lines" : 1108,
+   "operation_changed_lines" : 1206,
+   "operation_deleted_lines" : 98,
+   "preimages_and_applied_copies_verified" : 6,
+   "retained_numstat_exact" : true,
+   "retained_replay_operations" : 71,
+   "scope_note" : "Concurrent docs/test edits are separate; no claim that all current nonproduction paths retain baseline bytes."
+}

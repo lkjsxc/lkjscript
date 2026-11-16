@@ -1,0 +1,3 @@
+/home/coder/workspace/lkjscript/target/compiler-copy-sites-integrated/src/main.lkj:0:0: E_IO /home/coder/workspace/lkjscript/target/compiler-copy-sites-integrated/src/main.lkj:1:1: E_IO open failed (errno 18)
+/home/coder/workspace/lkjscript/target/compiler-copy-sites-integrated/src/main.lkj:0:0: E_BLOCKED file: /home/coder/workspace/lkjscript/target/compiler-copy-sites-integrated/src/main.lkj:1:1: E_IO open failed (errno 18)
+/home/coder/workspace/lkjscript/target/compiler-copy-sites-integrated/src/main.lkj:0:0: E_BLOCKED semantic phase: source errors prevent complete name resolution and semantic checking

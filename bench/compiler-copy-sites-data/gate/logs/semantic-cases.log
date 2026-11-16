@@ -1,0 +1,1 @@
+ok semantic-cases (12.841 s, load 5.51 -> 4.66; gate+579.903..592.744 s); cases reused=0 rerun=436 (authenticated producer and input closure; misses/open effects rerun)

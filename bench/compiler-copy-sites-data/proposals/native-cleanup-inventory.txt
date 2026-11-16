@@ -1,0 +1,44 @@
+600	1001	1001	1	6789	16	144	37052307	1794831933	target/compiler-copy-sites-candidate/README.md
+d119dd2311e2e5f5a00dafea22da0e2c79eb8ece719e18448d76825b46594bde  target/compiler-copy-sites-candidate/README.md
+600	1001	1001	1	486	8	144	37051926	1794831711	target/compiler-copy-sites-candidate/candidate.sha256
+0a534c802109171cac8a34c100491e13f4f873959e9429c9865c8800a2ccc328  target/compiler-copy-sites-candidate/candidate.sha256
+600	1001	1001	1	1071	8	144	37052309	1794831933	target/compiler-copy-sites-candidate/manifest.sha256
+daa9e05099b9f38b7c25a69428513a1146f3da3e55c1e2449759073012ef21ea  target/compiler-copy-sites-candidate/manifest.sha256
+600	1001	1001	1	34154	72	144	37051924	1794831711	target/compiler-copy-sites-candidate/proposal.diff
+b897a024a32fdada7034a90c8ed0ace56fe2172771da65c124093336c614e89d  target/compiler-copy-sites-candidate/proposal.diff
+600	1001	1001	1	357	8	144	37052308	1794831933	target/compiler-copy-sites-candidate/provenance.txt
+2bcb2139f00c5a6557010b1407c875ba2943a2933fbc604332bfe4f79df2a718  target/compiler-copy-sites-candidate/provenance.txt
+600	1001	1001	1	338	8	144	37051925	1794831711	target/compiler-copy-sites-candidate/source.sha256
+6b19719d05bf5756542fab2795f9b1d6bf9336519837b453a389e7f19a9df3f1  target/compiler-copy-sites-candidate/source.sha256
+600	1001	1001	1	88541	176	144	37047180	1794831535	target/compiler-copy-sites-candidate/src/native.lkj
+8443ca135131e565c01d311533c4fc976dea74c7177f14d19fbb8f8dc86a54f4  target/compiler-copy-sites-candidate/src/native.lkj
+600	1001	1001	1	16820	40	144	37051795	1794831668	target/compiler-copy-sites-candidate/src/native/cache.lkj
+2b125a813e20f04fb2d5a939a4e5f81f252082e0ca882ba840341be2244c1da1  target/compiler-copy-sites-candidate/src/native/cache.lkj
+600	1001	1001	1	37534	80	144	37047181	1794831535	target/compiler-copy-sites-candidate/src/native/intrinsics.lkj
+22b0cb4fd6e6bbe469d514a7ba25cfdb4be64784a5df683aaa11cd3f014d97c8  target/compiler-copy-sites-candidate/src/native/intrinsics.lkj
+600	1001	1001	1	33628	72	144	37051794	1794831668	target/compiler-copy-sites-candidate/src/x86.lkj
+6e25b0a456cc2bd278f30ebca7eeb7d8a3932e1235401502a9c27c39ecc54e09  target/compiler-copy-sites-candidate/src/x86.lkj
+600	1001	1001	1	2168	8	144	37066714	1794832335	target/compiler-copy-sites-candidate-v2/corrections.diff
+edbff13de0ae1425d67622168367d182d1a3d201d2895029f7e4ab42934d2fc7  target/compiler-copy-sites-candidate-v2/corrections.diff
+600	1001	1001	1	368	8	144	37066715	1794832335	target/compiler-copy-sites-candidate-v2/manifest.sha256
+c6b1cbe4555aa2ccc0183b66d185b0bf492a3ee55efe6b058695d9b63faa5978  target/compiler-copy-sites-candidate-v2/manifest.sha256
+644	1001	1001	1	16824	40	144	37066474	1794832329	target/compiler-copy-sites-candidate-v2/src/native/cache.lkj
+08508a69aa4c8024a3f5980bec8c00e2df9a368c2e7ad78f2667b0877b5ca57c  target/compiler-copy-sites-candidate-v2/src/native/cache.lkj
+644	1001	1001	1	33723	72	144	37066473	1794832329	target/compiler-copy-sites-candidate-v2/src/x86.lkj
+297c8b56d3fa8b2533245ad3a6c70af2097137020a502a3daa6fbfe283d72fac  target/compiler-copy-sites-candidate-v2/src/x86.lkj
+644	1001	1001	1	6683	16	144	37077629	1794832769	target/compiler-copy-sites-role-fixture-candidate/README.md
+62a511df28b4065b28fb6dc2cc4ef349eea83d29be01dd97753688b980292cf4  target/compiler-copy-sites-role-fixture-candidate/README.md
+600	1001	1001	1	3535	8	144	37077722	1794832788	target/compiler-copy-sites-role-fixture-candidate/additions.diff
+0759982d55f3ec052b4abaef3fbc088f884a1635eefa5d66873ea676ebcdaee0  target/compiler-copy-sites-role-fixture-candidate/additions.diff
+644	1001	1001	1	4045	8	144	37077542	1794832694	target/compiler-copy-sites-role-fixture-candidate/additions.json
+2b10947b55b9687a13ab1a67276dadbd062365d2b1915c46b7717f109ee940f2  target/compiler-copy-sites-role-fixture-candidate/additions.json
+644	1001	1001	1	3266	8	144	37077541	1794832694	target/compiler-copy-sites-role-fixture-candidate/additions.lkj
+f75120197455312f4c02ba635d4ea5fb5bb8129f61c5df95714c8114523394e1  target/compiler-copy-sites-role-fixture-candidate/additions.lkj
+644	1001	1001	1	126	8	144	37077543	1794832694	target/compiler-copy-sites-role-fixture-candidate/identities.txt
+04f2d818dc5711cbb79a3f01339065c7b900336429f5ec1b082c1c4350a4a6bb  target/compiler-copy-sites-role-fixture-candidate/identities.txt
+600	1001	1001	1	560	8	144	37077723	1794832788	target/compiler-copy-sites-role-fixture-candidate/manifest.sha256
+617b0475ea31b3e4344a955c548bf2303766058d0444e738a1a1f4f2280e4e60  target/compiler-copy-sites-role-fixture-candidate/manifest.sha256
+644	1001	1001	1	4376	16	144	37077540	1794832694	target/compiler-copy-sites-role-fixture-candidate/profile.lkj
+184adbc8dd758c72474f268122602285468e99d2b21362216b9c5918b6e79fd4  target/compiler-copy-sites-role-fixture-candidate/profile.lkj
+600	1001	1001	1	158	8	144	37077721	1794832788	target/compiler-copy-sites-role-fixture-candidate/static-check.txt
+6de76ef92a1d1a485206a5e6ed63ac5d0db7cc40842656c8741e44878da5fb54  target/compiler-copy-sites-role-fixture-candidate/static-check.txt

@@ -1,0 +1,81 @@
+diff --git a/target/compiler-copy-sites-integrated/src/x86.lkj b/src/x86.lkj
+index 5d46f519..e35451ae 100644
+--- a/target/compiler-copy-sites-integrated/src/x86.lkj
++++ b/src/x86.lkj
+@@ -44,21 +44,35 @@ pub const KIND_RETURN: u8 = 15;
+ pub const KIND_COUNT: usize = 16;
+ 
+ 
+-// Copy metadata is diagnostic only and is collected solely in profile mode.
++
+ pub const COPY_ORIGIN_BODY: u64 = 1;
++
+ pub const COPY_ORIGIN_PARAMETER: u64 = 2;
++
+ pub const COPY_ROLE_LOCAL: u64 = 1;
++
+ pub const COPY_ROLE_PLACE: u64 = 2;
++
+ pub const COPY_ROLE_CONSTRUCTOR_FIELD: u64 = 3;
++
+ pub const COPY_ROLE_ARRAY_ELEMENT: u64 = 4;
++
+ pub const COPY_ROLE_ABI_INCOMING: u64 = 5;
++
+ pub const COPY_ROLE_PARAM_LOCAL: u64 = 6;
++
+ pub const COPY_ROLE_ABI_RESULT: u64 = 7;
++
+ pub const COPY_ROLE_VEC_ELEMENT: u64 = 8;
++
+ pub const COPY_ROLE_RESULT_FIELD: u64 = 9;
++
+ pub const COPY_ROLE_REPEAT_ELEMENT: u64 = 10;
++
+ pub const COPY_ROLE_BOX_PAYLOAD: u64 = 11;
++
+ pub const COPY_ROLE_REFERENT: u64 = 12;
++
+ pub const COPY_ROLE_VIEW_HEADER: u64 = 13;
+ 
+ #[derive(Clone, Copy, PartialEq, Eq)]
+@@ -72,6 +86,7 @@ pub struct CopySite {
+     pub width: u64,
+     pub tags: u64,
+ }
++
+ pub fn valid_copy_tags(tags: u64) -> bool {
+     if tags & !0x0000000707ffffffu64 != 0 { return false; }
+     let origin = tags & 255u64;
+@@ -95,6 +110,7 @@ pub fn valid_copy_tags(tags: u64) -> bool {
+         || (source == COPY_ROLE_REFERENT && destination == COPY_ROLE_LOCAL)
+         || (source == COPY_ROLE_VIEW_HEADER && destination == COPY_ROLE_VIEW_HEADER)
+ }
++
+ fn valid_copy_coordinates(site: &CopySite) -> bool {
+     let origin = site.tags & 255u64;
+     site.start < site.end && site.width != 0 && site.function != !0usize && site.ty != !0usize
+@@ -102,6 +118,7 @@ fn valid_copy_coordinates(site: &CopySite) -> bool {
+         && ((origin == COPY_ORIGIN_BODY && site.instruction != !0usize)
+             || (origin == COPY_ORIGIN_PARAMETER && site.instruction == !0usize))
+ }
++
+ pub(crate) fn copy_interval(kinds: &[(usize, u8)], start: usize, end: usize, length: usize) -> bool {
+     if start >= end || end > length { return false; }
+     let mut low = 0usize;
+@@ -113,7 +130,6 @@ pub(crate) fn copy_interval(kinds: &[(usize, u8)], start: usize, end: usize, len
+     low != 0 && kinds[low - 1usize].1 == KIND_COPY
+         && (low == kinds.len() || kinds[low].0 >= end)
+ }
+-
+ struct Reference {
+     at: usize,
+     label: Label,
+@@ -163,6 +179,7 @@ impl Default for Assembler {
+         Self::new()
+     }
+ }
++
+ impl Assembler {
+     pub fn new() -> Self {
+         Self {

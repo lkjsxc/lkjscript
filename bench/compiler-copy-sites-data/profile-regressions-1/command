@@ -1,0 +1,1 @@
+/usr/bin/prlimit --as=4294967296 -- /usr/bin/timeout --kill-after=10s 600s sh -x tools/profile-test.sh /home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence/compiler 

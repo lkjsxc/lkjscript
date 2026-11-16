@@ -1,0 +1,1 @@
+/usr/bin/prlimit --as=4294967296 -- /usr/bin/timeout --kill-after=10s 2400s env LKJSCRIPT_GATE_JOBS=4 LKJSCRIPT_STORE=/home/coder/workspace/lkjscript/target/compiler-copy-sites-gate.ccpzZ9/store LKJSCRIPT_STORE_KEY=/home/coder/.local/state/lkjscript/store-key bash tools/check.sh 
