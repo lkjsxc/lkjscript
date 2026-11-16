@@ -1,0 +1,11 @@
+Too many arguments for main::require_true at /home/coder/workspace/lkjscript/target/compiler-scalar-cohort-acceptance-1/audit-v2.pl line 34, near "$why)"
+Too many arguments for main::require_true at /home/coder/workspace/lkjscript/target/compiler-scalar-cohort-acceptance-1/audit-v2.pl line 37, near ""not a regular file: $p")"
+Too many arguments for main::require_true at /home/coder/workspace/lkjscript/target/compiler-scalar-cohort-acceptance-1/audit-v2.pl line 40, near ""read identity: $p")"
+Too many arguments for main::require_true at /home/coder/workspace/lkjscript/target/compiler-scalar-cohort-acceptance-1/audit-v2.pl line 43, near ""changed while reading: $p")"
+Too many arguments for main::require_true at /home/coder/workspace/lkjscript/target/compiler-scalar-cohort-acceptance-1/audit-v2.pl line 44, near ""short read: $p")"
+Too many arguments for main::require_true at /home/coder/workspace/lkjscript/target/compiler-scalar-cohort-acceptance-1/audit-v2.pl line 50, near ""not one line: $_[0]")"
+Too many arguments for main::require_true at /home/coder/workspace/lkjscript/target/compiler-scalar-cohort-acceptance-1/audit-v2.pl line 53, near ""bad audit output")"
+Too many arguments for main::require_true at /home/coder/workspace/lkjscript/target/compiler-scalar-cohort-acceptance-1/audit-v2.pl line 66, near ""bad key/value")"
+Too many arguments for main::require_true at /home/coder/workspace/lkjscript/target/compiler-scalar-cohort-acceptance-1/audit-v2.pl line 66, near ""duplicate key/value")"
+Too many arguments for main::require_true at /home/coder/workspace/lkjscript/target/compiler-scalar-cohort-acceptance-1/audit-v2.pl line 72, near ""bad hash line: $path")"
+/home/coder/workspace/lkjscript/target/compiler-scalar-cohort-acceptance-1/audit-v2.pl has too many errors.

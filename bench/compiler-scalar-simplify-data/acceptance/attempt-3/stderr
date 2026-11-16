@@ -1,0 +1,1 @@
+Use of uninitialized value $dir in lstat at /home/coder/workspace/lkjscript/target/compiler-scalar-cohort-acceptance-1/audit-v3.pl line 81.

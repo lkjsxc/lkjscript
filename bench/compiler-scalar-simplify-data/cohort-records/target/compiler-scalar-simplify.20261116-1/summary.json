@@ -1,0 +1,40 @@
+{
+   "candidate_ci" : "pending-until-if-main-adoption",
+   "decision" : "discard-scalar-below-threshold",
+   "fixed_order" : [
+      "A1",
+      "B1",
+      "B2",
+      "A2",
+      "A3",
+      "B3"
+   ],
+   "mean_B_over_A" : 0.992973210364515,
+   "mean_wall_reduction_percent" : 0.702678963548531,
+   "peak_runtime_rss_kib" : {
+      "A" : 526328,
+      "B" : 527144
+   },
+   "policy_change" : "none",
+   "primary_metric" : "arithmetic mean GNU-time wall, all three executions per policy",
+   "qualifies" : false,
+   "runtime_cpu_sum_ns" : {
+      "A" : 44650000000,
+      "B" : 44310000000
+   },
+   "runtime_mean_ns" : {
+      "A" : 15180000000,
+      "B" : 15073333333.3333
+   },
+   "runtime_median_ns" : {
+      "A" : 15220000000,
+      "B" : 15130000000
+   },
+   "runtime_sum_ns" : {
+      "A" : 45540000000,
+      "B" : 45220000000
+   },
+   "threshold" : "10*sum_B <= 9*sum_A",
+   "timing_claim_limit" : "one fixed-order six-run cohort; no randomized effect or backend floor",
+   "timing_repetitions_per_policy" : 3
+}

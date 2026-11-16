@@ -1,0 +1,6 @@
+/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source.tar: OK
+/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/seed/lkjscript.gz: OK
+/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/expected: OK
+/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/emitter: OK
+/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/producer-A: OK
+/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/producer-B: OK

@@ -1,0 +1,3947 @@
+{
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/arena.lkj" : {
+      "bytes" : 5649,
+      "mode" : "0600",
+      "sha256" : "1f9db54c4e8845aacc8d98e525bdd95c16c4bd064ad6aa92663d74607b9cbd84"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/buffer.lkj" : {
+      "bytes" : 2153,
+      "mode" : "0600",
+      "sha256" : "de444027870ae8382b3a137e625df00cc3b91774b3aa3280bfe25456b40c6e2d"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/bytes.lkj" : {
+      "bytes" : 968,
+      "mode" : "0600",
+      "sha256" : "8448ec831069dcb9af7255684f7cab55941450774d7207df05441e21da76c140"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/char.lkj" : {
+      "bytes" : 3050,
+      "mode" : "0600",
+      "sha256" : "a88b914c36fd02fa3513a6bd7d3b605c910a7d081fc73556e90f2f559b329c91"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/command.lkj" : {
+      "bytes" : 1092,
+      "mode" : "0600",
+      "sha256" : "ec475789a7f3953f16787781d020221e010077ce1f761fa807f1a3e971dff02b"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/fmt.lkj" : {
+      "bytes" : 14447,
+      "mode" : "0600",
+      "sha256" : "ac6ca7fd2494a691e749b49880a97c96f271445d3955a857d30a91a122ef6c98"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/foreign.lkj" : {
+      "bytes" : 2758,
+      "mode" : "0600",
+      "sha256" : "ba8b2d0bc38d83ea88794e1305542001d47dca467b3cb63bff5393fa3aa1b190"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/foreign_session.lkj" : {
+      "bytes" : 2313,
+      "mode" : "0600",
+      "sha256" : "07a4b69c352bfb9b79c4b949e99aacfc4af18e61350310475dbe56747561217b"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/hmac.lkj" : {
+      "bytes" : 1552,
+      "mode" : "0600",
+      "sha256" : "0b858ec07dea6ed77dbe2f1d2c7f5d82bb80fac22581fe2c4eacde6da0d0dc0a"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/http_policy.lkj" : {
+      "bytes" : 3345,
+      "mode" : "0600",
+      "sha256" : "828a8ac2268d7457dbbd899f845da47ebcb72ab05b706af4482c14207807ad71"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/http_protocol.lkj" : {
+      "bytes" : 22342,
+      "mode" : "0600",
+      "sha256" : "6e271d2712c55bdb2abe3e932ed19b341f9a2aedf02c3b4e147295a36c3b55b5"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/http_server.lkj" : {
+      "bytes" : 28337,
+      "mode" : "0600",
+      "sha256" : "a1eaa77fba55dd2a0881ff0c5c23f73541ad9d41ddf865e6817714c7dbba5864"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/integer.lkj" : {
+      "bytes" : 11342,
+      "mode" : "0600",
+      "sha256" : "4a6aee75de5f562487765f0ef10f21853082abeb79784692bdd4e870bf20dba9"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/io.lkj" : {
+      "bytes" : 15293,
+      "mode" : "0600",
+      "sha256" : "8624371dcbfa20f14a867f68235c647e7da69294df53a83509ab3db8fb1cfe26"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/iter.lkj" : {
+      "bytes" : 14776,
+      "mode" : "0600",
+      "sha256" : "2b8770dfcd8d7ae0e339aa36dd9224d69a449d8da96a8fc1de7fc9a8225db145"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/json.lkj" : {
+      "bytes" : 16416,
+      "mode" : "0600",
+      "sha256" : "37ec8d2a45090c6baca53ddb841c34d87472c7d3829611aaab9014e5ee268c0a"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/lib.lkj" : {
+      "bytes" : 1735,
+      "mode" : "0600",
+      "sha256" : "f3a22089990f40ae34cf921efe417122e89fc7e360de63424123862b2ecfd1a8"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/ordered_map.lkj" : {
+      "bytes" : 15116,
+      "mode" : "0600",
+      "sha256" : "c307dfaf987976ce401a8404f5ddc23dbfd44f07f94d81eb627b95ce8bb339cb"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/ordered_set.lkj" : {
+      "bytes" : 2714,
+      "mode" : "0600",
+      "sha256" : "374842accfffca999a5ec91469653d2b853ce682d2d64a4e22843de5d0d3a4e7"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/prelude.lkj" : {
+      "bytes" : 12911,
+      "mode" : "0600",
+      "sha256" : "6838e80682187566eb03b27975e0ee9b0b92c0cd93ba48e4448de89ee6bff166"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/process_model.lkj" : {
+      "bytes" : 7863,
+      "mode" : "0600",
+      "sha256" : "d80022d5aeb0bf171d2bef171e322e39376835be4f61cc518c8fb0ae5b940b41"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/read_io.lkj" : {
+      "bytes" : 2291,
+      "mode" : "0600",
+      "sha256" : "1818cfbf170fca18aa35415498cd97f9c6c46eae326669ff8d091192fc49dd9b"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/runtime.lkj" : {
+      "bytes" : 7050,
+      "mode" : "0600",
+      "sha256" : "eeeb173d23c597d7b666aca949a32ba171fa5407be4173ad4626abe1ad295d14"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/sequence.lkj" : {
+      "bytes" : 12749,
+      "mode" : "0600",
+      "sha256" : "44b90b45b87dc95987a58967fa38c8d5788fc573d10fbbdb368e7854dd2cfb98"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/sha256.lkj" : {
+      "bytes" : 6245,
+      "mode" : "0600",
+      "sha256" : "1cc3ea4cdde49659c4acc438211b7913dc6a274519b07c43a33d56dc8b0ee75c"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/str.lkj" : {
+      "bytes" : 17153,
+      "mode" : "0600",
+      "sha256" : "6fd8f10faaddba5738a108e878590c20a36391fe0c93ab0dfa8bcfeac3588cb9"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/string.lkj" : {
+      "bytes" : 5748,
+      "mode" : "0600",
+      "sha256" : "2956a68eb4ae029e49a730359f4fa207f91651a42e8d0e7ae5f929773a9a94b6"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/text.lkj" : {
+      "bytes" : 4696,
+      "mode" : "0600",
+      "sha256" : "a3db91eb7293a2755c6d1001a3a59da3357a349985535d509a36f80a64f7ab3f"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/text_lower.lkj" : {
+      "bytes" : 23643,
+      "mode" : "0600",
+      "sha256" : "aa0e8391619ea7f700fccf5a073f19f28d56a62061e8011d018f1901f86a92a8"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/time.lkj" : {
+      "bytes" : 5328,
+      "mode" : "0600",
+      "sha256" : "fa4723f72c2ee85a8388543959c6a612c921cc3006a0e5b8c94d0480d5582507"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/timers.lkj" : {
+      "bytes" : 4640,
+      "mode" : "0600",
+      "sha256" : "bfec10692ce18268654d56ebc29e0eec52996f2aa1ef46d83467d09541bcc7a1"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/library/workers.lkj" : {
+      "bytes" : 5022,
+      "mode" : "0600",
+      "sha256" : "7ec1ce8104ecdc1aae563c839ca962c3248345ebe71729d516e63dce2c9ed36d"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/admitted_image.lkj" : {
+      "bytes" : 3909,
+      "mode" : "0600",
+      "sha256" : "1e21c342d227c7edaf57c774cbcb724260aa376c8bf0ab56f81fe5b571434964"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/ast.lkj" : {
+      "bytes" : 10168,
+      "mode" : "0600",
+      "sha256" : "12cde633da8d5ac54bc71fe68b02017259a29ca3c44af23163565544464317bb"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/authority.lkj" : {
+      "bytes" : 21484,
+      "mode" : "0600",
+      "sha256" : "7503de630376a8c73a16ba81e0d149f7b12c9ecda8b30787b8121e2656cd429e"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/backend.lkj" : {
+      "bytes" : 6444,
+      "mode" : "0600",
+      "sha256" : "6aa820ebd4f84d404fdf252ca8d0bf5004e5ab43896f5f906ef3b43bdbafcc16"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/check.lkj" : {
+      "bytes" : 154155,
+      "mode" : "0600",
+      "sha256" : "71a23af143af92e8134f8453f34dd53f934b41d25736419f296c7458f5016e78"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/check/io.lkj" : {
+      "bytes" : 20826,
+      "mode" : "0600",
+      "sha256" : "5c550ce07efc6469f4760e98ef8a706667f7d1012423b9fd1673d917490acab3"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/check/scoped.lkj" : {
+      "bytes" : 25030,
+      "mode" : "0600",
+      "sha256" : "8e0c2a3c84a41e9244f1e34847481609ebf5d0c89f8ce07635fea757f77d73ef"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/check/scoped/locals.lkj" : {
+      "bytes" : 33345,
+      "mode" : "0600",
+      "sha256" : "e20135f660e2fae1104c9e6f970d5ab6be661357d3f1435a6feb20f4323819b2"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/check/scoped/views.lkj" : {
+      "bytes" : 8599,
+      "mode" : "0600",
+      "sha256" : "fb1adb0136f122b4eb65c731e669ea2177cc1eb4268b62f4704592eda4432a30"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/child_image.lkj" : {
+      "bytes" : 14069,
+      "mode" : "0600",
+      "sha256" : "155d192d068f0aabdd6d7aedc175a2b0d4dbae841e528f0b1902a9c557bace9e"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/child_image_cases.lkj" : {
+      "bytes" : 8050,
+      "mode" : "0600",
+      "sha256" : "460610bb323b2d61774ca4a17a981b810d5bca4d9de40eb6f11c4eac408466b7"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/closed_semantics.lkj" : {
+      "bytes" : 687,
+      "mode" : "0600",
+      "sha256" : "4dcbb7199ca05f23850dc6fb9a99887a874bb17c3b66373a8ccd2e4ad224e795"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/compiler.lkj" : {
+      "bytes" : 989,
+      "mode" : "0600",
+      "sha256" : "230cf8c9186561c4798da749f76d1c715ad7b4b66205fb399f823cb48f7bcdae"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/diagnostic.lkj" : {
+      "bytes" : 1088,
+      "mode" : "0600",
+      "sha256" : "0af2e25d88f30d57090130370e3178ad1d7072abf5afd43cf907ae30c9183e2c"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/diagnostics.lkj" : {
+      "bytes" : 2663,
+      "mode" : "0600",
+      "sha256" : "dca093110285a9b1531adc90dc6a4b5c597da4df5e5d7d78bd249d454994a8bd"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/diagnostics/borrow_edits.lkj" : {
+      "bytes" : 20019,
+      "mode" : "0600",
+      "sha256" : "f1e4dee120c0a7ff481e55e6364858b483be4e9a76361c2b92a7a03a44d42d09"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/diagnostics/consumer_edits.lkj" : {
+      "bytes" : 15720,
+      "mode" : "0600",
+      "sha256" : "b5e3d320e8ebc4135d53798660d7a625bcaae13f00edf810beb56cf5094e7b12"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/diagnostics/iterator_edits.lkj" : {
+      "bytes" : 7890,
+      "mode" : "0600",
+      "sha256" : "2be574b57fbcd1f631297fbc0c4f5e1a75dc0d08487174c31e7dc3ff5a2698e4"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/diagnostics/site_edits.lkj" : {
+      "bytes" : 6223,
+      "mode" : "0600",
+      "sha256" : "2eb75017172af724aa5b166613c255023a25ad88202286b0031b82fcac5561fe"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/diagnostics/static_label_edits.lkj" : {
+      "bytes" : 13431,
+      "mode" : "0600",
+      "sha256" : "8a4a39605f6751deeed093501fb86c35c1ab6d1781bdda760a9387443f3f4d63"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/driver.lkj" : {
+      "bytes" : 123588,
+      "mode" : "0600",
+      "sha256" : "46cb19f03237da9b10079f901f31acf213003b5bc6777df831743460e9d08f8e"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/driver/structure.lkj" : {
+      "bytes" : 30522,
+      "mode" : "0600",
+      "sha256" : "2b02455269ae3226ca027da6c41bfa7cfc09c11cf023a983f850297dd71c3c49"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/driver_host.lkj" : {
+      "bytes" : 34058,
+      "mode" : "0600",
+      "sha256" : "5cd7889d478eb40db329f04b56d68057e4111161e840c8d4cbd2f98cf30e0725"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate.lkj" : {
+      "bytes" : 194997,
+      "mode" : "0600",
+      "sha256" : "f6df272d50928d3bc22b1f55412a081ba74839523bb9193b9f375917e3d97d90"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/assignment.lkj" : {
+      "bytes" : 9683,
+      "mode" : "0600",
+      "sha256" : "832de8f0bee30bfb8b35fbba0116e868ce61d3a6bd3867f83bf477133058a186"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/borrow_cleanup.lkj" : {
+      "bytes" : 14331,
+      "mode" : "0600",
+      "sha256" : "51c4a7bf4643e03a475e07066c0a8d6ddb91ff857265dd4417bfc8c9cd4d6c33"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/capabilities.lkj" : {
+      "bytes" : 39398,
+      "mode" : "0600",
+      "sha256" : "40440007b614f3ae77498f6aa98065efb05145fe13a8ec3ed38127fffa1b1d85"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/closures.lkj" : {
+      "bytes" : 51916,
+      "mode" : "0600",
+      "sha256" : "d8941bb33e5a594a889617d5c6a7f7ccedde6df73473f6a4a716072c2e533baf"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/constructors.lkj" : {
+      "bytes" : 14200,
+      "mode" : "0600",
+      "sha256" : "d79715cddd8c1bb269be02d02e96938c3eef6a2b19a2b9bcb9858d39f467b5cf"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/definition_types.lkj" : {
+      "bytes" : 102567,
+      "mode" : "0600",
+      "sha256" : "163766449e8cbcc5d4d48a6979f26172db6ff8f08980038b1114a62c0338adf8"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/definition_types/capabilities.lkj" : {
+      "bytes" : 7648,
+      "mode" : "0600",
+      "sha256" : "142928273bda82380df80fa023c6410d54ff4c6765f5ecf3008a9cad82145218"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/definition_types/closures.lkj" : {
+      "bytes" : 6766,
+      "mode" : "0600",
+      "sha256" : "4000641a782400e6a443b38dfc9e44b19a069e39162cc94e1022138c4ec637d6"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/definition_types/method_headers.lkj" : {
+      "bytes" : 10708,
+      "mode" : "0600",
+      "sha256" : "ca19e8c2d8df3b8f9592c0ff9f3c6ad2ca1a321b8a56a8dd3430dd61df901a1f"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/definition_types/pattern_equations.lkj" : {
+      "bytes" : 4402,
+      "mode" : "0600",
+      "sha256" : "e2b888ecc5f9f16f49b9c4a45f07484e6a3ec2177e67b6dfedecb49761055c7c"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/definition_types/projection_equations.lkj" : {
+      "bytes" : 12174,
+      "mode" : "0600",
+      "sha256" : "5c455a38a1d151b7b5963908a916e1368c6e65cda6ae42011cacc5df1d2ba701"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/definition_types/semantic.lkj" : {
+      "bytes" : 5927,
+      "mode" : "0600",
+      "sha256" : "6a61d2419336f4b01bf5ce146216dac7b806aea5b79c3d87fd791873a6d3f4df"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/definition_types/source_types.lkj" : {
+      "bytes" : 10689,
+      "mode" : "0600",
+      "sha256" : "a56ab9038e4c91847b9fdf38b73a6a4057d27c1d0fb677240f9aec13ca759271"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/derive_check.lkj" : {
+      "bytes" : 11268,
+      "mode" : "0600",
+      "sha256" : "cb4b54f377efd3e09d8c59492ccb07403d2e9955005d8dd47cfea977aefb3f49"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/derive_methods.lkj" : {
+      "bytes" : 40000,
+      "mode" : "0600",
+      "sha256" : "721d5d1466bbfb53ef19cbcae7249e5c27214e736982cb929bdeda5fea4deacf"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/diagnostic_edits.lkj" : {
+      "bytes" : 18356,
+      "mode" : "0600",
+      "sha256" : "cc8e40302de5d239fa6090e2c9738fcc4f01452a5eb655f33ed3d6e51e12eb26"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/diagnostic_inference.lkj" : {
+      "bytes" : 1007,
+      "mode" : "0600",
+      "sha256" : "045f4ac68f29d42b0340eafccc7f1278f71c898ba7e980b73b08890f560e26c0"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/floats.lkj" : {
+      "bytes" : 9855,
+      "mode" : "0600",
+      "sha256" : "169e5d946f0972fda458b9bbae9c15c388c4cc2e455a2602b2a499a379a762c4"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/generic_check.lkj" : {
+      "bytes" : 57548,
+      "mode" : "0600",
+      "sha256" : "a41123b95d2cf375e6a8b929abbee98bdd3db55b33fd94107a576abedc9ef472"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/incremental.lkj" : {
+      "bytes" : 16413,
+      "mode" : "0600",
+      "sha256" : "3f19c06a0022e69856fd4693020672de07455ad1962bb6be7bf874e979e37537"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/inference.lkj" : {
+      "bytes" : 14930,
+      "mode" : "0600",
+      "sha256" : "4ab336f8f8142dc580a2476281abcceb6663a713b5acb849390fc3802e6ae6ee"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/integers.lkj" : {
+      "bytes" : 9426,
+      "mode" : "0600",
+      "sha256" : "707c712c875e6e42b2cec72d80cf77fd573a3e15b06c15230b42e60bab60bd0d"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/methods.lkj" : {
+      "bytes" : 4526,
+      "mode" : "0600",
+      "sha256" : "df97a059c3ed72b375dc5db4bc1614f85f8f6f607baa834847f7f5f96d97f463"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/operators.lkj" : {
+      "bytes" : 19189,
+      "mode" : "0600",
+      "sha256" : "d7125c7343bf460261bf569aa088c6d287319ec025e45cb73b777a79b96b6b4e"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/origins.lkj" : {
+      "bytes" : 26366,
+      "mode" : "0600",
+      "sha256" : "7bf0d43bdba77b9f0cc3e80a18694d70c1a5f00a89a6fdf887da668372fec4fc"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/output.lkj" : {
+      "bytes" : 14836,
+      "mode" : "0600",
+      "sha256" : "6bed56a3891bb74cac09aca6c916413c60bd8efddc59dbe218a8774b54f9851b"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/pattern_choices.lkj" : {
+      "bytes" : 23061,
+      "mode" : "0600",
+      "sha256" : "3f8593b15908ad86e9672726b2591d39ec5cf243abe87edc30745e16c1398de9"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/patterns.lkj" : {
+      "bytes" : 64118,
+      "mode" : "0600",
+      "sha256" : "1acfd88e82b646fba18aeb080e082cb3486fd8ad8e3adc7f2539147851472ca3"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/ranges.lkj" : {
+      "bytes" : 7515,
+      "mode" : "0600",
+      "sha256" : "3066e8bda9c7ed159b68af4ac387abe99593fe31eaf2b93314aab35867b4b9fd"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/scoped_calls.lkj" : {
+      "bytes" : 22429,
+      "mode" : "0600",
+      "sha256" : "376808c731e1c8496ddcebd74533f6b81cf6234a5d9744fb9e2449b5207a30b5"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/scoped_locals.lkj" : {
+      "bytes" : 15950,
+      "mode" : "0600",
+      "sha256" : "1d410be1f51b73711edc4f79261662c930e09aa9c29bdc74c595b73fb67c1425"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/semantic.lkj" : {
+      "bytes" : 7280,
+      "mode" : "0600",
+      "sha256" : "05cc1b05999773203ce559d2ea6474b93ff52572bb3b99779306fd4e697ef329"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/sequences.lkj" : {
+      "bytes" : 5436,
+      "mode" : "0600",
+      "sha256" : "15b41c14f08ec3497ba3bc5f7a17992c6aff944e8ec5848250f5622ed689b596"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/static_lifetimes.lkj" : {
+      "bytes" : 11874,
+      "mode" : "0600",
+      "sha256" : "dac5a64c156b94e90d233ce4c10a8712eb6e4c4a50bc69ba06742d03de4655b6"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/sugars.lkj" : {
+      "bytes" : 8773,
+      "mode" : "0600",
+      "sha256" : "6f5a49a6af7caef672915ea3954e838ad0e0cdd94dff7115a44e2d2bbde48d44"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/text_format.lkj" : {
+      "bytes" : 17351,
+      "mode" : "0600",
+      "sha256" : "11d94777c11d959f26de3f3550c64897efff153aa39f25f2bc684717c2a65fc8"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/trait_proofs.lkj" : {
+      "bytes" : 5759,
+      "mode" : "0600",
+      "sha256" : "c252248217fa2b59e25c53f2cb6590ba0d8ea15cc02c92c82bb933646bbc37c7"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/type_display.lkj" : {
+      "bytes" : 2556,
+      "mode" : "0600",
+      "sha256" : "4e21bf86289c60ca9d5efd2a0a0023210e821913642c89a4bccd5dbf0c170a44"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/type_resolve.lkj" : {
+      "bytes" : 26150,
+      "mode" : "0600",
+      "sha256" : "7e6bd34536ac7f8640ee3501e6a6f30f5adbf9cd6f24414661821d1e0438a41e"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/elaborate/variants.lkj" : {
+      "bytes" : 7233,
+      "mode" : "0600",
+      "sha256" : "ffdb1ec68ee75e69080cbcb2be210846b4be3e946104fbdc4014ffd123dfc62c"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/embedded.lkj" : {
+      "bytes" : 2480,
+      "mode" : "0600",
+      "sha256" : "2214fbaeaa2b45da480076dfd92cecde02dac72fece7c320a709a3f0dc9c0d55"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/entry_grants.lkj" : {
+      "bytes" : 10394,
+      "mode" : "0600",
+      "sha256" : "c6bbe64115978e63b6d6e02ca3bbddbfe3a88c6d48698a9a7df52c52b2b6c840"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/facts.lkj" : {
+      "bytes" : 5216,
+      "mode" : "0600",
+      "sha256" : "ab77f537bd3d9edcd304e84147b11ae6236c5136641314ae89b540e940674fe2"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/frontend.lkj" : {
+      "bytes" : 1271,
+      "mode" : "0600",
+      "sha256" : "339dd6c95239236e97200c4ae764a3a6b5a9689afd1ca449002ffb114ab8b534"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/gate_reuse_main.lkj" : {
+      "bytes" : 7857,
+      "mode" : "0600",
+      "sha256" : "e4c40afbb064ce8d72124ecde5795f62589a806a08e0885260f753d885124994"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/generics.lkj" : {
+      "bytes" : 98627,
+      "mode" : "0600",
+      "sha256" : "b010b15e7f92d21a31dd11dacea0048c1219ba653f98cb95881417a03ce4f5ee"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/generics/bound_solver.lkj" : {
+      "bytes" : 5289,
+      "mode" : "0600",
+      "sha256" : "47adc0962358861a85cb36f1f9aa8d14f9f6be9cc119d721b315950032e8088d"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/generics/signature_bounds.lkj" : {
+      "bytes" : 12349,
+      "mode" : "0600",
+      "sha256" : "a99c1ac45bece2a59ba270a7a35da7f73a1863fdc4f66d5339d8bfb6d6f9b4bb"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/host_network.lkj" : {
+      "bytes" : 25964,
+      "mode" : "0600",
+      "sha256" : "9e5489500e7fdaab9a08a04fa7cdf8529508b32c8c1cd47d53ecc41a4c8e9a42"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/host_network/broker.lkj" : {
+      "bytes" : 31066,
+      "mode" : "0600",
+      "sha256" : "817a42ab999558631e00f374d9343b3e817d5f16a078c99e5a926bfe7cf88e24"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/host_network/directories.lkj" : {
+      "bytes" : 11701,
+      "mode" : "0600",
+      "sha256" : "7b633e6a559d5e29539d62c78f8ab0510d812a6644cf19f1663b750008b308cf"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/host_network/foreign.lkj" : {
+      "bytes" : 23223,
+      "mode" : "0600",
+      "sha256" : "23704200e280a4f322d8bacaf6e18a2561e84430ed4f79007d792867e54d4599"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/host_network/foreign_session.lkj" : {
+      "bytes" : 20304,
+      "mode" : "0600",
+      "sha256" : "ac4e8d2452968fd8edd0ec20e5706693bcc22c902dc6e485b9dd00020efc38bf"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/host_network/lifecycle.lkj" : {
+      "bytes" : 5474,
+      "mode" : "0600",
+      "sha256" : "2d422c9b67f247cd592565b77844193c4111bb9e67733b9f7a4f310963d14978"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/host_network/process.lkj" : {
+      "bytes" : 12400,
+      "mode" : "0600",
+      "sha256" : "2f4ea3aa6262076d01aca32f5ad9e57975e36277a2992ddc882d4f2028a82a10"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/host_network/workers.lkj" : {
+      "bytes" : 21636,
+      "mode" : "0600",
+      "sha256" : "b8ff4649bf42bccf8f8ce6627be131b5e771d2c154d29ca4a9a060462f15debd"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/interpreter.lkj" : {
+      "bytes" : 123147,
+      "mode" : "0600",
+      "sha256" : "764e0d057a2cffc1f04ca32e93fe861987bbf2e77ed8e5deb70c76090d8deda9"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/interpreter/diagnostics.lkj" : {
+      "bytes" : 4142,
+      "mode" : "0600",
+      "sha256" : "a8d2368545a6c98f6e8a2da845c14a2b1286e858f6dc37c8ff76ff6aa1f15e09"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/interpreter/io.lkj" : {
+      "bytes" : 58174,
+      "mode" : "0600",
+      "sha256" : "612ca82867309ac1b1ce4e7c8655da620104ffba5ba2d733bdf25b1b9664301f"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/interpreter/scalar.lkj" : {
+      "bytes" : 8458,
+      "mode" : "0600",
+      "sha256" : "8a392f6b50889c7af23603b60b45c9f2085b90ab7bb1cf3f6be9877e48fc7cc9"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/ir.lkj" : {
+      "bytes" : 29411,
+      "mode" : "0600",
+      "sha256" : "40f7ae357e53524e0e2e89aa5e0b697613705b7342fef10346f78673679c9655"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/ir_binary.lkj" : {
+      "bytes" : 20456,
+      "mode" : "0600",
+      "sha256" : "d6c59a6670fde7acb93a2083f1d35998f091f247a386549a7761dd05dadb7f93"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/ir_text.lkj" : {
+      "bytes" : 43408,
+      "mode" : "0600",
+      "sha256" : "af4c78b51063bce8a24e2a35bd364a48cbb3a888d01c1fd6219faa3d5983d4f8"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/json.lkj" : {
+      "bytes" : 1186,
+      "mode" : "0600",
+      "sha256" : "c779d8e6c8e87811febd18ab6d3f51bdf9b26c085952845245bcad553082c7ed"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/lib.lkj" : {
+      "bytes" : 707,
+      "mode" : "0600",
+      "sha256" : "7475720af5fe414d52d0be589ebd2d7f25688013c5fe9227cc11e5dd3678505b"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/main.lkj" : {
+      "bytes" : 1039,
+      "mode" : "0600",
+      "sha256" : "7f7d43c94196d6ef9641bebf3f764fc5f3691f84c3bc8dcd137c7deb4eedd07a"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/meaning.lkj" : {
+      "bytes" : 31491,
+      "mode" : "0600",
+      "sha256" : "3079b5c92306abcdf9156e99bf970577174fadeda5818b4a80b5cce114adf6e1"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/names.lkj" : {
+      "bytes" : 371,
+      "mode" : "0600",
+      "sha256" : "d62ce42092821a3a6f33058377fe53fb6a0f7a577e9ebd067f363638672fe0c4"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native.lkj" : {
+      "bytes" : 88388,
+      "mode" : "0600",
+      "sha256" : "61d11c2b9caf4de3e3ee6bc533447da868a5c102e8dc05a63d1cf410790c95dc"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/cache.lkj" : {
+      "bytes" : 16864,
+      "mode" : "0600",
+      "sha256" : "eef07f3b7f920e9b712a371329c2408a4b3a5f6c9b5d0644978be154471270be"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/child_entry.lkj" : {
+      "bytes" : 11433,
+      "mode" : "0600",
+      "sha256" : "d9a77599c3ae21106ed6683445bc3cdf1822d88a87048dfd962c2b276bc06d2b"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/diagnostics.lkj" : {
+      "bytes" : 7225,
+      "mode" : "0600",
+      "sha256" : "85a545a647a2eb0dc9cdd289942a443e4ef905b6bca414b36f5e4ae72b98f3a9"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/entry.lkj" : {
+      "bytes" : 10585,
+      "mode" : "0600",
+      "sha256" : "cdf9b04d775950d90b2ac4a2ecfc9dc77e1bf7bad46e50280bf2e25e425df163"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/environment.lkj" : {
+      "bytes" : 2275,
+      "mode" : "0600",
+      "sha256" : "919e2485b114d994e95090662bc3a27af393a2e415f4aa9b75cdbbcdf3ca91b9"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/foreign.lkj" : {
+      "bytes" : 21551,
+      "mode" : "0600",
+      "sha256" : "18f6a3a98dacf3db82e153accd917fc462fa93807cc337357d3667b5f171adab"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/foreign_session.lkj" : {
+      "bytes" : 17265,
+      "mode" : "0600",
+      "sha256" : "0119ee8bf9d3f104eaff590b8c0e3d3b67a2f752bcf7ff75bf3697190812eefc"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/intrinsics.lkj" : {
+      "bytes" : 37534,
+      "mode" : "0600",
+      "sha256" : "22b0cb4fd6e6bbe469d514a7ba25cfdb4be64784a5df683aaa11cd3f014d97c8"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/layout.lkj" : {
+      "bytes" : 8785,
+      "mode" : "0600",
+      "sha256" : "f88d1ff9a50ce796d2fc10bfa04cd4e8d73a30d8284d5a9b3bcd3488f724daf0"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/lifecycle.lkj" : {
+      "bytes" : 6606,
+      "mode" : "0600",
+      "sha256" : "2b91309f7e88164929650d226248cf313a7052338f0f5f30fe8630f99f83acfa"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/network.lkj" : {
+      "bytes" : 7054,
+      "mode" : "0600",
+      "sha256" : "65faef54fbfe56a85ebb8cfec3dfba9ab0db82e7f79749384ebbb7f96c85c02f"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/ownership.lkj" : {
+      "bytes" : 4173,
+      "mode" : "0600",
+      "sha256" : "79072b9fa29972d45f3099b2a88f089af0ede246a5ccd0d67970e56178dc2833"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/platform.lkj" : {
+      "bytes" : 32811,
+      "mode" : "0600",
+      "sha256" : "ce8b3fdf826a878abbb9e75832c611eae48560dd1e39e7162029d96070bdd0e5"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/process.lkj" : {
+      "bytes" : 18589,
+      "mode" : "0600",
+      "sha256" : "2d81b96116239c795bbcb1e5f2e5d6ddf8ba17d9815414c4e531d0c71615b438"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/profiling.lkj" : {
+      "bytes" : 41990,
+      "mode" : "0600",
+      "sha256" : "59a6bdc97617130af9b7a0fbd3964952b31a48f2aa11dfac73416a0dad22fbe5"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/read_region.lkj" : {
+      "bytes" : 4992,
+      "mode" : "0600",
+      "sha256" : "f905f903f401e382d6f1964e5f3aca4130868f9bf0bb90147c7dc58922491dde"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/readiness.lkj" : {
+      "bytes" : 6282,
+      "mode" : "0600",
+      "sha256" : "8c8cf29d9f6d8283fa5a4bd2191fbd0c10795c51284438901e02060d622a69f8"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/registers.lkj" : {
+      "bytes" : 9849,
+      "mode" : "0600",
+      "sha256" : "543e6f139a95a2a496a328bb53ec99f1b723ff70c84ec9208277ea304018006a"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/scalar.lkj" : {
+      "bytes" : 17321,
+      "mode" : "0600",
+      "sha256" : "1a39b11441c7c01c0a94e4f064a8efddd7ce6c4938c10dc3ce55972ac281cd70"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/semantic.lkj" : {
+      "bytes" : 746,
+      "mode" : "0600",
+      "sha256" : "572dd21f3afc92f9410ebb32853b899b01e8f5c7c19f38d429097b3ffe05e3db"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/storage.lkj" : {
+      "bytes" : 11901,
+      "mode" : "0600",
+      "sha256" : "6b6ff6d9b8a38e12b60b9ba025db3ff1840e8f1d2df79ab40365659fd4665e55"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/storage_plan.lkj" : {
+      "bytes" : 2068,
+      "mode" : "0600",
+      "sha256" : "ce7fd06da2040779c4d03e2810b037fd71abe91a79bf5160441112298310a33f"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/native/workers.lkj" : {
+      "bytes" : 17868,
+      "mode" : "0600",
+      "sha256" : "d824f1d83ff94446d090d493e1f2dd7db784d1fc90f2591cdff8fc6c83dbab3a"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/optimizer.lkj" : {
+      "bytes" : 18621,
+      "mode" : "0600",
+      "sha256" : "850f0f4ff5c1fa81de371c06e11fdab5be2430bb4605fe0a6772f53d0ebfe4f4"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/optimizer/scalar.lkj" : {
+      "bytes" : 18058,
+      "mode" : "0600",
+      "sha256" : "b0d035f802caf02cb86f4eeb6a985aceb821fe67e74965afd7222df4e5abe18d"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/program_directory.lkj" : {
+      "bytes" : 8464,
+      "mode" : "0600",
+      "sha256" : "7486875ac1b4b79365a795c052747252d16d262eeb0183d05d8731c38a6c5e06"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/programs_admission_main.lkj" : {
+      "bytes" : 7537,
+      "mode" : "0600",
+      "sha256" : "836300ac0549064d7a78592b3f6ca6737b010656bc2706f2400b31e4e34c0dc0"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/programs_directory_cases.lkj" : {
+      "bytes" : 2292,
+      "mode" : "0600",
+      "sha256" : "63a8455353a992854c4af56350613976597cf60c5a1665fd28d70d7e2885136d"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/programs_foreign_session_mutation.lkj" : {
+      "bytes" : 5285,
+      "mode" : "0600",
+      "sha256" : "d0857b045c9c781e3ec8c3f18169bad5b43c5db2b00009fd41ac8c768bde7c63"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/programs_process_mutation.lkj" : {
+      "bytes" : 13933,
+      "mode" : "0600",
+      "sha256" : "3b4206ddd567f9c3345be2b0478a2d8424db54582163a057419bbb4c17ac1655"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/query_store_cases.lkj" : {
+      "bytes" : 12647,
+      "mode" : "0600",
+      "sha256" : "53314714f4f2d2cc45b89bbee52185c9f6976332722c35181f4eab6268fa87fb"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/resolve.lkj" : {
+      "bytes" : 44279,
+      "mode" : "0600",
+      "sha256" : "7355155f6c133bdd290d25067cebe7df6a0c35dcf5fe0698eee01d89271e9293"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/resolve/import_scopes.lkj" : {
+      "bytes" : 4215,
+      "mode" : "0600",
+      "sha256" : "bc52b438b83b7ddad39398d453ea37c5dba02454c50f99df496c02dffb684ad1"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/resolve/iteration.lkj" : {
+      "bytes" : 7742,
+      "mode" : "0600",
+      "sha256" : "a21cc7bfa1c88ee181a3d2f946b26685c1bbab708b765364f90b5047d27f3acb"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/reuse.lkj" : {
+      "bytes" : 19688,
+      "mode" : "0600",
+      "sha256" : "7ea5a19669d196bc0ec9630b39ed29ff821938b5ca6b6b63262a8a40aa80038f"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/runtime.lkj" : {
+      "bytes" : 7243,
+      "mode" : "0600",
+      "sha256" : "f25b7ded2ecf03e60fe1f4fce3d5dd6f8523d8b942f5fc58ae1ee062be44bbf7"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/runtime_diagnostics.lkj" : {
+      "bytes" : 10181,
+      "mode" : "0600",
+      "sha256" : "763083ea4d9b5f95bb9070016fbea446f937a582071ff4fb0bbe17a807ab0465"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/runtime_memory.lkj" : {
+      "bytes" : 8728,
+      "mode" : "0600",
+      "sha256" : "62244047de4c0f8cb3b5afccaabef5590e031de16858b25cadbdc2c222378bf6"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic.lkj" : {
+      "bytes" : 48299,
+      "mode" : "0600",
+      "sha256" : "f85b5d25336462e58505a07d4426c94489e9df849306174c3719b8de5a8a91d0"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic/origins.lkj" : {
+      "bytes" : 16852,
+      "mode" : "0600",
+      "sha256" : "b1922fef4fb8100c64caf936ffb237653e74174143b44f706ec3351c990df2d7"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic/references.lkj" : {
+      "bytes" : 27200,
+      "mode" : "0600",
+      "sha256" : "f406ebce52b191c375d29be1dfa7edf6a2febd70ffbfb932ce4c1fa698e6d8bb"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_facts.lkj" : {
+      "bytes" : 16955,
+      "mode" : "0600",
+      "sha256" : "013429fb13d9fc43c6304a838356603d7c41107b96e8c68261a0e68b58edafa9"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_main.lkj" : {
+      "bytes" : 1747,
+      "mode" : "0600",
+      "sha256" : "604dcc8bb7ac9d41765977db8b971e3bfe1932d01967b429899d807f712d55b5"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_query.lkj" : {
+      "bytes" : 9400,
+      "mode" : "0600",
+      "sha256" : "6db89d85392bed48974928dc2949a0a184005f3cfe599dd443889d1b0d948908"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_store.lkj" : {
+      "bytes" : 15892,
+      "mode" : "0600",
+      "sha256" : "b906e93b08a4375133ef56875d2782c5ddd1315c133bf4d0009977f1ca027bdf"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests.lkj" : {
+      "bytes" : 6056,
+      "mode" : "0600",
+      "sha256" : "f3efce27264edf5ff2897c2c161ea0e064c3eb8e256ad9b37d407514d1408a81"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/allocator.lkj" : {
+      "bytes" : 11646,
+      "mode" : "0600",
+      "sha256" : "4cc25183c55dc6290af60674db3a55cb62ad28fa396ef9844767bf5ff144e525"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/allocator_fixture.lkj" : {
+      "bytes" : 3247,
+      "mode" : "0600",
+      "sha256" : "e5b31433690de4b23d83a9777f1c7a49bb08f45747ce9db297dbae62a26c54de"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/array_repeat.lkj" : {
+      "bytes" : 6908,
+      "mode" : "0600",
+      "sha256" : "8797e6cdb776678b19565da76a4bad3972f8c15239839cd3c04a2c2368c90361"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/closed_units.lkj" : {
+      "bytes" : 11658,
+      "mode" : "0600",
+      "sha256" : "37d7afaad2278c496bf396ffef0b81232044f4a47dcda838a78bd65df4533581"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/diagnostic_contracts.lkj" : {
+      "bytes" : 13509,
+      "mode" : "0600",
+      "sha256" : "93677180dfda1c4270d8335f33c002ba48b6d0f1c4fd9d07edff649a7d76b325"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/entry_grants.lkj" : {
+      "bytes" : 18272,
+      "mode" : "0600",
+      "sha256" : "63d6c3f811f1a030db5cb6d12df3f50f0c1ec25e321477eb3fdbc74e7ff8aaa5"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/facts.lkj" : {
+      "bytes" : 3236,
+      "mode" : "0600",
+      "sha256" : "3a98f1b8a92e9db08bc0ca117622c9d4fe0b4e6d5d477d806bafaa1832c39351"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/function_owners.lkj" : {
+      "bytes" : 3825,
+      "mode" : "0600",
+      "sha256" : "0d501c42f6d7d10a6cf323da6ebd6d244408e9697ed00c52e4e12ff99786f368"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/interpreter_contracts.lkj" : {
+      "bytes" : 48723,
+      "mode" : "0600",
+      "sha256" : "726e91b14eb4ae41ad6bb7a1a9f8f2cc1360ab212f33214c1276f01d290d4b98"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/ir_binary.lkj" : {
+      "bytes" : 11712,
+      "mode" : "0600",
+      "sha256" : "47451e1ee9e2f3bf3ed34113eea982716ab65966c1286a16c12c685e0bcdaa13"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/ir_binary_admission.lkj" : {
+      "bytes" : 703,
+      "mode" : "0600",
+      "sha256" : "981fc8dd5ede7dc400d8738c8109346c76d5dd46bc474671bd0d01a762d33b08"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/library_demand.lkj" : {
+      "bytes" : 7956,
+      "mode" : "0600",
+      "sha256" : "6427d5c66cdcaf2055a4009d98d397575c38204ff3711671dabf71c24cf7bb7d"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/optimizer.lkj" : {
+      "bytes" : 17067,
+      "mode" : "0600",
+      "sha256" : "76ce8c73b42399dee23ea7e0696dafb0f95db30c379bb4e5cce27fd4ee3a8dba"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/optimizer/forwarding.lkj" : {
+      "bytes" : 16256,
+      "mode" : "0600",
+      "sha256" : "1eaaf3ad2fd11e7c4ed233db2ab7f7dfda3b2a0f73e78f1caa17a5bd8e86cdb1"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/optimizer/scalars.lkj" : {
+      "bytes" : 35224,
+      "mode" : "0600",
+      "sha256" : "c2def2592b809a846b4207065503a4c90d51b7f161957b9f2ca89623f0cbe78b"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/optimizer/wrappers.lkj" : {
+      "bytes" : 8447,
+      "mode" : "0600",
+      "sha256" : "091b83e682ec3a779819d600611a6fea0ff6b9ded46121a3fedac9cdfa0129e2"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/panic_messages.lkj" : {
+      "bytes" : 8493,
+      "mode" : "0600",
+      "sha256" : "1bf300a05543ab71a0ae6f7fbbb51108c6790e3e70e4e1e3c1acf855a05f5fa3"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/parser_contracts.lkj" : {
+      "bytes" : 3282,
+      "mode" : "0600",
+      "sha256" : "6c76289003d986d7a4a8dc81b0d88023dc2cbbe6f02745826c49fb9b14539858"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/recheck.lkj" : {
+      "bytes" : 15204,
+      "mode" : "0600",
+      "sha256" : "2ae9b67f65a6d76944e5a87c14566786e70a61ab62e9eef7f55bf6179cd59514"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/resolver.lkj" : {
+      "bytes" : 2216,
+      "mode" : "0600",
+      "sha256" : "7582746acdb71d3489cd5734ab472e2be935d416dc1d14221880f54535db27ac"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/return_contracts.lkj" : {
+      "bytes" : 5052,
+      "mode" : "0600",
+      "sha256" : "36d1339dc8c1aee253c82b8591e687b4cb077a6b71d445b3ea467cc3da26e774"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/reuse.lkj" : {
+      "bytes" : 15755,
+      "mode" : "0600",
+      "sha256" : "d009b63ac03c53e42fcb56d5b1c6ded95586d54a5dc825e19b2df4a3a56d9438"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/scalar_clone.lkj" : {
+      "bytes" : 3778,
+      "mode" : "0600",
+      "sha256" : "fc898abbb9be3ce77eba39c8f73099627ace7dbf0c4db55c95ded0cf0f130a43"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/source_cases.lkj" : {
+      "bytes" : 979605,
+      "mode" : "0600",
+      "sha256" : "2ee826eb7712efe7edd9cbc84da8527ebb91e99a81cc8e2c71edfc6147a1006f"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/source_contracts.lkj" : {
+      "bytes" : 7254,
+      "mode" : "0600",
+      "sha256" : "771df44f91a8b1b6d409b7788e9efcea89c13e9fa2741251563427eba5cd9faf"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/semantic_tests/units.lkj" : {
+      "bytes" : 74192,
+      "mode" : "0600",
+      "sha256" : "c7ea21b528cdf3c7ada8bb45dfa6436fbb4ab5241912bb56a35e0660a4c0bdcd"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/source.lkj" : {
+      "bytes" : 21283,
+      "mode" : "0600",
+      "sha256" : "93d1f41f34e747fe9387cd70ffacd8cd8277cce37fc783fe2ec70f36e171e960"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/store.lkj" : {
+      "bytes" : 76264,
+      "mode" : "0600",
+      "sha256" : "40a9f63ee6c9f60563c3e2de25eab19a78dc7308c8104d59f68cce9319932bbe"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/structure_edit.lkj" : {
+      "bytes" : 23933,
+      "mode" : "0600",
+      "sha256" : "8ff0523e958c4f71f4b0322eabd52ff89ad58c1690dac7c0bf177766a8dcd5e4"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/structure_refactor.lkj" : {
+      "bytes" : 129395,
+      "mode" : "0600",
+      "sha256" : "6debbca3945ff228f2f7cd5e3e0c98c53f6a71eb15d1dc4acd54459311edf63d"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/structure_refactor_cases.lkj" : {
+      "bytes" : 53522,
+      "mode" : "0600",
+      "sha256" : "189f53aa1005b9c829afdf4f7a9ea574bc5a746ca29c2bb1cccd0a12b16fbc47"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/structure_replay.lkj" : {
+      "bytes" : 22142,
+      "mode" : "0600",
+      "sha256" : "aa2af86f2cee2393b3be2ae5b67e3738e0f493162d0f64a9ee0a75c20b23d47f"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/structure_write.lkj" : {
+      "bytes" : 24893,
+      "mode" : "0600",
+      "sha256" : "96408572b6a687d3906abd946b9644fb11175f03b354c65cc1ec67f94fd26afc"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/syntax.lkj" : {
+      "bytes" : 130696,
+      "mode" : "0600",
+      "sha256" : "73a58b0255ab74086c34e20ae77c9bd908997d199869af3ff95d1be381d12af2"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/syntax/default.lkj" : {
+      "bytes" : 4099,
+      "mode" : "0600",
+      "sha256" : "ef36c574b288033a99ff3ab745c321ffb24613ff8149975b749ce3d5d78fade3"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/syntax/formatting.lkj" : {
+      "bytes" : 5903,
+      "mode" : "0600",
+      "sha256" : "e1699026a980f60cc0cee32666847b0e282a010eb623234d12c5b1764891ef8a"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/test_generators.lkj" : {
+      "bytes" : 60821,
+      "mode" : "0600",
+      "sha256" : "638ddec606cfb29a74ac057371a3db7ffd148d1cc61c25d143c181e5eee6aa94"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/test_generators/extended_cases.lkj" : {
+      "bytes" : 42037,
+      "mode" : "0600",
+      "sha256" : "ebb47e9038a41fb77ebd7fbeada7d13ad6904865adecad91e7200393977efee6"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/test_generators/integer_cases.lkj" : {
+      "bytes" : 3589,
+      "mode" : "0600",
+      "sha256" : "811a2b79f188b79f7e588b72c26e50be6d2f3b5af9337cdb0d7b667cb187ab1e"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/test_generators/mutation.lkj" : {
+      "bytes" : 14613,
+      "mode" : "0600",
+      "sha256" : "b047bafb7c67cd63d8755c644e9471e83e319c8549aa7bd3bd8bc7ad2412ea48"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/test_generators/ownership.lkj" : {
+      "bytes" : 17531,
+      "mode" : "0600",
+      "sha256" : "59e42b90e517056780a4f5520bf21982dc379fb3766694d851a2ce2e7d462c10"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/test_generators/reduction.lkj" : {
+      "bytes" : 12713,
+      "mode" : "0600",
+      "sha256" : "31c15f5fd87c97ae3f277b5ec5c35bc10a32d3fe0b1e607065a1dbbf3227f17a"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/test_generators/scale.lkj" : {
+      "bytes" : 4139,
+      "mode" : "0600",
+      "sha256" : "62bf9396f194814ea3d295e8b8f8204d651fd64ea9869f743119fe28154d2dba"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/test_generators/source_cases.lkj" : {
+      "bytes" : 21192,
+      "mode" : "0600",
+      "sha256" : "088cbc7223bc3fad90b9cb67d3bd8a30f3e37dd68e3c31cf9166835781f3b731"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/test_generators/values.lkj" : {
+      "bytes" : 26271,
+      "mode" : "0600",
+      "sha256" : "0b90b5094302351e27f033c4acb17e7cb33ef2d71ce2225fb2d38a3b04aa16a6"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/test_runner.lkj" : {
+      "bytes" : 45763,
+      "mode" : "0600",
+      "sha256" : "0d90325e8c5ec31ef59af5abf5e0c55a877ef441111242b16cd2a51f0df29abc"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/src/x86.lkj" : {
+      "bytes" : 33664,
+      "mode" : "0600",
+      "sha256" : "26a2d776163fa388969979f3cb2767567e3925254330efa1a7b0a5649d672d04"
+   },
+   "/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/lkjscript" : {
+      "bytes" : 32761734,
+      "mode" : "0755",
+      "sha256" : "f85624e3cc694f6a3a3e10c33f822789ae6084e2d5a5b41c3b1fc8fcc9bd2d64"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/execution-release.md" : {
+      "bytes" : 6204,
+      "mode" : "0644",
+      "sha256" : "caac1ba49044e4f4a2e0072cc57ad9516078a5850a73d9f4cc7f7864658ffc8a"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/focused-summary.json" : {
+      "bytes" : 6035,
+      "mode" : "0600",
+      "sha256" : "5f2df61db6decc3eaf91dbaaa3885600a56015da1f7b77b8d7db8799b654c508"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/gate/summary.json" : {
+      "bytes" : 10137,
+      "mode" : "0600",
+      "sha256" : "0bc00b8d36c8f909490cf3edd0d4578c052b90ccbc3d0754ee4b477d06531431"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/producer-pin.json" : {
+      "bytes" : 3886,
+      "mode" : "0644",
+      "sha256" : "d4ff362499768e6f19ca73a918c2234773c2bc62bc5bc145fa31c1dd104961f3"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/retention-copy.json" : {
+      "bytes" : 17902,
+      "mode" : "0600",
+      "sha256" : "35fd00547fb670da52cbce7a26979271ae09b875b40b1d5dc2926e88ad387393"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/source/compiler-scalar-source-5b5ce775.bundle" : {
+      "bytes" : 30643,
+      "mode" : "0600",
+      "sha256" : "a60e009b486d3eba48c24f14aaf7274662ab3744dc9718b480d412d3ffe8a552"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/source/create.stderr" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/source/create.stdout" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/source/finished.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "e59a9f4b296e658befce4d2b1ee5b0929377f2786589f2ce964b4743d5dcf6b3"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/source/list-heads" : {
+      "bytes" : 81,
+      "mode" : "0600",
+      "sha256" : "e8c7acaf6ddb816b97326593b7c57c87aff53d42bda6ac9f91a39416e35b8229"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/source/load-after" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "6c6753268ce38bdffde02059477188462cfc666cd615d92e09e261abc4bf7572"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/source/load-before" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "6c6753268ce38bdffde02059477188462cfc666cd615d92e09e261abc4bf7572"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/source/ref-removal" : {
+      "bytes" : 46,
+      "mode" : "0600",
+      "sha256" : "cec56be9f081dca2a75060ebd9958ef3058dbac78d83055d6b7bc9a12c7cbba8"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/source/source-pins" : {
+      "bytes" : 287,
+      "mode" : "0600",
+      "sha256" : "28cfe6714c5bd9504c97ad80ef00adf82499396d48a71dc6c6d9ae254fbbf479"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/source/source-retention.json" : {
+      "bytes" : 704,
+      "mode" : "0600",
+      "sha256" : "cc5add87b772c2a74e503778678544762a63824720b7f60ded0505a41d134684"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/source/source-tree.txt" : {
+      "bytes" : 214954,
+      "mode" : "0600",
+      "sha256" : "78ab420fad993128f598c578d5bf2d7558fac684a2f365b3d9490bc52f16b7ac"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/source/started.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "766a073d567e1345fa434b70b186bdcd6c5ab57ea33d888237f62872c1e5987f"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/source/verify.stderr" : {
+      "bytes" : 89,
+      "mode" : "0600",
+      "sha256" : "7256dbd55a19414571f523a446c15609d4949936bb1cda693a9556b95385195f"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/source/verify.stdout" : {
+      "bytes" : 225,
+      "mode" : "0600",
+      "sha256" : "c64f13c7bdda48d31adb33bdc227d69cfc74a9445e03b364749f04f4f79cfe41"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-plan.md" : {
+      "bytes" : 10219,
+      "mode" : "0644",
+      "sha256" : "5e7c5b605250bb3cc5e5153f1f2fac9a95a686cae5495bebfe5c6ee5798716d4"
+   },
+   "/home/coder/workspace/lkjscript/bench/compiler_scalar_simplify.sh" : {
+      "bytes" : 17217,
+      "mode" : "0644",
+      "sha256" : "092f0187705dc5136284d2cb9deed82d6c35664138e3c631a9887c01c280aad3"
+   },
+   "/home/coder/workspace/lkjscript/library/arena.lkj" : {
+      "bytes" : 5649,
+      "mode" : "0600",
+      "sha256" : "1f9db54c4e8845aacc8d98e525bdd95c16c4bd064ad6aa92663d74607b9cbd84"
+   },
+   "/home/coder/workspace/lkjscript/library/buffer.lkj" : {
+      "bytes" : 2153,
+      "mode" : "0600",
+      "sha256" : "de444027870ae8382b3a137e625df00cc3b91774b3aa3280bfe25456b40c6e2d"
+   },
+   "/home/coder/workspace/lkjscript/library/bytes.lkj" : {
+      "bytes" : 968,
+      "mode" : "0600",
+      "sha256" : "8448ec831069dcb9af7255684f7cab55941450774d7207df05441e21da76c140"
+   },
+   "/home/coder/workspace/lkjscript/library/char.lkj" : {
+      "bytes" : 3050,
+      "mode" : "0600",
+      "sha256" : "a88b914c36fd02fa3513a6bd7d3b605c910a7d081fc73556e90f2f559b329c91"
+   },
+   "/home/coder/workspace/lkjscript/library/command.lkj" : {
+      "bytes" : 1092,
+      "mode" : "0600",
+      "sha256" : "ec475789a7f3953f16787781d020221e010077ce1f761fa807f1a3e971dff02b"
+   },
+   "/home/coder/workspace/lkjscript/library/fmt.lkj" : {
+      "bytes" : 14447,
+      "mode" : "0600",
+      "sha256" : "ac6ca7fd2494a691e749b49880a97c96f271445d3955a857d30a91a122ef6c98"
+   },
+   "/home/coder/workspace/lkjscript/library/foreign.lkj" : {
+      "bytes" : 2758,
+      "mode" : "0600",
+      "sha256" : "ba8b2d0bc38d83ea88794e1305542001d47dca467b3cb63bff5393fa3aa1b190"
+   },
+   "/home/coder/workspace/lkjscript/library/foreign_session.lkj" : {
+      "bytes" : 2313,
+      "mode" : "0600",
+      "sha256" : "07a4b69c352bfb9b79c4b949e99aacfc4af18e61350310475dbe56747561217b"
+   },
+   "/home/coder/workspace/lkjscript/library/hmac.lkj" : {
+      "bytes" : 1552,
+      "mode" : "0600",
+      "sha256" : "0b858ec07dea6ed77dbe2f1d2c7f5d82bb80fac22581fe2c4eacde6da0d0dc0a"
+   },
+   "/home/coder/workspace/lkjscript/library/http_policy.lkj" : {
+      "bytes" : 3345,
+      "mode" : "0600",
+      "sha256" : "828a8ac2268d7457dbbd899f845da47ebcb72ab05b706af4482c14207807ad71"
+   },
+   "/home/coder/workspace/lkjscript/library/http_protocol.lkj" : {
+      "bytes" : 22342,
+      "mode" : "0600",
+      "sha256" : "6e271d2712c55bdb2abe3e932ed19b341f9a2aedf02c3b4e147295a36c3b55b5"
+   },
+   "/home/coder/workspace/lkjscript/library/http_server.lkj" : {
+      "bytes" : 28337,
+      "mode" : "0600",
+      "sha256" : "a1eaa77fba55dd2a0881ff0c5c23f73541ad9d41ddf865e6817714c7dbba5864"
+   },
+   "/home/coder/workspace/lkjscript/library/integer.lkj" : {
+      "bytes" : 11342,
+      "mode" : "0600",
+      "sha256" : "4a6aee75de5f562487765f0ef10f21853082abeb79784692bdd4e870bf20dba9"
+   },
+   "/home/coder/workspace/lkjscript/library/io.lkj" : {
+      "bytes" : 15293,
+      "mode" : "0600",
+      "sha256" : "8624371dcbfa20f14a867f68235c647e7da69294df53a83509ab3db8fb1cfe26"
+   },
+   "/home/coder/workspace/lkjscript/library/iter.lkj" : {
+      "bytes" : 14776,
+      "mode" : "0600",
+      "sha256" : "2b8770dfcd8d7ae0e339aa36dd9224d69a449d8da96a8fc1de7fc9a8225db145"
+   },
+   "/home/coder/workspace/lkjscript/library/json.lkj" : {
+      "bytes" : 16416,
+      "mode" : "0600",
+      "sha256" : "37ec8d2a45090c6baca53ddb841c34d87472c7d3829611aaab9014e5ee268c0a"
+   },
+   "/home/coder/workspace/lkjscript/library/lib.lkj" : {
+      "bytes" : 1735,
+      "mode" : "0600",
+      "sha256" : "f3a22089990f40ae34cf921efe417122e89fc7e360de63424123862b2ecfd1a8"
+   },
+   "/home/coder/workspace/lkjscript/library/ordered_map.lkj" : {
+      "bytes" : 15116,
+      "mode" : "0600",
+      "sha256" : "c307dfaf987976ce401a8404f5ddc23dbfd44f07f94d81eb627b95ce8bb339cb"
+   },
+   "/home/coder/workspace/lkjscript/library/ordered_set.lkj" : {
+      "bytes" : 2714,
+      "mode" : "0600",
+      "sha256" : "374842accfffca999a5ec91469653d2b853ce682d2d64a4e22843de5d0d3a4e7"
+   },
+   "/home/coder/workspace/lkjscript/library/prelude.lkj" : {
+      "bytes" : 12911,
+      "mode" : "0600",
+      "sha256" : "6838e80682187566eb03b27975e0ee9b0b92c0cd93ba48e4448de89ee6bff166"
+   },
+   "/home/coder/workspace/lkjscript/library/process_model.lkj" : {
+      "bytes" : 7863,
+      "mode" : "0600",
+      "sha256" : "d80022d5aeb0bf171d2bef171e322e39376835be4f61cc518c8fb0ae5b940b41"
+   },
+   "/home/coder/workspace/lkjscript/library/read_io.lkj" : {
+      "bytes" : 2291,
+      "mode" : "0600",
+      "sha256" : "1818cfbf170fca18aa35415498cd97f9c6c46eae326669ff8d091192fc49dd9b"
+   },
+   "/home/coder/workspace/lkjscript/library/runtime.lkj" : {
+      "bytes" : 7050,
+      "mode" : "0600",
+      "sha256" : "eeeb173d23c597d7b666aca949a32ba171fa5407be4173ad4626abe1ad295d14"
+   },
+   "/home/coder/workspace/lkjscript/library/sequence.lkj" : {
+      "bytes" : 12749,
+      "mode" : "0600",
+      "sha256" : "44b90b45b87dc95987a58967fa38c8d5788fc573d10fbbdb368e7854dd2cfb98"
+   },
+   "/home/coder/workspace/lkjscript/library/sha256.lkj" : {
+      "bytes" : 6245,
+      "mode" : "0644",
+      "sha256" : "1cc3ea4cdde49659c4acc438211b7913dc6a274519b07c43a33d56dc8b0ee75c"
+   },
+   "/home/coder/workspace/lkjscript/library/str.lkj" : {
+      "bytes" : 17153,
+      "mode" : "0600",
+      "sha256" : "6fd8f10faaddba5738a108e878590c20a36391fe0c93ab0dfa8bcfeac3588cb9"
+   },
+   "/home/coder/workspace/lkjscript/library/string.lkj" : {
+      "bytes" : 5748,
+      "mode" : "0600",
+      "sha256" : "2956a68eb4ae029e49a730359f4fa207f91651a42e8d0e7ae5f929773a9a94b6"
+   },
+   "/home/coder/workspace/lkjscript/library/text.lkj" : {
+      "bytes" : 4696,
+      "mode" : "0600",
+      "sha256" : "a3db91eb7293a2755c6d1001a3a59da3357a349985535d509a36f80a64f7ab3f"
+   },
+   "/home/coder/workspace/lkjscript/library/text_lower.lkj" : {
+      "bytes" : 23643,
+      "mode" : "0600",
+      "sha256" : "aa0e8391619ea7f700fccf5a073f19f28d56a62061e8011d018f1901f86a92a8"
+   },
+   "/home/coder/workspace/lkjscript/library/time.lkj" : {
+      "bytes" : 5328,
+      "mode" : "0600",
+      "sha256" : "fa4723f72c2ee85a8388543959c6a612c921cc3006a0e5b8c94d0480d5582507"
+   },
+   "/home/coder/workspace/lkjscript/library/timers.lkj" : {
+      "bytes" : 4640,
+      "mode" : "0600",
+      "sha256" : "bfec10692ce18268654d56ebc29e0eec52996f2aa1ef46d83467d09541bcc7a1"
+   },
+   "/home/coder/workspace/lkjscript/library/workers.lkj" : {
+      "bytes" : 5022,
+      "mode" : "0600",
+      "sha256" : "7ec1ce8104ecdc1aae563c839ca962c3248345ebe71729d516e63dce2c9ed36d"
+   },
+   "/home/coder/workspace/lkjscript/src/admitted_image.lkj" : {
+      "bytes" : 3909,
+      "mode" : "0600",
+      "sha256" : "1e21c342d227c7edaf57c774cbcb724260aa376c8bf0ab56f81fe5b571434964"
+   },
+   "/home/coder/workspace/lkjscript/src/ast.lkj" : {
+      "bytes" : 10168,
+      "mode" : "0600",
+      "sha256" : "12cde633da8d5ac54bc71fe68b02017259a29ca3c44af23163565544464317bb"
+   },
+   "/home/coder/workspace/lkjscript/src/authority.lkj" : {
+      "bytes" : 21484,
+      "mode" : "0600",
+      "sha256" : "7503de630376a8c73a16ba81e0d149f7b12c9ecda8b30787b8121e2656cd429e"
+   },
+   "/home/coder/workspace/lkjscript/src/backend.lkj" : {
+      "bytes" : 6444,
+      "mode" : "0600",
+      "sha256" : "6aa820ebd4f84d404fdf252ca8d0bf5004e5ab43896f5f906ef3b43bdbafcc16"
+   },
+   "/home/coder/workspace/lkjscript/src/check.lkj" : {
+      "bytes" : 154155,
+      "mode" : "0600",
+      "sha256" : "71a23af143af92e8134f8453f34dd53f934b41d25736419f296c7458f5016e78"
+   },
+   "/home/coder/workspace/lkjscript/src/check/io.lkj" : {
+      "bytes" : 20826,
+      "mode" : "0600",
+      "sha256" : "5c550ce07efc6469f4760e98ef8a706667f7d1012423b9fd1673d917490acab3"
+   },
+   "/home/coder/workspace/lkjscript/src/check/scoped.lkj" : {
+      "bytes" : 25030,
+      "mode" : "0600",
+      "sha256" : "8e0c2a3c84a41e9244f1e34847481609ebf5d0c89f8ce07635fea757f77d73ef"
+   },
+   "/home/coder/workspace/lkjscript/src/check/scoped/locals.lkj" : {
+      "bytes" : 33345,
+      "mode" : "0600",
+      "sha256" : "e20135f660e2fae1104c9e6f970d5ab6be661357d3f1435a6feb20f4323819b2"
+   },
+   "/home/coder/workspace/lkjscript/src/check/scoped/views.lkj" : {
+      "bytes" : 8599,
+      "mode" : "0600",
+      "sha256" : "fb1adb0136f122b4eb65c731e669ea2177cc1eb4268b62f4704592eda4432a30"
+   },
+   "/home/coder/workspace/lkjscript/src/child_image.lkj" : {
+      "bytes" : 14069,
+      "mode" : "0600",
+      "sha256" : "155d192d068f0aabdd6d7aedc175a2b0d4dbae841e528f0b1902a9c557bace9e"
+   },
+   "/home/coder/workspace/lkjscript/src/child_image_cases.lkj" : {
+      "bytes" : 8050,
+      "mode" : "0600",
+      "sha256" : "460610bb323b2d61774ca4a17a981b810d5bca4d9de40eb6f11c4eac408466b7"
+   },
+   "/home/coder/workspace/lkjscript/src/closed_semantics.lkj" : {
+      "bytes" : 687,
+      "mode" : "0600",
+      "sha256" : "4dcbb7199ca05f23850dc6fb9a99887a874bb17c3b66373a8ccd2e4ad224e795"
+   },
+   "/home/coder/workspace/lkjscript/src/compiler.lkj" : {
+      "bytes" : 989,
+      "mode" : "0600",
+      "sha256" : "230cf8c9186561c4798da749f76d1c715ad7b4b66205fb399f823cb48f7bcdae"
+   },
+   "/home/coder/workspace/lkjscript/src/diagnostic.lkj" : {
+      "bytes" : 1088,
+      "mode" : "0600",
+      "sha256" : "0af2e25d88f30d57090130370e3178ad1d7072abf5afd43cf907ae30c9183e2c"
+   },
+   "/home/coder/workspace/lkjscript/src/diagnostics.lkj" : {
+      "bytes" : 2663,
+      "mode" : "0600",
+      "sha256" : "dca093110285a9b1531adc90dc6a4b5c597da4df5e5d7d78bd249d454994a8bd"
+   },
+   "/home/coder/workspace/lkjscript/src/diagnostics/borrow_edits.lkj" : {
+      "bytes" : 20019,
+      "mode" : "0600",
+      "sha256" : "f1e4dee120c0a7ff481e55e6364858b483be4e9a76361c2b92a7a03a44d42d09"
+   },
+   "/home/coder/workspace/lkjscript/src/diagnostics/consumer_edits.lkj" : {
+      "bytes" : 15720,
+      "mode" : "0600",
+      "sha256" : "b5e3d320e8ebc4135d53798660d7a625bcaae13f00edf810beb56cf5094e7b12"
+   },
+   "/home/coder/workspace/lkjscript/src/diagnostics/iterator_edits.lkj" : {
+      "bytes" : 7890,
+      "mode" : "0600",
+      "sha256" : "2be574b57fbcd1f631297fbc0c4f5e1a75dc0d08487174c31e7dc3ff5a2698e4"
+   },
+   "/home/coder/workspace/lkjscript/src/diagnostics/site_edits.lkj" : {
+      "bytes" : 6223,
+      "mode" : "0644",
+      "sha256" : "2eb75017172af724aa5b166613c255023a25ad88202286b0031b82fcac5561fe"
+   },
+   "/home/coder/workspace/lkjscript/src/diagnostics/static_label_edits.lkj" : {
+      "bytes" : 13431,
+      "mode" : "0600",
+      "sha256" : "8a4a39605f6751deeed093501fb86c35c1ab6d1781bdda760a9387443f3f4d63"
+   },
+   "/home/coder/workspace/lkjscript/src/driver.lkj" : {
+      "bytes" : 120359,
+      "mode" : "0600",
+      "sha256" : "333d6ec927416917fa32269730a9a507fcfe31072a2191403a24161b5cf6c412"
+   },
+   "/home/coder/workspace/lkjscript/src/driver/structure.lkj" : {
+      "bytes" : 30522,
+      "mode" : "0600",
+      "sha256" : "2b02455269ae3226ca027da6c41bfa7cfc09c11cf023a983f850297dd71c3c49"
+   },
+   "/home/coder/workspace/lkjscript/src/driver_host.lkj" : {
+      "bytes" : 34058,
+      "mode" : "0600",
+      "sha256" : "5cd7889d478eb40db329f04b56d68057e4111161e840c8d4cbd2f98cf30e0725"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate.lkj" : {
+      "bytes" : 194997,
+      "mode" : "0600",
+      "sha256" : "f6df272d50928d3bc22b1f55412a081ba74839523bb9193b9f375917e3d97d90"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/assignment.lkj" : {
+      "bytes" : 9683,
+      "mode" : "0600",
+      "sha256" : "832de8f0bee30bfb8b35fbba0116e868ce61d3a6bd3867f83bf477133058a186"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/borrow_cleanup.lkj" : {
+      "bytes" : 14331,
+      "mode" : "0600",
+      "sha256" : "51c4a7bf4643e03a475e07066c0a8d6ddb91ff857265dd4417bfc8c9cd4d6c33"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/capabilities.lkj" : {
+      "bytes" : 39398,
+      "mode" : "0600",
+      "sha256" : "40440007b614f3ae77498f6aa98065efb05145fe13a8ec3ed38127fffa1b1d85"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/closures.lkj" : {
+      "bytes" : 51916,
+      "mode" : "0600",
+      "sha256" : "d8941bb33e5a594a889617d5c6a7f7ccedde6df73473f6a4a716072c2e533baf"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/constructors.lkj" : {
+      "bytes" : 14200,
+      "mode" : "0644",
+      "sha256" : "d79715cddd8c1bb269be02d02e96938c3eef6a2b19a2b9bcb9858d39f467b5cf"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/definition_types.lkj" : {
+      "bytes" : 102567,
+      "mode" : "0600",
+      "sha256" : "163766449e8cbcc5d4d48a6979f26172db6ff8f08980038b1114a62c0338adf8"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/definition_types/capabilities.lkj" : {
+      "bytes" : 7648,
+      "mode" : "0600",
+      "sha256" : "142928273bda82380df80fa023c6410d54ff4c6765f5ecf3008a9cad82145218"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/definition_types/closures.lkj" : {
+      "bytes" : 6766,
+      "mode" : "0600",
+      "sha256" : "4000641a782400e6a443b38dfc9e44b19a069e39162cc94e1022138c4ec637d6"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/definition_types/method_headers.lkj" : {
+      "bytes" : 10708,
+      "mode" : "0600",
+      "sha256" : "ca19e8c2d8df3b8f9592c0ff9f3c6ad2ca1a321b8a56a8dd3430dd61df901a1f"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/definition_types/pattern_equations.lkj" : {
+      "bytes" : 4402,
+      "mode" : "0600",
+      "sha256" : "e2b888ecc5f9f16f49b9c4a45f07484e6a3ec2177e67b6dfedecb49761055c7c"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/definition_types/projection_equations.lkj" : {
+      "bytes" : 12174,
+      "mode" : "0600",
+      "sha256" : "5c455a38a1d151b7b5963908a916e1368c6e65cda6ae42011cacc5df1d2ba701"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/definition_types/semantic.lkj" : {
+      "bytes" : 5927,
+      "mode" : "0600",
+      "sha256" : "6a61d2419336f4b01bf5ce146216dac7b806aea5b79c3d87fd791873a6d3f4df"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/definition_types/source_types.lkj" : {
+      "bytes" : 10689,
+      "mode" : "0600",
+      "sha256" : "a56ab9038e4c91847b9fdf38b73a6a4057d27c1d0fb677240f9aec13ca759271"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/derive_check.lkj" : {
+      "bytes" : 11268,
+      "mode" : "0600",
+      "sha256" : "cb4b54f377efd3e09d8c59492ccb07403d2e9955005d8dd47cfea977aefb3f49"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/derive_methods.lkj" : {
+      "bytes" : 40000,
+      "mode" : "0600",
+      "sha256" : "721d5d1466bbfb53ef19cbcae7249e5c27214e736982cb929bdeda5fea4deacf"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/diagnostic_edits.lkj" : {
+      "bytes" : 18356,
+      "mode" : "0600",
+      "sha256" : "cc8e40302de5d239fa6090e2c9738fcc4f01452a5eb655f33ed3d6e51e12eb26"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/diagnostic_inference.lkj" : {
+      "bytes" : 1007,
+      "mode" : "0644",
+      "sha256" : "045f4ac68f29d42b0340eafccc7f1278f71c898ba7e980b73b08890f560e26c0"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/floats.lkj" : {
+      "bytes" : 9855,
+      "mode" : "0600",
+      "sha256" : "169e5d946f0972fda458b9bbae9c15c388c4cc2e455a2602b2a499a379a762c4"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/generic_check.lkj" : {
+      "bytes" : 57548,
+      "mode" : "0600",
+      "sha256" : "a41123b95d2cf375e6a8b929abbee98bdd3db55b33fd94107a576abedc9ef472"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/incremental.lkj" : {
+      "bytes" : 16413,
+      "mode" : "0600",
+      "sha256" : "3f19c06a0022e69856fd4693020672de07455ad1962bb6be7bf874e979e37537"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/inference.lkj" : {
+      "bytes" : 14930,
+      "mode" : "0644",
+      "sha256" : "4ab336f8f8142dc580a2476281abcceb6663a713b5acb849390fc3802e6ae6ee"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/integers.lkj" : {
+      "bytes" : 9426,
+      "mode" : "0600",
+      "sha256" : "707c712c875e6e42b2cec72d80cf77fd573a3e15b06c15230b42e60bab60bd0d"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/methods.lkj" : {
+      "bytes" : 4526,
+      "mode" : "0600",
+      "sha256" : "df97a059c3ed72b375dc5db4bc1614f85f8f6f607baa834847f7f5f96d97f463"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/operators.lkj" : {
+      "bytes" : 19189,
+      "mode" : "0600",
+      "sha256" : "d7125c7343bf460261bf569aa088c6d287319ec025e45cb73b777a79b96b6b4e"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/origins.lkj" : {
+      "bytes" : 26366,
+      "mode" : "0600",
+      "sha256" : "7bf0d43bdba77b9f0cc3e80a18694d70c1a5f00a89a6fdf887da668372fec4fc"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/output.lkj" : {
+      "bytes" : 14836,
+      "mode" : "0600",
+      "sha256" : "6bed56a3891bb74cac09aca6c916413c60bd8efddc59dbe218a8774b54f9851b"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/pattern_choices.lkj" : {
+      "bytes" : 23061,
+      "mode" : "0600",
+      "sha256" : "3f8593b15908ad86e9672726b2591d39ec5cf243abe87edc30745e16c1398de9"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/patterns.lkj" : {
+      "bytes" : 64118,
+      "mode" : "0600",
+      "sha256" : "1acfd88e82b646fba18aeb080e082cb3486fd8ad8e3adc7f2539147851472ca3"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/ranges.lkj" : {
+      "bytes" : 7515,
+      "mode" : "0600",
+      "sha256" : "3066e8bda9c7ed159b68af4ac387abe99593fe31eaf2b93314aab35867b4b9fd"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/scoped_calls.lkj" : {
+      "bytes" : 22429,
+      "mode" : "0600",
+      "sha256" : "376808c731e1c8496ddcebd74533f6b81cf6234a5d9744fb9e2449b5207a30b5"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/scoped_locals.lkj" : {
+      "bytes" : 15950,
+      "mode" : "0600",
+      "sha256" : "1d410be1f51b73711edc4f79261662c930e09aa9c29bdc74c595b73fb67c1425"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/semantic.lkj" : {
+      "bytes" : 7280,
+      "mode" : "0600",
+      "sha256" : "05cc1b05999773203ce559d2ea6474b93ff52572bb3b99779306fd4e697ef329"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/sequences.lkj" : {
+      "bytes" : 5436,
+      "mode" : "0644",
+      "sha256" : "15b41c14f08ec3497ba3bc5f7a17992c6aff944e8ec5848250f5622ed689b596"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/static_lifetimes.lkj" : {
+      "bytes" : 11874,
+      "mode" : "0600",
+      "sha256" : "dac5a64c156b94e90d233ce4c10a8712eb6e4c4a50bc69ba06742d03de4655b6"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/sugars.lkj" : {
+      "bytes" : 8773,
+      "mode" : "0600",
+      "sha256" : "6f5a49a6af7caef672915ea3954e838ad0e0cdd94dff7115a44e2d2bbde48d44"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/text_format.lkj" : {
+      "bytes" : 17351,
+      "mode" : "0600",
+      "sha256" : "11d94777c11d959f26de3f3550c64897efff153aa39f25f2bc684717c2a65fc8"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/trait_proofs.lkj" : {
+      "bytes" : 5759,
+      "mode" : "0600",
+      "sha256" : "c252248217fa2b59e25c53f2cb6590ba0d8ea15cc02c92c82bb933646bbc37c7"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/type_display.lkj" : {
+      "bytes" : 2556,
+      "mode" : "0600",
+      "sha256" : "4e21bf86289c60ca9d5efd2a0a0023210e821913642c89a4bccd5dbf0c170a44"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/type_resolve.lkj" : {
+      "bytes" : 26150,
+      "mode" : "0600",
+      "sha256" : "7e6bd34536ac7f8640ee3501e6a6f30f5adbf9cd6f24414661821d1e0438a41e"
+   },
+   "/home/coder/workspace/lkjscript/src/elaborate/variants.lkj" : {
+      "bytes" : 7233,
+      "mode" : "0600",
+      "sha256" : "ffdb1ec68ee75e69080cbcb2be210846b4be3e946104fbdc4014ffd123dfc62c"
+   },
+   "/home/coder/workspace/lkjscript/src/embedded.lkj" : {
+      "bytes" : 2480,
+      "mode" : "0600",
+      "sha256" : "2214fbaeaa2b45da480076dfd92cecde02dac72fece7c320a709a3f0dc9c0d55"
+   },
+   "/home/coder/workspace/lkjscript/src/entry_grants.lkj" : {
+      "bytes" : 10394,
+      "mode" : "0600",
+      "sha256" : "c6bbe64115978e63b6d6e02ca3bbddbfe3a88c6d48698a9a7df52c52b2b6c840"
+   },
+   "/home/coder/workspace/lkjscript/src/facts.lkj" : {
+      "bytes" : 5216,
+      "mode" : "0600",
+      "sha256" : "ab77f537bd3d9edcd304e84147b11ae6236c5136641314ae89b540e940674fe2"
+   },
+   "/home/coder/workspace/lkjscript/src/frontend.lkj" : {
+      "bytes" : 1271,
+      "mode" : "0600",
+      "sha256" : "339dd6c95239236e97200c4ae764a3a6b5a9689afd1ca449002ffb114ab8b534"
+   },
+   "/home/coder/workspace/lkjscript/src/gate_reuse_main.lkj" : {
+      "bytes" : 7857,
+      "mode" : "0600",
+      "sha256" : "e4c40afbb064ce8d72124ecde5795f62589a806a08e0885260f753d885124994"
+   },
+   "/home/coder/workspace/lkjscript/src/generics.lkj" : {
+      "bytes" : 98627,
+      "mode" : "0600",
+      "sha256" : "b010b15e7f92d21a31dd11dacea0048c1219ba653f98cb95881417a03ce4f5ee"
+   },
+   "/home/coder/workspace/lkjscript/src/generics/bound_solver.lkj" : {
+      "bytes" : 5289,
+      "mode" : "0600",
+      "sha256" : "47adc0962358861a85cb36f1f9aa8d14f9f6be9cc119d721b315950032e8088d"
+   },
+   "/home/coder/workspace/lkjscript/src/generics/signature_bounds.lkj" : {
+      "bytes" : 12349,
+      "mode" : "0600",
+      "sha256" : "a99c1ac45bece2a59ba270a7a35da7f73a1863fdc4f66d5339d8bfb6d6f9b4bb"
+   },
+   "/home/coder/workspace/lkjscript/src/host_network.lkj" : {
+      "bytes" : 25964,
+      "mode" : "0600",
+      "sha256" : "9e5489500e7fdaab9a08a04fa7cdf8529508b32c8c1cd47d53ecc41a4c8e9a42"
+   },
+   "/home/coder/workspace/lkjscript/src/host_network/broker.lkj" : {
+      "bytes" : 31066,
+      "mode" : "0600",
+      "sha256" : "817a42ab999558631e00f374d9343b3e817d5f16a078c99e5a926bfe7cf88e24"
+   },
+   "/home/coder/workspace/lkjscript/src/host_network/directories.lkj" : {
+      "bytes" : 11701,
+      "mode" : "0600",
+      "sha256" : "7b633e6a559d5e29539d62c78f8ab0510d812a6644cf19f1663b750008b308cf"
+   },
+   "/home/coder/workspace/lkjscript/src/host_network/foreign.lkj" : {
+      "bytes" : 23223,
+      "mode" : "0600",
+      "sha256" : "23704200e280a4f322d8bacaf6e18a2561e84430ed4f79007d792867e54d4599"
+   },
+   "/home/coder/workspace/lkjscript/src/host_network/foreign_session.lkj" : {
+      "bytes" : 20304,
+      "mode" : "0600",
+      "sha256" : "ac4e8d2452968fd8edd0ec20e5706693bcc22c902dc6e485b9dd00020efc38bf"
+   },
+   "/home/coder/workspace/lkjscript/src/host_network/lifecycle.lkj" : {
+      "bytes" : 5474,
+      "mode" : "0600",
+      "sha256" : "2d422c9b67f247cd592565b77844193c4111bb9e67733b9f7a4f310963d14978"
+   },
+   "/home/coder/workspace/lkjscript/src/host_network/process.lkj" : {
+      "bytes" : 12400,
+      "mode" : "0600",
+      "sha256" : "2f4ea3aa6262076d01aca32f5ad9e57975e36277a2992ddc882d4f2028a82a10"
+   },
+   "/home/coder/workspace/lkjscript/src/host_network/workers.lkj" : {
+      "bytes" : 21636,
+      "mode" : "0600",
+      "sha256" : "b8ff4649bf42bccf8f8ce6627be131b5e771d2c154d29ca4a9a060462f15debd"
+   },
+   "/home/coder/workspace/lkjscript/src/interpreter.lkj" : {
+      "bytes" : 123147,
+      "mode" : "0600",
+      "sha256" : "764e0d057a2cffc1f04ca32e93fe861987bbf2e77ed8e5deb70c76090d8deda9"
+   },
+   "/home/coder/workspace/lkjscript/src/interpreter/diagnostics.lkj" : {
+      "bytes" : 4142,
+      "mode" : "0600",
+      "sha256" : "a8d2368545a6c98f6e8a2da845c14a2b1286e858f6dc37c8ff76ff6aa1f15e09"
+   },
+   "/home/coder/workspace/lkjscript/src/interpreter/io.lkj" : {
+      "bytes" : 58174,
+      "mode" : "0600",
+      "sha256" : "612ca82867309ac1b1ce4e7c8655da620104ffba5ba2d733bdf25b1b9664301f"
+   },
+   "/home/coder/workspace/lkjscript/src/interpreter/scalar.lkj" : {
+      "bytes" : 8458,
+      "mode" : "0600",
+      "sha256" : "8a392f6b50889c7af23603b60b45c9f2085b90ab7bb1cf3f6be9877e48fc7cc9"
+   },
+   "/home/coder/workspace/lkjscript/src/ir.lkj" : {
+      "bytes" : 29411,
+      "mode" : "0600",
+      "sha256" : "40f7ae357e53524e0e2e89aa5e0b697613705b7342fef10346f78673679c9655"
+   },
+   "/home/coder/workspace/lkjscript/src/ir_binary.lkj" : {
+      "bytes" : 20456,
+      "mode" : "0600",
+      "sha256" : "d6c59a6670fde7acb93a2083f1d35998f091f247a386549a7761dd05dadb7f93"
+   },
+   "/home/coder/workspace/lkjscript/src/ir_text.lkj" : {
+      "bytes" : 43408,
+      "mode" : "0600",
+      "sha256" : "af4c78b51063bce8a24e2a35bd364a48cbb3a888d01c1fd6219faa3d5983d4f8"
+   },
+   "/home/coder/workspace/lkjscript/src/json.lkj" : {
+      "bytes" : 1186,
+      "mode" : "0644",
+      "sha256" : "c779d8e6c8e87811febd18ab6d3f51bdf9b26c085952845245bcad553082c7ed"
+   },
+   "/home/coder/workspace/lkjscript/src/lib.lkj" : {
+      "bytes" : 707,
+      "mode" : "0600",
+      "sha256" : "7475720af5fe414d52d0be589ebd2d7f25688013c5fe9227cc11e5dd3678505b"
+   },
+   "/home/coder/workspace/lkjscript/src/main.lkj" : {
+      "bytes" : 1039,
+      "mode" : "0600",
+      "sha256" : "7f7d43c94196d6ef9641bebf3f764fc5f3691f84c3bc8dcd137c7deb4eedd07a"
+   },
+   "/home/coder/workspace/lkjscript/src/meaning.lkj" : {
+      "bytes" : 31491,
+      "mode" : "0600",
+      "sha256" : "3079b5c92306abcdf9156e99bf970577174fadeda5818b4a80b5cce114adf6e1"
+   },
+   "/home/coder/workspace/lkjscript/src/names.lkj" : {
+      "bytes" : 371,
+      "mode" : "0600",
+      "sha256" : "d62ce42092821a3a6f33058377fe53fb6a0f7a577e9ebd067f363638672fe0c4"
+   },
+   "/home/coder/workspace/lkjscript/src/native.lkj" : {
+      "bytes" : 88388,
+      "mode" : "0600",
+      "sha256" : "61d11c2b9caf4de3e3ee6bc533447da868a5c102e8dc05a63d1cf410790c95dc"
+   },
+   "/home/coder/workspace/lkjscript/src/native/cache.lkj" : {
+      "bytes" : 16864,
+      "mode" : "0600",
+      "sha256" : "eef07f3b7f920e9b712a371329c2408a4b3a5f6c9b5d0644978be154471270be"
+   },
+   "/home/coder/workspace/lkjscript/src/native/child_entry.lkj" : {
+      "bytes" : 11433,
+      "mode" : "0600",
+      "sha256" : "d9a77599c3ae21106ed6683445bc3cdf1822d88a87048dfd962c2b276bc06d2b"
+   },
+   "/home/coder/workspace/lkjscript/src/native/diagnostics.lkj" : {
+      "bytes" : 7225,
+      "mode" : "0600",
+      "sha256" : "85a545a647a2eb0dc9cdd289942a443e4ef905b6bca414b36f5e4ae72b98f3a9"
+   },
+   "/home/coder/workspace/lkjscript/src/native/entry.lkj" : {
+      "bytes" : 10585,
+      "mode" : "0600",
+      "sha256" : "cdf9b04d775950d90b2ac4a2ecfc9dc77e1bf7bad46e50280bf2e25e425df163"
+   },
+   "/home/coder/workspace/lkjscript/src/native/environment.lkj" : {
+      "bytes" : 2275,
+      "mode" : "0600",
+      "sha256" : "919e2485b114d994e95090662bc3a27af393a2e415f4aa9b75cdbbcdf3ca91b9"
+   },
+   "/home/coder/workspace/lkjscript/src/native/foreign.lkj" : {
+      "bytes" : 21551,
+      "mode" : "0600",
+      "sha256" : "18f6a3a98dacf3db82e153accd917fc462fa93807cc337357d3667b5f171adab"
+   },
+   "/home/coder/workspace/lkjscript/src/native/foreign_session.lkj" : {
+      "bytes" : 17265,
+      "mode" : "0600",
+      "sha256" : "0119ee8bf9d3f104eaff590b8c0e3d3b67a2f752bcf7ff75bf3697190812eefc"
+   },
+   "/home/coder/workspace/lkjscript/src/native/intrinsics.lkj" : {
+      "bytes" : 37534,
+      "mode" : "0600",
+      "sha256" : "22b0cb4fd6e6bbe469d514a7ba25cfdb4be64784a5df683aaa11cd3f014d97c8"
+   },
+   "/home/coder/workspace/lkjscript/src/native/layout.lkj" : {
+      "bytes" : 8785,
+      "mode" : "0600",
+      "sha256" : "f88d1ff9a50ce796d2fc10bfa04cd4e8d73a30d8284d5a9b3bcd3488f724daf0"
+   },
+   "/home/coder/workspace/lkjscript/src/native/lifecycle.lkj" : {
+      "bytes" : 6606,
+      "mode" : "0600",
+      "sha256" : "2b91309f7e88164929650d226248cf313a7052338f0f5f30fe8630f99f83acfa"
+   },
+   "/home/coder/workspace/lkjscript/src/native/network.lkj" : {
+      "bytes" : 7054,
+      "mode" : "0600",
+      "sha256" : "65faef54fbfe56a85ebb8cfec3dfba9ab0db82e7f79749384ebbb7f96c85c02f"
+   },
+   "/home/coder/workspace/lkjscript/src/native/ownership.lkj" : {
+      "bytes" : 4173,
+      "mode" : "0644",
+      "sha256" : "79072b9fa29972d45f3099b2a88f089af0ede246a5ccd0d67970e56178dc2833"
+   },
+   "/home/coder/workspace/lkjscript/src/native/platform.lkj" : {
+      "bytes" : 32811,
+      "mode" : "0600",
+      "sha256" : "ce8b3fdf826a878abbb9e75832c611eae48560dd1e39e7162029d96070bdd0e5"
+   },
+   "/home/coder/workspace/lkjscript/src/native/process.lkj" : {
+      "bytes" : 18589,
+      "mode" : "0600",
+      "sha256" : "2d81b96116239c795bbcb1e5f2e5d6ddf8ba17d9815414c4e531d0c71615b438"
+   },
+   "/home/coder/workspace/lkjscript/src/native/profiling.lkj" : {
+      "bytes" : 41990,
+      "mode" : "0600",
+      "sha256" : "59a6bdc97617130af9b7a0fbd3964952b31a48f2aa11dfac73416a0dad22fbe5"
+   },
+   "/home/coder/workspace/lkjscript/src/native/read_region.lkj" : {
+      "bytes" : 4992,
+      "mode" : "0600",
+      "sha256" : "f905f903f401e382d6f1964e5f3aca4130868f9bf0bb90147c7dc58922491dde"
+   },
+   "/home/coder/workspace/lkjscript/src/native/readiness.lkj" : {
+      "bytes" : 6282,
+      "mode" : "0600",
+      "sha256" : "8c8cf29d9f6d8283fa5a4bd2191fbd0c10795c51284438901e02060d622a69f8"
+   },
+   "/home/coder/workspace/lkjscript/src/native/registers.lkj" : {
+      "bytes" : 9849,
+      "mode" : "0600",
+      "sha256" : "543e6f139a95a2a496a328bb53ec99f1b723ff70c84ec9208277ea304018006a"
+   },
+   "/home/coder/workspace/lkjscript/src/native/scalar.lkj" : {
+      "bytes" : 17321,
+      "mode" : "0600",
+      "sha256" : "1a39b11441c7c01c0a94e4f064a8efddd7ce6c4938c10dc3ce55972ac281cd70"
+   },
+   "/home/coder/workspace/lkjscript/src/native/semantic.lkj" : {
+      "bytes" : 746,
+      "mode" : "0600",
+      "sha256" : "572dd21f3afc92f9410ebb32853b899b01e8f5c7c19f38d429097b3ffe05e3db"
+   },
+   "/home/coder/workspace/lkjscript/src/native/storage.lkj" : {
+      "bytes" : 11901,
+      "mode" : "0600",
+      "sha256" : "6b6ff6d9b8a38e12b60b9ba025db3ff1840e8f1d2df79ab40365659fd4665e55"
+   },
+   "/home/coder/workspace/lkjscript/src/native/storage_plan.lkj" : {
+      "bytes" : 2068,
+      "mode" : "0600",
+      "sha256" : "ce7fd06da2040779c4d03e2810b037fd71abe91a79bf5160441112298310a33f"
+   },
+   "/home/coder/workspace/lkjscript/src/native/workers.lkj" : {
+      "bytes" : 17868,
+      "mode" : "0600",
+      "sha256" : "d824f1d83ff94446d090d493e1f2dd7db784d1fc90f2591cdff8fc6c83dbab3a"
+   },
+   "/home/coder/workspace/lkjscript/src/optimizer.lkj" : {
+      "bytes" : 18604,
+      "mode" : "0600",
+      "sha256" : "961d59858c83afd8c5e8e2f9ec00d0f3a90cc91953ba8903528589f41a9da705"
+   },
+   "/home/coder/workspace/lkjscript/src/program_directory.lkj" : {
+      "bytes" : 8464,
+      "mode" : "0600",
+      "sha256" : "7486875ac1b4b79365a795c052747252d16d262eeb0183d05d8731c38a6c5e06"
+   },
+   "/home/coder/workspace/lkjscript/src/programs_admission_main.lkj" : {
+      "bytes" : 7537,
+      "mode" : "0600",
+      "sha256" : "836300ac0549064d7a78592b3f6ca6737b010656bc2706f2400b31e4e34c0dc0"
+   },
+   "/home/coder/workspace/lkjscript/src/programs_directory_cases.lkj" : {
+      "bytes" : 2292,
+      "mode" : "0600",
+      "sha256" : "63a8455353a992854c4af56350613976597cf60c5a1665fd28d70d7e2885136d"
+   },
+   "/home/coder/workspace/lkjscript/src/programs_foreign_session_mutation.lkj" : {
+      "bytes" : 5285,
+      "mode" : "0600",
+      "sha256" : "d0857b045c9c781e3ec8c3f18169bad5b43c5db2b00009fd41ac8c768bde7c63"
+   },
+   "/home/coder/workspace/lkjscript/src/programs_process_mutation.lkj" : {
+      "bytes" : 13933,
+      "mode" : "0600",
+      "sha256" : "3b4206ddd567f9c3345be2b0478a2d8424db54582163a057419bbb4c17ac1655"
+   },
+   "/home/coder/workspace/lkjscript/src/query_store_cases.lkj" : {
+      "bytes" : 12647,
+      "mode" : "0600",
+      "sha256" : "53314714f4f2d2cc45b89bbee52185c9f6976332722c35181f4eab6268fa87fb"
+   },
+   "/home/coder/workspace/lkjscript/src/resolve.lkj" : {
+      "bytes" : 44279,
+      "mode" : "0600",
+      "sha256" : "7355155f6c133bdd290d25067cebe7df6a0c35dcf5fe0698eee01d89271e9293"
+   },
+   "/home/coder/workspace/lkjscript/src/resolve/import_scopes.lkj" : {
+      "bytes" : 4215,
+      "mode" : "0600",
+      "sha256" : "bc52b438b83b7ddad39398d453ea37c5dba02454c50f99df496c02dffb684ad1"
+   },
+   "/home/coder/workspace/lkjscript/src/resolve/iteration.lkj" : {
+      "bytes" : 7742,
+      "mode" : "0600",
+      "sha256" : "a21cc7bfa1c88ee181a3d2f946b26685c1bbab708b765364f90b5047d27f3acb"
+   },
+   "/home/coder/workspace/lkjscript/src/reuse.lkj" : {
+      "bytes" : 19407,
+      "mode" : "0600",
+      "sha256" : "4a42f7705edf85ad31641b0afec6f89192585b18ff0eca9e75b835ae623b64e3"
+   },
+   "/home/coder/workspace/lkjscript/src/runtime.lkj" : {
+      "bytes" : 7243,
+      "mode" : "0600",
+      "sha256" : "f25b7ded2ecf03e60fe1f4fce3d5dd6f8523d8b942f5fc58ae1ee062be44bbf7"
+   },
+   "/home/coder/workspace/lkjscript/src/runtime_diagnostics.lkj" : {
+      "bytes" : 10181,
+      "mode" : "0600",
+      "sha256" : "763083ea4d9b5f95bb9070016fbea446f937a582071ff4fb0bbe17a807ab0465"
+   },
+   "/home/coder/workspace/lkjscript/src/runtime_memory.lkj" : {
+      "bytes" : 8728,
+      "mode" : "0600",
+      "sha256" : "62244047de4c0f8cb3b5afccaabef5590e031de16858b25cadbdc2c222378bf6"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic.lkj" : {
+      "bytes" : 48299,
+      "mode" : "0600",
+      "sha256" : "f85b5d25336462e58505a07d4426c94489e9df849306174c3719b8de5a8a91d0"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic/origins.lkj" : {
+      "bytes" : 16852,
+      "mode" : "0600",
+      "sha256" : "b1922fef4fb8100c64caf936ffb237653e74174143b44f706ec3351c990df2d7"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic/references.lkj" : {
+      "bytes" : 27200,
+      "mode" : "0600",
+      "sha256" : "f406ebce52b191c375d29be1dfa7edf6a2febd70ffbfb932ce4c1fa698e6d8bb"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_facts.lkj" : {
+      "bytes" : 16955,
+      "mode" : "0600",
+      "sha256" : "013429fb13d9fc43c6304a838356603d7c41107b96e8c68261a0e68b58edafa9"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_main.lkj" : {
+      "bytes" : 1747,
+      "mode" : "0600",
+      "sha256" : "547f53773affbd62e0c84902fcb135a4d992a1a17b5d004c1970571a37413de8"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_query.lkj" : {
+      "bytes" : 9400,
+      "mode" : "0600",
+      "sha256" : "6db89d85392bed48974928dc2949a0a184005f3cfe599dd443889d1b0d948908"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_store.lkj" : {
+      "bytes" : 15892,
+      "mode" : "0600",
+      "sha256" : "b906e93b08a4375133ef56875d2782c5ddd1315c133bf4d0009977f1ca027bdf"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests.lkj" : {
+      "bytes" : 6056,
+      "mode" : "0600",
+      "sha256" : "f3efce27264edf5ff2897c2c161ea0e064c3eb8e256ad9b37d407514d1408a81"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/allocator.lkj" : {
+      "bytes" : 11646,
+      "mode" : "0600",
+      "sha256" : "4cc25183c55dc6290af60674db3a55cb62ad28fa396ef9844767bf5ff144e525"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/allocator_fixture.lkj" : {
+      "bytes" : 3247,
+      "mode" : "0600",
+      "sha256" : "e5b31433690de4b23d83a9777f1c7a49bb08f45747ce9db297dbae62a26c54de"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/array_repeat.lkj" : {
+      "bytes" : 6908,
+      "mode" : "0600",
+      "sha256" : "8797e6cdb776678b19565da76a4bad3972f8c15239839cd3c04a2c2368c90361"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/closed_units.lkj" : {
+      "bytes" : 11658,
+      "mode" : "0600",
+      "sha256" : "37d7afaad2278c496bf396ffef0b81232044f4a47dcda838a78bd65df4533581"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/diagnostic_contracts.lkj" : {
+      "bytes" : 13509,
+      "mode" : "0600",
+      "sha256" : "93677180dfda1c4270d8335f33c002ba48b6d0f1c4fd9d07edff649a7d76b325"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/entry_grants.lkj" : {
+      "bytes" : 18272,
+      "mode" : "0600",
+      "sha256" : "63d6c3f811f1a030db5cb6d12df3f50f0c1ec25e321477eb3fdbc74e7ff8aaa5"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/facts.lkj" : {
+      "bytes" : 3236,
+      "mode" : "0644",
+      "sha256" : "3a98f1b8a92e9db08bc0ca117622c9d4fe0b4e6d5d477d806bafaa1832c39351"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/function_owners.lkj" : {
+      "bytes" : 3825,
+      "mode" : "0600",
+      "sha256" : "0d501c42f6d7d10a6cf323da6ebd6d244408e9697ed00c52e4e12ff99786f368"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/interpreter_contracts.lkj" : {
+      "bytes" : 48723,
+      "mode" : "0600",
+      "sha256" : "726e91b14eb4ae41ad6bb7a1a9f8f2cc1360ab212f33214c1276f01d290d4b98"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/ir_binary.lkj" : {
+      "bytes" : 11712,
+      "mode" : "0600",
+      "sha256" : "47451e1ee9e2f3bf3ed34113eea982716ab65966c1286a16c12c685e0bcdaa13"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/ir_binary_admission.lkj" : {
+      "bytes" : 703,
+      "mode" : "0600",
+      "sha256" : "981fc8dd5ede7dc400d8738c8109346c76d5dd46bc474671bd0d01a762d33b08"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/library_demand.lkj" : {
+      "bytes" : 7956,
+      "mode" : "0600",
+      "sha256" : "6427d5c66cdcaf2055a4009d98d397575c38204ff3711671dabf71c24cf7bb7d"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/optimizer.lkj" : {
+      "bytes" : 17013,
+      "mode" : "0600",
+      "sha256" : "e4e1142ce0dd36a4fa42dd70794cd8ec26dc747180a6de9bc0ad14cafcfe185c"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/optimizer/forwarding.lkj" : {
+      "bytes" : 16256,
+      "mode" : "0600",
+      "sha256" : "1eaaf3ad2fd11e7c4ed233db2ab7f7dfda3b2a0f73e78f1caa17a5bd8e86cdb1"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/optimizer/wrappers.lkj" : {
+      "bytes" : 8447,
+      "mode" : "0600",
+      "sha256" : "091b83e682ec3a779819d600611a6fea0ff6b9ded46121a3fedac9cdfa0129e2"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/panic_messages.lkj" : {
+      "bytes" : 8493,
+      "mode" : "0600",
+      "sha256" : "1bf300a05543ab71a0ae6f7fbbb51108c6790e3e70e4e1e3c1acf855a05f5fa3"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/parser_contracts.lkj" : {
+      "bytes" : 3282,
+      "mode" : "0600",
+      "sha256" : "6c76289003d986d7a4a8dc81b0d88023dc2cbbe6f02745826c49fb9b14539858"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/recheck.lkj" : {
+      "bytes" : 15204,
+      "mode" : "0600",
+      "sha256" : "2ae9b67f65a6d76944e5a87c14566786e70a61ab62e9eef7f55bf6179cd59514"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/resolver.lkj" : {
+      "bytes" : 2216,
+      "mode" : "0600",
+      "sha256" : "7582746acdb71d3489cd5734ab472e2be935d416dc1d14221880f54535db27ac"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/return_contracts.lkj" : {
+      "bytes" : 5052,
+      "mode" : "0600",
+      "sha256" : "36d1339dc8c1aee253c82b8591e687b4cb077a6b71d445b3ea467cc3da26e774"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/reuse.lkj" : {
+      "bytes" : 15755,
+      "mode" : "0600",
+      "sha256" : "d009b63ac03c53e42fcb56d5b1c6ded95586d54a5dc825e19b2df4a3a56d9438"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/scalar_clone.lkj" : {
+      "bytes" : 3778,
+      "mode" : "0600",
+      "sha256" : "fc898abbb9be3ce77eba39c8f73099627ace7dbf0c4db55c95ded0cf0f130a43"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/source_cases.lkj" : {
+      "bytes" : 979605,
+      "mode" : "0600",
+      "sha256" : "2ee826eb7712efe7edd9cbc84da8527ebb91e99a81cc8e2c71edfc6147a1006f"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/source_contracts.lkj" : {
+      "bytes" : 7254,
+      "mode" : "0600",
+      "sha256" : "771df44f91a8b1b6d409b7788e9efcea89c13e9fa2741251563427eba5cd9faf"
+   },
+   "/home/coder/workspace/lkjscript/src/semantic_tests/units.lkj" : {
+      "bytes" : 74192,
+      "mode" : "0600",
+      "sha256" : "c7ea21b528cdf3c7ada8bb45dfa6436fbb4ab5241912bb56a35e0660a4c0bdcd"
+   },
+   "/home/coder/workspace/lkjscript/src/source.lkj" : {
+      "bytes" : 21283,
+      "mode" : "0600",
+      "sha256" : "93d1f41f34e747fe9387cd70ffacd8cd8277cce37fc783fe2ec70f36e171e960"
+   },
+   "/home/coder/workspace/lkjscript/src/store.lkj" : {
+      "bytes" : 76264,
+      "mode" : "0600",
+      "sha256" : "40a9f63ee6c9f60563c3e2de25eab19a78dc7308c8104d59f68cce9319932bbe"
+   },
+   "/home/coder/workspace/lkjscript/src/structure_edit.lkj" : {
+      "bytes" : 23933,
+      "mode" : "0600",
+      "sha256" : "8ff0523e958c4f71f4b0322eabd52ff89ad58c1690dac7c0bf177766a8dcd5e4"
+   },
+   "/home/coder/workspace/lkjscript/src/structure_refactor.lkj" : {
+      "bytes" : 129395,
+      "mode" : "0600",
+      "sha256" : "6debbca3945ff228f2f7cd5e3e0c98c53f6a71eb15d1dc4acd54459311edf63d"
+   },
+   "/home/coder/workspace/lkjscript/src/structure_refactor_cases.lkj" : {
+      "bytes" : 53522,
+      "mode" : "0600",
+      "sha256" : "189f53aa1005b9c829afdf4f7a9ea574bc5a746ca29c2bb1cccd0a12b16fbc47"
+   },
+   "/home/coder/workspace/lkjscript/src/structure_replay.lkj" : {
+      "bytes" : 22142,
+      "mode" : "0600",
+      "sha256" : "aa2af86f2cee2393b3be2ae5b67e3738e0f493162d0f64a9ee0a75c20b23d47f"
+   },
+   "/home/coder/workspace/lkjscript/src/structure_write.lkj" : {
+      "bytes" : 24893,
+      "mode" : "0600",
+      "sha256" : "96408572b6a687d3906abd946b9644fb11175f03b354c65cc1ec67f94fd26afc"
+   },
+   "/home/coder/workspace/lkjscript/src/syntax.lkj" : {
+      "bytes" : 130696,
+      "mode" : "0600",
+      "sha256" : "73a58b0255ab74086c34e20ae77c9bd908997d199869af3ff95d1be381d12af2"
+   },
+   "/home/coder/workspace/lkjscript/src/syntax/default.lkj" : {
+      "bytes" : 4099,
+      "mode" : "0600",
+      "sha256" : "ef36c574b288033a99ff3ab745c321ffb24613ff8149975b749ce3d5d78fade3"
+   },
+   "/home/coder/workspace/lkjscript/src/syntax/formatting.lkj" : {
+      "bytes" : 5903,
+      "mode" : "0600",
+      "sha256" : "e1699026a980f60cc0cee32666847b0e282a010eb623234d12c5b1764891ef8a"
+   },
+   "/home/coder/workspace/lkjscript/src/test_generators.lkj" : {
+      "bytes" : 52731,
+      "mode" : "0600",
+      "sha256" : "7079eecd341aeef03256d4625a37666b375bba65cbed2045b927daf43469dc1f"
+   },
+   "/home/coder/workspace/lkjscript/src/test_generators/extended_cases.lkj" : {
+      "bytes" : 42037,
+      "mode" : "0644",
+      "sha256" : "ebb47e9038a41fb77ebd7fbeada7d13ad6904865adecad91e7200393977efee6"
+   },
+   "/home/coder/workspace/lkjscript/src/test_generators/integer_cases.lkj" : {
+      "bytes" : 3589,
+      "mode" : "0644",
+      "sha256" : "811a2b79f188b79f7e588b72c26e50be6d2f3b5af9337cdb0d7b667cb187ab1e"
+   },
+   "/home/coder/workspace/lkjscript/src/test_generators/mutation.lkj" : {
+      "bytes" : 14613,
+      "mode" : "0600",
+      "sha256" : "b047bafb7c67cd63d8755c644e9471e83e319c8549aa7bd3bd8bc7ad2412ea48"
+   },
+   "/home/coder/workspace/lkjscript/src/test_generators/ownership.lkj" : {
+      "bytes" : 17531,
+      "mode" : "0644",
+      "sha256" : "59e42b90e517056780a4f5520bf21982dc379fb3766694d851a2ce2e7d462c10"
+   },
+   "/home/coder/workspace/lkjscript/src/test_generators/reduction.lkj" : {
+      "bytes" : 12713,
+      "mode" : "0644",
+      "sha256" : "31c15f5fd87c97ae3f277b5ec5c35bc10a32d3fe0b1e607065a1dbbf3227f17a"
+   },
+   "/home/coder/workspace/lkjscript/src/test_generators/scale.lkj" : {
+      "bytes" : 4139,
+      "mode" : "0644",
+      "sha256" : "62bf9396f194814ea3d295e8b8f8204d651fd64ea9869f743119fe28154d2dba"
+   },
+   "/home/coder/workspace/lkjscript/src/test_generators/source_cases.lkj" : {
+      "bytes" : 21192,
+      "mode" : "0644",
+      "sha256" : "088cbc7223bc3fad90b9cb67d3bd8a30f3e37dd68e3c31cf9166835781f3b731"
+   },
+   "/home/coder/workspace/lkjscript/src/test_generators/values.lkj" : {
+      "bytes" : 26271,
+      "mode" : "0644",
+      "sha256" : "0b90b5094302351e27f033c4acb17e7cb33ef2d71ce2225fb2d38a3b04aa16a6"
+   },
+   "/home/coder/workspace/lkjscript/src/test_runner.lkj" : {
+      "bytes" : 45565,
+      "mode" : "0600",
+      "sha256" : "e19e713fa6a6c26554b89702e61227ffed435c879994973c76a0f926de24e79f"
+   },
+   "/home/coder/workspace/lkjscript/src/x86.lkj" : {
+      "bytes" : 33664,
+      "mode" : "0600",
+      "sha256" : "26a2d776163fa388969979f3cb2767567e3925254330efa1a7b0a5649d672d04"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/checkpoint" : {
+      "bytes" : 12,
+      "mode" : "0600",
+      "sha256" : "4789715162137c8adf3ecd0297a53046ff5757dd58f4a640bfeb321af2040419"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/constructed-producers.sha256" : {
+      "bytes" : 320,
+      "mode" : "0600",
+      "sha256" : "4bd59542745ec9575086d8cd4521ce9531e4efd8b4ab92e654b9c740ba806f2d"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/construction-controls.stderr" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/construction-controls.stdout" : {
+      "bytes" : 63,
+      "mode" : "0600",
+      "sha256" : "bab2bd820f602df36d5da204739365285afcad7bef179e2a2834ad988f74ea50"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/cwd" : {
+      "bytes" : 32,
+      "mode" : "0600",
+      "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/final-artifacts.sha256" : {
+      "bytes" : 1431,
+      "mode" : "0600",
+      "sha256" : "107d39a638c36b300a0d2009081402146fdc8b009a251464e8c9d055119f067f"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/final-input-check.stderr" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/final-input-check.stdout" : {
+      "bytes" : 597,
+      "mode" : "0600",
+      "sha256" : "549fd6156d15cacf14ca7e10744f80545c6491000d3447aafe802daf3a1080ba"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/emitter" : {
+      "bytes" : 32761734,
+      "mode" : "0500",
+      "sha256" : "f85624e3cc694f6a3a3e10c33f822789ae6084e2d5a5b41c3b1fc8fcc9bd2d64"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/expected" : {
+      "bytes" : 16228028,
+      "mode" : "0600",
+      "sha256" : "8ca3225bebb5738376479d7556cd6d88b666805391fd2477331523ee6c666132"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/output-A1" : {
+      "bytes" : 16228028,
+      "mode" : "0755",
+      "sha256" : "8ca3225bebb5738376479d7556cd6d88b666805391fd2477331523ee6c666132"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/output-A2" : {
+      "bytes" : 16228028,
+      "mode" : "0755",
+      "sha256" : "8ca3225bebb5738376479d7556cd6d88b666805391fd2477331523ee6c666132"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/output-A3" : {
+      "bytes" : 16228028,
+      "mode" : "0755",
+      "sha256" : "8ca3225bebb5738376479d7556cd6d88b666805391fd2477331523ee6c666132"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/output-B1" : {
+      "bytes" : 16228028,
+      "mode" : "0755",
+      "sha256" : "8ca3225bebb5738376479d7556cd6d88b666805391fd2477331523ee6c666132"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/output-B2" : {
+      "bytes" : 16228028,
+      "mode" : "0755",
+      "sha256" : "8ca3225bebb5738376479d7556cd6d88b666805391fd2477331523ee6c666132"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/output-B3" : {
+      "bytes" : 16228028,
+      "mode" : "0755",
+      "sha256" : "8ca3225bebb5738376479d7556cd6d88b666805391fd2477331523ee6c666132"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/producer-A" : {
+      "bytes" : 22937783,
+      "mode" : "0755",
+      "sha256" : "c7b8d970ace8f836a559f21fd7d95867fd718b9e95160d686442380afa330db1"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/producer-B" : {
+      "bytes" : 22929591,
+      "mode" : "0755",
+      "sha256" : "12b1f645c3ae4085c998cde9b6d3c920bc6c4ca547839654586c196e9aaaad11"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source.tar" : {
+      "bytes" : 7434240,
+      "mode" : "0600",
+      "sha256" : "cf3cd4568e4b7581aefff46cc92f93a6f145d861f46481df76d1e861fd0d0c64"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/buffer.lkj" : {
+      "bytes" : 2153,
+      "mode" : "0600",
+      "sha256" : "de444027870ae8382b3a137e625df00cc3b91774b3aa3280bfe25456b40c6e2d"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/bytes.lkj" : {
+      "bytes" : 968,
+      "mode" : "0600",
+      "sha256" : "8448ec831069dcb9af7255684f7cab55941450774d7207df05441e21da76c140"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/char.lkj" : {
+      "bytes" : 3050,
+      "mode" : "0600",
+      "sha256" : "a88b914c36fd02fa3513a6bd7d3b605c910a7d081fc73556e90f2f559b329c91"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/command.lkj" : {
+      "bytes" : 1092,
+      "mode" : "0600",
+      "sha256" : "ec475789a7f3953f16787781d020221e010077ce1f761fa807f1a3e971dff02b"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/fmt.lkj" : {
+      "bytes" : 14447,
+      "mode" : "0600",
+      "sha256" : "ac6ca7fd2494a691e749b49880a97c96f271445d3955a857d30a91a122ef6c98"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/hmac.lkj" : {
+      "bytes" : 1552,
+      "mode" : "0600",
+      "sha256" : "0b858ec07dea6ed77dbe2f1d2c7f5d82bb80fac22581fe2c4eacde6da0d0dc0a"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/integer.lkj" : {
+      "bytes" : 11342,
+      "mode" : "0600",
+      "sha256" : "4a6aee75de5f562487765f0ef10f21853082abeb79784692bdd4e870bf20dba9"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/io.lkj" : {
+      "bytes" : 10944,
+      "mode" : "0600",
+      "sha256" : "c014d2b40e88e19a2ca681aa68eb783bc523d923c1e3eb3de34b5ee33f30d56f"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/iter.lkj" : {
+      "bytes" : 14776,
+      "mode" : "0600",
+      "sha256" : "2b8770dfcd8d7ae0e339aa36dd9224d69a449d8da96a8fc1de7fc9a8225db145"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/json.lkj" : {
+      "bytes" : 16416,
+      "mode" : "0600",
+      "sha256" : "37ec8d2a45090c6baca53ddb841c34d87472c7d3829611aaab9014e5ee268c0a"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/lib.lkj" : {
+      "bytes" : 1632,
+      "mode" : "0600",
+      "sha256" : "15b09275477c93422cef83e4ecfd747affb6d273029fed3573caf85b552c7370"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/ordered_map.lkj" : {
+      "bytes" : 15116,
+      "mode" : "0600",
+      "sha256" : "c307dfaf987976ce401a8404f5ddc23dbfd44f07f94d81eb627b95ce8bb339cb"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/ordered_set.lkj" : {
+      "bytes" : 2714,
+      "mode" : "0600",
+      "sha256" : "374842accfffca999a5ec91469653d2b853ce682d2d64a4e22843de5d0d3a4e7"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/prelude.lkj" : {
+      "bytes" : 12911,
+      "mode" : "0600",
+      "sha256" : "6838e80682187566eb03b27975e0ee9b0b92c0cd93ba48e4448de89ee6bff166"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/runtime.lkj" : {
+      "bytes" : 7050,
+      "mode" : "0600",
+      "sha256" : "eeeb173d23c597d7b666aca949a32ba171fa5407be4173ad4626abe1ad295d14"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/sequence.lkj" : {
+      "bytes" : 12749,
+      "mode" : "0600",
+      "sha256" : "44b90b45b87dc95987a58967fa38c8d5788fc573d10fbbdb368e7854dd2cfb98"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/sha256.lkj" : {
+      "bytes" : 6245,
+      "mode" : "0600",
+      "sha256" : "1cc3ea4cdde49659c4acc438211b7913dc6a274519b07c43a33d56dc8b0ee75c"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/str.lkj" : {
+      "bytes" : 17153,
+      "mode" : "0600",
+      "sha256" : "6fd8f10faaddba5738a108e878590c20a36391fe0c93ab0dfa8bcfeac3588cb9"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/string.lkj" : {
+      "bytes" : 5748,
+      "mode" : "0600",
+      "sha256" : "2956a68eb4ae029e49a730359f4fa207f91651a42e8d0e7ae5f929773a9a94b6"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/text.lkj" : {
+      "bytes" : 4696,
+      "mode" : "0600",
+      "sha256" : "a3db91eb7293a2755c6d1001a3a59da3357a349985535d509a36f80a64f7ab3f"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/text_lower.lkj" : {
+      "bytes" : 23643,
+      "mode" : "0600",
+      "sha256" : "aa0e8391619ea7f700fccf5a073f19f28d56a62061e8011d018f1901f86a92a8"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/time.lkj" : {
+      "bytes" : 5328,
+      "mode" : "0600",
+      "sha256" : "fa4723f72c2ee85a8388543959c6a612c921cc3006a0e5b8c94d0480d5582507"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/library/timers.lkj" : {
+      "bytes" : 4640,
+      "mode" : "0600",
+      "sha256" : "bfec10692ce18268654d56ebc29e0eec52996f2aa1ef46d83467d09541bcc7a1"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/seed/lkjscript.gz" : {
+      "bytes" : 3145429,
+      "mode" : "0600",
+      "sha256" : "85b4e70de34dfa759aaf3cfb7e1009ba6b49b57499e01e4a3d49ae9182a6193c"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/ast.lkj" : {
+      "bytes" : 9828,
+      "mode" : "0600",
+      "sha256" : "1bcecbb8dcbafb84f1acfc15ea3bdff294895747800549b7226e17a8023ed523"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/authority.lkj" : {
+      "bytes" : 16397,
+      "mode" : "0600",
+      "sha256" : "b3af48cb2236d24e2c1f875394bb22339531bc11f4f06fa4128541f550abaeaa"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/backend.lkj" : {
+      "bytes" : 6119,
+      "mode" : "0600",
+      "sha256" : "8ee796ab1a2287aa3533f1b0d1de264fd2b652e0e72597e46ce00332c9e9b48c"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/check.lkj" : {
+      "bytes" : 153274,
+      "mode" : "0600",
+      "sha256" : "0db1ee5530d3afb3a9aeae3de1d6063ed537c955b97e1d28c91168befcc1b71b"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/check/io.lkj" : {
+      "bytes" : 15314,
+      "mode" : "0600",
+      "sha256" : "e279223aa48757d1f893981b1fbbbb1a5021a3da12967a0628ab23cc60270ac3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/check/scoped.lkj" : {
+      "bytes" : 25030,
+      "mode" : "0600",
+      "sha256" : "8e0c2a3c84a41e9244f1e34847481609ebf5d0c89f8ce07635fea757f77d73ef"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/check/scoped/locals.lkj" : {
+      "bytes" : 33345,
+      "mode" : "0600",
+      "sha256" : "e20135f660e2fae1104c9e6f970d5ab6be661357d3f1435a6feb20f4323819b2"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/check/scoped/views.lkj" : {
+      "bytes" : 8599,
+      "mode" : "0600",
+      "sha256" : "fb1adb0136f122b4eb65c731e669ea2177cc1eb4268b62f4704592eda4432a30"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/closed_semantics.lkj" : {
+      "bytes" : 347,
+      "mode" : "0600",
+      "sha256" : "6a479784084ee5bd740ed1be0a28e06d8d253d73d6027d6e2349b82e575a7af9"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/compiler.lkj" : {
+      "bytes" : 989,
+      "mode" : "0600",
+      "sha256" : "230cf8c9186561c4798da749f76d1c715ad7b4b66205fb399f823cb48f7bcdae"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/diagnostic.lkj" : {
+      "bytes" : 1088,
+      "mode" : "0600",
+      "sha256" : "0af2e25d88f30d57090130370e3178ad1d7072abf5afd43cf907ae30c9183e2c"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/diagnostics.lkj" : {
+      "bytes" : 2663,
+      "mode" : "0600",
+      "sha256" : "dca093110285a9b1531adc90dc6a4b5c597da4df5e5d7d78bd249d454994a8bd"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/diagnostics/borrow_edits.lkj" : {
+      "bytes" : 20019,
+      "mode" : "0600",
+      "sha256" : "f1e4dee120c0a7ff481e55e6364858b483be4e9a76361c2b92a7a03a44d42d09"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/diagnostics/consumer_edits.lkj" : {
+      "bytes" : 15720,
+      "mode" : "0600",
+      "sha256" : "b5e3d320e8ebc4135d53798660d7a625bcaae13f00edf810beb56cf5094e7b12"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/diagnostics/iterator_edits.lkj" : {
+      "bytes" : 7890,
+      "mode" : "0600",
+      "sha256" : "2be574b57fbcd1f631297fbc0c4f5e1a75dc0d08487174c31e7dc3ff5a2698e4"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/diagnostics/site_edits.lkj" : {
+      "bytes" : 6223,
+      "mode" : "0600",
+      "sha256" : "2eb75017172af724aa5b166613c255023a25ad88202286b0031b82fcac5561fe"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/diagnostics/static_label_edits.lkj" : {
+      "bytes" : 13431,
+      "mode" : "0600",
+      "sha256" : "8a4a39605f6751deeed093501fb86c35c1ab6d1781bdda760a9387443f3f4d63"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/driver.lkj" : {
+      "bytes" : 82414,
+      "mode" : "0600",
+      "sha256" : "ea056a27564fa374eb00847d1278fe4e1ebf9da6e1204b8b0adda4cfff148fd5"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/driver_host.lkj" : {
+      "bytes" : 24311,
+      "mode" : "0600",
+      "sha256" : "d0aea8122898e38837d8d2872b44325ed0c551e7f56c11e5064c0c0a2a02fdd0"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate.lkj" : {
+      "bytes" : 192657,
+      "mode" : "0600",
+      "sha256" : "c64b818f92840d4ce6f960b36a6a4707a1463d3febd57cdbb631edf8db6ada39"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/assignment.lkj" : {
+      "bytes" : 9683,
+      "mode" : "0600",
+      "sha256" : "832de8f0bee30bfb8b35fbba0116e868ce61d3a6bd3867f83bf477133058a186"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/borrow_cleanup.lkj" : {
+      "bytes" : 14331,
+      "mode" : "0600",
+      "sha256" : "51c4a7bf4643e03a475e07066c0a8d6ddb91ff857265dd4417bfc8c9cd4d6c33"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/capabilities.lkj" : {
+      "bytes" : 29096,
+      "mode" : "0600",
+      "sha256" : "22de7a8ba1e2a7935dbb740ff4203b4f83c2342cda4217592e1ea1f7bb89844e"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/closures.lkj" : {
+      "bytes" : 51916,
+      "mode" : "0600",
+      "sha256" : "d8941bb33e5a594a889617d5c6a7f7ccedde6df73473f6a4a716072c2e533baf"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/constructors.lkj" : {
+      "bytes" : 14200,
+      "mode" : "0600",
+      "sha256" : "d79715cddd8c1bb269be02d02e96938c3eef6a2b19a2b9bcb9858d39f467b5cf"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/definition_types.lkj" : {
+      "bytes" : 101318,
+      "mode" : "0600",
+      "sha256" : "9b3a10a88a8508ffae931a78fdea7afa50efeaa07c219cd1899bfbd4eb2db7bd"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/definition_types/capabilities.lkj" : {
+      "bytes" : 6305,
+      "mode" : "0600",
+      "sha256" : "bfec7ed801d7a534a8e01d46dbc1ff4b5159eb37f1fcc933812448b3bbbd1bf7"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/definition_types/closures.lkj" : {
+      "bytes" : 6766,
+      "mode" : "0600",
+      "sha256" : "4000641a782400e6a443b38dfc9e44b19a069e39162cc94e1022138c4ec637d6"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/definition_types/method_headers.lkj" : {
+      "bytes" : 10708,
+      "mode" : "0600",
+      "sha256" : "ca19e8c2d8df3b8f9592c0ff9f3c6ad2ca1a321b8a56a8dd3430dd61df901a1f"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/definition_types/pattern_equations.lkj" : {
+      "bytes" : 4246,
+      "mode" : "0600",
+      "sha256" : "f7d5486fddfc3433082f117c0bdc3cca8cb9f4d3c62279d8decbfe2b761fc5b4"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/definition_types/projection_equations.lkj" : {
+      "bytes" : 12174,
+      "mode" : "0600",
+      "sha256" : "5c455a38a1d151b7b5963908a916e1368c6e65cda6ae42011cacc5df1d2ba701"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/definition_types/source_types.lkj" : {
+      "bytes" : 10557,
+      "mode" : "0600",
+      "sha256" : "b139c3732fd4395715b58833975845b77e4e808d4a00e5b293372fd2b5220b36"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/derive_check.lkj" : {
+      "bytes" : 11268,
+      "mode" : "0600",
+      "sha256" : "cb4b54f377efd3e09d8c59492ccb07403d2e9955005d8dd47cfea977aefb3f49"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/derive_methods.lkj" : {
+      "bytes" : 40000,
+      "mode" : "0600",
+      "sha256" : "721d5d1466bbfb53ef19cbcae7249e5c27214e736982cb929bdeda5fea4deacf"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/diagnostic_edits.lkj" : {
+      "bytes" : 18356,
+      "mode" : "0600",
+      "sha256" : "cc8e40302de5d239fa6090e2c9738fcc4f01452a5eb655f33ed3d6e51e12eb26"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/diagnostic_inference.lkj" : {
+      "bytes" : 1007,
+      "mode" : "0600",
+      "sha256" : "045f4ac68f29d42b0340eafccc7f1278f71c898ba7e980b73b08890f560e26c0"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/floats.lkj" : {
+      "bytes" : 9855,
+      "mode" : "0600",
+      "sha256" : "169e5d946f0972fda458b9bbae9c15c388c4cc2e455a2602b2a499a379a762c4"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/generic_check.lkj" : {
+      "bytes" : 57501,
+      "mode" : "0600",
+      "sha256" : "bd505c1a5b2346a517e7d3df25a0f412279f4c7671a142ab0ee1a9dc55227c8a"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/incremental.lkj" : {
+      "bytes" : 15732,
+      "mode" : "0600",
+      "sha256" : "68102b15bf0091d9a54136ba1e93be5a2af53f5fb733eddca7471ae82c958510"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/inference.lkj" : {
+      "bytes" : 14930,
+      "mode" : "0600",
+      "sha256" : "4ab336f8f8142dc580a2476281abcceb6663a713b5acb849390fc3802e6ae6ee"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/integers.lkj" : {
+      "bytes" : 9426,
+      "mode" : "0600",
+      "sha256" : "707c712c875e6e42b2cec72d80cf77fd573a3e15b06c15230b42e60bab60bd0d"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/methods.lkj" : {
+      "bytes" : 3869,
+      "mode" : "0600",
+      "sha256" : "49680dd1a9195d3c9118a2070a0d0e45e6f4f5cc9ec3c5758d764ce06be3d5a7"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/operators.lkj" : {
+      "bytes" : 19189,
+      "mode" : "0600",
+      "sha256" : "d7125c7343bf460261bf569aa088c6d287319ec025e45cb73b777a79b96b6b4e"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/origins.lkj" : {
+      "bytes" : 26366,
+      "mode" : "0600",
+      "sha256" : "7bf0d43bdba77b9f0cc3e80a18694d70c1a5f00a89a6fdf887da668372fec4fc"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/output.lkj" : {
+      "bytes" : 12665,
+      "mode" : "0600",
+      "sha256" : "50f75839305c844cb5df16b0d548afd9e73ed16bc11becb5a405a37a7559ea63"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/pattern_choices.lkj" : {
+      "bytes" : 23061,
+      "mode" : "0600",
+      "sha256" : "3f8593b15908ad86e9672726b2591d39ec5cf243abe87edc30745e16c1398de9"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/patterns.lkj" : {
+      "bytes" : 64118,
+      "mode" : "0600",
+      "sha256" : "1acfd88e82b646fba18aeb080e082cb3486fd8ad8e3adc7f2539147851472ca3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/ranges.lkj" : {
+      "bytes" : 7515,
+      "mode" : "0600",
+      "sha256" : "3066e8bda9c7ed159b68af4ac387abe99593fe31eaf2b93314aab35867b4b9fd"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/scoped_calls.lkj" : {
+      "bytes" : 22429,
+      "mode" : "0600",
+      "sha256" : "376808c731e1c8496ddcebd74533f6b81cf6234a5d9744fb9e2449b5207a30b5"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/scoped_locals.lkj" : {
+      "bytes" : 15950,
+      "mode" : "0600",
+      "sha256" : "1d410be1f51b73711edc4f79261662c930e09aa9c29bdc74c595b73fb67c1425"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/sequences.lkj" : {
+      "bytes" : 5436,
+      "mode" : "0600",
+      "sha256" : "15b41c14f08ec3497ba3bc5f7a17992c6aff944e8ec5848250f5622ed689b596"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/static_lifetimes.lkj" : {
+      "bytes" : 11742,
+      "mode" : "0600",
+      "sha256" : "fbc808d91288c3d56e55e4e172d7669cee72ade06b7ccc36c350b700ee10a913"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/sugars.lkj" : {
+      "bytes" : 8773,
+      "mode" : "0600",
+      "sha256" : "6f5a49a6af7caef672915ea3954e838ad0e0cdd94dff7115a44e2d2bbde48d44"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/text_format.lkj" : {
+      "bytes" : 17351,
+      "mode" : "0600",
+      "sha256" : "11d94777c11d959f26de3f3550c64897efff153aa39f25f2bc684717c2a65fc8"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/trait_proofs.lkj" : {
+      "bytes" : 5759,
+      "mode" : "0600",
+      "sha256" : "c252248217fa2b59e25c53f2cb6590ba0d8ea15cc02c92c82bb933646bbc37c7"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/type_display.lkj" : {
+      "bytes" : 2556,
+      "mode" : "0600",
+      "sha256" : "4e21bf86289c60ca9d5efd2a0a0023210e821913642c89a4bccd5dbf0c170a44"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/type_resolve.lkj" : {
+      "bytes" : 25502,
+      "mode" : "0600",
+      "sha256" : "39c926df75ab743b6e01128b79d4cbe9ce80d06e5c40f5375dc1f9b05eb36675"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/elaborate/variants.lkj" : {
+      "bytes" : 7233,
+      "mode" : "0600",
+      "sha256" : "ffdb1ec68ee75e69080cbcb2be210846b4be3e946104fbdc4014ffd123dfc62c"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/embedded.lkj" : {
+      "bytes" : 1798,
+      "mode" : "0600",
+      "sha256" : "691ce9e72c5aff6dd5c1aaedda5bc52688e47af8230bfcfb232249dcf012f51d"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/entry_grants.lkj" : {
+      "bytes" : 8933,
+      "mode" : "0600",
+      "sha256" : "499ef6bfe13bea8bb168d07763a1967083ad6aa7830b0f9ae983a845514ee7a7"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/facts.lkj" : {
+      "bytes" : 5216,
+      "mode" : "0600",
+      "sha256" : "ab77f537bd3d9edcd304e84147b11ae6236c5136641314ae89b540e940674fe2"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/frontend.lkj" : {
+      "bytes" : 1271,
+      "mode" : "0600",
+      "sha256" : "339dd6c95239236e97200c4ae764a3a6b5a9689afd1ca449002ffb114ab8b534"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/gate_reuse_main.lkj" : {
+      "bytes" : 5870,
+      "mode" : "0600",
+      "sha256" : "7f9613f228a5ffd024a9f6d24bf6fe9392b45c59dbac033016e405ecd32dd88b"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/generics.lkj" : {
+      "bytes" : 98003,
+      "mode" : "0600",
+      "sha256" : "4d8a3bdeace4ee54692d7b71db46df5ab15e08079c71f076bc325e00b279963b"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/generics/bound_solver.lkj" : {
+      "bytes" : 5289,
+      "mode" : "0600",
+      "sha256" : "47adc0962358861a85cb36f1f9aa8d14f9f6be9cc119d721b315950032e8088d"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/generics/signature_bounds.lkj" : {
+      "bytes" : 12349,
+      "mode" : "0600",
+      "sha256" : "a99c1ac45bece2a59ba270a7a35da7f73a1863fdc4f66d5339d8bfb6d6f9b4bb"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/host_network.lkj" : {
+      "bytes" : 19248,
+      "mode" : "0600",
+      "sha256" : "a91bcde719089dcf9bbd495e632a5302700395d70cc819fc921f4025aec2e514"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/host_network/broker.lkj" : {
+      "bytes" : 27387,
+      "mode" : "0600",
+      "sha256" : "b212105ee2babfd03cdb65f210c3c13b3e496348973c69c4d7681e13e2bf9ac5"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/host_network/directories.lkj" : {
+      "bytes" : 5115,
+      "mode" : "0600",
+      "sha256" : "d171252ec0922696836f25df5c73cdfd2b75bcdcbafa50343cedeb491b460b10"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/host_network/lifecycle.lkj" : {
+      "bytes" : 5167,
+      "mode" : "0600",
+      "sha256" : "e9cc369a290b3ffb287defe09b3707f15b18d7b47382ef3c387e73b7b4f3706d"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/host_network/process.lkj" : {
+      "bytes" : 12400,
+      "mode" : "0600",
+      "sha256" : "2f4ea3aa6262076d01aca32f5ad9e57975e36277a2992ddc882d4f2028a82a10"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/interpreter.lkj" : {
+      "bytes" : 109986,
+      "mode" : "0600",
+      "sha256" : "fd88f6a0611426c4732be6af00ce21374608405d5669a23e1a6ffd2171a5ac81"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/interpreter/io.lkj" : {
+      "bytes" : 41576,
+      "mode" : "0600",
+      "sha256" : "cd1185f8c0e462ed06eee0b722795233ac7f4f3aefed11a4091148175932a240"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/interpreter/scalar.lkj" : {
+      "bytes" : 8458,
+      "mode" : "0600",
+      "sha256" : "8a392f6b50889c7af23603b60b45c9f2085b90ab7bb1cf3f6be9877e48fc7cc9"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/ir.lkj" : {
+      "bytes" : 23786,
+      "mode" : "0600",
+      "sha256" : "cc0ab109df00da190f6400e92a94fcdfedf0e302b6040e08c73b460740f78308"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/ir_binary.lkj" : {
+      "bytes" : 19383,
+      "mode" : "0600",
+      "sha256" : "932c1f73e5d4725b54a93662dc6157448ddaa13d69b4b9483062d72eb7fe7415"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/ir_text.lkj" : {
+      "bytes" : 40608,
+      "mode" : "0600",
+      "sha256" : "50054504ffbfa16aca07d3abdcb819d7a77255c816b8147af62b19096523f5bf"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/json.lkj" : {
+      "bytes" : 1186,
+      "mode" : "0600",
+      "sha256" : "c779d8e6c8e87811febd18ab6d3f51bdf9b26c085952845245bcad553082c7ed"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/lib.lkj" : {
+      "bytes" : 523,
+      "mode" : "0600",
+      "sha256" : "f8f611f579a5a14bcd5318d582478d789c4a96e7e434771d31a3ff5759f838b9"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/main.lkj" : {
+      "bytes" : 757,
+      "mode" : "0600",
+      "sha256" : "be5ec46f670f179f3f5df0a949cd5bfa7006cb61458529d44f5ba5e6575c7c59"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/names.lkj" : {
+      "bytes" : 371,
+      "mode" : "0600",
+      "sha256" : "d62ce42092821a3a6f33058377fe53fb6a0f7a577e9ebd067f363638672fe0c4"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/native.lkj" : {
+      "bytes" : 74651,
+      "mode" : "0600",
+      "sha256" : "517194e7bf4170da5a3118b9336c9cd425b4398b5c6e628229e9cab55fc85f4d"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/native/cache.lkj" : {
+      "bytes" : 10531,
+      "mode" : "0600",
+      "sha256" : "f2e92c484ffa43787c0275b6c4a26146e5fa618e591f741786c4aa0981f45c1c"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/native/entry.lkj" : {
+      "bytes" : 7070,
+      "mode" : "0600",
+      "sha256" : "2c773b347dfee2bb51a34f53a35b0a522019f089b92737e58a3b2d61ba2b59e6"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/native/environment.lkj" : {
+      "bytes" : 2275,
+      "mode" : "0600",
+      "sha256" : "919e2485b114d994e95090662bc3a27af393a2e415f4aa9b75cdbbcdf3ca91b9"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/native/intrinsics.lkj" : {
+      "bytes" : 29902,
+      "mode" : "0600",
+      "sha256" : "df239a311e22a27295fca24f7e158c7b6013d33f255b99c8f478c5eb5f3ee257"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/native/layout.lkj" : {
+      "bytes" : 8473,
+      "mode" : "0600",
+      "sha256" : "f1700deb73255f3423537af7fea71fa694bae1ee1a9367d1688da4c4a626f13a"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/native/lifecycle.lkj" : {
+      "bytes" : 6396,
+      "mode" : "0600",
+      "sha256" : "5a42c2e596d6e0c2bde406b79f7b85b0550eecf5f9f25dc1aef3e24baa2ef4fc"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/native/network.lkj" : {
+      "bytes" : 7008,
+      "mode" : "0600",
+      "sha256" : "b38eeee6236052dfddc09ceadf761118e8cb23803b4af628d2cf1063534f40ff"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/native/ownership.lkj" : {
+      "bytes" : 4173,
+      "mode" : "0600",
+      "sha256" : "79072b9fa29972d45f3099b2a88f089af0ede246a5ccd0d67970e56178dc2833"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/native/platform.lkj" : {
+      "bytes" : 29190,
+      "mode" : "0600",
+      "sha256" : "e632c9fe19937a4a404be7962e2a566f1db87ba41733a984d9bc13766f033bd9"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/native/process.lkj" : {
+      "bytes" : 14929,
+      "mode" : "0600",
+      "sha256" : "589ade4fb02679ef813a81e00c9f223dbb1668212f2da70d91f40412a4b9fbff"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/native/profiling.lkj" : {
+      "bytes" : 18267,
+      "mode" : "0600",
+      "sha256" : "e9b08cd5728cb89fdc4755731669f75bbe4613fd734aa60181f3452d09125bee"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/native/readiness.lkj" : {
+      "bytes" : 6236,
+      "mode" : "0600",
+      "sha256" : "e343aef30be73f81d173b0e4d0630054415e7b78d5e078ea8033bec195bfe713"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/native/registers.lkj" : {
+      "bytes" : 9849,
+      "mode" : "0600",
+      "sha256" : "543e6f139a95a2a496a328bb53ec99f1b723ff70c84ec9208277ea304018006a"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/native/scalar.lkj" : {
+      "bytes" : 12443,
+      "mode" : "0600",
+      "sha256" : "ab940f62e9761bd08bfd6efcb30aa9ed02624c3bbdba0a928aff3a686159e27f"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/native/storage.lkj" : {
+      "bytes" : 3741,
+      "mode" : "0600",
+      "sha256" : "42edafff15977eed197a4f19a83c32737825fe8561326472b9cbd66aa7e87230"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/native/storage_plan.lkj" : {
+      "bytes" : 2068,
+      "mode" : "0600",
+      "sha256" : "ce7fd06da2040779c4d03e2810b037fd71abe91a79bf5160441112298310a33f"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/optimizer.lkj" : {
+      "bytes" : 18604,
+      "mode" : "0600",
+      "sha256" : "961d59858c83afd8c5e8e2f9ec00d0f3a90cc91953ba8903528589f41a9da705"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/program_directory.lkj" : {
+      "bytes" : 8434,
+      "mode" : "0600",
+      "sha256" : "6b8f68bf4826c0c08177d4e25eec7094f9a3dd2c0c6d8b0c2fbbba8c5ba32dfd"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/resolve.lkj" : {
+      "bytes" : 42411,
+      "mode" : "0600",
+      "sha256" : "31d12385bb3cbdd675cb2b023b53bd7e48a313962316b022e5b8d88c5c9da96e"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/resolve/import_scopes.lkj" : {
+      "bytes" : 4215,
+      "mode" : "0600",
+      "sha256" : "bc52b438b83b7ddad39398d453ea37c5dba02454c50f99df496c02dffb684ad1"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/resolve/iteration.lkj" : {
+      "bytes" : 7742,
+      "mode" : "0600",
+      "sha256" : "a21cc7bfa1c88ee181a3d2f946b26685c1bbab708b765364f90b5047d27f3acb"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/reuse.lkj" : {
+      "bytes" : 17556,
+      "mode" : "0600",
+      "sha256" : "4983d1d7d0ea5c8177525c9db7edc123c0839b9b7483d6ebd2608878b9aad747"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/runtime.lkj" : {
+      "bytes" : 7243,
+      "mode" : "0600",
+      "sha256" : "f25b7ded2ecf03e60fe1f4fce3d5dd6f8523d8b942f5fc58ae1ee062be44bbf7"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/runtime_memory.lkj" : {
+      "bytes" : 8728,
+      "mode" : "0600",
+      "sha256" : "62244047de4c0f8cb3b5afccaabef5590e031de16858b25cadbdc2c222378bf6"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_main.lkj" : {
+      "bytes" : 1557,
+      "mode" : "0600",
+      "sha256" : "05937bc272028f2b7ae7246a034c4d92e3d0967601aae2b13cfee0232d375c66"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests.lkj" : {
+      "bytes" : 4912,
+      "mode" : "0600",
+      "sha256" : "29b19cbeb2611ec57bee3f72a74df23f59015ef31beeb7e37ef220adcf3c8f86"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/allocator.lkj" : {
+      "bytes" : 11566,
+      "mode" : "0600",
+      "sha256" : "cbead19fc9d49e380df57808b57030df08b5400b3427ecaf095fb6800d305b25"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/allocator_fixture.lkj" : {
+      "bytes" : 3247,
+      "mode" : "0600",
+      "sha256" : "e5b31433690de4b23d83a9777f1c7a49bb08f45747ce9db297dbae62a26c54de"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/array_repeat.lkj" : {
+      "bytes" : 7491,
+      "mode" : "0600",
+      "sha256" : "a7b2d0114b3b148e9a2375cbf50aeb47c91ec91ff74c77f724015120db12b861"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/diagnostic_contracts.lkj" : {
+      "bytes" : 15407,
+      "mode" : "0600",
+      "sha256" : "9a77e50ff6719d16ea325f0fd06d1819551136f82faa751e81c34a5a4bf18f4e"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/entry_grants.lkj" : {
+      "bytes" : 13198,
+      "mode" : "0600",
+      "sha256" : "bfd4c9033b7ccebece2ba77ffae07ad23f26fe19bde9e191877d8478c4a9a549"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/facts.lkj" : {
+      "bytes" : 3236,
+      "mode" : "0600",
+      "sha256" : "3a98f1b8a92e9db08bc0ca117622c9d4fe0b4e6d5d477d806bafaa1832c39351"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/function_owners.lkj" : {
+      "bytes" : 4560,
+      "mode" : "0600",
+      "sha256" : "18cd97c495b854fd03fb10c02069b23ddb59c9e3c6aaf9e5c5e47a82d40e51cc"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/interpreter_contracts.lkj" : {
+      "bytes" : 48189,
+      "mode" : "0600",
+      "sha256" : "5b076dfb2569525152b7ab98650e95fc4f4ac6d3bbaf46c619e42b2198e99ad9"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/ir_binary.lkj" : {
+      "bytes" : 10902,
+      "mode" : "0600",
+      "sha256" : "01cba950de4b5ed3d1e37f89ec9d0cc80dcf782c2ac4c88b6aa8c4ef3abea646"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/ir_binary_admission.lkj" : {
+      "bytes" : 682,
+      "mode" : "0600",
+      "sha256" : "736be1018b06f16800ee9731c2127713b01ed0e3f1a7de00b3b370988778914e"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/library_demand.lkj" : {
+      "bytes" : 8915,
+      "mode" : "0600",
+      "sha256" : "db1a350c182f1c5534fdac1b3147e5b1079713e31a42e0409efa63a5461db41f"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/optimizer.lkj" : {
+      "bytes" : 16397,
+      "mode" : "0600",
+      "sha256" : "9ab1238063e09ab4aea386c805e699c6d896bdf4a8390ed581c9897e6eb7914e"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/optimizer/forwarding.lkj" : {
+      "bytes" : 16193,
+      "mode" : "0600",
+      "sha256" : "b2a165445a15c29b98097ff25b26da453ada4f10eb977487a6626e749452e9b8"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/optimizer/wrappers.lkj" : {
+      "bytes" : 8405,
+      "mode" : "0600",
+      "sha256" : "ce85896278208d9bada9a7091e0a3c0e00a0bd7c3426fd227b6ac7b3b6805f55"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/panic_messages.lkj" : {
+      "bytes" : 7044,
+      "mode" : "0600",
+      "sha256" : "3a3ada4d1e894d1d4c2ab0a7481e0eff3c5d00a33e201d1dea9ddc23888409e8"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/parser_contracts.lkj" : {
+      "bytes" : 3879,
+      "mode" : "0600",
+      "sha256" : "9636c151501ca324acfaa0ba1d65cbe5e209495e88fe3b8ca432c0717f84c684"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/recheck.lkj" : {
+      "bytes" : 15617,
+      "mode" : "0600",
+      "sha256" : "9f42ecea6e09efa3b1209d6d0597bb5e3f01623f32fd6f14d9c8a27289ecbff7"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/resolver.lkj" : {
+      "bytes" : 2216,
+      "mode" : "0600",
+      "sha256" : "7582746acdb71d3489cd5734ab472e2be935d416dc1d14221880f54535db27ac"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/return_contracts.lkj" : {
+      "bytes" : 5138,
+      "mode" : "0600",
+      "sha256" : "03ce6ced2b1d2cf670548261f2c811a9b2dce4ffef0e8865efb4188e29e7384b"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/reuse.lkj" : {
+      "bytes" : 14334,
+      "mode" : "0600",
+      "sha256" : "0f0ca1c8004900f224f2ab98b41c8777c94fd33ba230932b7dc321c6e3e915a1"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/scalar_clone.lkj" : {
+      "bytes" : 4400,
+      "mode" : "0600",
+      "sha256" : "8eaeed68fee358163152f186ca2f764316b5b38056c607a814531c28efc62171"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/source_cases.lkj" : {
+      "bytes" : 979605,
+      "mode" : "0600",
+      "sha256" : "2ee826eb7712efe7edd9cbc84da8527ebb91e99a81cc8e2c71edfc6147a1006f"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/source_contracts.lkj" : {
+      "bytes" : 7366,
+      "mode" : "0600",
+      "sha256" : "f82903739b9f6413ec2206aae8f72d656d74f108aaa93bcf0e36d56aee865340"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/semantic_tests/units.lkj" : {
+      "bytes" : 99931,
+      "mode" : "0600",
+      "sha256" : "a8d5a51fed6781d5d672a2f77cca0a2d36336a25e182ff363cd7d94b80c88cc4"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/source.lkj" : {
+      "bytes" : 18321,
+      "mode" : "0600",
+      "sha256" : "7e59c0f773fde7e434508506b75ace0e53e2a33f8e72985a97f867a6581e2bb7"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/store.lkj" : {
+      "bytes" : 22602,
+      "mode" : "0600",
+      "sha256" : "2f37e63be4cd392edf3f1bb85140a5af2b481c9936c49ca9823043c836fd2ecf"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/syntax.lkj" : {
+      "bytes" : 129580,
+      "mode" : "0600",
+      "sha256" : "11ccc3239394db641b03254f093edacfc47469046bdf252162897904440ab1ae"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/syntax/default.lkj" : {
+      "bytes" : 4099,
+      "mode" : "0600",
+      "sha256" : "ef36c574b288033a99ff3ab745c321ffb24613ff8149975b749ce3d5d78fade3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/syntax/formatting.lkj" : {
+      "bytes" : 5903,
+      "mode" : "0600",
+      "sha256" : "e1699026a980f60cc0cee32666847b0e282a010eb623234d12c5b1764891ef8a"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/test_generators.lkj" : {
+      "bytes" : 50554,
+      "mode" : "0600",
+      "sha256" : "853c7ce6411aedc7e303a181e7e40cba1ae6ead48e450fa300d5d8d802e1f72f"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/test_generators/extended_cases.lkj" : {
+      "bytes" : 42037,
+      "mode" : "0600",
+      "sha256" : "ebb47e9038a41fb77ebd7fbeada7d13ad6904865adecad91e7200393977efee6"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/test_generators/integer_cases.lkj" : {
+      "bytes" : 3589,
+      "mode" : "0600",
+      "sha256" : "811a2b79f188b79f7e588b72c26e50be6d2f3b5af9337cdb0d7b667cb187ab1e"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/test_generators/mutation.lkj" : {
+      "bytes" : 14613,
+      "mode" : "0600",
+      "sha256" : "b047bafb7c67cd63d8755c644e9471e83e319c8549aa7bd3bd8bc7ad2412ea48"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/test_generators/ownership.lkj" : {
+      "bytes" : 17531,
+      "mode" : "0600",
+      "sha256" : "59e42b90e517056780a4f5520bf21982dc379fb3766694d851a2ce2e7d462c10"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/test_generators/reduction.lkj" : {
+      "bytes" : 12713,
+      "mode" : "0600",
+      "sha256" : "31c15f5fd87c97ae3f277b5ec5c35bc10a32d3fe0b1e607065a1dbbf3227f17a"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/test_generators/scale.lkj" : {
+      "bytes" : 4139,
+      "mode" : "0600",
+      "sha256" : "62bf9396f194814ea3d295e8b8f8204d651fd64ea9869f743119fe28154d2dba"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/test_generators/source_cases.lkj" : {
+      "bytes" : 21192,
+      "mode" : "0600",
+      "sha256" : "088cbc7223bc3fad90b9cb67d3bd8a30f3e37dd68e3c31cf9166835781f3b731"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/test_generators/values.lkj" : {
+      "bytes" : 26271,
+      "mode" : "0600",
+      "sha256" : "0b90b5094302351e27f033c4acb17e7cb33ef2d71ce2225fb2d38a3b04aa16a6"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/test_runner.lkj" : {
+      "bytes" : 43270,
+      "mode" : "0600",
+      "sha256" : "d205735c9f798a35d465f5b7a185ec9e045470ef44427a07e3281a2f1895982d"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture/source/src/x86.lkj" : {
+      "bytes" : 26540,
+      "mode" : "0600",
+      "sha256" : "ee1090f415094f0d855f39e7b317fa4e17d208a96286b3d76fc66f9b549b5a79"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/focused.evidence" : {
+      "bytes" : 6035,
+      "mode" : "0600",
+      "sha256" : "5f2df61db6decc3eaf91dbaaa3885600a56015da1f7b77b8d7db8799b654c508"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/free-space-kib" : {
+      "bytes" : 10,
+      "mode" : "0600",
+      "sha256" : "ecf9d956292d4cac1364f0ae4b2716d4cdf0ddbd3859c4e1a812cc090317c844"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/full_gate.evidence" : {
+      "bytes" : 10137,
+      "mode" : "0600",
+      "sha256" : "0bc00b8d36c8f909490cf3edd0d4578c052b90ccbc3d0754ee4b477d06531431"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/input-artifacts.sha256" : {
+      "bytes" : 649,
+      "mode" : "0600",
+      "sha256" : "a14fd3f2fe3bb8d1da48da59021cdb77d8bf460ea97471f4c66cdaf53f8a7751"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/metadata" : {
+      "bytes" : 1292,
+      "mode" : "0600",
+      "sha256" : "5e13a00a85cbab2bdb59c2b5b35bbbd561a43495da61bb92f8366525ca277bf8"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/outcome" : {
+      "bytes" : 135,
+      "mode" : "0600",
+      "sha256" : "2ff060c42d1d39d73ad49d8aea06e48a7ee6f1a870f43fcf840723fb3dd3d9a0"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/parity.tsv" : {
+      "bytes" : 606,
+      "mode" : "0600",
+      "sha256" : "9485aa6d7b22643a95e4dc6c223b1841c872a93f3a0da828ee390dfb4848b87b"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/pin-values" : {
+      "bytes" : 271,
+      "mode" : "0600",
+      "sha256" : "741b5eaf236fe1f959f1911d1240b23d33dba7e83349035da76ab2fe084aa85d"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/producer-pin.json" : {
+      "bytes" : 3886,
+      "mode" : "0600",
+      "sha256" : "d4ff362499768e6f19ca73a918c2234773c2bc62bc5bc145fa31c1dd104961f3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/producer-pin.sha256" : {
+      "bytes" : 159,
+      "mode" : "0600",
+      "sha256" : "f71cf8b68afa17f1e933d18cfce92fe8aada660226e9f2b4cb962b76f766b0a1"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/protocol.md" : {
+      "bytes" : 10219,
+      "mode" : "0600",
+      "sha256" : "5e7c5b605250bb3cc5e5153f1f2fac9a95a686cae5495bebfe5c6ee5798716d4"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.A.1.argv" : {
+      "bytes" : 586,
+      "mode" : "0600",
+      "sha256" : "2af3e74f6e565eaa5a2f42f48d6e70fb8d6a8cb9307c5e2102f5dd94ee085279"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.A.1.capture" : {
+      "bytes" : 72,
+      "mode" : "0600",
+      "sha256" : "6f76732e61007005ce16bf75c1cb418bf90646f6e20468322f5fd431c1d46bab"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.A.1.cwd" : {
+      "bytes" : 32,
+      "mode" : "0600",
+      "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.A.1.finished.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "a736ae265f837a694a551b5aefa2c6d94b4a423f4edf353af055f000db8b4bb3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.A.1.finished.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "43cf9ad1a6281ef4ec9ba331d7e04fbe88890c295cf82da24125a8066a867abf"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.A.1.load-after" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "b821a3e8ac66f77c71cb1684a1b4f8e5d20c9ba3eedeaf584bfec11df9816ad8"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.A.1.load-before" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "88ba885ebb28eb857e522c65e011a2bcfbacca52d2b67c8463b5832fe6797dd9"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.A.1.started.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "83274adc92b2b3a891e19cf9650f40940eb858ef8e9c443f26ae7eade306308e"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.A.1.started.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "6e76e717d097e9ce05c66165444cc683249f5885767cc5866645b6b624507d0b"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.A.1.status" : {
+      "bytes" : 2,
+      "mode" : "0600",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.A.1.stderr" : {
+      "bytes" : 1063,
+      "mode" : "0600",
+      "sha256" : "fb668a7f3fb157b9e7503baccdf27a818d5ae12562d35dab8dcbe4eb84ed0bde"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.A.1.stdout" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.A.1.time" : {
+      "bytes" : 24,
+      "mode" : "0600",
+      "sha256" : "e43b2b577a28970ec3654ae2d92564635581316c402f92598b65a8847046e6c7"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.A.1.wrapper-argv" : {
+      "bytes" : 790,
+      "mode" : "0600",
+      "sha256" : "37af9358cdc89312671845db40e386b1392a7a772878d9fa70723063b70337f5"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.B.1.argv" : {
+      "bytes" : 604,
+      "mode" : "0600",
+      "sha256" : "8186e1d554181f0bbc569fde78307374c5e55d430bcf119f3cdf95295487fee5"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.B.1.capture" : {
+      "bytes" : 72,
+      "mode" : "0600",
+      "sha256" : "a98168291f051e2a92ffe51345b01b43567e55fa995fdb656bb119a3a212ef45"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.B.1.cwd" : {
+      "bytes" : 32,
+      "mode" : "0600",
+      "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.B.1.finished.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "d418ae625b00776958d7356c530681cbc2fd8589989f7cd635bcc1b6f62792a4"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.B.1.finished.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "eadadc3e6277ab8652fc5409a1b0fa58691c6d703c73f7b020c46f412e2269e1"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.B.1.load-after" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "82b632514a27ce26d149e4cad5a97fbc184c8c13145ee5a988ced4ab0b284a12"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.B.1.load-before" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "b821a3e8ac66f77c71cb1684a1b4f8e5d20c9ba3eedeaf584bfec11df9816ad8"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.B.1.started.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "60eba7bfe1060328a69bac8ada128b5a7c17639f50b3d3b507c4f7a23bada5c1"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.B.1.started.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "43cf9ad1a6281ef4ec9ba331d7e04fbe88890c295cf82da24125a8066a867abf"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.B.1.status" : {
+      "bytes" : 2,
+      "mode" : "0600",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.B.1.stderr" : {
+      "bytes" : 1118,
+      "mode" : "0600",
+      "sha256" : "8da7f08c656631a4a71a1917a1b743264f66170577b70b96e61d5d0838db17e9"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.B.1.stdout" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.B.1.time" : {
+      "bytes" : 25,
+      "mode" : "0600",
+      "sha256" : "623b989df1b26820b1ffa3b641f4ee6519976e5d85a10556cc9e87cfee3832d6"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/construct.B.1.wrapper-argv" : {
+      "bytes" : 808,
+      "mode" : "0600",
+      "sha256" : "ae7dcd83c07cdd01d9ef067940123e02153924c14f016dd02bcaca23036967d7"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.1.argv" : {
+      "bytes" : 579,
+      "mode" : "0600",
+      "sha256" : "601c3e46088e59b7ab3e2950b98386b9a5e7a0a0466764efaa025311d9ea6321"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.1.capture" : {
+      "bytes" : 72,
+      "mode" : "0600",
+      "sha256" : "d638a1b2f1d90416c2da59077cebc0118c8985cb8fe75aeeddac2ac7bb843092"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.1.cwd" : {
+      "bytes" : 32,
+      "mode" : "0600",
+      "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.1.finished.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "8c5260ed29bb45e9f9a86def55401b7f3585a34b1c20ffe231c9704552a917ac"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.1.finished.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "fca99ef43f48c97d1a393ca51975114a4af86d44f26ccee8af1383b35ecf3ad6"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.1.load-after" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "594e209fff8f3bec2dbf9f8410664a1f05e56bfe692d287f8ac3d415984c0762"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.1.load-before" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "82b632514a27ce26d149e4cad5a97fbc184c8c13145ee5a988ced4ab0b284a12"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.1.started.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "d3c2854fcc2a6c1ef54f24bc110c843cfad3a72d125cabf67541cf639698ab45"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.1.started.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "eadadc3e6277ab8652fc5409a1b0fa58691c6d703c73f7b020c46f412e2269e1"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.1.status" : {
+      "bytes" : 2,
+      "mode" : "0600",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.1.stderr" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.1.stdout" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.1.time" : {
+      "bytes" : 24,
+      "mode" : "0600",
+      "sha256" : "4169d6d0389163eeaf88199598ce4e29ae0ebb85ee1e89cc8fb155ab7d83d482"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.1.wrapper-argv" : {
+      "bytes" : 781,
+      "mode" : "0600",
+      "sha256" : "2cb9eda32598cfb3d11d8705efb39094d0ed9a7b802fda77ee990ab838bda681"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.2.argv" : {
+      "bytes" : 579,
+      "mode" : "0600",
+      "sha256" : "a61e18c8aea2380736573bfb2c95c06f05308312532baf633994667b1dfe827e"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.2.capture" : {
+      "bytes" : 72,
+      "mode" : "0600",
+      "sha256" : "7c688bc9ea6bbe273efdc4ba3a1ae832ecc233e0fbaca4e7f2442ea8b90ebdd9"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.2.cwd" : {
+      "bytes" : 32,
+      "mode" : "0600",
+      "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.2.finished.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "b188b4eee08ce07f7ad20022184a149589da83beecde1920c5672b033bd716fc"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.2.finished.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "412df223b850dddfb79ae5b4b858e9f8faeed78d358ea52b64ede2d85969226f"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.2.load-after" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "bfe4b9fd54d5e8ba74d336d333fef2e549c12aa2ea1dea12e908a79cc7c5d6e3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.2.load-before" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "9ea17a8035c1d95045d2644db16b44de34f49e8d5c876b7e9df5ea915d5425d0"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.2.started.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "3a4cc1410a6d0def9b8b6ddba0f86e7ec2800feff699cd0ec735b69ce13adf75"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.2.started.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "d43dce5c26ffe0c99d95807e6a17cae6ecf4d97b65a2649e5c57a28adb3e90a0"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.2.status" : {
+      "bytes" : 2,
+      "mode" : "0600",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.2.stderr" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.2.stdout" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.2.time" : {
+      "bytes" : 24,
+      "mode" : "0600",
+      "sha256" : "0a47616f482010d48ddbb3842cb8c81deeba29c046bfc994ffdd57fdf5d6bcf3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.2.wrapper-argv" : {
+      "bytes" : 781,
+      "mode" : "0600",
+      "sha256" : "b7c4cb9c999650c8657b5c300776ec314af80413183ef678fe0bc0cb608f2cb6"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.3.argv" : {
+      "bytes" : 579,
+      "mode" : "0600",
+      "sha256" : "452578b24bf4c9c67953792360dbfb5c3c2c63d9a68b86f9935be8ed5adafb4b"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.3.capture" : {
+      "bytes" : 72,
+      "mode" : "0600",
+      "sha256" : "37191a183862e8d722c537f4687adb39e9f7e6372732c76d05abbf2e9bbe8687"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.3.cwd" : {
+      "bytes" : 32,
+      "mode" : "0600",
+      "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.3.finished.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "24e1f18e028e820056035c4a0441a98cc68b19e9d4d72f8d73edb37722c44646"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.3.finished.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "f741d67daf7a76cba51e84d1670b9a3cbbbc2c6f89de1d48f35183a382352088"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.3.load-after" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "4b07e33900ee4849c338c27f56a9daa7a29a1f5cb3324a3f76850841595afdf5"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.3.load-before" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "bfe4b9fd54d5e8ba74d336d333fef2e549c12aa2ea1dea12e908a79cc7c5d6e3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.3.started.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "5897b0f91448559b1815fa4d4370ef69ccba2383b5eb601fb7d34f2bed0a080e"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.3.started.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "412df223b850dddfb79ae5b4b858e9f8faeed78d358ea52b64ede2d85969226f"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.3.status" : {
+      "bytes" : 2,
+      "mode" : "0600",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.3.stderr" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.3.stdout" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.3.time" : {
+      "bytes" : 24,
+      "mode" : "0600",
+      "sha256" : "f8fef2c13d237592306ba9c80b6e5769100dc6a0d98dbbda90160546961e16e7"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.A.3.wrapper-argv" : {
+      "bytes" : 781,
+      "mode" : "0600",
+      "sha256" : "429a177a1d4657965d492052739db692315a5063971dad3f2cbbe01bc5885b08"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.1.argv" : {
+      "bytes" : 579,
+      "mode" : "0600",
+      "sha256" : "5f9f5e833987241dbf647210f11503de455f94070e606e0ea643b32329841144"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.1.capture" : {
+      "bytes" : 72,
+      "mode" : "0600",
+      "sha256" : "17d5bb3f8013e9fecc015397358f693beedc32db5c5e4bb602fc018c87290e8d"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.1.cwd" : {
+      "bytes" : 32,
+      "mode" : "0600",
+      "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.1.finished.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "a475b4d1bc70062c9a9cf8468b22b71dd0ed0a3bcd968fc98ed3810bdb6aa2d1"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.1.finished.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "482e9b57e1e032e0ae3f10beb749a0265fdcaf507741f6efc95a28b44a37a17a"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.1.load-after" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "04ae2e70fbb1a5db52d1761a581cadfb80c56b5d5dc1827a0423e07a6fcb3a18"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.1.load-before" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "594e209fff8f3bec2dbf9f8410664a1f05e56bfe692d287f8ac3d415984c0762"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.1.started.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "a25e7a6760ea5a340bd51afa6d16bd37bd71740633fcc4447f97348d45bc6703"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.1.started.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "fca99ef43f48c97d1a393ca51975114a4af86d44f26ccee8af1383b35ecf3ad6"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.1.status" : {
+      "bytes" : 2,
+      "mode" : "0600",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.1.stderr" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.1.stdout" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.1.time" : {
+      "bytes" : 24,
+      "mode" : "0600",
+      "sha256" : "025c70ec0fde30cebfc289591ff12cb5a76c819e52f80a48dd40db7c9916b59e"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.1.wrapper-argv" : {
+      "bytes" : 781,
+      "mode" : "0600",
+      "sha256" : "a95b7d248c1cc18433176a45955df892030584074e316de06f84f3708e110e53"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.2.argv" : {
+      "bytes" : 579,
+      "mode" : "0600",
+      "sha256" : "bb976614431670b2a2484375fcbaf283d8437da054097d3e31ff93ebe348355c"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.2.capture" : {
+      "bytes" : 72,
+      "mode" : "0600",
+      "sha256" : "26c3e49773a97600f3bfb52654f31a8e5e9ef23cd8fb766c2e8b8c2a9a590da0"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.2.cwd" : {
+      "bytes" : 32,
+      "mode" : "0600",
+      "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.2.finished.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "aabff562208eb3f62ab7af4e2d188bf978d86d6e908870c6ed9ad56a6592e8f1"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.2.finished.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "d43dce5c26ffe0c99d95807e6a17cae6ecf4d97b65a2649e5c57a28adb3e90a0"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.2.load-after" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "9ea17a8035c1d95045d2644db16b44de34f49e8d5c876b7e9df5ea915d5425d0"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.2.load-before" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "04ae2e70fbb1a5db52d1761a581cadfb80c56b5d5dc1827a0423e07a6fcb3a18"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.2.started.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "6432ba32c76790f3cbd2463978e6cd0d3b0d8d2fe2d30d4e68815795990844dc"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.2.started.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "482e9b57e1e032e0ae3f10beb749a0265fdcaf507741f6efc95a28b44a37a17a"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.2.status" : {
+      "bytes" : 2,
+      "mode" : "0600",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.2.stderr" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.2.stdout" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.2.time" : {
+      "bytes" : 24,
+      "mode" : "0600",
+      "sha256" : "8458a2459d884c0ee212d83c0de3fb1e40b6869265be20b840cad7818d6413df"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.2.wrapper-argv" : {
+      "bytes" : 781,
+      "mode" : "0600",
+      "sha256" : "545c06509f511a03aecf719146f43d4ceac1a31717c3a62f1a889345be4d5448"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.3.argv" : {
+      "bytes" : 579,
+      "mode" : "0600",
+      "sha256" : "c75d1fa61b00a6a4e6d6eb089e807f1e1e02f0aa4927acfa1e9a26c45c632ad4"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.3.capture" : {
+      "bytes" : 72,
+      "mode" : "0600",
+      "sha256" : "e7a47122fca74f0d2b506590a29d473dfd9722697d9c3d7e5ce1801a4153cc50"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.3.cwd" : {
+      "bytes" : 32,
+      "mode" : "0600",
+      "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.3.finished.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "4ca32b28a499ecbf7efbffa5a8a524a11971617c02abce6e8ebf731e3a1cbd85"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.3.finished.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "17b1330560d36bb181acce986f570198cf7c2fb259bff0acdf45ec8514370b33"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.3.load-after" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "dcdd1188ca8c8334eeaade138b1fba6de03a88b704147ab6cfe90b57d031dedc"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.3.load-before" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "4b07e33900ee4849c338c27f56a9daa7a29a1f5cb3324a3f76850841595afdf5"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.3.started.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "b26a957c55339ab0db141af08f2b2c4ced8165e13771152e647ac894fa4bdee5"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.3.started.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "f741d67daf7a76cba51e84d1670b9a3cbbbc2c6f89de1d48f35183a382352088"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.3.status" : {
+      "bytes" : 2,
+      "mode" : "0600",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.3.stderr" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.3.stdout" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.3.time" : {
+      "bytes" : 24,
+      "mode" : "0600",
+      "sha256" : "9d9201d541632680defbd3d833f8b238be7155b8dde66f225510adfec44f66ab"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/raw/execute.B.3.wrapper-argv" : {
+      "bytes" : 781,
+      "mode" : "0600",
+      "sha256" : "4c915e737ad128ccef6c2c34a4ffee306d0a06ae3042f5f1ee507262eccd55c8"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/rows.tsv" : {
+      "bytes" : 1246,
+      "mode" : "0600",
+      "sha256" : "13cbd14a84c9b3ee93d5ed0a66854b3030bdd1b2c4761058403b63feca6e78ae"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/source-after.sha256" : {
+      "bytes" : 15843,
+      "mode" : "0600",
+      "sha256" : "85cfebe17abf222b0ed3633e3f8c54e5d8185f5409903ecb2c270660d2dbb1ae"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/source-before.sha256" : {
+      "bytes" : 15843,
+      "mode" : "0600",
+      "sha256" : "85cfebe17abf222b0ed3633e3f8c54e5d8185f5409903ecb2c270660d2dbb1ae"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/summary.json" : {
+      "bytes" : 1023,
+      "mode" : "0600",
+      "sha256" : "4854e49e834001a4e3bcb0caddbbf329b9ae72e93c825336201e4b5973a5b859"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-trial-capture.20261116-1/argv" : {
+      "bytes" : 184,
+      "mode" : "0600",
+      "sha256" : "73593a91c3bd050a6221e96b954dcd9d6d20dcba8acdcad579dfde3cce445b42"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-trial-capture.20261116-1/cwd" : {
+      "bytes" : 32,
+      "mode" : "0600",
+      "sha256" : "75e946c91813d01074089c1c600b05b504ea1691f0cdf50d0837ef3f197086a3"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-trial-capture.20261116-1/finished.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "a6950e2ff556e6cf3fc405d19395a4683f356326c194187dd58a006623faa04d"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-trial-capture.20261116-1/finished.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "17b1330560d36bb181acce986f570198cf7c2fb259bff0acdf45ec8514370b33"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-trial-capture.20261116-1/inputs.sha256" : {
+      "bytes" : 325,
+      "mode" : "0600",
+      "sha256" : "1e09f5ecd438ac32ddc0766027949aa97fa00a7967b8030c82b9189e3842f5eb"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-trial-capture.20261116-1/launch.sh" : {
+      "bytes" : 1132,
+      "mode" : "0600",
+      "sha256" : "ed756eb4328380277094ff65070442144b77eaecb7d3829d9fc34fa060baf293"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-trial-capture.20261116-1/launch.sha256" : {
+      "bytes" : 124,
+      "mode" : "0600",
+      "sha256" : "4fe2c6851089047fff58a64792e120f40e54424c7c892b3dec7c6b93f42535fa"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-trial-capture.20261116-1/load-after" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "dcdd1188ca8c8334eeaade138b1fba6de03a88b704147ab6cfe90b57d031dedc"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-trial-capture.20261116-1/load-before" : {
+      "bytes" : 15,
+      "mode" : "0600",
+      "sha256" : "88ba885ebb28eb857e522c65e011a2bcfbacca52d2b67c8463b5832fe6797dd9"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-trial-capture.20261116-1/release-commit" : {
+      "bytes" : 41,
+      "mode" : "0600",
+      "sha256" : "143e1f1e88c2cea67b6f1555707024e5bcb4c73aef9f5b98c342d4ee8cb88dc2"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-trial-capture.20261116-1/started.ns" : {
+      "bytes" : 20,
+      "mode" : "0600",
+      "sha256" : "bf9bbb610559859b8542de1171ebabe0f69ac395af830097eb8bdf4ff2d11c46"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-trial-capture.20261116-1/started.utc" : {
+      "bytes" : 21,
+      "mode" : "0600",
+      "sha256" : "6e76e717d097e9ce05c66165444cc683249f5885767cc5866645b6b624507d0b"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-trial-capture.20261116-1/status" : {
+      "bytes" : 2,
+      "mode" : "0600",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-trial-capture.20261116-1/stderr" : {
+      "bytes" : 0,
+      "mode" : "0600",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+   },
+   "/home/coder/workspace/lkjscript/target/compiler-scalar-trial-capture.20261116-1/stdout" : {
+      "bytes" : 199,
+      "mode" : "0600",
+      "sha256" : "ab38ff1e3a6a3d4684966a2bca600e528262c9bd145fc14fcaaf4a6b77cff538"
+   }
+}

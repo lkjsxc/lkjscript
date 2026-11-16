@@ -1,0 +1,4 @@
+status=0
+completed=true
+last_phase=complete
+fixture=/home/coder/workspace/lkjscript/target/compiler-scalar-simplify.20261116-1/fixture

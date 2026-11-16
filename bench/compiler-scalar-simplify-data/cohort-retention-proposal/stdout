@@ -1,0 +1,16 @@
+proposal=/home/coder/workspace/lkjscript/target/compiler-scalar-cohort-retention-proposal-1
+files=337 bytes=207027139
+target/compiler-scalar-simplify.20261116-1	files=322	bytes=207024988
+target/compiler-scalar-trial-capture.20261116-1	files=15	bytes=2151
+existing-emitter-duplicate	files=1	bytes=32761734
+retain-producer-A	files=1	bytes=22937783
+retain-producer-B	files=1	bytes=22929591
+retain-raw-record	files=154	bytes=87098
+retain-source-archive	files=1	bytes=7434240
+seed-equal-output-duplicate	files=7	bytes=113596196
+source-tree-duplicate	files=172	bytes=7280497
+artifact	target/compiler-scalar-simplify.20261116-1/fixture/emitter	f85624e3cc694f6a3a3e10c33f822789ae6084e2d5a5b41c3b1fc8fcc9bd2d64	32761734	bench/compiler-scalar-simplify-data/preparation/artifacts/f85624e3cc694f6a3a3e10c33f822789ae6084e2d5a5b41c3b1fc8fcc9bd2d64.compiler.gz
+artifact	target/compiler-scalar-simplify.20261116-1/fixture/producer-A	c7b8d970ace8f836a559f21fd7d95867fd718b9e95160d686442380afa330db1	22937783	artifacts/c7b8d970ace8f836a559f21fd7d95867fd718b9e95160d686442380afa330db1.producer-A.gz
+artifact	target/compiler-scalar-simplify.20261116-1/fixture/producer-B	12b1f645c3ae4085c998cde9b6d3c920bc6c4ca547839654586c196e9aaaad11	22929591	artifacts/12b1f645c3ae4085c998cde9b6d3c920bc6c4ca547839654586c196e9aaaad11.producer-B.gz
+artifact	target/compiler-scalar-simplify.20261116-1/fixture/source.tar	cf3cd4568e4b7581aefff46cc92f93a6f145d861f46481df76d1e861fd0d0c64	7434240	artifacts/cf3cd4568e4b7581aefff46cc92f93a6f145d861f46481df76d1e861fd0d0c64.source.tar.gz
+proposal_sha256=1558b7a7872f7014e6bad817cb987526d0523581e9a716ba9a5b7e4d6e335150
