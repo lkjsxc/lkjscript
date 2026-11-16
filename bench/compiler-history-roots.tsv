@@ -1,0 +1,19 @@
+revision	stage	library_environment	exit	wall_s	user_s	system_s	peak_kib	load_before	load_after
+43cc8ae9c56bd0951548cece918fc7921d39bfd6	historical-before	historical-roots	1	0.00	0.00	0.00	4004	2.07 2.36 2.74	2.07 2.36 2.74
+43cc8ae9c56bd0951548cece918fc7921d39bfd6	historical-after	historical-roots	1	0.00	0.00	0.00	4004	2.07 2.36 2.74	2.07 2.36 2.74
+43cc8ae9c56bd0951548cece918fc7921d39bfd6	embedded-before	frozen-current-embedded-diagnostic	1	0.00	0.00	0.00	4004	2.07 2.36 2.74	2.07 2.36 2.74
+43cc8ae9c56bd0951548cece918fc7921d39bfd6	embedded-after	frozen-current-embedded-diagnostic	1	0.00	0.00	0.00	4004	2.07 2.36 2.74	2.07 2.36 2.74
+60b270ebb91074ea60f909f84676bc1d2d8d198b	historical-before	historical-roots	1	0.00	0.00	0.00	4004	2.07 2.36 2.74	2.07 2.36 2.74
+60b270ebb91074ea60f909f84676bc1d2d8d198b	historical-after	historical-roots	1	0.00	0.00	0.00	4004	2.07 2.36 2.74	2.07 2.36 2.74
+60b270ebb91074ea60f909f84676bc1d2d8d198b	embedded-before	frozen-current-embedded-diagnostic	1	0.00	0.00	0.00	4004	2.07 2.36 2.74	2.07 2.36 2.74
+60b270ebb91074ea60f909f84676bc1d2d8d198b	embedded-after	frozen-current-embedded-diagnostic	1	0.00	0.00	0.00	4004	2.07 2.36 2.74	2.07 2.36 2.74
+70680680009787b27640fbafa450f89c82a8b5e2	historical-before	historical-roots	0	0.18	0.18	0.00	42112	2.07 2.36 2.74	2.07 2.36 2.74
+70680680009787b27640fbafa450f89c82a8b5e2	historical-after	historical-roots	0	0.18	0.18	0.00	40496	2.07 2.36 2.74	2.07 2.36 2.74
+70680680009787b27640fbafa450f89c82a8b5e2	dry-run	historical-roots	0	0.93	0.91	0.00	69772	2.07 2.36 2.74	2.07 2.36 2.74
+70680680009787b27640fbafa450f89c82a8b5e2	apply	historical-roots	0	0.90	0.86	0.01	68540	2.07 2.36 2.74	2.07 2.36 2.74
+70680680009787b27640fbafa450f89c82a8b5e2	exact-desired	historical-roots	0	0.20	0.19	0.00	40264	2.07 2.36 2.74	2.07 2.36 2.74
+70680680009787b27640fbafa450f89c82a8b5e2	exact-candidate	historical-roots	0	0.19	0.19	0.00	40496	2.07 2.36 2.74	2.14 2.37 2.74
+075d9801c377e317002548c7edee88a4c9ef2269	historical-before	historical-roots	1	0.00	0.00	0.00	4004	2.14 2.37 2.74	2.14 2.37 2.74
+075d9801c377e317002548c7edee88a4c9ef2269	historical-after	historical-roots	1	0.00	0.00	0.00	4004	2.14 2.37 2.74	2.14 2.37 2.74
+075d9801c377e317002548c7edee88a4c9ef2269	embedded-before	frozen-current-embedded-diagnostic	1	0.00	0.00	0.00	4004	2.14 2.37 2.74	2.14 2.37 2.74
+075d9801c377e317002548c7edee88a4c9ef2269	embedded-after	frozen-current-embedded-diagnostic	1	0.00	0.00	0.00	4004	2.14 2.37 2.74	2.14 2.37 2.74

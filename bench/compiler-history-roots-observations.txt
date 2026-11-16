@@ -1,0 +1,265 @@
+Supplemental exact-filename history command observations
+
+COMMAND 43cc8ae9c56bd0951548cece918fc7921d39bfd6 historical-before environment=historical-roots
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler check tests/conformance/migrated/backend_vec_probe.rs --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/before --library-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/before/library --entry probe --no-store --stats
+stdout:
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":0.207,"other_ms":0.189,"producer_hash_ms":0.002,"store_io_ms":0.002,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_reused":0,"front_definitions":0,"front_functions":0,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"test_rerun":0,"test_reused":0,"peak_rss_bytes":4341760}
+tests/conformance/migrated/backend_vec_probe.rs: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir
+GNU time wall/user/system/RSS:
+0.00	0.00	0.00	4004
+
+COMMAND 43cc8ae9c56bd0951548cece918fc7921d39bfd6 historical-after environment=historical-roots
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler check tests/conformance/migrated/backend_vec_probe.rs --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/after --library-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/after/library --entry probe --no-store --stats
+stdout:
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":0.204,"other_ms":0.187,"producer_hash_ms":0.002,"store_io_ms":0.002,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_reused":0,"front_definitions":0,"front_functions":0,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"test_rerun":0,"test_reused":0,"peak_rss_bytes":4341760}
+tests/conformance/migrated/backend_vec_probe.rs: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir
+GNU time wall/user/system/RSS:
+0.00	0.00	0.00	4004
+
+COMMAND 43cc8ae9c56bd0951548cece918fc7921d39bfd6 embedded-before environment=frozen-current-embedded-diagnostic
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler check tests/conformance/migrated/backend_vec_probe.rs --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/before --entry probe --no-store --stats
+stdout:
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":0.137,"other_ms":0.122,"producer_hash_ms":0.002,"store_io_ms":0.001,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_reused":0,"front_definitions":0,"front_functions":0,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"test_rerun":0,"test_reused":0,"peak_rss_bytes":4341760}
+tests/conformance/migrated/backend_vec_probe.rs: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir
+GNU time wall/user/system/RSS:
+0.00	0.00	0.00	4004
+
+COMMAND 43cc8ae9c56bd0951548cece918fc7921d39bfd6 embedded-after environment=frozen-current-embedded-diagnostic
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler check tests/conformance/migrated/backend_vec_probe.rs --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/after --entry probe --no-store --stats
+stdout:
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":0.204,"other_ms":0.189,"producer_hash_ms":0.002,"store_io_ms":0.001,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_reused":0,"front_definitions":0,"front_functions":0,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"test_rerun":0,"test_reused":0,"peak_rss_bytes":4341760}
+tests/conformance/migrated/backend_vec_probe.rs: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir
+GNU time wall/user/system/RSS:
+0.00	0.00	0.00	4004
+
+COMMAND 60b270ebb91074ea60f909f84676bc1d2d8d198b historical-before environment=historical-roots
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler check tests/conformance/output/process_capture.rs --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/before --library-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/before/library --entry main --no-store --stats
+stdout:
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":0.203,"other_ms":0.185,"producer_hash_ms":0.004,"store_io_ms":0.002,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_reused":0,"front_definitions":0,"front_functions":0,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"test_rerun":0,"test_reused":0,"peak_rss_bytes":4337664}
+tests/conformance/output/process_capture.rs: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir
+GNU time wall/user/system/RSS:
+0.00	0.00	0.00	4004
+
+COMMAND 60b270ebb91074ea60f909f84676bc1d2d8d198b historical-after environment=historical-roots
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler check tests/conformance/output/process_capture.rs --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/after --library-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/after/library --entry main --no-store --stats
+stdout:
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":0.187,"other_ms":0.173,"producer_hash_ms":0.002,"store_io_ms":0.001,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_reused":0,"front_definitions":0,"front_functions":0,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"test_rerun":0,"test_reused":0,"peak_rss_bytes":4341760}
+tests/conformance/output/process_capture.rs: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir
+GNU time wall/user/system/RSS:
+0.00	0.00	0.00	4004
+
+COMMAND 60b270ebb91074ea60f909f84676bc1d2d8d198b embedded-before environment=frozen-current-embedded-diagnostic
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler check tests/conformance/output/process_capture.rs --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/before --entry main --no-store --stats
+stdout:
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":0.160,"other_ms":0.143,"producer_hash_ms":0.002,"store_io_ms":0.002,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_reused":0,"front_definitions":0,"front_functions":0,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"test_rerun":0,"test_reused":0,"peak_rss_bytes":4341760}
+tests/conformance/output/process_capture.rs: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir
+GNU time wall/user/system/RSS:
+0.00	0.00	0.00	4004
+
+COMMAND 60b270ebb91074ea60f909f84676bc1d2d8d198b embedded-after environment=frozen-current-embedded-diagnostic
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler check tests/conformance/output/process_capture.rs --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/after --entry main --no-store --stats
+stdout:
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":0.145,"other_ms":0.130,"producer_hash_ms":0.002,"store_io_ms":0.002,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_reused":0,"front_definitions":0,"front_functions":0,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"test_rerun":0,"test_reused":0,"peak_rss_bytes":4337664}
+tests/conformance/output/process_capture.rs: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir
+GNU time wall/user/system/RSS:
+0.00	0.00	0.00	4004
+
+COMMAND 70680680009787b27640fbafa450f89c82a8b5e2 historical-before environment=historical-roots
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler check tests/conformance/output/lifecycle.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/before --library-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/before/library --entry main --no-store --stats
+stdout:
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"done","total_ms":185.050,"build_ir_ms":31.657,"check_ms":0.007,"check_body_ms":12.480,"check_verification_ms":0.004,"key_hash_ms":0.002,"load_parse_ms":73.545,"other_ms":1.973,"producer_hash_ms":0.002,"resolve_ms":17.268,"store_io_ms":0.003,"type_ms":48.092,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_reused":0,"front_definitions":747,"front_functions":70,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"ir_functions":70,"ir_instructions":2873,"test_rerun":0,"test_reused":0,"peak_rss_bytes":43122688}
+GNU time wall/user/system/RSS:
+0.18	0.18	0.00	42112
+
+COMMAND 70680680009787b27640fbafa450f89c82a8b5e2 historical-after environment=historical-roots
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler check tests/conformance/output/lifecycle.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/after --library-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/after/library --entry main --no-store --stats
+stdout:
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"done","total_ms":183.984,"build_ir_ms":31.978,"check_ms":0.008,"check_body_ms":12.125,"check_verification_ms":0.004,"key_hash_ms":0.002,"load_parse_ms":72.963,"other_ms":1.926,"producer_hash_ms":0.002,"resolve_ms":16.988,"store_io_ms":0.002,"type_ms":47.972,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_reused":0,"front_definitions":747,"front_functions":70,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"ir_functions":70,"ir_instructions":2879,"test_rerun":0,"test_reused":0,"peak_rss_bytes":41467904}
+GNU time wall/user/system/RSS:
+0.18	0.18	0.00	40496
+
+COMMAND 70680680009787b27640fbafa450f89c82a8b5e2 dry-run environment=historical-roots
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler edit tests/conformance/output/lifecycle.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/before --against /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/after/tests/conformance/output/lifecycle.lkj --library-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/before/library --against-library-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/after/library --entry main --store /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/store --store-bytes 2147483648 --store-key /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/key --stats --dry-run
+stdout:
+"main" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/before/tests/conformance/output/lifecycle.lkj" level=source-claim file before=cec4d68163055b2bc72783244c43cc5d28d5c3e757ca24e4bcba9391f6271c7d after=7adcb557666bb00a85d8e73a00040848e9cb51cebeaf07676c2c75b9419d8e80
+transaction sites=1 files=1 identities=1
+"main" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=13c4f6941448296d272814d4797ede2c124483f4ecf37e00cb33134db51687e8 after=d8fce79ca3ede040bbabdf4e26b16f8580ea17c9346f88535c0e40b30d6a0d46 checked-instances=70 fresh-checked=70 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=a62a887e0e714459c0e31ea486dcce3a16aa5017b95aab639ce3f60b4a3b3368 source-after=18111d4b2dbbd81abb41d8278864a5091f84ec6e2a33e6bc13b898995a7817bc mode=dry-run
+replay desired=d8fce79ca3ede040bbabdf4e26b16f8580ea17c9346f88535c0e40b30d6a0d46 candidate=d8fce79ca3ede040bbabdf4e26b16f8580ea17c9346f88535c0e40b30d6a0d46 verified=true operations=1
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"done","total_ms":932.938,"build_ir_ms":98.375,"check_ms":0.016,"check_body_ms":37.989,"check_verification_ms":0.014,"key_hash_ms":4.498,"load_parse_ms":284.908,"resolve_ms":54.529,"semantic_catalog_ms":243.571,"source_read_ms":2.166,"type_ms":173.185,"ir_functions":70,"ir_instructions":2879,"peak_rss_bytes":71446528}
+GNU time wall/user/system/RSS:
+0.93	0.91	0.00	69772
+
+COMMAND 70680680009787b27640fbafa450f89c82a8b5e2 apply environment=historical-roots
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler edit tests/conformance/output/lifecycle.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/before --against /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/after/tests/conformance/output/lifecycle.lkj --library-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/before/library --against-library-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/after/library --entry main --store /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/store --store-bytes 2147483648 --store-key /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/key --stats
+stdout:
+"main" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/before/tests/conformance/output/lifecycle.lkj" level=source-claim file before=cec4d68163055b2bc72783244c43cc5d28d5c3e757ca24e4bcba9391f6271c7d after=7adcb557666bb00a85d8e73a00040848e9cb51cebeaf07676c2c75b9419d8e80
+transaction sites=1 files=1 identities=1
+"main" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=13c4f6941448296d272814d4797ede2c124483f4ecf37e00cb33134db51687e8 after=d8fce79ca3ede040bbabdf4e26b16f8580ea17c9346f88535c0e40b30d6a0d46 checked-instances=70 fresh-checked=70 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=a62a887e0e714459c0e31ea486dcce3a16aa5017b95aab639ce3f60b4a3b3368 source-after=18111d4b2dbbd81abb41d8278864a5091f84ec6e2a33e6bc13b898995a7817bc mode=apply
+replay desired=d8fce79ca3ede040bbabdf4e26b16f8580ea17c9346f88535c0e40b30d6a0d46 candidate=d8fce79ca3ede040bbabdf4e26b16f8580ea17c9346f88535c0e40b30d6a0d46 verified=true operations=1
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"done","total_ms":901.464,"build_ir_ms":97.014,"check_ms":0.019,"check_body_ms":35.878,"check_verification_ms":0.017,"key_hash_ms":4.477,"load_parse_ms":288.752,"resolve_ms":53.515,"semantic_catalog_ms":217.566,"source_read_ms":2.060,"type_ms":146.439,"ir_functions":70,"ir_instructions":2879,"peak_rss_bytes":70184960}
+GNU time wall/user/system/RSS:
+0.90	0.86	0.01	68540
+
+COMMAND 70680680009787b27640fbafa450f89c82a8b5e2 exact-desired environment=historical-roots
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler ir tests/conformance/output/lifecycle.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/active --library-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/active/library --entry main --no-store -o /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/desired.lkjir --stats
+stdout:
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"done","total_ms":199.538,"build_ir_ms":31.893,"check_ms":0.009,"check_body_ms":13.316,"check_verification_ms":0.004,"ir_write_ms":5.569,"key_hash_ms":0.004,"load_parse_ms":79.338,"other_ms":0.179,"producer_hash_ms":0.002,"resolve_ms":18.464,"store_io_ms":0.001,"type_ms":50.745,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_reused":0,"front_definitions":747,"front_functions":70,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"ir_bytes":105550,"ir_functions":70,"ir_instructions":2879,"test_rerun":0,"test_reused":0,"peak_rss_bytes":41230336}
+GNU time wall/user/system/RSS:
+0.20	0.19	0.00	40264
+
+COMMAND 70680680009787b27640fbafa450f89c82a8b5e2 exact-candidate environment=historical-roots
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler ir tests/conformance/output/lifecycle.lkj --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/active --library-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/active/library --entry main --no-store -o /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/candidate.lkjir --stats
+stdout:
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"done","total_ms":196.880,"build_ir_ms":31.542,"check_ms":0.006,"check_body_ms":12.550,"check_verification_ms":0.003,"ir_write_ms":5.454,"key_hash_ms":0.001,"load_parse_ms":79.294,"other_ms":0.161,"producer_hash_ms":0.003,"resolve_ms":17.713,"store_io_ms":0.001,"type_ms":50.138,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_reused":0,"front_definitions":747,"front_functions":70,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"ir_bytes":105550,"ir_functions":70,"ir_instructions":2879,"test_rerun":0,"test_reused":0,"peak_rss_bytes":41467904}
+GNU time wall/user/system/RSS:
+0.19	0.19	0.00	40496
+
+COMMAND 075d9801c377e317002548c7edee88a4c9ef2269 historical-before environment=historical-roots
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler check examples/http.rs --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/before --library-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/before/library --entry main --no-store --stats
+stdout:
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":0.238,"other_ms":0.220,"producer_hash_ms":0.002,"store_io_ms":0.002,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_reused":0,"front_definitions":0,"front_functions":0,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"test_rerun":0,"test_reused":0,"peak_rss_bytes":4345856}
+examples/http.rs: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir
+GNU time wall/user/system/RSS:
+0.00	0.00	0.00	4004
+
+COMMAND 075d9801c377e317002548c7edee88a4c9ef2269 historical-after environment=historical-roots
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler check examples/http.rs --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/after --library-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/after/library --entry main --no-store --stats
+stdout:
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":0.214,"other_ms":0.198,"producer_hash_ms":0.003,"store_io_ms":0.002,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_reused":0,"front_definitions":0,"front_functions":0,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"test_rerun":0,"test_reused":0,"peak_rss_bytes":4337664}
+examples/http.rs: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir
+GNU time wall/user/system/RSS:
+0.00	0.00	0.00	4004
+
+COMMAND 075d9801c377e317002548c7edee88a4c9ef2269 embedded-before environment=frozen-current-embedded-diagnostic
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler check examples/http.rs --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/before --entry main --no-store --stats
+stdout:
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":0.160,"other_ms":0.145,"producer_hash_ms":0.002,"store_io_ms":0.002,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_reused":0,"front_definitions":0,"front_functions":0,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"test_rerun":0,"test_reused":0,"peak_rss_bytes":4341760}
+examples/http.rs: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir
+GNU time wall/user/system/RSS:
+0.00	0.00	0.00	4004
+
+COMMAND 075d9801c377e317002548c7edee88a4c9ef2269 embedded-after environment=frozen-current-embedded-diagnostic
+arguments:
+/home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/compiler check examples/http.rs --source-dir /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/after --entry main --no-store --stats
+stdout:
+stderr:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":0.141,"other_ms":0.128,"producer_hash_ms":0.002,"store_io_ms":0.001,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_reused":0,"front_definitions":0,"front_functions":0,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"test_rerun":0,"test_reused":0,"peak_rss_bytes":4341760}
+examples/http.rs: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir
+GNU time wall/user/system/RSS:
+0.00	0.00	0.00	4004
+
+SAME-PATH EXACT CHECKED IR
+c16cf6a97763063078c9d35bdeed09fc6b10ab32a633e931375f68869bcd3098  /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/desired.lkjir
+c16cf6a97763063078c9d35bdeed09fc6b10ab32a633e931375f68869bcd3098  /home/coder/workspace/lkjscript-compiler-replay-roots-20261116/target/compiler-replay-roots.hsvk8P/candidate.lkjir
+
+SOURCE COVERAGE AND BYTES
+
+COMMIT 43cc8ae9c56bd0951548cece918fc7921d39bfd6
+M	docs/status.md
+M	tests/conformance/migrated/backend_vec_probe.rs
+before selected source: 82728524c204678c4885dd30ec0abd77a76c34f7cd0bad1211f286d127a03448  ./tests/conformance/migrated/backend_vec_probe.rs
+desired selected source: f2c3a21666889e00325ee1e3497aac7448e28f7e0b04f0b95aea6a7ffd1f06c1  ./tests/conformance/migrated/backend_vec_probe.rs
+final selected source: 82728524c204678c4885dd30ec0abd77a76c34f7cd0bad1211f286d127a03448  ./tests/conformance/migrated/backend_vec_probe.rs
+
+COMMIT 60b270ebb91074ea60f909f84676bc1d2d8d198b
+M	docs/status.md
+M	tests/conformance/output/process_capture.rs
+before selected source: ad15991f90b71d0a33d358d910ddaf7daf9044457fc93f3f98b976b459f3a3e9  ./tests/conformance/output/process_capture.rs
+desired selected source: 5d8f1af7d959fc3e103a3da7b2749a4dfc8cf66c87df247ed2ebeb51f304fd80  ./tests/conformance/output/process_capture.rs
+final selected source: ad15991f90b71d0a33d358d910ddaf7daf9044457fc93f3f98b976b459f3a3e9  ./tests/conformance/output/process_capture.rs
+
+COMMIT 70680680009787b27640fbafa450f89c82a8b5e2
+M	bench/README.md
+M	docs/status.md
+M	tests/conformance/output/lifecycle.lkj
+before selected source: cec4d68163055b2bc72783244c43cc5d28d5c3e757ca24e4bcba9391f6271c7d  ./tests/conformance/output/lifecycle.lkj
+desired selected source: 7adcb557666bb00a85d8e73a00040848e9cb51cebeaf07676c2c75b9419d8e80  ./tests/conformance/output/lifecycle.lkj
+final selected source: 7adcb557666bb00a85d8e73a00040848e9cb51cebeaf07676c2c75b9419d8e80  ./tests/conformance/output/lifecycle.lkj
+
+COMMIT 075d9801c377e317002548c7edee88a4c9ef2269
+M	docs/direction.md
+M	examples/README.md
+M	examples/http_server.rs
+A	tools/http-deadline.rs
+A	tools/http-deadline.sh
+M	tools/http-test.sh
+before selected source: 7ef7e67d6aeccb444271d09aafc467d9892e9c46bf0b1fc847046dc36f7b0d6c  ./examples/http_server.rs
+desired selected source: 158764c5f6cb7d628f227ebd1b627bc795d14e648e3c205b2885f73169368e27  ./examples/http_server.rs
+final selected source: 7ef7e67d6aeccb444271d09aafc467d9892e9c46bf0b1fc847046dc36f7b0d6c  ./examples/http_server.rs
+
+ORIGINAL EIGHT RAW PUBLICATION MODES (read-only audit)
+/home/coder/workspace/lkjscript-compiler-query-20261116/target/compiler-history-replay-fixed-1f48.tsv.logs/007-77469a1075e54f8d61e0eba763e3e4feb1f404fd.out:9:transaction source-before=799639c09b3792efb09c4457af54d617208e20f3eb63fc9662b14f270caa3170 source-after=2cd25582172993478a7ab73cb8428ad3f9402b3b50fac3e6590def0139cc155a mode=apply
+/home/coder/workspace/lkjscript-compiler-query-20261116/target/compiler-history-replay-fixed-1f48.tsv.logs/023-d127f09c1538311bedf4bd0aef7e831336ca265a.out:22:transaction source-before=7c7e20e1a63e137011dc7e4945a7e61264f1c2f2fc24c3b3b58714bdbc7eba73 source-after=b43ac0a5ca2578bcd8b1c6a6c611bf79937f4088d269d7f19451dd782166980f mode=apply
+/home/coder/workspace/lkjscript-compiler-query-20261116/target/compiler-history-replay-fixed-1f48.tsv.logs/016-5fe8d1ff1cc5fb170b9b308822520a7a5809aeb7.out:11:transaction source-before=d695e05b3768cf0e19fc304e74daf8f0a23e23fd17b84eee943dd721c0272b09 source-after=adebe70f7b6cc42814315c66df53c6f7f4431f3d778399c28a1de300e720e564 mode=apply
+/home/coder/workspace/lkjscript-compiler-query-20261116/target/compiler-history-replay-fixed-1f48.tsv.logs/025-f307bb3e849a378e82e53c6eeaf530056fba6490.out:14:transaction source-before=1070bba5d2a491726278ed2df5e7c1c15a5bdc2966690e374955d2ea3b75168a source-after=5f7cdf3b15131253b6c184625f3043cae5302c68e09a4aedd3a44c9221bdb495 mode=apply
+/home/coder/workspace/lkjscript-compiler-query-20261116/target/compiler-history-replay-fixed-1f48.tsv.logs/030-d2044ada0b0a608e316ce856f1a6c9c2e055cdd9.out:45:transaction source-before=b976ad674335fbeb6bb647d5b3b60e1d5730efc9c046e0e17da2a42711e2ef1d source-after=066004f1b651e512e004d74f1e23c4e76e67255484186d4ea530693c37f67b90 mode=apply
+/home/coder/workspace/lkjscript-compiler-query-20261116/target/compiler-history-replay-fixed-1f48.tsv.logs/039-c1baa3fed440a608e95f6ff83ddcb997f4e0e96e.out:35:transaction source-before=47a3fc7ad544054bb0c0d3a5af3ef85f639ac6eb71a22053b0e9c669f196ca16 source-after=23d99853e4ce6645ff1eb55a5bb8c45699c6295b69da6a1f5f3e890329b910d1 mode=apply
+/home/coder/workspace/lkjscript-compiler-query-20261116/target/compiler-history-replay-fixed-1f48.tsv.logs/031-4eef8920d3f653cbe13d400461d67c205a063875.out:43:transaction source-before=b1541b4deeaf7496a8077eba6a71a7566b35d61aa0c1f14ad7eb69380189835f source-after=8531639cae81c1771d3d7d5f8be0c35863ae5b0c23c73e7df2657274a52ac52e mode=apply
+/home/coder/workspace/lkjscript-compiler-query-20261116/target/compiler-history-replay-fixed-1f48.tsv.logs/073-28c1fda0b315b44489bdea9856aa7fac0d74feb6.out:173:transaction source-before=88693376377cb4de368b6609390fea1f9b06b646eac1eced8989754b6475af9f source-after=8c3d049cda4dbd2751916df56834a1cb3554d44f626268cb8db93fc67a6940c0 mode=apply
+
+INITIAL HARNESS SETUP FAILURE (no compiler commands executed)
+exit=2; shell syntax error near unexpected token fi at line167
+frozen_population=1f48bd24c90f98e833c3647d902ea0b4515d4d90
+candidates=4
+original_compiler_population=179
+original_results_unchanged=true
+producer_sha256=4c4537ea7ccb31213f376d1402f619883eea6f8877fdb8b752b31df364099e09
+producer_bytes=20627356
+harness_sha256=b12354a35e81449fd3fb2cfcd8f76adff0fd2b31477aac362560ad9eab8b9b4f
+workers=1
+memory_bytes=4294967296
+timeout_s=900
+termination_grace_s=5
+store_bytes=2147483648
+filename_projection=none
+source_adaptation=none
+legacy_aliases=none
+program_execution=false
+free_space_kib_before=115847168
+historical_library_trial=always
+embedded_library_fallback=separate_diagnostic_only
+exact_ir_trial=same_physical_path_desired_and_applied_candidate
+exit=2
+initial timing rows including header: 1

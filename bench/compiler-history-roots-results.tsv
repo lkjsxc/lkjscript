@@ -1,0 +1,5 @@
+revision	parent	root	historical_admitted	embedded_admitted	dry_run	publication	coverage	exact_ir_equal	replay_proof	classification
+43cc8ae9c56bd0951548cece918fc7921d39bfd6	60b270ebb91074ea60f909f84676bc1d2d8d198b	tests/conformance/migrated/backend_vec_probe.rs	no	no	not-run	not-run	not-run	not-run	-	historical-admission-refused
+60b270ebb91074ea60f909f84676bc1d2d8d198b	f2b87375ac5c498cef7147619e199b3a9f870f22	tests/conformance/output/process_capture.rs	no	no	not-run	not-run	not-run	not-run	-	historical-admission-refused
+70680680009787b27640fbafa450f89c82a8b5e2	4048e172ab9d2e3d517d6d79e52072f0fedf3d46	tests/conformance/output/lifecycle.lkj	yes	not-run	0	0	yes	yes	d8fce79ca3ede040bbabdf4e26b16f8580ea17c9346f88535c0e40b30d6a0d46,d8fce79ca3ede040bbabdf4e26b16f8580ea17c9346f88535c0e40b30d6a0d46,1	strict-applied-exact-ir
+075d9801c377e317002548c7edee88a4c9ef2269	1bbb2df30e16252adc1d5183856ed58583b6d0e0	examples/http.rs	no	no	not-run	not-run	not-run	not-run	-	historical-admission-refused
