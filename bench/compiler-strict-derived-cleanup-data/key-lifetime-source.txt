@@ -1,0 +1,153 @@
+producer_source=62fa76f4f863a169b906094f0dd9998c8421e77a
+path=src/structure_write.lkj
+sha256=96408572b6a687d3906abd946b9644fb11175f03b354c65cc1ec67f94fd26afc
+
+excerpt=67..105
+67:    pub fn open(world: &mut World, scope: &str, key: &str) -> Result<Self, String> {
+68:        let (parent, name) = location(key);
+69:        let mut owner = io(world.directory(&parent), "open transaction key root")?;
+70:        let mut file = io(owner.open(&name), "open transaction key")?;
+71:        let mut secret = vec![0u8; 33usize];
+72:        let mut at = 0usize;
+73:        while at < secret.len() {
+74:            let count = io(file.read(&mut secret[at..]), "read transaction key")?;
+75:            if count == 0usize { break; }
+76:            at += count;
+77:        }
+78:        if at != 32usize { return Err(failure("private key must contain exactly 32 bytes")); }
+79:        secret.pop();
+80:        let mut root = io(world.directory(scope), "open transaction root")?;
+81:        let mut lock = io(root.open_append(".lkjscript-edit.lock"), "open transaction lock")?;
+82:        io(lock.lock_wait(), "lock source transaction")?;
+83:        Ok(Self { root, scope: scope.to_string(), secret, entropy: world.entropy(), lock })
+84:    }
+85:    pub fn private_source_digest(&self) -> [u8; 32] { sha256::digest(&self.secret) }
+86:    fn key(&self) -> String { sha256::hex_digest(self.scope.as_bytes()) }
+87:    fn pending(&mut self) -> Result<Option<Intent>, String> {
+88:        let mut file = match self.root.open_regular(".lkjscript-edit.pending") {
+89:            Ok(file) => file,
+90:            Err(2i64) => return Ok(None),
+91:            Err(errno) => return Err(format!("transaction E_EDIT_IO open regular transaction intent: errno {errno}")),
+92:        };
+93:        let mut header = vec![0u8; reuse::header_size()];
+94:        let mut at = 0usize;
+95:        while at < header.len() {
+96:            let count = io(file.read(&mut header[at..]), "read transaction header")?;
+97:            if count == 0usize { return Err(failure("truncated intent header")); }
+98:            at += count;
+99:        }
+100:        let producer = signer();
+101:        let key = self.key();
+102:        let authenticated = reuse::AuthenticatedRoot::new(&producer, &self.secret, "source-transaction", &key, &header)
+103:            .ok_or_else(|| failure("intent authentication failed; sources were not changed"))?;
+104:        // An authenticated fixed root authorizes this exact allocation, as in the store.
+105:        let mut payload = vec![0u8; authenticated.length()];
+
+excerpt=144..199
+144:    pub fn recover(&mut self) -> Result<usize, String> {
+145:        let intent = match self.pending()? {
+146:            Some(intent) => intent,
+147:            None => {
+148:                remove(&mut self.root, "..lkjscript-edit.pending.lkjscript-next")?;
+149:                remove(&mut self.root, "..lkjscript-edit.generation.lkjscript-next")?;
+150:                return Ok(0usize);
+151:            }
+152:        };
+153:        // Reacquire every existing parent before validating any changed leaf.
+154:        // Public recovery has no surviving handles from the interrupted process.
+155:        let mut prepared = prepare_at(&mut self.root, &self.scope, &intent.changes, true)
+156:            .map_err(|problem| -> String { format!("{problem}; intent retained") })?;
+157:        self.complete(&intent, &mut prepared)
+158:            .map_err(|problem| -> String { format!("{problem}; intent retained") })
+159:    }
+160:}
+161:
+162:struct Intent {
+163:    changes: Vec<structure_edit::Change>,
+164:    generation: String,
+165:}
+166:
+167:fn valid_generation(value: &str) -> bool {
+168:    if value.len() != 64usize { return false; }
+169:    for byte in value.bytes() {
+170:        if !(b'0' <= byte && byte <= b'9') && !(b'a' <= byte && byte <= b'f') { return false; }
+171:    }
+172:    true
+173:}
+174:
+175:pub fn stamp(world: &mut World, scope: &str) -> Result<String, String> {
+176:    let mut root = io(world.directory(scope), "open source transaction scope")?;
+177:    if has_pending(&mut root)? {
+178:        return Err(format!("{} E_EDIT_RECOVERY interrupted publication; recover with edit --recover and its private key", scope));
+179:    }
+180:    let value = match root.open_regular(".lkjscript-edit.generation") {
+181:        Ok(mut file) => {
+182:            let mut bytes = [0u8; 65];
+183:            let mut at = 0usize;
+184:            while at < bytes.len() {
+185:                let count = io(file.read(&mut bytes[at..]), "read source generation")?;
+186:                if count == 0usize { break; }
+187:                at += count;
+188:            }
+189:            if at != 64usize { return Err(failure("invalid source generation length")); }
+190:            let value = String::from_utf8(bytes[..64usize].to_vec()).map_err(|_| failure("invalid source generation"))?;
+191:            if !valid_generation(&value) { return Err(failure("invalid source generation")); }
+192:            value
+193:        }
+194:        Err(2i64) => String::new(),
+195:        Err(errno) => return Err(format!("transaction E_EDIT_IO open regular source generation: errno {errno}")),
+196:    };
+197:    if has_pending(&mut root)? {
+198:        return Err(format!("{} E_EDIT_RECOVERY source publication began during capture", scope));
+199:    }
+
+excerpt=431..479
+431:    pub fn publish_prepared(&mut self, draft: &structure_edit::Draft, prepared: &mut Prepared) -> Result<(), String> {
+432:        if self.pending()?.is_some() {
+433:            return Err(failure("an interrupted intent must be recovered before a new transaction"));
+434:        }
+435:        if prepared.scope != self.scope { return Err(failure("prepared source scope differs")); }
+436:        prepared.verify(draft)?;
+437:        if draft.changes.is_empty() { return Ok(()); }
+438:        let mut nonce = [0u8; 32];
+439:        io(self.entropy.fill(&mut nonce), "generate source publication identity")?;
+440:        let generation = sha256::hex_digest(&nonce);
+441:        let payload = intent_payload(&self.scope, &draft.changes, &generation)?;
+442:        let producer = signer();
+443:        let envelope = reuse::seal(&producer, &self.secret, "source-transaction", &self.key(), payload.as_bytes());
+444:        // No per-source temporary is created until the durable intent names it.
+445:        // An error syncing this atomic publication can leave its commit uncertain.
+446:        atomic(&mut self.root, ".lkjscript-edit.pending", &envelope)
+447:            .map_err(|problem| -> String { format!("{problem}; intent publication may be committed; run edit --recover") })?;
+448:        let intent = Intent { changes: draft.changes.clone(), generation };
+449:        self.complete(&intent, prepared)
+450:            .map_err(|problem| -> String { format!("{problem}; checked transaction is committed; run edit --recover") })?;
+451:        Ok(())
+452:    }
+453:
+454:    fn complete(&mut self, intent: &Intent, prepared: &mut Prepared) -> Result<usize, String> {
+455:        if prepared.scope != self.scope || prepared.fingerprint != binding(&self.scope, &intent.changes)? {
+456:            return Err(failure("prepared recovery draft differs"));
+457:        }
+458:        // Validate every old/absent/exact-new leaf before even the first write.
+459:        let needed = verify_changes(&mut prepared.slots, &intent.changes, true)?;
+460:        stage_changes(&mut prepared.slots, &intent.changes, &needed)?;
+461:        atomic(&mut self.root, ".lkjscript-edit.generation", intent.generation.as_bytes())?;
+462:        for index in 0usize..intent.changes.len() {
+463:            let slot = &mut prepared.slots[index];
+464:            if needed[index] {
+465:                match &intent.changes[index].before {
+466:                    structure_edit::PreviousText::Absent =>
+467:                        io(slot.owner.rename_new(&slot.temporary, &slot.name), "publish absent projection without replacement")?,
+468:                    structure_edit::PreviousText::Present(_) =>
+469:                        io(slot.owner.rename(&slot.temporary, &slot.name), "publish existing projection replacement")?,
+470:                }
+471:            }
+472:            // Also sync a parent whose rename completed before an earlier kill.
+473:            io(slot.owner.sync(), "sync pinned projection parent")?;
+474:        }
+475:        clear_stages(&mut prepared.slots)?;
+476:        remove(&mut self.root, ".lkjscript-edit.pending")?;
+477:        io(self.root.sync(), "sync completed transaction")?;
+478:        Ok(intent.changes.len())
+479:    }

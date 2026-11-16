@@ -1,0 +1,4 @@
+Preparation only. The guard has not been invoked. Its Perl syntax check passed.
+The live inventory read normal fixture content and file metadata, excluding private key content.
+The completed lock/generation were copied byte-identically; no fixture file was changed.
+The prospective scale measurement release arrived afterward; cleanup remains explicitly blocked.
