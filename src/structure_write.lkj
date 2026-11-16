@@ -40,12 +40,6 @@ fn read(root: &mut Directory, path: &str) -> Result<Vec<u8>, String> {
     let mut file = io(root.open(path), "open source snapshot")?;
     io(file.read_to_end(), "read source snapshot")
 }
-fn contains(root: &mut Directory, name: &[u8]) -> Result<bool, String> {
-    for entry in io(root.list(), "list transaction root")? {
-        if entry.as_slice() == name { return Ok(true); }
-    }
-    Ok(false)
-}
 fn remove(root: &mut Directory, name: &str) -> Result<(), String> {
     match root.remove(name) {
         Ok(()) | Err(2i64) => Ok(()),
@@ -107,11 +101,11 @@ impl Writer {
         Ok(())
     }
     fn pending(&mut self) -> Result<Option<Intent>, String> {
-        if !contains(&mut self.root, b".lkjscript-edit.pending")? { return Ok(None); }
-        // O_RDWR plus nonblocking read cannot hang on a planted FIFO. Opening
-        // the final path uses the existing no-final-symlink storage operation.
-        let mut file = io(self.root.open_append(".lkjscript-edit.pending"), "open transaction intent")?;
-        io(file.set_nonblocking(true), "make journal read nonblocking")?;
+        let mut file = match self.root.open_regular(".lkjscript-edit.pending") {
+            Ok(file) => file,
+            Err(2i64) => return Ok(None),
+            Err(errno) => return Err(format!("transaction E_EDIT_IO open regular transaction intent: errno {errno}")),
+        };
         let mut header = vec![0u8; reuse::header_size()];
         let mut at = 0usize;
         while at < header.len() {
@@ -135,9 +129,11 @@ impl Writer {
         if io(file.read(&mut extra), "read transaction EOF")? != 0usize { return Err(failure("trailing intent bytes")); }
         let verified = authenticated.verify(payload).ok_or_else(|| failure("intent payload digest differs"))?;
         let value = json::parse(verified.bytes()).map_err(|problem| failure(&problem.message))?;
-        if value.get("version").and_then(|value| value.as_usize()) != Some(1usize)
-            || value.get("root").and_then(|value| value.as_str()) != Some(self.scope.as_str()) {
-            return Err(failure("intent version or root differs"));
+        if value.get("version").and_then(|value| value.as_usize()) != Some(2usize) {
+            return Err(failure("unsupported intent version; expected version 2"));
+        }
+        if value.get("root").and_then(|value| value.as_str()) != Some(self.scope.as_str()) {
+            return Err(failure("intent root differs"));
         }
         let generation = value.get("generation").and_then(|value| value.as_str())
             .ok_or_else(|| failure("missing source generation"))?;
@@ -148,9 +144,15 @@ impl Writer {
         for entry in entries {
             let path = entry.get("path").and_then(|value| value.as_str()).ok_or_else(|| failure("missing source path"))?;
             if !valid_path(path) || !seen.insert(path.to_string()) { return Err(failure("invalid or repeated source path")); }
-            let before = entry.get("before").and_then(|value| value.as_str()).ok_or_else(|| failure("missing old source"))?;
+            let before = match entry.get("before") {
+                Some(Value::Null) => structure_edit::PreviousText::Absent,
+                Some(Value::String(text)) => structure_edit::PreviousText::Present(text.as_bytes().to_vec()),
+                Some(_) => return Err(failure("old source must be explicit null or text")),
+                None => return Err(failure("missing old source state")),
+            };
             let after = entry.get("after").and_then(|value| value.as_str()).ok_or_else(|| failure("missing new source"))?;
-            changes.push(structure_edit::Change { file: path.to_string(), before: structure_edit::PreviousText::Present(before.as_bytes().to_vec()), after: after.as_bytes().to_vec() });
+            let file = if self.scope == "." { path.to_string() } else { format!("{}/{path}", self.scope) };
+            changes.push(structure_edit::Change { file, before, after: after.as_bytes().to_vec() });
         }
         if changes.is_empty() { return Err(failure("empty intent")); }
         Ok(Some(Intent { changes, generation: generation.to_string() }))
@@ -164,64 +166,23 @@ impl Writer {
                 return Ok(0usize);
             }
         };
-        let changes = intent.changes;
-        // Validate all preconditions before writing even the first file.
-        for change in &changes {
-            let before = match &change.before {
-                structure_edit::PreviousText::Present(bytes) => bytes,
-                structure_edit::PreviousText::Absent => return Err(failure("source creation requires prepared publication")),
-            };
-            let current = read(&mut self.root, &change.file)?;
-            if current != *before && current != change.after {
-                return Err(format!("{} E_EDIT_STALE source is neither the old nor new transaction value; intent retained", change.file));
-            }
-        }
-        // The random generation changes before the first projection file. A
-        // participating compiler can reject a read spanning this publication.
-        atomic(&mut self.root, ".lkjscript-edit.generation", intent.generation.as_bytes())?;
-        for change in &changes {
-            let current = read(&mut self.root, &change.file)?;
-            if current != change.after { atomic(&mut self.root, &change.file, &change.after)?; }
-        }
-        remove(&mut self.root, ".lkjscript-edit.pending")?;
-        io(self.root.sync(), "sync completed transaction")?;
-        Ok(changes.len())
+        // Reacquire every existing parent before validating any changed leaf.
+        // Public recovery has no surviving handles from the interrupted process.
+        let mut prepared = prepare_at(&mut self.root, &self.scope, &intent.changes, true)
+            .map_err(|problem| -> String { format!("{problem}; intent retained") })?;
+        self.complete(&intent, &mut prepared)
+            .map_err(|problem| -> String { format!("{problem}; intent retained") })
     }
     pub fn publish(&mut self, draft: &structure_edit::Draft) -> Result<(), String> {
-        if self.pending()?.is_some() { return Err(failure("an interrupted intent must be recovered before a new transaction")); }
-        if draft.changes.is_empty() { return Ok(()); }
-        let mut entries = Vec::new();
+        // Present-only callers retain their existing convenience entry point.
+        // Creation must use the Prepared value held across candidate checking.
         for change in &draft.changes {
-            let path = relative(&self.scope, &change.file)?;
-            let old = match &change.before {
-                structure_edit::PreviousText::Present(bytes) => bytes,
-                structure_edit::PreviousText::Absent => return Err(failure("source creation requires prepared publication")),
-            };
-            if read(&mut self.root, &path)? != *old {
-                return Err(format!("{} E_EDIT_STALE source changed before publication", change.file));
+            if matches!(&change.before, structure_edit::PreviousText::Absent) {
+                return Err(failure("source creation requires preparation retained through checking"));
             }
-            let before = String::from_utf8(old.clone()).map_err(|_| failure("old source is not UTF-8"))?;
-            let after = String::from_utf8(change.after.clone()).map_err(|_| failure("new source is not UTF-8"))?;
-            entries.push(Value::Object(vec![
-                ("path".to_string(), Value::String(path)),
-                ("before".to_string(), Value::String(before)),
-                ("after".to_string(), Value::String(after)),
-            ]));
         }
-        let mut nonce = [0u8; 32];
-        io(self.entropy.fill(&mut nonce), "generate source publication identity")?;
-        let generation = sha256::hex_digest(&nonce);
-        let payload = json::stringify(&Value::Object(vec![
-            ("version".to_string(), Value::from_usize(1usize)),
-            ("root".to_string(), Value::String(self.scope.clone())),
-            ("changes".to_string(), Value::Array(entries)),
-            ("generation".to_string(), Value::String(generation)),
-        ])).map_err(|problem| failure(&problem.message))?;
-        let producer = signer();
-        let envelope = reuse::seal(&producer, &self.secret, "source-transaction", &self.key(), payload.as_bytes());
-        atomic(&mut self.root, ".lkjscript-edit.pending", &envelope)?;
-        self.recover().map_err(|problem| -> String { format!("{problem}; checked transaction is committed; run edit --recover") })?;
-        Ok(())
+        let mut prepared = self.prepare(draft)?;
+        self.publish_prepared(draft, &mut prepared)
     }
 }
 
@@ -240,26 +201,328 @@ fn valid_generation(value: &str) -> bool {
 
 pub fn stamp(world: &mut World, scope: &str) -> Result<String, String> {
     let mut root = io(world.directory(scope), "open source transaction scope")?;
-    if contains(&mut root, b".lkjscript-edit.pending")? {
+    if has_pending(&mut root)? {
         return Err(format!("{} E_EDIT_RECOVERY interrupted publication; recover with edit --recover and its private key", scope));
     }
-    let value = if contains(&mut root, b".lkjscript-edit.generation")? {
-        let mut file = io(root.open_append(".lkjscript-edit.generation"), "open source generation")?;
-        io(file.set_nonblocking(true), "make generation read nonblocking")?;
-        let mut bytes = [0u8; 65];
-        let mut at = 0usize;
-        while at < bytes.len() {
-            let count = io(file.read(&mut bytes[at..]), "read source generation")?;
-            if count == 0usize { break; }
-            at += count;
+    let value = match root.open_regular(".lkjscript-edit.generation") {
+        Ok(mut file) => {
+            let mut bytes = [0u8; 65];
+            let mut at = 0usize;
+            while at < bytes.len() {
+                let count = io(file.read(&mut bytes[at..]), "read source generation")?;
+                if count == 0usize { break; }
+                at += count;
+            }
+            if at != 64usize { return Err(failure("invalid source generation length")); }
+            let value = String::from_utf8(bytes[..64usize].to_vec()).map_err(|_| failure("invalid source generation"))?;
+            if !valid_generation(&value) { return Err(failure("invalid source generation")); }
+            value
         }
-        if at != 64usize { return Err(failure("invalid source generation length")); }
-        let value = String::from_utf8(bytes[..64usize].to_vec()).map_err(|_| failure("invalid source generation"))?;
-        if !valid_generation(&value) { return Err(failure("invalid source generation")); }
-        value
-    } else { String::new() };
-    if contains(&mut root, b".lkjscript-edit.pending")? {
+        Err(2i64) => String::new(),
+        Err(errno) => return Err(format!("transaction E_EDIT_IO open regular source generation: errno {errno}")),
+    };
+    if has_pending(&mut root)? {
         return Err(format!("{} E_EDIT_RECOVERY source publication began during capture", scope));
     }
     Ok(value)
+}
+
+struct PinnedChange {
+    owner: Directory,
+    identity: [u8; 16],
+    physical: String,
+    path: String,
+    name: String,
+    temporary: String,
+}
+
+/// Read-only preconditions and owned parent handles for one exact text draft.
+/// Parent namespace changes by nonparticipating processes remain outside the
+/// cooperative project-writer contract; the descriptors themselves stay pinned.
+pub struct Prepared {
+    _root: Directory,
+    root_identity: [u8; 16],
+    scope: String,
+    fingerprint: String,
+    slots: Vec<PinnedChange>,
+}
+
+fn binding(scope: &str, changes: &[structure_edit::Change]) -> Result<String, String> {
+    let mut bytes = b"lkjscript-source-prepared-2\0"[..].to_vec();
+    binding_word(&mut bytes, scope.len());
+    bytes.extend_from_slice(scope.as_bytes());
+    binding_word(&mut bytes, changes.len());
+    for change in changes {
+        let path = relative(scope, &change.file)?;
+        binding_word(&mut bytes, path.len());
+        bytes.extend_from_slice(path.as_bytes());
+        match &change.before {
+            structure_edit::PreviousText::Absent => bytes.push(0u8),
+            structure_edit::PreviousText::Present(old) => {
+                bytes.push(1u8);
+                bytes.extend_from_slice(&sha256::digest(old));
+            }
+        }
+        bytes.extend_from_slice(&sha256::digest(&change.after));
+    }
+    Ok(sha256::hex_digest(&bytes))
+}
+
+fn binding_word(bytes: &mut Vec<u8>, value: usize) {
+    for shift in 0usize..8usize { bytes.push((value >> (shift * 8usize)) as u8); }
+}
+
+fn previous_size(value: &structure_edit::PreviousText) -> usize {
+    match value {
+        structure_edit::PreviousText::Absent => 0usize,
+        structure_edit::PreviousText::Present(bytes) => bytes.len(),
+    }
+}
+
+fn previous_equal(left: &structure_edit::PreviousText, right: &structure_edit::PreviousText) -> bool {
+    match (left, right) {
+        (structure_edit::PreviousText::Absent, structure_edit::PreviousText::Absent) => true,
+        (structure_edit::PreviousText::Present(left), structure_edit::PreviousText::Present(right)) =>
+            left.as_slice() == right.as_slice(),
+        _ => false,
+    }
+}
+
+fn current(slot: &mut PinnedChange, maximum: usize) -> Result<structure_edit::PreviousText, String> {
+    // Only ENOENT for this basename beneath an already acquired parent is
+    // absence. The primitive acquires O_PATH|O_NOFOLLOW, checks that same inode,
+    // and opens regular data only; FIFO/device/symlink substitutions cannot hang.
+    let mut file = match slot.owner.open_regular(&slot.name) {
+        Ok(file) => file,
+        Err(2i64) => return Ok(structure_edit::PreviousText::Absent),
+        Err(errno) => return Err(format!("{} E_EDIT_IO open regular source: errno {errno}", slot.path)),
+    };
+    let mut bytes = Vec::new();
+    let mut buffer = [0u8; 8192];
+    while bytes.len() < maximum {
+        let remaining = maximum - bytes.len();
+        let count = if remaining < buffer.len() { remaining } else { buffer.len() };
+        let count = io(file.read(&mut buffer[..count]), "read pinned source")?;
+        if count == 0usize { return Ok(structure_edit::PreviousText::Present(bytes)); }
+        bytes.extend_from_slice(&buffer[..count]);
+    }
+    let mut extra = [0u8; 1];
+    if io(file.read(&mut extra), "read pinned source boundary")? != 0usize {
+        return Err(format!("{} E_EDIT_STALE source exceeds the checked transaction values", slot.path));
+    }
+    Ok(structure_edit::PreviousText::Present(bytes))
+}
+
+fn verify_changes(slots: &mut [PinnedChange], changes: &[structure_edit::Change],
+    recovery: bool) -> Result<Vec<bool>, String> {
+    if slots.len() != changes.len() { return Err(failure("prepared change count differs")); }
+    let mut needed = Vec::new();
+    for index in 0usize..changes.len() {
+        let change = &changes[index];
+        let old_size = previous_size(&change.before);
+        let maximum = if recovery && change.after.len() > old_size { change.after.len() } else { old_size };
+        let observed = current(&mut slots[index], maximum)?;
+        let new = match &observed {
+            structure_edit::PreviousText::Present(bytes) => bytes.as_slice() == change.after.as_slice(),
+            structure_edit::PreviousText::Absent => false,
+        };
+        if !previous_equal(&observed, &change.before) && !(recovery && new) {
+            return Err(format!("{} E_EDIT_STALE source is not the expected {}transaction value",
+                slots[index].path, if recovery { "old or new " } else { "old " }));
+        }
+        needed.push(!new);
+    }
+    Ok(needed)
+}
+
+fn prepare_at(root: &mut Directory, scope: &str, changes: &[structure_edit::Change],
+    recovery: bool) -> Result<Prepared, String> {
+    let mut pinned_root = io(root.open_directory("."), "retain prepared transaction root")?;
+    let root_identity = io(std::io::directory_identity(&mut pinned_root), "identify prepared transaction root")?;
+    let mut slots: Vec<PinnedChange> = Vec::new();
+    let mut paths: BTreeSet<String> = BTreeSet::new();
+    let mut entries: BTreeSet<(u64, u64, String)> = BTreeSet::new();
+    for change in changes {
+        let path = relative(scope, &change.file)?;
+        if !paths.insert(path.clone()) { return Err(failure("repeated prepared source path")); }
+        let (parent, name) = location(&path);
+        let mut owner = root.open_directory(&parent).map_err(|errno: i64| -> String {
+            format!("{} E_EDIT_PARENT existing parent is unavailable: errno {errno}", path)
+        })?;
+        let identity = io(std::io::directory_identity(&mut owner), "identify pinned projection parent")?;
+        let key = (identity_word(&identity, 0usize), identity_word(&identity, 8usize), name.clone());
+        if !entries.insert(key) {
+            return Err(format!("{} E_EDIT_PARENT_ALIAS changes address the same retained parent and basename", path));
+        }
+        // Match exactly driver::normal(change.file), the overlay comparison.
+        // Do not normalize the later input argument again.
+        let physical = if change.file.starts_with("./") { change.file[2usize..].to_string() }
+            else { change.file.clone() };
+        let temporary = format!(".{name}.lkjscript-next");
+        slots.push(PinnedChange { owner, identity, physical, path, name, temporary });
+    }
+    let fingerprint = binding(scope, changes)?;
+    verify_changes(&mut slots, changes, recovery)?;
+    Ok(Prepared { _root: pinned_root, root_identity, scope: scope.to_string(), fingerprint, slots })
+}
+
+/// Acquire existing parents and verify the old projection without a signing
+/// key, creating files, or changing either source or transaction metadata.
+pub fn prepare(world: &mut World, scope: &str, draft: &structure_edit::Draft) -> Result<Prepared, String> {
+    let mut root = io(world.directory(scope), "open prepared transaction root")?;
+    prepare_at(&mut root, scope, &draft.changes, false)
+}
+
+impl Prepared {
+    pub fn verify(&mut self, draft: &structure_edit::Draft) -> Result<(), String> {
+        if self.fingerprint != binding(&self.scope, &draft.changes)? {
+            return Err(failure("prepared source draft differs"));
+        }
+        verify_changes(&mut self.slots, &draft.changes, false)?;
+        Ok(())
+    }
+
+    /// The caller supplies exactly the physical(root,path) spelling used by the
+    /// candidate overlay, for every captured positive and negative dependency.
+    pub fn check_input(&self, parent_identity: &[u8; 16], basename: &str,
+        physical_path: &str) -> Result<(), String> {
+        if self.root_identity == *parent_identity && reserved_root(basename) {
+            return Err(format!("{} E_EDIT_RESERVED_INPUT source depends on writer metadata", physical_path));
+        }
+        for slot in &self.slots {
+            if slot.identity != *parent_identity { continue; }
+            if slot.temporary == basename {
+                return Err(format!("{} E_EDIT_RESERVED_INPUT source depends on a projection staging slot", physical_path));
+            }
+            if slot.name == basename && slot.physical != physical_path {
+                return Err(format!("{} E_EDIT_PARENT_ALIAS captured input aliases changed projection {} through another spelling",
+                    physical_path, slot.physical));
+            }
+        }
+        Ok(())
+    }
+}
+
+fn clear_stages(slots: &mut [PinnedChange]) -> Result<(), String> {
+    for index in 0usize..slots.len() {
+        let slot = &mut slots[index];
+        remove(&mut slot.owner, &slot.temporary)?;
+    }
+    Ok(())
+}
+
+fn stage_changes(slots: &mut [PinnedChange], changes: &[structure_edit::Change],
+    needed: &[bool]) -> Result<(), String> {
+    // A durable authenticated intent already names every slot. A killed write
+    // leaves only a discoverable private temporary, never a partial final leaf.
+    clear_stages(slots)?;
+    for index in 0usize..changes.len() {
+        if !needed[index] { continue; }
+        let slot = &mut slots[index];
+        let mut file = io(slot.owner.create_private(&slot.temporary), "create pinned projection replacement")?;
+        io(file.write_all(&changes[index].after), "write pinned projection replacement")?;
+        io(file.sync(), "sync pinned projection replacement")?;
+    }
+    Ok(())
+}
+
+fn intent_payload(scope: &str, changes: &[structure_edit::Change], generation: &str) -> Result<String, String> {
+    let mut entries = Vec::new();
+    for change in changes {
+        let path = relative(scope, &change.file)?;
+        let before = match &change.before {
+            structure_edit::PreviousText::Absent => Value::Null,
+            structure_edit::PreviousText::Present(bytes) =>
+                Value::String(String::from_utf8(bytes.clone()).map_err(|_| failure("old source is not UTF-8"))?),
+        };
+        let after = String::from_utf8(change.after.clone()).map_err(|_| failure("new source is not UTF-8"))?;
+        entries.push(Value::Object(vec![
+            ("path".to_string(), Value::String(path)),
+            ("before".to_string(), before),
+            ("after".to_string(), Value::String(after)),
+        ]));
+    }
+    json::stringify(&Value::Object(vec![
+        ("version".to_string(), Value::from_usize(2usize)),
+        ("root".to_string(), Value::String(scope.to_string())),
+        ("changes".to_string(), Value::Array(entries)),
+        ("generation".to_string(), Value::String(generation.to_string())),
+    ])).map_err(|problem| failure(&problem.message))
+}
+
+impl Writer {
+    pub fn prepare(&mut self, draft: &structure_edit::Draft) -> Result<Prepared, String> {
+        prepare_at(&mut self.root, &self.scope, &draft.changes, false)
+    }
+
+    pub fn publish_prepared(&mut self, draft: &structure_edit::Draft, prepared: &mut Prepared) -> Result<(), String> {
+        if self.pending()?.is_some() {
+            return Err(failure("an interrupted intent must be recovered before a new transaction"));
+        }
+        if prepared.scope != self.scope { return Err(failure("prepared source scope differs")); }
+        prepared.verify(draft)?;
+        if draft.changes.is_empty() { return Ok(()); }
+        let mut nonce = [0u8; 32];
+        io(self.entropy.fill(&mut nonce), "generate source publication identity")?;
+        let generation = sha256::hex_digest(&nonce);
+        let payload = intent_payload(&self.scope, &draft.changes, &generation)?;
+        let producer = signer();
+        let envelope = reuse::seal(&producer, &self.secret, "source-transaction", &self.key(), payload.as_bytes());
+        // No per-source temporary is created until the durable intent names it.
+        // An error syncing this atomic publication can leave its commit uncertain.
+        atomic(&mut self.root, ".lkjscript-edit.pending", &envelope)
+            .map_err(|problem| -> String { format!("{problem}; intent publication may be committed; run edit --recover") })?;
+        let intent = Intent { changes: draft.changes.clone(), generation };
+        self.complete(&intent, prepared)
+            .map_err(|problem| -> String { format!("{problem}; checked transaction is committed; run edit --recover") })?;
+        Ok(())
+    }
+
+    fn complete(&mut self, intent: &Intent, prepared: &mut Prepared) -> Result<usize, String> {
+        if prepared.scope != self.scope || prepared.fingerprint != binding(&self.scope, &intent.changes)? {
+            return Err(failure("prepared recovery draft differs"));
+        }
+        // Validate every old/absent/exact-new leaf before even the first write.
+        let needed = verify_changes(&mut prepared.slots, &intent.changes, true)?;
+        stage_changes(&mut prepared.slots, &intent.changes, &needed)?;
+        atomic(&mut self.root, ".lkjscript-edit.generation", intent.generation.as_bytes())?;
+        for index in 0usize..intent.changes.len() {
+            let slot = &mut prepared.slots[index];
+            if needed[index] {
+                match &intent.changes[index].before {
+                    structure_edit::PreviousText::Absent =>
+                        io(slot.owner.rename_new(&slot.temporary, &slot.name), "publish absent projection without replacement")?,
+                    structure_edit::PreviousText::Present(_) =>
+                        io(slot.owner.rename(&slot.temporary, &slot.name), "publish existing projection replacement")?,
+                }
+            }
+            // Also sync a parent whose rename completed before an earlier kill.
+            io(slot.owner.sync(), "sync pinned projection parent")?;
+        }
+        clear_stages(&mut prepared.slots)?;
+        remove(&mut self.root, ".lkjscript-edit.pending")?;
+        io(self.root.sync(), "sync completed transaction")?;
+        Ok(intent.changes.len())
+    }
+}
+
+fn identity_word(bytes: &[u8; 16], start: usize) -> u64 {
+    let mut value = 0u64;
+    for shift in 0usize..8usize {
+        value |= (bytes[start + shift] as u64) << ((shift * 8usize) as u64);
+    }
+    value
+}
+
+fn reserved_root(name: &str) -> bool {
+    matches!(name, ".lkjscript-edit.lock" | ".lkjscript-edit.pending" | ".lkjscript-edit.generation"
+        | "..lkjscript-edit.pending.lkjscript-next" | "..lkjscript-edit.generation.lkjscript-next")
+}
+
+fn has_pending(root: &mut Directory) -> Result<bool, String> {
+    match root.open_regular(".lkjscript-edit.pending") {
+        Ok(_) => Ok(true),
+        Err(2i64) => Ok(false),
+        Err(errno) => Err(format!("transaction E_EDIT_IO inspect regular transaction intent: errno {errno}")),
+    }
 }
