@@ -1,0 +1,10 @@
+ok directory rename_new native: absent success, 7 occupied destinations, public/raw basenames, UTF-8/raw bytes, regular-only read and readonly File
+ok directory boundary: destination created at renameat2 entry was never overwritten
+ok directory boundary: read retained inode after pathname replacement
+ok directory rename_new native: ENOSYS/EOPNOTSUPP propagate without a replacing fallback
+ok directory rename_new interpreter: absent success, 7 occupied destinations, public/raw basenames, UTF-8/raw bytes, regular-only read and readonly File
+ok directory boundary: destination created at renameat2 entry was never overwritten
+ok directory boundary: read retained inode after pathname replacement
+ok directory rename_new interpreter: ENOSYS/EOPNOTSUPP propagate without a replacing fallback
+ok directory rename_new: independent checked-IR mutable authority, ReadDirectory refusal, arity, byte-view and result signatures
+ok directory rename_new suite: 2 routes, 2.795 s, load 3.68 3.78 4.90 4/5663 277734 -> 3.79 3.80 4.90 5/5672 278252

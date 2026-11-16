@@ -1,0 +1,8 @@
+format=gzip-n-9
+repeated_compression=byte-identical
+decompressed=byte-identical-to-canonical
+72a259e8889cff6e7c4ac712d7940b77343a9f5b
+0f2b0b0f0d62dc31e625eea80cfb37e317f007f6fcb4a7e8ecf6ef5249d51522  seed/lkjscript.gz
+34491766f5258dd3af3caf92db6b92dfeba09b405c00a8dd19cd955205c0d377  target/lkjscript
+6466085 seed/lkjscript.gz
+32196802 target/lkjscript

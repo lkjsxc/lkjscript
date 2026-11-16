@@ -1,0 +1,21 @@
+ok journal init
+target/http-journal-cases.lqhrH7/failure-out:journal error: lock journal: errno 11
+ok journal verify
+ok journal add
+ok journal verify
+recovery repaired 236
+ok journal verify
+recovery repaired 236
+ok journal verify
+recovery repaired 236
+ok journal extra
+target/http-journal-cases.lqhrH7/failure-out:journal error: journal head points beyond the complete log prefix; no repair performed
+target/http-journal-cases.lqhrH7/failure-out:journal error: journal record checksum mismatch
+target/http-journal-cases.lqhrH7/failure-out:journal error: journal head checksum mismatch
+ok journal verify
+target/http-journal-cases.lqhrH7/failure-out:journal sessions: session.key must contain exactly 32 bytes
+target/http-journal-cases.lqhrH7/failure-out:journal sessions: session.key must contain exactly 32 bytes
+ok journal verify
+stopped
+ok journal durable store (native): creation, append/replace, pipelining, restart, incomplete header/body/checksum, stale head-next, complete unacknowledged record, durable-boundary refusal, log/head corruption, single-writer lock, signed/expired/forged sessions, private durable key and separate issuer
+Journal cases cleanup: server PIDs 2604052 2604084 2604101 2604116 2604129 2604141 2604175 2604198; all reaped; loopback ports 42855 42737 44715 34555 46181 40887 40449 37721 released; client processes reaped and temporary directory removed

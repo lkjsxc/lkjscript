@@ -1,0 +1,11 @@
+query-publication: passed at exact 63360-byte boundary
+roomy-build	load-before	3.68 3.78 4.90 6/5663 277685
+roomy-build	result	0	wall=0.29 user=0.28 sys=0.00 peak-kib=30260
+roomy-build	load-after	3.68 3.78 4.90 4/5663 277705
+roomy-query	load-before	3.68 3.78 4.90 4/5663 277707
+roomy-query	result	0	wall=0.00 user=0.00 sys=0.00 peak-kib=5148
+roomy-query	load-after	3.68 3.78 4.90 4/5663 277711
+tight-build	load-before	3.68 3.78 4.90 4/5663 277717
+tight-build	result	1	Command exited with non-zero status 1
+wall=0.29 user=0.28 sys=0.00 peak-kib=28004
+tight-build	load-after	3.68 3.78 4.90 4/5663 277747
