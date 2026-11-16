@@ -1,0 +1,38 @@
+{
+  "schema": "compiler-reference-capture-final-cleanup-release-1",
+  "execute": true,
+  "cooperative_quiescence_confirmed": true,
+  "prior_python_verdict_trusted": false,
+  "approval_commit": "6114aa74926b4257c8418e6fc4b915348c6100cb",
+  "guard_sha256": "984c7e86d7cda2c9ffed7b20cb51d150b9c680ff0ec3218c9cce85563f4e2977",
+  "expected_scope_sha256": "c93116cc86295a5f0e15a84821baa80a6061be5ae85d8d6335392aaa0a0c3e5a",
+  "retention_commit": "9326dbaab1bf6832b9f35dc156e12d0d62eccd9e",
+  "directory_roots": [
+    "compiler-reference-capture-comparison-2",
+    "compiler-reference-capture-comparison-launch-2",
+    "compiler-reference-capture-measurement-2",
+    "compiler-reference-capture-trial-preparation-2",
+    "compiler-reference-capture-comparison-acceptance-2",
+    "compiler-reference-capture-comparison-recovery-2",
+    "compiler-reference-capture-measurement-preparation-1",
+    "compiler-reference-capture-cleanup-preparation-2",
+    "compiler-reference-capture-cleanup-execution-2",
+    "compiler-reference-capture-final-recovery-1"
+  ],
+  "top_level_files": [
+    "compiler-reference-capture-cleanup-inventory-1.json",
+    "compiler-reference-capture-recovery-guard-proposal-1.md",
+    "compiler-reference-capture-recovery-map-1.json",
+    "compiler-reference-capture-recovery-proof-1.sha256",
+    "compiler-reference-capture-recovery-proposal-1.py",
+    "compiler-reference-capture-recovery-run-1.json",
+    "compiler-reference-capture-recovery-syntax-1.json",
+    "compiler-reference-capture-recovery-time-1.txt",
+    "compiler-reference-capture-source-commit-message.txt"
+  ],
+  "expected_regular_files": 4532,
+  "expected_directories": 145,
+  "expected_logical_bytes": 354054095,
+  "capture_root": "/home/coder/workspace/lkjscript/bench/compiler-reference-capture-data/final-cleanup-1/execution-1",
+  "root_release_reference": "compiler-root-v1599: root reviewed exact guard/scope/auxiliary bytes, static peer review and successful Perl syntax; all nineteen scopes are completed, idle and fully retained. One invocation via compiler-root-v1600; stop on any refusal, no automatic retry."
+}
