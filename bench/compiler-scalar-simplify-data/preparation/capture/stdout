@@ -1,0 +1,9 @@
+create closed-records
+create desired-overlay
+create target/lkjscript
+create target/compiler-scalar-live-preliminary-1/live
+create target/compiler-scalar-proposals/desired-tests-input.tar
+verified target/lkjscript bytes=32761734 compressed=6582463
+verified target/compiler-scalar-live-preliminary-1/live bytes=21251056 compressed=3884857
+verified target/compiler-scalar-proposals/desired-tests-input.tar bytes=5376000 compressed=690741
+PASS closed_records=386 overlay=3 binary_gzips=3 copied_proposals=14 gateway_outcomes=2

@@ -1,0 +1,1 @@
+compiler-scalar-gate-retention-freeze-20261116-230: report-only Perl invocation omitted its directory argument; failed before writing retention files or manifest. Archive and verification were already complete and were not rerun.

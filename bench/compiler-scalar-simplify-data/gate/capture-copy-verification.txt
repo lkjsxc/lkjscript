@@ -1,0 +1,5 @@
+cold_capture_files=20
+gate_log_files=123
+regular_members=143
+payload_bytes=898185
+inventory_sha256=28ecc813c679acb0f6ecd5bc6958894353d6b228474075ef02cfcd3f66fe6503

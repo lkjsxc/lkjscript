@@ -1,0 +1,4 @@
+fresh-empty-store=true
+workers=4
+external-address-space-bytes=4294967296
+external-watchdog-seconds=1800

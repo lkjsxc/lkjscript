@@ -1,0 +1,99 @@
+{
+  "schema": 1,
+  "status": "prospective; no archive/compression/deletion/compiler execution",
+  "worktree": "/home/coder/workspace/lkjscript-compiler-scalar-20261116",
+  "source_commit": "5b5ce7759c035ae0437e3512e18efc440aa50d2e",
+  "base": "e0b21e66659dc1830a5bebddf0c1f30fd2d8fa94",
+  "scope_inventory": {
+    "path": "closed-inventory.json",
+    "sha256": "bb18dc804c6591917118d4184c4a87a6f78b9fba5a48899d64709d39443ec8b8",
+    "files": 388,
+    "bytes": 30958886,
+    "records": 386,
+    "record_bytes": 4331830
+  },
+  "record_manifest": {
+    "path": "closed-records.sha256",
+    "sha256": "b985b80cf81d34fa5c8aa7886debea6cfb7d9adad1cc21d4a532de5071f02bca"
+  },
+  "source_trees": {
+    "src": "6277f3cec86791e7f297a95ff0a70bed60b951eb",
+    "library": "25bdb8ff8567b941790d3951c78e896b23e26e8e",
+    "tests": "e2b30ac0f2fa8f897f366293189d6af552a41980"
+  },
+  "bundle": {
+    "create_after_gate": true,
+    "temporary_ref": "refs/retention/compiler-scalar-5b5ce775",
+    "positive_commit": "5b5ce7759c035ae0437e3512e18efc440aa50d2e",
+    "exclude_prerequisite": "e0b21e66659dc1830a5bebddf0c1f30fd2d8fa94",
+    "standalone": false,
+    "verify_before_ref_removal": true
+  },
+  "desired_recovery": {
+    "captured_manifest": "target/compiler-scalar-edit-mutation-apply-1/desired-after.sha256",
+    "manifest_sha256": "408a2833cd595e3a61acddaa6552b0fe2aa12a2c5d03d539b3c8eb387bb2d7a3",
+    "paths": 1744,
+    "actual_byte_matches": 1741,
+    "overlay": [
+      {
+        "path": "src/driver.lkj",
+        "sha256": "c3a1c555f9b14e0c09ee1fb8d2ab572dd901b93401bffe77e4dc960f9876a095"
+      },
+      {
+        "path": "src/reuse.lkj",
+        "sha256": "e12f48ed1ee75176125697f5a3f882dacb251108030127195d7520c0d6c2a1aa"
+      },
+      {
+        "path": "src/semantic_tests/optimizer.lkj",
+        "sha256": "bb282ac7e08d92c35466ce607f1d68dd3303a223627d34e1be1f26ef5da40cb3"
+      }
+    ],
+    "overlay_copied": false
+  },
+  "later_gzip": [
+    {
+      "path": "target/lkjscript",
+      "sha256": "f85624e3cc694f6a3a3e10c33f822789ae6084e2d5a5b41c3b1fc8fcc9bd2d64",
+      "bytes": 32761734,
+      "identity_source": "closed bootstrap/focused records; current binary unread"
+    },
+    {
+      "path": "target/compiler-scalar-live-preliminary-1/live",
+      "sha256": "fff89090526d3c9f0ed6081f57bd54121e51773912b833bff62db31e531a1b85",
+      "bytes": 21251056,
+      "identity_source": "retained before/after hashes; current stat only"
+    },
+    {
+      "path": "target/compiler-scalar-proposals/desired-tests-input.tar",
+      "sha256": "556b02937776b789adc51e04127ba4ff919400c8be047509970f28418f47e156",
+      "bytes": 5376000,
+      "identity_source": "retained tar hash; current stat only"
+    }
+  ],
+  "gateway_only_records_to_export": [
+    {
+      "request_id": "compiler-scalar-core-audit-1309",
+      "exit_code": 255,
+      "stdout": "/home/coder/.local/state/lkjyolo/outputs/pipe-mcobdkmfeegjeolhjnnjpeifipofedoi.stdout",
+      "stderr": "/home/coder/.local/state/lkjyolo/outputs/pipe-mcobdkmfeegjeolhjnnjpeifipofedoi.stderr",
+      "qualification": "Perl compile error before audit reads; not a compiler refusal"
+    },
+    {
+      "request_id": "compiler-scalar-publications-audit-1320",
+      "exit_code": 0,
+      "stdout": "/home/coder/.local/state/lkjyolo/outputs/pipe-jojppbgbdnhdeembilcfeoppffahokbk.stdout",
+      "stderr": "/home/coder/.local/state/lkjyolo/outputs/pipe-jojppbgbdnhdeembilcfeoppffahokbk.stderr"
+    }
+  ],
+  "planning_requests": [
+    "compiler-scalar-retention-directory-1321",
+    "compiler-scalar-retention-inventory-script-1322",
+    "compiler-scalar-retention-inventory-1323",
+    "compiler-scalar-retention-git-1324",
+    "compiler-scalar-retention-records-1325"
+  ],
+  "disposal_authorized": false,
+  "active_scopes_read": false,
+  "keys_read": false,
+  "binary_contents_read": false
+}

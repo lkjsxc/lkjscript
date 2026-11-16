@@ -1,0 +1,72 @@
+{
+  "schema": "lkjscript-scalar-six-run-1",
+  "release_status": "released-once-after-passed-local-gate",
+  "execution_authorized": true,
+  "harness_sha256": "092f0187705dc5136284d2cb9deed82d6c35664138e3c631a9887c01c280aad3",
+  "protocol_path": "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-plan.md",
+  "protocol_sha256": "5e7c5b605250bb3cc5e5153f1f2fac9a95a686cae5495bebfe5c6ee5798716d4",
+  "emitter": {
+    "path": "/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/lkjscript",
+    "sha256": "f85624e3cc694f6a3a3e10c33f822789ae6084e2d5a5b41c3b1fc8fcc9bd2d64",
+    "bytes": 32761734,
+    "source_commit": "5b5ce7759c035ae0437e3512e18efc440aa50d2e",
+    "source_tree": "6277f3cec86791e7f297a95ff0a70bed60b951eb",
+    "library_tree": "25bdb8ff8567b941790d3951c78e896b23e26e8e"
+  },
+  "validation": {
+    "focused": {
+      "status": "passed",
+      "source_commit": "5b5ce7759c035ae0437e3512e18efc440aa50d2e",
+      "producer_sha256": "f85624e3cc694f6a3a3e10c33f822789ae6084e2d5a5b41c3b1fc8fcc9bd2d64",
+      "evidence_path": "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/focused-summary.json",
+      "evidence_sha256": "5f2df61db6decc3eaf91dbaaa3885600a56015da1f7b77b8d7db8799b654c508"
+    },
+    "full_gate": {
+      "status": "passed",
+      "source_commit": "5b5ce7759c035ae0437e3512e18efc440aa50d2e",
+      "producer_sha256": "f85624e3cc694f6a3a3e10c33f822789ae6084e2d5a5b41c3b1fc8fcc9bd2d64",
+      "evidence_path": "/home/coder/workspace/lkjscript/bench/compiler-scalar-simplify-data/gate/summary.json",
+      "evidence_sha256": "0bc00b8d36c8f909490cf3edd0d4578c052b90ccbc3d0754ee4b477d06531431",
+      "root_request": "compiler-scalar-cold-gate-v1382",
+      "final_wait_request": "compiler-scalar-cold-gate-poll-v1392"
+    }
+  },
+  "candidate_ci": "pending-until-if-main-adoption",
+  "execution_order": [
+    "A1",
+    "B1",
+    "B2",
+    "A2",
+    "A3",
+    "B3"
+  ],
+  "primary_decision": "10*sum_B_wall_ns <= 9*sum_A_wall_ns",
+  "planned_results": "target/compiler-scalar-simplify.20261116-1",
+  "focused_capture_manifest": {
+    "path": "/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-focused-1/manifest.sha256",
+    "sha256": "5298b6f97945a0199ae1f3e9d731c8b5b7da7aa4510b77f4aacf27aa878dc3c9",
+    "records": 65
+  },
+  "baseline_ci_context": {
+    "source_commit": "7716f0d51ead33d17f5a85c0bb8e4f79d57ccf23",
+    "run_id": 43904619997,
+    "status": "in_progress; witness succeeded; gate pending at pretrial observation",
+    "validates_candidate": false
+  },
+  "notes": [
+    "Root releases one cohort only after focused and complete local gate success for the exact source and emitter. Final pin is distinct from the retained PENDING draft.",
+    "The source experiment remains isolated at 5b5ce7759c035ae0437e3512e18efc440aa50d2e; main production source, default policy and seed remain unchanged.",
+    "All own gate/compression workers finished before this release. Root will retain the exact outer invocation and release commit before launch.",
+    "Candidate CI remains pending until/if main adoption. The ongoing baseline CI is context only and does not validate this candidate.",
+    "The threshold, source, order, limits and one-cohort stopping rule remain the predeclared protocol. A miss discards the candidate; no policy adoption is automatic.",
+    "Gate qualifications include two pending conformance cases per route, twelve inliner fallback rejections, and four actual scalar branch mutation executions. All original oracle checks and raw diagnostics are retained."
+  ],
+  "root_release": {
+    "source_and_emitter_revalidation": "compiler-scalar-gate-copy-v1405",
+    "preparation_copy": "compiler-scalar-retention-copy-v1400",
+    "gate_copy": "compiler-scalar-gate-copy-v1405",
+    "single_cohort": true,
+    "no_retries": true,
+    "maximum_compute_workers": 1
+  }
+}

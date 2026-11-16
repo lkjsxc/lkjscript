@@ -1,0 +1,2 @@
+Scalar found where operator expected (Missing operator before "$b"?) at target/compiler-scalar-gate-acceptance-1/audit.pl line 33, near "$f$b"
+target/compiler-scalar-gate-acceptance-1/audit.pl syntax OK

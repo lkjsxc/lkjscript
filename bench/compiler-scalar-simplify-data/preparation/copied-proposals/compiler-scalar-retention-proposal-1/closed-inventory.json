@@ -1,0 +1,4013 @@
+{
+   "archive_or_compression_execution" : false,
+   "base" : "e0b21e66659dc1830a5bebddf0c1f30fd2d8fa94",
+   "binary_contents_read" : false,
+   "compiler_execution" : false,
+   "excluded" : [
+      "target/gate",
+      "target/compiler-scalar-cold-store-1",
+      "target/compiler-scalar-cold-gate-1",
+      "target/bootstrap.nG4W90",
+      "target/compiler-scalar-bootstrap-store-1",
+      "target/compiler-scalar-desired",
+      "target/lkjscript",
+      "all keys and durable edit metadata",
+      "main worktree and all unrelated worktrees"
+   ],
+   "files" : [
+      {
+         "bytes" : 205,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403505,
+         "mode" : "0600",
+         "mtime" : 1794845422,
+         "path" : "target/compiler-scalar-bootstrap-1/argv",
+         "sha256" : "1c8c0ae09cb447adcc7097de232afed6882fce33f86cf2cdb835d53ff70e6c72"
+      },
+      {
+         "bytes" : 57,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403501,
+         "mode" : "0600",
+         "mtime" : 1794845422,
+         "path" : "target/compiler-scalar-bootstrap-1/cwd",
+         "sha256" : "92973b5568cdc284564fb5620c9da15b38bb9da6a9b9290b43906c466323307a"
+      },
+      {
+         "bytes" : 169,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403504,
+         "mode" : "0600",
+         "mtime" : 1794845422,
+         "path" : "target/compiler-scalar-bootstrap-1/factory-inputs.sha256",
+         "sha256" : "99e6b9443cb4149ed9a6944fc3420859a120db027e43cf29cd83975b282adb24"
+      },
+      {
+         "bytes" : 45,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403639,
+         "mode" : "0600",
+         "mtime" : 1794845500,
+         "path" : "target/compiler-scalar-bootstrap-1/factory-inputs.verified",
+         "sha256" : "27235f5e6ca69d0edae6f26d770b53753869bdde56f1aeb0326f2ceb6fd916d5"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403635,
+         "mode" : "0600",
+         "mtime" : 1794845500,
+         "path" : "target/compiler-scalar-bootstrap-1/finished.ns",
+         "sha256" : "0fa7d7373e83253cec02a6c31ea53f3281241e3240b300b99a12ad41a6a535e3"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403636,
+         "mode" : "0600",
+         "mtime" : 1794845500,
+         "path" : "target/compiler-scalar-bootstrap-1/finished.utc",
+         "sha256" : "2cc0b13d9a8552cc6795bc3ee025077170130ec23a1e7769c47899d290427df8"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403634,
+         "mode" : "0600",
+         "mtime" : 1794845500,
+         "path" : "target/compiler-scalar-bootstrap-1/load-after",
+         "sha256" : "4ff561eeabfb1cea1ecdf250eb7c8141e2abdf4d34724e0ce0023056fd98ed5b"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403509,
+         "mode" : "0600",
+         "mtime" : 1794845422,
+         "path" : "target/compiler-scalar-bootstrap-1/load-before",
+         "sha256" : "6b29ec0c08eb966707812d86ba6f7062c5bf3cf31895b163f82020ac0d26a9ac"
+      },
+      {
+         "bytes" : 9,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403641,
+         "mode" : "0600",
+         "mtime" : 1794845500,
+         "path" : "target/compiler-scalar-bootstrap-1/producer.bytes",
+         "sha256" : "11a7c7158679d7ad83d74cbfe024ac6e90104e8da71ed5391d70e51108382da5"
+      },
+      {
+         "bytes" : 83,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403640,
+         "mode" : "0600",
+         "mtime" : 1794845500,
+         "path" : "target/compiler-scalar-bootstrap-1/producer.sha256",
+         "sha256" : "ff9226b47f88d4c954a150d684e7ef145399bba9b80dacef83c9c6f5f756d612"
+      },
+      {
+         "bytes" : 20209,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403638,
+         "mode" : "0600",
+         "mtime" : 1794845500,
+         "path" : "target/compiler-scalar-bootstrap-1/source-after.sha256",
+         "sha256" : "ceea7e99f90f6a67c542fb41d483716aee04b05923a40a3934279604443fddb7"
+      },
+      {
+         "bytes" : 20209,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403503,
+         "mode" : "0600",
+         "mtime" : 1794845422,
+         "path" : "target/compiler-scalar-bootstrap-1/source-before.sha256",
+         "sha256" : "ceea7e99f90f6a67c542fb41d483716aee04b05923a40a3934279604443fddb7"
+      },
+      {
+         "bytes" : 164,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403502,
+         "mode" : "0600",
+         "mtime" : 1794845422,
+         "path" : "target/compiler-scalar-bootstrap-1/source-pins",
+         "sha256" : "63753775e35fe4e94bcbd7a3aad34e68321e9c34c172cccef209eb815ce5f3d0"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403508,
+         "mode" : "0600",
+         "mtime" : 1794845422,
+         "path" : "target/compiler-scalar-bootstrap-1/started.ns",
+         "sha256" : "9a864da2d2851755c68454fe4caa32683bf99187419e26b3a20857c5151f7794"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403507,
+         "mode" : "0600",
+         "mtime" : 1794845422,
+         "path" : "target/compiler-scalar-bootstrap-1/started.utc",
+         "sha256" : "c808743f65d6250194dd4e46639fc26fdcdffd71473dc3924f545adad08e8d1c"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403637,
+         "mode" : "0600",
+         "mtime" : 1794845500,
+         "path" : "target/compiler-scalar-bootstrap-1/status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403511,
+         "mode" : "0600",
+         "mtime" : 1794845422,
+         "path" : "target/compiler-scalar-bootstrap-1/stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 13,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403510,
+         "mode" : "0600",
+         "mtime" : 1794845500,
+         "path" : "target/compiler-scalar-bootstrap-1/stdout",
+         "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
+      },
+      {
+         "bytes" : 25,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403512,
+         "mode" : "0600",
+         "mtime" : 1794845500,
+         "path" : "target/compiler-scalar-bootstrap-1/time",
+         "sha256" : "82ed44bd2a775f1373bee9bfbdd9951dcf231b037f74c7cf8c6f43eae046efa8"
+      },
+      {
+         "bytes" : 348,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403506,
+         "mode" : "0600",
+         "mtime" : 1794845422,
+         "path" : "target/compiler-scalar-bootstrap-1/wrapper-argv",
+         "sha256" : "d5b3c8a6d09878e891f3ebc720a422c0edd6bcebc243c16ade0156f9d446a05e"
+      },
+      {
+         "bytes" : 534,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37393799,
+         "mode" : "0600",
+         "mtime" : 1794843489,
+         "path" : "target/compiler-scalar-core-check-v2/argv.json",
+         "sha256" : "97541ecd3501fee5945bf00c4621a2588ede715943adb5e2cc9472a61f3a4e23"
+      },
+      {
+         "bytes" : 9,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37395416,
+         "mode" : "0600",
+         "mtime" : 1794843510,
+         "path" : "target/compiler-scalar-core-check-v2/capture.status",
+         "sha256" : "37a40f08d8548dba289b9b0bb35bcf63b359f6d37ee86044ebc6b6da080b9ec1"
+      },
+      {
+         "bytes" : 57,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37393795,
+         "mode" : "0600",
+         "mtime" : 1794843489,
+         "path" : "target/compiler-scalar-core-check-v2/cwd",
+         "sha256" : "92973b5568cdc284564fb5620c9da15b38bb9da6a9b9290b43906c466323307a"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37395412,
+         "mode" : "0600",
+         "mtime" : 1794843510,
+         "path" : "target/compiler-scalar-core-check-v2/end.ns",
+         "sha256" : "5a516ab5ddb8442794830803c8c78136a348144543e097c45b526a940d5518de"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37395413,
+         "mode" : "0600",
+         "mtime" : 1794843510,
+         "path" : "target/compiler-scalar-core-check-v2/end.utc",
+         "sha256" : "0d9dac152964993619d76be2183e99ead63663a70362dc38c6eea99e57ba8f49"
+      },
+      {
+         "bytes" : 294,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37395415,
+         "mode" : "0600",
+         "mtime" : 1794843510,
+         "path" : "target/compiler-scalar-core-check-v2/inputs.after.sha256",
+         "sha256" : "9ca58e78060e75804e2101a2af3b1b8ab2225a1aa351ce12692a46ae3c08ae47"
+      },
+      {
+         "bytes" : 294,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37393798,
+         "mode" : "0600",
+         "mtime" : 1794843489,
+         "path" : "target/compiler-scalar-core-check-v2/inputs.before.sha256",
+         "sha256" : "9ca58e78060e75804e2101a2af3b1b8ab2225a1aa351ce12692a46ae3c08ae47"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37395414,
+         "mode" : "0600",
+         "mtime" : 1794843510,
+         "path" : "target/compiler-scalar-core-check-v2/load.after",
+         "sha256" : "98ec8e30206f5be8d33ef154c8d898b7fb91a7ff8eeafea8d7e42c7745bd563b"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37393800,
+         "mode" : "0600",
+         "mtime" : 1794843489,
+         "path" : "target/compiler-scalar-core-check-v2/load.before",
+         "sha256" : "4a8106db730d9770a6efa4d1a7d0675eb783000ec8db0b59e2d350fd35c9698c"
+      },
+      {
+         "bytes" : 8,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37393796,
+         "mode" : "0600",
+         "mtime" : 1794843489,
+         "path" : "target/compiler-scalar-core-check-v2/owner-pid",
+         "sha256" : "f6929c9f84666e02e44d020f71fb450147547c892543a7df2174be9b0bc42e70"
+      },
+      {
+         "bytes" : 49,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37393797,
+         "mode" : "0600",
+         "mtime" : 1794843489,
+         "path" : "target/compiler-scalar-core-check-v2/producer.path",
+         "sha256" : "b004a9cf4a4bcbef655270873cb95120a04404c92e0f518f8e8bc66f17fde9b1"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37393802,
+         "mode" : "0600",
+         "mtime" : 1794843489,
+         "path" : "target/compiler-scalar-core-check-v2/start.ns",
+         "sha256" : "76b41385720a400e0916d1d1e32246fa9a560464abf4558fc86bcf4fb7c97379"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37393801,
+         "mode" : "0600",
+         "mtime" : 1794843489,
+         "path" : "target/compiler-scalar-core-check-v2/start.utc",
+         "sha256" : "b9766be0e4f5d61d84b362c3b0dba5b0457937bdd08b527e32e3905f99f35db1"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37395411,
+         "mode" : "0600",
+         "mtime" : 1794843510,
+         "path" : "target/compiler-scalar-core-check-v2/status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 672,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37393804,
+         "mode" : "0600",
+         "mtime" : 1794843510,
+         "path" : "target/compiler-scalar-core-check-v2/stderr",
+         "sha256" : "dad003da2bf067da28b190273df4eb6371149cfa52bbf6c145dc3f4e619c7d61"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37393803,
+         "mode" : "0600",
+         "mtime" : 1794843489,
+         "path" : "target/compiler-scalar-core-check-v2/stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 60,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37393805,
+         "mode" : "0600",
+         "mtime" : 1794843510,
+         "path" : "target/compiler-scalar-core-check-v2/time",
+         "sha256" : "6563ded9bf9836b821cb9aeef7f5bb85d5e147ab5f481bac72df68012076285f"
+      },
+      {
+         "bytes" : 567,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37382126,
+         "mode" : "0600",
+         "mtime" : 1794843175,
+         "path" : "target/compiler-scalar-edit-core-1/argv.json",
+         "sha256" : "a508df99b0543ef71fd3733af64a6e6578c52b4c240ba7964bdb5b03ec86ed88"
+      },
+      {
+         "bytes" : 57,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37382127,
+         "mode" : "0600",
+         "mtime" : 1794843175,
+         "path" : "target/compiler-scalar-edit-core-1/cwd",
+         "sha256" : "92973b5568cdc284564fb5620c9da15b38bb9da6a9b9290b43906c466323307a"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37385023,
+         "mode" : "0600",
+         "mtime" : 1794843216,
+         "path" : "target/compiler-scalar-edit-core-1/end.utc",
+         "sha256" : "4f6dae52c3f7f245228e6c3c51728642c061f31fd11d9dca6f7a395ae30ce99a"
+      },
+      {
+         "bytes" : 30,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37385022,
+         "mode" : "0600",
+         "mtime" : 1794843216,
+         "path" : "target/compiler-scalar-edit-core-1/load-after",
+         "sha256" : "a15226be0fc24fff7584e80857e756838d90eff2a38830bbedc5334e83b32b98"
+      },
+      {
+         "bytes" : 30,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37382129,
+         "mode" : "0600",
+         "mtime" : 1794843175,
+         "path" : "target/compiler-scalar-edit-core-1/load-before",
+         "sha256" : "96e417855164851126a0ecd91e48cbbd53e1f4c15593e9e1e1084ecbe24c4f62"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37382128,
+         "mode" : "0600",
+         "mtime" : 1794843175,
+         "path" : "target/compiler-scalar-edit-core-1/start.utc",
+         "sha256" : "f02b42c21497b4b893553da054cf655285b87429d7c5f765391520d30e4d2c70"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37385021,
+         "mode" : "0600",
+         "mtime" : 1794843216,
+         "path" : "target/compiler-scalar-edit-core-1/status",
+         "sha256" : "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+      },
+      {
+         "bytes" : 330,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37382131,
+         "mode" : "0600",
+         "mtime" : 1794843216,
+         "path" : "target/compiler-scalar-edit-core-1/stderr",
+         "sha256" : "d7892ec4979cee89b2637054592c5524d368ea66d2d2a70f627ddca700a89820"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37382130,
+         "mode" : "0600",
+         "mtime" : 1794843175,
+         "path" : "target/compiler-scalar-edit-core-1/stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 112,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37382132,
+         "mode" : "0600",
+         "mtime" : 1794843216,
+         "path" : "target/compiler-scalar-edit-core-1/time",
+         "sha256" : "36df7603595bc21a30894005ca351d4d78faeb2ce2081b2b3683c5efa8302469"
+      },
+      {
+         "bytes" : 533,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399932,
+         "mode" : "0600",
+         "mtime" : 1794844227,
+         "path" : "target/compiler-scalar-edit-core-2/argv",
+         "sha256" : "7ac5b56ada7f4e28c1d9b8cab3a3b101e9ba85cd90a417a99a9380a7bbcea7df"
+      },
+      {
+         "bytes" : 57,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399928,
+         "mode" : "0600",
+         "mtime" : 1794844227,
+         "path" : "target/compiler-scalar-edit-core-2/cwd",
+         "sha256" : "92973b5568cdc284564fb5620c9da15b38bb9da6a9b9290b43906c466323307a"
+      },
+      {
+         "bytes" : 20209,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399931,
+         "mode" : "0600",
+         "mtime" : 1794844227,
+         "path" : "target/compiler-scalar-edit-core-2/desired-before.sha256",
+         "sha256" : "563b4a176b4b0a439a6e018060a7d537f6634b8325d9d13b4770afa2547f4bab"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399987,
+         "mode" : "0600",
+         "mtime" : 1794844291,
+         "path" : "target/compiler-scalar-edit-core-2/finished.ns",
+         "sha256" : "a3517ead2180e56ca1e3543c2e72caf613340d81405f43f1d55c50a9344aaa17"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399988,
+         "mode" : "0600",
+         "mtime" : 1794844291,
+         "path" : "target/compiler-scalar-edit-core-2/finished.utc",
+         "sha256" : "6cbe3ef86ce8d8567271d1ab49b8ce13387fef68be4ed4f40a290b88cde032b4"
+      },
+      {
+         "bytes" : 41,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399929,
+         "mode" : "0600",
+         "mtime" : 1794844227,
+         "path" : "target/compiler-scalar-edit-core-2/head",
+         "sha256" : "fdbf633b27ad60d735e688ca0619e0bbe560a71265094dece0164f9980e405f6"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399986,
+         "mode" : "0600",
+         "mtime" : 1794844291,
+         "path" : "target/compiler-scalar-edit-core-2/load-after",
+         "sha256" : "c6dd46d1327acd2a72313efe03854e67d58f97dd8acdb55f0ca60932c4bcab09"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399936,
+         "mode" : "0600",
+         "mtime" : 1794844227,
+         "path" : "target/compiler-scalar-edit-core-2/load-before",
+         "sha256" : "deb95a544fa60c908bc8c0ba46a4063dc415d3a8a8f8d527eb4ebefa16cf4d0d"
+      },
+      {
+         "bytes" : 20011,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399990,
+         "mode" : "0600",
+         "mtime" : 1794844291,
+         "path" : "target/compiler-scalar-edit-core-2/source-after.sha256",
+         "sha256" : "5d948d0a006b78564eefa8d277370bf4288d3dc4d029b76133da7da84c852a16"
+      },
+      {
+         "bytes" : 20011,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399930,
+         "mode" : "0600",
+         "mtime" : 1794844227,
+         "path" : "target/compiler-scalar-edit-core-2/source-before.sha256",
+         "sha256" : "5d948d0a006b78564eefa8d277370bf4288d3dc4d029b76133da7da84c852a16"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399935,
+         "mode" : "0600",
+         "mtime" : 1794844227,
+         "path" : "target/compiler-scalar-edit-core-2/started.ns",
+         "sha256" : "5a2ba07a9eeb260be465855455be53078e43a39a501743d9d8473cfb4333c906"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399934,
+         "mode" : "0600",
+         "mtime" : 1794844227,
+         "path" : "target/compiler-scalar-edit-core-2/started.utc",
+         "sha256" : "d0e65176fc126faf597f0037b64574959411f788fb4a6c1c82378cf5023a428d"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399989,
+         "mode" : "0600",
+         "mtime" : 1794844291,
+         "path" : "target/compiler-scalar-edit-core-2/status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399938,
+         "mode" : "0600",
+         "mtime" : 1794844227,
+         "path" : "target/compiler-scalar-edit-core-2/stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 12359,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399937,
+         "mode" : "0600",
+         "mtime" : 1794844291,
+         "path" : "target/compiler-scalar-edit-core-2/stdout",
+         "sha256" : "51e3faea61be170808fbfd10d70ae743dae1517ce6fc64a38a77145686173398"
+      },
+      {
+         "bytes" : 25,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399939,
+         "mode" : "0600",
+         "mtime" : 1794844291,
+         "path" : "target/compiler-scalar-edit-core-2/time",
+         "sha256" : "99390c613fc9296f3794d184f74d555aefaf75d7a0333a71f47435a2237669fc"
+      },
+      {
+         "bytes" : 676,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399933,
+         "mode" : "0600",
+         "mtime" : 1794844227,
+         "path" : "target/compiler-scalar-edit-core-2/wrapper-argv",
+         "sha256" : "0d5def4a2a3ac52c8f6c5a2c0e2cecfecc59c1db35f6e72c4f2d83df8aba3b8c"
+      },
+      {
+         "bytes" : 523,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401664,
+         "mode" : "0600",
+         "mtime" : 1794844382,
+         "path" : "target/compiler-scalar-edit-core-apply-1/argv",
+         "sha256" : "937a8ae3e6b34d2c763e66e3f5c6e1c680922b327fa31f8d3b3a9dc676c51ed5"
+      },
+      {
+         "bytes" : 57,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401660,
+         "mode" : "0600",
+         "mtime" : 1794844382,
+         "path" : "target/compiler-scalar-edit-core-apply-1/cwd",
+         "sha256" : "92973b5568cdc284564fb5620c9da15b38bb9da6a9b9290b43906c466323307a"
+      },
+      {
+         "bytes" : 577,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401663,
+         "mode" : "0600",
+         "mtime" : 1794844382,
+         "path" : "target/compiler-scalar-edit-core-apply-1/desired-production-before.sha256",
+         "sha256" : "5d36490511c20f2127d110fc5ba23da0148c7589e694a7bc725fcec015c310ee"
+      },
+      {
+         "bytes" : 267,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401744,
+         "mode" : "0600",
+         "mtime" : 1794844447,
+         "path" : "target/compiler-scalar-edit-core-apply-1/desired-unchanged",
+         "sha256" : "be4da1ba0476f3a7c0ff26d64a2f8c64e7bef1fa0f693b062d9444de49aa6b7d"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401740,
+         "mode" : "0600",
+         "mtime" : 1794844447,
+         "path" : "target/compiler-scalar-edit-core-apply-1/finished.ns",
+         "sha256" : "9752bbdd4f3ff397fee594b547bb022d3abbcc4fe4a4c7ed2a99c4b6c6c438e1"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401741,
+         "mode" : "0600",
+         "mtime" : 1794844447,
+         "path" : "target/compiler-scalar-edit-core-apply-1/finished.utc",
+         "sha256" : "427b51d9b07f53a9779acc39966313ab400e488562a39d61c447be9ac4cad3f0"
+      },
+      {
+         "bytes" : 227,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401746,
+         "mode" : "0600",
+         "mtime" : 1794844447,
+         "path" : "target/compiler-scalar-edit-core-apply-1/git-status",
+         "sha256" : "b9d8d14a2b80c0f1f2f5245542d441692e2ccce52606a39b3b8578710f466437"
+      },
+      {
+         "bytes" : 41,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401661,
+         "mode" : "0600",
+         "mtime" : 1794844382,
+         "path" : "target/compiler-scalar-edit-core-apply-1/head",
+         "sha256" : "fdbf633b27ad60d735e688ca0619e0bbe560a71265094dece0164f9980e405f6"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401739,
+         "mode" : "0600",
+         "mtime" : 1794844447,
+         "path" : "target/compiler-scalar-edit-core-apply-1/load-after",
+         "sha256" : "1204feb5d3183d43e63714b10a477935935fe4f38f621d205737232d9e37da51"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401668,
+         "mode" : "0600",
+         "mtime" : 1794844382,
+         "path" : "target/compiler-scalar-edit-core-apply-1/load-before",
+         "sha256" : "6376032aa9e4db7fa140e8aee76a13f8d708f23e51ae605d14944cf26af9e7d9"
+      },
+      {
+         "bytes" : 103,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401745,
+         "mode" : "0600",
+         "mtime" : 1794844447,
+         "path" : "target/compiler-scalar-edit-core-apply-1/numstat",
+         "sha256" : "54f65c7c1bb5ed6f950b86600a77ee0e3d545b8250eed6294c38470635f87667"
+      },
+      {
+         "bytes" : 20011,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401743,
+         "mode" : "0600",
+         "mtime" : 1794844447,
+         "path" : "target/compiler-scalar-edit-core-apply-1/source-after.sha256",
+         "sha256" : "1e51221efdbf25e9c580ab6abb04be96d5a0bd181f6acb342b52c266d3755f9b"
+      },
+      {
+         "bytes" : 20011,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401662,
+         "mode" : "0600",
+         "mtime" : 1794844382,
+         "path" : "target/compiler-scalar-edit-core-apply-1/source-before.sha256",
+         "sha256" : "5d948d0a006b78564eefa8d277370bf4288d3dc4d029b76133da7da84c852a16"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401667,
+         "mode" : "0600",
+         "mtime" : 1794844382,
+         "path" : "target/compiler-scalar-edit-core-apply-1/started.ns",
+         "sha256" : "cb54aa5c72bc74682122d2be115f83883038bb1d033816bfeea6036f40e5a6c4"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401666,
+         "mode" : "0600",
+         "mtime" : 1794844382,
+         "path" : "target/compiler-scalar-edit-core-apply-1/started.utc",
+         "sha256" : "ea7138f1ce473c5046fce3e9a74c1baf7e750623a827f478ce0eac8f9797f9cb"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401742,
+         "mode" : "0600",
+         "mtime" : 1794844447,
+         "path" : "target/compiler-scalar-edit-core-apply-1/status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401670,
+         "mode" : "0600",
+         "mtime" : 1794844382,
+         "path" : "target/compiler-scalar-edit-core-apply-1/stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 12357,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401669,
+         "mode" : "0600",
+         "mtime" : 1794844447,
+         "path" : "target/compiler-scalar-edit-core-apply-1/stdout",
+         "sha256" : "53573876f571ec2bad3fdfc5b28406cf145eb68a07bedd31ae39ef5c09ba4e35"
+      },
+      {
+         "bytes" : 25,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401671,
+         "mode" : "0600",
+         "mtime" : 1794844447,
+         "path" : "target/compiler-scalar-edit-core-apply-1/time",
+         "sha256" : "4ec15a81c1eee557d8ab3b23a148d8140234c70d3c0af90c7d1a2344e7f4ae33"
+      },
+      {
+         "bytes" : 672,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401665,
+         "mode" : "0600",
+         "mtime" : 1794844382,
+         "path" : "target/compiler-scalar-edit-core-apply-1/wrapper-argv",
+         "sha256" : "4a030ab2fc3db1b1bd8d4ca4a30ec7599a71cacfc8ae752b936e292c723f6cf5"
+      },
+      {
+         "bytes" : 523,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403154,
+         "mode" : "0600",
+         "mtime" : 1794845142,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/argv",
+         "sha256" : "937a8ae3e6b34d2c763e66e3f5c6e1c680922b327fa31f8d3b3a9dc676c51ed5"
+      },
+      {
+         "bytes" : 57,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403150,
+         "mode" : "0600",
+         "mtime" : 1794845142,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/cwd",
+         "sha256" : "92973b5568cdc284564fb5620c9da15b38bb9da6a9b9290b43906c466323307a"
+      },
+      {
+         "bytes" : 212891,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403201,
+         "mode" : "0600",
+         "mtime" : 1794845207,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/desired-after.sha256",
+         "sha256" : "408a2833cd595e3a61acddaa6552b0fe2aa12a2c5d03d539b3c8eb387bb2d7a3"
+      },
+      {
+         "bytes" : 212891,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403153,
+         "mode" : "0600",
+         "mtime" : 1794845142,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/desired-before.sha256",
+         "sha256" : "408a2833cd595e3a61acddaa6552b0fe2aa12a2c5d03d539b3c8eb387bb2d7a3"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403197,
+         "mode" : "0600",
+         "mtime" : 1794845207,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/finished.ns",
+         "sha256" : "c46b1f4ce8b0271db1f9887c7752390c4b13d25457038e56c81aca3aef747abe"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403198,
+         "mode" : "0600",
+         "mtime" : 1794845207,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/finished.utc",
+         "sha256" : "adbc067d7d0dfeb6882ff8bab6004b25c32515cca3025c511f5dd5c224c379eb"
+      },
+      {
+         "bytes" : 359,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403203,
+         "mode" : "0600",
+         "mtime" : 1794845207,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/git-status",
+         "sha256" : "e4000b5839d7c70a40730fa441825284c308e884b334e483098f5044e05af081"
+      },
+      {
+         "bytes" : 41,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403151,
+         "mode" : "0600",
+         "mtime" : 1794845142,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/head",
+         "sha256" : "fdbf633b27ad60d735e688ca0619e0bbe560a71265094dece0164f9980e405f6"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403196,
+         "mode" : "0600",
+         "mtime" : 1794845207,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/load-after",
+         "sha256" : "363378e06ef665b169b9328681803463f3f0cc5e5d5874def761b948b64308f5"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403158,
+         "mode" : "0600",
+         "mtime" : 1794845142,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/load-before",
+         "sha256" : "0b532d5ffdd99d144d07a492f0d2a914ae668e531c78556e26daf9e029c7b7da"
+      },
+      {
+         "bytes" : 197,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403202,
+         "mode" : "0600",
+         "mtime" : 1794845207,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/numstat",
+         "sha256" : "42c0e4bbc5619c56b60a051ff62c1fee88a89d223abb42381cc5bc0342602820"
+      },
+      {
+         "bytes" : 212891,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403200,
+         "mode" : "0600",
+         "mtime" : 1794845207,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/source-after.sha256",
+         "sha256" : "8b2e35ff6b04f6d2410898b614e50b00e2795145442790209e4d4734d4c437f5"
+      },
+      {
+         "bytes" : 212891,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403152,
+         "mode" : "0600",
+         "mtime" : 1794845142,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/source-before.sha256",
+         "sha256" : "454b4c11f78ac1e586c191efaac5a9174dc9245ae09bc94f2208d35f92b1cf65"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403157,
+         "mode" : "0600",
+         "mtime" : 1794845142,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/started.ns",
+         "sha256" : "3c063fb9460240ca9c6b2807d6b333791f5c77acb60ae0d8a4816d3a347f2bbb"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403156,
+         "mode" : "0600",
+         "mtime" : 1794845142,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/started.utc",
+         "sha256" : "09eb7cf3dcde7cebc262f198974d18e7bf368f7d60dc3c9b630ddd4504699f8f"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403199,
+         "mode" : "0600",
+         "mtime" : 1794845207,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403160,
+         "mode" : "0600",
+         "mtime" : 1794845142,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 4300,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403159,
+         "mode" : "0600",
+         "mtime" : 1794845206,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/stdout",
+         "sha256" : "fa38fbc7bc2c5c288ba1811f8536dc6c71565b852f00f953c5d51c4327e2ce93"
+      },
+      {
+         "bytes" : 25,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403161,
+         "mode" : "0600",
+         "mtime" : 1794845207,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/time",
+         "sha256" : "200cd1c0b0de280e9ffd8280b6b11a3ccf444c7c2402ff1fa28da67434211b94"
+      },
+      {
+         "bytes" : 676,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403155,
+         "mode" : "0600",
+         "mtime" : 1794845142,
+         "path" : "target/compiler-scalar-edit-mutation-apply-1/wrapper-argv",
+         "sha256" : "44449577fb16acd9ead11f2d0a46ce2f1d33de471e5f22dff1ec9263e0d150b8"
+      },
+      {
+         "bytes" : 541,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401777,
+         "mode" : "0600",
+         "mtime" : 1794844479,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/argv",
+         "sha256" : "d263d5621dd46417097f2ef510fc7b36c02a6fb7a9ea6c645ab73748601611b1"
+      },
+      {
+         "bytes" : 57,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401773,
+         "mode" : "0600",
+         "mtime" : 1794844479,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/cwd",
+         "sha256" : "92973b5568cdc284564fb5620c9da15b38bb9da6a9b9290b43906c466323307a"
+      },
+      {
+         "bytes" : 212891,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401814,
+         "mode" : "0600",
+         "mtime" : 1794844515,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/desired-after.sha256",
+         "sha256" : "29a5b5af9d3024c40a5188c6b280870d43f8966374cafaeea5afc1fe86e49f4f"
+      },
+      {
+         "bytes" : 212891,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401776,
+         "mode" : "0600",
+         "mtime" : 1794844479,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/desired-before.sha256",
+         "sha256" : "29a5b5af9d3024c40a5188c6b280870d43f8966374cafaeea5afc1fe86e49f4f"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401810,
+         "mode" : "0600",
+         "mtime" : 1794844515,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/finished.ns",
+         "sha256" : "42a9837046151518a3349513677831cead6d6f19a3ebbc721360e92262e2bc0e"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401811,
+         "mode" : "0600",
+         "mtime" : 1794844515,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/finished.utc",
+         "sha256" : "31da8b330e37c5b168cd331cfbf400ce75df502b39753e754d3087d91aae0bb6"
+      },
+      {
+         "bytes" : 227,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401816,
+         "mode" : "0600",
+         "mtime" : 1794844515,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/git-status",
+         "sha256" : "b9d8d14a2b80c0f1f2f5245542d441692e2ccce52606a39b3b8578710f466437"
+      },
+      {
+         "bytes" : 41,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401774,
+         "mode" : "0600",
+         "mtime" : 1794844479,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/head",
+         "sha256" : "fdbf633b27ad60d735e688ca0619e0bbe560a71265094dece0164f9980e405f6"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401809,
+         "mode" : "0600",
+         "mtime" : 1794844515,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/load-after",
+         "sha256" : "fb8409fa61910892fb07ac915a8516e9d91c867e15ca4cf629b638df9c3cf2b3"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401781,
+         "mode" : "0600",
+         "mtime" : 1794844479,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/load-before",
+         "sha256" : "d39d60a29448d44565ee740c6c6ef1073f97d3f461889b73f3fa520414d36ca8"
+      },
+      {
+         "bytes" : 103,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401815,
+         "mode" : "0600",
+         "mtime" : 1794844515,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/numstat",
+         "sha256" : "54f65c7c1bb5ed6f950b86600a77ee0e3d545b8250eed6294c38470635f87667"
+      },
+      {
+         "bytes" : 212784,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401813,
+         "mode" : "0600",
+         "mtime" : 1794844515,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/source-after.sha256",
+         "sha256" : "caba5db35d822c351dc54599b25d4d270de3e6b45013ba778ebcb61cbb74f098"
+      },
+      {
+         "bytes" : 212784,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401775,
+         "mode" : "0600",
+         "mtime" : 1794844479,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/source-before.sha256",
+         "sha256" : "caba5db35d822c351dc54599b25d4d270de3e6b45013ba778ebcb61cbb74f098"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401780,
+         "mode" : "0600",
+         "mtime" : 1794844479,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/started.ns",
+         "sha256" : "47ebb222a0edfe26aa81b18fa773964d196e8156e2324318693139c2b2278e30"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401779,
+         "mode" : "0600",
+         "mtime" : 1794844479,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/started.utc",
+         "sha256" : "26fdb28795a7a968e917b0518650bb5dbe43944b69b10e36315f8ea2c9820314"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401812,
+         "mode" : "0600",
+         "mtime" : 1794844515,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/status",
+         "sha256" : "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+      },
+      {
+         "bytes" : 195,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401783,
+         "mode" : "0600",
+         "mtime" : 1794844515,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/stderr",
+         "sha256" : "0e67dfb086b30afe4256c155ce2d5d5ea6a23144131d1ee24d920cf4078f82a5"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401782,
+         "mode" : "0600",
+         "mtime" : 1794844479,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 63,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401784,
+         "mode" : "0600",
+         "mtime" : 1794844515,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/time",
+         "sha256" : "eea1d37d0c2fe0891e819e6d94642ddd52e755a4b36de478c251ab67b22e2664"
+      },
+      {
+         "bytes" : 691,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401778,
+         "mode" : "0600",
+         "mtime" : 1794844479,
+         "path" : "target/compiler-scalar-edit-tests-apply-1/wrapper-argv",
+         "sha256" : "7c8d35fcf7d21c255b23568d53eecdb9c9d0e31b63d25d899a4579a11196f340"
+      },
+      {
+         "bytes" : 364,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401949,
+         "mode" : "0600",
+         "mtime" : 1794844574,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/argv",
+         "sha256" : "4dc593d2ae50c4ee72e7f9195b8e9c9b60ad912d786aec1f5b45d5ec02993c59"
+      },
+      {
+         "bytes" : 57,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401945,
+         "mode" : "0600",
+         "mtime" : 1794844574,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/cwd",
+         "sha256" : "92973b5568cdc284564fb5620c9da15b38bb9da6a9b9290b43906c466323307a"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402004,
+         "mode" : "0600",
+         "mtime" : 1794844611,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/finished.ns",
+         "sha256" : "7e6450589e9b658231f82bfd2e67a1dffef9b6f72d0640f83b86bc7ab4ac4bf1"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402005,
+         "mode" : "0600",
+         "mtime" : 1794844611,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/finished.utc",
+         "sha256" : "bd32de6982a0f4c80e3e0422311e9780846539936183e515cf1f6cd1c4cda3de"
+      },
+      {
+         "bytes" : 332,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402009,
+         "mode" : "0600",
+         "mtime" : 1794844611,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/git-status",
+         "sha256" : "54def1acb447125c19c1bae09b704ae12d22e2dc30101357e468c8e88eb8bbe2"
+      },
+      {
+         "bytes" : 41,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401946,
+         "mode" : "0600",
+         "mtime" : 1794844574,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/head",
+         "sha256" : "fdbf633b27ad60d735e688ca0619e0bbe560a71265094dece0164f9980e405f6"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402003,
+         "mode" : "0600",
+         "mtime" : 1794844611,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/load-after",
+         "sha256" : "2e953eaffcf52902aa479f811c83b8be767661b095a590d16a46ed1b81a7e8d9"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401953,
+         "mode" : "0600",
+         "mtime" : 1794844574,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/load-before",
+         "sha256" : "91688dd9bdda5b7cf62d5f116d147dfd92b3e0cb39c10710b7b2aa63b4d1379a"
+      },
+      {
+         "bytes" : 166,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402008,
+         "mode" : "0600",
+         "mtime" : 1794844611,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/numstat",
+         "sha256" : "47c16ce3502c807e95a05252c84b2a199bc9b96edf955962175877d3faa4cc13"
+      },
+      {
+         "bytes" : 38907,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401948,
+         "mode" : "0600",
+         "mtime" : 1794844574,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/request.json",
+         "sha256" : "99e8aa6a117f4bbcafd8e32286984546c6f282b258b63009796dadaa6e9ecaed"
+      },
+      {
+         "bytes" : 212891,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402007,
+         "mode" : "0600",
+         "mtime" : 1794844611,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/source-after.sha256",
+         "sha256" : "454b4c11f78ac1e586c191efaac5a9174dc9245ae09bc94f2208d35f92b1cf65"
+      },
+      {
+         "bytes" : 212784,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401947,
+         "mode" : "0600",
+         "mtime" : 1794844574,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/source-before.sha256",
+         "sha256" : "caba5db35d822c351dc54599b25d4d270de3e6b45013ba778ebcb61cbb74f098"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401952,
+         "mode" : "0600",
+         "mtime" : 1794844574,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/started.ns",
+         "sha256" : "a5f460d2f378827aa9379e004635dc383cac200d2d64dfa398be157e2a6bbffe"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401951,
+         "mode" : "0600",
+         "mtime" : 1794844574,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/started.utc",
+         "sha256" : "d54b77e0da367218fbd6a6c12b70f927d3565a6e23567d625c0b992d23d349f7"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402006,
+         "mode" : "0600",
+         "mtime" : 1794844611,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401955,
+         "mode" : "0600",
+         "mtime" : 1794844574,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 11777,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401954,
+         "mode" : "0600",
+         "mtime" : 1794844611,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/stdout",
+         "sha256" : "b26dc5a24a24a5a87d338975afeb4a7dfe66ae82171e86184474a7b17c082e1a"
+      },
+      {
+         "bytes" : 25,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401956,
+         "mode" : "0600",
+         "mtime" : 1794844611,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/time",
+         "sha256" : "b917ece3c61f49285464202ee642a39a5394dd0ddfbfb3259bcee6713a80c8a5"
+      },
+      {
+         "bytes" : 517,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401950,
+         "mode" : "0600",
+         "mtime" : 1794844574,
+         "path" : "target/compiler-scalar-edit-tests-explicit-1/wrapper-argv",
+         "sha256" : "fac948f71ce5b26e12656829e1ba852a4370dfa50a65a98c53405662078f493e"
+      },
+      {
+         "bytes" : 27,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404283,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/completion.txt",
+         "sha256" : "06f5612a884403992e6fa3f10f94ee65f06fc89600e82fb2bd3b6afd3a1eb491"
+      },
+      {
+         "bytes" : 95,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404266,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/generator-self-test.argv",
+         "sha256" : "4f42614d4f8b49ce32712adfd66fb7bf35acfb4376ef0d91d71abf774b94d978"
+      },
+      {
+         "bytes" : 140,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404280,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/generator-self-test.compiler-after.sha256",
+         "sha256" : "c25920dd080c113c39a70aafd8f472e092f8b3028b6a4b354a91954f01ba140a"
+      },
+      {
+         "bytes" : 140,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404269,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/generator-self-test.compiler-before.sha256",
+         "sha256" : "c25920dd080c113c39a70aafd8f472e092f8b3028b6a4b354a91954f01ba140a"
+      },
+      {
+         "bytes" : 57,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404265,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/generator-self-test.cwd",
+         "sha256" : "92973b5568cdc284564fb5620c9da15b38bb9da6a9b9290b43906c466323307a"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404276,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/generator-self-test.end.ns",
+         "sha256" : "722bd263615e67d25be7bb63e68b8db0443509fef62dbb09c4cc214617869ad4"
+      },
+      {
+         "bytes" : 31,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404278,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/generator-self-test.end.utc",
+         "sha256" : "ddc5323e43bcf079c1a0e8170798b596b8ed19dbd3b5e7a7e227a89ce7dd5dd1"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404277,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/generator-self-test.load-after",
+         "sha256" : "98deaef1e6eb02870cbb66358191d751214711b6ed5688ebddd402738bdaaf24"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404271,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/generator-self-test.load-before",
+         "sha256" : "98deaef1e6eb02870cbb66358191d751214711b6ed5688ebddd402738bdaaf24"
+      },
+      {
+         "bytes" : 123,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404281,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/generator-self-test.source-after",
+         "sha256" : "c812d16815ec4be1558a8ad238604010ac29e351664ba8d47efa8b6c92d7e656"
+      },
+      {
+         "bytes" : 123,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404268,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/generator-self-test.source-before",
+         "sha256" : "c812d16815ec4be1558a8ad238604010ac29e351664ba8d47efa8b6c92d7e656"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404272,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/generator-self-test.start.ns",
+         "sha256" : "62a1897fe9d4afe135fc445e35111a1cdd332b88f944c35b9e336a7c84e54f0e"
+      },
+      {
+         "bytes" : 31,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404270,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/generator-self-test.start.utc",
+         "sha256" : "d709cf5d344286ea5f500a7e4916816b08d853adabbcfd505fe60728a96ad533"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404279,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/generator-self-test.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404274,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/generator-self-test.stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 31,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404273,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/generator-self-test.stdout",
+         "sha256" : "5c7ef752664608035bde4780f94ccfa78558d0831ba24378dd281eaf86a790ad"
+      },
+      {
+         "bytes" : 55,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404275,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/generator-self-test.time",
+         "sha256" : "5c5e47a451b82cd6c07dbdb996fa1d3a93e90417ad1583d93a01475b64778a2e"
+      },
+      {
+         "bytes" : 365,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404267,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/generator-self-test.wrapper-argv",
+         "sha256" : "c93f1dbafedd77fb3c1908be7c96c8a925a7e2b1525d83a2211d62d24234ac22"
+      },
+      {
+         "bytes" : 338,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404282,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/input-after.sha256",
+         "sha256" : "b5b592b8021ce7842b1acd11f4cc10ea272097dbcc3bdc21dedee83bf1fce82d"
+      },
+      {
+         "bytes" : 338,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404023,
+         "mode" : "0600",
+         "mtime" : 1794845616,
+         "path" : "target/compiler-scalar-focused-1/input-before.sha256",
+         "sha256" : "b5b592b8021ce7842b1acd11f4cc10ea272097dbcc3bdc21dedee83bf1fce82d"
+      },
+      {
+         "bytes" : 45,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404017,
+         "mode" : "0600",
+         "mtime" : 1794845616,
+         "path" : "target/compiler-scalar-focused-1/launch.argv",
+         "sha256" : "c5419859d11ecd4fac8cef9448c0cecb9e2085f0c10527dcaaedf56f461e036a"
+      },
+      {
+         "bytes" : 57,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404018,
+         "mode" : "0600",
+         "mtime" : 1794845616,
+         "path" : "target/compiler-scalar-focused-1/launch.cwd",
+         "sha256" : "92973b5568cdc284564fb5620c9da15b38bb9da6a9b9290b43906c466323307a"
+      },
+      {
+         "bytes" : 5803,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37405137,
+         "mode" : "0600",
+         "mtime" : 1794845693,
+         "path" : "target/compiler-scalar-focused-1/manifest.sha256",
+         "sha256" : "5298b6f97945a0199ae1f3e9d731c8b5b7da7aa4510b77f4aacf27aa878dc3c9"
+      },
+      {
+         "bytes" : 115,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404242,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/mutation-usage.argv",
+         "sha256" : "1665c30b2cded738c001b053b8c06a465b87b1360a1a680d31e9c86ac89a14a8"
+      },
+      {
+         "bytes" : 140,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404263,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/mutation-usage.compiler-after.sha256",
+         "sha256" : "c25920dd080c113c39a70aafd8f472e092f8b3028b6a4b354a91954f01ba140a"
+      },
+      {
+         "bytes" : 140,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404245,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/mutation-usage.compiler-before.sha256",
+         "sha256" : "c25920dd080c113c39a70aafd8f472e092f8b3028b6a4b354a91954f01ba140a"
+      },
+      {
+         "bytes" : 57,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404241,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/mutation-usage.cwd",
+         "sha256" : "92973b5568cdc284564fb5620c9da15b38bb9da6a9b9290b43906c466323307a"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404259,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/mutation-usage.end.ns",
+         "sha256" : "67a712e1b276f4b30d1961fd0d5e793da50ae222e5c32c3c4205d809c2958438"
+      },
+      {
+         "bytes" : 31,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404261,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/mutation-usage.end.utc",
+         "sha256" : "044b28e2591fdf15621f480fbbb6da0c31769bc1bce9c2c8a9bbd58585a64891"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404260,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/mutation-usage.load-after",
+         "sha256" : "98deaef1e6eb02870cbb66358191d751214711b6ed5688ebddd402738bdaaf24"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404247,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/mutation-usage.load-before",
+         "sha256" : "98deaef1e6eb02870cbb66358191d751214711b6ed5688ebddd402738bdaaf24"
+      },
+      {
+         "bytes" : 123,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404264,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/mutation-usage.source-after",
+         "sha256" : "c812d16815ec4be1558a8ad238604010ac29e351664ba8d47efa8b6c92d7e656"
+      },
+      {
+         "bytes" : 123,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404244,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/mutation-usage.source-before",
+         "sha256" : "c812d16815ec4be1558a8ad238604010ac29e351664ba8d47efa8b6c92d7e656"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404248,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/mutation-usage.start.ns",
+         "sha256" : "401e8b3eb2cc72c2962819093b8127f1470cdc4b1ee1ce6027f6009f66c8affe"
+      },
+      {
+         "bytes" : 31,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404246,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/mutation-usage.start.utc",
+         "sha256" : "35ac0115c8e2be9e3ebf51896019b4d4c744b583930fa69d8ff0bd1d097040ec"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404262,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/mutation-usage.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404250,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/mutation-usage.stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 73,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404249,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/mutation-usage.stdout",
+         "sha256" : "6e4e511de37bab254322ee1396ed851da0a8acee6d463d1781a201d07ad63330"
+      },
+      {
+         "bytes" : 54,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404251,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/mutation-usage.time",
+         "sha256" : "ea2386c30098235ad86bc7117a8e3711cb0916be684703ae93f71a20ba66a82c"
+      },
+      {
+         "bytes" : 380,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404243,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/mutation-usage.wrapper-argv",
+         "sha256" : "4648d68b1fcc60bdb76239fa06af5021743d57f80647c46f8d59646b86b0e530"
+      },
+      {
+         "bytes" : 314,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404024,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/phases.tsv",
+         "sha256" : "a77fa5b6da69a01ba841eacff19b954d43fc44ad82659d8200b4c8256e76ae78"
+      },
+      {
+         "bytes" : 78,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404021,
+         "mode" : "0600",
+         "mtime" : 1794845616,
+         "path" : "target/compiler-scalar-focused-1/producer-preflight.txt",
+         "sha256" : "321ddab26eccd8aa9441365638874003bd2fb206e49e35f0c7625b11e0bea130"
+      },
+      {
+         "bytes" : 3381,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404011,
+         "mode" : "0644",
+         "mtime" : 1794845610,
+         "path" : "target/compiler-scalar-focused-1/run.sh",
+         "sha256" : "210788b28307fe2769e8868bf28f00e2d40ffb12e6372fc790884c3e186e859f"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404284,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/runner.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404020,
+         "mode" : "0600",
+         "mtime" : 1794845616,
+         "path" : "target/compiler-scalar-focused-1/runner.stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 345,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404019,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/runner.stdout",
+         "sha256" : "ca18cef465b4d19531b823da8a2e40266c61da6db21ca83c8ec6cf5f453fae30"
+      },
+      {
+         "bytes" : 109,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404026,
+         "mode" : "0600",
+         "mtime" : 1794845616,
+         "path" : "target/compiler-scalar-focused-1/scalar-cli.argv",
+         "sha256" : "a2a2633cc7b6a628ea477a1f74020af0cb0256dd488df1c174e108e129a5d842"
+      },
+      {
+         "bytes" : 140,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404239,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/scalar-cli.compiler-after.sha256",
+         "sha256" : "c25920dd080c113c39a70aafd8f472e092f8b3028b6a4b354a91954f01ba140a"
+      },
+      {
+         "bytes" : 140,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404029,
+         "mode" : "0600",
+         "mtime" : 1794845616,
+         "path" : "target/compiler-scalar-focused-1/scalar-cli.compiler-before.sha256",
+         "sha256" : "c25920dd080c113c39a70aafd8f472e092f8b3028b6a4b354a91954f01ba140a"
+      },
+      {
+         "bytes" : 57,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404025,
+         "mode" : "0600",
+         "mtime" : 1794845616,
+         "path" : "target/compiler-scalar-focused-1/scalar-cli.cwd",
+         "sha256" : "92973b5568cdc284564fb5620c9da15b38bb9da6a9b9290b43906c466323307a"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404235,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/scalar-cli.end.ns",
+         "sha256" : "7d6d1b166adf6e51b22503defd865e54c0bae1b2660e183661fa90dafb90eeb9"
+      },
+      {
+         "bytes" : 31,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404237,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/scalar-cli.end.utc",
+         "sha256" : "ec6542a1698aee11c4c6eb7ddbb413ee8cc9840f75df78a07fa5acd3a6c12ea6"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404236,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/scalar-cli.load-after",
+         "sha256" : "98deaef1e6eb02870cbb66358191d751214711b6ed5688ebddd402738bdaaf24"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404031,
+         "mode" : "0600",
+         "mtime" : 1794845616,
+         "path" : "target/compiler-scalar-focused-1/scalar-cli.load-before",
+         "sha256" : "98deaef1e6eb02870cbb66358191d751214711b6ed5688ebddd402738bdaaf24"
+      },
+      {
+         "bytes" : 123,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404240,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/scalar-cli.source-after",
+         "sha256" : "c812d16815ec4be1558a8ad238604010ac29e351664ba8d47efa8b6c92d7e656"
+      },
+      {
+         "bytes" : 123,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404028,
+         "mode" : "0600",
+         "mtime" : 1794845616,
+         "path" : "target/compiler-scalar-focused-1/scalar-cli.source-before",
+         "sha256" : "c812d16815ec4be1558a8ad238604010ac29e351664ba8d47efa8b6c92d7e656"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404032,
+         "mode" : "0600",
+         "mtime" : 1794845616,
+         "path" : "target/compiler-scalar-focused-1/scalar-cli.start.ns",
+         "sha256" : "da9fb5d65a758a3113d2fb7705b72976807f4ba4dc3d7b7eaf01193ec697d1fe"
+      },
+      {
+         "bytes" : 31,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404030,
+         "mode" : "0600",
+         "mtime" : 1794845616,
+         "path" : "target/compiler-scalar-focused-1/scalar-cli.start.utc",
+         "sha256" : "42ff409c3362dcbbb8a2eddc896543b6a417deb93215969c86a170f57eaf81e8"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404238,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/scalar-cli.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404034,
+         "mode" : "0600",
+         "mtime" : 1794845616,
+         "path" : "target/compiler-scalar-focused-1/scalar-cli.stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 143,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404033,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/scalar-cli.stdout",
+         "sha256" : "31a6596a123a88bf2b95b657fc3a79fa22375d008a5e3dc576aeeaf15db02b6e"
+      },
+      {
+         "bytes" : 55,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404035,
+         "mode" : "0600",
+         "mtime" : 1794845620,
+         "path" : "target/compiler-scalar-focused-1/scalar-cli.time",
+         "sha256" : "9ac5c9b1bc21c8d8f3c00d052984dccb328d31798ee5fc7106ae8862b480564b"
+      },
+      {
+         "bytes" : 370,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404027,
+         "mode" : "0600",
+         "mtime" : 1794845616,
+         "path" : "target/compiler-scalar-focused-1/scalar-cli.wrapper-argv",
+         "sha256" : "82ae422370304092eaaaf41e9a0f9336199ae23a0f384d65f3b070d6c1d7428d"
+      },
+      {
+         "bytes" : 123,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37404022,
+         "mode" : "0600",
+         "mtime" : 1794845616,
+         "path" : "target/compiler-scalar-focused-1/source-pins.txt",
+         "sha256" : "c812d16815ec4be1558a8ad238604010ac29e351664ba8d47efa8b6c92d7e656"
+      },
+      {
+         "bytes" : 6035,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37405135,
+         "mode" : "0600",
+         "mtime" : 1794845693,
+         "path" : "target/compiler-scalar-focused-1/summary.json",
+         "sha256" : "5f2df61db6decc3eaf91dbaaa3885600a56015da1f7b77b8d7db8799b654c508"
+      },
+      {
+         "bytes" : 2341,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37405136,
+         "mode" : "0600",
+         "mtime" : 1794845693,
+         "path" : "target/compiler-scalar-focused-1/summary.md",
+         "sha256" : "7900abc468059dc287faab8335b1e81db2ffe1f84547db6544466f563994670f"
+      },
+      {
+         "bytes" : 476,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402744,
+         "mode" : "0600",
+         "mtime" : 1794844909,
+         "path" : "target/compiler-scalar-live-preliminary-1/build/argv.nul",
+         "sha256" : "369703625d6bd1a60aecb1bcb41f930b7421ff18487329ab1451518822100845"
+      },
+      {
+         "bytes" : 477,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402745,
+         "mode" : "0600",
+         "mtime" : 1794844909,
+         "path" : "target/compiler-scalar-live-preliminary-1/build/argv.txt",
+         "sha256" : "d9348d03150982db61c4e56a729d844173486e0bb5ba26749fcb185e80fd23f5"
+      },
+      {
+         "bytes" : 57,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402743,
+         "mode" : "0600",
+         "mtime" : 1794844909,
+         "path" : "target/compiler-scalar-live-preliminary-1/build/cwd",
+         "sha256" : "92973b5568cdc284564fb5620c9da15b38bb9da6a9b9290b43906c466323307a"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402759,
+         "mode" : "0600",
+         "mtime" : 1794844926,
+         "path" : "target/compiler-scalar-live-preliminary-1/build/end.ns",
+         "sha256" : "5e46edd27b959c41b48f504e5a2f2ef55cfdbe003af59367269396627be81365"
+      },
+      {
+         "bytes" : 31,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402760,
+         "mode" : "0600",
+         "mtime" : 1794844926,
+         "path" : "target/compiler-scalar-live-preliminary-1/build/end.utc",
+         "sha256" : "c184a3b0202113a6c2b901ad0053d600b7c5abb1dc30503a0e6650e6042a4662"
+      },
+      {
+         "bytes" : 30,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402758,
+         "mode" : "0600",
+         "mtime" : 1794844926,
+         "path" : "target/compiler-scalar-live-preliminary-1/build/load-after",
+         "sha256" : "3a31e5635a2268dacc377f8563681e2688753fbcb119111582e1b3e72bf67b2e"
+      },
+      {
+         "bytes" : 30,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402748,
+         "mode" : "0600",
+         "mtime" : 1794844909,
+         "path" : "target/compiler-scalar-live-preliminary-1/build/load-before",
+         "sha256" : "ff9df32b9edb9848ddeaefb7ace8451a689a3306936689f0c9d8f03bfd2fac39"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402747,
+         "mode" : "0600",
+         "mtime" : 1794844909,
+         "path" : "target/compiler-scalar-live-preliminary-1/build/start.ns",
+         "sha256" : "9afafaa39733024b58b97af8746e7997be8215d2447ab2869ca2569055bdf1b2"
+      },
+      {
+         "bytes" : 31,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402746,
+         "mode" : "0600",
+         "mtime" : 1794844909,
+         "path" : "target/compiler-scalar-live-preliminary-1/build/start.utc",
+         "sha256" : "9aa4bf4981cf3bb3bc0bd7101d9d0979562a264371e899bb832bc9e8f239c1d6"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402757,
+         "mode" : "0600",
+         "mtime" : 1794844926,
+         "path" : "target/compiler-scalar-live-preliminary-1/build/status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 798,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402750,
+         "mode" : "0600",
+         "mtime" : 1794844926,
+         "path" : "target/compiler-scalar-live-preliminary-1/build/stderr",
+         "sha256" : "3bff0b746d26569b4c61a68726cbc762ed2121724a971628d5e13a2f874851fc"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402749,
+         "mode" : "0600",
+         "mtime" : 1794844909,
+         "path" : "target/compiler-scalar-live-preliminary-1/build/stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 89,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402751,
+         "mode" : "0600",
+         "mtime" : 1794844926,
+         "path" : "target/compiler-scalar-live-preliminary-1/build/time",
+         "sha256" : "d97ccb5380a42d1d58a280996ba8695e5d58a8ed297f5c4b0c0fe3682feb052c"
+      },
+      {
+         "bytes" : 115,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402781,
+         "mode" : "0600",
+         "mtime" : 1794844927,
+         "path" : "target/compiler-scalar-live-preliminary-1/compiler-after.sha256",
+         "sha256" : "180a4bf01f9f8b8b141604133ca790c46b91d9041f1d888f68e0c582beb2cc84"
+      },
+      {
+         "bytes" : 115,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402736,
+         "mode" : "0600",
+         "mtime" : 1794844908,
+         "path" : "target/compiler-scalar-live-preliminary-1/compiler-before.sha256",
+         "sha256" : "180a4bf01f9f8b8b141604133ca790c46b91d9041f1d888f68e0c582beb2cc84"
+      },
+      {
+         "bytes" : 57,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402734,
+         "mode" : "0600",
+         "mtime" : 1794844908,
+         "path" : "target/compiler-scalar-live-preliminary-1/cwd",
+         "sha256" : "92973b5568cdc284564fb5620c9da15b38bb9da6a9b9290b43906c466323307a"
+      },
+      {
+         "bytes" : 1322,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402741,
+         "mode" : "0600",
+         "mtime" : 1794844909,
+         "path" : "target/compiler-scalar-live-preliminary-1/expected.stdout",
+         "sha256" : "d901d28e7a2bb2afd30e4147905c23d8c8ec8fd2c13b9596ff7a11d5fc17f08b"
+      },
+      {
+         "bytes" : 332,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402739,
+         "mode" : "0600",
+         "mtime" : 1794844909,
+         "path" : "target/compiler-scalar-live-preliminary-1/git-status-before",
+         "sha256" : "54def1acb447125c19c1bae09b704ae12d22e2dc30101357e468c8e88eb8bbe2"
+      },
+      {
+         "bytes" : 41,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402738,
+         "mode" : "0600",
+         "mtime" : 1794844909,
+         "path" : "target/compiler-scalar-live-preliminary-1/head",
+         "sha256" : "fdbf633b27ad60d735e688ca0619e0bbe560a71265094dece0164f9980e405f6"
+      },
+      {
+         "bytes" : 4631,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402733,
+         "mode" : "0600",
+         "mtime" : 1794844908,
+         "path" : "target/compiler-scalar-live-preliminary-1/launcher.sh",
+         "sha256" : "81973989432848ebe591a42cb58b71fb422ebd01ed7e80c96df172b6ea229ef7"
+      },
+      {
+         "bytes" : 152,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402735,
+         "mode" : "0600",
+         "mtime" : 1794844908,
+         "path" : "target/compiler-scalar-live-preliminary-1/limits",
+         "sha256" : "397f6e2ec46e626a77e8942a3606d088db0bd9da412d894e9aeb63d86592cc86"
+      },
+      {
+         "bytes" : 21251056,
+         "class" : "native-image; stat-only; no binary read",
+         "dev" : 144,
+         "ino" : 37402756,
+         "mode" : "0755",
+         "mtime" : 1794844926,
+         "path" : "target/compiler-scalar-live-preliminary-1/live",
+         "sha256" : null
+      },
+      {
+         "bytes" : 170,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402776,
+         "mode" : "0600",
+         "mtime" : 1794844927,
+         "path" : "target/compiler-scalar-live-preliminary-1/live-after.sha256",
+         "sha256" : "ba7bf4c33ca95c299c7dc8fd1bd8505f43e2ec5284201aafbe476215cd8eeed0"
+      },
+      {
+         "bytes" : 170,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402761,
+         "mode" : "0600",
+         "mtime" : 1794844926,
+         "path" : "target/compiler-scalar-live-preliminary-1/live-before.sha256",
+         "sha256" : "ba7bf4c33ca95c299c7dc8fd1bd8505f43e2ec5284201aafbe476215cd8eeed0"
+      },
+      {
+         "bytes" : 110,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402764,
+         "mode" : "0600",
+         "mtime" : 1794844926,
+         "path" : "target/compiler-scalar-live-preliminary-1/run/argv.nul",
+         "sha256" : "e283c729cb42d07c0e1cb8955e0ea3576d3429cc8e1e516b812de5a5c984dda9"
+      },
+      {
+         "bytes" : 111,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402765,
+         "mode" : "0600",
+         "mtime" : 1794844926,
+         "path" : "target/compiler-scalar-live-preliminary-1/run/argv.txt",
+         "sha256" : "b71a7478a637af34917533a33b88d0a2d34bc5fc8409e6b5dd29fd4bd0064dfb"
+      },
+      {
+         "bytes" : 57,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402763,
+         "mode" : "0600",
+         "mtime" : 1794844926,
+         "path" : "target/compiler-scalar-live-preliminary-1/run/cwd",
+         "sha256" : "92973b5568cdc284564fb5620c9da15b38bb9da6a9b9290b43906c466323307a"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402774,
+         "mode" : "0600",
+         "mtime" : 1794844927,
+         "path" : "target/compiler-scalar-live-preliminary-1/run/end.ns",
+         "sha256" : "bf0c825986a731bc4efef246a752dc7fe7c8a012b1ac2eabee655be96bfee346"
+      },
+      {
+         "bytes" : 31,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402775,
+         "mode" : "0600",
+         "mtime" : 1794844927,
+         "path" : "target/compiler-scalar-live-preliminary-1/run/end.utc",
+         "sha256" : "9e18d0a7d0f44a3a071195ee57ba40bd6b99de5c1c79f13ade3d966ccad996e5"
+      },
+      {
+         "bytes" : 30,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402773,
+         "mode" : "0600",
+         "mtime" : 1794844927,
+         "path" : "target/compiler-scalar-live-preliminary-1/run/load-after",
+         "sha256" : "01e7389870dbecac4890a1eff1ac9bc6c2e12e05064a04970fb5a52e16087346"
+      },
+      {
+         "bytes" : 30,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402768,
+         "mode" : "0600",
+         "mtime" : 1794844926,
+         "path" : "target/compiler-scalar-live-preliminary-1/run/load-before",
+         "sha256" : "632720a6419ce3df3bed5ad089633734c105b5a872e622a54e661de2efe7b88b"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402767,
+         "mode" : "0600",
+         "mtime" : 1794844926,
+         "path" : "target/compiler-scalar-live-preliminary-1/run/start.ns",
+         "sha256" : "e0ee132329ac4ca700b65bcd6c9d84d1d47db08a9df73bf3f966d4a0c3b6b41e"
+      },
+      {
+         "bytes" : 31,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402766,
+         "mode" : "0600",
+         "mtime" : 1794844926,
+         "path" : "target/compiler-scalar-live-preliminary-1/run/start.utc",
+         "sha256" : "406a86859307ed4568eae2ab136e9bec67823c215acebef9aea703496f19c67d"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402772,
+         "mode" : "0600",
+         "mtime" : 1794844927,
+         "path" : "target/compiler-scalar-live-preliminary-1/run/status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402770,
+         "mode" : "0600",
+         "mtime" : 1794844926,
+         "path" : "target/compiler-scalar-live-preliminary-1/run/stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 1322,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402769,
+         "mode" : "0600",
+         "mtime" : 1794844927,
+         "path" : "target/compiler-scalar-live-preliminary-1/run/stdout",
+         "sha256" : "d901d28e7a2bb2afd30e4147905c23d8c8ec8fd2c13b9596ff7a11d5fc17f08b"
+      },
+      {
+         "bytes" : 86,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402771,
+         "mode" : "0600",
+         "mtime" : 1794844927,
+         "path" : "target/compiler-scalar-live-preliminary-1/run/time",
+         "sha256" : "3bf047fd422b4697bb881c2ab7dbfad438a67740d1ddbcd865df68db66231213"
+      },
+      {
+         "bytes" : 212891,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402780,
+         "mode" : "0600",
+         "mtime" : 1794844927,
+         "path" : "target/compiler-scalar-live-preliminary-1/source-after.sha256",
+         "sha256" : "12e41d42e2d347cfb9461bd49a7b66f72bcf7adf5169a04e4b4a44257c9280a4"
+      },
+      {
+         "bytes" : 212891,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402737,
+         "mode" : "0600",
+         "mtime" : 1794844909,
+         "path" : "target/compiler-scalar-live-preliminary-1/source-before.sha256",
+         "sha256" : "12e41d42e2d347cfb9461bd49a7b66f72bcf7adf5169a04e4b4a44257c9280a4"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402782,
+         "mode" : "0600",
+         "mtime" : 1794844927,
+         "path" : "target/compiler-scalar-live-preliminary-1/status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402779,
+         "mode" : "0600",
+         "mtime" : 1794844927,
+         "path" : "target/compiler-scalar-live-preliminary-1/trace-cmp.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402778,
+         "mode" : "0600",
+         "mtime" : 1794844927,
+         "path" : "target/compiler-scalar-live-preliminary-1/trace-cmp.stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402777,
+         "mode" : "0600",
+         "mtime" : 1794844927,
+         "path" : "target/compiler-scalar-live-preliminary-1/trace-cmp.stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 4088,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399409,
+         "mode" : "0644",
+         "mtime" : 1794843718,
+         "path" : "target/compiler-scalar-proposals/README.md",
+         "sha256" : "2eeced6ef3a21f08a77e2f9141217fd327fc2042031061c65551fe8b2bdd4998"
+      },
+      {
+         "bytes" : 10219,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37393307,
+         "mode" : "0644",
+         "mtime" : 1794843440,
+         "path" : "target/compiler-scalar-proposals/compiler-scalar-simplify-plan.md",
+         "sha256" : "5e7c5b605250bb3cc5e5153f1f2fac9a95a686cae5495bebfe5c6ee5798716d4"
+      },
+      {
+         "bytes" : 17217,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37396710,
+         "mode" : "0644",
+         "mtime" : 1794843593,
+         "path" : "target/compiler-scalar-proposals/compiler_scalar_simplify.sh",
+         "sha256" : "092f0187705dc5136284d2cb9deed82d6c35664138e3c631a9887c01c280aad3"
+      },
+      {
+         "bytes" : 172844,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401611,
+         "mode" : "0600",
+         "mtime" : 1794844337,
+         "path" : "target/compiler-scalar-proposals/desired-tests-input.git-tree",
+         "sha256" : "0e7a05d91f090d71452a84455a5a75f9ecb6e3b1ea51ddb8670a864c315174be"
+      },
+      {
+         "bytes" : 192682,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401612,
+         "mode" : "0600",
+         "mtime" : 1794844337,
+         "path" : "target/compiler-scalar-proposals/desired-tests-input.sha256",
+         "sha256" : "72a9365fbc5d5a2b7ad437fbb33d965fb3f402bef4e30bc2320c569dfd9b7cf3"
+      },
+      {
+         "bytes" : 5376000,
+         "class" : "existing-input-archive; stat-only; no archive read",
+         "dev" : 144,
+         "ino" : 37400059,
+         "mode" : "0600",
+         "mtime" : 1794844337,
+         "path" : "target/compiler-scalar-proposals/desired-tests-input.tar",
+         "sha256" : null
+      },
+      {
+         "bytes" : 123,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401610,
+         "mode" : "0600",
+         "mtime" : 1794844337,
+         "path" : "target/compiler-scalar-proposals/desired-tests-input.tar.sha256",
+         "sha256" : "9964bb7d1acc587c08e476de754bf6daa67c316a85a68d8833a01240e385fc43"
+      },
+      {
+         "bytes" : 1026,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37368159,
+         "mode" : "0600",
+         "mtime" : 1794842859,
+         "path" : "target/compiler-scalar-proposals/integration-draft.json",
+         "sha256" : "2b740bdd1198dc3a883724f81d7dc23b07df04a724d6392276e2d332d02193f4"
+      },
+      {
+         "bytes" : 10648,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37367823,
+         "mode" : "0644",
+         "mtime" : 1794842834,
+         "path" : "target/compiler-scalar-proposals/integration.json",
+         "sha256" : "b970ea379564031b20c32130dd571872a6ff54988070dff282f397a47420da7f"
+      },
+      {
+         "bytes" : 349,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403138,
+         "mode" : "0600",
+         "mtime" : 1794845133,
+         "path" : "target/compiler-scalar-proposals/mutation-desired-materialization.sha256",
+         "sha256" : "1576bcd0516172993fe16a453651bc3d7317175691e1cbf46fda13adb6e6e27c"
+      },
+      {
+         "bytes" : 6693,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403296,
+         "mode" : "0644",
+         "mtime" : 1794845256,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/README.md",
+         "sha256" : "1963113a4170320eea659cbb07400477c83076dc4f74524dbbb120b1c1f068e3"
+      },
+      {
+         "bytes" : 2158,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402791,
+         "mode" : "0600",
+         "mtime" : 1794844930,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/items.tsv",
+         "sha256" : "5976c55287b7b7194e7dc5b122521482d31e9aeaa109c502cd75d483ad0e5938"
+      },
+      {
+         "bytes" : 1379,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403324,
+         "mode" : "0600",
+         "mtime" : 1794845286,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/manifest.sha256",
+         "sha256" : "7034e4822f1e48630482caabc21849c13ae28a529b5057bc070e4eff3c7ecbe3"
+      },
+      {
+         "bytes" : 2068,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402754,
+         "mode" : "0644",
+         "mtime" : 1794844913,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/materialize.pl",
+         "sha256" : "a43f1912b3fcdfd0ec400b1566cdb48b86b02b5accef37dcbb9c30cf49b3e9e3"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402789,
+         "mode" : "0600",
+         "mtime" : 1794844930,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/materialize.stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 201,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402788,
+         "mode" : "0600",
+         "mtime" : 1794844930,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/materialize.stdout",
+         "sha256" : "d7195d5acfc0487431f4318ed2a7084ab7a4893c1d90b22e17a3524d450fa7f3"
+      },
+      {
+         "bytes" : 1217,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403297,
+         "mode" : "0644",
+         "mtime" : 1794845256,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/mutation-cli-refusals-v1.sh",
+         "sha256" : "02b763c239ca371cb0d0341f41f3415ba54dcedbe9253921c7d24ba7254ebe04"
+      },
+      {
+         "bytes" : 39145,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402709,
+         "mode" : "0644",
+         "mtime" : 1794844880,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/replacements.json",
+         "sha256" : "d9608929825bb0489b8e7698ab2a85ad38df1faba219331df25646bacfae55da"
+      },
+      {
+         "bytes" : 22743,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402792,
+         "mode" : "0600",
+         "mtime" : 1794844930,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/source.diff",
+         "sha256" : "6c2064f26a08ce7fdcd80ca645eda64c3ecb669c27f5bf69f5fb87928d30b7c0"
+      },
+      {
+         "bytes" : 88,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402793,
+         "mode" : "0600",
+         "mtime" : 1794844930,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/source.numstat",
+         "sha256" : "cc4f1dd3f2712d4c374b642527eb616a7a384d2af899bd8d63c6eabb158f1711"
+      },
+      {
+         "bytes" : 36,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403317,
+         "mode" : "0600",
+         "mtime" : 1794845286,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/syntax.argv",
+         "sha256" : "7ae3369e6b3c5c172feee22fa835dd671a34fd7e2aa795ae2757d9d6d759e968"
+      },
+      {
+         "bytes" : 109,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403318,
+         "mode" : "0600",
+         "mtime" : 1794845286,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/syntax.cwd",
+         "sha256" : "1d8f9c0d6824f0080da07409337a5038e411a4d8f570f93aa4def4d080cb2300"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403322,
+         "mode" : "0600",
+         "mtime" : 1794845286,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/syntax.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403321,
+         "mode" : "0600",
+         "mtime" : 1794845286,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/syntax.stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403320,
+         "mode" : "0600",
+         "mtime" : 1794845286,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/syntax.stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403319,
+         "mode" : "0600",
+         "mtime" : 1794845286,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/syntax.utc",
+         "sha256" : "327898735725dc0cc7b1e3b1ce2db47978692e2efc157198cf55bf0bd8620731"
+      },
+      {
+         "bytes" : 60821,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402790,
+         "mode" : "0600",
+         "mtime" : 1794844930,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/test_generators.lkj",
+         "sha256" : "638ddec606cfb29a74ac057371a3db7ffd148d1cc61c25d143c181e5eee6aa94"
+      },
+      {
+         "bytes" : 77,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403323,
+         "mode" : "0600",
+         "mtime" : 1794845286,
+         "path" : "target/compiler-scalar-proposals/mutation-scalar-v1/validation.txt",
+         "sha256" : "df752dcb714f7c4f213be2854d7841fb8277ff5ade9c44e863c701f0ae2e7fa3"
+      },
+      {
+         "bytes" : 770,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37393308,
+         "mode" : "0644",
+         "mtime" : 1794843440,
+         "path" : "target/compiler-scalar-proposals/producer-pin.example.json",
+         "sha256" : "1416606159757f7a3ae355abb006d2dcc28a1dd0ffc603ad119334bca811e8b8"
+      },
+      {
+         "bytes" : 6509,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402607,
+         "mode" : "0600",
+         "mtime" : 1794844804,
+         "path" : "target/compiler-scalar-proposals/scalar-core-apply-audit-1.json",
+         "sha256" : "bd9c969e4bc0eaa812dcd07915f6cbc55ef7b83afced485b95adc739acbeed02"
+      },
+      {
+         "bytes" : 4631,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37402726,
+         "mode" : "0644",
+         "mtime" : 1794844903,
+         "path" : "target/compiler-scalar-proposals/scalar-live-preliminary-1.sh",
+         "sha256" : "81973989432848ebe591a42cb58b71fb422ebd01ed7e80c96df172b6ea229ef7"
+      },
+      {
+         "bytes" : 4697,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403062,
+         "mode" : "0600",
+         "mtime" : 1794845023,
+         "path" : "target/compiler-scalar-proposals/scalar-live-preliminary-result-1.json",
+         "sha256" : "4562f12e96dd76cbc79d02588afc1b089122ad1777f86fda8cb796349969cde1"
+      },
+      {
+         "bytes" : 18058,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37393345,
+         "mode" : "0644",
+         "mtime" : 1794843465,
+         "path" : "target/compiler-scalar-proposals/scalar-module-v2.txt",
+         "sha256" : "b0d035f802caf02cb86f4eeb6a985aceb821fe67e74965afd7222df4e5abe18d"
+      },
+      {
+         "bytes" : 17929,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37366861,
+         "mode" : "0644",
+         "mtime" : 1794842747,
+         "path" : "target/compiler-scalar-proposals/scalar-module.txt",
+         "sha256" : "7639ea0264ad4e96a84c59d8afb61ab8c15edb1b81d00464514d5a7c48019e45"
+      },
+      {
+         "bytes" : 1764,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37393316,
+         "mode" : "0644",
+         "mtime" : 1794843449,
+         "path" : "target/compiler-scalar-proposals/scalar-parent-run.txt",
+         "sha256" : "9447a1af45d92fddaaddf4054abc6ab2a6509ddc58b54e47e571b171eb5fa1b3"
+      },
+      {
+         "bytes" : 4888,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399427,
+         "mode" : "0600",
+         "mtime" : 1794843739,
+         "path" : "target/compiler-scalar-proposals/scalar-proposals.manifest.sha256",
+         "sha256" : "4b46685087ad7946b8eb51d026e77405599a966cbb8ab5b93334508a616d7ff0"
+      },
+      {
+         "bytes" : 14459,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403916,
+         "mode" : "0644",
+         "mtime" : 1794845516,
+         "path" : "target/compiler-scalar-proposals/scalar-publications-auditor-1.txt",
+         "sha256" : "7e0084a7207b71c416034f13c90241a83d5088271779fdcbbc78d9a787145f3a"
+      },
+      {
+         "bytes" : 14503,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37403956,
+         "mode" : "0600",
+         "mtime" : 1794845556,
+         "path" : "target/compiler-scalar-proposals/scalar-publications-cumulative-audit-1.json",
+         "sha256" : "efb7204665ea91110991f4d31531e161a1bdfbea0699261f89f7d2ec71f459a2"
+      },
+      {
+         "bytes" : 10723,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37396711,
+         "mode" : "0644",
+         "mtime" : 1794843593,
+         "path" : "target/compiler-scalar-proposals/scalar-simplify-test.sh",
+         "sha256" : "ad07852fa7fcc00447cb49862b448eecfbab6a963e25724342c532aa839f4810"
+      },
+      {
+         "bytes" : 2668,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401675,
+         "mode" : "0644",
+         "mtime" : 1794844389,
+         "path" : "target/compiler-scalar-proposals/scalar-tests-check-v3-complete.sh",
+         "sha256" : "8297a86fdf335360762a2346a7842b57b89a07319258fdb6b983a71afe29c9c9"
+      },
+      {
+         "bytes" : 2491,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399994,
+         "mode" : "0644",
+         "mtime" : 1794844296,
+         "path" : "target/compiler-scalar-proposals/scalar-tests-check-v3.sh",
+         "sha256" : "c959a2e9c01e253fe32936482e59707289454bfa8a2d1a53744bfe31b6623418"
+      },
+      {
+         "bytes" : 1745,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399361,
+         "mode" : "0644",
+         "mtime" : 1794843662,
+         "path" : "target/compiler-scalar-proposals/scalar-tests-handoff.json",
+         "sha256" : "c27bd09f093af5a4c3518071711353c99e487212b1521c6876cc2150ced806c5"
+      },
+      {
+         "bytes" : 7281,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399360,
+         "mode" : "0644",
+         "mtime" : 1794843662,
+         "path" : "target/compiler-scalar-proposals/scalar-tests-plan-v3.txt",
+         "sha256" : "c447d31112ed65dd8ce5fdad625efdac7706c7c807773f2730807cc67cda2eeb"
+      },
+      {
+         "bytes" : 5705,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37393317,
+         "mode" : "0644",
+         "mtime" : 1794843449,
+         "path" : "target/compiler-scalar-proposals/scalar-tests-plan.txt",
+         "sha256" : "7689f17da3b2c6fcb65ca6a5a8a4e01b1d60e4f37837bd27aa60ed3d2476aec3"
+      },
+      {
+         "bytes" : 38907,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401926,
+         "mode" : "0644",
+         "mtime" : 1794844561,
+         "path" : "target/compiler-scalar-proposals/scalar-tests-request-real-root-v1.json",
+         "sha256" : "99e8aa6a117f4bbcafd8e32286984546c6f282b258b63009796dadaa6e9ecaed"
+      },
+      {
+         "bytes" : 38138,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37394401,
+         "mode" : "0644",
+         "mtime" : 1794843507,
+         "path" : "target/compiler-scalar-proposals/scalar-tests-request-v2.json",
+         "sha256" : "3548233fdb735f9b5d056d35b9fa2d584b47f30e4d17963ebf726eca30d96ea9"
+      },
+      {
+         "bytes" : 38153,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37396733,
+         "mode" : "0644",
+         "mtime" : 1794843609,
+         "path" : "target/compiler-scalar-proposals/scalar-tests-request-v3.json",
+         "sha256" : "62dfd9a536a6c4ddb30c79121088924b00426b651b755e7be52e820f5eb300c5"
+      },
+      {
+         "bytes" : 38004,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37393319,
+         "mode" : "0644",
+         "mtime" : 1794843450,
+         "path" : "target/compiler-scalar-proposals/scalar-tests-request.json",
+         "sha256" : "54d2ed4705f5650f02aef0975025b5973de6c4af200d7846fc60e1548c5dc904"
+      },
+      {
+         "bytes" : 957,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399362,
+         "mode" : "0644",
+         "mtime" : 1794843662,
+         "path" : "target/compiler-scalar-proposals/scalar-tests-static-1295.txt",
+         "sha256" : "7eae7d61c0232ca934fd50786175f29dbc6f6d403740dfeca07fa8d78f0f5324"
+      },
+      {
+         "bytes" : 35209,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37394395,
+         "mode" : "0644",
+         "mtime" : 1794843506,
+         "path" : "target/compiler-scalar-proposals/scalar-tests-v2.txt",
+         "sha256" : "e842e6a631dcc6bfa15d85f970776ab464b80bc8a2f8ea01686cd46936c01740"
+      },
+      {
+         "bytes" : 35224,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37396731,
+         "mode" : "0644",
+         "mtime" : 1794843608,
+         "path" : "target/compiler-scalar-proposals/scalar-tests-v3.txt",
+         "sha256" : "c2def2592b809a846b4207065503a4c90d51b7f161957b9f2ca89623f0cbe78b"
+      },
+      {
+         "bytes" : 35077,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37388908,
+         "mode" : "0644",
+         "mtime" : 1794843349,
+         "path" : "target/compiler-scalar-proposals/scalar-tests.txt",
+         "sha256" : "40b808a33d3e8ae8ab678e5fe463e08d5e99b3c1dfee9ab547e0d7a6e3bc4d1c"
+      },
+      {
+         "bytes" : 2180,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399280,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/compiler_scalar_simplify.sh.1.pl",
+         "sha256" : "0e18d90bf02a28f13dd717b914bd5a140d04a214b2d43ee3f60b3d2da86d9fd4"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399285,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/compiler_scalar_simplify.sh.1.pl.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 143,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399284,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/compiler_scalar_simplify.sh.1.pl.stderr",
+         "sha256" : "5df8ea410d5170ccbc78ed7816bb6e55c6471c0fc8cbc2e4496b15bd11e2ec7c"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399283,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/compiler_scalar_simplify.sh.1.pl.stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 1316,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399281,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/compiler_scalar_simplify.sh.2.pl",
+         "sha256" : "8415ca9f5dd6bbc3060a6cda3b4f65fbbc8882cd156e504f8da1d279c494c9d0"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399288,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/compiler_scalar_simplify.sh.2.pl.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 143,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399287,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/compiler_scalar_simplify.sh.2.pl.stderr",
+         "sha256" : "06aca04fc0d36f4922cdcd5fe1e1d70378e1b6fa04c4ba3c01634f248f7d67c8"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399286,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/compiler_scalar_simplify.sh.2.pl.stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 2231,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399282,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/compiler_scalar_simplify.sh.3.pl",
+         "sha256" : "fbba3d80ad5db19edc9b36e538e36f45bc1bc3421640344cc3a99fbef6ad2901"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399291,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/compiler_scalar_simplify.sh.3.pl.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 143,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399290,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/compiler_scalar_simplify.sh.3.pl.stderr",
+         "sha256" : "38efa492ecaed9da6e202dda45428ee4bcca11faea8c3f8e5134fd9a15607593"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399289,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/compiler_scalar_simplify.sh.3.pl.stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399277,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/compiler_scalar_simplify.sh.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399276,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/compiler_scalar_simplify.sh.stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399275,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/compiler_scalar_simplify.sh.stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399300,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/finished.utc",
+         "sha256" : "79832e83366b68048a1a07b3740fbc92ca1fc868e83d70d3f66a90e83d1740a1"
+      },
+      {
+         "bytes" : 735,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399302,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/inputs.sha256",
+         "sha256" : "be12722912c9d1aa966f8c9ef2b3b6260eca561c1c33c579512791aeaf46efe6"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399301,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/load-after",
+         "sha256" : "2a79dbfe14c2cd34fae5b97efde38860598161fde7de73f6144d7c2791d667ea"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399271,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/load-before",
+         "sha256" : "2a79dbfe14c2cd34fae5b97efde38860598161fde7de73f6144d7c2791d667ea"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399299,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/pin.stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 37,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399298,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/pin.stdout",
+         "sha256" : "ccc5343e6279eb603aa700c030a5d22e0ab8f4648981f12b7619fd53b200dfb8"
+      },
+      {
+         "bytes" : 808,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399278,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/scalar-simplify-test.sh.1.pl",
+         "sha256" : "b6e1803db2de29683b994ba1227dc67fb8836c2bff9e602d39cc8c44d7f065f0"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399294,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/scalar-simplify-test.sh.1.pl.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 139,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399293,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/scalar-simplify-test.sh.1.pl.stderr",
+         "sha256" : "11f21fb39bd8d742f085c89110c918ad4e7843a5042ea560e6218998ee2f1a03"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399292,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/scalar-simplify-test.sh.1.pl.stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 399,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399279,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/scalar-simplify-test.sh.2.pl",
+         "sha256" : "90b827f757019ee4c821baa73784ff3abb835f4da5773a832fd891541223f486"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399297,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/scalar-simplify-test.sh.2.pl.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 139,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399296,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/scalar-simplify-test.sh.2.pl.stderr",
+         "sha256" : "b86efa23e04253efc6773798b92e0df88ca78b8145edababcca1ddbecf228390"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399295,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/scalar-simplify-test.sh.2.pl.stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399274,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/scalar-simplify-test.sh.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399273,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/scalar-simplify-test.sh.stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399272,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/scalar-simplify-test.sh.stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37399270,
+         "mode" : "0600",
+         "mtime" : 1794843659,
+         "path" : "target/compiler-scalar-proposals/syntax-v2/started.utc",
+         "sha256" : "79832e83366b68048a1a07b3740fbc92ca1fc868e83d70d3f66a90e83d1740a1"
+      },
+      {
+         "bytes" : 23150,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37396709,
+         "mode" : "0644",
+         "mtime" : 1794843593,
+         "path" : "target/compiler-scalar-proposals/syntax/compiler_scalar_simplify.failed.sh",
+         "sha256" : "133b769b74433cba8eeb680548415566472bbce86a6d5c706ecb87b07d02505d"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37395939,
+         "mode" : "0600",
+         "mtime" : 1794843540,
+         "path" : "target/compiler-scalar-proposals/syntax/compiler_scalar_simplify.sh.status",
+         "sha256" : "53c234e5e8472b6ac51c1ae1cab3fe06fad053beb8ebfd8977b010655bfdd3c3"
+      },
+      {
+         "bytes" : 175,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37395938,
+         "mode" : "0600",
+         "mtime" : 1794843540,
+         "path" : "target/compiler-scalar-proposals/syntax/compiler_scalar_simplify.sh.stderr",
+         "sha256" : "b0d943d77410439cdee4656b64dce84284f3b31151552b20b7d7ebfd0526f0cd"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37395937,
+         "mode" : "0600",
+         "mtime" : 1794843540,
+         "path" : "target/compiler-scalar-proposals/syntax/compiler_scalar_simplify.sh.stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 15,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37395933,
+         "mode" : "0600",
+         "mtime" : 1794843540,
+         "path" : "target/compiler-scalar-proposals/syntax/load-before",
+         "sha256" : "cfb47936b3939a74ef666d3e9145a852df66660af0dcae5dbfcbac32cc6767b3"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37395936,
+         "mode" : "0600",
+         "mtime" : 1794843540,
+         "path" : "target/compiler-scalar-proposals/syntax/scalar-simplify-test.sh.status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37395935,
+         "mode" : "0600",
+         "mtime" : 1794843540,
+         "path" : "target/compiler-scalar-proposals/syntax/scalar-simplify-test.sh.stderr",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37395934,
+         "mode" : "0600",
+         "mtime" : 1794843540,
+         "path" : "target/compiler-scalar-proposals/syntax/scalar-simplify-test.sh.stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 21,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37395932,
+         "mode" : "0600",
+         "mtime" : 1794843540,
+         "path" : "target/compiler-scalar-proposals/syntax/started.utc",
+         "sha256" : "3df0bbfb512a20766702d7df104d74554b05c4e3f7db78cc3c398c44115e9485"
+      },
+      {
+         "bytes" : 307,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401687,
+         "mode" : "0600",
+         "mtime" : 1794844392,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/argv.nul",
+         "sha256" : "e7b7f60ea9e74fb0f103418826bbcd081164c5f62641ac1990d6842b13a4874d"
+      },
+      {
+         "bytes" : 308,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401688,
+         "mode" : "0600",
+         "mtime" : 1794844392,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/argv.txt",
+         "sha256" : "ec196b552a30bc4e8f47112d700b7d4a28009d8084c9a3097b8faf15d040689a"
+      },
+      {
+         "bytes" : 115,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401683,
+         "mode" : "0600",
+         "mtime" : 1794844392,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/compiler.sha256",
+         "sha256" : "180a4bf01f9f8b8b141604133ca790c46b91d9041f1d888f68e0c582beb2cc84"
+      },
+      {
+         "bytes" : 88,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401681,
+         "mode" : "0600",
+         "mtime" : 1794844392,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/cwd",
+         "sha256" : "38d64276bd6411ffb9353cb1c16cc9faf1ac39cca079c9e50c80af6cc45810bf"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401708,
+         "mode" : "0600",
+         "mtime" : 1794844409,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/end.ns",
+         "sha256" : "7b5cd0a98bc567eb2888cf78b22a2ecb575072dbecd0b0a020392ec155bd2197"
+      },
+      {
+         "bytes" : 31,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401709,
+         "mode" : "0600",
+         "mtime" : 1794844409,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/end.utc",
+         "sha256" : "debd30e0793f87a17734f2179de6030a02dc336ebb1911ddfd1f8f33a27a2bbc"
+      },
+      {
+         "bytes" : 2668,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401680,
+         "mode" : "0600",
+         "mtime" : 1794844392,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/launcher.sh",
+         "sha256" : "8297a86fdf335360762a2346a7842b57b89a07319258fdb6b983a71afe29c9c9"
+      },
+      {
+         "bytes" : 91,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401682,
+         "mode" : "0600",
+         "mtime" : 1794844392,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/limits",
+         "sha256" : "361d4c75a7cd7ddbbbec3124c64a28e3023f6a5e69d7fe603ec03bfa0b771700"
+      },
+      {
+         "bytes" : 30,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401707,
+         "mode" : "0600",
+         "mtime" : 1794844409,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/load-after",
+         "sha256" : "8f98b642c73c919a2f83f452b6ed9e118857321aaac3419e6ec49abb924014bc"
+      },
+      {
+         "bytes" : 30,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401691,
+         "mode" : "0600",
+         "mtime" : 1794844392,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/load-before",
+         "sha256" : "cb516db57b5a20874b020a4c138831e84d12b65b065ff2a63d2fcbc77a877ed8"
+      },
+      {
+         "bytes" : 35224,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401686,
+         "mode" : "0600",
+         "mtime" : 1794844392,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/proposed-tests.txt",
+         "sha256" : "c2def2592b809a846b4207065503a4c90d51b7f161957b9f2ca89623f0cbe78b"
+      },
+      {
+         "bytes" : 212891,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401710,
+         "mode" : "0600",
+         "mtime" : 1794844409,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/source-after.sha256",
+         "sha256" : "cbef7b2e89ae41cfd17cc7a36fb2bf1c1d02ced8d122ca92e8a32a71a2172b98"
+      },
+      {
+         "bytes" : 212891,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401684,
+         "mode" : "0600",
+         "mtime" : 1794844392,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/source-before.sha256",
+         "sha256" : "cbef7b2e89ae41cfd17cc7a36fb2bf1c1d02ced8d122ca92e8a32a71a2172b98"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401690,
+         "mode" : "0600",
+         "mtime" : 1794844392,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/start.ns",
+         "sha256" : "8b06e566792ae8c61ed4e88345982856b6f8efca1589ecd1e45b97e68f0d0728"
+      },
+      {
+         "bytes" : 31,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401689,
+         "mode" : "0600",
+         "mtime" : 1794844392,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/start.utc",
+         "sha256" : "3d34a0633a6956c09c9c1a5c0e140cd79db89244e28497f7ddd6447ea9a792bf"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401706,
+         "mode" : "0600",
+         "mtime" : 1794844409,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/status",
+         "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+         "bytes" : 672,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401693,
+         "mode" : "0600",
+         "mtime" : 1794844409,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/stderr",
+         "sha256" : "2a6621c8e9ffe98cd6971ff2d300afa44b0655d227d99141bb45ae6a4d434222"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401692,
+         "mode" : "0600",
+         "mtime" : 1794844392,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 89,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401694,
+         "mode" : "0600",
+         "mtime" : 1794844409,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/time",
+         "sha256" : "11e077c24039bdfb147fcbac7c6a31815d0cca8df9825f7246fcf9e0e4546830"
+      },
+      {
+         "bytes" : 301,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401711,
+         "mode" : "0600",
+         "mtime" : 1794844409,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/tracked-after.sha256",
+         "sha256" : "03f4bbf138f64945a751215ce54ce9200b8f4bc3e64ccbfb4ea36e99e2c6e406"
+      },
+      {
+         "bytes" : 301,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37401685,
+         "mode" : "0600",
+         "mtime" : 1794844392,
+         "path" : "target/compiler-scalar-tests-check-v3-complete/tracked-before.sha256",
+         "sha256" : "03f4bbf138f64945a751215ce54ce9200b8f4bc3e64ccbfb4ea36e99e2c6e406"
+      },
+      {
+         "bytes" : 307,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400021,
+         "mode" : "0600",
+         "mtime" : 1794844300,
+         "path" : "target/compiler-scalar-tests-check-v3/argv.nul",
+         "sha256" : "e7b7f60ea9e74fb0f103418826bbcd081164c5f62641ac1990d6842b13a4874d"
+      },
+      {
+         "bytes" : 308,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400022,
+         "mode" : "0600",
+         "mtime" : 1794844300,
+         "path" : "target/compiler-scalar-tests-check-v3/argv.txt",
+         "sha256" : "ec196b552a30bc4e8f47112d700b7d4a28009d8084c9a3097b8faf15d040689a"
+      },
+      {
+         "bytes" : 115,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400017,
+         "mode" : "0600",
+         "mtime" : 1794844300,
+         "path" : "target/compiler-scalar-tests-check-v3/compiler.sha256",
+         "sha256" : "180a4bf01f9f8b8b141604133ca790c46b91d9041f1d888f68e0c582beb2cc84"
+      },
+      {
+         "bytes" : 88,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400015,
+         "mode" : "0600",
+         "mtime" : 1794844300,
+         "path" : "target/compiler-scalar-tests-check-v3/cwd",
+         "sha256" : "38d64276bd6411ffb9353cb1c16cc9faf1ac39cca079c9e50c80af6cc45810bf"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400031,
+         "mode" : "0600",
+         "mtime" : 1794844301,
+         "path" : "target/compiler-scalar-tests-check-v3/end.ns",
+         "sha256" : "1f87b0e48a3589b65b4d21f5515b0e050ca1922b9d78a7fdd3cdba03f6d0ce99"
+      },
+      {
+         "bytes" : 31,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400032,
+         "mode" : "0600",
+         "mtime" : 1794844301,
+         "path" : "target/compiler-scalar-tests-check-v3/end.utc",
+         "sha256" : "78545e45c0908d4e395b50bf90db29e0732cfe5110fa79ace16bde28e719f3ef"
+      },
+      {
+         "bytes" : 2491,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400014,
+         "mode" : "0600",
+         "mtime" : 1794844300,
+         "path" : "target/compiler-scalar-tests-check-v3/launcher.sh",
+         "sha256" : "c959a2e9c01e253fe32936482e59707289454bfa8a2d1a53744bfe31b6623418"
+      },
+      {
+         "bytes" : 91,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400016,
+         "mode" : "0600",
+         "mtime" : 1794844300,
+         "path" : "target/compiler-scalar-tests-check-v3/limits",
+         "sha256" : "361d4c75a7cd7ddbbbec3124c64a28e3023f6a5e69d7fe603ec03bfa0b771700"
+      },
+      {
+         "bytes" : 30,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400030,
+         "mode" : "0600",
+         "mtime" : 1794844301,
+         "path" : "target/compiler-scalar-tests-check-v3/load-after",
+         "sha256" : "2a8d8d054d0928e08b83462335ad2f63b995899019a57d0e940e8ad52f31a558"
+      },
+      {
+         "bytes" : 30,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400025,
+         "mode" : "0600",
+         "mtime" : 1794844300,
+         "path" : "target/compiler-scalar-tests-check-v3/load-before",
+         "sha256" : "719230c720643e53e51395496409310478c8be84acab411aac33a15e4c85804d"
+      },
+      {
+         "bytes" : 35224,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400020,
+         "mode" : "0600",
+         "mtime" : 1794844300,
+         "path" : "target/compiler-scalar-tests-check-v3/proposed-tests.txt",
+         "sha256" : "c2def2592b809a846b4207065503a4c90d51b7f161957b9f2ca89623f0cbe78b"
+      },
+      {
+         "bytes" : 20209,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400033,
+         "mode" : "0600",
+         "mtime" : 1794844301,
+         "path" : "target/compiler-scalar-tests-check-v3/source-after.sha256",
+         "sha256" : "fe7e67e8c034dd2a48b28ca905e582f841a53777ea57b71d004ab05ed1bd1fe3"
+      },
+      {
+         "bytes" : 20209,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400018,
+         "mode" : "0600",
+         "mtime" : 1794844300,
+         "path" : "target/compiler-scalar-tests-check-v3/source-before.sha256",
+         "sha256" : "fe7e67e8c034dd2a48b28ca905e582f841a53777ea57b71d004ab05ed1bd1fe3"
+      },
+      {
+         "bytes" : 20,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400024,
+         "mode" : "0600",
+         "mtime" : 1794844300,
+         "path" : "target/compiler-scalar-tests-check-v3/start.ns",
+         "sha256" : "0c6719600066b8907b7f58068a2852d4c3e3f9ba942c64c4174b97105967d1f6"
+      },
+      {
+         "bytes" : 31,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400023,
+         "mode" : "0600",
+         "mtime" : 1794844300,
+         "path" : "target/compiler-scalar-tests-check-v3/start.utc",
+         "sha256" : "db4139a6496e72e7ca6b19fdaac10a8aeec986c8057890b26ec62afb98f9d13e"
+      },
+      {
+         "bytes" : 2,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400029,
+         "mode" : "0600",
+         "mtime" : 1794844301,
+         "path" : "target/compiler-scalar-tests-check-v3/status",
+         "sha256" : "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+      },
+      {
+         "bytes" : 6310,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400027,
+         "mode" : "0600",
+         "mtime" : 1794844301,
+         "path" : "target/compiler-scalar-tests-check-v3/stderr",
+         "sha256" : "b2f90a57295e3027698ff6281e25f094e9b4ca54a5cfb29b14ca91c4e07419e3"
+      },
+      {
+         "bytes" : 0,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400026,
+         "mode" : "0600",
+         "mtime" : 1794844300,
+         "path" : "target/compiler-scalar-tests-check-v3/stdout",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 124,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400028,
+         "mode" : "0600",
+         "mtime" : 1794844301,
+         "path" : "target/compiler-scalar-tests-check-v3/time",
+         "sha256" : "5fee542d1f477c89ab7f2e130ceaaf53a8f4583ef5921b264915c9d771581893"
+      },
+      {
+         "bytes" : 301,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400034,
+         "mode" : "0600",
+         "mtime" : 1794844301,
+         "path" : "target/compiler-scalar-tests-check-v3/tracked-after.sha256",
+         "sha256" : "03f4bbf138f64945a751215ce54ce9200b8f4bc3e64ccbfb4ea36e99e2c6e406"
+      },
+      {
+         "bytes" : 301,
+         "class" : "retained-record",
+         "dev" : 144,
+         "ino" : 37400019,
+         "mode" : "0600",
+         "mtime" : 1794844300,
+         "path" : "target/compiler-scalar-tests-check-v3/tracked-before.sha256",
+         "sha256" : "03f4bbf138f64945a751215ce54ce9200b8f4bc3e64ccbfb4ea36e99e2c6e406"
+      }
+   ],
+   "kind" : "read-only closed evidence inventory for prospective retention",
+   "retained_record_bytes" : 4331830,
+   "retained_record_files" : 386,
+   "root" : "/home/coder/workspace/lkjscript-compiler-scalar-20261116",
+   "schema" : 1,
+   "scopes" : [
+      {
+         "bytes" : 6332308,
+         "directories_including_root" : 4,
+         "files" : 94,
+         "retained_record_bytes" : 956308,
+         "retained_record_files" : 93,
+         "scope" : "target/compiler-scalar-proposals"
+      },
+      {
+         "bytes" : 1170,
+         "directories_including_root" : 1,
+         "files" : 10,
+         "retained_record_bytes" : 1170,
+         "retained_record_files" : 10,
+         "scope" : "target/compiler-scalar-edit-core-1"
+      },
+      {
+         "bytes" : 2091,
+         "directories_including_root" : 1,
+         "files" : 17,
+         "retained_record_bytes" : 2091,
+         "retained_record_files" : 17,
+         "scope" : "target/compiler-scalar-core-check-v2"
+      },
+      {
+         "bytes" : 74036,
+         "directories_including_root" : 1,
+         "files" : 17,
+         "retained_record_bytes" : 74036,
+         "retained_record_files" : 17,
+         "scope" : "target/compiler-scalar-edit-core-2"
+      },
+      {
+         "bytes" : 86242,
+         "directories_including_root" : 1,
+         "files" : 21,
+         "retained_record_bytes" : 86242,
+         "retained_record_files" : 21,
+         "scope" : "target/compiler-scalar-tests-check-v3"
+      },
+      {
+         "bytes" : 54985,
+         "directories_including_root" : 1,
+         "files" : 20,
+         "retained_record_bytes" : 54985,
+         "retained_record_files" : 20,
+         "scope" : "target/compiler-scalar-edit-core-apply-1"
+      },
+      {
+         "bytes" : 466110,
+         "directories_including_root" : 1,
+         "files" : 21,
+         "retained_record_bytes" : 466110,
+         "retained_record_files" : 21,
+         "scope" : "target/compiler-scalar-tests-check-v3-complete"
+      },
+      {
+         "bytes" : 853382,
+         "directories_including_root" : 1,
+         "files" : 20,
+         "retained_record_bytes" : 853382,
+         "retained_record_files" : 20,
+         "scope" : "target/compiler-scalar-edit-tests-apply-1"
+      },
+      {
+         "bytes" : 477975,
+         "directories_including_root" : 1,
+         "files" : 19,
+         "retained_record_bytes" : 477975,
+         "retained_record_files" : 19,
+         "scope" : "target/compiler-scalar-edit-tests-explicit-1"
+      },
+      {
+         "bytes" : 21687858,
+         "directories_including_root" : 3,
+         "files" : 43,
+         "retained_record_bytes" : 436802,
+         "retained_record_files" : 42,
+         "scope" : "target/compiler-scalar-live-preliminary-1"
+      },
+      {
+         "bytes" : 857856,
+         "directories_including_root" : 1,
+         "files" : 20,
+         "retained_record_bytes" : 857856,
+         "retained_record_files" : 20,
+         "scope" : "target/compiler-scalar-edit-mutation-apply-1"
+      },
+      {
+         "bytes" : 41650,
+         "directories_including_root" : 1,
+         "files" : 20,
+         "retained_record_bytes" : 41650,
+         "retained_record_files" : 20,
+         "scope" : "target/compiler-scalar-bootstrap-1"
+      },
+      {
+         "bytes" : 23223,
+         "directories_including_root" : 1,
+         "files" : 66,
+         "retained_record_bytes" : 23223,
+         "retained_record_files" : 66,
+         "scope" : "target/compiler-scalar-focused-1"
+      }
+   ],
+   "source_commit" : "5b5ce7759c035ae0437e3512e18efc440aa50d2e",
+   "total_bytes" : 30958886,
+   "total_files" : 388
+}

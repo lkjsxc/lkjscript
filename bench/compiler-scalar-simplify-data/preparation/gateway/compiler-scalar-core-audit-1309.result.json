@@ -1,0 +1,36 @@
+{
+  "cancelled": false,
+  "capture_status": "complete",
+  "duration_ms": 16,
+  "exit_code": 255,
+  "finished": true,
+  "generation": "pipe-mcobdkmfeegjeolhjnnjpeifipofedoi",
+  "request_id": "compiler-scalar-core-audit-1309",
+  "signal": null,
+  "status": "done",
+  "stderr": "Global symbol \"$newline\" requires explicit package name (did you forget to declare \"my $newline\"?) at - line 33.\nExecution of - aborted due to compilation errors.\n",
+  "stderr_capture_truncated": false,
+  "stderr_ref": {
+    "available": true,
+    "end_offset": 163,
+    "offset": 163,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-mcobdkmfeegjeolhjnnjpeifipofedoi.stderr",
+    "total_bytes": 163
+  },
+  "stderr_truncated": false,
+  "stdout": "",
+  "stdout_capture_truncated": false,
+  "stdout_ref": {
+    "available": true,
+    "end_offset": 0,
+    "offset": 0,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-mcobdkmfeegjeolhjnnjpeifipofedoi.stdout",
+    "total_bytes": 0
+  },
+  "stdout_truncated": false,
+  "stream_mode": "pipes",
+  "timed_out": false,
+  "tool": "exec_command",
+  "truncated": false,
+  "workdir": "/home/coder/workspace/lkjscript-compiler-scalar-20261116"
+}

@@ -1,0 +1,22 @@
+[
+   {
+      "kind" : "closed-records",
+      "shell" : "/usr/bin/tar --format=ustar --mtime=@0 --owner=0 --group=0 --numeric-owner --hard-dereference --no-recursion --null --verbatim-files-from -C '/home/coder/workspace/lkjscript-compiler-scalar-20261116' -T '/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-validation-package-1/closed-members.nul' -cf - | /usr/bin/gzip -n -9 > '/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-validation-package-1/closed-records.tar.gz'"
+   },
+   {
+      "kind" : "desired-overlay",
+      "shell" : "/usr/bin/tar --format=ustar --mtime=@0 --owner=0 --group=0 --numeric-owner --hard-dereference --no-recursion --null --verbatim-files-from -C '/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-desired' -T '/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-validation-package-1/desired-overlay.members.nul' -cf - | /usr/bin/gzip -n -9 > '/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-validation-package-1/desired-overlay.tar.gz'"
+   },
+   {
+      "kind" : "target/lkjscript",
+      "shell" : "/usr/bin/gzip -n -9 -c -- '/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/lkjscript' > '/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-validation-package-1/artifacts/f85624e3cc694f6a3a3e10c33f822789ae6084e2d5a5b41c3b1fc8fcc9bd2d64.compiler.gz'"
+   },
+   {
+      "kind" : "target/compiler-scalar-live-preliminary-1/live",
+      "shell" : "/usr/bin/gzip -n -9 -c -- '/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-live-preliminary-1/live' > '/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-validation-package-1/artifacts/fff89090526d3c9f0ed6081f57bd54121e51773912b833bff62db31e531a1b85.live.gz'"
+   },
+   {
+      "kind" : "target/compiler-scalar-proposals/desired-tests-input.tar",
+      "shell" : "/usr/bin/gzip -n -9 -c -- '/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-proposals/desired-tests-input.tar' > '/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-validation-package-1/artifacts/556b02937776b789adc51e04127ba4ff919400c8be047509970f28418f47e156.tests-input.tar.gz'"
+   }
+]

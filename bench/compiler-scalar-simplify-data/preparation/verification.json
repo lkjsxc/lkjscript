@@ -1,0 +1,92 @@
+{
+   "archived_record_bytes" : 4331830,
+   "archived_records" : 386,
+   "archives" : [
+      {
+         "archive" : "closed-records.tar.gz",
+         "compressed_bytes" : 1575767,
+         "member_bytes" : 4331830,
+         "members" : 386,
+         "sha256" : "7eb694401cdd83c3b77c963405adabcd45bae390ef6e3ff8b959ea540a79ee6c",
+         "verification" : "every member name, regular type, mode, length, SHA-256, header checksum, padding, normalized metadata, end framing and gzip CRC"
+      },
+      {
+         "archive" : "desired-overlay.tar.gz",
+         "compressed_bytes" : 35168,
+         "member_bytes" : 160341,
+         "members" : 3,
+         "sha256" : "0fcb239c7d06c6566b1f64699d7a2b8d7e80e38129b0aaf03fc4666f96c5583d",
+         "verification" : "every member name, regular type, mode, length, SHA-256, header checksum, padding, normalized metadata, end framing and gzip CRC"
+      }
+   ],
+   "base" : "e0b21e66659dc1830a5bebddf0c1f30fd2d8fa94",
+   "binaries" : [
+      {
+         "artifact" : "artifacts/f85624e3cc694f6a3a3e10c33f822789ae6084e2d5a5b41c3b1fc8fcc9bd2d64.compiler.gz",
+         "bytes" : 32761734,
+         "compressed_bytes" : 6582463,
+         "compressed_sha256" : "ec4d686eb3a296c97757c479ce308a7c6388f3da8d30dca0079af9cb5684e7c2",
+         "sha256" : "f85624e3cc694f6a3a3e10c33f822789ae6084e2d5a5b41c3b1fc8fcc9bd2d64",
+         "source" : "target/lkjscript",
+         "suffix" : "compiler.gz",
+         "verified_byte_for_byte" : true
+      },
+      {
+         "artifact" : "artifacts/fff89090526d3c9f0ed6081f57bd54121e51773912b833bff62db31e531a1b85.live.gz",
+         "bytes" : 21251056,
+         "compressed_bytes" : 3884857,
+         "compressed_sha256" : "7d93a0051d1cfb8002ea3603b98ea894132b3d57da937247211b5a729433e0ea",
+         "sha256" : "fff89090526d3c9f0ed6081f57bd54121e51773912b833bff62db31e531a1b85",
+         "source" : "target/compiler-scalar-live-preliminary-1/live",
+         "suffix" : "live.gz",
+         "verified_byte_for_byte" : true
+      },
+      {
+         "artifact" : "artifacts/556b02937776b789adc51e04127ba4ff919400c8be047509970f28418f47e156.tests-input.tar.gz",
+         "bytes" : 5376000,
+         "compressed_bytes" : 690741,
+         "compressed_sha256" : "debf8876e6932f06ef381e4268747834eaa147ed98275955579533941219179b",
+         "sha256" : "556b02937776b789adc51e04127ba4ff919400c8be047509970f28418f47e156",
+         "source" : "target/compiler-scalar-proposals/desired-tests-input.tar",
+         "suffix" : "tests-input.tar.gz",
+         "verified_byte_for_byte" : true
+      }
+   ],
+   "closed_bytes" : 30958886,
+   "closed_files" : 388,
+   "closed_scopes" : 13,
+   "compiler_or_native_executed" : false,
+   "copied_proposal_records" : 14,
+   "deletion" : false,
+   "desired_overlay" : {
+      "src/driver.lkj" : {
+         "bytes" : 123588,
+         "mode" : "0600",
+         "sha256" : "c3a1c555f9b14e0c09ee1fb8d2ab572dd901b93401bffe77e4dc960f9876a095"
+      },
+      "src/reuse.lkj" : {
+         "bytes" : 19687,
+         "mode" : "0600",
+         "sha256" : "e12f48ed1ee75176125697f5a3f882dacb251108030127195d7520c0d6c2a1aa"
+      },
+      "src/semantic_tests/optimizer.lkj" : {
+         "bytes" : 17066,
+         "mode" : "0600",
+         "sha256" : "bb282ac7e08d92c35466ce607f1d68dd3303a223627d34e1be1f26ef5da40cb3"
+      }
+   },
+   "exact_gateway_exports" : 2,
+   "excluded" : [
+      "target/gate",
+      "target/compiler-scalar-cold-gate-1",
+      "target/compiler-scalar-cold-store-1",
+      "target/compiler-scalar-bootstrap-store-1",
+      "all keys",
+      "durable edit metadata",
+      "main worktree"
+   ],
+   "git_bundle" : "owned by root; not created here",
+   "schema" : 1,
+   "source_commit" : "5b5ce7759c035ae0437e3512e18efc440aa50d2e",
+   "source_inputs_unchanged" : true
+}

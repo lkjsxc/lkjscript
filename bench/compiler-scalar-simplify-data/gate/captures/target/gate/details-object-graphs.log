@@ -1,0 +1,11 @@
+ok 4 tests
+ok 8 tests
+ok tests/diagnostics/graph_receiver_argument.lkj: 1 cases, 2 route checks, 0 pending (0.144 s)
+ok tests/diagnostics/graph_handle_kind.lkj: 1 cases, 2 route checks, 0 pending (0.143 s)
+ok tests/diagnostics/graph_immutable_arguments.lkj: 1 cases, 2 route checks, 0 pending (0.151 s)
+ok tests/diagnostics/graph_uninitialized_inference.lkj: 1 cases, 2 route checks, 0 pending (0.139 s)
+ok tests/diagnostics/graph_output_result.lkj: 1 cases, 0 route checks, 2 pending (0.135 s)
+graph focused: 13936 ms, load 3.78 2.79 1.99 3/5546 3450152 -> 3.66 2.80 2.00 2/5547 3452507
+graph initial=1000000 removed=13546 added=16960 live=1003414 stale=40449 slots=1008515 checksum=138421207483169
+graph native: 968 ms; wall/user/system/RSS-KiB 0.96 0.87 0.07 253188; load 3.66 2.80 2.00 2/5547 3452508 -> 3.53 2.78 2.00 2/5554 3452644
+ok graph owner handles, generation retirement, affine removal, seeded mutation, observers and native/interpreter agreement

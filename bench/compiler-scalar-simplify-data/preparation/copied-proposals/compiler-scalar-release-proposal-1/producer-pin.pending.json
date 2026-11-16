@@ -1,0 +1,61 @@
+{
+  "schema": "lkjscript-scalar-six-run-1",
+  "release_status": "PENDING",
+  "execution_authorized": false,
+  "harness_sha256": "092f0187705dc5136284d2cb9deed82d6c35664138e3c631a9887c01c280aad3",
+  "protocol_path": "/home/coder/workspace/lkjscript-compiler-scalar-20261116/bench/compiler-scalar-simplify-plan.md",
+  "protocol_sha256": "5e7c5b605250bb3cc5e5153f1f2fac9a95a686cae5495bebfe5c6ee5798716d4",
+  "emitter": {
+    "path": "/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/lkjscript",
+    "sha256": "f85624e3cc694f6a3a3e10c33f822789ae6084e2d5a5b41c3b1fc8fcc9bd2d64",
+    "bytes": 32761734,
+    "source_commit": "5b5ce7759c035ae0437e3512e18efc440aa50d2e",
+    "source_tree": "6277f3cec86791e7f297a95ff0a70bed60b951eb",
+    "library_tree": "25bdb8ff8567b941790d3951c78e896b23e26e8e"
+  },
+  "validation": {
+    "focused": {
+      "status": "passed",
+      "source_commit": "5b5ce7759c035ae0437e3512e18efc440aa50d2e",
+      "producer_sha256": "f85624e3cc694f6a3a3e10c33f822789ae6084e2d5a5b41c3b1fc8fcc9bd2d64",
+      "evidence_path": "/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-focused-1/summary.json",
+      "evidence_sha256": "5f2df61db6decc3eaf91dbaaa3885600a56015da1f7b77b8d7db8799b654c508"
+    },
+    "full_gate": {
+      "status": "PENDING",
+      "source_commit": "5b5ce7759c035ae0437e3512e18efc440aa50d2e",
+      "producer_sha256": "f85624e3cc694f6a3a3e10c33f822789ae6084e2d5a5b41c3b1fc8fcc9bd2d64",
+      "evidence_path": null,
+      "evidence_sha256": null,
+      "root_request": "rootv1382"
+    }
+  },
+  "candidate_ci": "pending-until-if-main-adoption",
+  "execution_order": [
+    "A1",
+    "B1",
+    "B2",
+    "A2",
+    "A3",
+    "B3"
+  ],
+  "primary_decision": "10*sum_B_wall_ns <= 9*sum_A_wall_ns",
+  "planned_results": "target/compiler-scalar-simplify.20261116-1",
+  "focused_capture_manifest": {
+    "path": "/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-focused-1/manifest.sha256",
+    "sha256": "5298b6f97945a0199ae1f3e9d731c8b5b7da7aa4510b77f4aacf27aa878dc3c9",
+    "records": 65
+  },
+  "baseline_ci_context": {
+    "source_commit": "7716f0d51ead33d17f5a85c0bb8e4f79d57ccf23",
+    "run_id": 43904619997,
+    "status": "pending-as-reported-by-root",
+    "validates_candidate": false
+  },
+  "notes": [
+    "Non-runnable preparation only. The frozen harness requires validation.full_gate.status exactly passed and therefore rejects this PENDING pin before compiler workload.",
+    "Do not invoke the harness to test this pending pin: its preparation creates a result directory before validating all inputs.",
+    "A separate final pin with actual passed-gate evidence, source/producer revalidation and explicit root release is required.",
+    "No compiler, native image, benchmark or compression was executed to prepare this pin."
+  ]
+}

@@ -1,0 +1,5 @@
+armed
+drained
+ok interpreted shutdown tiny GET, admitted partial request, idle close and repeated SIGTERM
+Shutdown interpreter elapsed 491 ms; load 3.35 2.57 1.89 3/5551 3442405 -> 3.35 2.57 1.89 2/5562 3442582
+Shutdown cleanup: PIDs 3104295 3104410 3104450 reaped; loopback port 35413 released; temporary directory removed

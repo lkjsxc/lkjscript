@@ -1,0 +1,86 @@
+[
+   {
+      "bytes" : 139654,
+      "copy" : "copied-proposals/compiler-scalar-retention-proposal-1/closed-inventory.json",
+      "sha256" : "bb18dc804c6591917118d4184c4a87a6f78b9fba5a48899d64709d39443ec8b8",
+      "source" : "target/compiler-scalar-retention-proposal-1/closed-inventory.json"
+   },
+   {
+      "bytes" : 47318,
+      "copy" : "copied-proposals/compiler-scalar-retention-proposal-1/closed-records.sha256",
+      "sha256" : "b985b80cf81d34fa5c8aa7886debea6cfb7d9adad1cc21d4a532de5071f02bca",
+      "source" : "target/compiler-scalar-retention-proposal-1/closed-records.sha256"
+   },
+   {
+      "bytes" : 4225,
+      "copy" : "copied-proposals/compiler-scalar-retention-proposal-1/inventory.pl",
+      "sha256" : "7718dfe16856ffe8689fcd2631f331c6b39373c1f3fe082609da7f112c5de4f5",
+      "source" : "target/compiler-scalar-retention-proposal-1/inventory.pl"
+   },
+   {
+      "bytes" : 414,
+      "copy" : "copied-proposals/compiler-scalar-retention-proposal-1/manifest.sha256",
+      "sha256" : "0c914bd7c28156950971777d4e419d6cf71d21218f2ed2d996503ea407916a52",
+      "source" : "target/compiler-scalar-retention-proposal-1/manifest.sha256"
+   },
+   {
+      "bytes" : 10513,
+      "copy" : "copied-proposals/compiler-scalar-retention-proposal-1/proposal.md",
+      "sha256" : "a69c4c30ceaad481500096c0403f40a1af1a0a077559318faed79513e10d84d5",
+      "source" : "target/compiler-scalar-retention-proposal-1/proposal.md"
+   },
+   {
+      "bytes" : 3828,
+      "copy" : "copied-proposals/compiler-scalar-retention-proposal-1/retention.json",
+      "sha256" : "d766365973daf13cf266a7276d4ac7a3232750047c777d28df7c470969463278",
+      "source" : "target/compiler-scalar-retention-proposal-1/retention.json"
+   },
+   {
+      "bytes" : 9644,
+      "copy" : "copied-proposals/compiler-scalar-release-proposal-1/launch-retention-checklist.md",
+      "sha256" : "27901dd8ae14f453e225132c7d3eda5a41c393bb588c3a2e05498f74a7984177",
+      "source" : "target/compiler-scalar-release-proposal-1/launch-retention-checklist.md"
+   },
+   {
+      "bytes" : 588,
+      "copy" : "copied-proposals/compiler-scalar-release-proposal-1/manifest.sha256",
+      "sha256" : "1e7efe38081a2332a4d88428682c212d1456aaf45ed37ddcf7735e3346015185",
+      "source" : "target/compiler-scalar-release-proposal-1/manifest.sha256"
+   },
+   {
+      "bytes" : 2842,
+      "copy" : "copied-proposals/compiler-scalar-release-proposal-1/producer-pin.pending.json",
+      "sha256" : "ecbd168ee6399381f69106c11974e729ad22ed9a2dd6789f714e3af86a0c69cc",
+      "source" : "target/compiler-scalar-release-proposal-1/producer-pin.pending.json"
+   },
+   {
+      "bytes" : 364,
+      "copy" : "copied-proposals/compiler-scalar-release-proposal-1/recovery-git.txt",
+      "sha256" : "6c3661d3e342e005bcc62fd4d8a5e303bec14a4064878b0d34a7a6d8a5d73cb7",
+      "source" : "target/compiler-scalar-release-proposal-1/recovery-git.txt"
+   },
+   {
+      "bytes" : 2,
+      "copy" : "copied-proposals/compiler-scalar-release-proposal-1/review.status",
+      "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa",
+      "source" : "target/compiler-scalar-release-proposal-1/review.status"
+   },
+   {
+      "bytes" : 0,
+      "copy" : "copied-proposals/compiler-scalar-release-proposal-1/review.stderr",
+      "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "source" : "target/compiler-scalar-release-proposal-1/review.stderr"
+   },
+   {
+      "bytes" : 161,
+      "copy" : "copied-proposals/compiler-scalar-release-proposal-1/review.stdout",
+      "sha256" : "8714158f22ed974201c076aaaed7033823b5866fc14cf0b9890ded10de76c907",
+      "source" : "target/compiler-scalar-release-proposal-1/review.stdout"
+   },
+   {
+      "bytes" : 21,
+      "copy" : "copied-proposals/compiler-scalar-release-proposal-1/review.utc",
+      "sha256" : "3da8cd7f8261c26d84e78599a92bfac53e79c04fdec1860966902e0aa19e08c2",
+      "source" : "target/compiler-scalar-release-proposal-1/review.utc"
+   }
+]

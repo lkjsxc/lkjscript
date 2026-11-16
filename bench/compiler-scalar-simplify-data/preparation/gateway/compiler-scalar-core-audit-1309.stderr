@@ -1,0 +1,2 @@
+Global symbol "$newline" requires explicit package name (did you forget to declare "my $newline"?) at - line 33.
+Execution of - aborted due to compilation errors.

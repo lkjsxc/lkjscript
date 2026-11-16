@@ -1,0 +1,1 @@
+ok diagnostic-cases (11.322 s, load 4.28 -> 4.13; gate+173.891..185.214 s); cases reused=0 rerun=65 (authenticated producer and input closure; misses/open effects rerun)

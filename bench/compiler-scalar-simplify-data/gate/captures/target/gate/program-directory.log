@@ -1,0 +1,1 @@
+ok program-directory (40.272 s, load 4.13 -> 3.47; gate+185.216..225.488 s); cases reused=0 rerun=4 (authenticated exact stable runner, sealed ELF, checked closure and closed input contract)

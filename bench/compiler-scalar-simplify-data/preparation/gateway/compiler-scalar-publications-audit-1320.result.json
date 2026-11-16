@@ -1,0 +1,36 @@
+{
+  "cancelled": false,
+  "capture_status": "complete",
+  "duration_ms": 260,
+  "exit_code": 0,
+  "finished": true,
+  "generation": "pipe-jojppbgbdnhdeembilcfeoppffahokbk",
+  "request_id": "compiler-scalar-publications-audit-1320",
+  "signal": null,
+  "status": "done",
+  "stderr": "target/compiler-scalar-proposals/scalar-publications-auditor-1.txt syntax OK\n",
+  "stderr_capture_truncated": false,
+  "stderr_ref": {
+    "available": true,
+    "end_offset": 77,
+    "offset": 77,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-jojppbgbdnhdeembilcfeoppffahokbk.stderr",
+    "total_bytes": 77
+  },
+  "stderr_truncated": false,
+  "stdout": "audit=/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-proposals/scalar-publications-cumulative-audit-1.json\nsha256=efb7204665ea91110991f4d31531e161a1bdfbea0699261f89f7d2ec71f459a2\nbaseline_files=1742 final_files=1744 unchanged_baseline=1735 existing_changes=7 new_files=2\ncredited=1401 total=1401 share=100% operations=30 desired_exact=1741 desired_blank_only=3\ncompiler-scalar-edit-core-apply-1\toperations=15\tsites=15\tlines=526\tunchanged=212\ncompiler-scalar-edit-tests-explicit-1\toperations=3\tsites=3\tlines=644\tunchanged=1741\ncompiler-scalar-edit-mutation-apply-1\toperations=12\tsites=11\tlines=231\tunchanged=1743\nsrc/driver.lkj\t+77\t-6\t46cb19f03237da9b10079f901f31acf213003b5bc6777df831743460e9d08f8e\nsrc/optimizer.lkj\t+2\t-0\t850f0f4ff5c1fa81de371c06e11fdab5be2430bb4605fe0a6772f53d0ebfe4f4\nsrc/optimizer/scalar.lkj\t+424\t-0\tb0d035f802caf02cb86f4eeb6a985aceb821fe67e74965afd7222df4e5abe18d\nsrc/reuse.lkj\t+8\t-1\t7ea5a19669d196bc0ec9630b39ed29ff821938b5ca6b6b63262a8a40aa80038f\nsrc/semantic_main.lkj\t+1\t-1\t604dcc8bb7ac9d41765977db8b971e3bfe1932d01967b429899d807f712d55b5\nsrc/semantic_tests/optimizer.lkj\t+4\t-1\t76ce8c73b42399dee23ea7e0696dafb0f95db30c379bb4e5cce27fd4ee3a8dba\nsrc/semantic_tests/optimizer/scalars.lkj\t+637\t-0\tc2def2592b809a846b4207065503a4c90d51b7f161957b9f2ca89623f0cbe78b\nsrc/test_generators.lkj\t+197\t-34\t638ddec606cfb29a74ac057371a3db7ffd148d1cc61c25d143c181e5eee6aa94\nsrc/test_runner.lkj\t+6\t-2\t0d90325e8c5ec31ef59af5abf5e0c55a877ef441111242b16cd2a51f0df29abc\n",
+  "stdout_capture_truncated": false,
+  "stdout_ref": {
+    "available": true,
+    "end_offset": 1504,
+    "offset": 1504,
+    "path": "/home/coder/.local/state/lkjyolo/outputs/pipe-jojppbgbdnhdeembilcfeoppffahokbk.stdout",
+    "total_bytes": 1504
+  },
+  "stdout_truncated": false,
+  "stream_mode": "pipes",
+  "timed_out": false,
+  "tool": "exec_command",
+  "truncated": false,
+  "workdir": "/home/coder/workspace/lkjscript-compiler-scalar-20261116"
+}

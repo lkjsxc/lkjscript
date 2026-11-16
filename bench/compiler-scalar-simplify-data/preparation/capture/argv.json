@@ -1,0 +1,24 @@
+{
+  "request": "compiler-scalar-package-run-1331",
+  "cwd": "/home/coder/workspace/lkjscript-compiler-scalar-20261116",
+  "launch": [
+    "bash",
+    "/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-validation-package-1/launch.sh"
+  ],
+  "timed_argv": [
+    "/usr/bin/time",
+    "-o",
+    "/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-validation-package-1/capture/time",
+    "-f",
+    "wall_s=%e user_s=%U system_s=%S maxrss_kib=%M exit_status=%x",
+    "/usr/bin/timeout",
+    "--signal=TERM",
+    "--kill-after=10s",
+    "900s",
+    "/usr/bin/prlimit",
+    "--as=4294967296",
+    "--",
+    "perl",
+    "/home/coder/workspace/lkjscript-compiler-scalar-20261116/target/compiler-scalar-validation-package-1/pack.pl"
+  ]
+}
