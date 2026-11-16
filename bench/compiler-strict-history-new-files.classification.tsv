@@ -1,0 +1,38 @@
+ordinal	projected_path	action	parent_exists	declaration_owner	owner_state	declaration_kind	selected_root_route	evidence
+106	src/platform/compiler/selfhost_input.lkj	added	yes	src/platform/compiler/mod.rs	existing	external	cfg-test-excluded	Direct #[cfg(test)] before selfhost_input.
+106	src/platform/execution/normalized/selfhost_tests.lkj	added	yes	src/platform/execution/normalized/tests.rs	existing	legacy-path-module	cfg-test-excluded	Legacy #[path] within normalized::tests, whose parent declaration is cfg(test).
+108	src/semantic_tests/optimizer/forwarding.lkj	added	no	src/semantic_tests/optimizer.rs	existing	external	separate-root	Reached from src/semantic_main.rs, not the selected src/main.rs.
+110	src/elaborate/definition_types/semantic.lkj	added	yes	src/elaborate/definition_types.lkj	existing	external	conventional-module-route	main -> elaborate -> definition_types -> semantic.
+110	src/elaborate/semantic.lkj	added	yes	src/elaborate.lkj	existing	external	conventional-module-route	main -> elaborate -> semantic.
+110	src/semantic/references.lkj	added	no	src/semantic.lkj	existing	external	conventional-module-route	main -> semantic -> references; destination directory absent.
+115	src/platform/compiler/link_projection_measurement_tests.lkj	added	yes	src/platform/compiler/tests.rs	existing	legacy-path-module	cfg-test-excluded	Declared as link_projection_measurement under compiler::tests.
+115	src/platform/compiler/link_projection_tests.lkj	added	yes	src/platform/compiler/tests.rs	existing	legacy-path-module	cfg-test-excluded	Declared under compiler::tests.
+122	src/platform/execution/normalized/typed_compiler_input_fixture_tests.lkj	added	yes	src/platform/execution/normalized/typed_compiler_input_tests.rs	existing	legacy-path-module	cfg-test-excluded	Declared as fixture through selfhost_source_tests/typed_compiler_input_tests.
+127	src/driver/structure.lkj	added	no	src/driver.lkj	existing	external	conventional-module-route	main -> driver -> structure; destination directory absent.
+127	src/meaning.lkj	added	yes	src/main.lkj	existing	external	conventional-module-route	Direct main module; also added to off-root lib.lkj.
+127	src/structure_edit.lkj	added	yes	src/main.lkj	existing	external	conventional-module-route	Direct main module; also added to off-root lib.lkj.
+127	src/structure_write.lkj	added	yes	src/main.lkj	existing	external	conventional-module-route	Direct main module; also added to off-root lib.lkj.
+144	src/native/semantic.lkj	added	yes	src/native.lkj	existing	external	conventional-module-route	main -> native -> semantic.
+144	src/semantic.lkj	added	yes	src/main.lkj	existing	external	conventional-module-route	Direct main module; also added to off-root lib.lkj.
+144	src/semantic_facts.lkj	added	yes	src/main.lkj	existing	external	conventional-module-route	Direct main module; also added to off-root lib.lkj.
+144	src/semantic_query.lkj	added	yes	src/main.lkj	existing	external	conventional-module-route	Direct main module.
+144	src/semantic_store.lkj	added	yes	src/main.lkj	existing	external	conventional-module-route	Direct main module.
+152	src/structure_refactor.lkj	added	yes	src/structure_refactor_cases.lkj	new	external	separate-root	Declared only from newly added standalone case root at this revision.
+152	src/structure_refactor_cases.lkj	added	yes	-	standalone	standalone-root	separate-root	New independent main function; no main-root declaration.
+154	src/platform/execution/normalized/selfhost_source_profile_flow_tests.lkj	added	yes	src/platform/execution/normalized/selfhost_source_profile_tests.rs	new	legacy-path-module	cfg-test-excluded	Declared as flow in newly added profile test module.
+154	src/platform/execution/normalized/selfhost_source_profile_tests.lkj	added	yes	src/platform/execution/normalized/selfhost_source_tests.rs	existing	legacy-path-module	cfg-test-excluded	Declared as profile in existing selfhost source test module.
+157	src/platform/compiler/elf_x86_64/scalar_abi.lkj	added	yes	src/platform/compiler/elf_x86_64.rs	existing	external	conventional-module-route	lib -> platform -> compiler -> elf_x86_64 -> scalar_abi.
+157	src/platform/compiler/elf_x86_64/scalar_flow.lkj	added	yes	src/platform/compiler/elf_x86_64.rs	existing	external	conventional-module-route	lib -> platform -> compiler -> elf_x86_64 -> scalar_flow.
+157	src/platform/compiler/elf_x86_64/scalar_lower.lkj	added	yes	src/platform/compiler/elf_x86_64.rs	existing	external	conventional-module-route	lib -> platform -> compiler -> elf_x86_64 -> scalar_lower.
+157	src/platform/execution/normalized/native_scalar_boundary_tests.lkj	added	yes	src/platform/execution/normalized/native_phase_tests.rs	existing	legacy-path-module	cfg-test-excluded	Declared as scalar_boundaries through the selfhost artifact test chain.
+184	src/platform/compiler/artifact_capacity_tests.lkj	added	yes	src/platform/compiler/tests.rs	existing	legacy-path-module	cfg-test-excluded	Declared under compiler::tests.
+184	src/platform/compiler/unit_codec.lkj	added	yes	src/platform/compiler/unit.rs	existing	legacy-path-module	legacy-path-not-followed	Declared as codec using #[path = unit_codec.rs]; conventional lookup would use unit/codec.lkj.
+184	src/platform/compiler/unit_codec_tests.lkj	added	yes	src/platform/compiler/unit_codec.rs	new	legacy-path-module	cfg-test-excluded	Declared as tests with cfg(test) inside newly added unit_codec.rs.
+184	src/platform/execution/normalized/selfhost_source_sequence_preparation_tests.lkj	added	yes	src/platform/execution/normalized/selfhost_source_sequence_tests.rs	new	legacy-path-module	cfg-test-excluded	Declared as preparation in newly added sequence test module.
+184	src/platform/execution/normalized/selfhost_source_sequence_tests.lkj	added	yes	src/platform/execution/normalized/selfhost_source_artifact_tests.rs	existing	legacy-path-module	cfg-test-excluded	Declared as sequence through the selfhost test chain.
+184	src/platform/execution/normalized/vm_preparation_capacity_tests.lkj	added	yes	src/platform/execution/normalized/vm.rs	existing	legacy-path-module	cfg-test-excluded	Direct cfg(test) before path-bound preparation_capacity_tests.
+184	src/platform/kernel/codec/linear.lkj	added	no	src/platform/kernel/codec.rs	existing	external	conventional-module-route	lib -> platform -> kernel -> codec -> linear; destination directory absent.
+184	src/platform/kernel/codec/linear/expression.lkj	added	no	src/platform/kernel/codec/linear.rs	new	external	conventional-module-route	Declared in newly added linear.rs; destination directory absent.
+184	src/platform/kernel/codec/linear/owner.lkj	added	no	src/platform/kernel/codec/linear.rs	new	external	conventional-module-route	Declared in newly added linear.rs; destination directory absent.
+184	src/platform/kernel/codec/linear/tests.lkj	added	no	src/platform/kernel/codec/linear.rs	new	external	cfg-test-excluded	Direct cfg(test) in newly added linear.rs; destination directory absent.
+184	src/platform/package_transport/source_capacity_tests.lkj	added	yes	src/platform/package_transport/source.rs	existing	source-include	cfg-test-excluded	include! inside cfg(test) inline tests; not an external module declaration.

@@ -1,0 +1,470 @@
+=== original ordinal 106 revision 892b46da28c0e7a9dd529e7167dd763defabcc39 parent b83b6dd5dc235daaef0483d10342988f7712085c root src/lib.lkj ===
+892b46da28c0e7a9dd529e7167dd763defabcc39:src/platform/compiler/mod.rs-20-pub(crate) mod manifest;
+892b46da28c0e7a9dd529e7167dd763defabcc39:src/platform/compiler/mod.rs-21-#[cfg(test)]
+892b46da28c0e7a9dd529e7167dd763defabcc39:src/platform/compiler/mod.rs:22:pub(crate) mod selfhost_input;
+892b46da28c0e7a9dd529e7167dd763defabcc39:src/platform/compiler/mod.rs-23-pub(crate) mod unit;
+892b46da28c0e7a9dd529e7167dd763defabcc39:src/platform/compiler/mod.rs-24-
+--
+892b46da28c0e7a9dd529e7167dd763defabcc39:src/platform/execution/normalized/tests.rs-7-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+892b46da28c0e7a9dd529e7167dd763defabcc39:src/platform/execution/normalized/tests.rs-8-#[path = "selfhost_tests.rs"]
+892b46da28c0e7a9dd529e7167dd763defabcc39:src/platform/execution/normalized/tests.rs:9:mod selfhost_tests;
+892b46da28c0e7a9dd529e7167dd763defabcc39:src/platform/execution/normalized/tests.rs-10-
+892b46da28c0e7a9dd529e7167dd763defabcc39:src/platform/execution/normalized/tests.rs-11-#[path = "region_persistence_tests.rs"]
+
+=== original ordinal 108 revision 81048410169c593a251af05697f7953db5324808 parent f307bb3e849a378e82e53c6eeaf530056fba6490 root src/main.lkj ===
+81048410169c593a251af05697f7953db5324808:src/semantic_tests/optimizer.rs-1-//! Independent admission, fallback and original-IR/native optimization contracts.
+81048410169c593a251af05697f7953db5324808:src/semantic_tests/optimizer.rs-2-use crate::{check, frontend, interpreter, ir, ir_text, native, optimizer, reuse, runtime, source};
+81048410169c593a251af05697f7953db5324808:src/semantic_tests/optimizer.rs:3:mod forwarding;
+81048410169c593a251af05697f7953db5324808:src/semantic_tests/optimizer.rs-4-
+81048410169c593a251af05697f7953db5324808:src/semantic_tests/optimizer.rs-5-fn compiled_files(root: &str, files: Vec<source::SourceInput>) -> reuse::Checked {
+
+=== original ordinal 110 revision 7b6d333b0853094725c191b2503cf247ecc128c4 parent 685764ae21557e868c313c9b8a5d20f9117cb832 root src/main.lkj ===
+7b6d333b0853094725c191b2503cf247ecc128c4:src/elaborate.lkj-25-mod scoped_locals;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/elaborate.lkj-26-mod sequences;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/elaborate.lkj:27:pub mod semantic;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/elaborate.lkj-28-mod static_lifetimes;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/elaborate.lkj-29-mod sugars;
+--
+7b6d333b0853094725c191b2503cf247ecc128c4:src/elaborate/definition_types.lkj-11-mod projection_equations;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/elaborate/definition_types.lkj-12-mod source_types;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/elaborate/definition_types.lkj:13:mod semantic;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/elaborate/definition_types.lkj-14-
+7b6d333b0853094725c191b2503cf247ecc128c4:src/elaborate/definition_types.lkj-15-type Variable = usize;
+--
+7b6d333b0853094725c191b2503cf247ecc128c4:src/lib.lkj-30-pub mod structure_edit;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/lib.lkj-31-pub mod structure_write;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/lib.lkj:32:pub mod semantic;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/lib.lkj-33-pub mod semantic_facts;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/lib.lkj-34-pub mod source;
+--
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj-35-pub mod structure_edit;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj-36-pub mod structure_write;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj:37:pub mod semantic;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj-38-pub mod semantic_facts;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj-39-pub mod semantic_store;
+--
+7b6d333b0853094725c191b2503cf247ecc128c4:src/native.lkj-19-mod intrinsics;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/native.lkj-20-mod layout;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/native.lkj:21:pub mod semantic;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/native.lkj-22-mod ownership;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/native.lkj-23-pub(crate) mod platform;
+--
+7b6d333b0853094725c191b2503cf247ecc128c4:src/semantic.lkj-3-use crate::{ast as a, ir, json, names, resolve, sha256, syntax};
+7b6d333b0853094725c191b2503cf247ecc128c4:src/semantic.lkj-4-use std::collections::{BTreeMap, BTreeSet};
+7b6d333b0853094725c191b2503cf247ecc128c4:src/semantic.lkj:5:mod references;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/semantic.lkj-6-use references::*;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/semantic.lkj-7-
+
+=== original ordinal 115 revision 47e989412e40ad2fd6ab75240f5c6a31d922288c parent 7668bb9d0d314fed7b3adcaf9767cb8e74bb2528 root src/lib.lkj ===
+47e989412e40ad2fd6ab75240f5c6a31d922288c:src/platform/compiler/tests.rs-5-
+47e989412e40ad2fd6ab75240f5c6a31d922288c:src/platform/compiler/tests.rs-6-#[path = "link_projection_tests.rs"]
+47e989412e40ad2fd6ab75240f5c6a31d922288c:src/platform/compiler/tests.rs:7:mod link_projection_tests;
+47e989412e40ad2fd6ab75240f5c6a31d922288c:src/platform/compiler/tests.rs-8-
+47e989412e40ad2fd6ab75240f5c6a31d922288c:src/platform/compiler/tests.rs-9-#[path = "link_projection_measurement_tests.rs"]
+
+=== original ordinal 122 revision 52e3e11cd45dd4f05b7bffbf12c8f6ea986cf645 parent 227987594673468c991fb8154f7b3b5bb0d8082c root src/lib.lkj ===
+
+=== original ordinal 127 revision 685764ae21557e868c313c9b8a5d20f9117cb832 parent 4800a7f8e1e71b308ccf1c5ccbd87db7873471f9 root src/main.lkj ===
+685764ae21557e868c313c9b8a5d20f9117cb832:src/driver.lkj-1-// Command line and orchestration for the complete owned toolchain.
+685764ae21557e868c313c9b8a5d20f9117cb832:src/driver.lkj:2:mod structure;
+685764ae21557e868c313c9b8a5d20f9117cb832:src/driver.lkj-3-use crate::{
+685764ae21557e868c313c9b8a5d20f9117cb832:src/driver.lkj-4-    ast, backend, check, driver_host, elaborate, embedded, interpreter, ir, ir_text, json, runtime,
+--
+685764ae21557e868c313c9b8a5d20f9117cb832:src/lib.lkj-27-#[path = "../library/sha256.lkj"]
+685764ae21557e868c313c9b8a5d20f9117cb832:src/lib.lkj-28-pub mod sha256;
+685764ae21557e868c313c9b8a5d20f9117cb832:src/lib.lkj:29:pub mod meaning;
+685764ae21557e868c313c9b8a5d20f9117cb832:src/lib.lkj:30:pub mod structure_edit;
+685764ae21557e868c313c9b8a5d20f9117cb832:src/lib.lkj:31:pub mod structure_write;
+685764ae21557e868c313c9b8a5d20f9117cb832:src/lib.lkj-32-pub mod semantic;
+685764ae21557e868c313c9b8a5d20f9117cb832:src/lib.lkj-33-pub mod semantic_facts;
+--
+685764ae21557e868c313c9b8a5d20f9117cb832:src/main.lkj-32-pub mod runtime_diagnostics;
+685764ae21557e868c313c9b8a5d20f9117cb832:src/main.lkj-33-pub use std::sha256;
+685764ae21557e868c313c9b8a5d20f9117cb832:src/main.lkj:34:pub mod meaning;
+685764ae21557e868c313c9b8a5d20f9117cb832:src/main.lkj:35:pub mod structure_edit;
+685764ae21557e868c313c9b8a5d20f9117cb832:src/main.lkj:36:pub mod structure_write;
+685764ae21557e868c313c9b8a5d20f9117cb832:src/main.lkj-37-pub mod semantic;
+685764ae21557e868c313c9b8a5d20f9117cb832:src/main.lkj-38-pub mod semantic_facts;
+
+=== original ordinal 144 revision 16055fc067748b8c42cdcf56cf94906f417cac82 parent 6632d1ca5b9d336ff7014e017a25ef1792b81de2 root src/main.lkj ===
+16055fc067748b8c42cdcf56cf94906f417cac82:src/lib.lkj-27-#[path = "../library/sha256.lkj"]
+16055fc067748b8c42cdcf56cf94906f417cac82:src/lib.lkj-28-pub mod sha256;
+16055fc067748b8c42cdcf56cf94906f417cac82:src/lib.lkj:29:pub mod semantic;
+16055fc067748b8c42cdcf56cf94906f417cac82:src/lib.lkj:30:pub mod semantic_facts;
+16055fc067748b8c42cdcf56cf94906f417cac82:src/lib.lkj-31-pub mod source;
+16055fc067748b8c42cdcf56cf94906f417cac82:src/lib.lkj-32-pub mod syntax;
+--
+16055fc067748b8c42cdcf56cf94906f417cac82:src/main.lkj-32-pub mod runtime_diagnostics;
+16055fc067748b8c42cdcf56cf94906f417cac82:src/main.lkj-33-pub use std::sha256;
+16055fc067748b8c42cdcf56cf94906f417cac82:src/main.lkj:34:pub mod semantic;
+16055fc067748b8c42cdcf56cf94906f417cac82:src/main.lkj:35:pub mod semantic_facts;
+16055fc067748b8c42cdcf56cf94906f417cac82:src/main.lkj:36:pub mod semantic_store;
+16055fc067748b8c42cdcf56cf94906f417cac82:src/main.lkj:37:pub mod semantic_query;
+16055fc067748b8c42cdcf56cf94906f417cac82:src/main.lkj-38-pub mod source;
+16055fc067748b8c42cdcf56cf94906f417cac82:src/main.lkj-39-pub mod store;
+--
+16055fc067748b8c42cdcf56cf94906f417cac82:src/native.lkj-19-mod intrinsics;
+16055fc067748b8c42cdcf56cf94906f417cac82:src/native.lkj-20-mod layout;
+16055fc067748b8c42cdcf56cf94906f417cac82:src/native.lkj:21:pub mod semantic;
+16055fc067748b8c42cdcf56cf94906f417cac82:src/native.lkj-22-mod ownership;
+16055fc067748b8c42cdcf56cf94906f417cac82:src/native.lkj-23-pub(crate) mod platform;
+
+=== original ordinal 152 revision d6ff7809e49caf2c268ffe7d57b2ceae57f27bc8 parent d654a960cc50e4fad8dccad64f3b7fcad250bd5b root src/main.lkj ===
+d6ff7809e49caf2c268ffe7d57b2ceae57f27bc8:src/structure_refactor_cases.lkj-4-mod json; mod names; mod optimizer; mod resolve; mod reuse; mod runtime_memory;
+d6ff7809e49caf2c268ffe7d57b2ceae57f27bc8:src/structure_refactor_cases.lkj-5-mod native; mod x86; mod child_image; mod entry_grants; mod runtime; mod runtime_diagnostics; mod semantic; mod source; mod syntax;
+d6ff7809e49caf2c268ffe7d57b2ceae57f27bc8:src/structure_refactor_cases.lkj:6:mod structure_edit; mod structure_refactor;
+d6ff7809e49caf2c268ffe7d57b2ceae57f27bc8:src/structure_refactor_cases.lkj-7-pub use std::sha256;
+d6ff7809e49caf2c268ffe7d57b2ceae57f27bc8:src/structure_refactor_cases.lkj-8-pub fn main(mut world: World) { cases::run(&mut world); }
+
+=== original ordinal 154 revision 3556e5824c77ddfe2d18322fe35d5f6de947a679 parent d225e8cbe643ee7e1e99b1d345a482e127e5b3b3 root src/lib.lkj ===
+
+=== original ordinal 157 revision acf740271957297971e379efb90c74ef392316a7 parent 7f7cdc776cea74b9f6bedf42ffde10bb261f2dd1 root src/lib.lkj ===
+acf740271957297971e379efb90c74ef392316a7:src/platform/compiler/elf_x86_64.rs-25-mod profiling;
+acf740271957297971e379efb90c74ef392316a7:src/platform/compiler/elf_x86_64.rs-26-mod runtime;
+acf740271957297971e379efb90c74ef392316a7:src/platform/compiler/elf_x86_64.rs:27:mod scalar_abi;
+acf740271957297971e379efb90c74ef392316a7:src/platform/compiler/elf_x86_64.rs:28:mod scalar_flow;
+acf740271957297971e379efb90c74ef392316a7:src/platform/compiler/elf_x86_64.rs:29:mod scalar_lower;
+acf740271957297971e379efb90c74ef392316a7:src/platform/compiler/elf_x86_64.rs-30-#[cfg(all(test, target_os = "linux", target_arch = "x86_64"))]
+acf740271957297971e379efb90c74ef392316a7:src/platform/compiler/elf_x86_64.rs-31-mod scalar_pool_tests;
+
+=== original ordinal 184 revision 411886df565d2875ad2c35e6ee8992ee4ed2f9ce parent ef1eaa0f6e77454064245b80e898dc61851d4eb1 root src/lib.lkj ===
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/change/mod.rs-108-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/change/mod.rs-109-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/change/mod.rs:110:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/change/request/parameter_order.rs-194-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/change/request/parameter_order.rs-195-#[path = "parameter_order_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/change/request/parameter_order.rs:196:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/cli/tx.rs-5-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/cli/tx.rs-6-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/cli/tx.rs:7:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/cli/tx.rs-8-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/cli/tx.rs-9-pub fn execute_tx(arguments: Vec<String>) -> Result<Vec<u8>, Vec<Diagnostic>> {
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/artifact_associated.rs-126-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/artifact_associated.rs-127-#[path = "artifact_associated_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/artifact_associated.rs:128:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/mod.rs-65-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/mod.rs-66-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/mod.rs:67:pub(crate) mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/mod.rs-68-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/mod.rs-69-#[cfg(test)]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/selfhost_source_input.rs-340-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/selfhost_source_input.rs-341-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/selfhost_source_input.rs:342:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/tests.rs-2-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/tests.rs-3-#[path = "artifact_capacity_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/tests.rs:4:mod artifact_capacity_tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/tests.rs-5-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/tests.rs-6-#[path = "associated_serial_admission_tests.rs"]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/unit_codec.rs-567-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/unit_codec.rs-568-#[path = "unit_codec_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/unit_codec.rs:569:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/contract/native_guides.rs-172-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/contract/native_guides.rs-173-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/contract/native_guides.rs:174:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/control/change/references.rs-4-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/control/change/references.rs-5-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/control/change/references.rs:6:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/control/change/references.rs-7-use crate::platform::change::{
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/control/change/references.rs-8-    AuthoredOwnerReferenceSelection, AuthoredOwnerReferenceSelector, AuthoredReference,
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/deployment/build.rs-3-mod output;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/deployment/build.rs-4-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/deployment/build.rs:5:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/deployment/build.rs-6-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/deployment/build.rs-7-use super::{
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/deployment/grant_selection.rs-119-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/deployment/grant_selection.rs-120-#[path = "grant_selection_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/deployment/grant_selection.rs:121:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/deployment/shared.rs-189-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/deployment/shared.rs-190-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/deployment/shared.rs:191:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/mailbox.rs-80-mod concurrency_tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/mailbox.rs-81-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/mailbox.rs:82:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/bytes.rs-11-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/bytes.rs-12-#[path = "bytes_storage_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/bytes.rs:13:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/bytes.rs-14-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/bytes.rs-15-#[derive(Clone)]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/bytes_slice.rs-4-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/bytes_slice.rs-5-#[path = "bytes_slice_storage_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/bytes_slice.rs:6:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/bytes_slice.rs-7-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/bytes_slice.rs-8-// A window owns one original backing, never another window. Nested slicing cannot
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/child_storage.rs-694-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/child_storage.rs-695-#[path = "child_storage_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/child_storage.rs:696:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/list.rs-646-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/list.rs-647-#[path = "list_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/list.rs:648:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/list.rs-649-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/list.rs-650-#[cfg(test)]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/local_moves.rs-240-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/local_moves.rs-241-#[path = "local_moves_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/local_moves.rs:242:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/local_moves.rs-243-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/local_moves.rs-244-#[cfg(test)]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/map.rs-658-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/map.rs-659-#[path = "map_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/map.rs:660:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/mod.rs-93-mod reference_associated_integration_tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/mod.rs-94-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/mod.rs:95:pub(crate) mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/prepared_signature_owned.rs-223-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/prepared_signature_owned.rs-224-#[path = "prepared_signature_owned_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/prepared_signature_owned.rs:225:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/read_view_storage.rs-18-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/read_view_storage.rs-19-#[path = "read_view_storage_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/read_view_storage.rs:20:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/read_view_storage.rs-21-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/read_view_storage.rs-22-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/reference_associated_preparation.rs-3699-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/reference_associated_preparation.rs-3700-#[path = "reference_associated_preparation_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/reference_associated_preparation.rs:3701:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/reference_associated_preparation.rs-3702-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/reference_associated_preparation.rs-3703-#[cfg(test)]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/reference_dependency_binding.rs-678-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/reference_dependency_binding.rs-679-#[path = "reference_dependency_binding_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/reference_dependency_binding.rs:680:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/reference_read_view_admission.rs-8026-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/reference_read_view_admission.rs-8027-#[path = "reference_read_view_admission_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/reference_read_view_admission.rs:8028:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/region_value.rs-570-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/region_value.rs-571-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/region_value.rs:572:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/structural_equality.rs-277-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/structural_equality.rs-278-#[path = "structural_equality_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/structural_equality.rs:279:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/structural_equality.rs-280-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/structural_equality.rs-281-#[cfg(test)]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm_checked.rs-2281-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm_checked.rs-2282-#[path = "vm_checked_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm_checked.rs:2283:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm_checked.rs-2284-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm_checked.rs-2285-#[cfg(test)]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm_read_views.rs-12-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm_read_views.rs-13-#[path = "vm_read_view_admission_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm_read_views.rs:14:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm_read_views.rs-15-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm_read_views.rs-16-pub(super) struct Scope {
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm_transfer.rs-917-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm_transfer.rs-918-#[path = "vm_transfer_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm_transfer.rs:919:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm_transfer.rs-920-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm_transfer.rs-921-#[cfg(test)]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/region.rs-722-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/region.rs-723-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/region.rs:724:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/region/persistence.rs-197-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/region/persistence.rs-198-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/region/persistence.rs:199:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/region/runtime.rs-487-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/region/runtime.rs-488-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/region/runtime.rs:489:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/installation/mod.rs-1064-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/installation/mod.rs-1065-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/installation/mod.rs:1066:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/associated_callable_flow.rs-6-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/associated_callable_flow.rs-7-#[path = "associated_callable_flow_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/associated_callable_flow.rs:8:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/associated_callable_flow.rs-9-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/associated_callable_flow.rs-10-#[derive(Clone, Debug, Eq, Ord, PartialEq, PartialOrd)]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/callable_flow.rs-8-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/callable_flow.rs-9-#[path = "callable_flow_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/callable_flow.rs:10:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/callable_flow.rs-11-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/callable_flow.rs-12-#[path = "composed_callable_flow.rs"]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/codec.rs-22-use crate::platform::packed;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/codec.rs-23-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/codec.rs:24:mod linear;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/codec.rs-25-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/codec.rs-26-pub const OWNER_BINDING_BYTES: usize = 33;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/codec/linear.rs-26-}
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/codec/linear.rs-27-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/codec/linear.rs:28:mod expression;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/codec/linear.rs:29:mod owner;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/codec/linear.rs-30-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/codec/linear.rs-31-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/codec/linear.rs:32:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/codec/linear.rs-33-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/codec/linear.rs-34-/// The wrapper changes allocation behavior, never the OwnerRecord wire schema.
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/composed_callable_flow.rs-2739-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/composed_callable_flow.rs-2740-#[path = "composed_callable_flow_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/composed_callable_flow.rs:2741:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/composed_callable_flow.rs-2742-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/composed_callable_flow.rs-2743-#[cfg(test)]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/demanded_callable_inputs.rs-161-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/demanded_callable_inputs.rs-162-#[path = "demanded_callable_input_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/demanded_callable_inputs.rs:163:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/demanded_callable_scopes.rs-48-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/demanded_callable_scopes.rs-49-#[path = "demanded_callable_scope_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/demanded_callable_scopes.rs:50:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/mod.rs-23-mod digest;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/mod.rs-24-mod effect;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/mod.rs:25:mod expression;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/mod.rs-26-mod id;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/mod.rs-27-mod implementation;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/mod.rs-39-pub(crate) mod owned_product;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/mod.rs-40-pub(crate) mod owned_record;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/mod.rs:41:mod owner;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/mod.rs-42-pub(crate) mod parallel;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/mod.rs-43-pub(crate) mod parallel_types;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/mod.rs-107-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/mod.rs-108-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/mod.rs:109:pub(crate) mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/mod.rs-110-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/mod.rs-111-#[cfg(test)]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/owned_associated.rs-23-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/owned_associated.rs-24-#[path = "owned_associated_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/owned_associated.rs:25:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/owned_associated.rs-26-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/owned_associated.rs-27-#[derive(Clone, Copy, Debug, Eq, Ord, PartialEq, PartialOrd)]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/read_view.rs-354-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/read_view.rs-355-#[path = "read_view_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/read_view.rs:356:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/read_view_flow_reference.rs-3243-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/read_view_flow_reference.rs-3244-#[path = "read_view_flow_reference_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/read_view_flow_reference.rs:3245:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/region.rs-7-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/region.rs-8-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/region.rs:9:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/region.rs-10-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/kernel/region.rs-11-fn reject(message: &str) -> Diagnostic {
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/normalized_lifecycle/supplier_cache.rs-392-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/normalized_lifecycle/supplier_cache.rs-393-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/normalized_lifecycle/supplier_cache.rs:394:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/native_plan.rs-559-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/native_plan.rs-560-#[path = "native_plan_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/native_plan.rs:561:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/packed.rs-1-//! Canonical integrity envelope for packed semantic objects.
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/packed.rs-2-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/packed.rs:3:pub(crate) mod linear;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/packed.rs-4-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/packed.rs-5-use super::canonical_schema::SCHEMA_EPOCH;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/persistent_map_read_cache.rs-173-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/persistent_map_read_cache.rs-174-#[path = "persistent_map_read_cache_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/persistent_map_read_cache.rs:175:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/project_creation/editor.rs-95-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/project_creation/editor.rs-96-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/project_creation/editor.rs:97:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/project_creation/native.rs-98-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/project_creation/native.rs-99-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/project_creation/native.rs:100:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/dependency_source_priority.rs-138-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/dependency_source_priority.rs-139-#[path = "dependency_source_priority_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/dependency_source_priority.rs:140:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/gc.rs-484-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/gc.rs-485-#[path = "gc/tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/gc.rs:486:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/gc/retain.rs-199-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/gc/retain.rs-200-#[path = "retain_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/gc/retain.rs:201:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/history.rs-178-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/history.rs-179-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/history.rs:180:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/link_read_reuse.rs-489-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/link_read_reuse.rs-490-#[path = "link_read_reuse_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/link_read_reuse.rs:491:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/memory_repository.rs-5-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/memory_repository.rs-6-#[path = "memory_repository_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/memory_repository.rs:7:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/memory_repository.rs-8-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/memory_repository.rs-9-impl GraphRepository {
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/mod.rs-78-mod repository_tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/mod.rs-79-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/mod.rs:80:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/republish.rs-280-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/republish.rs-281-#[path = "republish_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/republish.rs:282:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/validation.rs-348-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/validation.rs-349-#[path = "validation_cache_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/validation.rs:350:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/validation.rs-351-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/publication/validation.rs-352-#[cfg(test)]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/runtime/structured.rs-404-    reason = "controlled scheduler proofs"
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/runtime/structured.rs-405-)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/runtime/structured.rs:406:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/runtime/structured.rs-407-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/runtime/structured.rs-408-#[cfg(test)]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/storage/directory/gc.rs-193-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/storage/directory/gc.rs-194-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/storage/directory/gc.rs:195:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/storage/mod.rs-12-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/storage/mod.rs-13-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/storage/mod.rs:14:mod tests;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/witness/mod.rs-56-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/witness/mod.rs-57-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/witness/mod.rs:58:mod tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/witness/mod.rs-59-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/witness/mod.rs-60-#[cfg(test)]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/release_container/mod.rs-602-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/release_container/mod.rs-603-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/release_container/mod.rs:604:pub(crate) mod tests;
+

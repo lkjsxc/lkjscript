@@ -1,0 +1,249 @@
+Supporting read-only Git excerpts for the manual route classifications.
+These textual searches are not parser output or admission observations.
+
+Request compiler-strict-new-file-includes-read-639
+52e3e11cd45dd4f05b7bffbf12c8f6ea986cf645:src/platform/execution/normalized/typed_compiler_input_tests.rs-4-use super::*;
+52e3e11cd45dd4f05b7bffbf12c8f6ea986cf645:src/platform/execution/normalized/typed_compiler_input_tests.rs-5-use std::time::Instant;
+52e3e11cd45dd4f05b7bffbf12c8f6ea986cf645:src/platform/execution/normalized/typed_compiler_input_tests.rs-6-
+52e3e11cd45dd4f05b7bffbf12c8f6ea986cf645:src/platform/execution/normalized/typed_compiler_input_tests.rs:7:#[path = "typed_compiler_input_fixture_tests.rs"]
+52e3e11cd45dd4f05b7bffbf12c8f6ea986cf645:src/platform/execution/normalized/typed_compiler_input_tests.rs-8-mod fixture;
+52e3e11cd45dd4f05b7bffbf12c8f6ea986cf645:src/platform/execution/normalized/typed_compiler_input_tests.rs-9-
+52e3e11cd45dd4f05b7bffbf12c8f6ea986cf645:src/platform/execution/normalized/typed_compiler_input_tests.rs-10-const TYPED_SOURCE: &str = concat!(
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_source_profile_tests.rs-8-use std::collections::{BTreeMap, BTreeSet};
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_source_profile_tests.rs-9-use std::io::Write;
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_source_profile_tests.rs-10-
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_source_profile_tests.rs:11:#[path = "selfhost_source_profile_flow_tests.rs"]
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_source_profile_tests.rs-12-mod flow;
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_source_profile_tests.rs-13-
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_source_profile_tests.rs-14-type Histogram = BTreeMap<String, usize>;
+--
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_source_tests.rs-860-#[path = "selfhost_source_function_binder_oracle_tests.rs"]
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_source_tests.rs-861-mod function_binder_oracle;
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_source_tests.rs-862-
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_source_tests.rs:863:#[path = "selfhost_source_profile_tests.rs"]
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_source_tests.rs-864-mod profile;
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_source_tests.rs-865-
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_source_tests.rs-866-#[path = "selfhost_source_measure_tests.rs"]
+47e989412e40ad2fd6ab75240f5c6a31d922288c:src/platform/compiler/tests.rs-3-#[path = "artifact_capacity_tests.rs"]
+47e989412e40ad2fd6ab75240f5c6a31d922288c:src/platform/compiler/tests.rs-4-mod artifact_capacity_tests;
+47e989412e40ad2fd6ab75240f5c6a31d922288c:src/platform/compiler/tests.rs-5-
+47e989412e40ad2fd6ab75240f5c6a31d922288c:src/platform/compiler/tests.rs:6:#[path = "link_projection_tests.rs"]
+47e989412e40ad2fd6ab75240f5c6a31d922288c:src/platform/compiler/tests.rs:7:mod link_projection_tests;
+47e989412e40ad2fd6ab75240f5c6a31d922288c:src/platform/compiler/tests.rs-8-
+47e989412e40ad2fd6ab75240f5c6a31d922288c:src/platform/compiler/tests.rs:9:#[path = "link_projection_measurement_tests.rs"]
+47e989412e40ad2fd6ab75240f5c6a31d922288c:src/platform/compiler/tests.rs-10-mod link_projection_measurement;
+47e989412e40ad2fd6ab75240f5c6a31d922288c:src/platform/compiler/tests.rs-11-
+47e989412e40ad2fd6ab75240f5c6a31d922288c:src/platform/compiler/tests.rs-12-#[path = "associated_serial_admission_tests.rs"]
+acf740271957297971e379efb90c74ef392316a7:src/platform/execution/normalized/native_phase_tests.rs-16-#[path = "native_phase_caller.rs"]
+acf740271957297971e379efb90c74ef392316a7:src/platform/execution/normalized/native_phase_tests.rs-17-mod caller;
+acf740271957297971e379efb90c74ef392316a7:src/platform/execution/normalized/native_phase_tests.rs-18-use caller::{Mode, word};
+acf740271957297971e379efb90c74ef392316a7:src/platform/execution/normalized/native_phase_tests.rs:19:#[path = "native_scalar_boundary_tests.rs"]
+acf740271957297971e379efb90c74ef392316a7:src/platform/execution/normalized/native_phase_tests.rs-20-mod scalar_boundaries;
+acf740271957297971e379efb90c74ef392316a7:src/platform/execution/normalized/native_phase_tests.rs-21-#[path = "native_scalar_probe_tests.rs"]
+acf740271957297971e379efb90c74ef392316a7:src/platform/execution/normalized/native_phase_tests.rs-22-mod scalar_probe;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/unit.rs-16-use std::fmt;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/unit.rs-17-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/unit.rs:18:#[path = "unit_codec.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/unit.rs-19-mod codec;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/unit.rs-20-#[path = "unit_region.rs"]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/selfhost_source_artifact_tests.rs-44-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/selfhost_source_artifact_tests.rs-45-#[cfg(all(target_os = "linux", target_arch = "x86_64"))]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/selfhost_source_artifact_tests.rs:46:#[path = "selfhost_source_sequence_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/selfhost_source_artifact_tests.rs-47-mod sequence;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/selfhost_source_artifact_tests.rs-48-
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/selfhost_source_sequence_tests.rs-13-use std::sync::Mutex;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/selfhost_source_sequence_tests.rs-14-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/selfhost_source_sequence_tests.rs:15:#[path = "selfhost_source_sequence_preparation_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/selfhost_source_sequence_tests.rs-16-mod preparation;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/selfhost_source_sequence_tests.rs-17-
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm.rs-49-pub(super) mod borrow_result_tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm.rs-50-#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm.rs:51:#[path = "vm_preparation_capacity_tests.rs"]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm.rs-52-mod preparation_capacity_tests;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/normalized/vm.rs-53-#[cfg(test)]
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1534-    include!("native_plan_reuse_tests.rs");
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1535-    include!("source_validation_control_tests.rs");
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs:1536:    include!("source_capacity_tests.rs");
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1537-    include!("source_validation_reuse_tests.rs");
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1538-
+
+Request compiler-strict-new-file-chain-read-641
+81048410169c593a251af05697f7953db5324808:src/lib.rs-17-pub mod names;
+81048410169c593a251af05697f7953db5324808:src/lib.rs-18-pub mod native;
+81048410169c593a251af05697f7953db5324808:src/lib.rs:19:pub mod optimizer;
+81048410169c593a251af05697f7953db5324808:src/lib.rs-20-pub mod resolve;
+81048410169c593a251af05697f7953db5324808:src/lib.rs-21-pub mod reuse;
+--
+81048410169c593a251af05697f7953db5324808:src/main.rs-21-pub mod names;
+81048410169c593a251af05697f7953db5324808:src/main.rs-22-pub mod native;
+81048410169c593a251af05697f7953db5324808:src/main.rs:23:pub mod optimizer;
+81048410169c593a251af05697f7953db5324808:src/main.rs-24-pub mod resolve;
+81048410169c593a251af05697f7953db5324808:src/main.rs-25-pub mod reuse;
+--
+81048410169c593a251af05697f7953db5324808:src/semantic_tests.rs-8-mod interpreter_contracts;
+81048410169c593a251af05697f7953db5324808:src/semantic_tests.rs-9-mod library_demand;
+81048410169c593a251af05697f7953db5324808:src/semantic_tests.rs:10:mod optimizer;
+81048410169c593a251af05697f7953db5324808:src/semantic_tests.rs-11-mod parser_contracts;
+81048410169c593a251af05697f7953db5324808:src/semantic_tests.rs-12-mod resolver;
+52e3e11cd45dd4f05b7bffbf12c8f6ea986cf645:src/platform/execution/normalized/selfhost_source_tests.rs-1136-}
+52e3e11cd45dd4f05b7bffbf12c8f6ea986cf645:src/platform/execution/normalized/selfhost_source_tests.rs-1137-
+52e3e11cd45dd4f05b7bffbf12c8f6ea986cf645:src/platform/execution/normalized/selfhost_source_tests.rs:1138:#[path = "typed_compiler_input_tests.rs"]
+52e3e11cd45dd4f05b7bffbf12c8f6ea986cf645:src/platform/execution/normalized/selfhost_source_tests.rs-1139-mod typed_compiler_input;
+52e3e11cd45dd4f05b7bffbf12c8f6ea986cf645:src/platform/execution/normalized/selfhost_source_tests.rs-1140-
+M	src/driver.lkj
+M	src/elaborate.lkj
+M	src/elaborate/definition_types.lkj
+M	src/elaborate/definition_types/pattern_equations.lkj
+A	src/elaborate/definition_types/semantic.lkj
+A	src/elaborate/semantic.lkj
+M	src/native.lkj
+M	src/semantic.lkj
+A	src/semantic/references.lkj
+M	src/semantic_facts.lkj
+M	src/semantic_query.lkj
+M	src/semantic_store.lkj
+M	src/store.lkj
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/lib.rs-13-pub const PRODUCT_VERSION_POLICY: &str = "opaque-triplet";
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/lib.rs-14-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/lib.rs:15:pub mod platform;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/lib.rs-16-pub mod release_container;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/mod.rs-14-mod cache;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/mod.rs-15-pub(crate) mod egraph_opt;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/mod.rs:16:pub(crate) mod elf_x86_64;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/mod.rs-17-mod immutable;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/compiler/mod.rs-18-mod link;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/mod.rs-3-mod control;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/mod.rs-4-pub(crate) mod mailbox;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/mod.rs:5:pub(crate) mod normalized;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/mod.rs-6-pub mod region;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/execution/mod.rs-7-
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs-20-    reason = "normalized compiler internals are process-private behind lifecycle preparation"
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs-21-)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs:22:pub(crate) mod compiler;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs-23-pub mod configuration;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs-24-pub mod contract;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs-28-pub mod deployment;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs-29-pub mod diagnostic;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs:30:pub mod execution;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs-31-pub mod graph;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs-32-pub mod http;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs-39-    reason = "the current semantic kernel is process-private behind typed public adapters"
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs-40-)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs:41:pub(crate) mod kernel;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs-42-pub mod language;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs-43-pub mod meaning;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs-44-pub mod native_tool;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs:45:pub(crate) mod normalized_lifecycle;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs:46:pub(crate) mod normalized_query;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs-47-pub mod object;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/mod.rs-48-pub(crate) mod owned_output;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-35-pub const READINESS_CONTRACT_IDENTITY: &str = "lkjscript-package-transport-selection";
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-36-pub const READINESS_CONTRACT_VERSION: u16 = crate::platform::canonical_schema::SCHEMA_EPOCH;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs:37:#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-38-pub(crate) const FORMER_VALIDATION_VISITS: u64 = 16_000_000;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs:39:#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-40-pub(crate) const FORMER_VALIDATION_READ_BYTES: u64 = 4_294_967_296;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-41-
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-405-    }
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-406-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs:407:    #[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-408-    pub(crate) fn admit_with_budget(
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-409-        &self,
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-630-    }
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-631-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs:632:    #[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-633-    pub(crate) fn remaining_read_bytes(&self) -> Option<u64> {
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-634-        self.admission.borrow().remaining().maximum_bytes
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-968-        }
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-969-        store.charge_observed_visits(intrinsic_work.consumed as u64, intrinsic_work.saturated)?;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs:970:        #[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-971-        tests::before_source_full_validation(control);
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-972-        // Fresh canonical reconstruction, exact interface attachment, profile and intrinsic
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1106-    let source_snapshots = packages.values().map(|p| &p.snapshot).collect::<Vec<_>>();
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1107-    let mut composed_work = crate::platform::kernel::ValidationWork::default();
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs:1108:    #[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1109-    tests::before_source_composed_validation(control);
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1110-    crate::platform::kernel::callable_flow::validate_snapshot_callable_closure(
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1163-use shared_interfaces::SharedDependencyInterfaces;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1164-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs:1165:#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1166-std::thread_local! {
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1167-    static DEPENDENCY_COPY_COUNTS: std::cell::Cell<(usize, usize)> = const {
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1516-}
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1517-
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs:1518:#[cfg(test)]
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs:1519:mod tests {
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1520-    use super::*;
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1521-    use crate::platform::publication::GraphRepository;
+--
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1534-    include!("native_plan_reuse_tests.rs");
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1535-    include!("source_validation_control_tests.rs");
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs:1536:    include!("source_capacity_tests.rs");
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1537-    include!("source_validation_reuse_tests.rs");
+411886df565d2875ad2c35e6ee8992ee4ed2f9ce:src/platform/package_transport/source.rs-1538-
+
+Request compiler-strict-new-file-ancestors-read-642
+81048410169c593a251af05697f7953db5324808:src/semantic_main.rs-23-pub mod runtime_memory;
+81048410169c593a251af05697f7953db5324808:src/semantic_main.rs-24-pub use std::sha256;
+81048410169c593a251af05697f7953db5324808:src/semantic_main.rs:25:mod semantic_tests;
+81048410169c593a251af05697f7953db5324808:src/semantic_main.rs-26-pub mod source;
+81048410169c593a251af05697f7953db5324808:src/semantic_main.rs-27-pub mod syntax;
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_tests.rs-16-#[path = "selfhost_closure_tests.rs"]
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_tests.rs-17-mod closure;
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_tests.rs:18:#[path = "selfhost_source_tests.rs"]
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_tests.rs-19-mod source;
+3556e5824c77ddfe2d18322fe35d5f6de947a679:src/platform/execution/normalized/selfhost_tests.rs-20-
+acf740271957297971e379efb90c74ef392316a7:src/platform/execution/normalized/selfhost_source_artifact_tests.rs-53-mod label_measurement;
+acf740271957297971e379efb90c74ef392316a7:src/platform/execution/normalized/selfhost_source_artifact_tests.rs-54-
+acf740271957297971e379efb90c74ef392316a7:src/platform/execution/normalized/selfhost_source_artifact_tests.rs:55:#[path = "native_phase_tests.rs"]
+acf740271957297971e379efb90c74ef392316a7:src/platform/execution/normalized/selfhost_source_artifact_tests.rs-56-mod phase;
+acf740271957297971e379efb90c74ef392316a7:src/platform/execution/normalized/selfhost_source_artifact_tests.rs-57-use artifact_support::{RepositoryCopy, run_filter, run_scalar};
+7b6d333b0853094725c191b2503cf247ecc128c4:src/elaborate.lkj-6-mod constructors;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/elaborate.lkj:7:mod definition_types;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/elaborate.lkj-8-mod derive_check;
+--
+7b6d333b0853094725c191b2503cf247ecc128c4:src/elaborate.lkj-26-mod sequences;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/elaborate.lkj:27:pub mod semantic;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/elaborate.lkj-28-mod static_lifetimes;
+--
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj-14-pub mod host_network;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj:15:pub mod elaborate;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj-16-pub mod embedded;
+--
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj-25-pub mod names;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj:26:pub mod native;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj-27-pub mod optimizer;
+--
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj-36-pub mod structure_write;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj:37:pub mod semantic;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj:38:pub mod semantic_facts;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj:39:pub mod semantic_store;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj:40:pub mod semantic_query;
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj-41-pub mod source;
+--
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj-47-
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj:48:pub fn main(world: World) {
+7b6d333b0853094725c191b2503cf247ecc128c4:src/main.lkj-49-    driver::main(world);
+M	src/driver.lkj
+A	src/driver/structure.lkj
+M	src/lib.lkj
+M	src/main.lkj
+A	src/meaning.lkj
+A	src/structure_edit.lkj
+A	src/structure_write.lkj
+
