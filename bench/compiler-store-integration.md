@@ -116,3 +116,20 @@ seed is 6,367,172 bytes, SHA-256
 A second compression compares byte-for-byte, and decompression compares exactly
 with `target/lkjscript`. New CI acceptance will be recorded in
 `docs/status.md`; no latency improvement is inferred from these correctness runs.
+
+## Accepted Store integration CI
+
+Both jobs of [CI43827465744](https://github.com/lkjsxc/lkjscript/actions/runs/43827465744)
+passed at `2bdab38837e54c3057489891e0e33b7a8beea178`.
+The seed-only native gate ran 5,448 case requests fresh, with zero case reuse,
+in **1,641.955 s (load 0.74 → 2.08)**. Its bootstrap took 87.269 s
+(load 0.74 → 1.07). The optional Rust witness reports 276 value/output
+cases, 344 verdicts and exact compiler bytes; both Directory suites passed
+across native, interpretation and Rust routes.
+
+The downloaded [native log](compiler-store-gate-data/ci-gate.log) has SHA-256
+`e1952492373748ae5deb124174a3f8465be83abb2a88b70db1828c59b04f3edc`;
+the [witness log](compiler-store-gate-data/ci-witness.log) has SHA-256
+`d4a42a92a42a4b4a5719f18f0f1eb9422dc13803833ec54c83b99749e7875801`.
+This acceptance belongs to the Store integration and its ADC producer. The
+later explicit source-scope change has a separate gate and CI history.

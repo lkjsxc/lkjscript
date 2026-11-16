@@ -45,7 +45,11 @@ Only `src/driver/structure.lkj` changes:
 → `2b02455269ae3226ca027da6c41bfa7cfc09c11cf023a983f850297dd71c3c49`.
 The retained delta is **10 added and four deleted language lines, all 14 applied
 by those four operations**, with no manual language-file change. Before and
-after manifests cover all 1,206 tracked `.lkj` files.
+after manifests cover all 1,206 tracked `.lkj` files. An independent read-only
+audit checks all 2,412 before/after Git blobs, reconstructs the exact committed
+file from the four original items and replacements, and verifies the request's
+text expectations. Its [raw result](compiler-replay-scope-data/independent-audit.log)
+is retained with the other operation evidence.
 
 The operation used producer
 `adc0b26f2c6db38710971b48ca88a6598078537959e04accbaae60a07a82ccc7`,
@@ -99,3 +103,33 @@ the command trace and actual refusal.
 This is a CLI scope correction, not a performance result or new historical
 replay proof. The complete four-worker gate, canonical fixed point and CI are
 required before a separately frozen new replay campaign.
+
+## Accepted full gate and canonical seed
+
+The full empty-store gate at `830896f51b449532e99c203a6531844fa399fb50`
+passed in **657.932 s (load 6.68 → 9.29)**, with 5,448 fresh case requests,
+zero case reuse and 128 mutants with zero findings. GNU time reports 657.93 wall
+seconds, 1,629.96 user seconds, 34.69 system seconds and peak RSS
+1,213,464 KiB. Four workers ran under a 4 GiB address-space limit and a
+2,400-second watchdog. The fresh store occupied 316,084,405 bytes before
+its directory and external private key were removed; the process was drained.
+
+The canonical bootstrap passed in **86.797 s (load 6.68 → 9.68)** and
+reproduced the 31,724,996-byte executable with SHA-256
+`ab2fa80787261e2fec6d872d989099d3b1dd0984c26ac59bf89c7237d9e97504`.
+This is the producer for any later frozen scope campaign, distinct from the
+focused absolute-path build above. The source/library trees remain unchanged
+through the evidence-only and seed commits.
+
+The [full log](compiler-replay-scope-data/cold-gate.log) has SHA-256
+`aff46525d057e1195fa3d5fb2dda2d324d5a2884ab791069d485451f0294ed46`.
+The final mutation detail records 104 rejections, 22 values, one trap, one
+nontermination and no resource findings. Its 15 checked and three emitted
+reuses are internal mutation-campaign reuse, separate from zero gate-case reuse.
+
+Seed-only commit `8007e47d` stores that exact canonical producer with
+`gzip -n -9`: 6,367,232 compressed bytes, SHA-256
+`13c601190b8bb3926a03d2b1bd40f875c357b68d3376f073f3db74e3f569faca`.
+Independent repeated compression compares exactly, and decompression matches
+the gated executable. New scope CI and any later historical replay outcomes
+remain separate acceptance steps.
