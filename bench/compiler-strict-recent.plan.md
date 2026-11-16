@@ -41,12 +41,14 @@ configuration switch, fallback library, omitted off-root language file, or
 historical Rust compilation is allowed. The exact historical logic remains the
 input to the current producer; an admission refusal is a result.
 
-The compiler command for a case is exactly:
+Preparation amendment v2 changes the process working directory to the exact
+`CASE/after` tree and makes the desired entry relative. The compiler command,
+executed from that directory, is exactly:
 
 ```text
 COPIED_PRODUCER edit src/main.lkj
   --source-dir CASE/before
-  --against CASE/after/src/main.lkj
+  --against src/main.lkj
   --library-dir CASE/before/library
   --against-library-dir CASE/after/library
   --inline-limit 0
@@ -55,7 +57,14 @@ COPIED_PRODUCER edit src/main.lkj
 ```
 
 The actual argument vector is retained as NUL-delimited bytes for every launched
-command. There is no runtime selector and no native historical compiler image
+command, alongside requested cwd and the physical cwd read inside the measured
+subprocess; a failed change-directory or physical-cwd mismatch exits before
+starting the compiler. Before every case, canonicalize both source roots, both library roots,
+and the private key path; refuse if the key is equal to or beneath any of those
+granted roots. Retain the resulting path-only grant table. With a relative
+`--against`, the desired compiler source Directory is `.` at `CASE/after`;
+its grant does not contain `FIXTURE/key`. Recovery uses the same cwd and explicit
+before root. There is no runtime selector and no native historical compiler image
 is emitted or executed by this replay command. The contract compares original
 checked programs through the canonical checked-meaning domain; explicit
 `--inline-limit 0` also prevents a producer option change from obscuring that
@@ -155,8 +164,13 @@ perl bench/compiler-strict-recent-audit.pl --report \
   2> bench/compiler-strict-recent.audit.log
 ```
 
-The immutable preparation manifest covers this protocol, the harness, auditor,
-static inventory script, and frozen inventory files. Runtime records receive a
+The original preparation commit `803c7367` and its original
+`compiler-strict-recent.prepared.sha256` remain unchanged historical evidence.
+Its absolute desired-path invocation was never executed and is superseded by
+this source-grant correction. The amendment and static code trace are recorded in
+`compiler-strict-recent-amendment.md`. The new immutable
+`compiler-strict-recent.prepared-v2.sha256` covers the corrected protocol,
+harness, auditor, amendment, static inventory script, and frozen inventory files. Runtime records receive a
 separate manifest and report; no frozen historical table or preparation evidence
 is overwritten. The fixture remains until the root session accepts the evidence.
 Then the harness's guarded `--cleanup OWNED_FIXTURE` mode removes only its owned

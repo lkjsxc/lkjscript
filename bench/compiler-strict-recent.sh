@@ -53,7 +53,7 @@ timeout_seconds=900
 store_bytes=2147483648
 history_head=6a187b94fb763f7b0565436a98ab5feda3cd642f
 perl bench/compiler-strict-recent-inventory.pl "$repository" bench/compiler-strict-recent --check
-sha256sum --status -c bench/compiler-strict-recent.prepared.sha256
+sha256sum --status -c bench/compiler-strict-recent.prepared-v2.sha256
 [[ $(sha256sum "$compiler_origin" | cut -d ' ' -f 1) == "$expected_sha" ]] || {
     printf 'E_REPLAY_PRODUCER origin hash differs from released pin\n' >&2; exit 2;
 }
@@ -67,9 +67,9 @@ printf 'compiler_origin=%s\ncompiler_sha256=%s\ncompiler_bytes=%s\nproducer_sour
     "$compiler_origin" "$expected_sha" "$compiler_bytes" "$producer_source" \
     "$(git -C "$repository" rev-parse "$producer_source:src")" \
     "$(git -C "$repository" rev-parse "$producer_source:library")" >> "$output.meta"
-printf 'harness_sha256=%s\nprepared_manifest_sha256=%s\nprior_proofs=24\nprior_producer_sha256=4c4537ea7ccb31213f376d1402f619883eea6f8877fdb8b752b31df364099e09\nlibrary_policy=physical-exact-historical-library-on-both-sides\nruntime_policy=no-runtime-selector-no-native-historical-image-execution\ninline_limit=0\n' \
+printf 'preparation_version=2\nsuperseded_preparation_commit=803c7367c8e7bd3858652001a98176ef68fdc15f\nworking_directory=case-after\nagainst_policy=relative-src-main\nkey_grant_fence=canonical-before-after-and-both-libraries\nharness_sha256=%s\nprepared_manifest_sha256=%s\nprior_proofs=24\nprior_producer_sha256=4c4537ea7ccb31213f376d1402f619883eea6f8877fdb8b752b31df364099e09\nlibrary_policy=physical-exact-historical-library-on-both-sides\nruntime_policy=no-runtime-selector-no-native-historical-image-execution\ninline_limit=0\n' \
     "$(sha256sum "$0" | cut -d ' ' -f 1)" \
-    "$(sha256sum bench/compiler-strict-recent.prepared.sha256 | cut -d ' ' -f 1)" >> "$output.meta"
+    "$(sha256sum bench/compiler-strict-recent.prepared-v2.sha256 | cut -d ' ' -f 1)" >> "$output.meta"
 fixture=
 active_pid=
 completed=0
@@ -177,16 +177,38 @@ materialize() {
     [[ -f "$destination/src/main.lkj" && -f "$destination/library/lib.lkj" ]] || return 14
     # No filename projection, source rewrite, synthetic root, cfg switch or library fallback.
 }
+grant_fence() {
+    local stem=$1 before_root=$2 after_root=$3 key_path role candidate root
+    key_path=$(realpath -e "$fixture/key") || return 21
+    printf 'role\tcanonical_path\n' > "$stem.grants.tsv"
+    for role in before-source desired-source before-library desired-library; do
+        case "$role" in
+            before-source) candidate=$before_root ;;
+            desired-source) candidate=$after_root ;;
+            before-library) candidate="$before_root/library" ;;
+            desired-library) candidate="$after_root/library" ;;
+        esac
+        root=$(realpath -e "$candidate") || return 21
+        [[ -d $root && $root == "$candidate" ]] || return 21
+        [[ $key_path != "$root" && $key_path != "$root/"* ]] || return 21
+        printf '%s\t%s\n' "$role" "$root" >> "$stem.grants.tsv"
+    done
+    printf 'private-key\t%s\n' "$key_path" >> "$stem.grants.tsv"
+}
 load() { awk '{print $1 "," $2 "," $3}' /proc/loadavg; }
 measure() {
-    local stem=$1 result=0 start end before after group_cleanup
-    shift
+    local stem=$1 run_directory=$2 result=0 start end before after group_cleanup
+    shift 2
     printf '%s\0' "$@" > "$stem.argv0"
+    printf '%s\n' "$run_directory" > "$stem.cwd-requested"
     before=$(load)
     start=$(date +%s%N)
     printf '%s\t%s\t%s\n' "$start" "$before" started > "$stem.started"
     (
-        cd "$fixture"
+        cd -- "$run_directory" || exit 126
+        physical_directory=$(pwd -P) || exit 126
+        printf '%s\n' "$physical_directory" > "$stem.cwd"
+        [[ $physical_directory == "$run_directory" ]] || exit 126
         exec setsid /usr/bin/time -q -f '%e\t%U\t%S\t%M' -o "$stem.time" \
             prlimit --as="$memory_bytes" -- timeout --foreground --kill-after=5s "$timeout_seconds" \
             "$@"
@@ -233,6 +255,9 @@ while IFS=$'\t' read -r ordinal revision parent root weight file_count rest; do
             materialize "$revision" "$case_dir/after" "$stem.after-archive-paths" || prep=$?
         fi
     fi
+    if [[ $prep == 0 ]]; then
+        grant_fence "$stem" "$case_dir/before" "$case_dir/after" || prep=$?
+    fi
     if [[ $prep != 0 ]]; then
         stop_reason="setup-$prep"
         printf '%s\t%s\t%s\trefused\t-\t0\t0\t-\t-\t-\t-\t-\t-\t%s\tnot-loaded\t%s\n' \
@@ -241,12 +266,12 @@ while IFS=$'\t' read -r ordinal revision parent root weight file_count rest; do
         continue
     fi
     args=("$compiler" edit "$root" --source-dir "$case_dir/before"
-        --against "$case_dir/after/$root"
+        --against "$root"
         --library-dir "$case_dir/before/library" --against-library-dir "$case_dir/after/library"
         --inline-limit 0 --store "$fixture/store" --store-bytes "$store_bytes" --store-key "$fixture/key" --stats)
     result=0
     ((launched += 1))
-    measure "$stem" "${args[@]}" || result=$?
+    measure "$stem" "$case_dir/after" "${args[@]}" || result=$?
     metrics=$(tail -n 1 "$stem.time")
     [[ $(printf '%s' "$metrics" | awk -F '\t' '{print NF}') == 4 ]] || metrics=$'-\t-\t-\t-'
     IFS=$'\t' read -r start end before after < "$stem.capture"
@@ -299,7 +324,7 @@ while IFS=$'\t' read -r ordinal revision parent root weight file_count rest; do
     if [[ -z $active_pid && -e "$case_dir/before/.lkjscript-edit.pending" ]]; then
         # Recovery is a separately retained cleanup action, never a replay retry.
         recovery=0
-        measure "$stem.recovery" "$compiler" edit "$root" --source-dir "$case_dir/before" \
+        measure "$stem.recovery" "$case_dir/after" "$compiler" edit "$root" --source-dir "$case_dir/before" \
             --recover --no-store --store-key "$fixture/key" || recovery=$?
         if [[ $recovery != 0 || -e "$case_dir/before/.lkjscript-edit.pending" ]]; then
             stop_reason=unrecovered-source-intent

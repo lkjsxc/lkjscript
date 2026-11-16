@@ -120,6 +120,9 @@ for my $expected (
     [compiler_sha256=>'adc0b26f2c6db38710971b48ca88a6598078537959e04accbaae60a07a82ccc7'],
     [producer_source_commit=>'4f8c213559b7de96b3b6bd6199da661dfc95f778'],
     [mode=>'replay'],[root_policy=>'explicit-src-main'],[inline_limit=>'0'],
+    [preparation_version=>'2'],[working_directory=>'case-after'],
+    [against_policy=>'relative-src-main'],[key_grant_fence=>'canonical-before-after-and-both-libraries'],
+    [superseded_preparation_commit=>'803c7367c8e7bd3858652001a98176ef68fdc15f'],
     [memory_bytes=>'4294967296'],[timeout_seconds=>'900'],[store_bytes=>'2147483648'],
     [workers=>'1'],[resume=>'false'],[retries=>'false'],
     [identity_domain=>'lkjscript-checked-meaning-1']
@@ -168,10 +171,24 @@ for my $index (0..$#records) {
     bytes("$stem.before") eq "$before\n" or die "historical source path differs\n";
     (my $after=$before)=~s{/before$}{/after};
     my @args=("$fixture/compiler",'edit','src/main.lkj','--source-dir',$before,
-        '--against',"$after/src/main.lkj",'--library-dir',"$before/library",
+        '--against','src/main.lkj','--library-dir',"$before/library",
         '--against-library-dir',"$after/library",'--inline-limit','0',
         '--store',"$fixture/store",'--store-bytes','2147483648','--store-key',"$fixture/key",'--stats');
     bytes("$stem.argv0") eq join('',map {"$_\0"} @args) or die "actual replay arguments differ\n";
+    bytes("$stem.cwd-requested") eq "$after\n" && bytes("$stem.cwd") eq "$after\n"
+        or die "actual desired-source working directory differs\n";
+    my @grants=(['before-source',$before],['desired-source',$after],
+        ['before-library',"$before/library"],['desired-library',"$after/library"]);
+    my $grant_text="role\tcanonical_path\n";
+    my $key="$fixture/key";
+    for my $grant (@grants) {
+        $key ne $grant->[1] && index($key,"$grant->[1]/")!=0
+            or die "private key is inside a granted source/library root\n";
+        $grant_text.=join("\t",@$grant)."\n";
+    }
+    $grant_text.="private-key\t$key\n";
+    bytes("$stem.grants.tsv") eq $grant_text or die "source/library/key grant evidence differs\n";
+
     my @capture=split /\t/,line(bytes("$stem.capture"));
     @capture==4 && $capture[0]=~/^\d+$/ && $capture[1]=~/^\d+$/ && $capture[1]>=$capture[0]
         && $capture[2] eq $row[11] && $capture[3] eq $row[12] or die "capture/load witness differs\n";
