@@ -641,6 +641,13 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                         add_reference(&mut result, &files, owner, path.name.clone(), node.span, leaf_name(&path.name), "lexical-name", false);
                         continue;
                     }
+                    let closed = source_functions.get(&owner).is_some_and(|function|
+                        crate::elaborate::semantic::closed_source_owner(program, *function));
+                    if matches!(node.kind, a::Expr::Path(_))
+                        && evidence.as_ref().is_some_and(|evidence|
+                            typed_associated(&mut result, &files, program, evidence, expression, &owner, closed)) {
+                        continue;
+                    }
                     let resolved = resolver.value_path(node.scope, path, node.span).ok();
                     let target = if self_record { self_claim.as_ref().map(|claim| claim.0.clone()) }
                         else { resolved.as_ref().and_then(|path| value_identity(program, path, &result.function_ids)) };
@@ -653,7 +660,9 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                         path_reference(&mut result, &files, owner.clone(), target.clone(), node.span,
                             if matches!(node.kind, a::Expr::Struct { .. }) { "constructor" } else { "value" },
                             &resolver, node.scope, matches!(node.kind, a::Expr::Struct { .. }));
-                    } else if resolved.as_ref().is_some_and(|path| path.declaration.is_some()) {
+                    } else if resolved.as_ref().is_some_and(|path| path.declaration.is_some())
+                        || (matches!(node.kind, a::Expr::Path(_)) && path.name.contains("::")
+                            && resolver.generic_path(path, node.span)) {
                         add_reference(&mut result, &files, owner.clone(), path.name.clone(), node.span, leaf_name(&path.name), "associated-function", false);
                     }
                     constructor_fields(&mut result, &files, program, &owner, node, &target);

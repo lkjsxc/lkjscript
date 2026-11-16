@@ -67,6 +67,26 @@ omits body references and never permits a rename proof from their absence.
 Compiler checkpoints can reuse this smaller capture; a full typed index must
 obtain the missing resolved/inferred evidence.
 
+Associated calls such as `Widget::make()` and `Self::make()` publish an
+`associated-call` source reference only from a successful frontend selector.
+A declared trait contract can identify its member throughout an unused generic
+definition. An inherent source selection is exported only when the calling
+function has no type or const parameters, its enclosing implementation has none,
+and it is not a trait-owned function; lifetime parameters do not vary selection.
+Classification uses the declared function owner rather than an enclosing source
+span. Agreeing observed generic instances do not establish a definition-wide
+inherent target.
+
+The member's exact terminal token is separate from its type/module/alias prefix.
+Rename and signature operations can therefore use a proven member reference
+without renaming an owner alias. Builtin, conflicting and unavailable selections
+remain explicit gaps. A type argument list before the member, as in
+`Boxed::<T>::make()`, currently prevents the terminal-token proof and refuses
+refactoring. A trait default calling `Self::make()` also retains the existing
+frontend constructor-routing refusal; this evidence extension does not change
+language admission. `uses` and `references` include the source claims, while
+`callers` and `callees` continue to describe checked monomorphic calls only.
+
 ## One checked request
 
 ```sh

@@ -301,6 +301,59 @@ mod cases {
             Err(error) => { world.stdout().write(format!("{error}\n").as_bytes()); panic!("structural refactor case failed"); }
         }
     }
+
+fn associated_evidence() -> Result<usize, String> {
+    for mode in 0usize..7usize {
+        let source = match mode {
+            3usize => "struct Fixed {} impl Fixed { fn make() -> i64 { 3i64 } } fn generic<T>() -> i64 { Fixed::make() } fn main() -> i64 { generic::<bool>() }",
+            5usize => "struct Fixed {} impl Fixed { fn make() -> i64 { 3i64 } } struct Family<T> { value: T } impl<T> Family<T> { fn selected() -> i64 { Fixed::make() } } fn main() -> i64 { Family::<bool>::selected() }",
+            6usize => "struct Fixed {} impl Fixed { fn make() -> i64 { 3i64 } } trait DefaultBody { fn selected() -> i64 { Fixed::make() } } fn main() -> i64 { 3i64 }",
+            _ => "struct Fixed {} impl Fixed { fn make() -> i64 { 3i64 } } fn idle() -> i64 { Fixed::make() } fn main() -> i64 { 3i64 }",
+        };
+        let mut parsed = syntax::parse(source).map_err(|problem| problem.message)?;
+        parsed.files[0usize].path = "fixture.lkj".to_string();
+        let resolved = resolve::resolve(&parsed).map_err(|problem| problem.message)?;
+        let definitions = elaborate::infer_resolved_all(&resolved).map_err(|problems| -> String { problems[0usize].message.clone() })?;
+        let mut evidence = Some(elaborate::semantic::Evidence::default());
+        let raw = elaborate::lower_definitions_recorded_semantic(definitions, &mut None, &mut evidence)
+            .map_err(|problems| -> String { problems[0usize].message.clone() })?;
+        let checked = check::check(raw).map_err(|problem| problem.message)?;
+        let program = &resolved;
+        let mut callee: Option<usize> = None;
+        let mut target: Option<usize> = None;
+        for (index, expression) in program.exprs.iter().enumerate() {
+            if let ast::Expr::Path(path) = &expression.kind {
+                if path.name == "Fixed::make" { assert!(callee.is_none()); callee = Some(index); }
+            }
+        }
+        for (index, function) in program.functions.iter().enumerate() {
+            if function.name == "make" { assert!(target.is_none()); target = Some(index); }
+        }
+        let selection = match mode {
+            1usize => elaborate::semantic::MethodTarget::InstanceDependent,
+            2usize => elaborate::semantic::MethodTarget::Builtin,
+            4usize => elaborate::semantic::MethodTarget::BuiltinTrait("Default".to_string()),
+            _ => elaborate::semantic::MethodTarget::Source(target.unwrap()),
+        };
+        evidence.as_mut().unwrap().methods.insert(callee.unwrap(), selection);
+        let inputs = vec![("fixture.lkj".to_string(), source.as_bytes().to_vec())];
+        let catalog = semantic::catalog_typed(&resolved, &inputs, &checked, &evidence)?;
+        let expected = mode == 0usize;
+        assert_eq!(catalog.references.iter().any(|site| site.kind == "associated-call" && site.target == "Fixed::make"), expected);
+        if !expected { assert!(catalog.unresolved.iter().any(|site| site.kind == "associated-function")); }
+        let before = Snapshot { catalog, inputs, checked };
+        let request = structure_edit::parse(r#"{"version":1,"operations":[{"op":"rename","id":"Fixed::make","name":"fabricate_value"}]}"#.as_bytes())?;
+        let mut patches = Vec::new();
+        let result = structure_refactor::plan(&before.catalog, &before.inputs, &request.operations[0usize], &mut patches);
+        if expected {
+            assert!(result?); assert!(!patches.is_empty());
+        } else {
+            match result { Err(error) => assert!(error.contains("E_EDIT_REFERENCES")), Ok(_) => return Err("unproved associated target permitted rename".to_string()) }
+            assert!(patches.is_empty());
+        }
+    }
+    Ok(7usize)
+}
             pub fn run(world: &mut World) {
         let mut count = 0usize;
         world.stdout().write(b"refactor signature cases\n"); count += report(world, signatures());
@@ -312,6 +365,7 @@ mod cases {
         world.stdout().write(b"refactor general rename cases\n"); count += report(world, general_renames());
         world.stdout().write(b"refactor rename scope cases\n"); count += report(world, rename_scope());
         world.stdout().write(b"refactor move cases\n"); count += report(world, moves());
+        world.stdout().write(b"refactor associated evidence cases\n"); count += report(world, associated_evidence());
         world.stdout().write(format!("ok structural refactor {count} cases\n").as_bytes());
     }
 

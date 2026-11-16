@@ -447,3 +447,44 @@ pub(super) fn self_constructor(result: &mut Catalog, files: &[SourceText], progr
     }
     Some((target, type_name(program, program.impls[implementation.index].target)))
 }
+
+pub(super) fn typed_associated(result: &mut Catalog, files: &[SourceText], program: &a::Program,
+    evidence: &Evidence, expression: usize, owner: &str, closed_owner: bool) -> bool {
+    let node = &program.exprs[expression];
+    let a::Expr::Path(path) = &node.kind else { return false; };
+    let Some(selection) = evidence.methods.get(&expression) else { return false; };
+    let name = leaf_name(&path.name);
+    let source = match selection {
+        MethodTarget::Source(index) if closed_owner => Some(*index),
+        MethodTarget::Trait(index) => {
+            let mut selected: Option<usize> = None;
+            for method in &program.traits[*index].methods {
+                let function = &program.functions[*method];
+                if function.name == name && function.params.first().is_none_or(|parameter| parameter.name != "self") {
+                    if selected.is_some() { return false; }
+                    selected = Some(*method);
+                }
+            }
+            selected
+        }
+        _ => None,
+    };
+    let Some(source) = source else {
+        add_reference(result, files, owner.to_string(), path.name.clone(), node.span, name, "associated-function", false);
+        return true;
+    };
+    let target = result.function_ids[source].clone();
+    // The owner may be an alias; only the selector's exact member token is edited.
+    // The ordinary prefix references retain that owner's independent provenance.
+    let token = path_token(&files[node.span.file], node.span).map(|index| &files[node.span.file].tokens[index]);
+    if let Some(token) = token {
+        if token.text == program.functions[source].name && result.by_identity.contains_key(&target) {
+            record_site(result, files, owner.to_string(), target,
+                a::Span { file: node.span.file, ..token.span }, "associated-call", true);
+            return true;
+        }
+    }
+    record_site(result, files, owner.to_string(), target,
+        a::Span { end: node.span.start, ..node.span }, "implicit-source", false);
+    true
+}

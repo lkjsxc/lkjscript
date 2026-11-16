@@ -4013,6 +4013,10 @@ impl Builder<'_, '_> {
                 ));
             }
         }
+        if associated.is_some() && self.compiler.semantic_evidence.is_some()
+            && semantic::closed_source_owner(self.compiler.source, self.source_function) {
+            if let Some(evidence) = self.compiler.semantic_evidence.as_mut() { evidence.method(callee, index); }
+        }
         let ty = self.compiler.functions[function].result;
         let dst = self.temp(ty);
         self.emit(

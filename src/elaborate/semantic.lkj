@@ -152,3 +152,14 @@ pub fn intrinsic_method_name(name: &str) -> bool {
     }
     false
 }
+
+pub(crate) fn closed_source_owner(program: &a::Program, index: usize) -> bool {
+    let function = &program.functions[index];
+    if function.generics.iter().any(|parameter| !parameter.lifetime) { return false; }
+    match program.function_owner(a::FunctionId { index }) {
+        a::FunctionOwner::Free => true,
+        a::FunctionOwner::Implementation(owner) =>
+            program.impls[owner.index].generics.iter().all(|parameter| parameter.lifetime),
+        a::FunctionOwner::Trait(_) => false,
+    }
+}
