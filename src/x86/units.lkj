@@ -1,0 +1,95 @@
+//! A unit resolves its local labels before the next unit enters memory.
+use super::*;
+use std::collections::{BTreeMap, BTreeSet};
+
+pub(crate) struct SymbolReference {
+    pub at: usize,
+    pub name: String,
+    pub site: Span,
+}
+pub(crate) struct ImmediateReference {
+    pub at: usize,
+    pub message: String,
+    pub site: Span,
+}
+pub(crate) struct Linkable {
+    pub bytes: Vec<u8>,
+    pub definitions: Vec<(String, usize)>,
+    pub references: Vec<SymbolReference>,
+    pub immediates: Vec<ImmediateReference>,
+}
+fn problem(site: Span, message: &str) -> Diagnostic {
+    Diagnostic::new(site, "E_EMIT", message)
+}
+pub(crate) fn displacement(target: usize, at: usize, site: Span) -> Result<[u8; 4], Diagnostic> {
+    let base = at.checked_add(4usize).ok_or_else(|| problem(site, "relative address overflow"))?;
+    let value = if target >= base {
+        let distance = target - base;
+        if distance > 2147483647usize { return Err(problem(site, "x86-64 relative address exceeds signed 32-bit representation")); }
+        distance as i64
+    } else {
+        let distance = base - target;
+        if distance > 2147483648usize { return Err(problem(site, "x86-64 relative address exceeds signed 32-bit representation")); }
+        -(distance as i64)
+    };
+    Ok([value as u8, (value >> 8u32) as u8, (value >> 16u32) as u8, (value >> 24u32) as u8])
+}
+impl Assembler {
+    pub(crate) fn enable_symbolic_messages(&mut self) { self.symbolic_messages = true; }
+    pub(crate) fn symbolic_messages(&self) -> bool { self.symbolic_messages }
+    pub(crate) fn message_immediate(&mut self, reg: u8, message: &str) {
+        self.rex_for(true, 0u8, reg, false);
+        self.bytes.push(0xb8u8 | (reg & 7u8));
+        let at = self.bytes.len();
+        self.word(0u64, 8usize);
+        self.immediate_references.push(ImmediateReference { at, message: message.to_string(), site: self.site });
+    }
+    pub(crate) fn at_base(base: usize) -> Self {
+        let mut result = Self::new();
+        result.base = base;
+        result
+    }
+    /// Export named definitions and leave only named external relocations.
+    /// Ordinary internal branches are resolved and their labels are discarded.
+    pub(crate) fn linkable(mut self, names: &[(Label, String)]) -> Result<Linkable, Diagnostic> {
+        if let Some(problem) = self.problem { return Err(problem); }
+        if self.profile { return Err(problem(self.site, "unit objects do not carry profiling state")); }
+        let mut by_label: BTreeMap<usize, String> = BTreeMap::new();
+        let mut by_name: BTreeSet<String> = BTreeSet::new();
+        let mut definitions = Vec::new();
+        for (label, name) in names {
+            if *label >= self.labels.len() || name.is_empty() || by_label.contains_key(label)
+                || !by_name.insert(name.clone()) {
+                return Err(problem(self.site, "duplicate or invalid unit symbol"));
+            }
+            by_label.insert(*label, name.clone());
+            if let Some(position) = self.labels[*label] {
+                if position < self.base || position - self.base > self.bytes.len() {
+                    return Err(problem(self.site, "unit symbol is outside encoded bytes"));
+                }
+                definitions.push((name.clone(), position - self.base));
+            }
+        }
+        let mut references = Vec::new();
+        for reference in &self.references {
+            if reference.at > self.bytes.len() || self.bytes.len() - reference.at < 4usize {
+                return Err(problem(reference.site, "unit relocation is outside encoded bytes"));
+            }
+            match self.labels.get(reference.label) {
+                Some(Some(target)) => {
+                    let at = self.base.checked_add(reference.at)
+                        .ok_or_else(|| problem(reference.site, "unit relocation address overflow"))?;
+                    let bytes = displacement(*target, at, reference.site)?;
+                    self.bytes[reference.at..reference.at + 4usize].copy_from_slice(&bytes);
+                }
+                Some(None) => {
+                    let name = by_label.get(&reference.label)
+                        .ok_or_else(|| problem(reference.site, "unbound unnamed unit label"))?;
+                    references.push(SymbolReference { at: reference.at, name: name.clone(), site: reference.site });
+                }
+                None => return Err(problem(reference.site, "unit relocation has an absent label")),
+            }
+        }
+        Ok(Linkable { bytes: self.bytes, definitions, references, immediates: self.immediate_references })
+    }
+}

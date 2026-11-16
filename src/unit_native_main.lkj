@@ -1,0 +1,22 @@
+//! Live checked-unit object and streaming-linker contracts.
+mod ast;
+mod diagnostic;
+mod facts;
+mod ir;
+mod ir_binary;
+mod ir_text;
+mod check;
+mod reuse;
+mod native;
+mod runtime;
+mod runtime_diagnostics;
+mod child_image;
+mod entry_grants;
+mod json;
+mod x86;
+mod unit_native_cases;
+pub use std::sha256;
+fn main(mut world: World) {
+    let count = unit_native_cases::run(&mut world);
+    world.stdout().write(format!("ok unit native {count} contracts\n").as_bytes());
+}

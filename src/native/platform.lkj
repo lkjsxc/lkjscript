@@ -1012,20 +1012,27 @@ fn segment(bytes: &mut [u8], at: usize, flags: u64, offset: u64, size: u64) {
 
 /// image starts at the code entry and already contains aligned code and RW data.
 pub fn elf(image: Vec<u8>, data_offset: usize) -> Result<Vec<u8>, Diagnostic> {
+    let mut output = elf_header(image.len(), data_offset)?;
+    output.extend_from_slice(&image);
+    Ok(output)
+}
+
+/// Header-only form for a linker that already streamed all encoded bytes.
+pub(super) fn elf_header(image_length: usize, data_offset: usize) -> Result<Vec<u8>, Diagnostic> {
     let failure = "ELF image exceeds its address representation";
-    if data_offset > image.len() || data_offset % PAGE_BYTES as usize != 0 {
+    if data_offset > image_length || data_offset % PAGE_BYTES as usize != 0 {
         return Err(Diagnostic::new(
             Span::default(),
             "E_EMIT",
             "invalid ELF data boundary",
         ));
     }
-    let total = match CODE_OFFSET.checked_add(image.len()) {
+    let _total = match CODE_OFFSET.checked_add(image_length) {
         Some(total) => total,
         None => return Err(Diagnostic::new(Span::default(), "E_EMIT", failure)),
     };
     let absolute_data = CODE_OFFSET + data_offset;
-    let mut output = vec![0u8; total];
+    let mut output = vec![0u8; CODE_OFFSET];
     let magic = [0x7f, b'E', b'L', b'F', 2, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0];
     let mut index = 0usize;
     while index < magic.len() {
@@ -1046,15 +1053,10 @@ pub fn elf(image: Vec<u8>, data_offset: usize) -> Result<Vec<u8>, Diagnostic> {
         120,
         6,
         absolute_data as u64,
-        (image.len() - data_offset) as u64,
+        (image_length - data_offset) as u64,
     );
     put(&mut output, 176, 0x6474e551, 4); // PT_GNU_STACK, writable and nonexecutable.
     put(&mut output, 180, 6, 4);
     put(&mut output, 224, 16, 8);
-    let mut index = 0usize;
-    while index < image.len() {
-        output[CODE_OFFSET + index] = image[index];
-        index += 1;
-    }
     Ok(output)
 }

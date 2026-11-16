@@ -1,5 +1,7 @@
 //! x86-64 encoding and relative relocation. No IR operation is selected here.
 use crate::diagnostic::{Diagnostic, Span};
+mod units;
+pub(crate) use units::{displacement, Linkable, SymbolReference, ImmediateReference};
 
 pub type Label = usize;
 pub const A: u8 = 0;
@@ -164,6 +166,9 @@ pub(crate) struct Fragment {
 
 pub struct Assembler {
     pub bytes: Vec<u8>,
+    base: usize,
+    symbolic_messages: bool,
+    immediate_references: Vec<ImmediateReference>,
     labels: Vec<Option<usize>>,
     references: Vec<Reference>,
     site: Span,
@@ -184,6 +189,9 @@ impl Assembler {
     pub fn new() -> Self {
         Self {
             bytes: Vec::new(),
+            base: 0usize,
+            symbolic_messages: false,
+            immediate_references: Vec::new(),
             labels: Vec::new(),
             references: Vec::new(),
             site: Span {
@@ -508,7 +516,7 @@ impl Assembler {
         self.labels[label]
     }
     pub fn bind(&mut self, label: Label) {
-        let offset = self.bytes.len();
+        let offset = self.base + self.bytes.len();
         self.data_label(label, offset);
     }
     /// Bind a target at an offset relative to the first emitted code byte.
@@ -868,7 +876,7 @@ impl Assembler {
                     ));
                 }
             };
-            let base = reference.at + 4usize;
+            let base = self.base + reference.at + 4usize;
             let displacement = if target >= base {
                 let distance = target - base;
                 if distance > 2147483647usize {

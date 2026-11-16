@@ -1,0 +1,204 @@
+//! Cross-unit execution and exact authenticated-object refusal controls.
+use crate::{check, ir, ir_text, native, reuse, runtime};
+use crate::check::units::{CheckedUnit, Import, Interface};
+fn local(name: &str, ty: usize) -> ir::Local { ir::Local { name: name.to_string(), ty, mutable: false } }
+fn function(name: &str, locals: Vec<ir::Local>, ops: Vec<ir::Op>) -> ir::Function {
+    let mut body = Vec::new();
+    for op in ops { body.push(ir::Instruction { file: None, line: 7usize, column: 3usize, op }); }
+    ir::Function { file: 0usize, name: name.to_string(), params: 0usize, result: ir::I64,
+        return_source: None, locals, body, test: false }
+}
+fn provider(value: i64, trapping: bool) -> CheckedUnit {
+    let mut program = ir::Program { sources: vec!["numbers.lkj".to_string()], types: ir::primitives(),
+        functions: Vec::new(), destructors: Vec::new() };
+    program.functions.push(function("numbers::value", vec![local("result", ir::I64)],
+        vec![ir::Op::Call { dst: 0usize, function: 1usize, args: Vec::new() }, ir::Op::Return { src: 0usize }]));
+    let ops = if trapping { vec![ir::Op::Trap { message: "zeta custom failure".to_string() }] }
+        else { vec![ir::Op::Int { dst: 0usize, value }, ir::Op::Return { src: 0usize }] };
+    program.functions.push(function("numbers::private", vec![local("value", ir::I64)], ops));
+    let imports: Vec<Import> = Vec::new();
+    check::units::check_unit_with_exports("numbers", &format!("numbers-{value}-{trapping}"), program,
+        &imports, &[0usize], &[0usize; 0]).unwrap()
+}
+fn imported(interface: &Interface) -> Import {
+    let mut types = Vec::new(); let mut functions = Vec::new();
+    for index in 0usize..interface.program().types.len() { types.push((index, index)); }
+    for index in 0usize..interface.program().functions.len() { functions.push((index, index)); }
+    Import { interface: interface.clone(), types, functions }
+}
+fn consumer(interface: &Interface, extra_message: bool) -> CheckedUnit {
+    let mut program = interface.program().clone();
+    program.sources.push("user.lkj".to_string());
+    let mut main = function("user::main", vec![local("result", ir::I64), local("one", ir::I64), local("sum", ir::I64)],
+        vec![ir::Op::Call { dst: 0usize, function: 0usize, args: Vec::new() },
+            ir::Op::Int { dst: 1usize, value: 1i64 },
+            ir::Op::Binary { dst: 2usize, op: ir::BinaryOp::Add, left: 0usize, right: 1usize },
+            ir::Op::Return { src: 2usize }]);
+    main.file = program.sources.len() - 1usize;
+    program.functions.push(main);
+    if extra_message {
+        program.functions.push(function("user::unreachable", vec![local("never", ir::I64)],
+            vec![ir::Op::Trap { message: "alpha unused failure".to_string() }]));
+    }
+    check::units::check_unit_with_exports("user", "user-input", program, &[imported(interface)], &[1usize], &[0usize; 0]).unwrap()
+}
+fn runtime(world: &mut World) -> runtime::Runtime {
+    let mut directory = world.directory(".").unwrap();
+    let mut file = directory.open("target/unit-native-runtime.lkjir").unwrap();
+    let text = String::from_utf8(file.read_to_end().unwrap()).unwrap();
+    runtime::seal(check::check(ir_text::read(&text).unwrap()).unwrap()).unwrap()
+}
+fn no_grants() -> Vec<ir::EntryGrant> { Vec::new() }
+fn no_messages() -> Vec<String> { Vec::new() }
+fn sources(first: &CheckedUnit, second: &CheckedUnit) -> Vec<String> {
+    let mut result = first.program().sources.clone();
+    for path in &second.program().sources { result.push(path.clone()); }
+    result
+}
+fn read_word(bytes: &[u8], at: usize) -> usize {
+    let mut value = 0usize;
+    for index in 0usize..8usize { value |= (bytes[at + index] as usize) << (index * 8usize); }
+    value
+}
+fn execute(world: &mut World, mut executable: File) -> (i64, Vec<u8>) {
+    executable.set_executable().unwrap();
+    let input = world.temporary_file().unwrap();
+    let output = world.temporary_file().unwrap();
+    let errors = world.temporary_file().unwrap();
+    let mut result = world.temporary_file().unwrap();
+    let args: Vec<Vec<u8>> = Vec::new();
+    let mut process = world.process();
+    let mut child = process.spawn_file(&executable, &args, &input, &output, &errors, &result).unwrap();
+    let status = child.wait().unwrap();
+    result.rewind().unwrap();
+    (status, result.read_to_end().unwrap())
+}
+fn verified(namespace: &str, key: &str, bytes: &[u8], producer: &[u8], secret: &[u8]) -> reuse::VerifiedPayload {
+    let encoded = reuse::seal(producer, secret, namespace, key, bytes);
+    let header = reuse::header_size();
+    let root = reuse::AuthenticatedRoot::new(producer, secret, namespace, key, &encoded[..header]).unwrap();
+    root.verify(encoded[header..].to_vec()).unwrap()
+}
+fn objects(world: &mut World, runtime: &runtime::Runtime) -> usize {
+    let first = provider(41i64, false);
+    let second = consumer(first.interface(), false);
+    let source_base = first.program().sources.len();
+    let all_sources = sources(&first, &second);
+    let a = native::units::emit(&first, runtime, 0usize).unwrap();
+    let b = native::units::emit(&second, runtime, source_base).unwrap();
+    let output = world.temporary_file().unwrap(); let spool = world.temporary_file().unwrap();
+    let mut linker = native::units::Linker::new(output, spool).unwrap();
+    linker.push(a).unwrap(); linker.push(b).unwrap();
+    let (file, length) = linker.finish(runtime, second.interface(), "user::main", &no_grants(), &all_sources, &no_messages(), Some(3u32)).unwrap();
+    assert!(length > 4096usize);
+    let (status, bytes) = execute(world, file);
+    assert_eq!(status, 0i64); assert_eq!(bytes.len(), 8usize); assert_eq!(read_word(&bytes, 0usize), 42usize);
+    let object = native::units::emit(&first, runtime, 0usize).unwrap();
+    let encoded = object.encode(); let key = object.key().to_string();
+    let producer = [7u8; 32]; let secret = [9u8; 32]; let domain = reuse::ProofDomain::new(&producer, &secret);
+    let token = verified(native::units::namespace(), &key, &encoded, &producer, &secret);
+    let reopened = native::units::Object::open(&domain, first.interface(), runtime, 0usize, &first.program().sources, token).unwrap();
+    assert_eq!(reopened.encode(), encoded);
+    let changed = provider(99i64, false);
+    assert_eq!(changed.interface().identity(), first.interface().identity());
+    let token = verified(native::units::namespace(), &key, &encoded, &producer, &secret);
+    assert!(native::units::Object::open(&domain, changed.interface(), runtime, 0usize, &first.program().sources, token).is_none());
+    let token = verified("front", &key, &encoded, &producer, &secret);
+    assert!(native::units::Object::open(&domain, first.interface(), runtime, 0usize, &first.program().sources, token).is_none());
+    let token = verified(native::units::namespace(), &key, &encoded, &producer, &[8u8; 32]);
+    assert!(native::units::Object::open(&domain, first.interface(), runtime, 0usize, &first.program().sources, token).is_none());
+    let token = verified(native::units::namespace(), &key, &encoded, &[6u8; 32], &secret);
+    assert!(native::units::Object::open(&domain, first.interface(), runtime, 0usize, &first.program().sources, token).is_none());
+    let token = verified(native::units::namespace(), &key, &encoded, &producer, &secret);
+    assert!(native::units::Object::open(&domain, first.interface(), runtime, 1usize, &first.program().sources, token).is_none());
+    let mut changed_sources = first.program().sources.clone(); changed_sources[0] = "different.lkj".to_string();
+    let token = verified(native::units::namespace(), &key, &encoded, &producer, &secret);
+    assert!(native::units::Object::open(&domain, first.interface(), runtime, 0usize, &changed_sources, token).is_none());
+    for variant in 0usize..3usize {
+        let mut malformed = encoded.clone();
+        match variant { 0usize => { malformed.pop(); }, 1usize => malformed.push(0u8), _ => malformed[0] ^= 1u8 }
+        let token = verified(native::units::namespace(), &key, &malformed, &producer, &secret);
+        assert!(native::units::Object::open(&domain, first.interface(), runtime, 0usize, &first.program().sources, token).is_none());
+    }
+    // An authenticated cold object may enter an otherwise fresh link.
+    let mut linker = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();
+    linker.push(reopened).unwrap(); linker.push(native::units::emit(&second, runtime, source_base).unwrap()).unwrap();
+    let (file, _) = linker.finish(runtime, second.interface(), "user::main", &no_grants(), &all_sources, &no_messages(), Some(3u32)).unwrap();
+    let (status, bytes) = execute(world, file); assert_eq!(status, 0i64); assert_eq!(read_word(&bytes, 0usize), 42usize);
+    13usize
+}
+fn refusals(world: &mut World, runtime: &runtime::Runtime) -> usize {
+    let first = provider(41i64, false); let second = consumer(first.interface(), false);
+    let all_sources = sources(&first, &second);
+    let base = first.program().sources.len();
+    let mut missing = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();
+    missing.push(native::units::emit(&second, runtime, base).unwrap()).unwrap();
+    assert!(missing.finish(runtime, second.interface(), "user::main", &no_grants(), &all_sources, &no_messages(), None).is_err());
+    let mut duplicate = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();
+    duplicate.push(native::units::emit(&first, runtime, 0usize).unwrap()).unwrap();
+    assert!(duplicate.push(native::units::emit(&first, runtime, 0usize).unwrap()).is_err());
+    assert!(duplicate.finish(runtime, first.interface(), "numbers::value", &no_grants(), &all_sources, &no_messages(), None).is_err());
+    let mut table = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();
+    table.push(native::units::emit(&first, runtime, 0usize).unwrap()).unwrap();
+    table.push(native::units::emit(&second, runtime, base).unwrap()).unwrap();
+    let mut wrong_sources = all_sources.clone(); wrong_sources[0] = "forged.lkj".to_string();
+    assert!(table.finish(runtime, second.interface(), "user::main", &no_grants(), &wrong_sources, &no_messages(), None).is_err());
+    let mut stale = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();
+    stale.push(native::units::emit(&first, runtime, 0usize).unwrap()).unwrap();
+    let changed = provider(9i64, false);
+    assert!(stale.finish(runtime, changed.interface(), "numbers::value", &no_grants(), &first.program().sources, &no_messages(), None).is_err());
+    let mut spool = world.temporary_file().unwrap(); let mut alias = spool.duplicate().unwrap();
+    let mut changed_spool = native::units::Linker::new(world.temporary_file().unwrap(), spool).unwrap();
+    changed_spool.push(native::units::emit(&first, runtime, 0usize).unwrap()).unwrap();
+    alias.seek(8i64, 0u8).unwrap(); alias.write_all(&[2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8]).unwrap();
+    let refusal = changed_spool.finish(runtime, first.interface(), "numbers::value", &no_grants(), &first.program().sources, &no_messages(), None).err().unwrap();
+    assert_eq!(refusal.message, "relocation spool changed after emission");
+    6usize
+}
+fn traps
+(world: &mut World, runtime: &runtime::Runtime) -> usize {
+    let first = provider(41i64, true); let second = consumer(first.interface(), true);
+    let all_sources = sources(&first, &second);
+    let mut linker = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();
+    let object = native::units::emit(&first, runtime, 0usize).unwrap();
+    let producer = [7u8; 32]; let secret = [9u8; 32];
+    let domain = reuse::ProofDomain::new(&producer, &secret);
+    let token = verified(native::units::namespace(), object.key(), &object.encode(), &producer, &secret);
+    let reopened = native::units::Object::open(&domain, first.interface(), runtime, 0usize, &first.program().sources, token).unwrap();
+    linker.push(reopened).unwrap();
+
+    linker.push(native::units::emit(&second, runtime, first.program().sources.len()).unwrap()).unwrap();
+    let messages = vec!["zeta custom failure".to_string(), "alpha unused failure".to_string()];
+    let (file, _) = linker.finish(runtime, second.interface(), "user::main", &no_grants(), &all_sources, &messages, Some(3u32)).unwrap();
+    let (status, raw) = execute(world, file);
+    assert!(status != 0i64);
+    assert!(raw.starts_with(b"LKJTRAP2"));
+    assert_eq!(read_word(&raw, 8usize), 17usize);
+    assert_eq!(read_word(&raw, 16usize), 0usize);
+    assert_eq!(read_word(&raw, 24usize), 7usize);
+    let message = String::from_utf8(raw[32usize..].to_vec()).unwrap();
+    assert_eq!(message, "numbers.lkj:7: R0017 zeta custom failure\n");
+    1usize
+}
+fn relocation_edges() -> usize {
+    let mut a = crate::x86::Assembler::at_base(37usize);
+    let local = a.label(); let external = a.label();
+    a.jump(local); a.raw(&[0x90u8]); a.bind(local); a.call(external); a.ret();
+    let object = a.linkable(&[(local, "local".to_string()), (external, "external".to_string())]).unwrap();
+    assert_eq!(object.bytes.len(), 12usize); assert_eq!(object.bytes[1], 1u8);
+    assert_eq!(object.definitions[0].1, 6usize); assert_eq!(object.references[0].at, 7usize);
+    let mut absent = crate::x86::Assembler::new(); let missing = absent.label(); absent.call(missing);
+    let empty: Vec<(usize, String)> = Vec::new(); assert!(absent.linkable(&empty).is_err());
+    let mut duplicate = crate::x86::Assembler::new(); let first = duplicate.label(); let second = duplicate.label();
+    assert!(duplicate.linkable(&[(first, "a".to_string()), (second, "a".to_string())]).is_err());
+    let site = crate::diagnostic::Span::default();
+    assert!(crate::x86::displacement(2147483651usize, 0usize, site).is_ok());
+    assert!(crate::x86::displacement(2147483652usize, 0usize, site).is_err());
+    assert!(crate::x86::displacement(0usize, 2147483644usize, site).is_ok());
+    assert!(crate::x86::displacement(0usize, 2147483645usize, site).is_err());
+    8usize
+}
+pub fn run(world: &mut World) -> usize {
+    let runtime = runtime(world);
+    objects(world, &runtime) + refusals(world, &runtime) + traps(world, &runtime) + relocation_edges()
+}

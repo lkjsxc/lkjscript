@@ -10,6 +10,7 @@ use crate::x86::{Assembler, Label};
 use std::collections::{BTreeMap, BTreeSet};
 
 mod cache;
+pub mod units;
 
 
 pub(crate) fn cache_contracts() { cache::contracts(); }
@@ -1200,7 +1201,12 @@ impl<'a> Body<'a> {
                 while index < self.messages.len() && self.messages[index] != *message {
                     index += 1;
                 }
-                self.trap(16 + index as u64);
+                if self.a.symbolic_messages() {
+                    self.a.immediate(LINE, self.site.line as u64);
+                    self.a.immediate(FILE, self.site.file as u64);
+                    self.a.message_immediate(A, message);
+                    self.a.jump(self.platform.trap);
+                } else { self.trap(16 + index as u64); }
             }
         }
         if let Some(kind) = call_kind { self.a.scope_kind(kind); }
@@ -1446,7 +1452,9 @@ fn emit_drop(
     let drops = selection.drops;
     let runtime = selection.runtime;
     a.bind(drops[ty]);
-    prologue(a, p, 48, Span::default());
+    let site = Span { file: selection.source_base, ..Span::default() };
+    a.location(site.file, 1usize, 1usize);
+    prologue(a, p, 48, site);
     a.store(BP, -8, DI);
     if let Some((_, function)) = program.destructors.iter().find(|entry| entry.0 == ty) {
         needed[*function] = true;
