@@ -59,7 +59,8 @@ opened regular proof can enter cleanup accounting, but its writer lock is
 released before executing the closed child. A truly absent read should create
 no store files. The dedicated lock-fixture repair preserves both cases and the
 existing failed-child, busy-writer and serial-success controls; its focused
-evidence is recorded with that script's change.
+evidence is recorded in [the lock-fixture analysis](compiler-gate-reuse-lock.md),
+with the raw observations also copied into [compiler-store-lock-data](compiler-store-lock-data/).
 
 ## Independent witness and producer identity
 
