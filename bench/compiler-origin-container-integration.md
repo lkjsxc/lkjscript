@@ -91,6 +91,33 @@ The isolated historical replay follows that cohort; its new pass count remains
 conditional. A distinct ordinary-build 1M protocol may then localize refusal
 under a predeclared ceiling while preserving the old incomplete observation.
 
-Both GitHub jobs for this integrated source/seed remain pending at this record.
-The source, seed and all local proof bytes are ready for publication; CI results
-will be added with their exact run/head identities.
+## Published CI
+
+Both jobs in [CI43853670261](https://github.com/lkjsxc/lkjscript/actions/runs/43853670261)
+passed at head `535c4db0746c95742a44c83222f7de81fdd2243e`.
+The source/library/tools/tests inventory is unchanged from gated `62fa76f4`;
+the published seed is the independently reproduced `72a259e8` artifact above.
+
+| CI observation | Result | Wall s | Load 1m before → after |
+| --- | --- | ---: | --- |
+| Native gate, job 133252371646 | Passed; 5,448 fresh case requests, zero reuse | 1,163.531 | 0.45 → 3.07 |
+| Bootstrap | Passed | 60.752 | 0.45 → 1.10 |
+| Generated-source regression | Passed | 55.420 | 2.16 → 3.78 |
+| Semantic index pages | Passed | 50.820 | 2.45 → 3.80 |
+| Checked meaning | Passed | 12.278 | 4.45 → 4.45 |
+| History replay | Passed | 7.710 | 4.45 → 4.61 |
+| IR mutation suite | Passed | 3.355 | 2.64 → 3.07 |
+
+The optional Rust witness, job `133252371167`, passed 276 value/output
+cases and 344 verdicts, its directory-boundary controls, and exact compiler-byte
+identity. Its completed job log is evidence of those outcomes; no extra
+benchmark timing is inferred from the job timestamps.
+
+Raw gate/witness logs and the final run/head/job metadata are retained in
+[ci43853670261](compiler-origin-container-integration-data/ci43853670261/).
+Their SHA-256 digests are respectively
+`d3b8ee7ff610b9188934234ff93fa1430c036cecd4b67c139f1429bdb15ee84f`,
+`b1e671c877c4f3e9afb20559ea176be12a09d5fd5cce563090ff597d74f6dbbd`
+and `ba1455d75a67c0452cea2c77bbde26225684d2b8b17fb0659013c5e5a9337f4e`.
+The earlier local mutant outcome distribution is not substituted for unseen CI
+detail counters. No running service was deployed.
