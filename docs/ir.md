@@ -458,9 +458,14 @@ or protocol. Layout uses the native target's actual checked-IR layout; reachable
 effects include destruction and work for ordinary functions with scalar inputs.
 
 Source identities use semantic paths, independent of physical files and whitespace.
-Fields, variants, parameters, generic parameters and implementations have named
-identities. A semantic rename/move changes that path; physical reorganization does
-not. Bindings and calls are scoped by the token-normalized body digest and a local
+Fields, variants, named parameters, generic parameters and implementations have
+named identities. An anonymous `_` parameter uses `OWNER::param:POSITION`, its
+zero-based position in the complete signature, including any receiver; named
+parameters retain `OWNER::param:NAME`. Anonymous IDs remain stable until signature
+positions change, then clients query a fresh outline. Numeric positions cannot
+collide with legal names, and there is no `param:_` alias. A semantic rename/move
+changes its path; physical reorganization does not. Bindings and calls are scoped
+by the token-normalized body digest and a local
 ordinal; only an unchanged token body preserves that epoch. Comments/formatting do
 not change it. Source byte ranges and file/item hashes are exact stale-edit inputs.
 These producer identities never replace the checker's exact proof identities.
@@ -517,7 +522,16 @@ checker would admit them. This reader cannot create general store records, retur
 `CheckedProgram`, or supply admission, image authority or gate reuse. Ordinary
 builds, current authority and unpinned lookup retain exact current-producer checks.
 Locator publication is accounted under its producing generation and follows
-complete root/page retention; eviction or corruption remains a disposable miss.
+complete root/page retention. After the final semantic memo writes, publication
+also requires a healthy writer, retained Merkle-root accounting, and authenticated
+root and locator. Eviction at this point refuses `E_QUERY_STORE` before printing
+a snapshot identity. Later eviction or corruption remains a disposable miss.
+
+A query reader fixes one snapshot for its lifetime. Fully validated decoded fact
+pages and authenticated absence may be cached by exact kind, identity and page
+number. Every cache miss traverses authenticated bytes and performs the existing
+rooted-range, framing and continuation checks; errors invalidate the snapshot and
+stay uncached.
 
 Cursor state has an explicit query protocol version and authenticates the exact
 snapshot/question/depth under the selected producer. It carries a bounded

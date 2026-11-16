@@ -139,6 +139,9 @@ reject literal-only 'SOURCE must be a string literal' build "$program"
 sed 's/GRANTS: \&\[\&str\]/GRANTS: bool/' "$work/manifest" > "$program/program.lkj"
 reject manifest-type 'GRANTS must have type &[&str]' build "$program"
 
+# The final manifest refusal was expected; do not print it for a later failure.
+: > "$work/errors"
+
 # Each reviewed directory builds its real entry and runs a focused contract.
 # Full module suites remain in the consumer campaigns; they are not repeated here.
 printf 'Program directory fixture %s ms; load %s -> %s\n' \

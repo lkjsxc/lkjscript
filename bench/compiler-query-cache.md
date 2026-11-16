@@ -107,7 +107,8 @@ hash either executable inside a query. It uses a 2 GiB external address-space
 ceiling and 30-second watchdog per request, one worker, and the explicit
 historical snapshot. The snapshot/private-key fixture remains owned by its
 creating worker until the reports are accepted; this harness removes only its
-own executable copies. The free-space preflight before this campaign reported
+own executable copies. After acceptance, the owner removed the source archive,
+store, key, producer and images and verified their absence. The free-space preflight before this campaign reported
 115,692,376 KiB available.
 
 ## Forty bounded requests
