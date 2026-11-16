@@ -83,7 +83,7 @@ needed forms or ceases to find useful differences. Source uses .lkj to identify 
 ## Program specimens (programs stream)
 [Runtime demand table](runtime-demands.md) orders work. Applications are specimens; site, journal and desk remain unchanged gate cases. The compiler is the first consumer.
 Programs work in /home/coder/workspace/lkjscript-programs-20261115 on programs; fetch/rebase, bootstrap, four-worker gate, push HEAD:main. Never refresh seed here.
-Concurrency is process-isolated parallelism and readiness for idle work; no mutable shared address space or heap views. [Pools, map actors and bounded channels](../examples/process-workers.md) are library; only sealed immutable payloads may be shared.
+Concurrency is process-isolated parallelism and readiness for idle work; no mutable shared address space or heap views. The [ordered pool library and map/channel specimens](../examples/process-workers.md) share only sealed immutable payloads.
 The compiler pays separate heaps and checked-unit serialization; no single-process speedup is claimed. Seeded actor protocol exploration is distinct from a thread-race detector.
 Connector grants one numeric IPv4:port, without DNS/retargeting. HTTP framing, indexed deadlines, bounded dispatch and fixed receive/write deadlines remain in the existing suites.
 ReadDirectory/ReadFile are affine and cannot make writable/chmod-capable handles. Inspect/read one regular descriptor; atomic replacement preserves its coherent snapshot.
