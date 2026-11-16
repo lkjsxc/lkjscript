@@ -1,0 +1,20 @@
+{
+   "all_initial_metadata_matches" : true,
+   "checked_utc" : "2026-11-16T14:47:07Z",
+   "deleted" : false,
+   "directories" : 112,
+   "logical_bytes" : 779287389,
+   "note" : "This final preparation pass compares the complete live path set and original metadata. Initial complete file hashes and exact archive comparisons are retained separately; the future guard repeats full hashes before deletion.",
+   "process_or_fd_observer" : false,
+   "regular_files" : 21076,
+   "scope_absences" : 0,
+   "scopes" : [
+      "/home/coder/workspace/lkjscript/target/compiler-copy-sites-integrated",
+      "/home/coder/workspace/lkjscript/target/compiler-copy-sites-driver-candidate",
+      "/home/coder/workspace/lkjscript/target/compiler-copy-sites-integration-evidence",
+      "/home/coder/workspace/lkjscript/target/compiler-copy-sites-gate.ccpzZ9",
+      "/home/coder/workspace/lkjscript/target/compiler-copy-sites-evidence.20261116-1",
+      "/home/coder/workspace/lkjscript/target/gate"
+   ],
+   "whole_file_hashes_repeated_in_this_pass" : false
+}

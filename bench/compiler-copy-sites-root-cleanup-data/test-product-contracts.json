@@ -1,0 +1,1298 @@
+{
+   "accumulated_products_without_individual_outcome_binding" : 76,
+   "claim" : "The current and preceding retained HTTP gate logs name their output pairs and record test outcomes. Remaining older accumulated HTTP files are disposable test products under the same named output contract; no separate historical success or recoverable raw bytes is claimed for each older PID.",
+   "contracts" : [
+      {
+         "bytes" : 13551,
+         "excerpt" : [
+            {
+               "line" : 17,
+               "text" : "mkdir -p target/gate"
+            },
+            {
+               "line" : 25,
+               "text" : "    local details=\"target/gate/details-$label.log\""
+            },
+            {
+               "line" : 67,
+               "text" : "    target/lkjscript build tools/toolchain-test.lkj -o target/gate/toolchain-test \"${reuse[@]}\""
+            },
+            {
+               "line" : 68,
+               "text" : "    target/lkjscript build tools/world-test.lkj -o target/gate/world-test \"${reuse[@]}\""
+            },
+            {
+               "line" : 72,
+               "text" : "    toolchain_directory=target/gate/toolchain-work"
+            },
+            {
+               "line" : 75,
+               "text" : "    timeout --kill-after=10s 600s target/gate/toolchain-test \"$check_binary\" \"$toolchain_directory\" \"${check_reuse[@]}\""
+            },
+            {
+               "line" : 78,
+               "text" : "    world_directory=$(mktemp -d target/gate/world.XXXXXX)"
+            },
+            {
+               "line" : 80,
+               "text" : "    timeout --kill-after=10s 600s target/gate/world-test \"$check_binary\" \"$world_directory\""
+            },
+            {
+               "line" : 88,
+               "text" : "    timeout --kill-after=10s 600s target/gate/closed/live"
+            },
+            {
+               "line" : 92,
+               "text" : "    rm -rf target/gate/generated"
+            },
+            {
+               "line" : 93,
+               "text" : "    mkdir -p target/gate/generated"
+            },
+            {
+               "line" : 95,
+               "text" : "    \"$check_binary\" generate values 601 100 -o target/gate/generated/values || return 1"
+            },
+            {
+               "line" : 96,
+               "text" : "    \"$check_binary\" generate ownership 601 100 -o target/gate/generated/ownership || return 1"
+            },
+            {
+               "line" : 97,
+               "text" : "    \"$check_binary\" generate output 601 50 -o target/gate/generated/output || return 1"
+            },
+            {
+               "line" : 98,
+               "text" : "    \"$check_binary\" generate drops 1201 100 -o target/gate/generated/drops || return 1"
+            },
+            {
+               "line" : 99,
+               "text" : "    \"$check_binary\" generate sugar 1301 216 -o target/gate/generated/sugar || return 1"
+            },
+            {
+               "line" : 100,
+               "text" : "    \"$check_binary\" generate closures 1501 44 -o target/gate/generated/closures || return 1"
+            },
+            {
+               "line" : 101,
+               "text" : "    \"$check_binary\" generate integers 0 0 -o target/gate/generated/integers || return 1"
+            },
+            {
+               "line" : 129,
+               "text" : "    local log=\"target/gate/$1.log\""
+            },
+            {
+               "line" : 142,
+               "text" : "parallel_step 1 generated-source timeout --kill-after=10s 600s bash tools/generated-source-test.sh \"$check_binary\""
+            },
+            {
+               "line" : 159,
+               "text" : "parallel_step 1 profiler timeout --kill-after=10s 600s sh tools/profile-test.sh \"$check_binary\""
+            },
+            {
+               "line" : 167,
+               "text" : "parallel_step 2 http timeout --kill-after=10s 600s sh tools/http-test.sh --compiler \"$check_binary\" --seconds 0 --out target/gate/http-profiles"
+            },
+            {
+               "line" : 182,
+               "text" : "parallel_step \"$check_suite_jobs\" generated timeout --kill-after=10s 600s \"$check_binary\" test target/gate/generated --stats --jobs \"$check_suite_jobs\" \"${check_reuse[@]}\""
+            },
+            {
+               "line" : 184,
+               "text" : "parallel_step \"$check_suite_jobs\" optimized-generated timeout --kill-after=10s 600s \"$check_binary\" test target/gate/generated --stats --jobs \"$check_suite_jobs\" --inline-limit 64 \"${check_reuse[@]}\""
+            }
+         ],
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:tools/check.sh",
+         "sha256" : "ae4f2e6e698132bd458aab70bd57269a475fad8610c20c732514e03dae384d52"
+      },
+      {
+         "bytes" : 9782,
+         "excerpt" : [
+            {
+               "line" : 199,
+               "text" : "sample"
+            },
+            {
+               "line" : 200,
+               "text" : "printf 'HTTP measurement loadavg: %s\\n' \"$(cat /proc/loadavg)\""
+            },
+            {
+               "line" : 201,
+               "text" : "kill \"$server_pid\""
+            },
+            {
+               "line" : 202,
+               "text" : "wait \"$server_pid\" 2>/dev/null || :"
+            },
+            {
+               "line" : 203,
+               "text" : "sample_pid=$(printf '%020d' \"$server_pid\")"
+            },
+            {
+               "line" : 204,
+               "text" : "server_pid="
+            },
+            {
+               "line" : 205,
+               "text" : "awk '"
+            },
+            {
+               "line" : 206,
+               "text" : "    $2==1 {"
+            },
+            {
+               "line" : 207,
+               "text" : "        if (!n) {first=$3; min=$3; max=$3; first_virtual=$4}"
+            },
+            {
+               "line" : 208,
+               "text" : "        if ($3<min) min=$3"
+            },
+            {
+               "line" : 209,
+               "text" : "        if ($3>max) max=$3"
+            },
+            {
+               "line" : 210,
+               "text" : "        last=$3; last_virtual=$4; peak=$5; n++"
+            },
+            {
+               "line" : 211,
+               "text" : "    }"
+            },
+            {
+               "line" : 212,
+               "text" : "    END {"
+            },
+            {
+               "line" : 213,
+               "text" : "        printf \"HTTP memory after warmup: %d samples; RSS first/last/min/max %d/%d/%d/%d KiB; virtual first/last %d/%d KiB; peak RSS %d KiB\\n\", n, first, last, min, max, first_virtual, last_virtual, peak"
+            },
+            {
+               "line" : 214,
+               "text" : "    }"
+            },
+            {
+               "line" : 215,
+               "text" : "' \"$http_work/memory\""
+            },
+            {
+               "line" : 216,
+               "text" : "mkdir -p \"$profile_directory\""
+            },
+            {
+               "line" : 217,
+               "text" : "measurements=\"$profile_directory/http.memory.$sample_pid\""
+            },
+            {
+               "line" : 218,
+               "text" : "cp \"$http_work/memory\" \"$measurements\""
+            },
+            {
+               "line" : 219,
+               "text" : "printf 'HTTP memory samples: %s\\n' \"$measurements\""
+            },
+            {
+               "line" : 220,
+               "text" : "if [ \"$engine\" = native ]; then"
+            },
+            {
+               "line" : 221,
+               "text" : "    samples=\"$profile_directory/http.samples.$sample_pid\""
+            },
+            {
+               "line" : 222,
+               "text" : "    cp \"$http_work/server.samples.$sample_pid\" \"$samples\""
+            },
+            {
+               "line" : 223,
+               "text" : "    \"$compiler\" profile \"$samples\""
+            },
+            {
+               "line" : 224,
+               "text" : "    printf 'HTTP profile samples: %s\\n' \"$samples\""
+            }
+         ],
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:tools/http-test.sh",
+         "sha256" : "e6e64f1eb6799751d544217c9dafcdaa26b22aa304abb223caf9d10ab0dba5b4"
+      },
+      {
+         "bytes" : 15644,
+         "excerpt" : [
+            {
+               "line" : 140,
+               "text" : "The ordinary comparison uses the original 411-byte profile fixture"
+            },
+            {
+               "line" : 141,
+               "text" : "(`8899630364d9922f2de4c5ccfd667e1c582551dcad6800060c047a6a0534b7a5`),"
+            },
+            {
+               "line" : 142,
+               "text" : "before adding the new entries. Both images equal"
+            },
+            {
+               "line" : 143,
+               "text" : "`abcba417f3d240c9d89e885edf3a3d0e3ffb8d9a764b706c59e0ab963ca0cffd`."
+            },
+            {
+               "line" : 144,
+               "text" : "This is a fixed specimen byte-equivalence check, not a general performance"
+            },
+            {
+               "line" : 145,
+               "text" : "comparison."
+            },
+            {
+               "line" : 146,
+               "text" : ""
+            },
+            {
+               "line" : 147,
+               "text" : "The short role artifact has zero samples as expected for this small execution;"
+            },
+            {
+               "line" : 148,
+               "text" : "its 58 rows remain visible. Its exact 59,965-byte companion is retained as"
+            },
+            {
+               "line" : 149,
+               "text" : "[roles.lkjir](compiler-copy-sites-data/roles.lkjir), SHA-256"
+            },
+            {
+               "line" : 150,
+               "text" : "`b323c6407a905ef3f7097406bd4659f728b9c252b27a70452789da7233b0154b`."
+            },
+            {
+               "line" : 151,
+               "text" : "The compressed raw sample decompresses to"
+            },
+            {
+               "line" : 152,
+               "text" : "`1f0912222954ccfc998e2ee27f8164c0e631381701b6ae1b04d1ae43907a27a1`."
+            },
+            {
+               "line" : 153,
+               "text" : "This supplies inspectable coordinate/type/layout evidence without pretending"
+            },
+            {
+               "line" : 154,
+               "text" : "that zero-count rows are dynamic cost measurements."
+            },
+            {
+               "line" : 182,
+               "text" : "The hot regression observes mapped copy samples and 14 sites. Its first page"
+            },
+            {
+               "line" : 183,
+               "text" : "has one row and its continuation the remaining 13; 896 bytes admits the exact"
+            },
+            {
+               "line" : 184,
+               "text" : "first page and 895 refuses it. These counts describe the test, not compiler"
+            },
+            {
+               "line" : 185,
+               "text" : "attribution. Raw hot samples, companions, cache stats and individual error files"
+            },
+            {
+               "line" : 186,
+               "text" : "were removed by the test's ordinary cleanup. The retained tool and completed"
+            },
+            {
+               "line" : 187,
+               "text" : "trace prove their assertions ran; they do not support a fresh independent"
+            },
+            {
+               "line" : 188,
+               "text" : "recomputation of those transient artifacts."
+            },
+            {
+               "line" : 198,
+               "text" : "## Full gate, seed and CI"
+            },
+            {
+               "line" : 199,
+               "text" : ""
+            },
+            {
+               "line" : 200,
+               "text" : "Source `d461c2d9` passes the complete four-worker gate from a fresh empty"
+            },
+            {
+               "line" : 201,
+               "text" : "authenticated store: **616.092 s, load 2.68 → 4.26**. All **5,448 case requests"
+            },
+            {
+               "line" : 202,
+               "text" : "are fresh and zero are reused/skipped**; host suites run. The mutation phase"
+            },
+            {
+               "line" : 203,
+               "text" : "passes 128 mutants: 104 rejected, 22 values, one trap, one nontermination,"
+            },
+            {
+               "line" : 204,
+               "text" : "zero resource refusals and zero findings."
+            },
+            {
+               "line" : 205,
+               "text" : ""
+            },
+            {
+               "line" : 206,
+               "text" : "GNU time records wall 616.09 s, user/system 1,536.38/34.01 s and peak RSS"
+            },
+            {
+               "line" : 207,
+               "text" : "1,229,496 KiB over that same load window. RSS is the largest recorded process,"
+            },
+            {
+               "line" : 208,
+               "text" : "not the aggregate memory of four simultaneous workers. The wrapper is 4 GiB"
+            },
+            {
+               "line" : 209,
+               "text" : "per process with a 2,400 s watchdog and 10 s grace. All 1,937 pinned input files"
+            },
+            {
+               "line" : 210,
+               "text" : "verify unchanged afterward. The fresh store contains 321,266,634 apparent"
+            },
+            {
+               "line" : 211,
+               "text" : "bytes; all 114 gate logs are retained under [gate](compiler-copy-sites-data/gate/)."
+            },
+            {
+               "line" : 212,
+               "text" : ""
+            },
+            {
+               "line" : 213,
+               "text" : "Bootstrap passes in **78.236 s (load 2.68 → 2.54)**, requiring consecutive"
+            },
+            {
+               "line" : 214,
+               "text" : "current-emitter compiler bytes to agree. The resulting canonical image is the"
+            },
+            {
+               "line" : 215,
+               "text" : "same 32,584,542-byte `6cd52308…e7bdacc` produced by the focused build."
+            }
+         ],
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites.md",
+         "sha256" : "87ba3448d9ee084e04d6dbacff55c435a438e310ff83957f145ffc707d63e2f9"
+      },
+      {
+         "bytes" : 179,
+         "excerpt" : [
+            {
+               "line" : 1,
+               "text" : "ok http (29.178 s, load 3.54 -> 3.31; gate+225.551..254.730 s); cases reused=0 rerun=28 (authenticated exact stable runner, sealed ELF, checked closure and closed input contract)"
+            }
+         ],
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/http.log",
+         "sha256" : "55314630a0085a1cb2fc7ed7723f49362e6c487a73cbd44c9d1c3b973c1c7591"
+      },
+      {
+         "bytes" : 6079,
+         "excerpt" : [
+            {
+               "line" : 23,
+               "text" : "ok http 29 functional cases, 12 persistent/pipelined requests"
+            },
+            {
+               "line" : 24,
+               "text" : "ok http-get native and interpreter"
+            },
+            {
+               "line" : 26,
+               "text" : "HTTP memory after warmup: 1 samples; RSS first/last/min/max 1980/1980/1980/1980 KiB; virtual first/last 2099984/2099984 KiB; peak RSS 1980 KiB"
+            },
+            {
+               "line" : 27,
+               "text" : "HTTP memory samples: target/gate/http-profiles/http.memory.00000000000002777731"
+            },
+            {
+               "line" : 61,
+               "text" : "HTTP profile samples: target/gate/http-profiles/http.samples.00000000000002777731"
+            }
+         ],
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-http.log",
+         "sha256" : "da1774dad27bca771f6675e7b3bdd634dd2d0606dc6c3ac80fa5f7df115596c8"
+      },
+      {
+         "bytes" : 179,
+         "excerpt" : [
+            {
+               "line" : 1,
+               "text" : "ok http (29.088 s, load 3.39 -> 3.01; gate+221.898..250.986 s); cases reused=0 rerun=28 (authenticated exact stable runner, sealed ELF, checked closure and closed input contract)"
+            }
+         ],
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-origin-container-integration-data/local/suite-logs/http.log",
+         "sha256" : "deab76f2d489bf299ac4fb45b90d745e336070a0dbf84f3ebc96b71d9c513295"
+      },
+      {
+         "bytes" : 6228,
+         "excerpt" : [
+            {
+               "line" : 23,
+               "text" : "ok http 29 functional cases, 12 persistent/pipelined requests"
+            },
+            {
+               "line" : 24,
+               "text" : "ok http-get native and interpreter"
+            },
+            {
+               "line" : 26,
+               "text" : "HTTP memory after warmup: 1 samples; RSS first/last/min/max 1924/1924/1924/1924 KiB; virtual first/last 2099832/2099832 KiB; peak RSS 1924 KiB"
+            },
+            {
+               "line" : 27,
+               "text" : "HTTP memory samples: target/gate/http-profiles/http.memory.00000000000002606246"
+            },
+            {
+               "line" : 62,
+               "text" : "HTTP profile samples: target/gate/http-profiles/http.samples.00000000000002606246"
+            }
+         ],
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-origin-container-integration-data/local/suite-logs/details-http.log",
+         "sha256" : "c67fc2edc3df430b2c0562b4ffb76c9532faedc5da45ca89fa4ba54dfeb8038c"
+      }
+   ],
+   "current_gate_top_level_log_count" : 114,
+   "current_gate_top_level_logs" : [
+      {
+         "bytes" : 131,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/associated-query.log",
+         "relative" : "gate/associated-query.log",
+         "sha256" : "0d9ecfa486f840e39fae2bd1db774e398a09ed8ea69d59a1840e0eee09714ad5"
+      },
+      {
+         "bytes" : 123,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/cache-io.log",
+         "relative" : "gate/cache-io.log",
+         "sha256" : "265cd0f4b9e228673bd9edcba8293047ced7765559b55e2b55385af6a3139f6a"
+      },
+      {
+         "bytes" : 125,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/cache-read.log",
+         "relative" : "gate/cache-read.log",
+         "sha256" : "b17743e51fc918540f3a5228d1decb8fe0345118c404496769bc6e72d8b14772"
+      },
+      {
+         "bytes" : 130,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/checked-meaning.log",
+         "relative" : "gate/checked-meaning.log",
+         "sha256" : "133c2e3ed1dcec14aaea863615228a0bde1cd810f3f45859f77f9a2dfc937dcf"
+      },
+      {
+         "bytes" : 126,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/child-image.log",
+         "relative" : "gate/child-image.log",
+         "sha256" : "0c536076f07b92b2edba38838f6ce5c64bb29599580e3efbf179d407e2775cf0"
+      },
+      {
+         "bytes" : 135,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/closed-proof-attacks.log",
+         "relative" : "gate/closed-proof-attacks.log",
+         "sha256" : "69e0af4dd9ea74ca4b34bc7ed935b9ce6d99a8dc4ed5d8aad9d3e9be7823d2cc"
+      },
+      {
+         "bytes" : 190,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/closed-semantics.log",
+         "relative" : "gate/closed-semantics.log",
+         "sha256" : "9760fbd94fa917ae0aa7dfcf5d28c3e69bbcdfa8cbea1806219574282cc3e4bb"
+      },
+      {
+         "bytes" : 166,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/conformance.log",
+         "relative" : "gate/conformance.log",
+         "sha256" : "863e353f46bcf7b65d8b9959f636d56eafd31bfafc955c71de659bb93cbfc145"
+      },
+      {
+         "bytes" : 126,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/desk-events.log",
+         "relative" : "gate/desk-events.log",
+         "sha256" : "a681e7ac4973702e50885a54176231ece18179a7d3aa27471078bbedc61acbf1"
+      },
+      {
+         "bytes" : 119,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/desk.log",
+         "relative" : "gate/desk.log",
+         "sha256" : "40ba10772bcb57d0faf1f0999eda6ab65c69052ebc975198cc2db98e9759362c"
+      },
+      {
+         "bytes" : 173,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-associated-query.log",
+         "relative" : "gate/details-associated-query.log",
+         "sha256" : "5c960d3481dd07fe17c3af5c3b406e69d2c9b06852533796668255bf9fe4b292"
+      },
+      {
+         "bytes" : 13,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-bootstrap.log",
+         "relative" : "gate/details-bootstrap.log",
+         "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
+      },
+      {
+         "bytes" : 136,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-cache-io.log",
+         "relative" : "gate/details-cache-io.log",
+         "sha256" : "dc60e51f288749861d8c9c4989ac9c15a387665bea6be2785fb98fe9ebf26ed6"
+      },
+      {
+         "bytes" : 34,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-cache-read.log",
+         "relative" : "gate/details-cache-read.log",
+         "sha256" : "3c7dcdb943169ce913cbaacec5e75de1a13791219a30924484e9f3ca6eb9578b"
+      },
+      {
+         "bytes" : 102,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-checked-meaning.log",
+         "relative" : "gate/details-checked-meaning.log",
+         "sha256" : "f79401890615478c6489f6e98c4e0ca28d4ec4b5fe834053854c1fa2327bd61e"
+      },
+      {
+         "bytes" : 236,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-child-image.log",
+         "relative" : "gate/details-child-image.log",
+         "sha256" : "545543bfd3d8c997f40883c433381b3ade11632af165cd7fedbb43617946c49e"
+      },
+      {
+         "bytes" : 0,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/build-1/stdout",
+         "relative" : "gate/details-closed-build.log",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 357,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-closed-proof-attacks.log",
+         "relative" : "gate/details-closed-proof-attacks.log",
+         "sha256" : "597ad14ce03e40096f40e19a215f2212e1e1686b908380ea1ad672ef2e75f93b"
+      },
+      {
+         "bytes" : 192,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-closed-semantics.log",
+         "relative" : "gate/details-closed-semantics.log",
+         "sha256" : "39890b48c95083b561148d08de74303f05c1b5d61a4c48cb081688c7c2ae0153"
+      },
+      {
+         "bytes" : 28012,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-conformance.log",
+         "relative" : "gate/details-conformance.log",
+         "sha256" : "a1d21fc8b0e3bd13dee756a7a194b4d67b45670a0fcd4c9aae8102601183cb65"
+      },
+      {
+         "bytes" : 582,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-desk-events.log",
+         "relative" : "gate/details-desk-events.log",
+         "sha256" : "65a2e1ee25c2cd04070fe17bf514f3f940c82335d3fe018f5eef05e1446e93e9"
+      },
+      {
+         "bytes" : 3031,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-desk.log",
+         "relative" : "gate/details-desk.log",
+         "sha256" : "376e817b628547f814a1c01cb8cb959d1e10d9f46ec6fbe8610fae14a4dc78f6"
+      },
+      {
+         "bytes" : 8826,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-diagnostic-cases.log",
+         "relative" : "gate/details-diagnostic-cases.log",
+         "sha256" : "a92ba9c0bc2d6f0f1210963f2654b21bfc4a4ec881bf0806c4587dbb5d2cf0e5"
+      },
+      {
+         "bytes" : 660,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-directory-identity.log",
+         "relative" : "gate/details-directory-identity.log",
+         "sha256" : "eae41ed02c3740d87be975d8a49c15bfe0332150f6c00f03db79c12f8fe1a5ee"
+      },
+      {
+         "bytes" : 1039,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-directory-publication.log",
+         "relative" : "gate/details-directory-publication.log",
+         "sha256" : "74377cf5909c08e1785f5e37f10493ecbf20288b90a975aa7481d557eeed9d9c"
+      },
+      {
+         "bytes" : 132,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-foreign-child.log",
+         "relative" : "gate/details-foreign-child.log",
+         "sha256" : "a5b76c9d1e0e41fa0b2f733e62360d6568bfb051ebaccb60f38e7478e3742435"
+      },
+      {
+         "bytes" : 703,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-foreign-session.log",
+         "relative" : "gate/details-foreign-session.log",
+         "sha256" : "fe0ee31daeadf986be86cb2b5a1bc4b39619af5d1b25dffccf36de98a644db47"
+      },
+      {
+         "bytes" : 478,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-generate.log",
+         "relative" : "gate/details-generate.log",
+         "sha256" : "2ee44fc45f5eab100102aabce776ac53a55fc3ad7bdbe6ef29732ca6795b05ec"
+      },
+      {
+         "bytes" : 104,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-generated-source.log",
+         "relative" : "gate/details-generated-source.log",
+         "sha256" : "56b0efaab1f6fdc86efd3572161126a01258f4273316da3d3e563f9d97ad093b"
+      },
+      {
+         "bytes" : 28178,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-generated.log",
+         "relative" : "gate/details-generated.log",
+         "sha256" : "2c02975b8dd97471563f72d0ea01509034cb66b1b83049c4da4cf62a3d4efb01"
+      },
+      {
+         "bytes" : 146,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-history-replay.log",
+         "relative" : "gate/details-history-replay.log",
+         "sha256" : "2d3e231d45542eba3f786945d61948b7c2ea7fd92b703143cba9a19370d0b914"
+      },
+      {
+         "bytes" : 6079,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-http.log",
+         "relative" : "gate/details-http.log",
+         "sha256" : "da1774dad27bca771f6675e7b3bdd634dd2d0606dc6c3ac80fa5f7df115596c8"
+      },
+      {
+         "bytes" : 35,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-independence.log",
+         "relative" : "gate/details-independence.log",
+         "sha256" : "9872e3b7453b7f6047a0df7a2c3c003522d674cd14f90c3f34dab97a307f7584"
+      },
+      {
+         "bytes" : 320,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-ir-mutation.log",
+         "relative" : "gate/details-ir-mutation.log",
+         "sha256" : "e26e83ec2e433b13ae256106f87afa59dca21055a526ce7030b49c415f2c7ac4"
+      },
+      {
+         "bytes" : 1383,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-journal.log",
+         "relative" : "gate/details-journal.log",
+         "sha256" : "1b4fc8ae265a8887f2b3ad70a581614292dc5ebed59e891dfe7ef4c5a0ce3a45"
+      },
+      {
+         "bytes" : 961,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-object-graphs.log",
+         "relative" : "gate/details-object-graphs.log",
+         "sha256" : "c78ff2df05a6f4afc8b83f961b0a04041d54a5d89c0ba69e76410d9c9939ecf6"
+      },
+      {
+         "bytes" : 28412,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-optimized-conformance.log",
+         "relative" : "gate/details-optimized-conformance.log",
+         "sha256" : "e53739a87e294b5dde80915030ecc3f46a2bded16ce6f8c3135eefa6c7e48fb7"
+      },
+      {
+         "bytes" : 28580,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-optimized-generated.log",
+         "relative" : "gate/details-optimized-generated.log",
+         "sha256" : "597deee5a3ee6573a3fcd06a106be29527f2823debca32725e0faabd64205f9f"
+      },
+      {
+         "bytes" : 148,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-optimizer.log",
+         "relative" : "gate/details-optimizer.log",
+         "sha256" : "ddc01dfbb0cc9f7e0b1e2db2333c23c119fd8e6b895dd8b68caea7a7615b88d8"
+      },
+      {
+         "bytes" : 94,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-pool-publication.log",
+         "relative" : "gate/details-pool-publication.log",
+         "sha256" : "3723af762e3e4001a43fb61978109ae2c6e73eae20f925d0cf4f0b5de21367b0"
+      },
+      {
+         "bytes" : 954,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-process-workers.log",
+         "relative" : "gate/details-process-workers.log",
+         "sha256" : "2c8c10e07263ec16f94094af432e7b1351d19f7b94761d4a8a6c2d9fa57193f2"
+      },
+      {
+         "bytes" : 187,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-profiler.log",
+         "relative" : "gate/details-profiler.log",
+         "sha256" : "409fd4b3acc8f2664809831782c3a9b46127b535198a64fa0b33797757127729"
+      },
+      {
+         "bytes" : 16877,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-program-directory.log",
+         "relative" : "gate/details-program-directory.log",
+         "sha256" : "40bf8aafd6598d3ef9ebaaa1493148063902eb36f232cece13ebb2b4de1a5799"
+      },
+      {
+         "bytes" : 608,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-query-publication.log",
+         "relative" : "gate/details-query-publication.log",
+         "sha256" : "2774d201c05c40e6d81fcbda1815234b83b4cdea3b5fa508a862cbe0e10edfee"
+      },
+      {
+         "bytes" : 160,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-query-signature.log",
+         "relative" : "gate/details-query-signature.log",
+         "sha256" : "6bbe5c9765d9efe9dc7132dca10cd2a58a8372bba230c19ca57e74adf4ee9e57"
+      },
+      {
+         "bytes" : 134,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-query-store.log",
+         "relative" : "gate/details-query-store.log",
+         "sha256" : "35692dab7a7e97f1929b26f79bfef5b85275be7dc1f23954a803a2dcd062ea96"
+      },
+      {
+         "bytes" : 7504,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-references.log",
+         "relative" : "gate/details-references.log",
+         "sha256" : "a5bff1452f193458f071f92fe7d4a6182d6abdacc9ffa222bc45da44fdd7f1d7"
+      },
+      {
+         "bytes" : 83,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-resources.log",
+         "relative" : "gate/details-resources.log",
+         "sha256" : "724d2cda086badba659fb8f58b56f904758a55f8a98ede0c8401bf11209cf64d"
+      },
+      {
+         "bytes" : 136,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-runtime-admission.log",
+         "relative" : "gate/details-runtime-admission.log",
+         "sha256" : "8496065313329bb88f646d21666c12dc4d4d43f66b86efe696456a5a74b591f5"
+      },
+      {
+         "bytes" : 23897,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-semantic-cases.log",
+         "relative" : "gate/details-semantic-cases.log",
+         "sha256" : "f1154b56434ccdbc1a31e270bbf0781de96f29c477a6de7a1f1eb97db7e0b255"
+      },
+      {
+         "bytes" : 50,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-semantic-host.log",
+         "relative" : "gate/details-semantic-host.log",
+         "sha256" : "f9fbfc6c25754e22aca8c8e9ca6eb98c51087bb9f10b042ae5530354b166bb25"
+      },
+      {
+         "bytes" : 270,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-semantic-index-page.log",
+         "relative" : "gate/details-semantic-index-page.log",
+         "sha256" : "e4b01557e2073d0b48bbe2a2d08307f6216a398e4e48613fd515040022f0e39a"
+      },
+      {
+         "bytes" : 291,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-semantic-query.log",
+         "relative" : "gate/details-semantic-query.log",
+         "sha256" : "4c434831879d629c93619aaecfd8cb7f94cc53e633ce499805463d30bc9ff650"
+      },
+      {
+         "bytes" : 965,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-semantic-structure.log",
+         "relative" : "gate/details-semantic-structure.log",
+         "sha256" : "bbcca327d6f02b9c080f1a3271de4a1a5df0c4d38c6f1eb61faa1146f76b8d52"
+      },
+      {
+         "bytes" : 841,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-site.log",
+         "relative" : "gate/details-site.log",
+         "sha256" : "7119f4af7a203dbdbb59ed6fe46afc39f3eac214c33c1f143333081f6e42b146"
+      },
+      {
+         "bytes" : 324,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-stop-interpreter.log",
+         "relative" : "gate/details-stop-interpreter.log",
+         "sha256" : "41f9533ee2def9a247173eb9a45707bce482e0268c59889b6402668c3d102369"
+      },
+      {
+         "bytes" : 328,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-stop.log",
+         "relative" : "gate/details-stop.log",
+         "sha256" : "93c6fc32db35a3ef99e836f829544662dc19f9f82a8fc4564addef08d3628c1d"
+      },
+      {
+         "bytes" : 126,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-store.log",
+         "relative" : "gate/details-store.log",
+         "sha256" : "46cddc9678c83372be9fa64d45241cf361032a354470f62c8f0c4e9bef122b67"
+      },
+      {
+         "bytes" : 418,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-structure-alternate-race.log",
+         "relative" : "gate/details-structure-alternate-race.log",
+         "sha256" : "9de80952e2d0c3e1513ab3b19a3138f8b6a154ec80a9fc551456e8e7aa855eab"
+      },
+      {
+         "bytes" : 110,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-structure-create-kills.log",
+         "relative" : "gate/details-structure-create-kills.log",
+         "sha256" : "83e20e9baf134ea1113fcc0edd67ba45d682e7196edd6f27065c87d12185d762"
+      },
+      {
+         "bytes" : 125,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-structure-create.log",
+         "relative" : "gate/details-structure-create.log",
+         "sha256" : "b5de4a334bc5c8abb5a6e2d9c330fc2a7333c4b0cdfb52df0a3b60168032569e"
+      },
+      {
+         "bytes" : 111,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-structure-edit.log",
+         "relative" : "gate/details-structure-edit.log",
+         "sha256" : "ada91075cd80e7bffb25650bda4764b0bbe83a30025a42f541f31e9dde167662"
+      },
+      {
+         "bytes" : 82,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-structure-embedded.log",
+         "relative" : "gate/details-structure-embedded.log",
+         "sha256" : "575f514ddcd5cad4f5e997aa765380dad4aaca03dfa1320ea852c17c4e703817"
+      },
+      {
+         "bytes" : 73,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-structure-module.log",
+         "relative" : "gate/details-structure-module.log",
+         "sha256" : "e12b6c6fd0c2f8508c8f30649f0df90390c45ccf57a8f45bc06dc40d1b020c57"
+      },
+      {
+         "bytes" : 90,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-structure-projection.log",
+         "relative" : "gate/details-structure-projection.log",
+         "sha256" : "05a0ede6c720c4cf12f4b34a0d0ee97187d6e1cbe28729a3e034f3e56f90c56e"
+      },
+      {
+         "bytes" : 385,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-structure-refactor.log",
+         "relative" : "gate/details-structure-refactor.log",
+         "sha256" : "e659df5e1d7b18c678ab318c8b370a9633fd2eb68955299230a816963bd5d544"
+      },
+      {
+         "bytes" : 0,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/build-1/stdout",
+         "relative" : "gate/details-tool-build.log",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+         "bytes" : 148728,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-toolchain.log",
+         "relative" : "gate/details-toolchain.log",
+         "sha256" : "65ea855baae2995f2c101121ff6aad69f2f664f88ba523dd2420e4583dee12bd"
+      },
+      {
+         "bytes" : 101,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-type-identity.log",
+         "relative" : "gate/details-type-identity.log",
+         "sha256" : "627f7adfdbec2123407de7d54307d80c424a4590ee41e3048950d13ed9c23dfc"
+      },
+      {
+         "bytes" : 70,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-world.log",
+         "relative" : "gate/details-world.log",
+         "sha256" : "66455bf173aa2ec632c3a3e873d77ab77ef63fb8322adbdf7f555d4afa720edd"
+      },
+      {
+         "bytes" : 170,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/diagnostic-cases.log",
+         "relative" : "gate/diagnostic-cases.log",
+         "sha256" : "ef222f406630e3c1fa22fbfb20093639b7a92bfb3ef1db4ccaef3faa448eb979"
+      },
+      {
+         "bytes" : 133,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/directory-identity.log",
+         "relative" : "gate/directory-identity.log",
+         "sha256" : "e3d6703ab64473f22ec980d89aa3fcd859a0fb637d919f9ed27682ce0dbbaf49"
+      },
+      {
+         "bytes" : 136,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/directory-publication.log",
+         "relative" : "gate/directory-publication.log",
+         "sha256" : "02317e20f24c1f3a2c68f4da9d1f7c613ec6dd3a8ac23f6b591d8c99a2bfad18"
+      },
+      {
+         "bytes" : 128,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/foreign-child.log",
+         "relative" : "gate/foreign-child.log",
+         "sha256" : "45ccd1940d4f5b479f865f4afd5ec0f16a11f38d2be6ddbcc4561f44f3c2d3f0"
+      },
+      {
+         "bytes" : 130,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/foreign-session.log",
+         "relative" : "gate/foreign-session.log",
+         "sha256" : "0f5175970ea9277545c1ff12731065116d1d1bccfcf6e8d11b691fc6711fb6a8"
+      },
+      {
+         "bytes" : 132,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/generated-source.log",
+         "relative" : "gate/generated-source.log",
+         "sha256" : "9b5052305ffaef9937a1c97233c0523246b30ae4e3233fbcab6513d6be5ff4d1"
+      },
+      {
+         "bytes" : 165,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/generated.log",
+         "relative" : "gate/generated.log",
+         "sha256" : "1aad20fbdd2dcf876b9fe29f964fb177706b087f8744b0ffddd092672a63703c"
+      },
+      {
+         "bytes" : 129,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/history-replay.log",
+         "relative" : "gate/history-replay.log",
+         "sha256" : "d16ff0c4e29c5f1f9fc5622ad2e3d8fa505c3a92c2844d90e1360ea90bd09d38"
+      },
+      {
+         "bytes" : 179,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/http.log",
+         "relative" : "gate/http.log",
+         "sha256" : "55314630a0085a1cb2fc7ed7723f49362e6c487a73cbd44c9d1c3b973c1c7591"
+      },
+      {
+         "bytes" : 122,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/journal.log",
+         "relative" : "gate/journal.log",
+         "sha256" : "9e226be86292fc4e77a73819c27bb85300f1d3597ddc6f0d926c83020ba0b833"
+      },
+      {
+         "bytes" : 129,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/object-graphs.log",
+         "relative" : "gate/object-graphs.log",
+         "sha256" : "ec59f6ed12afa22daa4880599d6f60eb056e0a6f94c05609a0a117553cd8f148"
+      },
+      {
+         "bytes" : 176,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/optimized-conformance.log",
+         "relative" : "gate/optimized-conformance.log",
+         "sha256" : "6e10cd8855f48c8aef1bee0c9df8a7be2f33c64c50b0cb1db91d368b99047f70"
+      },
+      {
+         "bytes" : 175,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/optimized-generated.log",
+         "relative" : "gate/optimized-generated.log",
+         "sha256" : "827240c19bb3f02a41d843ff81fe41e1ba25819dd40654170651fc1f5d1a0723"
+      },
+      {
+         "bytes" : 124,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/optimizer.log",
+         "relative" : "gate/optimizer.log",
+         "sha256" : "98f9d1aa9fb8252f5daa034f894b961720278afe22341ff5bf3233b2e1720d23"
+      },
+      {
+         "bytes" : 131,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/pool-publication.log",
+         "relative" : "gate/pool-publication.log",
+         "sha256" : "c350282007d916de0c0bf6d7d22d0f61e395075ff91944fa4911037e8bd1a7a7"
+      },
+      {
+         "bytes" : 131,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/process-workers.log",
+         "relative" : "gate/process-workers.log",
+         "sha256" : "9c025961b7c0d1cc4328f49d1ff8977f5af96080195a203a252b89750a91d349"
+      },
+      {
+         "bytes" : 123,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/profiler.log",
+         "relative" : "gate/profiler.log",
+         "sha256" : "19bd0947434809f3e50a306757cd27185cb58a4c584ef74882e0e9227ed6d7dd"
+      },
+      {
+         "bytes" : 191,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/program-directory.log",
+         "relative" : "gate/program-directory.log",
+         "sha256" : "60fd09574416d742ea28efb526c13fe36219a2f8371f05e8808526a1339bc424"
+      },
+      {
+         "bytes" : 132,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/query-publication.log",
+         "relative" : "gate/query-publication.log",
+         "sha256" : "68d7754dd4a6897acb18801c7a8a4b3dca5325eff0eaba20c06b21971bb269fc"
+      },
+      {
+         "bytes" : 130,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/query-signature.log",
+         "relative" : "gate/query-signature.log",
+         "sha256" : "48b70a36578f118d79ed5f8d273c65c2a0a0a68e19eff268ec813fc6ddfa2fe5"
+      },
+      {
+         "bytes" : 126,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/query-store.log",
+         "relative" : "gate/query-store.log",
+         "sha256" : "b41fdfff02978dd95cb63814fe0733ae317be8f270de6b37bdaa6541dba09a8e"
+      },
+      {
+         "bytes" : 164,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/references.log",
+         "relative" : "gate/references.log",
+         "sha256" : "6a5aab3b24d2b6dfda32121e0316f1eada397248de5b9980c97993ac5ac8c179"
+      },
+      {
+         "bytes" : 124,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/resources.log",
+         "relative" : "gate/resources.log",
+         "sha256" : "fdc23f953071e0092e1cd6e2bf8303612ed1b61fe9b27449739e6f3ab021be71"
+      },
+      {
+         "bytes" : 133,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/runtime-admission.log",
+         "relative" : "gate/runtime-admission.log",
+         "sha256" : "410a740a69f8583577ce3b45faa44cef14bb11896910e68324b82fb8dea190ee"
+      },
+      {
+         "bytes" : 169,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/semantic-cases.log",
+         "relative" : "gate/semantic-cases.log",
+         "sha256" : "68d0337964f1eec10b849449081515dff8c79bb499284d9184f59ac602bdad59"
+      },
+      {
+         "bytes" : 128,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/semantic-host.log",
+         "relative" : "gate/semantic-host.log",
+         "sha256" : "976557b2e85abab31bfb9bf3c2f2dc09920436fab3de1e181d128e8aed407d07"
+      },
+      {
+         "bytes" : 135,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/semantic-index-page.log",
+         "relative" : "gate/semantic-index-page.log",
+         "sha256" : "4a309bbf690b36f5f82159b1a82b9e7a68685308555d419c97e393ec50ca9906"
+      },
+      {
+         "bytes" : 129,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/semantic-query.log",
+         "relative" : "gate/semantic-query.log",
+         "sha256" : "e4cb555ee37e7abcf66014f12c2f59f0a93a0b02ba05f739e39fd10c9d4312d4"
+      },
+      {
+         "bytes" : 194,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/semantic-structure.log",
+         "relative" : "gate/semantic-structure.log",
+         "sha256" : "2aaa8696808475d32d77d7caf484336e04e0546641570c557486f2d29077ce2c"
+      },
+      {
+         "bytes" : 119,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/site.log",
+         "relative" : "gate/site.log",
+         "sha256" : "1d9ff7f8ffb1b081979cab1b8bba6d0b3b21b5b1c282f2dde750d2223e4b92b3"
+      },
+      {
+         "bytes" : 131,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/stop-interpreter.log",
+         "relative" : "gate/stop-interpreter.log",
+         "sha256" : "b1d064ce7a33df02956899b61c08d8af0b57131343d491c5648af8bd39e9f8e5"
+      },
+      {
+         "bytes" : 119,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/stop.log",
+         "relative" : "gate/stop.log",
+         "sha256" : "e2b8da4ec85e030ee87771320c025a2ed682c1227937b9c8955faa34b9bd1ef3"
+      },
+      {
+         "bytes" : 121,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/store.log",
+         "relative" : "gate/store.log",
+         "sha256" : "62d96c0a36dec36c12c4e85e4cc102e888533829e6c8f6ce4c08daf6a893fc98"
+      },
+      {
+         "bytes" : 139,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/structure-alternate-race.log",
+         "relative" : "gate/structure-alternate-race.log",
+         "sha256" : "ef890cfc00c93e3412202d10ab465410035c5c6d4980acda747fe11a01a7de81"
+      },
+      {
+         "bytes" : 138,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/structure-create-kills.log",
+         "relative" : "gate/structure-create-kills.log",
+         "sha256" : "4854965c69b16146d7c2e738f63189b7f22904a04ebdf78262c33e3afd3b5c88"
+      },
+      {
+         "bytes" : 131,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/structure-create.log",
+         "relative" : "gate/structure-create.log",
+         "sha256" : "b84527495f33852f5cfd53ff63aebc333383258c3315bfb7b8c52d8b6360fe63"
+      },
+      {
+         "bytes" : 129,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/structure-edit.log",
+         "relative" : "gate/structure-edit.log",
+         "sha256" : "0bc03ae91a4605eff5292257b63ed025a8605fbdd53210761aa99158994a7fab"
+      },
+      {
+         "bytes" : 133,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/structure-embedded.log",
+         "relative" : "gate/structure-embedded.log",
+         "sha256" : "3a1615e3e4aea1004116e26454583c569022b0e107076ff4891aef3f0f6d6be0"
+      },
+      {
+         "bytes" : 131,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/structure-module.log",
+         "relative" : "gate/structure-module.log",
+         "sha256" : "6cad55911ac0806b254e009db3c7fa180c1bba87de9b7eb55a75274d21e2f744"
+      },
+      {
+         "bytes" : 136,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/structure-projection.log",
+         "relative" : "gate/structure-projection.log",
+         "sha256" : "5056f804a4172fe6beab23ff15987d2f023845b035aa2311613e49a454a3b10e"
+      },
+      {
+         "bytes" : 134,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/structure-refactor.log",
+         "relative" : "gate/structure-refactor.log",
+         "sha256" : "e8b85bf007a885c1e1ea5b3ef5af8ecf9798a77cbab7176bc81acdda54c9212c"
+      },
+      {
+         "bytes" : 163,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/toolchain.log",
+         "relative" : "gate/toolchain.log",
+         "sha256" : "b42e319cb807edba493dc60f907217e3dacdf8dd8ead83b3b0015b8dbde290d8"
+      },
+      {
+         "bytes" : 128,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/type-identity.log",
+         "relative" : "gate/type-identity.log",
+         "sha256" : "1a4c42a8b7e20ef923da1e63295eb00f1fd615913e201ea02b0fdfac217c4002"
+      },
+      {
+         "bytes" : 121,
+         "kind" : "committed_blob",
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/world.log",
+         "relative" : "gate/world.log",
+         "sha256" : "bffd121d5f75329a3281d88b4cab5408629ff8b03e35499d02bce86f9eeba9a6"
+      }
+   ],
+   "deleted" : false,
+   "http_product_count" : 80,
+   "http_products_named_by_retained_outcome" : [
+      {
+         "bytes" : 42,
+         "kind" : "disposable_http_test_product",
+         "outcome_reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-origin-container-integration-data/local/suite-logs/details-http.log",
+         "relative" : "compiler-copy-sites-gate.ccpzZ9/previous-target-gate/http-profiles/http.memory.00000000000002606246",
+         "sha256" : "ae8c2d078b1810960f723682da672fa60d8f8dde632329e154bf004ccbdbc9bc"
+      },
+      {
+         "bytes" : 607390,
+         "kind" : "disposable_http_test_product",
+         "outcome_reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-origin-container-integration-data/local/suite-logs/details-http.log",
+         "relative" : "compiler-copy-sites-gate.ccpzZ9/previous-target-gate/http-profiles/http.samples.00000000000002606246",
+         "sha256" : "ca774b0099d1d6ea7fe9b882c7de48ccb205e122ae964f127d0444af30a8109b"
+      },
+      {
+         "bytes" : 44,
+         "kind" : "disposable_http_test_product",
+         "outcome_reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-http.log",
+         "relative" : "gate/http-profiles/http.memory.00000000000002777731",
+         "sha256" : "fa1df77f13057fab988ab4a6594bd3e7dbad051580acc8e108c97454ba8f5dd3"
+      },
+      {
+         "bytes" : 685198,
+         "kind" : "disposable_http_test_product",
+         "outcome_reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/gate/logs/details-http.log",
+         "relative" : "gate/http-profiles/http.samples.00000000000002777731",
+         "sha256" : "94777fa6cf7d959b385abcccc90011fc9a746f9737b9ccb394248c532ac71bb0"
+      }
+   ],
+   "inventory_pin" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991",
+   "source_or_artifact_executed" : false
+}

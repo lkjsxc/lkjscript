@@ -1,0 +1,65 @@
+{
+   "deleted" : false,
+   "readable_key_name_exceptions" : [
+      "compiler-copy-sites-integrated/examples/journal/token.lkj",
+      "compiler-copy-sites-integrated/tests/diagnostics/programs_image_key_grant_overlap.sh",
+      "compiler-copy-sites-integrated/tools/store-key.sh"
+   ],
+   "scopes" : {
+      "compiler-copy-sites-driver-candidate" : {
+         "bytes" : 154506,
+         "directories" : 1,
+         "files" : 4,
+         "matched_bytes" : 0,
+         "matched_files" : 0,
+         "unmatched_bytes" : 154506,
+         "unmatched_files" : 4
+      },
+      "compiler-copy-sites-evidence.20261116-1" : {
+         "bytes" : 7010,
+         "directories" : 1,
+         "files" : 12,
+         "matched_bytes" : 7010,
+         "matched_files" : 12,
+         "unmatched_bytes" : 0,
+         "unmatched_files" : 0
+      },
+      "compiler-copy-sites-gate.ccpzZ9" : {
+         "bytes" : 576864424,
+         "directories" : 18,
+         "files" : 17580,
+         "matched_bytes" : 13798529,
+         "matched_files" : 142,
+         "unmatched_bytes" : 563065895,
+         "unmatched_files" : 17438
+      },
+      "compiler-copy-sites-integrated" : {
+         "bytes" : 11191303,
+         "directories" : 55,
+         "files" : 1937,
+         "matched_bytes" : 10889843,
+         "matched_files" : 1932,
+         "unmatched_bytes" : 301460,
+         "unmatched_files" : 5
+      },
+      "compiler-copy-sites-integration-evidence" : {
+         "bytes" : 34411659,
+         "directories" : 26,
+         "files" : 187,
+         "matched_bytes" : 1110417,
+         "matched_files" : 171,
+         "unmatched_bytes" : 33301242,
+         "unmatched_files" : 16
+      },
+      "gate" : {
+         "bytes" : 156658487,
+         "directories" : 11,
+         "files" : 1356,
+         "matched_bytes" : 350686,
+         "matched_files" : 114,
+         "unmatched_bytes" : 156307801,
+         "unmatched_files" : 1242
+      }
+   },
+   "unmatched_files" : 18705
+}

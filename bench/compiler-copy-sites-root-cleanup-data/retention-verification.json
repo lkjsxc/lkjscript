@@ -1,0 +1,9 @@
+{
+   "bytes" : 40221,
+   "format" : "ustar, sorted exact file list, mtime=0 uid=0 gid=0, gzip -n -9",
+   "member_bytes" : 259435,
+   "path" : "retained-unmatched.tar.gz",
+   "regular_members" : 71,
+   "sha256" : "56825fc0ed67a0e772d46404598c0b0dd2d3ff099d05734e977cda0582317a22",
+   "source_comparison" : "Every member SHA-256 and size exactly matches live input and initial inventory; live metadata checked before and after retention."
+}

@@ -1,0 +1,81 @@
+{
+   "archive_counterpart_files" : 15,
+   "archives" : [
+      {
+         "bytes" : 11153,
+         "member_bytes" : 53083,
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/proposals/compiler-copy-sites-candidate-v2.tar.gz",
+         "regular_members" : 4,
+         "sha256" : "0b5892fe4e12b36d47b685d33d8a8d49aff262334d5407cd9ae8d384c9c5adda"
+      },
+      {
+         "bytes" : 42213,
+         "member_bytes" : 219718,
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/proposals/compiler-copy-sites-candidate.tar.gz",
+         "regular_members" : 10,
+         "sha256" : "45a8157a1c98ff4372757c9b5fb452bfd37ce7c8b41510c4fd2d257fe0c0e31b"
+      },
+      {
+         "bytes" : 5893,
+         "member_bytes" : 22749,
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/proposals/compiler-copy-sites-role-fixture-candidate.tar.gz",
+         "regular_members" : 8,
+         "sha256" : "66918c7b74ea5fcf180b4aa4e1351957efb7aa59c12b9b7003e7ae37da32c7ed"
+      },
+      {
+         "bytes" : 58506,
+         "member_bytes" : 168851,
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/proposals/docs.tar.gz",
+         "regular_members" : 17,
+         "sha256" : "ce532246b87b69fc81af8b8edebfe4a55e3f18c298f8bdb806cd9189cdced926"
+      },
+      {
+         "bytes" : 31807,
+         "member_bytes" : 154506,
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/proposals/driver.tar.gz",
+         "regular_members" : 4,
+         "sha256" : "4d91806e9f53eb1c0b51b2226716ebebba06be3c518b4c314487d17c08214ca4"
+      },
+      {
+         "bytes" : 39809,
+         "member_bytes" : 183565,
+         "reference" : "416da03c86b6073832c9b2cdbb319ff8a3b8c991:bench/compiler-copy-sites-data/proposals/profiler.tar.gz",
+         "regular_members" : 8,
+         "sha256" : "306377afa71b52f8121f6f6447460224be493750daf36c6e3aa10266320e17f8"
+      }
+   ],
+   "deleted" : false,
+   "git_counterpart_files" : 2371,
+   "seed_matches" : [
+      {
+         "bytes" : 32584542,
+         "reference" : "7d0731e99aeaf241c4334fc5ff065a341fb388c8:seed/lkjscript.gz",
+         "relative" : "compiler-copy-sites-integration-evidence/compiler",
+         "sha256" : "6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc",
+         "transform" : "gzip decompression"
+      },
+      {
+         "bytes" : 32584542,
+         "reference" : "7d0731e99aeaf241c4334fc5ff065a341fb388c8:seed/lkjscript.gz",
+         "relative" : "compiler-copy-sites-gate.ccpzZ9/canonical",
+         "sha256" : "6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc",
+         "transform" : "gzip decompression"
+      },
+      {
+         "bytes" : 6547345,
+         "reference" : "7d0731e99aeaf241c4334fc5ff065a341fb388c8:seed/lkjscript.gz",
+         "relative" : "compiler-copy-sites-gate.ccpzZ9/seed-a.gz",
+         "sha256" : "505be947525d53b4db1bff6c85cb77622cb2f5dc7e7d7fe92b772ee3b8ffc3e2",
+         "transform" : "identity"
+      },
+      {
+         "bytes" : 6547345,
+         "reference" : "7d0731e99aeaf241c4334fc5ff065a341fb388c8:seed/lkjscript.gz",
+         "relative" : "compiler-copy-sites-gate.ccpzZ9/seed-b.gz",
+         "sha256" : "505be947525d53b4db1bff6c85cb77622cb2f5dc7e7d7fe92b772ee3b8ffc3e2",
+         "transform" : "identity"
+      }
+   ],
+   "source_executed" : false,
+   "unique_verified_git_blobs" : 2267
+}

@@ -1,0 +1,55 @@
+{
+   "credential_name_candidates" : [
+      {
+         "bytes" : 1809,
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-copy-sites-integrated/examples/journal/token.lkj"
+      },
+      {
+         "bytes" : 2863,
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-copy-sites-integrated/tests/diagnostics/programs_image_key_grant_overlap.sh"
+      },
+      {
+         "bytes" : 939,
+         "path" : "/home/coder/workspace/lkjscript/target/compiler-copy-sites-integrated/tools/store-key.sh"
+      }
+   ],
+   "nonregular" : [],
+   "scopes" : {
+      "compiler-copy-sites-driver-candidate" : {
+         "allocated_bytes" : 167936,
+         "directories" : 1,
+         "file_bytes" : 154506,
+         "files" : 4
+      },
+      "compiler-copy-sites-evidence.20261116-1" : {
+         "allocated_bytes" : 49152,
+         "directories" : 1,
+         "file_bytes" : 7010,
+         "files" : 12
+      },
+      "compiler-copy-sites-gate.ccpzZ9" : {
+         "allocated_bytes" : 632504320,
+         "directories" : 18,
+         "file_bytes" : 576864424,
+         "files" : 17580
+      },
+      "compiler-copy-sites-integrated" : {
+         "allocated_bytes" : 17301504,
+         "directories" : 55,
+         "file_bytes" : 11191303,
+         "files" : 1937
+      },
+      "compiler-copy-sites-integration-evidence" : {
+         "allocated_bytes" : 35028992,
+         "directories" : 26,
+         "file_bytes" : 34411659,
+         "files" : 187
+      },
+      "gate" : {
+         "allocated_bytes" : 161140736,
+         "directories" : 11,
+         "file_bytes" : 156658487,
+         "files" : 1356
+      }
+   }
+}

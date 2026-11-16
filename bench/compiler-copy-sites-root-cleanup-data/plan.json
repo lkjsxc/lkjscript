@@ -1,0 +1,102 @@
+{
+  "version": 1,
+  "state": "prepared-no-deletion-release",
+  "repository": "/home/coder/workspace/lkjscript",
+  "planned_repository_prefix": "bench/compiler-copy-sites-root-cleanup-data",
+  "inventory_pin": "416da03c86b6073832c9b2cdbb319ff8a3b8c991",
+  "source_archive_baseline": "27c94440646d787efc4e7b43a712405288c22c61",
+  "gate_source": "d461c2d98e93aeed6061508ee80ab36b9eeaa04f",
+  "target": "/home/coder/workspace/lkjscript/target",
+  "scopes": [
+    "compiler-copy-sites-integrated",
+    "compiler-copy-sites-driver-candidate",
+    "compiler-copy-sites-integration-evidence",
+    "compiler-copy-sites-gate.ccpzZ9",
+    "compiler-copy-sites-evidence.20261116-1",
+    "gate"
+  ],
+  "expected": {
+    "regular_files": 21076,
+    "directories": 112,
+    "logical_bytes": 779287389,
+    "allocated_bytes": 846192640,
+    "symlinks": 0,
+    "special_entries": 0,
+    "regular_links_per_file": 1
+  },
+  "inventory_sha256": "e50bebef5501856268d0cb9459b9dd4465246cf8d49273803c4076c7dc934736",
+  "retention": {
+    "archive": "retained-unmatched.tar.gz",
+    "sha256": "56825fc0ed67a0e772d46404598c0b0dd2d3ff099d05734e977cda0582317a22",
+    "compressed_bytes": 40221,
+    "regular_members": 71,
+    "member_bytes": 259435,
+    "selection": "All remaining non-product gaps: 62 logs and nine combined projections/observations, explicitly selected by root before archive creation.",
+    "verification": "Exact member path set, sizes, SHA-256, and live initial inventory metadata before/after archive creation."
+  },
+  "partition": {
+    "exact_existing_recovery_files": 2384,
+    "exact_existing_recovery_bytes": 92144809,
+    "newly_retained_files": 71,
+    "newly_retained_bytes": 259435,
+    "disposable_files": 18621,
+    "disposable_bytes": 686883145
+  },
+  "disposal_boundary": {
+    "all_disposable_paths": "disposable.json, bound to disposition.tsv and full-inventory.tsv",
+    "recoverable_from_hashes": false,
+    "http_test_products": 80,
+    "http_test_product_bytes": 17755510,
+    "http_products_named_in_retained_gate_outcomes": 4,
+    "older_http_products_without_individual_outcome_binding": 76,
+    "focused_generated_images": [
+      "compiler-copy-sites-integration-evidence/ordinary-old",
+      "compiler-copy-sites-integration-evidence/ordinary-new",
+      "compiler-copy-sites-integration-evidence/roles"
+    ],
+    "focused_generated_image_bytes": 229667
+  },
+  "canonical_recovery": {
+    "reference": "7d0731e99aeaf241c4334fc5ff065a341fb388c8:seed/lkjscript.gz",
+    "compressed_bytes": 6547345,
+    "compressed_sha256": "505be947525d53b4db1bff6c85cb77622cb2f5dc7e7d7fe92b772ee3b8ffc3e2",
+    "decoded_bytes": 32584542,
+    "decoded_sha256": "6cd52308aba91d6f84396e6f999ffba6d97eb7ccbacbb6bec654c31fee7bdacc",
+    "live_copies": [
+      "compiler-copy-sites-integration-evidence/compiler",
+      "compiler-copy-sites-gate.ccpzZ9/canonical"
+    ],
+    "state": "Both copies remain live. No removal until root confirms no remaining consumer and explicitly releases this exact committed plan."
+  },
+  "outside_scope": [
+    "/home/coder/workspace/lkjscript/target/lkjscript",
+    "all other target paths, including cohort 2 run/evidence and extractor/census proposals",
+    "all worktrees and shared parent directories",
+    "global store key and every operation credential",
+    "all running services and their data",
+    ".generation-one"
+  ],
+  "execution": {
+    "guard": "guard.pl",
+    "arguments": [
+      "--execute-after-root-release",
+      "EXACT_COMMITTED_BUNDLE_REVISION"
+    ],
+    "requires_root_release": true,
+    "requires_commit_in_main_history": true,
+    "requires_guard_and_all_manifest_bytes_match_commit": true,
+    "no_retry_on_refusal": true,
+    "no_recursive_removal": true,
+    "no_process_or_fd_observer": true,
+    "no_private_key_read": true,
+    "no_compiler_or_image_execution": true,
+    "result_directory": "/home/coder/workspace/lkjscript-compiler-copy-sites-native-20261116/target/compiler-copy-sites-root-inventory-20261116/cleanup-results",
+    "capture": "Root-released future invocation only, with stdout/stderr/status, UTC endpoints, GNU elapsed time and before/after load retained outside all six scopes."
+  },
+  "limitations": [
+    "Cooperative ownership cleanup, not an atomic defense against a hostile concurrent parent rename. Root must confirm quiescence without adding a process observer.",
+    "Any changed file, extra entry, missing entry, changed metadata, missing recovery or guard failure refuses; a partial unlink failure is recorded and cannot be retried through the same result directory.",
+    "Historical gate products are disposable by explicit scope and test contracts. No fresh independent census or byte-reconstruction claim follows from their hashes.",
+    "Earlier legacy-guard review does not cover this adaptation. Root independent review and commit remain pending."
+  ]
+}
