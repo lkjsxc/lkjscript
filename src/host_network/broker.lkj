@@ -188,7 +188,7 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     let mut storage = Vec::new();
     for _index in 0usize..5usize { storage.push(a.label()); }
     let mut directories = Vec::new();
-    for _index in 0usize..9usize { directories.push(a.label()); }
+    for _index in 0usize..10usize { directories.push(a.label()); }
     let mut lifecycle = Vec::new();
     for _index in 0usize..6usize { lifecycle.push(a.label()); }
 

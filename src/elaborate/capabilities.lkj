@@ -183,6 +183,7 @@ pub(super) enum Method {
     DirectoryRenameNewRaw,
     DirectoryOpenRegular,
     DirectoryOpenRegularRaw,
+    DirectoryIdentityRaw,
     WorldConnector,
     WorldConnectorRaw,
     ConnectorConnect,
@@ -362,6 +363,7 @@ pub(super) fn method(receiver: Receiver, name: &str) -> Option<Method> {
         (Receiver::Directory, "__lkjscript_rename_new") => Method::DirectoryRenameNewRaw,
         (Receiver::Directory, "open_regular") => Method::DirectoryOpenRegular,
         (Receiver::Directory, "__lkjscript_open_regular") => Method::DirectoryOpenRegularRaw,
+        (Receiver::Directory, "__lkjscript_identity") => Method::DirectoryIdentityRaw,
         _ => return None,
     })
 }
@@ -506,6 +508,7 @@ impl Method {
             Method::DirectoryRenameNewRaw => (vec![Value::Bytes, Value::Bytes], Value::Error),
             Method::DirectoryOpenRegular => (vec![Value::Text], Value::ResultFile),
             Method::DirectoryOpenRegularRaw => (vec![Value::Bytes], Value::ResultFile),
+            Method::DirectoryIdentityRaw => (vec![Value::MutableBytes], Value::Error),
             Method::DirectoryRenameRaw => (
                 vec![Value::Bytes, Value::DirectoryRef, Value::Bytes],
                 Value::Error,
@@ -609,6 +612,7 @@ impl Method {
             Method::DirectoryRenameRaw => ir::IntrinsicOp::DirectoryRename,
             Method::DirectoryRenameNewRaw => ir::IntrinsicOp::DirectoryRenameNew,
             Method::DirectoryOpenRegularRaw => ir::IntrinsicOp::DirectoryOpenRegular,
+            Method::DirectoryIdentityRaw => ir::IntrinsicOp::DirectoryIdentity,
             _ => return None,
         })
     }
@@ -662,7 +666,7 @@ impl Method {
 }
 
 fn storage_method(name: &str) -> bool {
-    matches!(name, "rename_new" | "__lkjscript_rename_new" | "open_regular" | "__lkjscript_open_regular"
+    matches!(name, "__lkjscript_identity" | "rename_new" | "__lkjscript_rename_new" | "open_regular" | "__lkjscript_open_regular"
         | "create_new" | "open_append" | "__lkjscript_create_new" | "__lkjscript_open_append"
         | "sync" | "seek" | "modified_nanoseconds" | "truncate" | "lock_exclusive" | "lock_wait" | "unix_nanoseconds" | "get" | "set_status"
         | "entropy" | "fill" | "unix_seconds" | "set_private" | "stop" | "requested" | "target"

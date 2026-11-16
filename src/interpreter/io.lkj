@@ -264,7 +264,7 @@ impl<H: Host> Interpreter<'_, H> {
     ) -> Result<Option<Value>, RunError> {
         let storage_arity = match name {
             ir::IntrinsicOp::DirectoryRenameNew => 3usize,
-            ir::IntrinsicOp::DirectoryOpenRegular => 2usize,
+            ir::IntrinsicOp::DirectoryOpenRegular | ir::IntrinsicOp::DirectoryIdentity => 2usize,
             ir::IntrinsicOp::ForeignRun | ir::IntrinsicOp::ForeignStart => 5usize,
             ir::IntrinsicOp::ForeignImage => 1usize,
             ir::IntrinsicOp::ForeignExchange => 4usize,
@@ -720,6 +720,18 @@ impl<H: Host> Interpreter<'_, H> {
                     let is_directory = self.io_number(values, 2, ir::BOOL)? != 0;
                     self.host.remove_entry(handle, &path, is_directory)
                 };
+                self.io_status(outcome)?
+            }
+            ir::IntrinsicOp::DirectoryIdentity => {
+                let directory = self.io_authority(values, TypeKind::Directory)?;
+                self.io_result_type(result, ir::I64)?;
+                let buffer = self.io_buffer(values, 1, true)?;
+                let mut bytes = self.bytes(&buffer)?;
+                let handle = self.io_handle(&directory)?;
+                let outcome = if bytes.len() == 16usize {
+                    self.host.directory_identity(handle, &mut bytes)
+                } else { Err(22) };
+                if outcome.is_ok() { self.io_write_buffer(&buffer, &bytes)?; }
                 self.io_status(outcome)?
             }
             ir::IntrinsicOp::DirectoryRenameNew => {

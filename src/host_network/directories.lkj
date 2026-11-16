@@ -220,6 +220,30 @@ pub(super) fn emit(a: &mut Assembler, labels: &[Label], reply: Label, invalid: L
     a.immediate(R10, 0);
     syscall(a, 257); // One validated component needs no path traversal.
     empty(a, reply);
+
+    // 74: dev/ino identity of this retained Directory, never a pathname lookup.
+    a.bind(labels[9]);
+    a.load(DI, BP, REQUEST + 8);
+    check_fd(a, DI, bad);
+    a.test(R15, true);
+    a.condition(5, invalid);
+    a.lea(SI, BP, SCRATCH);
+    syscall(a, 5);
+    let identified = a.label();
+    a.test(A, true);
+    a.condition(9, identified);
+    empty(a, reply);
+    a.bind(identified);
+    a.load_width(A, BP, SCRATCH + 24, 4, false);
+    a.immediate(C, 0xf000);
+    a.rr(0x21, A, C, true);
+    a.immediate(C, 0x4000); // S_IFDIR.
+    a.compare(A, C);
+    a.condition(5, invalid);
+    a.immediate(A, 0);
+    a.lea(R8, BP, SCRATCH);
+    a.immediate(R9, 16); // Linux x86-64 st_dev, then st_ino: little-endian u64s.
+    a.jump(reply);
 }
 
 // Independently implement ENOSYS beneath traversal in the syscall broker.

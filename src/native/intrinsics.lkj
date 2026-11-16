@@ -478,6 +478,13 @@ impl Body<'_> {
                     self.platform.directory_remove
                 });
             }
+            IntrinsicOp::DirectoryIdentity => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.read_word(args[1], 0, SI);
+                self.read_word(args[1], 1, D);
+                self.a.call(self.platform.directory_identity);
+            }
             IntrinsicOp::DirectoryRenameNew => {
                 self.read(args[0], DI);
                 self.a.load(DI, DI, 0);

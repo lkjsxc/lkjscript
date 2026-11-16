@@ -285,6 +285,40 @@ fn directories(a: &mut Assembler, p: Platform) {
     a.immediate(A, (-22i64) as u64);
     a.bind(finish_new);
     epilogue(a);
+
+    a.bind(p.directory_identity);
+    let identity_invalid = a.label();
+    let identity_done = a.label();
+    a.immediate(A, 16);
+    a.compare(D, A);
+    a.condition(5, identity_invalid);
+    prologue(a, p, 160, Span::default());
+    a.store(BP, -152, SI);
+    a.lea(SI, BP, -144);
+    syscall(a, 5); // fstat writes private scratch, never the caller's buffer.
+    a.test(A, true);
+    a.condition(8, identity_done);
+    a.load_width(A, BP, -120, 4, false);
+    a.immediate(C, 0xf000);
+    a.rr(0x21, A, C, true);
+    a.immediate(C, 0x4000); // S_IFDIR.
+    a.compare(A, C);
+    let directory_identity = a.label();
+    a.condition(4, directory_identity);
+    a.immediate(A, (-22i64) as u64);
+    a.jump(identity_done);
+    a.bind(directory_identity);
+    a.load(R8, BP, -152);
+    a.load(A, BP, -144); // st_dev.
+    a.store(R8, 0, A);
+    a.load(A, BP, -136); // st_ino.
+    a.store(R8, 8, A);
+    a.immediate(A, 0);
+    a.bind(identity_done);
+    epilogue(a);
+    a.bind(identity_invalid);
+    a.immediate(A, (-22i64) as u64);
+    a.ret();
 }
 
 fn children(a: &mut Assembler, p: Platform) {

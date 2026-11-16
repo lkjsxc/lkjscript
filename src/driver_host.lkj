@@ -762,6 +762,11 @@ impl interpreter::Host for Host<'_, '_> {
         self.network.move_entry(from, old, to, new)
     }
 
+    fn directory_identity(&mut self, directory: u64, bytes: &mut [u8]) -> Result<(), i64> {
+        let directory = self.directory_handle(directory)?;
+        self.network.directory_identity(directory, bytes)
+    }
+
     fn rename_new_entry(&mut self, directory: u64, old: &[u8], new: &[u8]) -> Result<(), i64> {
         let directory = self.directory_handle(directory)?;
         self.network.move_new_entry(directory, old, new)

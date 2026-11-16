@@ -508,3 +508,9 @@ pub fn __lkjscript_directory_rename_new(
 pub fn __lkjscript_directory_open_regular(directory: &mut Directory, name: &str) -> Result<File, i64> {
     directory.__lkjscript_open_regular(&path_bytes(name)?)
 }
+
+pub fn directory_identity(directory: &mut Directory) -> Result<[u8; 16], i64> {
+    let mut bytes = [0u8; 16];
+    unit_result(directory.__lkjscript_identity(&mut bytes))?;
+    Result::Ok(bytes)
+}

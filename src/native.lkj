@@ -1827,6 +1827,7 @@ fn prepare_program(
         symbols.push((p.directory_rename, "$platform::directory_rename".to_string()));
     symbols.push((p.directory_rename_new, "$platform::directory_rename_new".to_string()));
     symbols.push((p.directory_open_regular, "$platform::directory_open_regular".to_string()));
+    symbols.push((p.directory_identity, "$platform::directory_identity".to_string()));
         symbols.push((p.file_executable, "$platform::file_executable".to_string()));
         symbols.push((p.file_duplicate, "$platform::file_duplicate".to_string()));
         symbols.push((p.file_readonly, "$platform::file_readonly".to_string()));

@@ -306,7 +306,15 @@ impl Stdin {
         files::read_to_end(0)
     }
 }
+pub fn directory_identity(directory: &mut Directory) -> Result<[u8; 16], i64> {
+    let mut bytes = [0u8; 16];
+    let status = directory.__lkjscript_identity(&mut bytes);
+    if status < 0 { Err(-status) } else { Ok(bytes) }
+}
 impl Directory {
+    pub fn __lkjscript_identity(&mut self, bytes: &mut [u8]) -> i64 {
+        files::directory_identity(&self.handle, bytes).map_or_else(|error| -error, |()| 0)
+    }
     fn descriptor(&self) -> i32 {
         self.handle.as_raw_fd()
     }
@@ -1260,6 +1268,15 @@ pub(crate) mod files {
             )
         })
         .map(|_| ())
+    }
+    pub fn directory_identity(directory: &std::fs::File, bytes: &mut [u8]) -> Result<(), i64> {
+        use std::os::unix::fs::MetadataExt;
+        if bytes.len() != 16 { return Err(22); }
+        let identity = directory.metadata().map_err(error)?;
+        if !identity.is_dir() { return Err(22); }
+        bytes[..8].copy_from_slice(&identity.dev().to_le_bytes());
+        bytes[8..].copy_from_slice(&identity.ino().to_le_bytes());
+        Ok(())
     }
     pub fn rename_new_entry(directory: &std::fs::File, old: &[u8], new: &[u8]) -> Result<(), i64> {
         let old = name(old)?;

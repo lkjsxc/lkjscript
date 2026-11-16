@@ -591,3 +591,13 @@ impl Network {
         readable
     }
 }
+
+impl Network {
+    pub fn directory_identity(&mut self, directory: u64, bytes: &mut [u8]) -> Result<(), i64> {
+        if bytes.len() != 16usize { return Err(22); }
+        let (_, identity) = self.request(74, &[directory], b"")?;
+        if identity.len() != 16usize { return Err(5); }
+        bytes.copy_from_slice(&identity);
+        Ok(())
+    }
+}
