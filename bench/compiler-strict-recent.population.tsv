@@ -1,0 +1,12 @@
+revision	parent	classification	language_files	subject
+e03db719e77de6e6f3cb1ce4495058b646bb9220	c4b62ce61d8142314699d2b8733c7f723d987fc9	alternate-existing-refactor-root-not-selected	5	compiler: expose proved associated-call source targets
+9047a677f9a353ae13883b4998adf9da2fc67b48	14180552c2fbc4df4eec4aa9d7c08e5503f26c5f	selected-main-root	1	Preserve complete long signatures across authenticated query pages
+de65c09bab9d336e10dcfe245058d4ee14b3aea2	8317e94efad30e297de5bd0bd70d028c804c4530	selected-main-root	2	Distinguish absent and existing source transaction inputs
+579cf55e88177b9c9a4c59e2ff6c1bf7829e2878	d85d71d7aa4160f8551aec5caab6443972ce0ef1	excluded-mixed-roots-and-Rust-witness	17	Add capability checked absent-only rename and pinned regular reads
+0a410badb7e96ed9f6cf185df7d1f781d71c5fdb	579cf55e88177b9c9a4c59e2ff6c1bf7829e2878	selected-main-root	5	compiler: plan loader-backed external module projections
+1c5d964e03a505d9545f85da39a5b2975f7694b9	0a410badb7e96ed9f6cf185df7d1f781d71c5fdb	excluded-mixed-roots-and-Rust-witness	18	Add exact identity for held Directory capabilities
+c5f67a5583aaba6dd338ba3e7278fdc775f36731	2b3ff6c9cdaaedb052c379023780b8e3b148801d	selected-main-root	1	Prepare signed source publication with explicit absence
+9c0d1797a31e3b67ad17ec3cf819951f8f51b4e0	7c8a88e43d6b2de113d4ad5faa3f30b61af7b99f	excluded-main-and-semantic-test-roots	5	Publish checked external modules through retained parents
+501db910c1e57b6647cf2b0f7cf972f034f5bbfd	b7e8ed035d155e75438406c7474a747220ff9537	excluded-Rust-witness-only	2	Preserve crate-local structural diagnostics in the Rust witness
+ba27e90add8c1a28e7d2c03984dbaa4aed1a8e72	6c3f0ce8294400ebcd81e4e7f1a82e08bda6262d	selected-main-root	1	Trial lazy serialization of authenticated semantic fact pages
+71e821dfcaaf6a7940ed67bb7d2d3a721c169922	05b8e88c0d96a6fe4cf5cb6104eb5d90359c4f8a	selected-main-root	2	Attribute ordinary store I/O by fixed cache category
