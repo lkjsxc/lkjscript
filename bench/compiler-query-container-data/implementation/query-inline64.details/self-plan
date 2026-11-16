@@ -1,0 +1,14 @@
+"generic::Record" level=source-claim operation-target
+"generic::Record<T>::new" level=source-claim operation-target
+"main" level=source-claim operation-target
+"target/semantic-query.nCphJu/self-source/main.lkj" level=source-claim file before=ad444baab1e5d2a54f727431c926267a57a886d6cda72ddc3febe868da349237 after=e81947e6fcd84128f1ed7ea1086cb66bbfb7e3a55cbb735da2314ca59f86248f
+transaction sites=3 files=1 identities=3
+"generic" level=source-claim changed=text-only
+"generic::Record" level=source-claim changed=signature
+"generic::Record::field:tag" level=source-claim changed=added
+"generic::Record<T>::new" level=source-claim changed=body
+"impl:generic::Record<T>#65eaba7bc83789e1" level=source-claim changed=text-only
+"main" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=53e0f19d97674b086bc39f9553e0c92fd5d7919c67522bc441ed29ee03a57010 after=707a39309225fb9b4863ace5dc3b22c3f9f9c8a2e7df2b259b5a5c6cae4724a9 checked-instances=1 fresh-checked=1 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=6d0c39b9e404367bcda26c6a067186b132fb3792e570b625e47fc80cd2326912 source-after=95310987c3e0694c4c87c29e853644e4b86afeecaeebad6b3366b6ebff0b68cf mode=apply

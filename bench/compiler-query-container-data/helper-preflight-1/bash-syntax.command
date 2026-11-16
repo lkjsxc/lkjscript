@@ -1,0 +1,1 @@
+bash -c for\ file\ in\ \"\$@\"\;\ do\ bash\ -n\ \"\$file\"\ \|\|\ exit\;\ done _ bench/compiler-query-container.sh tools/query-store-test.sh tools/semantic-query-test.sh tools/cache-read-test.sh tools/cache-io-test.sh tools/semantic-index-page-test.sh 

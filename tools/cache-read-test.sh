@@ -45,20 +45,26 @@ pub use std::sha256;
 use store::QueryAccess;
 fn main(mut world: World) {
     let args = world.args();
-    assert!(args.len() == 3usize);
+    assert!(args.len() == 5usize);
     let mode = String::from_utf8(args[0].clone()).unwrap();
     let directory = Some(String::from_utf8(args[1].clone()).unwrap());
     let key_file = Some(String::from_utf8(args[2].clone()).unwrap());
     let ordinary = sha256::hex_digest(b"cache read ordinary");
-    let identity = sha256::hex_digest(b"snapshot payload");
-    let page = sha256::hex_digest(b"page payload");
+    let identity = String::from_utf8(args[3].clone()).unwrap();
+    let page = String::from_utf8(args[4].clone()).unwrap();
     let selector = sha256::hex_digest(b"cache read selector");
     if mode == "init" {
         let mut cache = store::Store::open_bounded(&mut world, &directory, &key_file, 65536usize).unwrap();
         cache.put("probe", &ordinary, b"ordinary payload");
-        cache.put("semantic-root", &identity, b"snapshot payload");
-        cache.put("semantic-page", &page, b"page payload");
-        assert!(cache.publish_query_locator(&identity, &selector, &page));
+        let mut node = Vec::new();
+        for word in vec![3usize, 0usize, 0usize, 0usize] { store::push_word(&mut node, word); }
+        let mut writer = cache.begin_query_container().unwrap();
+        let root = writer.append_node(&node).unwrap();
+        let source = sha256::hex_digest(b"snapshot source");
+        let checked = sha256::hex_digest(b"snapshot checked IR");
+        let manifest = writer.finish(&source, &checked, &selector, 0usize, &root).unwrap();
+        assert!(cache.publish_query_locator(&manifest.identity, &selector, &root.digest));
+        world.stdout().write(format!("id={} root={}\n", manifest.identity, root.digest).as_bytes());
         cache.finish();
     } else if mode == "ordinary-hit" || mode == "ordinary-miss" {
         let mut cache = store::Store::open_bounded(&mut world, &directory, &key_file, 65536usize).unwrap();
@@ -70,10 +76,22 @@ fn main(mut world: World) {
     } else {
         let mut reader = store::QueryReader::open(&mut world, &directory, &key_file, 65536usize, &identity, &selector).unwrap();
         assert!(reader.query_bound_root() == Some(page.clone()));
-        if mode == "root-hit" { assert!(reader.query_root(&identity).unwrap() == b"snapshot payload"[..].to_vec()); }
-        else if mode == "root-miss" { assert!(reader.query_root(&identity).is_none()); }
-        else if mode == "page-hit" { assert!(reader.query_page(&page).unwrap() == b"page payload"[..].to_vec()); }
-        else { assert!(mode == "page-miss" && reader.query_page(&page).is_none()); }
+        if mode == "root-hit" {
+            let bytes = reader.query_root(&identity).unwrap();
+            let manifest = store::QueryManifest::decode(&bytes).unwrap();
+            assert_eq!(manifest.identity, identity); assert_eq!(manifest.root, page);
+        } else if mode == "root-miss" { assert!(reader.query_root(&identity).is_none()); }
+        else {
+            let node = match reader.query_root(&identity) {
+                Some(bytes) => {
+                    let manifest = store::QueryManifest::decode(&bytes).unwrap();
+                    reader.query_node(&identity, &manifest.root_extent())
+                }
+                None => None,
+            };
+            if mode == "page-hit" { assert_eq!(sha256::hex_digest(&node.unwrap()), page); }
+            else { assert!(mode == "page-miss" && node.is_none()); }
+        }
     }
 }
 SOURCE
@@ -91,7 +109,7 @@ manifest() {
 unchanged() {
     local label=$1 executable=$2 mode=$3 directory=$4
     manifest "$directory" "$fixture/$label.before"
-    run "$label" "$executable" "$mode" "$directory" "$fixture/key"
+    run "$label" "$executable" "$mode" "$directory" "$fixture/key" "$identity" "$node_digest"
     manifest "$directory" "$fixture/$label.after"
     cmp "$fixture/$label.before" "$fixture/$label.after"
     printf '%s\tunchanged\n' "$label" >> "$fixture/contracts.tsv"
@@ -100,17 +118,22 @@ unchanged() {
 "$compiler" build main.lkj --source-dir "$fixture/source" --no-store --inline-limit 0 -o "$fixture/probe" \
     > "$fixture/build.stdout" 2> "$fixture/build.stderr"
 sha256sum "$fixture/probe" > "$fixture/probe.sha256"
+identity=$(printf "absent snapshot" | sha256sum | cut -d" " -f1)
+node_digest=$(printf "absent node" | sha256sum | cut -d" " -f1)
 unchanged ordinary-absent "$fixture/probe" ordinary-miss "$fixture/empty-ordinary"
 unchanged locator-absent "$fixture/probe" locator-miss "$fixture/empty-locator"
-run init "$fixture/probe" init "$fixture/seed" "$fixture/key"
+run init "$fixture/probe" init "$fixture/seed" "$fixture/key" "$identity" "$node_digest"
+identity=$(sed -n 's/^id=\([0-9a-f]*\) root=.*/\1/p' "$fixture/init.stdout")
+node_digest=$(sed -n 's/.* root=\([0-9a-f]*\)$/\1/p' "$fixture/init.stdout")
+[[ ${#identity} == 64 && ${#node_digest} == 64 ]]
 cp "$fixture/probe" "$fixture/historical-probe"
 printf 'different read-only query executable\n' >> "$fixture/historical-probe"
 sha256sum "$fixture/historical-probe" > "$fixture/historical-probe.sha256"
 [[ $(sha256sum "$fixture/probe" | cut -d' ' -f1) != $(sha256sum "$fixture/historical-probe" | cut -d' ' -f1) ]]
 ordinary=$(find "$fixture/seed" -maxdepth 1 -type f -name 'probe-*' -printf '%f')
-root=$(find "$fixture/seed" -maxdepth 1 -type f -name 'semantic-root-*' -printf '%f')
-page=$(find "$fixture/seed" -maxdepth 1 -type f -name 'semantic-page-*' -printf '%f')
-locator=$(find "$fixture/seed" -maxdepth 1 -type f -name 'semantic-locator-*' -printf '%f')
+root=$(find "$fixture/seed" -maxdepth 1 -type f -name 'semantic-container-v3-*' -printf '%f')
+page=$(find "$fixture/seed" -maxdepth 1 -type f -name 'semantic-container-v3-*' -printf '%f')
+locator=$(find "$fixture/seed" -maxdepth 1 -type f -name 'semantic-locator-v3-*' -printf '%f')
 [[ -n $ordinary && -n $root && -n $page && -n $locator ]]
 printf 'ordinary\t%s\nroot\t%s\npage\t%s\nlocator\t%s\n' "$ordinary" "$root" "$page" "$locator" > "$fixture/entries.tsv"
 cp -a "$fixture/seed" "$fixture/readonly"
@@ -118,6 +141,7 @@ find "$fixture/readonly" -maxdepth 1 -type f -exec chmod 0444 {} +
 unchanged ordinary-readonly "$fixture/probe" ordinary-hit "$fixture/readonly"
 unchanged historical-root-readonly "$fixture/historical-probe" root-hit "$fixture/readonly"
 unchanged historical-page-readonly "$fixture/historical-probe" page-hit "$fixture/readonly"
+# Root and node APIs share one container path but exercise separate lookup paths.
 for kind in root page; do
     name=${!kind}
     directory="$fixture/missing-$kind"
@@ -151,7 +175,7 @@ for kind in ordinary root page locator; do
     directory="$fixture/$kind-forged"
     cp -a "$fixture/seed" "$directory"
     printf 'forged authenticated entry\n' > "$directory/$name"
-    run "$kind-forged" "$executable" "$kind-miss" "$directory" "$fixture/key"
+    run "$kind-forged" "$executable" "$kind-miss" "$directory" "$fixture/key" "$identity" "$node_digest"
     printf '%s\trefused\n' "$kind-forged" >> "$fixture/contracts.tsv"
 done
 # An authentic envelope from another namespace is also a miss.
@@ -159,10 +183,12 @@ for kind in ordinary root; do
     directory="$fixture/$kind-substituted"
     cp -a "$fixture/seed" "$directory"
     name=${!kind}
-    cp "$fixture/seed/$page" "$directory/$name"
+    replacement=$page
+    [[ $kind == root ]] && replacement=$ordinary
+    cp "$fixture/seed/$replacement" "$directory/$name"
     executable="$fixture/historical-probe"
     [[ $kind == ordinary ]] && executable="$fixture/probe"
-    run "$kind-substituted" "$executable" "$kind-miss" "$directory" "$fixture/key"
+    run "$kind-substituted" "$executable" "$kind-miss" "$directory" "$fixture/key" "$identity" "$node_digest"
     printf '%s\trefused\n' "$kind-substituted" >> "$fixture/contracts.tsv"
 done
 printf 'ok cache-read contracts: %s cases\n' "$(wc -l < "$fixture/contracts.tsv")"

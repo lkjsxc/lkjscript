@@ -1,0 +1,8 @@
+"probe"	level=protocol	fact=query	version=3 producer=eed6ca32edcc182a92c4e697f4702ec685dff8e7778b0374a27552aa9c938947 validation=authenticated-producing-compiler current-check=not-performed snapshot=c7dc825941bf01ad06c02e849c8196c63c43ee3e264aa50b7e636a9c227c38d1 source=c190b15cd6580a8b23ff82864ab2f3852aaf78332bc380c4455af6a24bd744cc checked-ir=531f03273c5fbc474bc8dab899464aca8097c366febb4841b64e0f25c3c2f03b kind=slice depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
+"probe"	level=source-claim	fact=identity	signature=1b20dcae83c8e8c01faea15d243572b625cf39f3621d5784449404dd6fd93c36 body=d8a78bbb475ddf012cb7b14e81e6f5c81ea9d4cae01306d862a86736dc94e8b2 scope=semantic-path body-locals=token-body-epoch
+"probe"	level=source-claim	fact=item	kind=function parent="crate" file="target/semantic-query.nCphJu/source/main.lkj" start=121 end=174 file-sha256=6899ebbb2833583268d6e1e9bbf0e3b0689be982c461b4e00e1fd254ca3dc8ca item-sha256=edaf95497ff95e4c9095693c4bd68499430028f7f50e24347492a42357e81773 references-complete=true
+"probe"	level=source-claim	fact=text	chunk=0000000000000000 value="pub fn probe() -> i64 { helpers::identity(times(7)) }"
+"helpers"	level=source-claim	fact=signature	kind=module text="mod helpers;" bytes=12 complete=true
+"helpers::identity"	level=source-claim	fact=signature	kind=function text="pub fn identity<T>(value: T) -> T" bytes=33 complete=true
+"helpers::square"	level=source-claim	fact=signature	kind=function text="pub fn square(value: i64) -> i64" bytes=32 complete=true
+"probe"	level=protocol	fact=continuation	cursor=none facts=6 pages-read=12 traversal-steps=15

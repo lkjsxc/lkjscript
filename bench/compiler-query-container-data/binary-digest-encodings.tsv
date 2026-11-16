@@ -1,0 +1,5 @@
+source_relative	bytes	sha256_raw	committed_hex_file
+implementation/query-2/root-a	32	b056955119aa513740968e051444cd2ce5d853106a32b1e6818a5614171b1bba	implementation/query-2/root-a.hex
+implementation/query-2/root-b	32	b056955119aa513740968e051444cd2ce5d853106a32b1e6818a5614171b1bba	implementation/query-2/root-b.hex
+implementation/query-inline64.details/root-a	32	1a892b1903cdc9c8cd07b0b47b66b0b81e5b58d2e6f41c0fff5f75fb9a8c223e	implementation/query-inline64.details/root-a.hex
+implementation/query-inline64.details/root-b	32	1a892b1903cdc9c8cd07b0b47b66b0b81e5b58d2e6f41c0fff5f75fb9a8c223e	implementation/query-inline64.details/root-b.hex

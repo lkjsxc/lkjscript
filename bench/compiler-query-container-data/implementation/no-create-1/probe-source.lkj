@@ -1,0 +1,58 @@
+mod diagnostic;
+mod ir;
+mod ir_binary;
+mod reuse;
+mod store;
+pub use std::sha256;
+use store::QueryAccess;
+fn main(mut world: World) {
+    let args = world.args();
+    assert!(args.len() == 5usize);
+    let mode = String::from_utf8(args[0].clone()).unwrap();
+    let directory = Some(String::from_utf8(args[1].clone()).unwrap());
+    let key_file = Some(String::from_utf8(args[2].clone()).unwrap());
+    let ordinary = sha256::hex_digest(b"cache read ordinary");
+    let identity = String::from_utf8(args[3].clone()).unwrap();
+    let page = String::from_utf8(args[4].clone()).unwrap();
+    let selector = sha256::hex_digest(b"cache read selector");
+    if mode == "init" {
+        let mut cache = store::Store::open_bounded(&mut world, &directory, &key_file, 65536usize).unwrap();
+        cache.put("probe", &ordinary, b"ordinary payload");
+        let mut node = Vec::new();
+        for word in vec![3usize, 0usize, 0usize, 0usize] { store::push_word(&mut node, word); }
+        let mut writer = cache.begin_query_container().unwrap();
+        let root = writer.append_node(&node).unwrap();
+        let source = sha256::hex_digest(b"snapshot source");
+        let checked = sha256::hex_digest(b"snapshot checked IR");
+        let manifest = writer.finish(&source, &checked, &selector, 0usize, &root).unwrap();
+        assert!(cache.publish_query_locator(&manifest.identity, &selector, &root.digest));
+        world.stdout().write(format!("id={} root={}\n", manifest.identity, root.digest).as_bytes());
+        cache.finish();
+    } else if mode == "ordinary-hit" || mode == "ordinary-miss" {
+        let mut cache = store::Store::open_bounded(&mut world, &directory, &key_file, 65536usize).unwrap();
+        let value = cache.get("probe", &ordinary);
+        if mode == "ordinary-hit" { assert!(value.unwrap() == b"ordinary payload"[..].to_vec()); }
+        else { assert!(value.is_none()); }
+    } else if mode == "locator-miss" {
+        assert!(store::QueryReader::open(&mut world, &directory, &key_file, 65536usize, &identity, &selector).is_err());
+    } else {
+        let mut reader = store::QueryReader::open(&mut world, &directory, &key_file, 65536usize, &identity, &selector).unwrap();
+        assert!(reader.query_bound_root() == Some(page.clone()));
+        if mode == "root-hit" {
+            let bytes = reader.query_root(&identity).unwrap();
+            let manifest = store::QueryManifest::decode(&bytes).unwrap();
+            assert_eq!(manifest.identity, identity); assert_eq!(manifest.root, page);
+        } else if mode == "root-miss" { assert!(reader.query_root(&identity).is_none()); }
+        else {
+            let node = match reader.query_root(&identity) {
+                Some(bytes) => {
+                    let manifest = store::QueryManifest::decode(&bytes).unwrap();
+                    reader.query_node(&identity, &manifest.root_extent())
+                }
+                None => None,
+            };
+            if mode == "page-hit" { assert_eq!(sha256::hex_digest(&node.unwrap()), page); }
+            else { assert!(mode == "page-miss" && node.is_none()); }
+        }
+    }
+}

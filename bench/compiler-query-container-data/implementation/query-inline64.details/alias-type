@@ -1,0 +1,5 @@
+"alias_type"	level=protocol	fact=query	version=3 producer=eed6ca32edcc182a92c4e697f4702ec685dff8e7778b0374a27552aa9c938947 validation=authenticated-producing-compiler current-check=not-performed snapshot=c7dc825941bf01ad06c02e849c8196c63c43ee3e264aa50b7e636a9c227c38d1 source=c190b15cd6580a8b23ff82864ab2f3852aaf78332bc380c4455af6a24bd744cc checked-ir=531f03273c5fbc474bc8dab899464aca8097c366febb4841b64e0f25c3c2f03b kind=references depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
+"alias_type::param:value"	level=source-claim	fact=references	from="alias_type" file="target/semantic-query.nCphJu/source/main.lkj" start=379 end=384 kind=local-value
+"helpers::Counter"	level=source-claim	fact=references	from="alias_type" file="target/semantic-query.nCphJu/source/main.lkj" start=356 end=368 kind=alias-type
+"helpers::Counter::field:value"	level=source-claim	fact=references	from="alias_type" file="target/semantic-query.nCphJu/source/main.lkj" start=385 end=390 kind=field
+"alias_type"	level=protocol	fact=continuation	cursor=none facts=3 pages-read=3 traversal-steps=4

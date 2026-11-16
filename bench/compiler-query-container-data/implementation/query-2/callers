@@ -1,0 +1,15 @@
+"helpers::square"	level=protocol	fact=query	version=3 producer=a72d386bbb6af3bf0a1782503ed4ae7f1ea9bf7bb8c3078eb4682acfe2f9c5ad validation=authenticated-producing-compiler current-check=not-performed snapshot=45d4f8dc312ae9b595d20c8df26c62fdcde0530fd2580d143c65a919d963e768 source=ed50bb9b5bfc98cc39f03d7826143e7808270c457716d9b599d3c881526438ad checked-ir=fd1a2e2264eb4d4653fc0b2ba32f29f9b40f3c86e698b74f7d54fb6bd9603b9e kind=callers depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
+"direct_import::run"	level=checked-ir	fact=callers	caller-instance="ir:direct_import::run" callee-instance="ir:helpers::square" mapping=source-claim cleanup=false
+"grouped::run"	level=checked-ir	fact=callers	caller-instance="ir:grouped::run" callee-instance="ir:helpers::square" mapping=source-claim cleanup=false
+"module_alias::run"	level=checked-ir	fact=callers	caller-instance="ir:module_alias::run" callee-instance="ir:helpers::square" mapping=source-claim cleanup=false
+"probe"	level=checked-ir	fact=callers	caller-instance="ir:probe" callee-instance="ir:helpers::square" mapping=source-claim cleanup=false
+"same_alias::run"	level=checked-ir	fact=callers	caller-instance="ir:same_alias::run" callee-instance="ir:helpers::square" mapping=source-claim cleanup=false
+"self_alias::run"	level=checked-ir	fact=callers	caller-instance="ir:self_alias::run" callee-instance="ir:helpers::square" mapping=source-claim cleanup=false
+"self_function::run"	level=checked-ir	fact=callers	caller-instance="ir:self_function::run" callee-instance="ir:helpers::square" mapping=source-claim cleanup=false
+"self_reexport::run"	level=checked-ir	fact=callers	caller-instance="ir:self_reexport::run" callee-instance="ir:helpers::square" mapping=source-claim cleanup=false
+"self_repeated::run"	level=checked-ir	fact=callers	caller-instance="ir:self_repeated::run" callee-instance="ir:helpers::square" mapping=source-claim cleanup=false
+"self_sibling::run"	level=checked-ir	fact=callers	caller-instance="ir:self_sibling::run" callee-instance="ir:helpers::square" mapping=source-claim cleanup=false
+"self_terminal::run"	level=checked-ir	fact=callers	caller-instance="ir:self_terminal::run" callee-instance="ir:helpers::square" mapping=source-claim cleanup=false
+"self_transparent::run"	level=checked-ir	fact=callers	caller-instance="ir:self_transparent::run" callee-instance="ir:helpers::square" mapping=source-claim cleanup=false
+"wildcard::run"	level=checked-ir	fact=callers	caller-instance="ir:wildcard::run" callee-instance="ir:helpers::square" mapping=source-claim cleanup=false
+"helpers::square"	level=protocol	fact=continuation	cursor=none facts=13 pages-read=3 traversal-steps=14

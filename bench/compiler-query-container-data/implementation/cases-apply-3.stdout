@@ -1,0 +1,8 @@
+"cases::execute" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-query-container-20261116/src/query_store_cases.lkj" level=source-claim file before=da84cff7b66f26014bdf4264d5da18620ed4eb9775f6ac1f2a5453b9c0e862e6 after=53314714f4f2d2cc45b89bbee52185c9f6976332722c35181f4eab6268fa87fb
+transaction sites=1 files=1 identities=1
+"cases" level=source-claim changed=text-only
+"cases::execute" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=607a60cf9fc5b8f86f5d1e688f069f5dc185cbd518ecfb818169c48834c50415 after=537e8a7e232514aac3286e19a2e32f3d11d0519f4b38f4be36fa81fb5181b2c1 checked-instances=582 fresh-checked=582 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=09cbffc428b09ddcd86a51332e45f31592ba7d538564ecc8a640a1a88e88d8f0 source-after=808299faa7a6ecc3e8adca92af38635f0a5733b74df9ae00a0f1f83bcaede8b2 mode=apply

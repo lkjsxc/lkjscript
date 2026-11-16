@@ -1,0 +1,58 @@
+refused: target/semantic-query.363w7N/another-reader query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --kind meta --id crate
+E_QUERY_SNAPSHOT no authenticated snapshot; build with --index and this store first
+refused: target/semantic-query.363w7N/another-reader query main.lkj --source-dir target/semantic-query.363w7N/not-selected --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --snapshot 45d4f8dc312ae9b595d20c8df26c62fdcde0530fd2580d143c65a919d963e768 --kind meta --id crate
+E_QUERY_SNAPSHOT snapshot belongs to another source selection
+refused: target/semantic-query.363w7N/another-reader query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --snapshot 8a6f0d90fa6a359f88c7e0cb10954ffb903806963bf963d105eee0111895dfc8 --kind outline --id helpers --limit 1 --cursor 6c6b6a7363726970742d73746f72652d320a46000000000000005a32ea205f691d6fa780574915d55cd4e7e9789e89fcb9339741b68f97bfb675bb2ea91d3ecb35f24ae667dd1c0095e6b6f450794d3556059c5041dc5e3dfd070300000000000000010000000000000007000000000000006f75746c696e65070000000000000068656c70657273010000000000000000000000000000000100000000000000
+E_QUERY_CURSOR cursor does not authenticate for this snapshot and question
+refused: /home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-candidate-2 build main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/small-store --store-key target/semantic-query.363w7N/key --store-bytes 32768 --index -o target/semantic-query.363w7N/small-program
+E_QUERY_STORE container exceeds the authenticated store budget or writer is unavailable
+refused: /home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-candidate-2 query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/small-store --store-key target/semantic-query.363w7N/key --kind outline
+E_QUERY_SNAPSHOT no authenticated snapshot; build with --index and this store first
+refused: query type helpers::anonymous::param:_
+E_QUERY_ID no type fact for "helpers::anonymous::param:_"
+refused: query type helpers::anonymous::param:1
+E_QUERY_ID no type fact for "helpers::anonymous::param:1"
+refused: query outline scalar --limit 1 --cursor 6c6b6a7363726970742d73746f72652d320a46000000000000005a32ea205f691d6fa780574915d55cd4e7e9789e89fcb9339741b68f97bfb675bb2ea91d3ecb35f24ae667dd1c0095e6b6f450794d3556059c5041dc5e3dfd070300000000000000010000000000000007000000000000006f75746c696e65070000000000000068656c70657273010000000000000000000000000000000100000000000000
+E_QUERY_CURSOR cursor does not authenticate for this snapshot and question
+refused: query authority scalar --limit 1 --bytes 1 --cursor 6c6b6a7363726970742d73746f72652d320a47000000000000007094a0b65ad7a72fe67984312d2bba4f9e478b2d1c6005d791581954055ccad50d03f49858893e3ed45f6009ba68c3e86434b1fc14bb49b912cfe0a1a32fb767030000000000000001000000000000000900000000000000617574686f7269747906000000000000007363616c6172010000000000000000000000000000000100000000000000
+E_QUERY_BOUND protocol and continuation require 639 bytes
+refused: query outline helpers --cursor 6c6b6a7363726970742d73746f72652d320a46000000000000005a32ea205f691d6fa780574915d55cd4e7e9789e89fcb9339741b68f97bfb675bb2ea91d3ecb35f24ae667dd1c0095e6b6f450794d3556059c5041dc5e3dfd070300000000000000010000000000000007000000000000006f75746c696e65070000000000000068656c7065727301000000000000000000000000000000010000000000000z
+E_QUERY_CURSOR malformed cursor
+refused: query authority writes
+E_QUERY_SNAPSHOT no authenticated pinned locator; build with --index first
+refused: query authority writes
+E_QUERY_SNAPSHOT no authenticated pinned locator; build with --index first
+refused: query outline helpers --cursor 6c6b6a7363726970742d73746f72652d320a46000000000000005a32ea205f691d6fa780574915d55cd4e7e9789e89fcb9339741b68f97bfb675bb2ea91d3ecb35f24ae667dd1c0095e6b6f450794d3556059c5041dc5e3dfd070300000000000000010000000000000007000000000000006f75746c696e65070000000000000068656c70657273010000000000000000000000000000000100000000000000
+E_QUERY_CURSOR cursor does not authenticate for this snapshot and question
+refused: timeout --kill-after=2s 10s target/semantic-query.363w7N/another-reader query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --snapshot 49d6bd2056ad55cefb9dc2d8363d0a5c17c730a9b3ac08a2bddaf14224bc93d3 --kind authority --id writes
+E_QUERY_SNAPSHOT no authenticated pinned locator; build with --index first
+refused: timeout --kill-after=2s 10s target/semantic-query.363w7N/another-reader query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --snapshot 49d6bd2056ad55cefb9dc2d8363d0a5c17c730a9b3ac08a2bddaf14224bc93d3 --kind authority --id writes
+E_QUERY_SNAPSHOT no authenticated pinned locator; build with --index first
+refused: timeout --kill-after=2s 10s target/semantic-query.363w7N/another-reader query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --snapshot 49d6bd2056ad55cefb9dc2d8363d0a5c17c730a9b3ac08a2bddaf14224bc93d3 --kind authority --id writes
+E_QUERY_SNAPSHOT no authenticated pinned locator; build with --index first
+refused: timeout --kill-after=2s 10s target/semantic-query.363w7N/another-reader query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --snapshot 49d6bd2056ad55cefb9dc2d8363d0a5c17c730a9b3ac08a2bddaf14224bc93d3 --kind authority --id writes
+E_QUERY_SNAPSHOT no authenticated pinned locator; build with --index first
+refused: timeout --kill-after=2s 10s target/semantic-query.363w7N/another-reader query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --snapshot 49d6bd2056ad55cefb9dc2d8363d0a5c17c730a9b3ac08a2bddaf14224bc93d3 --kind authority --id writes
+E_QUERY_SNAPSHOT no authenticated pinned locator; build with --index first
+refused: timeout --kill-after=2s 10s target/semantic-query.363w7N/another-reader query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --snapshot 49d6bd2056ad55cefb9dc2d8363d0a5c17c730a9b3ac08a2bddaf14224bc93d3 --kind authority --id writes
+E_QUERY_SNAPSHOT no authenticated pinned locator; build with --index first
+refused: timeout --kill-after=2s 10s target/semantic-query.363w7N/another-reader query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --snapshot 49d6bd2056ad55cefb9dc2d8363d0a5c17c730a9b3ac08a2bddaf14224bc93d3 --kind authority --id writes
+E_QUERY_SNAPSHOT no authenticated pinned locator; build with --index first
+refused: timeout --kill-after=2s 10s target/semantic-query.363w7N/another-reader query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --snapshot 49d6bd2056ad55cefb9dc2d8363d0a5c17c730a9b3ac08a2bddaf14224bc93d3 --kind authority --id writes
+E_QUERY_SNAPSHOT no authenticated pinned locator; build with --index first
+refused: timeout --kill-after=2s 10s /home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-candidate-2 query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --snapshot 49d6bd2056ad55cefb9dc2d8363d0a5c17c730a9b3ac08a2bddaf14224bc93d3 --kind authority --id writes
+E_QUERY_SNAPSHOT no authenticated snapshot; build with --index and this store first
+refused: timeout --kill-after=2s 10s /home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-candidate-2 query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --snapshot 49d6bd2056ad55cefb9dc2d8363d0a5c17c730a9b3ac08a2bddaf14224bc93d3 --kind authority --id writes
+E_QUERY_INDEX node is missing or unauthenticated; rebuild the index
+refused: timeout --kill-after=2s 10s /home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-candidate-2 query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --snapshot 49d6bd2056ad55cefb9dc2d8363d0a5c17c730a9b3ac08a2bddaf14224bc93d3 --kind authority --id writes
+E_QUERY_SNAPSHOT no authenticated snapshot; build with --index and this store first
+refused: timeout --kill-after=2s 10s /home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-candidate-2 query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --snapshot 49d6bd2056ad55cefb9dc2d8363d0a5c17c730a9b3ac08a2bddaf14224bc93d3 --kind authority --id writes
+E_QUERY_SNAPSHOT no authenticated snapshot; build with --index and this store first
+refused: timeout --kill-after=2s 10s /home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-candidate-2 query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --snapshot 49d6bd2056ad55cefb9dc2d8363d0a5c17c730a9b3ac08a2bddaf14224bc93d3 --kind authority --id writes
+E_QUERY_SNAPSHOT no authenticated snapshot; build with --index and this store first
+refused: timeout --kill-after=2s 10s /home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-candidate-2 query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --snapshot 49d6bd2056ad55cefb9dc2d8363d0a5c17c730a9b3ac08a2bddaf14224bc93d3 --kind authority --id writes
+E_QUERY_SNAPSHOT no authenticated snapshot; build with --index and this store first
+refused: timeout --kill-after=2s 10s /home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-candidate-2 query main.lkj --source-dir target/semantic-query.363w7N/source --no-library --store target/semantic-query.363w7N/store --store-key target/semantic-query.363w7N/key --snapshot 49d6bd2056ad55cefb9dc2d8363d0a5c17c730a9b3ac08a2bddaf14224bc93d3 --kind authority --id writes
+E_QUERY_SNAPSHOT no authenticated snapshot; build with --index and this store first
+refused: query authority writes
+E_QUERY_SNAPSHOT no authenticated snapshot; build with --index and this store first

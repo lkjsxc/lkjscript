@@ -1,0 +1,147 @@
+{
+   "authenticated_node_envelope_bytes_a" : 58042,
+   "authenticated_node_envelope_bytes_b" : 58298,
+   "authenticated_node_payload_bytes_a" : 56512,
+   "authenticated_node_payload_bytes_b" : 56768,
+   "branches" : 1,
+   "checked_ir" : "8246e2c39abf7fca5dab772e487fe9d6274b77154508dbbc978d432b357f0092",
+   "container_bytes_b" : 58788,
+   "continuation_chains_verified" : true,
+   "fact_utf8_bytes" : 30283,
+   "facts" : 206,
+   "kinds" : {
+      "@callees" : {
+         "fact_bytes" : 52,
+         "facts" : 4,
+         "pages" : 2,
+         "value_bytes" : 132
+      },
+      "@callers" : {
+         "fact_bytes" : 22,
+         "facts" : 4,
+         "pages" : 4,
+         "value_bytes" : 150
+      },
+      "@dependents" : {
+         "fact_bytes" : 35,
+         "facts" : 5,
+         "pages" : 5,
+         "value_bytes" : 195
+      },
+      "@outline" : {
+         "fact_bytes" : 246,
+         "facts" : 8,
+         "pages" : 5,
+         "value_bytes" : 430
+      },
+      "@references" : {
+         "fact_bytes" : 76,
+         "facts" : 5,
+         "pages" : 3,
+         "value_bytes" : 188
+      },
+      "@uses" : {
+         "fact_bytes" : 35,
+         "facts" : 5,
+         "pages" : 5,
+         "value_bytes" : 195
+      },
+      "authority" : {
+         "fact_bytes" : 564,
+         "facts" : 6,
+         "pages" : 6,
+         "value_bytes" : 756
+      },
+      "callees" : {
+         "fact_bytes" : 431,
+         "facts" : 4,
+         "pages" : 2,
+         "value_bytes" : 511
+      },
+      "callers" : {
+         "fact_bytes" : 416,
+         "facts" : 4,
+         "pages" : 4,
+         "value_bytes" : 544
+      },
+      "dependents" : {
+         "fact_bytes" : 601,
+         "facts" : 7,
+         "pages" : 5,
+         "value_bytes" : 777
+      },
+      "instances" : {
+         "fact_bytes" : 1014,
+         "facts" : 6,
+         "pages" : 6,
+         "value_bytes" : 1206
+      },
+      "layout" : {
+         "fact_bytes" : 7090,
+         "facts" : 28,
+         "pages" : 28,
+         "value_bytes" : 7986
+      },
+      "meta" : {
+         "fact_bytes" : 6212,
+         "facts" : 34,
+         "pages" : 26,
+         "value_bytes" : 7108
+      },
+      "outline" : {
+         "fact_bytes" : 1052,
+         "facts" : 8,
+         "pages" : 5,
+         "value_bytes" : 1236
+      },
+      "references" : {
+         "fact_bytes" : 1387,
+         "facts" : 6,
+         "pages" : 3,
+         "value_bytes" : 1507
+      },
+      "signature" : {
+         "fact_bytes" : 1052,
+         "facts" : 8,
+         "pages" : 8,
+         "value_bytes" : 1308
+      },
+      "text" : {
+         "fact_bytes" : 1104,
+         "facts" : 8,
+         "pages" : 8,
+         "value_bytes" : 1360
+      },
+      "type" : {
+         "fact_bytes" : 7531,
+         "facts" : 50,
+         "pages" : 39,
+         "value_bytes" : 8867
+      },
+      "uses" : {
+         "fact_bytes" : 1363,
+         "facts" : 6,
+         "pages" : 5,
+         "value_bytes" : 1531
+      }
+   },
+   "leaves" : 16,
+   "logical_chains" : 169,
+   "logical_key_bytes" : 3829,
+   "logical_pages" : 169,
+   "logical_value_bytes" : 35987,
+   "max_depth" : 1,
+   "physical_nodes" : 17,
+   "producer_a" : "adc0b26f2c6db38710971b48ca88a6598078537959e04accbaae60a07a82ccc7",
+   "producer_b" : "eed6ca32edcc182a92c4e697f4702ec685dff8e7778b0374a27552aa9c938947",
+   "root_a" : "3254dd30048b31e945f14e9642dd12ba0944a5f3499a5c82b1ada366b42aa779",
+   "root_b" : "a4f318ff8289100d5b90296bc49ddc80482ebf1ec3c0fc2674b323369145faa0",
+   "selector" : "4a3b044cd85f2623d42420d4679af71e00b8f976772af711ca5b5d462e78bcda",
+   "snapshot_a" : "fb6ba9ea93c2a725843be865b8d05231abdad2f232f02acbddb002d80aec7dfd",
+   "snapshot_b" : "c559632f667f02490fbf7e201797503936101c86f8d0a10238845fb2763de886",
+   "sorted_logical_map_fingerprint" : "69a0cbafb5abbf0b4ead252a7c692c60651c7e2e675013676118ba1a310b5dfb",
+   "source" : "dabec907fdcd16011d4e3c816053dc57806f1676966ddb0fbd809557081d397e",
+   "status" : "exact-logical-map",
+   "version_a" : 2,
+   "version_b" : 3
+}

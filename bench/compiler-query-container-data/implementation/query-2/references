@@ -1,0 +1,5 @@
+"probe"	level=protocol	fact=query	version=3 producer=a72d386bbb6af3bf0a1782503ed4ae7f1ea9bf7bb8c3078eb4682acfe2f9c5ad validation=authenticated-producing-compiler current-check=not-performed snapshot=45d4f8dc312ae9b595d20c8df26c62fdcde0530fd2580d143c65a919d963e768 source=ed50bb9b5bfc98cc39f03d7826143e7808270c457716d9b599d3c881526438ad checked-ir=fd1a2e2264eb4d4653fc0b2ba32f29f9b40f3c86e698b74f7d54fb6bd9603b9e kind=references depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
+"helpers"	level=source-claim	fact=references	from="probe" file="target/semantic-query.363w7N/source/main.lkj" start=145 end=152 kind=qualification
+"helpers::identity"	level=source-claim	fact=references	from="probe" file="target/semantic-query.363w7N/source/main.lkj" start=154 end=162 kind=value
+"helpers::square"	level=source-claim	fact=references	from="probe" file="target/semantic-query.363w7N/source/main.lkj" start=163 end=168 kind=alias-value
+"probe"	level=protocol	fact=continuation	cursor=none facts=3 pages-read=3 traversal-steps=4

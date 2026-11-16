@@ -1,0 +1,32 @@
+"helpers::square"	level=protocol	fact=query	version=3 producer=eed6ca32edcc182a92c4e697f4702ec685dff8e7778b0374a27552aa9c938947 validation=authenticated-producing-compiler current-check=not-performed snapshot=c7dc825941bf01ad06c02e849c8196c63c43ee3e264aa50b7e636a9c227c38d1 source=c190b15cd6580a8b23ff82864ab2f3852aaf78332bc380c4455af6a24bd744cc checked-ir=531f03273c5fbc474bc8dab899464aca8097c366febb4841b64e0f25c3c2f03b kind=dependents depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
+"crate"	level=source-claim	fact=dependents	change=signature conservative=true
+"direct_import"	level=source-claim	fact=dependents	change=signature conservative=true
+"direct_import::run"	level=source-claim	fact=dependents	change=signature checked-instance-call=true conservative=true
+"direct_import::run"	level=source-claim	fact=dependents	change=signature conservative=true
+"exports"	level=source-claim	fact=dependents	change=signature conservative=true
+"grouped"	level=source-claim	fact=dependents	change=signature conservative=true
+"grouped::run"	level=source-claim	fact=dependents	change=signature checked-instance-call=true conservative=true
+"grouped::run"	level=source-claim	fact=dependents	change=signature conservative=true
+"module_alias::run"	level=source-claim	fact=dependents	change=signature checked-instance-call=true conservative=true
+"module_alias::run"	level=source-claim	fact=dependents	change=signature conservative=true
+"probe"	level=source-claim	fact=dependents	change=signature checked-instance-call=true conservative=true
+"probe"	level=source-claim	fact=dependents	change=signature conservative=true
+"same_alias"	level=source-claim	fact=dependents	change=signature conservative=true
+"same_alias::run"	level=source-claim	fact=dependents	change=signature checked-instance-call=true conservative=true
+"same_alias::run"	level=source-claim	fact=dependents	change=signature conservative=true
+"self_alias"	level=source-claim	fact=dependents	change=signature conservative=true
+"self_alias::run"	level=source-claim	fact=dependents	change=signature checked-instance-call=true conservative=true
+"self_alias::run"	level=source-claim	fact=dependents	change=signature conservative=true
+"self_function"	level=source-claim	fact=dependents	change=signature conservative=true
+"self_function::run"	level=source-claim	fact=dependents	change=signature checked-instance-call=true conservative=true
+"self_function::run"	level=source-claim	fact=dependents	change=signature conservative=true
+"self_reexport"	level=source-claim	fact=dependents	change=signature conservative=true
+"self_reexport::run"	level=source-claim	fact=dependents	change=signature checked-instance-call=true conservative=true
+"self_reexport::run"	level=source-claim	fact=dependents	change=signature conservative=true
+"self_repeated"	level=source-claim	fact=dependents	change=signature conservative=true
+"self_repeated::run"	level=source-claim	fact=dependents	change=signature checked-instance-call=true conservative=true
+"self_repeated::run"	level=source-claim	fact=dependents	change=signature conservative=true
+"self_sibling"	level=source-claim	fact=dependents	change=signature conservative=true
+"self_sibling::run"	level=source-claim	fact=dependents	change=signature checked-instance-call=true conservative=true
+"self_sibling::run"	level=source-claim	fact=dependents	change=signature conservative=true
+"helpers::square"	level=protocol	fact=continuation	cursor=6c6b6a7363726970742d73746f72652d320a51000000000000001bcd4ef951d958f62d4cdead8beed9a16d651fd7c64a0074f4f44cf466093bfafb3adfdd8d58ed505e926922e76271c2ba07110a0294dc15c0a87297bafd1ddf030000000000000001000000000000000a00000000000000646570656e64656e74730f0000000000000068656c706572733a3a737175617265010000000000000001000000000000000e00000000000000 facts=30 pages-read=5 traversal-steps=31

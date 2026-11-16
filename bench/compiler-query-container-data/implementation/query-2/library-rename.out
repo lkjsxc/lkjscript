@@ -1,0 +1,13 @@
+"edit::target" level=source-claim operation-target
+"main" level=source-claim operation-target
+"target/semantic-query.363w7N/library-rename/main.lkj" level=source-claim file before=d7deab02a76ee2f5d6c3d364723d3097ca8fe5452d7af09c27376d3144990eb5 after=54600eca7411e125e7756e8076a43ba118748e585903c90127a738d26288d353
+transaction sites=2 files=1 identities=2
+"edit" level=source-claim changed=text-only
+"edit::target" level=source-claim changed=removed
+"edit::target::param:value" level=source-claim changed=removed
+"edit::target_renamed" level=source-claim changed=added
+"edit::target_renamed::param:value" level=source-claim changed=added
+"main" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=114835be722028cfb27e47d07464abe0508327e8f573fc7617b93aee39ae489f after=114835be722028cfb27e47d07464abe0508327e8f573fc7617b93aee39ae489f checked-instances=7 fresh-checked=7 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=e0489841dd83fdb73ae8fb5721cd1828bdc9294e0538f547ff5b07f89d4a48e4 source-after=109b7360f8bfb4ff04d0ae6eea60ea9d4fa78094249c3ec8f1a670cee89ab8b9 mode=dry-run

@@ -93,7 +93,8 @@ impl Budget {
         let length = reader.word()?;
         if !owned_entry(&name, &producer) || !result.generations.contains(&producer)
             || result.entries.contains_key(&name) || length < reuse::header_size() { return None; }
-        if query_locator_identity(&name).is_some() && length != reuse::header_size() + 104usize { return None; }
+        if (query_locator_identity(&name).is_some() || legacy_query_locator_identity(&name).is_some())
+            && length != reuse::header_size() + 104usize { return None; }
         result.bytes = result.bytes.checked_add(length)?;
         result.metadata = result.metadata.checked_add(24usize + name.len() + producer.len())?;
         result.entries.insert(name, StoredEntry { producer, bytes: length });
@@ -118,6 +119,7 @@ pub struct Store {
     write_state: u8,
     budget: Budget,
     dirty: bool,
+    query_container: Option<QueryContainerRead>,
     pub retained_bytes: usize,
     pub evicted: usize,
     pub hits: usize,
@@ -142,15 +144,20 @@ fn cache_file(directory: &mut Directory, name: &str) -> Option<File> {
 
 
 impl Store {
-    /// Budget bookkeeping only, never authentication. Queries still verify each
-    /// rooted payload. This detects eviction of pages during index publication.
-    pub fn query_pages_retained(&self, pages: &[String]) -> bool {
-        if self.write_state != 1u8 { return false; }
-        for page in pages {
-            let name = format!("semantic-page-{}-{page}", self.producer_slot);
-            if !self.budget.entries.contains_key(&name) { return false; }
+    /// Check retained accounting and authenticate the current manifest and EOF.
+    /// Each requested node still requires its own rooted payload verification.
+    pub fn query_container_retained(&mut self, identity: &str, total_bytes: usize) -> bool {
+        if self.write_state != 1u8 || !hex_identity(identity) { return false; }
+        let name = query_container_name(&self.producer_slot, identity);
+        let retained = match self.budget.entries.get(&name) {
+            Some(entry) => entry.bytes == total_bytes && entry.producer == self.producer_slot,
+            None => false,
+        };
+        if !retained { return false; }
+        match self.load_query_container(identity) {
+            Some(container) => container.manifest.total_bytes == total_bytes,
+            None => false,
         }
-        true
     }
     pub fn invalidate_query_snapshot
 (&mut self, identity: &str, selector: &str) { invalidate_store_query_snapshot(self, identity, selector); }
@@ -190,12 +197,13 @@ impl Store {
             directory, clock: world.clock(), producer: producer[..].to_vec(),
             producer_slot: sha256::hex_digest(&producer), secret,
             sequence: 0, hits: 0, misses: 0, rejected: 0, writes: 0,
-            capacity, index_bytes: 0, writer: None, write_state: 0u8, budget: Budget::new(), dirty: false,
+            capacity, index_bytes: 0, writer: None, write_state: 0u8, budget: Budget::new(), dirty: false, query_container: None,
             retained_bytes: 0, evicted: 0,
         })
     }
 
     fn raw(&mut self, namespace: &str, key: &str) -> Option<reuse::VerifiedPayload> {
+    if namespace == "semantic-container-v3" { return None; }
     let span = self.io_begin();
     let name = format!("{namespace}-{}-{key}", self.producer_slot);
     let mut opened = false;
@@ -339,7 +347,7 @@ impl Store {
 
     pub fn put(&mut self, namespace: &str, key: &str, payload: &[u8]) {
     if let Some(row) = self.io_row(namespace) { row.put_requests = io_add(row.put_requests, 1usize, &mut row.overflow); }
-    if payload.len() > self.capacity || !self.writable() { return; }
+    if namespace == "semantic-container-v3" || payload.len() > self.capacity || !self.writable() { return; }
     let span = self.io_begin();
     let envelope = reuse::seal(&self.producer, &self.secret, namespace, key, payload);
     let elapsed = self.io_end(span);
@@ -499,7 +507,7 @@ pub trait QueryAccess {
     fn query_bound_root(&self) -> Option<String>;
     fn query_root(&mut self, identity: &str) -> Option<Vec<u8>>;
     fn query_latest(&mut self, selector: &str) -> Option<Vec<u8>>;
-    fn query_page(&mut self, identity: &str) -> Option<Vec<u8>>;
+    fn query_node(&mut self, snapshot: &str, extent: &QueryExtent) -> Option<Vec<u8>>;
     fn query_cursor(&self, question: &str, payload: &[u8]) -> Vec<u8>;
     fn open_query_cursor(&self, question: &str, bytes: &[u8]) -> Option<Vec<u8>>;
     fn invalidate_query_snapshot(&mut self, identity: &str, selector: &str);
@@ -515,6 +523,7 @@ pub struct QueryReader {
     selector: String,
     root: String,
     capacity: usize,
+    container: Option<QueryContainerRead>,
 }
 
 fn query_hex(bytes: &[u8]) -> String {
@@ -540,22 +549,25 @@ fn query_digest(identity: &str) -> Option<Vec<u8>> {
     Some(bytes)
 }
 
-fn query_locator_name(identity: &str) -> String { format!("semantic-locator-{identity}") }
+fn query_locator_name(identity: &str) -> String { format!("semantic-locator-v3-{identity}") }
 
 fn query_locator_identity(name: &str) -> Option<&str> {
-    if !name.starts_with("semantic-locator-") || name.len() != 81usize { return None; }
-    let identity = &name[17usize..];
+    if !name.starts_with("semantic-locator-v3-") || name.len() != 84usize { return None; }
+    let identity = &name[20usize..];
     if hex_identity(identity) { Some(identity) } else { None }
 }
 
 fn indexed_name(name: &str) -> bool {
-    if name.starts_with("semantic-locator-") { query_locator_identity(name).is_some() }
-    else { entry_producer(name).is_some() }
+    if name.starts_with("semantic-locator-") {
+        query_locator_identity(name).is_some() || legacy_query_locator_identity(name).is_some()
+    } else { entry_producer(name).is_some() }
 }
 
 fn owned_entry(name: &str, producer: &str) -> bool {
     if !hex_identity(producer) { return false; }
-    if name.starts_with("semantic-locator-") { return query_locator_identity(name).is_some(); }
+    if name.starts_with("semantic-locator-") {
+        return query_locator_identity(name).is_some() || legacy_query_locator_identity(name).is_some();
+    }
     entry_producer(name).is_some_and(|owner| owner == producer)
 }
 
@@ -575,7 +587,7 @@ fn read_store_secret(world: &mut World, key: &str) -> Option<Vec<u8>> {
     Some(secret)
 }
 
-fn query_locator_producer() -> [u8; 32] { sha256::digest(b"lkjscript-semantic-locator-2") }
+fn query_locator_producer() -> [u8; 32] { sha256::digest(b"lkjscript-semantic-locator-3") }
 
 fn read_query_locator(directory: &mut Directory, secret: &[u8], capacity: usize,
     identity: &str) -> Option<(Vec<u8>, String, String)> {
@@ -583,29 +595,29 @@ fn read_query_locator(directory: &mut Directory, secret: &[u8], capacity: usize,
     let mut file = cache_file(directory, &query_locator_name(identity))?;
     let protocol = query_locator_producer();
     let limit = capacity.min(reuse::header_size() + 104usize);
-    let payload = read_envelope(&mut file, &protocol, secret, "semantic-locator", identity, limit)?.into_bytes();
+    let payload = read_envelope(&mut file, &protocol, secret, "semantic-locator-v3", identity, limit)?.into_bytes();
     if payload.len() != 104usize { return None; }
     let mut reader = Reader::new(&payload);
-    if reader.word() != Some(2usize) { return None; }
+    if reader.word() != Some(3usize) { return None; }
     Some((payload[8usize..40usize].to_vec(), query_hex(&payload[40usize..72usize]),
         query_hex(&payload[72usize..104usize])))
 }
 
 fn query_cursor_key(producer: &[u8], question: &str) -> String {
-    let mut bytes = b"lkjscript-semantic-cursor-question-2"[..].to_vec();
+    let mut bytes = b"lkjscript-semantic-cursor-question-3"[..].to_vec();
     push_bytes(&mut bytes, producer);
     push_bytes(&mut bytes, question.as_bytes());
     sha256::hex_digest(&bytes)
 }
 
 fn seal_query_cursor(producer: &[u8], secret: &[u8], question: &str, payload: &[u8]) -> Vec<u8> {
-    let protocol = sha256::digest(b"lkjscript-semantic-cursor-2");
-    reuse::seal(&protocol, secret, "semantic-cursor-2", &query_cursor_key(producer, question), payload)
+    let protocol = sha256::digest(b"lkjscript-semantic-cursor-3");
+    reuse::seal(&protocol, secret, "semantic-cursor-3", &query_cursor_key(producer, question), payload)
 }
 
 fn authenticate_query_cursor(producer: &[u8], secret: &[u8], question: &str, bytes: &[u8]) -> Option<Vec<u8>> {
-    let protocol = sha256::digest(b"lkjscript-semantic-cursor-2");
-    reuse::authenticate(&protocol, secret, "semantic-cursor-2", &query_cursor_key(producer, question), bytes)
+    let protocol = sha256::digest(b"lkjscript-semantic-cursor-3");
+    reuse::authenticate(&protocol, secret, "semantic-cursor-3", &query_cursor_key(producer, question), bytes)
 }
 
 impl Store {
@@ -625,27 +637,27 @@ impl Store {
         let Some(selector_bytes) = query_digest(selector) else { return false; };
         let Some(root_bytes) = query_digest(root) else { return false; };
         let mut payload = Vec::new();
-        push_word(&mut payload, 2usize);
+        push_word(&mut payload, 3usize);
         payload.extend_from_slice(&self.producer);
         payload.extend_from_slice(&selector_bytes);
         payload.extend_from_slice(&root_bytes);
         let protocol = query_locator_producer();
         let span = self.io_begin();
-        let bytes = reuse::seal(&protocol, &self.secret, "semantic-locator", identity, &payload);
+        let bytes = reuse::seal(&protocol, &self.secret, "semantic-locator-v3", identity, &payload);
         let elapsed = self.io_end(span);
-        if let Some(row) = self.io_row("semantic-locator") {
+        if let Some(row) = self.io_row("semantic-locator-v3") {
             row.seals = io_add(row.seals, 1usize, &mut row.overflow);
             row.sealed_payload_bytes = io_add(row.sealed_payload_bytes, payload.len(), &mut row.overflow);
             row.seal_ns = io_add(row.seal_ns, elapsed, &mut row.overflow);
         }
-        self.publish_named("semantic-locator", &query_locator_name(identity), &bytes);
+        self.publish_named("semantic-locator-v3", &query_locator_name(identity), &bytes);
         self.query_locator_retained(identity, selector, root)
     }
     pub fn query_locator_retained(&mut self, identity: &str, selector: &str, root: &str) -> bool {
     let span = self.io_begin();
     let locator = read_query_locator(&mut self.directory, &self.secret, self.capacity, identity);
     let elapsed = self.io_end(span);
-    if let Some(row) = self.io_row("semantic-locator") {
+    if let Some(row) = self.io_row("semantic-locator-v3") {
         row.read_attempts = io_add(row.read_attempts, 1usize, &mut row.overflow);
         row.read_ns = io_add(row.read_ns, elapsed, &mut row.overflow);
         if locator.is_some() {
@@ -663,16 +675,36 @@ impl QueryAccess for Store {
     fn query_producer(&self) -> String { query_hex(&self.producer) }
     fn query_bound_root(&self) -> Option<String> { None }
     fn query_root(&mut self, identity: &str) -> Option<Vec<u8>> {
-        if !hex_identity(identity) { return None; }
-        self.get("semantic-root", identity)
+        let container = self.load_query_container(identity)?;
+        let bytes = container.manifest.encode();
+        self.query_container = Some(container);
+        Some(bytes)
     }
-    fn query_latest(&mut self, selector: &str) -> Option<Vec<u8>> {
-        if !hex_identity(selector) { return None; }
-        self.get("semantic-latest", selector)
-    }
-    fn query_page(&mut self, identity: &str) -> Option<Vec<u8>> {
-        if !hex_identity(identity) { return None; }
-        self.get("semantic-page", identity)
+    fn query_latest(&mut self, selector: &str) -> Option<Vec<u8>> { self.read_query_latest(selector) }
+    fn query_node(&mut self, snapshot: &str, extent: &QueryExtent) -> Option<Vec<u8>> {
+        if !hex_identity(snapshot) { return None; }
+        let selected = match &self.query_container {
+            Some(container) => container.manifest.identity == snapshot,
+            None => false,
+        };
+        if !selected { self.query_container = self.load_query_container(snapshot); }
+        let span = self.io_begin();
+        let result = match self.query_container.as_mut() {
+            Some(container) if container.manifest.identity == snapshot =>
+                container.node(&self.secret, extent, self.capacity),
+            _ => None,
+        };
+        let elapsed = self.io_end(span);
+        if let Some(row) = self.io_row("semantic-node-v3") {
+            row.read_attempts = io_add(row.read_attempts, 1usize, &mut row.overflow);
+            row.read_ns = io_add(row.read_ns, elapsed, &mut row.overflow);
+            if let Some(payload) = &result {
+                row.authenticated_reads = io_add(row.authenticated_reads, 1usize, &mut row.overflow);
+                row.authenticated_payload_bytes = io_add(row.authenticated_payload_bytes, payload.bytes().len(), &mut row.overflow);
+                row.authenticated_envelope_bytes = io_add(row.authenticated_envelope_bytes, payload.bytes().len() + 90usize, &mut row.overflow);
+            }
+        }
+        result.map(|payload| payload.into_bytes())
     }
     fn query_cursor(&self, question: &str, payload: &[u8]) -> Vec<u8> {
         seal_query_cursor(&self.producer, &self.secret, question, payload)
@@ -705,28 +737,34 @@ impl QueryReader {
         }
         let producer_slot = sha256::hex_digest(&producer);
         Ok(Self { directory, secret, producer, producer_slot,
-            identity: identity.to_string(), selector: selector.to_string(), root, capacity })
+            identity: identity.to_string(), selector: selector.to_string(), root, capacity, container: None })
     }
-    fn raw(&mut self, namespace: &str, identity: &str, limit: usize) -> Option<Vec<u8>> {
-        if !hex_identity(identity) { return None; }
-        let name = format!("{namespace}-{}-{identity}", self.producer_slot);
+    fn read_root(&mut self, identity: &str) -> Option<Vec<u8>> {
+        if identity != self.identity || !hex_identity(identity) { return None; }
+        let name = query_container_name(&self.producer_slot, identity);
         let mut file = cache_file(&mut self.directory, &name)?;
-        read_envelope(&mut file, &self.producer, &self.secret, namespace, identity,
-            self.capacity.min(limit)).map(|payload| payload.into_bytes())
+        let mut counts = QueryHeaderRead::new();
+        let manifest = read_query_manifest(&mut file, &self.secret, &self.producer_slot, identity,
+            self.capacity, &mut counts)?;
+        if manifest.producer != query_hex(&self.producer) || manifest.selector != self.selector
+            || manifest.root != self.root { return None; }
+        let bytes = manifest.encode();
+        self.container = Some(QueryContainerRead { file, manifest, producer: self.producer.clone() });
+        Some(bytes)
     }
 }
 
 impl QueryAccess for QueryReader {
     fn query_producer(&self) -> String { query_hex(&self.producer) }
     fn query_bound_root(&self) -> Option<String> { Some(self.root.clone()) }
-    fn query_root(&mut self, identity: &str) -> Option<Vec<u8>> {
-        if identity != self.identity { return None; }
-        // Snapshot v2: version + five length-framed 64-byte digests + fact count.
-        self.raw("semantic-root", identity, reuse::header_size() + 376usize)
-    }
+    fn query_root(&mut self, identity: &str) -> Option<Vec<u8>> { self.read_root(identity) }
     fn query_latest(&mut self, _selector: &str) -> Option<Vec<u8>> { None }
-    fn query_page(&mut self, identity: &str) -> Option<Vec<u8>> {
-        self.raw("semantic-page", identity, reuse::header_size() + 32768usize)
+    fn query_node(&mut self, snapshot: &str, extent: &QueryExtent) -> Option<Vec<u8>> {
+        if snapshot != self.identity { return None; }
+        if self.container.is_none() { let _ = self.read_root(snapshot)?; }
+        let container = self.container.as_mut()?;
+        if container.manifest.identity != snapshot { return None; }
+        container.node(&self.secret, extent, self.capacity).map(|payload| payload.into_bytes())
     }
     fn query_cursor(&self, question: &str, payload: &[u8]) -> Vec<u8> {
         seal_query_cursor(&self.producer, &self.secret, question, payload)
@@ -736,28 +774,29 @@ impl QueryAccess for QueryReader {
     }
     fn invalidate_query_snapshot(&mut self, identity: &str, selector: &str) {
         if identity != self.identity || selector != self.selector { return; }
-        let root = format!("semantic-root-{}-{identity}", self.producer_slot);
+        self.container = None;
+        let container = query_container_name(&self.producer_slot, identity);
         let locator = query_locator_name(identity);
-        let _ = self.directory.remove(&root);
+        let _ = self.directory.remove(&container);
         let _ = self.directory.remove(&locator);
-        // Never unlink latest without the ordinary writer lock: another build
-        // may replace it after a reader compares its authenticated payload.
-        // These removals only overcharge the signed budget until its next writer.
+        // Latest is replaced only under the ordinary writer lock.
     }
 }
 
 fn invalidate_store_query_snapshot(store: &mut Store, identity: &str, selector: &str) {
-    if !store.writable() { return; }
-    // Compare latest while holding the same lock as every ordinary publisher.
-    let latest_matches = store.get("semantic-latest", selector)
+    if !hex_identity(identity) || !hex_identity(selector) || !store.writable() { return; }
+    let latest_matches = store.read_query_latest(selector)
         .is_some_and(|bytes| sha256::hex_digest(&bytes) == identity);
-    store.discard("semantic-root", identity);
-    if latest_matches { store.discard("semantic-latest", selector); }
+    let selected = match &store.query_container {
+        Some(container) => container.manifest.identity == identity,
+        None => false,
+    };
+    if selected { store.query_container = None; }
+    store.discard("semantic-container-v3", identity);
+    if latest_matches { store.discard("semantic-latest-v3", selector); }
     let name = query_locator_name(identity);
-    if hex_identity(identity)
-        && store.budget.entries.get(&name).is_some_and(|entry| entry.producer == store.producer_slot) {
-        let _ = store.erase(&name);
-    }
+    let owned = store.budget.entries.get(&name).is_some_and(|entry| entry.producer == store.producer_slot);
+    if owned { let _ = store.erase(&name); }
 }
 
 struct IoCounters {
@@ -790,6 +829,11 @@ struct IoCounters {
     metadata_ns: usize,
     budget_headers: usize,
     budget_header_bytes: usize,
+    budget_manifest_bytes: usize,
+    budget_container_authenticated: usize,
+    budget_container_extent_checks: usize,
+    stream_write_ns: usize,
+    stream_completed_write_bytes: usize,
 }
 
 impl IoCounters {
@@ -824,6 +868,11 @@ impl IoCounters {
             metadata_ns: 0usize,
             budget_headers: 0usize,
             budget_header_bytes: 0usize,
+            budget_manifest_bytes: 0usize,
+            budget_container_authenticated: 0usize,
+            budget_container_extent_checks: 0usize,
+            stream_write_ns: 0usize,
+            stream_completed_write_bytes: 0usize,
         }
     }
 }
@@ -892,8 +941,8 @@ impl Store {
         if !rows.contains_key(&category) { rows.insert(category.clone(), IoCounters::new()); }
         rows.get_mut(&category)
     }
-    /// Bytes describe accepted authenticated snapshots or successful publications,
-    /// not syscall traffic. No namespace digest, path, key or payload is printed.
+    /// Counters distinguish verified extents, completed buffers and publications.
+    /// They are not total physical I/O; seek lengths never count as bytes read.
     pub fn io_report(&self) -> String {
         let mut output = String::new();
         let Some(io) = &self.io_stats else { return output; };
@@ -932,6 +981,11 @@ impl Store {
             output.push_str(&format!(",\"metadata_ns\":{}", row.metadata_ns));
             output.push_str(&format!(",\"budget_headers\":{}", row.budget_headers));
             output.push_str(&format!(",\"budget_header_bytes\":{}", row.budget_header_bytes));
+            output.push_str(&format!(",\"budget_manifest_bytes\":{}", row.budget_manifest_bytes));
+            output.push_str(&format!(",\"budget_container_authenticated\":{}", row.budget_container_authenticated));
+            output.push_str(&format!(",\"budget_container_extent_checks\":{}", row.budget_container_extent_checks));
+            output.push_str(&format!(",\"stream_write_ns\":{}", row.stream_write_ns));
+            output.push_str(&format!(",\"stream_completed_write_bytes\":{}", row.stream_completed_write_bytes));
             output.push_str("}\n");
         }
         output
@@ -981,19 +1035,41 @@ impl Store {
         let mut present: BTreeSet<String> = BTreeSet::new();
         for bytes in names {
             let Ok(name) = String::from_utf8(bytes) else { continue; };
+            if legacy_query_entry(&name) {
+                if !self.erase(&name) { return false; }
+                continue;
+            }
             if indexed_name(&name) {
                 let expected = match self.budget.entries.get(&name) { Some(entry) => Some(entry.bytes), None => None };
                 let mut valid = false;
                 if let Some(expected) = expected {
                     if let Some(mut file) = cache_file(&mut self.directory, &name) {
-                        let mut header = vec![0u8; reuse::header_size()];
-                        if read_exact(&mut file, &mut header) {
+                        if let Some(identity) = query_container_identity(&name) {
+                            let slot = entry_producer(&name).unwrap();
+                            let mut counts = QueryHeaderRead::new();
+                            let manifest = read_query_manifest(&mut file, &self.secret, &slot, identity,
+                                self.capacity, &mut counts);
                             if let Some(row) = self.io_row("size-index") {
-                                row.budget_headers = io_add(row.budget_headers, 1usize, &mut row.overflow);
-                                row.budget_header_bytes = io_add(row.budget_header_bytes, header.len(), &mut row.overflow);
+                                row.budget_headers = io_add(row.budget_headers, counts.headers, &mut row.overflow);
+                                row.budget_header_bytes = io_add(row.budget_header_bytes, counts.headers * 90usize, &mut row.overflow);
+                                row.budget_manifest_bytes = io_add(row.budget_manifest_bytes, counts.manifest_bytes, &mut row.overflow);
+                                row.budget_container_authenticated = io_add(row.budget_container_authenticated, counts.authenticated, &mut row.overflow);
+                                row.budget_container_extent_checks = io_add(row.budget_container_extent_checks, counts.extent_checks, &mut row.overflow);
                             }
-                            if let Some(payload) = reuse::payload_length(&header) {
-                                valid = payload.checked_add(header.len()) == Some(expected);
+                            valid = match manifest {
+                                Some(manifest) => manifest.total_bytes == expected,
+                                None => false,
+                            };
+                        } else {
+                            let mut header = vec![0u8; reuse::header_size()];
+                            if read_exact(&mut file, &mut header) {
+                                if let Some(row) = self.io_row("size-index") {
+                                    row.budget_headers = io_add(row.budget_headers, 1usize, &mut row.overflow);
+                                    row.budget_header_bytes = io_add(row.budget_header_bytes, header.len(), &mut row.overflow);
+                                }
+                                if let Some(payload) = reuse::payload_length(&header) {
+                                    valid = payload.checked_add(header.len()) == Some(expected);
+                                }
                             }
                         }
                     }
@@ -1046,7 +1122,7 @@ impl Store {
     }
     fn publish_named_inner(&mut self, namespace: &str, name: &str, bytes: &[u8]) {
         let valid = owned_entry(name, &self.producer_slot);
-        if !valid || !self.writable() { return; }
+        if !valid || query_container_identity(name).is_some() || !self.writable() { return; }
         if self.budget.entries.contains_key(&name.to_string()) && !self.erase(name) { return; }
         loop {
             let fits = match self.budget.growth(name, &self.producer_slot, bytes.len(), self.index_bytes) {
@@ -1054,7 +1130,9 @@ impl Store {
             };
             if fits { break; }
             if !self.evict_oldest() {
+                if self.write_state != 1u8 { return; }
                 self.checkpoint();
+                if self.write_state != 1u8 { return; }
                 let fits = match self.budget.growth(name, &self.producer_slot, bytes.len(), self.index_bytes) {
                     Some(size) => size <= self.capacity, None => false,
                 };
@@ -1103,4 +1181,445 @@ pub(crate) fn io_timing_contracts() {
     let mut overflow = false;
     assert!(io_add(40usize, 2usize, &mut overflow) == 42usize && !overflow);
     assert!(io_add((!0usize), 1usize, &mut overflow) == (!0usize) && overflow);
+}
+
+#[derive(Clone)]
+pub struct QueryExtent {
+    pub digest: String,
+    pub offset: usize,
+    pub length: usize,
+}
+
+impl QueryExtent {
+    pub fn end(&self) -> Option<usize> { self.offset.checked_add(self.length) }
+    pub fn valid(&self, total: usize, before: usize) -> bool {
+        let maximum = 0x7fffffffffffffffusize;
+        if !hex_identity(&self.digest) || total > maximum || before > total
+            || self.offset < 490usize || self.offset > maximum
+            || self.length < 122usize || self.length > 32858usize { return false; }
+        match self.end() { Some(end) => end <= total && end <= before, None => false }
+    }
+    pub fn cache_key(&self) -> String {
+        format!("{}:{}:{}", self.digest, self.offset, self.length)
+    }
+}
+
+#[derive(Clone)]
+pub struct QueryManifest {
+    pub identity: String,
+    pub producer: String,
+    pub source: String,
+    pub checked_ir: String,
+    pub root: String,
+    pub selector: String,
+    pub facts: usize,
+    pub root_offset: usize,
+    pub root_length: usize,
+    pub total_bytes: usize,
+}
+
+impl QueryManifest {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bytes = Vec::new();
+        push_word(&mut bytes, 3usize);
+        push_bytes(&mut bytes, self.producer.as_bytes());
+        push_bytes(&mut bytes, self.source.as_bytes());
+        push_bytes(&mut bytes, self.checked_ir.as_bytes());
+        push_bytes(&mut bytes, self.root.as_bytes());
+        push_bytes(&mut bytes, self.selector.as_bytes());
+        push_word(&mut bytes, self.facts);
+        push_word(&mut bytes, self.root_offset);
+        push_word(&mut bytes, self.root_length);
+        push_word(&mut bytes, self.total_bytes);
+        bytes
+    }
+    pub fn decode(bytes: &[u8]) -> Option<Self> {
+        if bytes.len() != 400usize { return None; }
+        let mut input = Reader::new(bytes);
+        if input.word()? != 3usize { return None; }
+        let producer = input.text()?;
+        let source = input.text()?;
+        let checked_ir = input.text()?;
+        let root = input.text()?;
+        let selector = input.text()?;
+        let facts = input.word()?;
+        let root_offset = input.word()?;
+        let root_length = input.word()?;
+        let total_bytes = input.word()?;
+        if !input.done() || !hex_identity(&producer) || !hex_identity(&source)
+            || !hex_identity(&checked_ir) || !hex_identity(&root) || !hex_identity(&selector) {
+            return None;
+        }
+        let result = Self { identity: sha256::hex_digest(bytes), producer, source, checked_ir,
+            root, selector, facts, root_offset, root_length, total_bytes };
+        let extent = result.root_extent();
+        if !extent.valid(total_bytes, total_bytes) || extent.end()? != total_bytes { return None; }
+        Some(result)
+    }
+    pub fn root_extent(&self) -> QueryExtent {
+        QueryExtent { digest: self.root.clone(), offset: self.root_offset, length: self.root_length }
+    }
+}
+
+struct QueryHeaderRead {
+    headers: usize,
+    manifest_bytes: usize,
+    authenticated: usize,
+    extent_checks: usize,
+}
+
+impl QueryHeaderRead {
+    fn new() -> Self {
+        Self { headers: 0usize, manifest_bytes: 0usize, authenticated: 0usize, extent_checks: 0usize }
+    }
+}
+
+fn query_container_name(producer: &str, identity: &str) -> String {
+    format!("semantic-container-v3-{producer}-{identity}")
+}
+
+fn entry_namespace(name: &str) -> Option<&str> {
+    entry_producer(name)?;
+    Some(&name[..name.len() - 130usize])
+}
+
+fn query_container_identity(name: &str) -> Option<&str> {
+    if entry_namespace(name)? != "semantic-container-v3" { return None; }
+    Some(&name[name.len() - 64usize..])
+}
+
+fn legacy_query_locator_identity(name: &str) -> Option<&str> {
+    if !name.starts_with("semantic-locator-") || name.len() != 81usize { return None; }
+    let identity = &name[17usize..];
+    if hex_identity(identity) { Some(identity) } else { None }
+}
+
+fn legacy_query_entry(name: &str) -> bool {
+    if legacy_query_locator_identity(name).is_some() { return true; }
+    match entry_namespace(name) {
+        Some(namespace) => matches!(namespace, "semantic-page" | "semantic-root" | "semantic-latest"),
+        None => false,
+    }
+}
+
+fn read_query_manifest(file: &mut File, secret: &[u8], slot: &str, identity: &str,
+    capacity: usize, counts: &mut QueryHeaderRead) -> Option<QueryManifest> {
+    if capacity < 490usize || !hex_identity(slot) || !hex_identity(identity) { return None; }
+    let mut header = vec![0u8; 90usize];
+    if !read_exact(file, &mut header) { return None; }
+    counts.headers += 1usize;
+    if reuse::payload_length(&header) != Some(400usize) { return None; }
+    let mut bytes = vec![0u8; 400usize];
+    if !read_exact(file, &mut bytes) { return None; }
+    counts.manifest_bytes += 400usize;
+    let manifest = QueryManifest::decode(&bytes)?;
+    if manifest.identity != identity { return None; }
+    let producer = query_digest(&manifest.producer)?;
+    if sha256::hex_digest(&producer) != slot { return None; }
+    let root = reuse::AuthenticatedRoot::new(&producer, secret, "semantic-container-v3", identity, &header)?;
+    if root.length() != 400usize { return None; }
+    let _verified = root.verify(bytes)?;
+    counts.authenticated += 1usize;
+    let physical = file.seek(0i64, 2u8).ok()?;
+    counts.extent_checks += 1usize;
+    if physical != manifest.total_bytes || physical > 0x7fffffffffffffffusize { return None; }
+    Some(manifest)
+}
+
+struct QueryContainerRead {
+    file: File,
+    manifest: QueryManifest,
+    producer: Vec<u8>,
+}
+
+impl QueryContainerRead {
+    fn node(&mut self, secret: &[u8], extent: &QueryExtent, capacity: usize) -> Option<reuse::VerifiedPayload> {
+        if !extent.valid(self.manifest.total_bytes, self.manifest.total_bytes)
+            || extent.length > capacity { return None; }
+        if self.file.seek(extent.offset as i64, 0u8).ok()? != extent.offset { return None; }
+        let mut header = vec![0u8; 90usize];
+        if !read_exact(&mut self.file, &mut header) { return None; }
+        let root = reuse::AuthenticatedRoot::new(&self.producer, secret, "semantic-node-v3", &extent.digest, &header)?;
+        let length = root.length();
+        if length < 32usize || length > 32768usize || length.checked_add(90usize)? != extent.length {
+            return None;
+        }
+        let mut bytes = vec![0u8; length];
+        if !read_exact(&mut self.file, &mut bytes) { return None; }
+        let payload = root.verify(bytes)?;
+        if sha256::hex_digest(payload.bytes()) != extent.digest { return None; }
+        Some(payload)
+    }
+}
+
+pub struct QueryContainerWriter<'a> {
+    store: &'a mut Store,
+    temporary: Directory,
+    file: File,
+    temporary_name: String,
+    reservation_name: String,
+    position: usize,
+    payload_bytes: usize,
+    failed: bool,
+}
+
+impl<'a> QueryContainerWriter<'a> {
+    fn reserve_inner(&mut self, total: usize) -> bool {
+        if self.failed || total > 0x7fffffffffffffffusize || self.store.write_state != 1u8 { return false; }
+        loop {
+            let size = self.store.budget.growth(&self.reservation_name, &self.store.producer_slot,
+                total, self.store.index_bytes);
+            let fits = match size { Some(value) => value <= self.store.capacity, None => false };
+            if fits { return true; }
+            if !self.store.evict_oldest() {
+                if self.store.write_state != 1u8 { return false; }
+                self.store.checkpoint();
+                if self.store.write_state != 1u8 { return false; }
+                let size = self.store.budget.growth(&self.reservation_name, &self.store.producer_slot,
+                    total, self.store.index_bytes);
+                return match size { Some(value) => value <= self.store.capacity, None => false };
+            }
+        }
+    }
+    fn reserve(&mut self, total: usize) -> Result<(), String> {
+        let span = self.store.io_begin();
+        let accepted = self.reserve_inner(total);
+        let elapsed = self.store.io_end(span);
+        if let Some(row) = self.store.io_row("semantic-container-v3") {
+            row.prepare_ns = io_add(row.prepare_ns, elapsed, &mut row.overflow);
+        }
+        if accepted { Ok(()) }
+        else {
+            self.failed = true;
+            Err("E_QUERY_STORE container exceeds the authenticated store budget or writer is unavailable".to_string())
+        }
+    }
+    fn write_stream(&mut self, bytes: &[u8]) -> Result<(), String> {
+        if self.failed { return Err("E_QUERY_STORE container stream is already refused".to_string()); }
+        let span = self.store.io_begin();
+        let result = self.file.write_all(bytes);
+        let elapsed = self.store.io_end(span);
+        if let Some(row) = self.store.io_row("semantic-container-v3") {
+            row.stream_write_ns = io_add(row.stream_write_ns, elapsed, &mut row.overflow);
+            if result.is_ok() {
+                row.stream_completed_write_bytes = io_add(row.stream_completed_write_bytes, bytes.len(), &mut row.overflow);
+            }
+        }
+        match result {
+            Ok(()) => Ok(()),
+            Err(_) => {
+                self.failed = true;
+                Err("E_QUERY_STORE container stream write failed".to_string())
+            }
+        }
+    }
+    pub fn append_node(&mut self, payload: &[u8]) -> Result<QueryExtent, String> {
+        if self.failed || payload.len() < 32usize || payload.len() > 32768usize {
+            self.failed = true;
+            return Err("E_QUERY_INDEX node exceeds its bounded representation".to_string());
+        }
+        let length = payload.len().checked_add(90usize).ok_or("E_QUERY_INDEX node length overflow")?;
+        let end = self.position.checked_add(length).ok_or("E_QUERY_INDEX container length overflow")?;
+        self.reserve(end)?;
+        let digest = sha256::hex_digest(payload);
+        let span = self.store.io_begin();
+        let bytes = reuse::seal(&self.store.producer, &self.store.secret, "semantic-node-v3", &digest, payload);
+        let elapsed = self.store.io_end(span);
+        if let Some(row) = self.store.io_row("semantic-node-v3") {
+            row.seals = io_add(row.seals, 1usize, &mut row.overflow);
+            row.sealed_payload_bytes = io_add(row.sealed_payload_bytes, payload.len(), &mut row.overflow);
+            row.seal_ns = io_add(row.seal_ns, elapsed, &mut row.overflow);
+        }
+        if bytes.len() != length {
+            self.failed = true;
+            return Err("E_QUERY_INDEX node envelope length changed".to_string());
+        }
+        let offset = self.position;
+        self.write_stream(&bytes)?;
+        self.position = end;
+        self.payload_bytes = self.payload_bytes.checked_add(payload.len()).ok_or("E_QUERY_INDEX payload length overflow")?;
+        Ok(QueryExtent { digest, offset, length })
+    }
+    fn publish_inner(&mut self, name: &str, front: &[u8]) -> bool {
+        if self.failed || self.store.write_state != 1u8 || front.len() != 490usize { return false; }
+        if self.file.seek(0i64, 0u8).ok() != Some(0usize) { return false; }
+        if self.write_stream(front).is_err() { return false; }
+        if self.file.seek(0i64, 2u8).ok() != Some(self.position) { return false; }
+        let mut destination = name.as_bytes().to_vec();
+        destination.push(0u8);
+        self.temporary.__lkjscript_rename(b"entry\0", &mut self.store.directory, &destination) == 0i64
+    }
+    pub fn finish(mut self, source: &str, checked_ir: &str, selector: &str,
+        facts: usize, root: &QueryExtent) -> Result<QueryManifest, String> {
+        if self.failed || !root.valid(self.position, self.position) || root.end() != Some(self.position) {
+            return Err("E_QUERY_INDEX root must be the last bounded container node".to_string());
+        }
+        let total = self.position;
+        self.reserve(total)?;
+        let manifest = QueryManifest { identity: String::new(), producer: self.store.query_producer(),
+            source: source.to_string(), checked_ir: checked_ir.to_string(), root: root.digest.clone(),
+            selector: selector.to_string(), facts, root_offset: root.offset, root_length: root.length,
+            total_bytes: self.position };
+        let payload = manifest.encode();
+        let manifest = QueryManifest::decode(&payload).ok_or("E_QUERY_INDEX invalid container manifest")?;
+        let span = self.store.io_begin();
+        let front = reuse::seal(&self.store.producer, &self.store.secret, "semantic-container-v3", &manifest.identity, &payload);
+        let elapsed = self.store.io_end(span);
+        if let Some(row) = self.store.io_row("semantic-container-v3") {
+            row.seals = io_add(row.seals, 1usize, &mut row.overflow);
+            row.sealed_payload_bytes = io_add(row.sealed_payload_bytes, payload.len(), &mut row.overflow);
+            row.seal_ns = io_add(row.seal_ns, elapsed, &mut row.overflow);
+        }
+        let name = query_container_name(&self.store.producer_slot, &manifest.identity);
+        let span = self.store.io_begin();
+        let published = self.publish_inner(&name, &front);
+        let elapsed = self.store.io_end(span);
+        if let Some(row) = self.store.io_row("semantic-container-v3") {
+            row.publish_requests = io_add(row.publish_requests, 1usize, &mut row.overflow);
+            row.publish_attempts = io_add(row.publish_attempts, 1usize, &mut row.overflow);
+            row.publish_ns = io_add(row.publish_ns, elapsed, &mut row.overflow);
+            if published {
+                row.published = io_add(row.published, 1usize, &mut row.overflow);
+                row.published_payload_bytes = io_add(row.published_payload_bytes, self.payload_bytes + 400usize, &mut row.overflow);
+                row.published_envelope_bytes = io_add(row.published_envelope_bytes, self.position, &mut row.overflow);
+            }
+        }
+        if !published { return Err("E_QUERY_STORE container publication failed".to_string()); }
+        self.store.budget.remember(&name, &self.store.producer_slot, self.position);
+        self.store.dirty = true;
+        self.store.writes += 1usize;
+        self.store.retained_bytes = self.store.budget.bytes + self.store.index_bytes;
+        Ok(manifest)
+    }
+}
+
+impl<'a> Drop for QueryContainerWriter<'a> {
+    fn drop(&mut self) {
+        let span = self.store.io_begin();
+        let _ = self.temporary.remove("entry");
+        let _ = self.store.directory.remove_directory(&self.temporary_name);
+        let elapsed = self.store.io_end(span);
+        if let Some(row) = self.store.io_row("semantic-container-v3") {
+            row.publish_ns = io_add(row.publish_ns, elapsed, &mut row.overflow);
+        }
+    }
+}
+
+impl Store {
+    pub fn begin_query_container(&mut self) -> Result<QueryContainerWriter<'_>, String> {
+        if !self.writable() { return Err("E_QUERY_STORE container writer is unavailable".to_string()); }
+        let span = self.io_begin();
+        let staged = self.stage_query_container();
+        let elapsed = self.io_end(span);
+        if let Some(row) = self.io_row("semantic-container-v3") {
+            row.prepare_ns = io_add(row.prepare_ns, elapsed, &mut row.overflow);
+        }
+        let (temporary, file, temporary_name) = staged?;
+        let reservation_name = query_container_name(&self.producer_slot,
+            "0000000000000000000000000000000000000000000000000000000000000000");
+        let mut result = QueryContainerWriter { store: self, temporary, file, temporary_name,
+            reservation_name, position: 0usize, payload_bytes: 0usize, failed: false };
+        result.reserve(490usize)?;
+        let front = vec![0u8; 490usize];
+        result.write_stream(&front)?;
+        result.position = 490usize;
+        Ok(result)
+    }
+    fn stage_query_container(&mut self) -> Result<(Directory, File, String), String> {
+        let stamp = self.clock.nanoseconds().map_err(|_: i64| -> String {
+            "E_QUERY_STORE container staging clock is unavailable".to_string()
+        })?;
+        let temporary_name: String = loop {
+            self.sequence = self.sequence.wrapping_add(1usize);
+            let name = format!(".tmp-{stamp}-{}", self.sequence);
+            match self.directory.create_directory(&name) {
+                Ok(()) => break name,
+                Err(17) => continue,
+                Err(_) => return Err("E_QUERY_STORE cannot claim a container staging directory".to_string()),
+            }
+        };
+        let mut temporary = match self.directory.open_directory(&temporary_name) {
+            Ok(directory) => directory,
+            Err(_) => {
+                let _ = self.directory.remove_directory(&temporary_name);
+                return Err("E_QUERY_STORE cannot retain the container staging directory".to_string());
+            }
+        };
+        let file = match temporary.create_private("entry") {
+            Ok(file) => file,
+            Err(_) => {
+                let _ = self.directory.remove_directory(&temporary_name);
+                return Err("E_QUERY_STORE cannot create a private container stream".to_string());
+            }
+        };
+        Ok((temporary, file, temporary_name))
+    }
+    fn load_query_container(&mut self, identity: &str) -> Option<QueryContainerRead> {
+        if !hex_identity(identity) { return None; }
+        let name = query_container_name(&self.producer_slot, identity);
+        let span = self.io_begin();
+        let mut opened = false;
+        let result = match cache_file(&mut self.directory, &name) {
+            Some(mut file) => {
+                opened = true;
+                let mut counts = QueryHeaderRead::new();
+                match read_query_manifest(&mut file, &self.secret, &self.producer_slot, identity,
+                    self.capacity, &mut counts) {
+                    Some(manifest) if manifest.producer == query_hex(&self.producer) =>
+                        Some(QueryContainerRead { file, manifest, producer: self.producer.clone() }),
+                    _ => None,
+                }
+            }
+            None => None,
+        };
+        let elapsed = self.io_end(span);
+        if let Some(row) = self.io_row("semantic-container-v3") {
+            row.read_attempts = io_add(row.read_attempts, 1usize, &mut row.overflow);
+            row.read_ns = io_add(row.read_ns, elapsed, &mut row.overflow);
+            if result.is_some() {
+                row.authenticated_reads = io_add(row.authenticated_reads, 1usize, &mut row.overflow);
+                row.authenticated_payload_bytes = io_add(row.authenticated_payload_bytes, 400usize, &mut row.overflow);
+                row.authenticated_envelope_bytes = io_add(row.authenticated_envelope_bytes, 490usize, &mut row.overflow);
+            }
+        }
+        if opened && result.is_none() {
+            self.rejected += 1usize;
+            self.discard("semantic-container-v3", identity);
+        }
+        result
+    }
+}
+
+impl Store {
+    fn read_query_latest(&mut self, selector: &str) -> Option<Vec<u8>> {
+        if !hex_identity(selector) { return None; }
+        let name = format!("semantic-latest-v3-{}-{selector}", self.producer_slot);
+        let span = self.io_begin();
+        let mut opened = false;
+        let result = match cache_file(&mut self.directory, &name) {
+            Some(mut file) => {
+                opened = true;
+                read_envelope(&mut file, &self.producer, &self.secret, "semantic-latest-v3",
+                    selector, self.capacity.min(490usize))
+            }
+            None => None,
+        };
+        let elapsed = self.io_end(span);
+        if let Some(row) = self.io_row("semantic-latest-v3") {
+            row.read_attempts = io_add(row.read_attempts, 1usize, &mut row.overflow);
+            row.read_ns = io_add(row.read_ns, elapsed, &mut row.overflow);
+            if let Some(payload) = &result {
+                row.authenticated_reads = io_add(row.authenticated_reads, 1usize, &mut row.overflow);
+                row.authenticated_payload_bytes = io_add(row.authenticated_payload_bytes, payload.bytes().len(), &mut row.overflow);
+                row.authenticated_envelope_bytes = io_add(row.authenticated_envelope_bytes, payload.bytes().len() + 90usize, &mut row.overflow);
+            }
+        }
+        if opened && result.is_none() {
+            self.rejected += 1usize;
+            self.discard("semantic-latest-v3", selector);
+        }
+        let payload = result?;
+        if payload.bytes().len() != 400usize { return None; }
+        Some(payload.into_bytes())
+    }
 }

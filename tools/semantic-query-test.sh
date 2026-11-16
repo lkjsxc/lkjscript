@@ -147,16 +147,16 @@ first=$snapshot
 # A protocol-compatible reader can inspect another authenticated producing
 # generation, while admission and image reuse remain exact-producer claims.
 producer_a=$(sha256sum "$compiler" | cut -d' ' -f1)
-producer_a_root=$(find "$fixture/store" -maxdepth 1 -type f -name "semantic-root-*-$first" -print -quit)
+producer_a_root=$(find "$fixture/store" -maxdepth 1 -type f -name "semantic-container-v3-*-$first" -print -quit)
 [[ -n "$producer_a_root" ]] || fail 'producer A snapshot root missing'
-producer_a_slot=$(basename "$producer_a_root" | cut -d- -f3)
+producer_a_slot=$(basename "$producer_a_root" | cut -d- -f4)
 reader="$fixture/another-reader"
 cp "$compiler" "$reader"
 printf 'query reader protocol generation test\n' >> "$reader"
 producer_b=$(sha256sum "$reader" | cut -d' ' -f1)
 [[ "$producer_a" != "$producer_b" ]] || fail 'reader producer did not change'
 query meta crate > "$fixture/producer-a"
-grep -Eq "version=2 producer=$producer_a validation=authenticated-producing-compiler current-check=not-performed" "$fixture/producer-a" || fail 'producer attestation label'
+grep -Eq "version=3 producer=$producer_a validation=authenticated-producing-compiler current-check=not-performed" "$fixture/producer-a" || fail 'producer attestation label'
 "$reader" query "${common[@]}" --snapshot "$first" --kind meta --id crate > "$fixture/cross-reader"
 cmp "$fixture/producer-a" "$fixture/cross-reader" || fail 'cross-reader changed the pinned answer'
 refuse "$reader" query "${common[@]}" --kind meta --id crate
@@ -173,14 +173,14 @@ for statistic in checked_reused build_reused; do
     [[ "$count" == 0 ]] || fail "producer B reused producer A $statistic"
 done
 "$compiler" query "${common[@]}" --snapshot "$second" --kind meta --id crate > "$fixture/producer-b"
-grep -Eq "version=2 producer=$producer_b validation=authenticated-producing-compiler current-check=not-performed" "$fixture/producer-b" || fail 'reader substituted its own producer'
+grep -Eq "version=3 producer=$producer_b validation=authenticated-producing-compiler current-check=not-performed" "$fixture/producer-b" || fail 'reader substituted its own producer'
 for fact in source checked-ir; do
     a=$(sed -n "s/.* $fact=\([^ ]*\) .*/\1/p" "$fixture/producer-a" | head -n 1)
     b=$(sed -n "s/.* $fact=\([^ ]*\) .*/\1/p" "$fixture/producer-b" | head -n 1)
     [[ -n "$a" && "$a" == "$b" ]] || fail "unchanged cross-producer $fact mismatch"
 done
-tail -c 32 "$fixture/store/semantic-locator-$first" > "$fixture/root-a"
-tail -c 32 "$fixture/store/semantic-locator-$second" > "$fixture/root-b"
+tail -c 32 "$fixture/store/semantic-locator-v3-$first" > "$fixture/root-a"
+tail -c 32 "$fixture/store/semantic-locator-v3-$second" > "$fixture/root-b"
 cmp "$fixture/root-a" "$fixture/root-b" || fail 'unchanged cross-producer fact root mismatch'
 refuse "$reader" query "${common[@]}" --snapshot "$second" --kind outline --id helpers --limit 1 --cursor "$producer_a_cursor"
 mkdir "$fixture/small-store"
@@ -333,7 +333,7 @@ refuse query outline helpers --cursor "${cursor%?}z"
 query meta helpers::square > "$fixture/before"
 before_signature=$(sed -n 's/.*signature=\([^ ]*\).*/\1/p' "$fixture/before")
 before_body=$(sed -n 's/.*body=\([^ ]*\).*/\1/p' "$fixture/before")
-latest=$(find "$fixture/store" -maxdepth 1 -type f -name "semantic-latest-$producer_a_slot-*" -print -quit)
+latest=$(find "$fixture/store" -maxdepth 1 -type f -name "semantic-latest-v3-$producer_a_slot-*" -print -quit)
 cp "$latest" "$fixture/old-latest"
 mkdir "$fixture/source/helpers"
 mv "$fixture/source/helpers.lkj" "$fixture/source/helpers/mod.lkj"
@@ -347,7 +347,7 @@ query meta helpers::square > "$fixture/after"
 # the immutable snapshot root and complete image proof are still present.
 repair_snapshot=$snapshot
 for attack in missing corrupt; do
-    locator="$fixture/store/semantic-locator-$snapshot"
+    locator="$fixture/store/semantic-locator-v3-$snapshot"
     if [[ "$attack" == missing ]]; then rm "$locator"; else flip_byte "$locator" 98; fi
     refuse query authority writes
     build
@@ -365,22 +365,24 @@ grep -Eq "snapshot=$first .*freshness=not-asserted" "$fixture/replayed" || fail 
 query authority writes > "$fixture/explicit"
 grep -Eq "snapshot=$snapshot" "$fixture/explicit" || fail 'explicit snapshot followed old pointer'
 cp -a "$fixture/store" "$fixture/saved-store"
-root_record=$(find "$fixture/store" -maxdepth 1 -type f -name "semantic-root-*-$snapshot" -print -quit)
-root_page=$(perl - "$root_record" <<'PERL'
+root_record=$(find "$fixture/store" -maxdepth 1 -type f -name "semantic-container-v3-*-$snapshot" -print -quit)
+read -r root_page root_offset root_length container_bytes < <(perl - "$root_record" <<'PERL'
 use strict;
 use warnings;
 open my $file, '<:raw', shift @ARGV or die $!;
-local $/;
-my $data = <$file>;
-my $at = length("lkjscript-store-2\n") + 8 + 64 + 8;
+read($file, my $data, 490) == 490 or die "short container manifest\n";
+my $at = 98;
 sub field { my $n = unpack('Q<', substr($data, $at, 8)); $at += 8; my $v = substr($data, $at, $n); $at += $n; return $v; }
 field(); field(); field();
-print field();
+my $root = field(); field();
+my ($facts, $offset, $length, $total) = unpack('Q<4', substr($data, $at, 32));
+die "manifest framing\n" unless $at + 32 == 490 && $offset + $length == $total;
+print "$root $offset $length $total\n";
 PERL
 )
-page_name=$(basename "$(find "$fixture/store" -maxdepth 1 -type f -name "semantic-page-*-$root_page" -print -quit)")
-[[ -n "$page_name" ]] || fail 'root page not found'
-locator_name="semantic-locator-$snapshot"
+page_name=$(basename "$root_record")
+[[ "$root_offset" -ge 490 && "$root_length" -ge 122 ]] || fail 'root extent not found'
+locator_name="semantic-locator-v3-$snapshot"
 [[ -f "$fixture/store/$locator_name" ]] || fail 'published snapshot has no locator'
 for attack in producer selector root truncate substitute missing fifo symlink; do
     rm -rf "$fixture/store"
@@ -391,7 +393,7 @@ for attack in producer selector root truncate substitute missing fifo symlink; d
         selector) flip_byte "$target" 130 ;;
         root) flip_byte "$target" 162 ;;
         truncate) truncate -s 40 "$target" ;;
-        substitute) cp "$fixture/store/semantic-locator-$first" "$target" ;;
+        substitute) cp "$fixture/store/semantic-locator-v3-$first" "$target" ;;
         missing) rm "$target" ;;
         fifo) rm "$target"; mkfifo "$target" ;;
         symlink) rm "$target"; ln -s ../old-latest "$target" ;;
@@ -400,15 +402,17 @@ for attack in producer selector root truncate substitute missing fifo symlink; d
 done
 rm -rf "$fixture/store"
 cp -a "$fixture/saved-store" "$fixture/store"
-for attack in mutate truncate substitute fifo symlink; do
+for attack in manifest mutate truncate append substitute fifo symlink; do
     rm -rf "$fixture/store"
     cp -a "$fixture/saved-store" "$fixture/store"
     target="$fixture/store/$page_name"
     case "$attack" in
-        mutate) flip_byte "$target" 40 ;;
-        truncate) truncate -s 40 "$target" ;;
+        manifest) flip_byte "$target" 40 ;;
+        mutate) flip_byte "$target" "$((root_offset + 40))" ;;
+        truncate) truncate -s "$((container_bytes - 1))" "$target" ;;
+        append) printf x >> "$target" ;;
         substitute)
-            other=$(find "$fixture/store" -maxdepth 1 -type f -name 'semantic-page-*' ! -name "$page_name" -print -quit)
+            other=$(find "$fixture/store" -maxdepth 1 -type f -name 'semantic-container-v3-*' ! -name "$page_name" -print -quit)
             cp "$other" "$target" ;;
         fifo) rm "$target"; mkfifo "$target" ;;
         symlink) rm "$target"; ln -s ../old-latest "$target" ;;
@@ -534,4 +538,4 @@ done
 "$compiler" query "${self_untyped_common[@]}" --snapshot "$self_untyped_snapshot" --kind references --id std::Actual::construct > "$fixture/self-resolved"
 grep -Eq '^"std::Actual".*kind=alias-constructor$' "$fixture/self-resolved" || fail 'resolved owner missing from an undemanded inherent method'
 
-printf 'ok semantic-query: identities, source/IR levels, ordinary authority, all question kinds, bounded authenticated cursor, source-free lookup, physical move/formatting, explicit cross-producer provenance, producer-bound admission, snapshot replay, eight locator and five index attacks\n'
+printf 'ok semantic-query: identities, source/IR levels, ordinary authority, all question kinds, bounded authenticated cursor, source-free lookup, physical move/formatting, explicit cross-producer provenance, producer-bound admission, snapshot replay, eight locator and seven container/node attacks\n'

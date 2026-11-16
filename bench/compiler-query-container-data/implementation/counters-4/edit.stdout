@@ -1,0 +1,7 @@
+"dependency::answer" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-cache-io-test.dQOL6W/source/dependency.lkj" level=source-claim file before=7a05c42c05eb92d11ba535f710a997c764516e72f64a0486ae9a8842000f5b4f after=fd5e54728d15bdf71ecef070a701738c2793bf4175f3de6565ad7f1aa2dca9fe
+transaction sites=1 files=1 identities=1
+"dependency::answer" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=0110b925ff21a3c940c5a42e16a38e59a6798c0ee2e9cdaf87d64a8f049d180f after=1ef69b3f7d156bca62d10806fa7def9dc93f83be5419a83538947184e8850ac4 checked-instances=7 fresh-checked=7 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=646dd81f317a72760930accd2786bd59db9980215e3fa17d852ef6fcf9ab042a source-after=38ea7c7efb7534dd3408fb3f7110f5ad3e3ca1004bcda59f744a2634e7f9e790 mode=apply

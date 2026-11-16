@@ -1,0 +1,46 @@
+"helpers"	level=protocol	fact=query	version=3 producer=a72d386bbb6af3bf0a1782503ed4ae7f1ea9bf7bb8c3078eb4682acfe2f9c5ad validation=authenticated-producing-compiler current-check=not-performed snapshot=45d4f8dc312ae9b595d20c8df26c62fdcde0530fd2580d143c65a919d963e768 source=ed50bb9b5bfc98cc39f03d7826143e7808270c457716d9b599d3c881526438ad checked-ir=fd1a2e2264eb4d4653fc0b2ba32f29f9b40f3c86e698b74f7d54fb6bd9603b9e kind=outline depth=2 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
+"helpers::Apply"	level=source-claim	fact=signature	kind=trait text="pub trait Apply" bytes=15 complete=true
+"helpers::Color"	level=source-claim	fact=signature	kind=enum text="pub enum Color { Red, Blue(i64) }" bytes=33 complete=true
+"helpers::Counter"	level=source-claim	fact=signature	kind=struct text="pub struct Counter { pub value: i64 }" bytes=37 complete=true
+"helpers::anonymous"	level=source-claim	fact=signature	kind=function text="pub fn anonymous(_: u8, named: i64, _: bool) -> i64" bytes=51 complete=true
+"helpers::anonymous_reference"	level=source-claim	fact=signature	kind=function text="pub fn anonymous_reference(_: i64, _: i64) -> i64" bytes=49 complete=true
+"helpers::applied"	level=source-claim	fact=signature	kind=function text="pub fn applied(value: Counter) -> i64" bytes=37 complete=true
+"helpers::blue"	level=source-claim	fact=signature	kind=function text="pub fn blue(value: i64) -> Color" bytes=32 complete=true
+"helpers::destructure"	level=source-claim	fact=signature	kind=function text="pub fn destructure(value: Counter) -> i64" bytes=41 complete=true
+"helpers::identity"	level=source-claim	fact=signature	kind=function text="pub fn identity<T>(value: T) -> T" bytes=33 complete=true
+"helpers::local_generic"	level=source-claim	fact=signature	kind=function text="pub fn local_generic<T>(value: T) -> T" bytes=38 complete=true
+"helpers::named"	level=source-claim	fact=signature	kind=function text="pub fn named(value: i64) -> Counter" bytes=35 complete=true
+"helpers::patterned"	level=source-claim	fact=signature	kind=function text="pub fn patterned(value: Color) -> i64" bytes=37 complete=true
+"helpers::record"	level=source-claim	fact=signature	kind=function text="pub fn record() -> i64" bytes=22 complete=true
+"helpers::shorthand"	level=source-claim	fact=signature	kind=function text="pub fn shorthand(value: Counter) -> i64" bytes=39 complete=true
+"helpers::square"	level=source-claim	fact=signature	kind=function text="pub fn square(value: i64) -> i64" bytes=32 complete=true
+"impl:<helpers::Counter as helpers::Apply>#97eb21600622f40a"	level=source-claim	fact=signature	kind=implementation text="impl Apply for Counter" bytes=22 complete=true
+"helpers::Apply::apply"	level=source-claim	fact=signature	kind=function text="fn apply(&self, value: i64) -> i64;" bytes=35 complete=true
+"helpers::Color::variant:Blue"	level=source-claim	fact=signature	kind=variant text="Blue(i64)" bytes=9 complete=true
+"helpers::Color::variant:Red"	level=source-claim	fact=signature	kind=variant text="Red" bytes=3 complete=true
+"helpers::Counter::field:value"	level=source-claim	fact=signature	kind=field text="pub value: i64" bytes=14 complete=true
+"helpers::anonymous::param:0"	level=source-claim	fact=signature	kind=parameter text="_: u8" bytes=5 complete=true
+"helpers::anonymous::param:2"	level=source-claim	fact=signature	kind=parameter text="_: bool" bytes=7 complete=true
+"helpers::anonymous::param:named"	level=source-claim	fact=signature	kind=parameter text="named: i64" bytes=10 complete=true
+"helpers::anonymous_reference::param:0"	level=source-claim	fact=signature	kind=parameter text="_: i64" bytes=6 complete=true
+"helpers::anonymous_reference::param:1"	level=source-claim	fact=signature	kind=parameter text="_: i64" bytes=6 complete=true
+"helpers::applied::body:0adcb670b7f1e44b21abb5d3f9d42b11f8b0156f8a8715bdfdc3837d68fcf2c6::call:0"	level=source-claim	fact=signature	kind=call-site text="value.apply(4)" bytes=14 complete=true
+"helpers::applied::param:value"	level=source-claim	fact=signature	kind=parameter text="value: Counter" bytes=14 complete=true
+"helpers::blue::body:0c7f01ca13da07d38679a73fdbeb611a5d7cef5e4cbbbe4d62908b2a45b98442::call:0"	level=source-claim	fact=signature	kind=call-site text="Color::Blue(value)" bytes=18 complete=true
+"helpers::blue::param:value"	level=source-claim	fact=signature	kind=parameter text="value: i64" bytes=10 complete=true
+"helpers::destructure::body:cbfae1010ecdb20b69b740746c27eb2b5f2a3f0295726b4a3cec90ff68e886b1::binding:observed:0"	level=source-claim	fact=signature	kind=binding text="observed" bytes=8 complete=true
+"helpers::destructure::param:value"	level=source-claim	fact=signature	kind=parameter text="value: Counter" bytes=14 complete=true
+"helpers::identity::generic:T"	level=source-claim	fact=signature	kind=generic-parameter text="T" bytes=1 complete=true
+"helpers::identity::param:value"	level=source-claim	fact=signature	kind=parameter text="value: T" bytes=8 complete=true
+"helpers::local_generic::body:50f3a76a32422fab82e11e9ba3957a183ad1fa0420ac3d44cfcec9b8f7566e19::binding:held:0"	level=source-claim	fact=signature	kind=binding text="held" bytes=4 complete=true
+"helpers::local_generic::generic:T"	level=source-claim	fact=signature	kind=generic-parameter text="T" bytes=1 complete=true
+"helpers::local_generic::param:value"	level=source-claim	fact=signature	kind=parameter text="value: T" bytes=8 complete=true
+"helpers::named::param:value"	level=source-claim	fact=signature	kind=parameter text="value: i64" bytes=10 complete=true
+"helpers::patterned::body:bdd78cab0e4d711490b5459540e77ea9e28e51025144932720f5292989122cf2::binding:n:0"	level=source-claim	fact=signature	kind=binding text="n" bytes=1 complete=true
+"helpers::patterned::param:value"	level=source-claim	fact=signature	kind=parameter text="value: Color" bytes=12 complete=true
+"helpers::record::body:9bf7f8025a832037e2675b86a23aee98d9ffa0b4dfc09e6a017c23c0e087c66c::binding:value:0"	level=source-claim	fact=signature	kind=binding text="value" bytes=5 complete=true
+"helpers::shorthand::body:6505d0e63d81643338c1d2adb927030890ec93a3d1f0626059f189fd46ef0019::binding:value:0"	level=source-claim	fact=signature	kind=binding text="value" bytes=5 complete=true
+"helpers::shorthand::param:value"	level=source-claim	fact=signature	kind=parameter text="value: Counter" bytes=14 complete=true
+"helpers::square::param:value"	level=source-claim	fact=signature	kind=parameter text="value: i64" bytes=10 complete=true
+"<helpers::Counter as helpers::Apply>::apply"	level=source-claim	fact=signature	kind=function text="fn apply(&self, value: i64) -> i64" bytes=34 complete=true
+"helpers"	level=protocol	fact=continuation	cursor=none facts=44 pages-read=27 traversal-steps=78

@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "operations": [
+    {
+      "op": "replace-item",
+      "id": "semantic_query::decode",
+      "source": "fn decode(bytes: &[u8]) -> Option<Vec<Work>> {\n    let mut reader = store::Reader::new(bytes);\n    if reader.word()? != 3usize { return None; }\n    let count = reader.word()?;\n    if count > bytes.len() / 40usize { return None; }\n    let mut result = Vec::new();\n    for _ in 0usize..count {\n        let kind = reader.text()?; let identity = reader.text()?;\n        let depth = reader.word()?; let page = reader.word()?; let offset = reader.word()?;\n        if offset > 16usize { return None; }\n        result.push(Work { kind, identity, depth, page, offset });\n    }\n    if reader.done() { Some(result) } else { None }\n}"
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+"helpers::patterned"	level=protocol	fact=query	version=3 producer=eed6ca32edcc182a92c4e697f4702ec685dff8e7778b0374a27552aa9c938947 validation=authenticated-producing-compiler current-check=not-performed snapshot=c7dc825941bf01ad06c02e849c8196c63c43ee3e264aa50b7e636a9c227c38d1 source=c190b15cd6580a8b23ff82864ab2f3852aaf78332bc380c4455af6a24bd744cc checked-ir=531f03273c5fbc474bc8dab899464aca8097c366febb4841b64e0f25c3c2f03b kind=references depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
+"helpers::Color"	level=source-claim	fact=references	from="helpers::patterned" file="target/semantic-query.nCphJu/source/helpers.lkj" start=815 end=820 kind=type
+"helpers::Color"	level=source-claim	fact=references	from="helpers::patterned" file="target/semantic-query.nCphJu/source/helpers.lkj" start=845 end=850 kind=qualification
+"helpers::Color"	level=source-claim	fact=references	from="helpers::patterned" file="target/semantic-query.nCphJu/source/helpers.lkj" start=862 end=867 kind=qualification
+"helpers::Color::variant:Blue"	level=source-claim	fact=references	from="helpers::patterned" file="target/semantic-query.nCphJu/source/helpers.lkj" start=869 end=873 kind=pattern
+"helpers::Color::variant:Red"	level=source-claim	fact=references	from="helpers::patterned" file="target/semantic-query.nCphJu/source/helpers.lkj" start=852 end=855 kind=pattern
+"helpers::patterned::body:bdd78cab0e4d711490b5459540e77ea9e28e51025144932720f5292989122cf2::binding:n:0"	level=source-claim	fact=references	from="helpers::patterned" file="target/semantic-query.nCphJu/source/helpers.lkj" start=880 end=881 kind=local-value
+"helpers::patterned::param:value"	level=source-claim	fact=references	from="helpers::patterned" file="target/semantic-query.nCphJu/source/helpers.lkj" start=837 end=842 kind=local-value
+"helpers::patterned"	level=protocol	fact=continuation	cursor=none facts=7 pages-read=3 traversal-steps=8

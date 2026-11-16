@@ -11,6 +11,9 @@ pub struct Snapshot {
     pub root: String,
     pub selector: String,
     pub facts: usize,
+    pub root_offset: usize,
+    pub root_length: usize,
+    pub total_bytes: usize,
 }
 struct Entry {
     name: String,
@@ -55,11 +58,11 @@ fn page(lines: &[String], next: Option<usize>) -> Vec<u8> {
     for line in lines { store::push_bytes(&mut bytes, line.as_bytes()); }
     bytes
 }
-fn node(store: &mut store::Store, entries: Vec<Entry>, records: &[Vec<String>], depth: usize, pages: &mut Vec<String>) -> Result<String, String> {
+fn node(writer: &mut store::QueryContainerWriter<'_>, entries: Vec<Entry>, records: &[Vec<String>], depth: usize) -> Result<store::QueryExtent, String> {
     let mut size = 32usize;
     for entry in &entries { size += entry.name.len() + entry.value_bytes + 88usize; }
     let mut bytes = Vec::new();
-    store::push_word(&mut bytes, 1usize);
+    store::push_word(&mut bytes, 3usize);
     if entries.len() <= 64usize && size <= 32768usize {
         store::push_word(&mut bytes, 0usize);
         store::push_word(&mut bytes, depth);
@@ -85,37 +88,20 @@ fn node(store: &mut store::Store, entries: Vec<Entry>, records: &[Vec<String>], 
         store::push_word(&mut bytes, groups.len());
         for (digit, group) in groups {
             store::push_word(&mut bytes, digit as usize);
-            let identity = node(store, group, records, depth + 1usize, pages)?;
-            store::push_bytes(&mut bytes, identity.as_bytes());
+            let child = node(writer, group, records, depth + 1usize)?;
+            store::push_bytes(&mut bytes, child.digest.as_bytes());
+            store::push_word(&mut bytes, child.offset);
+            store::push_word(&mut bytes, child.length);
         }
     }
-    let identity = sha256::hex_digest(&bytes);
-    if store.get("semantic-page", &identity).is_none() { store.put("semantic-page", &identity, &bytes); }
-    pages.push(identity.clone());
-    Ok(identity)
-}
-fn snapshot_bytes(producer: &str, source: &str, checked_ir: &str, root: &str, selector: &str, facts: usize) -> Vec<u8> {
-    let mut bytes = Vec::new();
-    store::push_word(&mut bytes, 2usize);
-    store::push_bytes(&mut bytes, producer.as_bytes());
-    store::push_bytes(&mut bytes, source.as_bytes()); store::push_bytes(&mut bytes, checked_ir.as_bytes());
-    store::push_bytes(&mut bytes, root.as_bytes()); store::push_bytes(&mut bytes, selector.as_bytes());
-    store::push_word(&mut bytes, facts);
-    bytes
+    writer.append_node(&bytes)
 }
 fn decode_snapshot(bytes: &[u8]) -> Option<Snapshot> {
-    if bytes.len() != 376usize { return None; }
-    let mut reader = store::Reader::new(bytes);
-    if reader.word()? != 2usize { return None; }
-    let producer = reader.text()?;
-    let source = reader.text()?;
-    let checked_ir = reader.text()?;
-    let root = reader.text()?;
-    let selector = reader.text()?;
-    let facts = reader.word()?;
-    if !reader.done() || !hexadecimal(&producer) || !hexadecimal(&source) || !hexadecimal(&checked_ir)
-        || !hexadecimal(&root) || !hexadecimal(&selector) { return None; }
-    Some(Snapshot { identity: sha256::hex_digest(bytes), producer, source, checked_ir, root, selector, facts })
+    let manifest = store::QueryManifest::decode(bytes)?;
+    Some(Snapshot { identity: manifest.identity, producer: manifest.producer, source: manifest.source,
+        checked_ir: manifest.checked_ir, root: manifest.root, selector: manifest.selector,
+        facts: manifest.facts, root_offset: manifest.root_offset, root_length: manifest.root_length,
+        total_bytes: manifest.total_bytes })
 }
 pub fn publish(store: &mut store::Store, selector: &str, catalog: &semantic::Catalog, checked: &ir::CheckedProgram) -> Result<Snapshot, String> {
     publish_emitted(store, selector, catalog, checked, &BTreeMap::new())
@@ -145,22 +131,22 @@ pub fn publish_emitted(store: &mut store::Store, selector: &str, catalog: &seman
         }
         records.push(lines);
     }
-    let mut pages = Vec::new();
-    let root = node(store, entries, &records, 0usize, &mut pages)?;
+    let mut writer = store.begin_query_container()?;
+    let root = node(&mut writer, entries, &records, 0usize)?;
     drop(records);
     let checked_ir = sha256::hex_digest(&ir_binary::write(checked.program()));
-    let bytes = snapshot_bytes(&store.query_producer(), &catalog.input_digest, &checked_ir, &root, selector, count);
+    let manifest = writer.finish(&catalog.input_digest, &checked_ir, selector, count, &root)?;
+    let bytes = manifest.encode();
     let snapshot = decode_snapshot(&bytes).ok_or("E_QUERY_INDEX could not form snapshot")?;
-    store.put("semantic-root", &snapshot.identity, &bytes);
-    if !store.publish_query_locator(&snapshot.identity, selector, &root) {
+    if !store.publish_query_locator(&snapshot.identity, selector, &snapshot.root) {
         store.invalidate_query_snapshot(&snapshot.identity, selector);
         return Err("E_QUERY_INDEX store refused authenticated snapshot locator publication".to_string());
     }
-    store.put("semantic-latest", selector, &bytes);
+    store.put("semantic-latest-v3", selector, &bytes);
     // Publishing can be refused by the disposable store's budget or lock. Never
-    // print a usable identity until its root, locator and all pages were retained.
-    if store.get("semantic-root", &snapshot.identity).is_none() || !store.query_pages_retained(&pages)
-        || !store.query_locator_retained(&snapshot.identity, selector, &root) {
+    // print an identity until its complete container and locator were retained.
+    if !store.query_container_retained(&snapshot.identity, snapshot.total_bytes)
+        || !store.query_locator_retained(&snapshot.identity, selector, &snapshot.root) {
         store.invalidate_query_snapshot(&snapshot.identity, selector);
         return Err("E_QUERY_INDEX store refused complete snapshot publication; increase --store-bytes or retry".to_string());
     }
@@ -175,6 +161,11 @@ pub fn open<Q: store::QueryAccess>(store: &mut Q, selector: &str, requested: &Op
         None => store.query_latest(selector),
     }.ok_or("E_QUERY_SNAPSHOT no authenticated snapshot; build with --index and this store first")?;
     let snapshot = decode_snapshot(&bytes).ok_or("E_QUERY_SNAPSHOT invalid authenticated snapshot record")?;
+    if requested.is_none() {
+        let actual = store.query_root(&snapshot.identity)
+            .ok_or("E_QUERY_SNAPSHOT latest has no complete authenticated container")?;
+        if actual != bytes { return Err("E_QUERY_SNAPSHOT latest disagrees with its container".to_string()); }
+    }
     if snapshot.producer != store.query_producer() {
         return Err("E_QUERY_SNAPSHOT snapshot producer does not match authenticated provenance".to_string());
     }
@@ -198,34 +189,40 @@ pub struct Reader {
 }
 impl Reader {
     pub fn new(snapshot: Snapshot) -> Self { Self { snapshot, pages: BTreeMap::new(), fact_pages: BTreeMap::new(), reads: 0usize } }
-    fn node<Q: store::QueryAccess>(&mut self, store: &mut Q, identity: &str) -> Result<Vec<u8>, String> {
-        if let Some(bytes) = self.pages.get(&identity.to_string()) { return Ok(bytes.clone()); }
-        let bytes = match store.query_page(identity) {
+    fn node<Q: store::QueryAccess>(&mut self, store: &mut Q, extent: &store::QueryExtent) -> Result<Vec<u8>, String> {
+        if !extent.valid(self.snapshot.total_bytes, self.snapshot.total_bytes) {
+            return Err("E_QUERY_INDEX node extent is outside its authenticated container".to_string());
+        }
+        let key = extent.cache_key();
+        if let Some(bytes) = self.pages.get(&key) { return Ok(bytes.clone()); }
+        let bytes = match store.query_node(&self.snapshot.identity, extent) {
             Some(bytes) => bytes,
             None => {
                 store.invalidate_query_snapshot(&self.snapshot.identity, &self.snapshot.selector);
-                return Err("E_QUERY_INDEX page is missing or unauthenticated; rebuild the index".to_string());
+                return Err("E_QUERY_INDEX node is missing or unauthenticated; rebuild the index".to_string());
             }
         };
-        if bytes.len() > 32768usize || sha256::hex_digest(&bytes) != identity {
+        if bytes.len() < 32usize || bytes.len() > 32768usize
+            || bytes.len().checked_add(90usize) != Some(extent.length)
+            || sha256::hex_digest(&bytes) != extent.digest {
             store.invalidate_query_snapshot(&self.snapshot.identity, &self.snapshot.selector);
-            return Err("E_QUERY_INDEX page does not match its rooted content identity".to_string());
+            return Err("E_QUERY_INDEX node does not match its rooted content identity".to_string());
         }
         self.reads += 1usize;
-        self.pages.insert(identity.to_string(), bytes.clone());
+        self.pages.insert(key, bytes.clone());
         Ok(bytes)
     }
     fn value<Q: store::QueryAccess>(&mut self, store: &mut Q, key: &str) -> Result<Option<Vec<u8>>, String> {
         let hash = sha256::hex_digest(key.as_bytes());
-        let mut identity = self.snapshot.root.clone(); let mut depth = 0usize;
+        let mut extent = self.snapshot.root_extent(); let mut depth = 0usize;
         loop {
-            let bytes = self.node(&mut *store, &identity)?;
+            let bytes = self.node(&mut *store, &extent)?;
             let mut input = store::Reader::new(&bytes);
             let version = input.word().ok_or("E_QUERY_INDEX malformed page")?;
             let kind = input.word().ok_or("E_QUERY_INDEX malformed page")?;
             let level = input.word().ok_or("E_QUERY_INDEX malformed page")?;
             let count = input.word().ok_or("E_QUERY_INDEX malformed page")?;
-            if version != 1usize || level != depth || depth > 64usize || count > 64usize {
+            if version != 3usize || level != depth || depth > 64usize || count > 64usize {
                 return Err("E_QUERY_INDEX invalid page shape".to_string());
             }
             if kind == 0usize {
@@ -246,20 +243,26 @@ impl Reader {
                 if !input.done() { return Err("E_QUERY_INDEX trailing leaf bytes".to_string()); }
                 return Ok(found);
             }
-            if kind != 1usize || depth >= 64usize || count > 16usize { return Err("E_QUERY_INDEX invalid branch".to_string()); }
+            if kind != 1usize || depth >= 64usize || count == 0usize || count > 16usize { return Err("E_QUERY_INDEX invalid branch".to_string()); }
             let mut selected = None; let mut previous = 0usize;
             for index in 0usize..count {
                 let digit = input.word().ok_or("E_QUERY_INDEX malformed branch")?;
-                let child = input.text().ok_or("E_QUERY_INDEX malformed branch")?;
-                if digit > 255usize || !hexadecimal(&child) || (index != 0usize && digit <= previous) {
-                    return Err("E_QUERY_INDEX invalid ordered branch".to_string());
+                let digest = input.text().ok_or("E_QUERY_INDEX malformed branch")?;
+                let offset = input.word().ok_or("E_QUERY_INDEX malformed branch extent")?;
+                let length = input.word().ok_or("E_QUERY_INDEX malformed branch extent")?;
+                let child = store::QueryExtent { digest, offset, length };
+                let byte = digit as u8;
+                if digit > 255usize || !(byte.is_ascii_digit() || (b'a' <= byte && byte <= b'f'))
+                    || (index != 0usize && digit <= previous)
+                    || !child.valid(self.snapshot.total_bytes, extent.offset) {
+                    return Err("E_QUERY_INDEX invalid ordered branch extent".to_string());
                 }
                 previous = digit;
-                if digit as u8 == hash.as_bytes()[depth] { selected = Some(child); }
+                if byte == hash.as_bytes()[depth] { selected = Some(child); }
             }
             if !input.done() { return Err("E_QUERY_INDEX trailing branch bytes".to_string()); }
             let Some(child) = selected else { return Ok(None); };
-            identity = child; depth += 1usize;
+            extent = child; depth += 1usize;
         }
     }
     pub fn page<Q: store::QueryAccess>(&mut self, store: &mut Q, kind: &str, identity: &str, number: usize) -> Result<Option<Page>, String> {
@@ -285,5 +288,11 @@ impl Reader {
         for _ in 0usize..count { lines.push(reader.text().ok_or("E_QUERY_INDEX malformed fact line")?); }
         if !reader.done() { return Err("E_QUERY_INDEX trailing fact bytes".to_string()); }
         Ok(Some(Page { lines, next: if next == !0usize { None } else { Some(next) } }))
+    }
+}
+
+impl Snapshot {
+    fn root_extent(&self) -> store::QueryExtent {
+        store::QueryExtent { digest: self.root.clone(), offset: self.root_offset, length: self.root_length }
     }
 }

@@ -16,6 +16,15 @@ cleanup() {
             tail -12 "$log" >&2
         done
     fi
+    if [[ -n ${LKJSCRIPT_CACHE_IO_EVIDENCE:-} ]]; then
+        mkdir -p "$LKJSCRIPT_CACHE_IO_EVIDENCE"
+        while IFS= read -r -d '' record; do
+            case $(basename "$record") in key|image|expected|body-image|index-image) continue ;; esac
+            if [[ ! -s $record ]] || LC_ALL=C grep -Iq '' "$record"; then
+                cp "$record" "$LKJSCRIPT_CACHE_IO_EVIDENCE/"
+            fi
+        done < <(find "$fixture" -maxdepth 1 -type f -print0)
+    fi
     rm -rf -- "$fixture"
     exit "$status"
 }
@@ -69,11 +78,26 @@ run control build main.lkj --source-dir "$fixture/source" --no-store --inline-li
 cmp "$fixture/body-image" "$fixture/image"
 if cmp -s "$fixture/expected" "$fixture/image"; then echo 'body change left image identical' >&2; exit 1; fi
 find "$fixture/store" -maxdepth 1 -type f ! -name '.budget-lock' -printf '%f\t%s\n' | sort > "$fixture/body.files"
+# A separate tiny indexed store exercises streamed-byte aggregation and the
+# fixed manifest/EOF reconciliation. This is counter validation, not a rung.
+mkdir "$fixture/index-store"
+run indexed build main.lkj --source-dir "$fixture/source" --no-library \
+    --store "$fixture/index-store" --store-key "$fixture/key" --inline-limit 0 \
+    --index --stats -o "$fixture/index-image"
+find "$fixture/index-store" -maxdepth 1 -type f ! -name '.budget-lock' -printf '%f\t%s\n' | sort > "$fixture/indexed.files"
+cat > "$fixture/index-body.json" <<'JSON'
+{"version":1,"operations":[{"op":"replace-body","id":"dependency::answer","source":"{ 42 }"}]}
+JSON
+run index-edit edit main.lkj --source-dir "$fixture/source" --no-library --no-store --store-key "$fixture/key" --request "$fixture/index-body.json"
+run indexed-body build main.lkj --source-dir "$fixture/source" --no-library \
+    --store "$fixture/index-store" --store-key "$fixture/key" --inline-limit 0 \
+    --stats -o "$fixture/index-image"
 perl -MJSON::PP - "$fixture" <<'PERL'
 use strict;
 use warnings;
 my ($fixture) = @ARGV;
 my $header = length("lkjscript-store-2\n") + 8 + 64;
+my $container_nodes = 0;
 my %allowed = map { $_ => 1 } qw(front native check image inputs-image index inputs-index test inputs-test metadata other);
 sub read_rows {
     my ($phase) = @_;
@@ -104,17 +128,21 @@ sub read_rows {
                 $row->{authenticated_payload_bytes} + $header * $row->{authenticated_reads};
             die "write envelope identity\n" unless
                 $row->{published_envelope_bytes} ==
-                $row->{published_payload_bytes} + $header * $row->{published};
+                $row->{published_payload_bytes} + $header * ($row->{published} +
+                    (($phase eq 'indexed' && $category eq 'index') ? $container_nodes : 0));
             $rows{$category} = $row;
         } else { die "unexpected diagnostic $_"; }
     }
     die "missing stats, summary or rows\n" unless $stats && $summary && keys %rows;
     my $sum = 0;
     for my $row (values %rows) {
-        $sum += $row->{$_} for qw(read_ns pack_decode_ns pack_retain_ns seal_ns pack_reseal_ns publish_ns prepare_ns metadata_ns);
+        $sum += $row->{$_} for qw(read_ns pack_decode_ns pack_retain_ns seal_ns pack_reseal_ns publish_ns prepare_ns metadata_ns stream_write_ns);
     }
     die "phase accounting mismatch $phase\n" unless $sum == $summary->{accounted_ns};
-    die "overlapping stage totals $phase\n" if $sum > $stats->{store_io_ms} * 1_000_000;
+    # Driver publication is nested inside semantic_index; ordinary commands have
+    # no such phase. The Store counters remain mutually exclusive in both cases.
+    my $driver_store_phases = $stats->{store_io_ms} + ($stats->{semantic_index_ms} // 0);
+    die "overlapping stage totals $phase\n" if $sum > $driver_store_phases * 1_000_000;
     return (\%rows, $stats);
 }
 sub category {
@@ -168,5 +196,29 @@ for my $category (keys %$cold) {
     $published += $cold->{$category}{published} unless $category eq 'metadata';
 }
 die "legacy write count changed\n" unless $published == $cold_stats->{store_writes};
-print "cache I/O: exact cold envelope bytes, warm reads, pack loads/reseal, disjoint durations and quiet default agree\n";
+my @containers = glob("$fixture/index-store/semantic-container-v3-*");
+die "one indexed container expected\n" unless @containers == 1;
+open my $container, '<:raw', $containers[0] or die $!;
+read($container, my $front, 490) == 490 or die "front framing\n";
+die "manifest payload size\n" unless unpack('Q<', substr($front, 18, 8)) == 400;
+my $total = unpack('Q<', substr($front, 482, 8));
+die "container extent\n" unless -s $containers[0] == $total;
+my $at = 490;
+while ($at < $total) {
+    read($container, my $node, 90) == 90 or die "node header\n";
+    my $n = unpack('Q<', substr($node, 18, 8));
+    die "node extent\n" unless $n >= 32 && $n <= 32768 && $n + 90 <= $total - $at;
+    seek($container, $n, 1) or die "node seek\n";
+    $at += $n + 90; $container_nodes++;
+}
+die "node count\n" unless $at == $total && $container_nodes > 0;
+my ($indexed) = read_rows('indexed');
+die "stream write bytes\n" unless $indexed->{index}{stream_completed_write_bytes} == $total + 490;
+die "stream duration missing\n" unless exists $indexed->{index}{stream_write_ns};
+my ($indexed_body) = read_rows('indexed-body');
+my $metadata = $indexed_body->{metadata};
+die "container accounting probes\n" unless $metadata->{budget_container_authenticated} == 1
+    && $metadata->{budget_container_extent_checks} == 1 && $metadata->{budget_manifest_bytes} == 400;
+die "header counter framing\n" unless $metadata->{budget_header_bytes} % 90 == 0;
+print "cache I/O: ordinary byte identities, streamed container bytes, one fixed manifest/EOF probe, disjoint durations and quiet default agree\n";
 PERL

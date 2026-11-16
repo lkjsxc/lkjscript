@@ -48,7 +48,7 @@ fn start(options: &Options) -> Vec<Work> {
     state
 }
 fn identity(snapshot: &str, options: &Options) -> String {
-    let mut bytes = b"lkjscript-semantic-query-2"[..].to_vec();
+    let mut bytes = b"lkjscript-semantic-query-3"[..].to_vec();
     store::push_bytes(&mut bytes, snapshot.as_bytes());
     store::push_bytes(&mut bytes, options.kind.as_bytes()); store::push_bytes(&mut bytes, options.identity.as_bytes());
     store::push_word(&mut bytes, options.depth);
@@ -56,7 +56,7 @@ fn identity(snapshot: &str, options: &Options) -> String {
 }
 fn encode(state: &[Work]) -> Vec<u8> {
     let mut bytes = Vec::new();
-    store::push_word(&mut bytes, 2usize); store::push_word(&mut bytes, state.len());
+    store::push_word(&mut bytes, 3usize); store::push_word(&mut bytes, state.len());
     for item in state {
         store::push_bytes(&mut bytes, item.kind.as_bytes()); store::push_bytes(&mut bytes, item.identity.as_bytes());
         store::push_word(&mut bytes, item.depth); store::push_word(&mut bytes, item.page); store::push_word(&mut bytes, item.offset);
@@ -65,7 +65,7 @@ fn encode(state: &[Work]) -> Vec<u8> {
 }
 fn decode(bytes: &[u8]) -> Option<Vec<Work>> {
     let mut reader = store::Reader::new(bytes);
-    if reader.word()? != 2usize { return None; }
+    if reader.word()? != 3usize { return None; }
     let count = reader.word()?;
     if count > bytes.len() / 40usize { return None; }
     let mut result = Vec::new();
@@ -117,7 +117,7 @@ pub fn run<Q: store::QueryAccess>(store: &mut Q, selector: &str, options: &Optio
         None => start(options),
     };
     let mut output = semantic_facts::fact(&options.identity, "protocol", "query",
-        &format!("version=2 producer={} validation=authenticated-producing-compiler current-check=not-performed snapshot={} source={} checked-ir={} kind={} depth={} freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection={}",
+        &format!("version=3 producer={} validation=authenticated-producing-compiler current-check=not-performed snapshot={} source={} checked-ir={} kind={} depth={} freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection={}",
             snapshot.producer, snapshot.identity, snapshot.source, snapshot.checked_ir, options.kind, options.depth,
             if options.snapshot.is_some() { "explicit" } else { "stored-pointer" }));
     output.push('\n');

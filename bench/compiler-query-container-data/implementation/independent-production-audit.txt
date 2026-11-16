@@ -1,0 +1,11 @@
+PASS baseline=8f28f9bf3741f684117fbe05575765f1d0598b34 tracked_lkj=1206 git_blobs_verified=1206
+PASS request2_refusal_unchanged=1206 request3_to_request4_chain=1206
+PASS request3_operations=61 changed_files=4 requested_source_fragments_present=60
+PASS request4_operations=1 changed_files=1 intermediate_reconstructed_from_final=true
+PASS apply_file_hashes=5 final_source_hashes=4 retained_src_added_deleted_lines=802
+src/driver.lkj +2 -4
+src/semantic_query.lkj +4 -4
+src/semantic_store.lkj +63 -54
+src/store.lkj +595 -76
+SCOPE exact manifests, requested replacement bytes, transaction file proofs and line count; no fresh compiler rerun.
+AUDIT PREDECESSOR compiler-v960 refused at Perl compile time before reading evidence; corrected lexical newline declaration only.
