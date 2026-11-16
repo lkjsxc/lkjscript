@@ -1,0 +1,17 @@
+25	0	bench/compiler-generated-source-data/focused-1/original.lkj
+25	0	bench/compiler-generated-source-data/focused-2/original.lkj
+25	0	bench/compiler-generated-source-data/focused-3/original.lkj
+25	0	bench/compiler-generated-source-data/focused-4/original.lkj
+25	0	bench/compiler-generated-source-data/focused-5/original.lkj
+28	0	bench/compiler-generated-source-data/focused-6/original.lkj
+53	0	bench/compiler-generated-source-data/focused-7/contracts-source.lkj
+28	0	bench/compiler-generated-source-data/focused-7/original.lkj
+55	0	bench/compiler-generated-source-data/focused-8/contracts-source.lkj
+28	0	bench/compiler-generated-source-data/focused-8/original.lkj
+93	0	bench/compiler-generated-source-data/focused-9/contracts-source.lkj
+28	0	bench/compiler-generated-source-data/focused-9/original.lkj
+128	7	src/semantic.lkj
+271	0	src/semantic/origins.lkj
+46	8	src/semantic_facts.lkj
+19	0	src/structure_edit.lkj
+3	2	src/structure_replay.lkj
