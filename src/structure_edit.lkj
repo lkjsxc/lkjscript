@@ -26,10 +26,16 @@ pub struct Patch {
     pub end: usize,
     pub replacement: String,
 }
+
+#[derive(Clone)]
+pub enum PreviousText {
+    Absent,
+    Present(Vec<u8>),
+}
 #[derive(Clone)]
 pub struct Change {
     pub file: String,
-    pub before: Vec<u8>,
+    pub before: PreviousText,
     pub after: Vec<u8>,
 }
 pub struct Draft {
@@ -189,7 +195,7 @@ fn finish(inputs: &[(String, Vec<u8>)], patches: Vec<Patch>) -> Result<Draft, St
             if !current.is_empty() {
                 let original = input(inputs, &current)?;
                 output.extend_from_slice(&original[cursor..]);
-                changes.push(Change { file: current.clone(), before: original.to_vec(), after: output });
+                changes.push(Change { file: current.clone(), before: PreviousText::Present(original.to_vec()), after: output });
                 output = Vec::new();
             }
             current = value.file.clone();
@@ -208,7 +214,7 @@ fn finish(inputs: &[(String, Vec<u8>)], patches: Vec<Patch>) -> Result<Draft, St
     if !current.is_empty() {
         let original = input(inputs, &current)?;
         output.extend_from_slice(&original[cursor..]);
-        changes.push(Change { file: current, before: original.to_vec(), after: output });
+        changes.push(Change { file: current, before: PreviousText::Present(original.to_vec()), after: output });
     }
     let mut names = Vec::new();
     for identity in identities { names.push(identity); }
@@ -288,8 +294,12 @@ pub fn report(draft: &Draft) -> String {
         out.push_str(&format!("{} level=source-claim operation-target\n", semantic::quote(identity)));
     }
     for change in &draft.changes {
+        let before = match &change.before {
+            PreviousText::Absent => "absent".to_string(),
+            PreviousText::Present(bytes) => sha256::hex_digest(bytes),
+        };
         out.push_str(&format!("{} level=source-claim file before={} after={}\n", semantic::quote(&change.file),
-            sha256::hex_digest(&change.before), sha256::hex_digest(&change.after)));
+            before, sha256::hex_digest(&change.after)));
     }
     out.push_str(&format!("transaction sites={} files={} identities={}\n", draft.patches.len(), draft.changes.len(), draft.identities.len()));
     out
