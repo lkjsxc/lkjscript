@@ -100,7 +100,8 @@
    "verification" : {
       "build_command" : "target/lkjscript build tools/toolchain-test.lkj --source-dir . --library-dir library --no-store -o TEMP/toolchain-after",
       "build_status" : 0,
-      "build_stdout" : "build_stderr",
+      "build_stdout" : "",
+      "build_stderr" : "",
       "case_requests_rerun" : 96,
       "case_requests_reused" : 0,
       "command" : "LKJSCRIPT_GATE_JOBS=1 timeout --kill-after=10s 600s TEMP/toolchain-after target/lkjscript TEMP/work --library-dir library",

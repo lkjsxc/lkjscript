@@ -86,6 +86,28 @@ The corpus uses supported format syntax. No full Rust compatibility, generic
 collection destination, Cargo loader, macro expansion or package authority system
 is claimed by this first route.
 
+### Integrated gate and operation adoption
+
+The first integrated attempt exposed one pre-existing custom-count fixture:
+ordinary IteratorExt count made its repaired call genuinely ambiguous. The
+[checked fixture repair](../tests/fixtures/iterator_count_integration.operation.json)
+preserves that call, requires the exact two-implementation refusal on both engines,
+and executes an explicit Count-bound version. Method resolution is unchanged.
+
+Source `12f11d8ae` passes the four-worker gate in **341.496 s**, load
+5.09→5.13; GNU-time peak RSS is **1,396,456 KiB** for the largest process.
+It reuses 4,551 authenticated case results, runs 912 fresh requests and all host
+suites, and finishes 128 IR mutants with zero findings. Bootstrap takes 80.303 s,
+load 5.09→4.66, and preserves the 32,594,327-byte fixed point. The seed is unchanged.
+The initial failed gate is not counted as a complete pass; publication CI is next.
+
+Independent adoption audit covers every changed `.lkj` line in the two commits:
+the first route credits 382/408, and the fixture repair 31/33, for **413/441
+(93.65%) through 21 successful operations**. Four scaffold lines, 22 handwritten
+diagnostic lines and two comment-change lines are uncredited. Counts are added
+plus deleted lines per commit, not net tree size; source normalization is still
+a port cost even when the checked operation publishes it.
+
 ## Three-class cohort
 
 The first route is complete before this cohort begins. Selection now requires

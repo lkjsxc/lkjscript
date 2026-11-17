@@ -250,5 +250,47 @@
       "rust-tests-opt3.out" : "\nrunning 8 tests\ntest case_sensitive ... ok\ntest empty_both ... ok\ntest empty_left ... ok\ntest empty_right ... ok\ntest equal_long ... ok\ntest ordering ... ok\ntest should_work ... ok\ntest unicode ... ok\n\ntest result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s\n\n",
       "with-library-check.err" : "/home/coder/workspace/lkjscript-specimens/projections/levenshtein/lib.lkj:32:34: E_UNSUPPORTED this expression form is not implemented yet\nlib.lkj:1:1: E_BLOCKED remaining semantic analysis: failed bodies are blocked; independent typed bodies were constructed and checked\n"
    },
-   "schema" : 1
+   "schema" : 1,
+  "integrated_gate": {
+    "source_commit": "12f11d8ae",
+    "command": "LKJSCRIPT_GATE_JOBS=4 bash tools/check.sh",
+    "exit_status": 0,
+    "gate_seconds": 341.496,
+    "load_before": "5.09",
+    "load_after": "5.13",
+    "peak_process_rss_kib": 1396456,
+    "cases_reused": 4551,
+    "cases_rerun": 912,
+    "host_suites": "rerun",
+    "bootstrap": {
+      "seconds": 80.303,
+      "load_before": "5.09",
+      "load_after": "4.66",
+      "fixed_point_bytes": 32594327,
+      "compiler_sha256": "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+      "seed_changed": false
+    },
+    "mutation": {
+      "seed": 1701,
+      "count": 128,
+      "rejected": 104,
+      "values": 22,
+      "traps": 1,
+      "nonterminating": 1,
+      "resources": 0,
+      "findings": 0,
+      "workers": 4
+    },
+    "adoption": {
+      "changed_language_lines": 441,
+      "credited_language_lines": 413,
+      "successful_operations": 21,
+      "audit": "Independent read-only reconstruction of committed projections, library operations, cleanup accounting and complete toolchain replacement."
+    },
+    "first_attempt": {
+      "result": "failed before final mutation phase",
+      "cause": "Pre-existing custom-count fixture became correctly ambiguous after standard IteratorExt::count addition",
+      "counterexample_receipt": "tests/fixtures/iterator_count_integration.operation.json"
+    }
+  }
 }
