@@ -101,7 +101,7 @@ fn unhex(text: &str) -> Option<Vec<u8>> {
 pub fn run<Q: store::QueryAccess>(store: &mut Q, selector: &str, options: &Options) -> Result<String, String> {
     if !matches!(options.kind.as_str(), "outline" | "item" | "text" | "slice" | "signature" | "meta" | "references" |
         "uses" | "callers" | "callees" | "impls" | "instances" | "type" | "layout" | "authority" | "dependents") {
-        return Err("E_QUERY_KIND expected outline|item|text|slice|uses|callers|callees|impls|instances|type|layout|authority|dependents".to_string());
+        return Err("E_QUERY_KIND expected outline|signature|meta|text|item|slice|references|uses|callers|callees|impls|instances|type|layout|authority|dependents; see lkjscript query --help".to_string());
     }
     if options.limit == 0usize || options.bytes == 0usize || options.depth == 0usize {
         return Err("E_QUERY_BOUND --limit, --bytes and --depth must be positive".to_string());
@@ -135,7 +135,7 @@ pub fn run<Q: store::QueryAccess>(store: &mut Q, selector: &str, options: &Optio
             None => {
                 if hidden { continue; }
                 if reader.page(&mut *store, "meta", &current.identity, 0usize)?.is_none() {
-                    return Err(format!("E_QUERY_ID no {} fact for {}", current.kind, semantic::quote(&current.identity)));
+                    return Err(format!("E_QUERY_ID no {} fact for {}; use --kind outline --id crate and copy a returned identity; see lkjscript query --help", current.kind, semantic::quote(&current.identity)));
                 }
                 semantic_store::Page { lines: vec![semantic_facts::fact(&current.identity, "protocol", "empty-indexed-result",
                     &format!("kind={} claim=recorded-facts-only", current.kind))], next: None }

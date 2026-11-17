@@ -55,7 +55,11 @@ pub struct Draft {
     pub patches: Vec<Patch>,
 }
 pub(crate) fn error(identity: &str, rule: &str, detail: &str) -> String {
-    format!("{} E_EDIT_{} {}", semantic::quote(identity), rule, detail)
+    let mut message = format!("{} E_EDIT_{} {}", semantic::quote(identity), rule, detail);
+    if rule == "REQUEST" || rule == "VERSION" {
+        message.push_str("\nSee lkjscript edit --help for the JSON request schema and examples.");
+    }
+    message
 }
 fn string(value: &Value, key: &str, required: bool) -> Result<String, String> {
     match value.get(key) {

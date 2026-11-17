@@ -1,0 +1,224 @@
+{
+  "version": 1,
+  "cases": [
+    {
+      "id": 1,
+      "revision": "a52c30464648af9664b17af5998de407bd060a3c",
+      "task": "In retained refactor type annotations, use the resolver's existing intrinsic-name inventory instead of a duplicated spelling list, so ForeignSession, Image, Channel, Worker and ReadRegion are recognized. Preserve conservative source-type shadow refusal.",
+      "paths": [
+        "src/structure_refactor.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 2,
+      "revision": "d4901e46565b07543c3bd3777a0308e2dd2c98a4",
+      "task": "An indexed build may evict its own snapshot when publishing its final memo entries. After those memo writes and before announcing the snapshot, recheck page retention, the authenticated semantic root and its locator. If any was lost, invalidate the snapshot and refuse with E_QUERY_STORE explaining that --store-bytes must increase.",
+      "paths": [
+        "src/driver.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 3,
+      "revision": "cac9d51fc8c744abf2d5ed53d400f49f941b6b5c",
+      "task": "Reject structural edits to embedded library declarations even if a physical include has the same diagnostic path. Track embedded-source origins when loading and clear that tracking between compilations; the transaction must consult it before reusing editable input keys and report E_EDIT_EMBEDDED with the explicit --library-dir remedy.",
+      "paths": [
+        "src/driver.lkj",
+        "src/driver/structure.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 4,
+      "revision": "6c270fd6baf79e1e9b71c2bb2500cd99f617aeda",
+      "task": "Within a semantic query Reader, cache successfully validated decoded pages and authenticated absences by logical kind, identity and page. Keep the snapshot private. Every cache miss must retain the existing authentication/framing/range checks; errors must never be cached and must still invalidate the snapshot.",
+      "paths": [
+        "src/semantic_store.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 5,
+      "revision": "a71ba37024e852babed0165e335ef8cfa17d79bd",
+      "task": "Recover the exact field-label token for borrowed shorthand fields from the parser's recorded prefix, rather than treating the whole borrowed expression as its label. Preserve conservative refusal when exact token identity cannot be shown.",
+      "paths": [
+        "src/semantic/references.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 6,
+      "revision": "a9622bec2143e80b9f3df62e721a0639399c6b09",
+      "task": "Check the absolute foreign-session deadline between already-ready I/O chunks in both the host and emitted native implementations. Preserve their matching timeout/result behavior; readiness must not allow a long stream to evade its deadline.",
+      "paths": [
+        "src/host_network/foreign_session.lkj",
+        "src/native/foreign_session.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 7,
+      "revision": "d654a960cc50e4fad8dccad64f3b7fcad250bd5b",
+      "task": "Recover exact nominal type-reference tokens after borrowed type prefixes by respecting the parser's prefix spans. Cover nested and mutable borrowed forms without claiming ambiguous tokens as exact references.",
+      "paths": [
+        "src/semantic/references.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 8,
+      "revision": "9465e9e094cd59bc88d8dc0338b08922e09c645a",
+      "task": "Record resolved Self record constructors using the resolver's function-owner table and nominal implementation target. Retain exact Self alias-constructor tokens and nominal field labels, preserve generic arguments in missing-type fallback, and prefer existing inferred types. Nested free functions and abstract trait defaults remain unresolved.",
+      "paths": [
+        "src/semantic.lkj",
+        "src/semantic/references.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 9,
+      "revision": "a48d0c709db68ce7ef90d749887f2847239c6738",
+      "task": "Prove narrow lexical binding identities in undemanded library bodies where typed instantiations are absent. Export those resolved sites only where the lexical proof is unambiguous; preserve existing typed reference evidence and conservative unresolved claims.",
+      "paths": [
+        "src/semantic.lkj",
+        "src/semantic/references.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 10,
+      "revision": "20d5f7e98fe4501d441b3ac357733a8a7ba942e7",
+      "task": "Dispatch explicitly pinned structural queries through authenticated QueryReader before Memo construction and executable hashing. Keep current-producer Store behavior for unpinned queries/builds/checks. Mark snapshot_auth separately and zero producer bytes hashed. Reuse an indexed image only while its authenticated locator is retained.",
+      "paths": [
+        "src/driver.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 11,
+      "revision": "6d3185ac24de6101c52f01c3694ef5deeb6fe657",
+      "task": "Expose the existing intrinsic name and intrinsic function spelling inventories through resolver/elaborator helpers so semantic edit guards can use the same inventories as ordinary resolution, without changing which spellings are accepted.",
+      "paths": [
+        "src/elaborate/semantic.lkj",
+        "src/resolve.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 12,
+      "revision": "263f6a8f363ca6dc217ae1d0354e685265c942f9",
+      "task": "Separate the resolver's 42 intrinsic value-type spellings from its 13 builtin predicate/trait names while preserving the same 55-name resolver union. Annotation rendering must use only value types, so an ordinary source type named Data is qualified rather than mistaken for the builtin predicate.",
+      "paths": [
+        "src/resolve.lkj",
+        "src/structure_refactor.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 13,
+      "revision": "896ce05fc40f5c7ae816d84d18ae6abdc2ea8ea3",
+      "task": "Bind semantic snapshots and their query continuations to the exact producing compiler. Include the producer digest in snapshot identity, require the fixed protocol shape, publish locator before latest and verify root/pages/locator after publication. Generalize the reader over QueryAccess and label provenance separately from current checker admission.",
+      "paths": [
+        "src/semantic_query.lkj",
+        "src/semantic_store.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 14,
+      "revision": "498345eeb26d7ca53ff1e02e984549c789001a4f",
+      "task": "Before publishing an edit with an explicit source library, check its undemanded library definitions too. Promote every compared side consistently to check-library while retaining the parsed request, Writer, memo read snapshots and replay's pinned desired tree. Invalid unused library bodies must refuse without publication.",
+      "paths": [
+        "src/driver/structure.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 15,
+      "revision": "1fd442214a197d20a577debe7c37cbf694878f96",
+      "task": "Use declaration-only catalogs for ordinary source replacement, but obtain full reference facts for operations that require them. Add an explicit before anchor for insertions, remove empty indentation left by item removal, canonicalize entry authority keys, and prove checked-meaning preservation for rename subsets.",
+      "paths": [
+        "src/driver/structure.lkj",
+        "src/structure_edit.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 16,
+      "revision": "d884c0fdd7d0a99a5d770d2eb719ad2eb5e85c0d",
+      "task": "Prove namespace roles for semantic source references and retain bindings from grouped self imports. Qualified references must preserve their actual namespace and target, and uncertain forms must stay unresolved instead of being renamed by spelling.",
+      "paths": [
+        "src/semantic/references.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 17,
+      "revision": "f9e8eb6e59a5051b023702c1a0cd111dfc45f47b",
+      "task": "Recognize exact scalar rotate patterns during native instruction selection and emit the matching x86 rotation operations. Canonicalize scalar result handling consistently so the hash workload benefits without changing checked arithmetic behavior.",
+      "paths": [
+        "src/native.lkj",
+        "src/native/scalar.lkj",
+        "src/x86.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 18,
+      "revision": "9e64aa7fb65cf853866386c691d2511aacb0ca63",
+      "task": "Unify source renames through the checked refactor path, prove the checked-meaning-preserving subset of moves, and bound comparison output while sampling useful change categories so one category cannot exhaust the review limit.",
+      "paths": [
+        "src/driver/structure.lkj",
+        "src/meaning.lkj",
+        "src/structure_edit.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 19,
+      "revision": "ab13f54086920041910087a1b44fcf8b0818f2cf",
+      "task": "Resolve qualified and aliased source-reference sites using actual resolver identities and retain expression type evidence needed by semantic operations. Thread that evidence through AST, elaboration, resolver, catalog and syntax, keeping ambiguous source claims explicit.",
+      "paths": [
+        "src/ast.lkj",
+        "src/elaborate/definition_types/semantic.lkj",
+        "src/resolve.lkj",
+        "src/semantic.lkj",
+        "src/semantic/references.lkj",
+        "src/syntax.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    },
+    {
+      "id": 20,
+      "revision": "1d50974fb5bcb72b69c188acbfff2b4bfcafbb06",
+      "task": "Bound structural catalog string validation work and add a declaration-only capture mode. Preserve full reference recording when required, expose the resolver support needed for the cheaper catalog, and have the driver select the appropriate capture instead of always collecting full bodies.",
+      "paths": [
+        "src/driver.lkj",
+        "src/resolve.lkj",
+        "src/semantic.lkj"
+      ],
+      "scope": "complete src/library language changes in this fixed historical revision",
+      "population": "first twenty native-lkj passed rows of bench/compiler-self-history.tsv"
+    }
+  ]
+}

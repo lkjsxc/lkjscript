@@ -114,6 +114,15 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         no_library: false,
         arguments,
     };
+    if out.command == "query" || out.command == "edit" || out.command == "compare" {
+        for value in &values[1usize..] {
+            if value == "--help" || value == "-h" {
+                out.tool_arguments = vec![out.command.clone()];
+                out.command = "--help".to_string();
+                return Ok(out);
+            }
+        }
+    }
     if out.command == "generate" || out.command == "mutate" || out.command == "reduce" || out.command == "mutate-run" || out.command == "edit" || out.command == "compare" {
         out.tool_arguments = values;
         return Ok(out);
@@ -1692,7 +1701,12 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
         return Ok(0);
     }
     if options.command == "--help" || options.command == "-h" {
-        world.stdout().write(usage().as_bytes());
+        if let Some(topic) = options.tool_arguments.first() {
+            world.stdout().write(help::topic(topic.as_str()).as_bytes());
+        } else {
+            world.stdout().write(usage().as_bytes());
+            world.stdout().write(help::summary().as_bytes());
+        }
         return Ok(0);
     }
     if !options.tool_arguments.is_empty() {
@@ -2595,3 +2609,5 @@ fn compile_snapshot(
     }
     select_checked(checked, options, stats, memo)
 }
+
+mod help;
