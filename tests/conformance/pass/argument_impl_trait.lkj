@@ -1,0 +1,22 @@
+// expect: value 42
+// witness: {}
+trait Value { fn get(&self) -> i64; }
+#[derive(Clone)]
+struct First { value: i64 }
+struct Second { value: i64 }
+impl Value for First { fn get(&self) -> i64 { self.value } }
+impl Value for Second { fn get(&self) -> i64 { self.value } }
+fn different(left: impl Value, right: impl Value) -> i64 { left.get() + right.get() }
+fn named<T>(input: impl Value, result: T) -> T { let _ = input.get(); result }
+fn borrowed(input: &impl Value) -> i64 { input.get() }
+fn nested(input: Option<impl Value>) -> i64 {
+    match input { Some(value) => value.get(), None => 0i64 }
+}
+fn cloned(input: impl Value + Clone) -> i64 { input.clone().get() }
+pub fn probe() -> i64 {
+    different(First { value: 7 }, Second { value: 8 })
+        + named::<i64>(First { value: 100 }, 9)
+        + borrowed(&Second { value: 5 })
+        + nested(Some(First { value: 6 }))
+        + cloned(First { value: 7 })
+}

@@ -139,6 +139,7 @@ parallel_step 1 world world_cases
 parallel_step 1 semantic-query timeout --kill-after=10s 600s bash tools/semantic-query-test.sh "$check_binary"
 parallel_step 1 associated-query timeout --kill-after=10s 600s bash tools/associated-query-test.sh "$check_binary"
 parallel_step 1 qualified-paths timeout --kill-after=10s 600s bash tools/qualified-paths-test.sh "$check_binary"
+parallel_step 1 argument-impl-trait timeout --kill-after=10s 600s bash tools/argument-impl-trait-test.sh "$check_binary"
 parallel_step 1 query-signature timeout --kill-after=10s 600s bash tools/query-signature-test.sh "$check_binary"
 parallel_step 1 generated-source timeout --kill-after=10s 600s bash tools/generated-source-test.sh "$check_binary"
 parallel_step 1 query-store timeout --kill-after=10s 600s bash tools/query-store-test.sh "$check_binary"

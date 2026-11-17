@@ -3907,7 +3907,7 @@ impl Builder<'_, '_> {
         let mut sub = initial_sub;
         let mut generic = Vec::new();
         for index in 0..target.generics.len() {
-            if !target.generics[index].lifetime {
+            if !target.generics[index].lifetime && !target.generics[index].implicit {
                 generic.push(index);
             }
         }

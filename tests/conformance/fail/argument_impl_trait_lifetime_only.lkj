@@ -1,0 +1,4 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+fn invalid<'a>(input: impl 'a) { let _ = input; }
+pub fn probe() -> i64 { 42i64 }

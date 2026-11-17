@@ -7,34 +7,74 @@
       },
       "new_independent_primary_sites" : {
          "dom" : 1,
-         "nom" : 2,
+         "nom" : 4,
          "sozu" : 0
       },
       "nom_dom_primary_sites" : {
-         "after" : 183,
+         "after" : 102,
          "before" : 244
       },
+      "observed_old_target_diagnostic_sites_not_reproduced" : {
+         "dom" : 17,
+         "nom" : 129,
+         "total" : 146
+      },
       "removed_old_target_diagnostic_identities" : {
-         "dom" : 12,
-         "nom" : 51,
-         "total" : 63
+         "dom" : 17,
+         "nom" : 129,
+         "total" : 146
       },
       "removed_old_target_sites" : {
-         "dom" : 12,
+         "dom" : 14,
          "nom" : 51,
-         "total" : 63
+         "total" : 65
       },
       "source_semantic_edits" : 0,
-      "target_site_interpretation" : "A changed diagnostic retaining the same reviewed cause at an original target coordinate remains an observed target site; message disappearance alone earns no form-removal credit."
+      "supported_original_target_sites" : {
+         "dom" : 14,
+         "nom" : 51,
+         "total" : 65
+      },
+      "target_site_interpretation" : "All 146 original target diagnostic identities are absent from these root observations. This APIT-only stage does not support RPIT: its parser consumes opaque result syntax, while earlier unrelated parse refusals prevent the later resolver from emitting its RPIT refusal. Source-form support credit is 65 sites: prior equality/qualified 63 plus two verified DOM argument occurrences. The 81 original result occurrences remain unsupported; whole-root admission remains zero.",
+      "unimplemented_original_result_position_sites" : {
+         "dom" : 3,
+         "nom" : 78,
+         "total" : 81
+      }
    },
+   "argument_position_original_sites" : [
+      {
+         "column" : 31,
+         "function" : "update_nodes",
+         "line" : 821,
+         "package" : "dom",
+         "path" : "src/selection.rs",
+         "source_form" : "f: impl Fn(&mut TreeNode)"
+      },
+      {
+         "column" : 37,
+         "function" : "update_nodes_by_id",
+         "line" : 831,
+         "package" : "dom",
+         "path" : "src/selection.rs",
+         "source_form" : "f: impl Fn(&mut Vec<TreeNode>, &NodeId)"
+      }
+   ],
    "baseline_compiler_sha256" : "eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f",
-   "compiler_sha256" : "92c4caac762373609bb19e8eaa38559de060d59c41e9197a9ca59413e1690bde",
+   "compiler_sha256" : "210181363677c5d877fd63b9b52f2591f402c907ff7e0a19d2c22ff1471178b3",
+   "form_support" : {
+      "argument_impl_trait" : "supported",
+      "associated_type_equality" : "supported",
+      "ordinary_impl_trait_form_complete" : false,
+      "qualified_associated_paths" : "supported",
+      "return_position_impl_trait" : "not_implemented_in_this_stage"
+   },
    "interpretation" : [
+      "APIT-only stage: all 146 old target diagnostics are not observed, but the 81 original result-position occurrences remain unsupported. Support credit is 65 original source forms, including two verified argument occurrences; no whole function, module, or crate admission is inferred.",
       "Original source bytes, projection identities and the selected library inventory remain unchanged. Original-suffix refusals are compared byte-for-byte.",
       "A vanished diagnostic is not proof that the surrounding program admits. New independent sites, changed diagnostic identities at old coordinates, and recovery artifacts are reported separately.",
       "The three original classification JSON files remain the immutable baseline; this file records the current frontier and exact deltas.",
-      "Source/frontend edits receive no operation-adoption credit from these observations.",
-      "The verify where predicate at src/combinator/mod.rs:503:7 is current same-function recovery after rejected impl Trait; it may become an independent ?Sized refusal when opaque-return parsing proceeds. No sizedness support or module admission is inferred."
+      "Source/frontend edits receive no operation-adoption credit from these observations."
    ],
    "kind" : "current_foreign_program_refusal_frontier",
    "rerank_payload_fingerprint" : "sha256(JSON::PP canonical ascii encode(rerank without inputs))",
@@ -43,19 +83,19 @@
       "dom" : {
          "accounting" : {
             "baseline_primary_sites" : 95,
-            "current_primary_sites" : 83,
+            "current_primary_sites" : 78,
             "new_unclassified_rows" : 0,
             "prior_unclassified_rows" : 0,
             "raw_by_code" : {
-               "E_BLOCKED" : 87,
+               "E_BLOCKED" : 79,
                "E_CAPABILITY" : 10,
                "E_PARSE" : 8,
-               "E_UNSUPPORTED" : 50,
+               "E_UNSUPPORTED" : 42,
                "E_UNSUPPORTED_MACRO" : 18
             },
-            "raw_projected_diagnostic_rows" : 173,
-            "recovery_rows_excluded" : 3,
-            "upstream_default_candidate_sites" : 76,
+            "raw_projected_diagnostic_rows" : 157,
+            "recovery_rows_excluded" : 0,
+            "upstream_default_candidate_sites" : 71,
             "upstream_test_only_sites" : 7
          },
          "baseline_classification" : {
@@ -110,26 +150,26 @@
                "entry_sha256" : "81441eac6c5af9fe4aa7eea33f2f11ebad8a6d309a0f0fb80a17c9d2174f5779",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5428,
+               "peak_rss_kib" : 5612,
                "route" : "original_suffix",
                "stderr_sha256" : "1170c98833b245d8181dc2850bcfc1d36d34bc83792f33ec55fd3787b0b748e1",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.002373
+               "wall_seconds" : 0.001912
             },
             {
                "entry_sha256" : "81441eac6c5af9fe4aa7eea33f2f11ebad8a6d309a0f0fb80a17c9d2174f5779",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 35080,
+               "peak_rss_kib" : 40936,
                "route" : "suffix_projection",
-               "stderr_sha256" : "0d390d815c0a8c83a16a03b1760c371692a425758ff33b0eb6835c3e80ad5d2d",
+               "stderr_sha256" : "61ed936d543e1c1d818d069274491481b42f1f6044c9424bce173ba20af67d5a",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.174094
+               "wall_seconds" : 0.159815
             }
          ],
-         "observed_at_utc" : "2026-11-17T19:07:11Z",
+         "observed_at_utc" : "2026-11-17T19:35:51Z",
          "old_site_counts" : [
             {
                "baseline_rank" : 6,
@@ -215,9 +255,9 @@
                "baseline_rank" : 5,
                "baseline_sites" : 5,
                "changed_diagnostic_sites" : 0,
-               "exact_surviving_sites" : 5,
+               "exact_surviving_sites" : 0,
                "id" : "opaque_impl_trait",
-               "not_observed_sites" : 0,
+               "not_observed_sites" : 5,
                "owner" : "language",
                "title" : "impl Trait argument/return types"
             },
@@ -301,8 +341,8 @@
             "version" : "0.28.0"
          },
          "probe_receipt" : {
-            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-qualified-92c4caac76237360.json",
-            "sha256" : "ac368a8205953f832a51ddbd7a2513fd0d799e491133d790ee448d9ad42bbf57"
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-apit-210181363677c5d8.json",
+            "sha256" : "1fcff3b795b8dea08878c54f37645f3317855a28520fe9391f7c79f775064a6f"
          },
          "projection_manifest_sha256" : "7eef776218daecb22822d613a609a00039600c34cea05a6047216111148272c9",
          "ranked_causes" : [
@@ -366,18 +406,6 @@
                "owner" : "refused_by_design",
                "site_count" : 9,
                "title" : "Shared interior mutation and borrow guards"
-            },
-            {
-               "affected_files" : [
-                  "src/node/node_ref.rs",
-                  "src/selection.rs"
-               ],
-               "baseline_rank" : 5,
-               "id" : "opaque_impl_trait",
-               "overlapping_file_physical_lines" : 1784,
-               "owner" : "language",
-               "site_count" : 5,
-               "title" : "impl Trait argument/return types"
             },
             {
                "affected_files" : [
@@ -470,32 +498,33 @@
             }
          ],
          "removed_previously_unclassified_sites" : [],
-         "rerank_payload_sha256" : "7574db480a4af92f6865f1dd055e367324b62df00bf4e0db22074eef0004fd34",
+         "rerank_payload_sha256" : "a510ece0915b3be9c082d143537e391bc1d23db5c705e03639afdda89a7210e8",
          "review" : {
             "changed_primary_diagnostics" : 1,
             "changed_recovery_rows" : 0,
             "new_independent_primary_sites" : 1,
-            "path" : "docs/real-programs-qualified-dom-review.json",
+            "path" : "docs/real-programs-apit-dom-review.json",
             "reviewed_primary_sites" : 2,
-            "sha256" : "b5bcddb0fa33a346b41e2f1d649e9cb8f315da927ed7f5cc2b1dd914eaa9e0ec",
-            "unchanged_recovery_rows" : 3
+            "sha256" : "a654532fa09bc26a1ae4612b951ca847b0c17e5ab9214cd7483f8b9a45017100",
+            "unchanged_recovery_rows" : 0
          }
       },
       "nom" : {
          "accounting" : {
             "baseline_primary_sites" : 149,
-            "current_primary_sites" : 100,
+            "current_primary_sites" : 24,
             "new_unclassified_rows" : 0,
             "prior_unclassified_rows" : 0,
             "raw_by_code" : {
-               "E_BLOCKED" : 206,
+               "E_BLOCKED" : 25,
                "E_LEX" : 8,
-               "E_PARSE" : 4,
-               "E_UNSUPPORTED" : 193
+               "E_PARSE" : 3,
+               "E_UNSUPPORTED" : 11,
+               "E_UNSUPPORTED_MACRO" : 2
             },
-            "raw_projected_diagnostic_rows" : 411,
-            "recovery_rows_excluded" : 105,
-            "upstream_default_candidate_sites" : 96,
+            "raw_projected_diagnostic_rows" : 49,
+            "recovery_rows_excluded" : 0,
+            "upstream_default_candidate_sites" : 20,
             "upstream_default_inactive_sites" : 4
          },
          "baseline_classification" : {
@@ -509,21 +538,21 @@
          "library_manifest_sha256" : "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
          "new_primary_sites" : [
             "path",
-            "src/multi/mod.rs",
+            "src/combinator/mod.rs",
             "line",
-            961,
+            503,
             "column",
-            6,
+            7,
             "code",
-            "E_UNSUPPORTED",
+            "E_PARSE",
             "message",
-            "unsupported construct: impl",
+            "expected an identifier",
             "cause",
-            "return_position_impl_trait",
+            "maybe_sized_bounds",
             "file_sha256",
-            "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+            "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
             "reason",
-            "The fill function directly returns impl Parser<I, Output = (), Error = E> + lifetime. Its preceding parameter contains a qualified associated projection; progression through that parameter now exposes the genuine opaque-result refusal at this later source occurrence.",
+            "The parser now consumes the impl Trait result before reading the real verify function where clause. The earlier 498:6 unsupported-impl parent is absent. O2: ?Sized at503:7 is therefore an independently observed function-bound syntax refusal at this stage; its qualified-stage recovery classification is explicitly superseded. RPIT semantics remain unsupported later in resolution, but that later refusal is not a parser recovery parent.",
             "relationship_to_baseline",
             "new_independent_coordinate",
             "path",
@@ -543,6 +572,42 @@
             "reason",
             "The original where clause of the Parser implementation for Verify explicitly contains O2: ?Sized. The earlier ?Sized diagnostic at the separate Verify struct declaration (line 513) is not a recovery parent for this independently declared implementation bound.",
             "relationship_to_baseline",
+            "new_independent_coordinate",
+            "path",
+            "src/bits/complete.rs",
+            "line",
+            100,
+            "column",
+            24,
+            "code",
+            "E_UNSUPPORTED_MACRO",
+            "message",
+            "unsupported macro: error_position!",
+            "cause",
+            "error_position_macro_expansion",
+            "file_sha256",
+            "467122d4056c0e2655fd4ba087f1ee5042fb86453b662ae7ebe2e42c0066a09a",
+            "reason",
+            "The complete::tag closure body is now parsed as an ordinary function body. Its error branch contains the original error_position!(inp, ErrorKind::TagBits) invocation. This is a dependency-provided declarative macro call, not parser recovery from the previously rejected opaque return.",
+            "relationship_to_baseline",
+            "new_independent_coordinate",
+            "path",
+            "src/bits/streaming.rs",
+            "line",
+            76,
+            "column",
+            24,
+            "code",
+            "E_UNSUPPORTED_MACRO",
+            "message",
+            "unsupported macro: error_position!",
+            "cause",
+            "error_position_macro_expansion",
+            "file_sha256",
+            "dfba58d569c1ab89f6cb9e33153775ed19d45385e39d5047eb717c44b07e3cc0",
+            "reason",
+            "The streaming::tag closure body is now parsed as an ordinary function body. Its error branch contains the original error_position!(inp, ErrorKind::TagBits) invocation. This independently located macro call is not parser recovery from an opaque return.",
+            "relationship_to_baseline",
             "new_independent_coordinate"
          ],
          "observations" : [
@@ -550,26 +615,26 @@
                "entry_sha256" : "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5428,
+               "peak_rss_kib" : 5612,
                "route" : "original_suffix",
                "stderr_sha256" : "1170c98833b245d8181dc2850bcfc1d36d34bc83792f33ec55fd3787b0b748e1",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.002779
+               "wall_seconds" : 0.001292
             },
             {
                "entry_sha256" : "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 35284,
+               "peak_rss_kib" : 39020,
                "route" : "suffix_projection",
-               "stderr_sha256" : "c8ddbb70bfd49a5ef5998e6f2334d6de8690311ffc0d2b91a76c14a5f0aa5be1",
+               "stderr_sha256" : "aad5407b571b5a9266ef45e0271da9b4945b9dda65e6b45d3c296dae84814dee",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.229299
+               "wall_seconds" : 0.136124
             }
          ],
-         "observed_at_utc" : "2026-11-17T19:07:08Z",
+         "observed_at_utc" : "2026-11-17T19:35:50Z",
          "old_site_counts" : [
             {
                "baseline_rank" : 4,
@@ -635,9 +700,9 @@
                "baseline_rank" : 2,
                "baseline_sites" : 78,
                "changed_diagnostic_sites" : 0,
-               "exact_surviving_sites" : 78,
+               "exact_surviving_sites" : 0,
                "id" : "return_position_impl_trait",
-               "not_observed_sites" : 0,
+               "not_observed_sites" : 78,
                "owner" : "Language / compiler source lowering",
                "title" : "Opaque impl Trait return types"
             },
@@ -661,30 +726,11 @@
             "version" : "8.0.0"
          },
          "probe_receipt" : {
-            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-qualified-92c4caac76237360.json",
-            "sha256" : "035964f1cfdd5e6fb7f05e051611950549709b41837a805b47d170d82742cebd"
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-apit-210181363677c5d8.json",
+            "sha256" : "a446f60ee3692e75573ba0db24f36ed3bbf73ec4b511f27e53a24abc83a31376"
          },
          "projection_manifest_sha256" : "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
          "ranked_causes" : [
-            {
-               "affected_files" : [
-                  "src/bits/complete.rs",
-                  "src/bits/mod.rs",
-                  "src/bits/streaming.rs",
-                  "src/bytes/complete.rs",
-                  "src/bytes/mod.rs",
-                  "src/bytes/streaming.rs",
-                  "src/character/mod.rs",
-                  "src/combinator/mod.rs",
-                  "src/multi/mod.rs"
-               ],
-               "baseline_rank" : 2,
-               "id" : "return_position_impl_trait",
-               "overlapping_file_physical_lines" : 5964,
-               "owner" : "Language / compiler source lowering",
-               "site_count" : 79,
-               "title" : "Opaque impl Trait return types"
-            },
             {
                "affected_files" : [
                   "src/branch/mod.rs",
@@ -733,8 +779,19 @@
                "id" : "maybe_sized_bounds",
                "overlapping_file_physical_lines" : 1044,
                "owner" : "Language / compiler generic bounds",
-               "site_count" : 2,
+               "site_count" : 3,
                "title" : "Relaxed ?Sized bound syntax"
+            },
+            {
+               "affected_files" : [
+                  "src/bits/complete.rs",
+                  "src/bits/streaming.rs"
+               ],
+               "id" : "error_position_macro_expansion",
+               "overlapping_file_physical_lines" : 365,
+               "owner" : "Compiler / checked source producer",
+               "site_count" : 2,
+               "title" : "nom error_position macro expansion"
             },
             {
                "affected_files" : [
@@ -749,14 +806,14 @@
             }
          ],
          "removed_previously_unclassified_sites" : [],
-         "rerank_payload_sha256" : "c2193eae6728a8131dd6bd9d969283da8fd99dd325c58404b752abee7ff18784",
+         "rerank_payload_sha256" : "62d68217c5e7c4893cbe68464c6ff388ac5f2c8859e92042537548a16dba7b2a",
          "review" : {
             "changed_primary_diagnostics" : 0,
-            "changed_recovery_rows" : 105,
-            "new_independent_primary_sites" : 2,
-            "path" : "docs/real-programs-qualified-nom-review.json",
-            "reviewed_primary_sites" : 2,
-            "sha256" : "b027d4fa8e1306092db7049fa241cad73aa769b068463650d631472ce2ddaa36",
+            "changed_recovery_rows" : 0,
+            "new_independent_primary_sites" : 4,
+            "path" : "docs/real-programs-apit-nom-review.json",
+            "reviewed_primary_sites" : 4,
+            "sha256" : "0c1b53ea495e74d83fba861f7626ec444be2c32749ceb3ab9781bcf9b41cf85c",
             "unchanged_recovery_rows" : 0
          }
       },
@@ -793,92 +850,92 @@
                "entry_sha256" : "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5428,
+               "peak_rss_kib" : 5612,
                "route" : "original_suffix",
                "stderr_sha256" : "7b549de4db0927e5cfce74b5932bada29e9eb2d1f4453c00765287200f698e06",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "bin/src/main.rs",
-               "wall_seconds" : 0.002555
+               "wall_seconds" : 0.001529
             },
             {
                "entry_sha256" : "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 33548,
+               "peak_rss_kib" : 39164,
                "route" : "suffix_projection",
                "stderr_sha256" : "5a511b9ace6c5b6e56e3cb5266a12315b94102c4439f714268406eef6520fcda",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "bin/src/main.rs",
-               "wall_seconds" : 0.230686
+               "wall_seconds" : 0.14856
             },
             {
                "entry_sha256" : "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5428,
+               "peak_rss_kib" : 5612,
                "route" : "original_suffix",
                "stderr_sha256" : "6c077bd9d3f3ddf7b4272ee7183242c23fa8a77a2d0212dfba601bb1b82481f8",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "lib/src/lib.rs",
-               "wall_seconds" : 0.002284
+               "wall_seconds" : 0.001768
             },
             {
                "entry_sha256" : "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 29452,
+               "peak_rss_kib" : 37184,
                "route" : "suffix_projection",
                "stderr_sha256" : "4a94594ccc6f875d67e35105a6b479f997764d9fa831195a8ab1cce128447579",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "lib/src/lib.rs",
-               "wall_seconds" : 0.144032
+               "wall_seconds" : 0.078407
             },
             {
                "entry_sha256" : "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5428,
+               "peak_rss_kib" : 5612,
                "route" : "original_suffix",
                "stderr_sha256" : "a9f468a468db306f90ff1c8629d09a0a9e63bc215ad0f16255d5b664965a7b6c",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "command/src/lib.rs",
-               "wall_seconds" : 0.001783
+               "wall_seconds" : 0.001788
             },
             {
                "entry_sha256" : "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 34972,
+               "peak_rss_kib" : 42620,
                "route" : "suffix_projection",
                "stderr_sha256" : "066d558f87407ae23b0eb9a006440134dbe41154b6674f20bcb811b32a7a76b4",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "command/src/lib.rs",
-               "wall_seconds" : 0.282442
+               "wall_seconds" : 0.205065
             },
             {
                "entry_sha256" : "8a8900e43c1479621cabd4e27575bdc49624d5c43469a754dc2b6bd5272efa78",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5428,
+               "peak_rss_kib" : 5612,
                "route" : "original_suffix",
                "stderr_sha256" : "a00167481ac5fad74f5a5729cc5c94ae44f197d913df9a7a953f1767f9b210f3",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "e2e/src/lib.rs",
-               "wall_seconds" : 0.00325
+               "wall_seconds" : 0.00136
             },
             {
                "entry_sha256" : "8a8900e43c1479621cabd4e27575bdc49624d5c43469a754dc2b6bd5272efa78",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 30988,
+               "peak_rss_kib" : 38080,
                "route" : "suffix_projection",
                "stderr_sha256" : "146fbabe3156eed526d9105f8f0984bc3dcd5f6c62e120f5988aa6c13f99075e",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "e2e/src/lib.rs",
-               "wall_seconds" : 0.176936
+               "wall_seconds" : 0.10212
             }
          ],
-         "observed_at_utc" : "2026-11-17T19:07:14Z",
+         "observed_at_utc" : "2026-11-17T19:35:52Z",
          "old_site_counts" : [
             {
                "baseline_rank" : 14,
@@ -1070,8 +1127,8 @@
             "version" : "1.0.6"
          },
          "probe_receipt" : {
-            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-qualified-92c4caac76237360.json",
-            "sha256" : "1e84f2f62748b2e7c49e63e5b3ec93e07fec3c0d7230984608333a2bea2a5f41"
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-apit-210181363677c5d8.json",
+            "sha256" : "ab0128a839dd68f33e7fee325de3878794d249f13b55814bd1f0ebb68835b7db"
          },
          "projection_manifest_sha256" : "3ad1b9efdc73fb42f61aa3cb5d0dfaf1edea4d5fecf68e4b48e4cedd01db38b0",
          "ranked_causes" : [
@@ -1366,73 +1423,73 @@
             "changed_primary_diagnostics" : 0,
             "changed_recovery_rows" : 0,
             "new_independent_primary_sites" : 0,
-            "path" : "docs/real-programs-qualified-sozu-review.json",
+            "path" : "docs/real-programs-apit-sozu-review.json",
             "reviewed_primary_sites" : 0,
-            "sha256" : "d317d3c0c473678dce040eba9a57ec8d7f7558d4a18f00b76cc35e0a3f3e38f6",
+            "sha256" : "de911a5cc43941b7369f2546314f4d2a40d035cd0b12cd13d306a8ac2e9c2c25",
             "unchanged_recovery_rows" : 0
          }
       }
    },
-   "stage" : "qualified_associated_paths_gated",
+   "stage" : "argument_impl_trait_gated",
    "validation" : {
       "admitted_projected_roots" : 0,
       "fixed_point" : {
          "bootstrap_log" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/bootstrap.log",
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/bootstrap.log",
             "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
          },
          "candidate_self_rebuild" : "byte_identical",
          "gate_bootstrap_log" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/bootstrap-gate.log",
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/bootstrap-gate.log",
             "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
          },
          "matching_seed" : "refreshed",
          "producer_and_seed" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/producer-and-seed.sha256",
-            "sha256" : "16c84fb97255b7e6470beb6c1d29288cc18e79ef3b4eb8430ee3b865bd1e9242"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/producer-and-seed.sha256",
+            "sha256" : "b23ac935fc81328055c131a2a13385eb5c7ec64c171c2ee4c250869d19a24d91"
          },
          "refreshed_seed_bootstrap" : "passed_byte_identical",
-         "seed_sha256" : "a6ed66a27cb81f8ea5ef414790c8408ddbcc3f2e1e5bb90d9b94d4ba70fc7709",
+         "seed_sha256" : "d0ef3e46d67ce1b3785cd0ab2ff705ae3937b38765d53d71f38519182bd29109",
          "source_anchor" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/source-anchor.txt",
-            "sha256" : "8df79d53067f1bf6c04b4e39eff1264f5d3693247a6c4322b1015d804361e8a5"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/source-anchor.txt",
+            "sha256" : "5d2293b28411dd66fee010ad6d9b9b4167f1ad59dc34a2a5baab5cfa2f78b2de"
          }
       },
-      "focused_cases" : 97,
-      "focused_engine_route_checks" : 194,
+      "focused_cases" : 12,
+      "focused_engine_route_checks" : 24,
       "focused_logs" : {
          "engines" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/focused-routes.log",
-            "sha256" : "9f3d4761ad405b877e44d556632cd3459a27af16772c183c496f2fa21b0e711c"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/apit-engines.log",
+            "sha256" : "fc964b46ae88056498cf39970de2c619dcc9e7c4386e48759a843e84a932a503"
          },
          "rust" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/focused-rust.log",
-            "sha256" : "8a0a6f19e5d556c08748f55eaad9a79f57de160dc39977cd0f639ee173b45856"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/apit-rust.log",
+            "sha256" : "47c66a29f3df84732877bf9becd4e22e00200b9914f2a92baa06ced5fe705bc0"
          }
       },
-      "focused_producer" : "Rust-hosted source build; final full gate uses the fixed-point native producer",
+      "focused_producer" : "Rust-hosted source build; final gate uses the fixed-point native producer",
       "focused_result" : "passed",
-      "focused_route_checks" : 291,
-      "focused_rust_route_checks" : 97,
+      "focused_route_checks" : 36,
+      "focused_rust_route_checks" : 12,
       "full_gate" : {
          "command" : "LKJSCRIPT_GATE_JOBS=4 bash tools/check.sh",
-         "elapsed_seconds" : 1109.296,
-         "fresh_case_requests" : 5679,
+         "elapsed_seconds" : 807.474,
+         "fresh_case_requests" : 5703,
          "ir_mutation" : {
             "findings" : 0,
             "log" : {
-               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/ir-mutation.log",
-               "sha256" : "2d2701c137caaafcc7254efdbf06c05455a44d3c492a5360aa0c229950b5f09c"
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/ir-mutation.log",
+               "sha256" : "7f81bd1ee46891b466567a84d0f41115bae83d9c8bafe36de38e25392ca83d3d"
             },
             "mutants" : 128
          },
          "log" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/full-gate.log",
-            "sha256" : "be71256a5b7f9e7fa84209e7c137377e877c6e07bc8fb9ee59831aa096ae94c2"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/full-gate.log",
+            "sha256" : "f5160330a9d7264cf9c6893a93768250e9aca316bfabe243b18fe8ebe0cc4748"
          },
          "log_archive" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/gate-logs.tar.gz",
-            "sha256" : "6f848d6696e8f1ec63e86ddb388a4c2c8a17ea0103e8b99188020955888c381d"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/gate-logs.tar.gz",
+            "sha256" : "a27731b2291a462d87767eba341d4165c958afd909755dd5429bde1f6d7da54a"
          },
          "reused_case_requests" : 0,
          "status" : "passed",
@@ -1442,27 +1499,23 @@
       "observations" : 12,
       "projected_roots" : 6,
       "publication_ci" : {
-         "result_record" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/publication-ci.json",
+         "result_record" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/publication-ci.json",
          "status_at_commit" : "pending"
       },
       "query_edit_logs" : [
          {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/equality-query.log",
-            "sha256" : "63b7767f6405309fb8fa3164f980a14cb737f87a852f8442cf6e7f483ff202ba"
-         },
-         {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/qualified-query.log",
-            "sha256" : "f07f059b07dd0632f7720dc867321367a398117743e4d438ef212d29648be0cd"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/apit-query.log",
+            "sha256" : "c960495dfcd11b6968818432f5ca8a318bbaff849696b0ce0e97d21e5384a118"
          }
       ],
       "source_check" : {
-         "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/source-check.log",
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/apit-selfcheck.log",
          "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
       },
       "standalone_real_programs_test" : {
          "command" : "bash tools/real-programs-test.sh target/lkjscript",
          "log" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/standalone-real-programs.log",
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/standalone-real-programs.log",
             "sha256" : "bfe050316ba1664049ab530cb4ea400a72ef27a18a88620f0f19e8efe78c69bf"
          },
          "status" : "passed"

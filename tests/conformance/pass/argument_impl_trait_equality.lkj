@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; fn take(self) -> Self::Item; }
+struct Value { value: i64 }
+impl Source for Value {
+    type Item = i64;
+    fn take(self) -> i64 { self.value }
+}
+trait Family { type Item; }
+struct Marker {}
+impl Family for Marker { type Item = i64; }
+fn read(value: impl Source<Item = <Marker as Family>::Item>) -> i64 { value.take() }
+fn generic<T>(value: impl Source<Item = T>) -> T { value.take() }
+pub fn probe() -> i64 {
+    read(Value { value: 20i64 }) + generic::<i64>(Value { value: 22i64 })
+}

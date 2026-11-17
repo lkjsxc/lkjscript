@@ -62,6 +62,14 @@ pub fn source_module_name(value: &str) -> String {
     else { value.to_string() }
 }
 pub fn source_type_name(program: &a::Program, ty: usize) -> String {
+    if let Some(form) = program.impl_traits.get(&ty) {
+        let mut out = "impl ".to_string();
+        for (index, bound) in form.bounds.iter().enumerate() {
+            if index != 0usize { out.push_str(" + "); }
+            out.push_str(&source_type_name(program, *bound));
+        }
+        return out;
+    }
     match &program.types[ty].kind {
         a::Type::Infer => "_".to_string(),
         a::Type::Never => "!".to_string(),

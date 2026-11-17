@@ -1,0 +1,10 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+trait Source { type Item; fn take(self) -> Self::Item; }
+struct Value {}
+impl Source for Value {
+    type Item = u64;
+    fn take(self) -> u64 { 42u64 }
+}
+fn read(value: impl Source<Item = i64>) -> i64 { value.take() }
+pub fn probe() -> i64 { read(Value {}) }

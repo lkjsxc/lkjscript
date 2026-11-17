@@ -1037,13 +1037,15 @@ impl Infer<'_, '_> {
         let mut type_index = 0;
         for parameter in &function.generics {
             if !parameter.lifetime {
-                let value = if let Some(ty) = type_args.get(type_index) {
+                let value = if parameter.implicit {
+                    self.unknown()
+                } else if let Some(ty) = type_args.get(type_index) {
                     self.source_type(*ty, &outer)?
                 } else {
                     self.unknown()
                 };
                 environment.insert(parameter.name.clone(), value);
-                type_index += 1;
+                if !parameter.implicit { type_index += 1; }
             }
         }
         self.parameter_equations(&function.generics, &mut environment, false)?;

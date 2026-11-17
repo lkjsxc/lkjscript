@@ -243,6 +243,19 @@ family, and checked body changes run through ordinary admission.
 [chained calls](../tests/conformance/pass/qualified_chain_where.lkj),
 [qualified equality bounds](../tests/conformance/pass/qualified_equality_where.lkj).
 
+Argument-position `impl Trait` introduces a distinct anonymous generic parameter
+for each occurrence, including through references, tuples and ordinary type
+arguments. Multiple bounds, callable bounds and inherent/trait method parameters
+use the same definition-site and concrete bound checks as named parameters.
+Explicit call type arguments select only written named parameters; anonymous
+parameters are inferred independently and cannot be chosen through a turbofish.
+Trait implementations preserve whether a method parameter was anonymous.
+Source queries retain the written `impl Trait` bounds and checked changes reparse
+that ordinary form. Anonymous parameters are not separate editable declarations.
+Nested `impl Trait` inside another bound, function-pointer signatures, local/type
+aliases and return-position `impl Trait` remain located unsupported forms.
+[Argument cases](../tests/conformance/pass/argument_impl_trait.lkj).
+
 Unused generic function/impl/default bodies and unreachable expressions check under
 rigid parameters through production elaboration and ownership checking, without
 sampling concrete types. Bounds, associated relationships, method signatures and

@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+fn read(input: impl Clone) -> i64 { let _ = input.clone(); 42i64 }
+pub fn probe() -> i64 { read::<i64>(7i64) }

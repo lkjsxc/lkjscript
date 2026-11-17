@@ -988,6 +988,18 @@ pub fn resolve(source: &Program) -> Result<Program> {
 }
 
 fn resolve_nodes(result: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
+    for (ty, form) in &result.impl_traits {
+        if !form.argument {
+            return Err(Diagnostic::new(result.types[*ty].span, "E_UNSUPPORTED",
+                "impl Trait is only supported in function parameter types; result types and nested bounds are not implemented yet"));
+        }
+        if form.bounds.iter().all(|bound|
+            matches!(&result.types[*bound].kind, Type::Path(path) if path.name.starts_with('\'')))
+        {
+            return Err(Diagnostic::new(result.types[*ty].span, "E_TRAIT",
+                "impl Trait requires at least one trait bound"));
+        }
+    }
     for id in 0..result.types.len() {
         let node = &mut result.types[id];
         let scope = node.scope;

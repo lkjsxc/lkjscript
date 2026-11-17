@@ -215,6 +215,7 @@ fn append(
 }
 fn append_generics(result: &mut Catalog, files: &[SourceText], owner: &str, values: &[a::GenericParam]) -> Result<(), String> {
     for parameter in values {
+        if parameter.implicit { continue; }
         append(result, files, format!("{}::generic:{}", owner, parameter.name), owner.to_string(),
             "generic-parameter", &parameter.name, parameter.span, None, parameter.name.clone(), false)?;
     }
@@ -501,6 +502,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                 "parameter", &parameter.name, parameter.span, None, type_name(program, parameter.ty), false)?;
         }
         for parameter in &value.generics {
+            if parameter.implicit { continue; }
             append(&mut result, &files, format!("{}::generic:{}", identity, parameter.name), identity.clone(),
                 "generic-parameter", &parameter.name, parameter.span, None, parameter.name.clone(), false)?;
         }
@@ -585,6 +587,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         visibility_qualifications(&mut result, &files, &owners);
         // Every declaration-backed type path is a resolved reference, including aliases.
         for (type_index, node) in program.types.iter().enumerate() {
+            if program.impl_traits.contains_key(&type_index) { continue; }
             if let Some(function) = origins.types.get(&type_index) {
                 let owner = result.function_ids[*function].clone();
                 let target = match &node.kind {

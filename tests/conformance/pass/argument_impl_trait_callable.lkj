@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+fn shared(function: impl Fn(i64) -> i64, input: i64) -> i64 { function(input) }
+fn mutable(mut function: impl FnMut(i64) -> i64, input: i64) -> i64 { function(input) }
+fn once(function: impl FnOnce() -> i64) -> i64 { function() }
+fn consume(value: String) -> i64 { value.len() as i64 }
+pub fn probe() -> i64 {
+    let offset = 4i64;
+    let first = shared(|value| value + offset, 6i64);
+    let mut next = 5i64;
+    let second = mutable(|value| { next += 1; value + next }, 14i64);
+    let owned = String::from("abcdefghijkl");
+    first + second + once(move || consume(owned))
+}

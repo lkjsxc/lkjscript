@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
+fn invalid(input: impl Fn(impl Clone) -> i64) { let _ = input; }
+pub fn probe() -> i64 { 42i64 }

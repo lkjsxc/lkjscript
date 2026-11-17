@@ -1,0 +1,6 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+trait Apply { fn apply(&self, input: impl Clone) -> i64; }
+struct Worker {}
+impl Apply for Worker { fn apply<T: Clone>(&self, input: T) -> i64 { let _ = input.clone(); 42i64 } }
+pub fn probe() -> i64 { Worker {}.apply(0i64) }

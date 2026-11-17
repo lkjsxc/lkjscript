@@ -1,0 +1,19 @@
+// expect: value 42
+// witness: {}
+trait Value { fn value(&self) -> i64; }
+struct Number { value: i64 }
+impl Value for Number { fn value(&self) -> i64 { self.value } }
+trait Apply { fn apply<T>(&self, input: impl Value, result: T) -> T; }
+struct Worker {}
+impl Apply for Worker {
+    fn apply<T>(&self, input: impl Value, result: T) -> T { let _ = input.value(); result }
+}
+impl Worker {
+    fn read(&self, input: impl Value) -> i64 { input.value() }
+}
+fn indirect(worker: impl Apply, input: impl Value) -> i64 {
+    worker.apply::<i64>(input, 20i64)
+}
+pub fn probe() -> i64 {
+    indirect(Worker {}, Number { value: 0 }) + Worker {}.read(Number { value: 22 })
+}

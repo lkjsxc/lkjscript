@@ -96,7 +96,16 @@ pub struct GenericParam {
     pub name: String,
     pub bounds: Vec<TypeId>,
     pub lifetime: bool,
+    /// An argument-position impl Trait parameter cannot be named by a turbofish.
+    pub implicit: bool,
     pub span: Span,
+}
+
+/// The written projection of an anonymous parameter survives ordinary generic lowering.
+#[derive(Clone)]
+pub struct ImplTrait {
+    pub bounds: Vec<TypeId>,
+    pub argument: bool,
 }
 
 #[derive(Clone)]
@@ -513,6 +522,7 @@ pub struct Program {
     /// Populated once by resolution; later phases read this relation directly.
     pub function_owners: Vec<FunctionOwner>,
     pub types: Vec<TypeNode>,
+    pub impl_traits: std::collections::BTreeMap<TypeId, ImplTrait>,
     pub exprs: Vec<ExprNode>,
     pub patterns: Vec<PatternNode>,
     pub blocks: Vec<Block>,

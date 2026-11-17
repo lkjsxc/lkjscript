@@ -1,0 +1,140 @@
+{
+  "inputs": {
+    "bank": {
+      "path": "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/review-bank-through-qualified.json",
+      "sha256": "3cf590b5d9a74616ab9126e44b14e1d5da7739a9bf8b2c5fca8038ce24c89d99"
+    },
+    "projection": {
+      "path": "/home/coder/workspace/lkjscript-specimens/projections/nom-8.0.0/projection.json",
+      "sha256": "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
+      "source": {
+        "commit": "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
+        "object_format": "sha1",
+        "origin": "https://github.com/rust-bakery/nom.git",
+        "root": "/home/coder/workspace/lkjscript-specimens/nom-8.0.0"
+      }
+    },
+    "receipt": {
+      "compiler": {
+        "path": "/home/coder/workspace/lkjscript-programs-paths-20261118/target/lkjscript",
+        "sha256": "210181363677c5d877fd63b9b52f2591f402c907ff7e0a19d2c22ff1471178b3"
+      },
+      "path": "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-apit-210181363677c5d8.json",
+      "sha256": "a446f60ee3692e75573ba0db24f36ed3bbf73ec4b511f27e53a24abc83a31376"
+    },
+    "unreviewed_report": {
+      "path": "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/apit-21018136/nom-unreviewed.json",
+      "sha256": "5ef456d6bf1028802c9e458851ca224703ff2569d3789918b107eb1705fe769c"
+    }
+  },
+  "interpretation": "The APIT parser consumes opaque result syntax before resolver refusal. Its former RPIT parser recovery parents disappear. Three newly reviewed rows are primary: two real error_position! calls and the verify ?Sized function predicate, whose earlier recovery classification is superseded.",
+  "kind": "explicit_foreign_diagnostic_site_review",
+  "package": "nom",
+  "schema": 1,
+  "sites": [
+    {
+      "cause": "maybe_sized_bounds",
+      "code": "E_PARSE",
+      "column": 7,
+      "disposition": "primary",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "line": 524,
+      "message": "expected an identifier",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler generic bounds",
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "reason": "The original where clause of the Parser implementation for Verify explicitly contains O2: ?Sized. The earlier ?Sized diagnostic at the separate Verify struct declaration (line 513) is not a recovery parent for this independently declared implementation bound.",
+      "source_anchor": {
+        "byte_offset": 14082,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "baade81f77aee47e84b2c5a18099601fdac1762254403cd781b175e82a4f5613",
+        "line_text": "  O2: ?Sized,"
+      },
+      "source_review": "q2",
+      "title": "Relaxed ?Sized bound syntax"
+    },
+    {
+      "package": "nom",
+      "path": "src/bits/complete.rs",
+      "line": 100,
+      "column": 24,
+      "code": "E_UNSUPPORTED_MACRO",
+      "message": "unsupported macro: error_position!",
+      "file_sha256": "467122d4056c0e2655fd4ba087f1ee5042fb86453b662ae7ebe2e42c0066a09a",
+      "cause": "error_position_macro_expansion",
+      "title": "nom error_position macro expansion",
+      "owner": "Compiler / checked source producer",
+      "reason": "The complete::tag closure body is now parsed as an ordinary function body. Its error branch contains the original error_position!(inp, ErrorKind::TagBits) invocation. This is a dependency-provided declarative macro call, not parser recovery from the previously rejected opaque return.",
+      "disposition": "primary",
+      "source_anchor": {
+        "byte_offset": 3167,
+        "file_bytes": 5372,
+        "file_physical_lines": 195,
+        "file_sha256": "467122d4056c0e2655fd4ba087f1ee5042fb86453b662ae7ebe2e42c0066a09a",
+        "line_sha256": "ff902b1530e3ead6f684e4569e9074781d46d3dcbca14ebd0a1462f22e5ef7aa",
+        "line_text": "        Err(Err::Error(error_position!(inp, ErrorKind::TagBits)))"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_review": "argument-impl-trait-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bits/streaming.rs",
+      "line": 76,
+      "column": 24,
+      "code": "E_UNSUPPORTED_MACRO",
+      "message": "unsupported macro: error_position!",
+      "file_sha256": "dfba58d569c1ab89f6cb9e33153775ed19d45385e39d5047eb717c44b07e3cc0",
+      "cause": "error_position_macro_expansion",
+      "title": "nom error_position macro expansion",
+      "owner": "Compiler / checked source producer",
+      "reason": "The streaming::tag closure body is now parsed as an ordinary function body. Its error branch contains the original error_position!(inp, ErrorKind::TagBits) invocation. This independently located macro call is not parser recovery from an opaque return.",
+      "disposition": "primary",
+      "source_anchor": {
+        "byte_offset": 2175,
+        "file_bytes": 4434,
+        "file_physical_lines": 170,
+        "file_sha256": "dfba58d569c1ab89f6cb9e33153775ed19d45385e39d5047eb717c44b07e3cc0",
+        "line_sha256": "ff902b1530e3ead6f684e4569e9074781d46d3dcbca14ebd0a1462f22e5ef7aa",
+        "line_text": "        Err(Err::Error(error_position!(inp, ErrorKind::TagBits)))"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_review": "argument-impl-trait-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 503,
+      "column": 7,
+      "code": "E_PARSE",
+      "message": "expected an identifier",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "maybe_sized_bounds",
+      "title": "Relaxed ?Sized bound syntax",
+      "owner": "Language / compiler generic bounds",
+      "reason": "The parser now consumes the impl Trait result before reading the real verify function where clause. The earlier 498:6 unsupported-impl parent is absent. O2: ?Sized at503:7 is therefore an independently observed function-bound syntax refusal at this stage; its qualified-stage recovery classification is explicitly superseded. RPIT semantics remain unsupported later in resolution, but that later refusal is not a parser recovery parent.",
+      "disposition": "primary",
+      "source_anchor": {
+        "byte_offset": 13739,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "baade81f77aee47e84b2c5a18099601fdac1762254403cd781b175e82a4f5613",
+        "line_text": "  O2: ?Sized,"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_review": "argument-impl-trait-source-review"
+    }
+  ]
+}

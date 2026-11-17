@@ -1,0 +1,52 @@
+//! Anonymous argument parameters lower to ordinary generic parameters. Their
+//! source bounds stay attached to the type occurrence for semantic projection.
+use super::*;
+
+impl Parser {
+    pub(super) fn impl_trait_type(&mut self, span: Span, bounds: Vec<TypeId>) -> TypeId {
+        let name = format!("$impl:{}", self.program.types.len());
+        let ty = self.add_finished_type(Type::Path(Path {
+            qualification: None, bindings: Vec::new(),
+            declaration: None, name, args: Vec::new(),
+        }), span);
+        self.program.impl_traits.insert(ty, ImplTrait { bounds, argument: false });
+        ty
+    }
+
+    pub(super) fn argument_impl_traits(&mut self, params: &[Param], generics: &mut Vec<GenericParam>) {
+        let mut pending = Vec::new();
+        let mut index = params.len();
+        while index > 0usize { index -= 1usize; pending.push(params[index].ty); }
+        while let Some(ty) = pending.pop() {
+            if let Some(form) = self.program.impl_traits.get_mut(&ty) {
+                if form.argument { continue; }
+                form.argument = true;
+                let node = &self.program.types[ty];
+                let Type::Path(path) = &node.kind else { unreachable!() };
+                generics.push(GenericParam {
+                    name: path.name.clone(), bounds: form.bounds.clone(),
+                    lifetime: false, implicit: true, span: node.span,
+                });
+                // A second impl Trait inside these bounds is not an argument
+                // position. It remains unbound and receives its own diagnostic.
+                continue;
+            }
+            match &self.program.types[ty].kind {
+                Type::Path(path) => {
+                    let mut index = path.args.len();
+                    while index > 0usize { index -= 1usize; pending.push(path.args[index]); }
+                }
+                Type::Ref { inner, .. } | Type::Slice(inner) | Type::Array { inner, .. } => {
+                    pending.push(*inner);
+                }
+                Type::Tuple(elements) => {
+                    let mut index = elements.len();
+                    while index > 0usize { index -= 1usize; pending.push(elements[index]); }
+                }
+                // An impl Trait inside a function-pointer signature is not an
+                // anonymous parameter of the enclosing function.
+                _ => {}
+            }
+        }
+    }
+}

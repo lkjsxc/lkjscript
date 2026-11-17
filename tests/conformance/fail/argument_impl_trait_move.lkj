@@ -1,0 +1,5 @@
+// expect: reject E_MOVE
+// witness: {"rustAccept":false}
+fn consume<T>(input: T) { let _ = input; }
+fn unused(input: impl Clone) { consume(input); consume(input); }
+pub fn probe() -> i64 { 42i64 }

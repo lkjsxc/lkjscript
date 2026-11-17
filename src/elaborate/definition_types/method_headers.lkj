@@ -273,7 +273,7 @@ impl Infer<'_, '_> {
 fn type_parameter_count(parameters: &[a::GenericParam]) -> usize {
     let mut count = 0;
     for parameter in parameters {
-        if !parameter.lifetime {
+        if !parameter.lifetime && !parameter.implicit {
             count += 1;
         }
     }

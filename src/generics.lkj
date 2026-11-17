@@ -2645,7 +2645,7 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
             for i in 0..actual.generics.len() {
                 let a = &actual.generics[i];
                 let e = &expected.generics[i];
-                if a.lifetime != e.lifetime {
+                if a.lifetime != e.lifetime || a.implicit != e.implicit {
                     return Err(Diagnostic::new(
                         actual.span,
                         "E_TRAIT",

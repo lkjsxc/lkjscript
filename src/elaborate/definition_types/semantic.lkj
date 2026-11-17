@@ -45,7 +45,17 @@ impl DefinitionTypes {
         let mut values = Vec::new();
         for child in shape.children() { values.push(self.semantic_type(source, child, known, active)?); }
         let result = match shape {
-            Shape::Atom(name) | Shape::Rigid(name) => name,
+            Shape::Atom(name) => name,
+            Shape::Rigid(name) => {
+                let mut written = name.clone();
+                for ty in source.impl_traits.keys() {
+                    if matches!(&source.types[*ty].kind, a::Type::Path(path) if path.name == name) {
+                        written = super::super::semantic::source_type_name(source, *ty);
+                        break;
+                    }
+                }
+                written
+            }
             Shape::Source(ty) => {
                 if matches!(source.types[ty].kind, a::Type::Infer) { return None; }
                 super::super::semantic::source_type_name(source, ty)

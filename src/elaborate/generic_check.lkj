@@ -1664,7 +1664,7 @@ fn named_method(source: &a::Program, methods: &[usize], name: &str) -> Option<us
 fn type_parameter_indices(parameters: &[a::GenericParam]) -> Vec<usize> {
     let mut indices = Vec::new();
     for index in 0..parameters.len() {
-        if !parameters[index].lifetime {
+        if !parameters[index].lifetime && !parameters[index].implicit {
             indices.push(index);
         }
     }
