@@ -1,0 +1,22 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; }
+trait Convert { type Output: Source; fn convert(self) -> Self::Output; }
+struct Stream<I, F> { input: I, function: F }
+impl<I: Source, O, F: FnMut(<I as Source>::Item) -> O> Source for Stream<I, F> {
+    type Item = O;
+}
+impl<I: Source, O, F: FnMut(I::Item) -> O> Convert for Stream<I, F> {
+    type Output = Self;
+    fn convert(self) -> Self { self }
+}
+struct Number {}
+impl Source for Number { type Item = i64; }
+fn convert<I: Source, O, F: FnMut(I::Item) -> O>(stream: Stream<I, F>) -> Stream<I, F> {
+    <Stream<I, F> as Convert>::convert(stream)
+}
+pub fn probe() -> i64 {
+    let stream = Stream { input: Number {}, function: |value: i64| value };
+    let stream = convert(stream);
+    (stream.function)(42)
+}

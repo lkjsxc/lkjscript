@@ -1,0 +1,10 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Other { type Next; }
+trait Loop {
+    type Next: Loop<Next = <End as Other>::Next>;
+}
+struct End {}
+impl Other for End { type Next = bool; }
+impl Loop for End { type Next = End; }
+pub fn probe() -> i64 { 42 }

@@ -1,0 +1,12 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Source { type Item; }
+trait Value {}
+trait Answer { fn answer() -> i64; }
+struct Number {}
+impl Source for Number { type Item = bool; }
+impl<T: Source> Answer for T where <T as Source>::Item: Value {
+    fn answer() -> i64 { 42 }
+}
+fn demand<T: Answer>() -> i64 { <T as Answer>::answer() }
+pub fn probe() -> i64 { demand::<Number>() }

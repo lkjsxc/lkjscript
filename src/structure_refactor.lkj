@@ -1501,24 +1501,24 @@ pub mod relocation {
     fn cohort(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)],
         target: &semantic::Item) -> Result<BTreeSet<String>, String> {
         let mut result = BTreeSet::new(); result.insert(target.identity.clone());
-        if target.kind != "function" || free(catalog, target) { return Ok(result); }
+        if !matches!(target.kind.as_str(), "function" | "associated-type") || free(catalog, target) { return Ok(result); }
         let parent = edit::item(catalog, &target.parent)?;
         let trait_id = match parent.kind.as_str() {
             "trait" => Some(parent.identity.clone()),
             "implementation" => trait_of(catalog, inputs, parent)?,
-            _ => return Err(fail(&target.identity, "MEMBER", "function is neither an inherent method nor a source trait method")),
+            _ => return Err(fail(&target.identity, "MEMBER", "member has no source trait or implementation owner")),
         };
         let Some(trait_id) = trait_id else { return Ok(result); };
         if trait_id == "std" || trait_id.starts_with("std::") {
-            return Err(fail(&target.identity, "TRAIT_COHORT", "standard protocol method names require an explicit compiler decision"));
+            return Err(fail(&target.identity, "TRAIT_COHORT", "standard protocol member names require an explicit compiler decision"));
         }
         let mut declaration = false;
         for item in &catalog.items {
-            if item.kind == "function" && item.parent == trait_id && item.name == target.name {
+            if item.kind == target.kind && item.parent == trait_id && item.name == target.name {
                 result.insert(item.identity.clone()); declaration = true;
             }
         }
-        if !declaration { return Err(fail(&target.identity, "TRAIT_COHORT", "trait method declaration is absent")); }
+        if !declaration { return Err(fail(&target.identity, "TRAIT_COHORT", "trait member declaration is absent")); }
         for (identity, _, trait_type) in &catalog.implementations {
             if trait_type.is_empty() { continue; }
             if nominal_head(catalog, trait_type.as_str())? != Some(trait_id.clone()) { continue; }
@@ -1527,7 +1527,9 @@ pub mod relocation {
                 return Err(fail(identity, "TRAIT_COHORT", "implementation metadata lacks matching resolved trait evidence"));
             }
             for item in &catalog.items {
-                if item.kind == "function" && item.parent == *identity && item.name == target.name { result.insert(item.identity.clone()); }
+                // A same-spelled value member and type member are separate
+                // declarations, even within the exact same source trait.
+                if item.kind == target.kind && item.parent == *identity && item.name == target.name { result.insert(item.identity.clone()); }
             }
         }
         Ok(result)
@@ -1628,7 +1630,7 @@ pub mod relocation {
         request: &Value, patches: &mut Vec<edit::Patch>) -> Result<bool, String> {
         let target = edit::item(catalog, &operation.identity)?;
         if operation.kind == "rename" {
-            if !matches!(target.kind.as_str(), "field" | "variant" | "module" | "struct" | "enum" | "trait" | "alias" | "constant" | "parameter" | "binding" | "generic-parameter" | "function") { return Ok(false); }
+            if !matches!(target.kind.as_str(), "field" | "variant" | "module" | "struct" | "enum" | "trait" | "alias" | "constant" | "parameter" | "binding" | "generic-parameter" | "function" | "associated-type") { return Ok(false); }
             fields(request, &target.identity, "name")?;
             let name = text(request, &target.identity, "name", true)?;
             rename(catalog, inputs, target, &name, patches)?; return Ok(true);

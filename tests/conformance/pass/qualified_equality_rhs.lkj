@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; }
+struct Left {}
+struct Right {}
+impl Source for Left { type Item = i64; }
+impl Source for Right { type Item = i64; }
+fn forward<T: Source, U: Source<Item = <T as Source>::Item>>(
+    value: <U as Source>::Item,
+) -> <T as Source>::Item { value }
+fn reverse<U: Source<Item = <T as Source>::Item>, T: Source>(
+    value: <U as Source>::Item,
+) -> <T as Source>::Item { value }
+pub fn probe() -> i64 { forward::<Left, Right>(20) + reverse::<Right, Left>(22) }

@@ -110,6 +110,7 @@ fn prerequisites(
     terms: &mut Vec<Term>,
     goal: Goal,
     known: &[Goal],
+    projection: &Option<(String, usize)>,
 ) -> Result<Option<Vec<Goal>>, Diagnostic> {
     let (ty, bound) = goal;
     let mut equality = None;
@@ -174,6 +175,10 @@ fn prerequisites(
                 };
                 current.insert(name.clone(), value);
             }
+            // Callable equations use the same trait-qualified projection as
+            // the caller's known bound. Keep the parameter arena itself free
+            // of derived entries: only its original variables are flexible.
+            parameter_projection_terms(source, &implementation.generics, &mut current, terms);
             for parameter in &implementation.generics {
                 if parameter.lifetime {
                     continue;
@@ -247,6 +252,11 @@ fn prerequisites(
         }
         let mut environment = resolved;
         environment.insert("Self".to_string(), ty);
+        parameter_projection_terms(source, &implementation.generics, &mut environment, terms);
+        if (projection.is_some() || equality.is_some() || !implementation.predicates.is_empty() || !source.traits[declaration].predicates.is_empty())
+            && !implementation_projection_terms(source, implementation, declaration, &mut environment, terms)? {
+            continue;
+        }
         if let Some((member, expected)) = &equality {
             let definition = implementation.associated.iter().find(|item| item.name == *member)
                 .and_then(|item| item.value)
@@ -275,6 +285,22 @@ fn prerequisites(
                 signature_type(source, *constraint, &environment, terms)?,
             ));
         }
+        for predicate in &implementation.predicates {
+            let receiver = signature_type(source, predicate.target, &environment, terms)?;
+            for bound in &predicate.bounds {
+                children.push((receiver, signature_type(source, *bound, &environment, terms)?));
+            }
+        }
+        for predicate in &source.traits[declaration].predicates {
+            let receiver = signature_type(source, predicate.target, &environment, terms)?;
+            for bound in &predicate.bounds {
+                children.push((receiver, signature_type(source, *bound, &environment, terms)?));
+            }
+        }
+        if let Some((member, bound)) = projection {
+            let Some(value) = environment.get(&format!("Self::{member}")) else { continue; };
+            children.push((*value, *bound));
+        }
         // Coherence normally ensures uniqueness; never choose arbitrarily if a
         // caller provides source that has not passed that global validation.
         if selected.is_some() {
@@ -283,6 +309,28 @@ fn prerequisites(
         selected = Some(children);
     }
     Ok(selected)
+}
+
+fn concrete_projection(terms: &[Term], ty: usize) -> Option<(Goal, String)> {
+    let Term::Named(name, children) = &terms[ty] else { return None; };
+    if !name.starts_with("$projection:") || children.len() != 2 { return None; }
+    if !matches!(&terms[children[1]], Term::DeclaredTrait(_, arguments) if arguments.is_empty()) {
+        return None;
+    }
+    let receiver = children[0];
+    let owner = children[1];
+    let mut pending = vec![receiver];
+    while let Some(ty) = pending.pop() {
+        match &terms[ty] {
+            Term::Unknown | Term::Variable(_) => return None,
+            Term::Named(name, children) => {
+                if name.starts_with("$projection:") { return None; }
+                pending.extend_from_slice(children);
+            }
+            Term::DeclaredTrait(_, children) => pending.extend_from_slice(children),
+        }
+    }
+    Some(((receiver, owner), name["$projection:".len()..].to_string()))
 }
 
 pub(super) fn prove(
@@ -328,7 +376,15 @@ pub(super) fn prove(
             state.insert(goal, 2);
             continue;
         }
-        let Some(children) = prerequisites(source, index, terms, goal, known)? else {
+        // A concrete projection may belong to a different trait than the
+        // implementation whose signature is being checked. Select that exact
+        // owner and retain all its prerequisites before using its type equation.
+        let children = if let Some((owner, member)) = concrete_projection(terms, goal.0) {
+            prerequisites(source, index, terms, owner, known, &Some((member, goal.1)))?
+        } else {
+            prerequisites(source, index, terms, goal, known, &None)?
+        };
+        let Some(children) = children else {
             state.insert(goal, 1);
             continue;
         };

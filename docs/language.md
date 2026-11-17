@@ -184,6 +184,10 @@ Nested binding values, repeated equal constraints and sibling generic parameters
 Cycles consisting only of unresolved projection dependencies are refused; finite relationships such as `A::Next = B, B::Next = A` are supported.
 Definitions retain equality before generic-body checking; every concrete instance checks the implementation's actual associated type.
 Implementation prerequisites and trait-method signatures retain that constraint.
+Generic parameter bounds and projected-target `where` bounds establish their
+ordinary trait identities and collect sibling equality equations before resolving
+right-hand sides. Reordering those written constraints does not change their
+meaning. Targets that normalize to concrete types must satisfy their full bounds.
 A unique structurally compatible implementation may contribute conditional equations, never proof. Selection checks prerequisites without specializing unresolved caller types to fit.
 Associated callable inputs can use declared trait evidence regardless of generic parameter order. Missing/ambiguous/incompatible bounds reject.
 Projections require checked child witnesses, and pending/cyclic nonstructural goals are not proofs.
@@ -192,9 +196,60 @@ Positional trait type arguments remain unsupported, and generic associated types
 Equalities lower to ordinary concrete types/calls with no new checked-IR operation or checker authority.
 Queries retain binding syntax and resolved member references; checked function changes preserve constraints. [Equality cases](../tests/conformance/pass/associated_equality.lkj).
 
-Unused generic function/impl/default bodies and unreachable expressions undergo production elaboration and ownership checking under rigid parameters, without sampling concrete types.
-Bounds, associated relationships, method signatures and explicit arguments check. Selected trait/source methods and receiver dereference counts survive specialization; newly applicable inherent methods cannot replace them.
-Rigid verification types/functions never execute. [Generic selection](../tests/reference/generic_selection.lkj).
+Fully qualified associated types and immediate calls retain the receiver type,
+declaring trait and member independently: `<T as Source>::Item` and
+`<T as Source>::value()` cannot select an inherent member or another trait's
+same-spelled item. Aliased traits, nested projections, explicit receiver arguments
+and method type arguments use the same selection. Projection results can occur
+inside other types and in `where` predicates; conditional implementation selection
+proves these predicates before exposing a witness. Qualified and unambiguous
+shorthand projections denote the same source type. Unused nominal declarations
+and trait method signatures retain their obligations.
+
+A chained call such as `<T as Source>::Item::make()` selects an associated
+function on the projected receiver. Its declared trait must be in scope; inherent
+functions on a concrete receiver use ordinary precedence. The checked generic
+selection survives specialization, including when the concrete type has another
+same-spelled inherent function. Nested qualified receivers and method type
+arguments keep the same identity. Provided associated function bodies use the
+selected trait's parameter scope; an implementation's generic names cannot
+capture the provided method's own parameters. Associated equality constraints belong on
+bounds; bindings in an `as` clause, such as `<T as Source<Item = i64>>::Item`,
+are located refusals.
+
+Associated definitions resolve one requested member at a time. Finite sibling
+chains, decreasing generic families and nominal recursion through indirection
+are supported. Transparent direct/mutual cycles and expanding associated-type
+queries reject with located diagnostics, including in unused implementations.
+Only completed concrete queries are cached; definition checking does not reuse
+results across changing rigid assumptions.
+
+Implementation signature proofs normalize qualified equality values for the
+current receiver. A qualified equality value requiring a separate concrete
+implementation may remain a located refusal.
+
+Associated and concrete type predicates apply to functions, nominal types, aliases,
+traits and implementations. A method implementation cannot strengthen its declared
+predicate. Invalid concrete predicates and missing trait/member evidence reject
+at the source form. Positional trait arguments, generic associated families,
+standalone qualified function values, builtin-trait qualification and recursive
+where assumptions requiring a lazy contract remain located refusals. Lifetime
+outlives predicates remain a separate boundary. These forms add no checked-IR
+operation or trusted trait proof. Queries preserve the written qualified type and
+exact receiver/trait/member references; checked renames update the selected trait
+family, and checked body changes run through ordinary admission.
+[Qualified path cases](../tests/conformance/pass/qualified_associated_paths.lkj),
+[predicate cases](../tests/conformance/pass/qualified_where_blanket.lkj),
+[chained calls](../tests/conformance/pass/qualified_chain_where.lkj),
+[qualified equality bounds](../tests/conformance/pass/qualified_equality_where.lkj).
+
+Unused generic function/impl/default bodies and unreachable expressions check under
+rigid parameters through production elaboration and ownership checking, without
+sampling concrete types. Bounds, associated relationships, method signatures and
+explicit arguments check. Selected trait/source methods and receiver dereference
+counts survive specialization; newly applicable inherent methods cannot replace
+them. Rigid verification types/functions never reach execution.
+[Generic selection](../tests/reference/generic_selection.lkj).
 
 | Trait operation | Meaning and lowering | Rejection or rewrite |
 | --- | --- | --- |

@@ -11,9 +11,21 @@ use std::collections::{BTreeMap, BTreeSet};
 pub(super) struct Session {
     active: BTreeSet<Goal>,
     proved: BTreeMap<Goal, Option<ImplementationWitness>>,
+    projections: BTreeMap<Goal, BTreeMap<String, usize>>,
 }
 
 impl Compiler<'_> {
+    pub(super) fn active_associated_type(
+        &self,
+        receiver: usize,
+        bound: &TraitIdentity,
+        member: &str,
+    ) -> Option<usize> {
+        let session = self.trait_proofs.as_ref()?;
+        let goal = Goal { ty: receiver, bound: bound.clone() };
+        session.projections.get(&goal)?.get(&member.to_string()).copied()
+    }
+
     fn infer_implementation(
         &mut self,
         mut witness: ImplementationWitness,
@@ -53,6 +65,31 @@ impl Compiler<'_> {
                 ));
             }
         }
+        let predicates = self.source.impls[witness.implementation].predicates.clone();
+        let trait_predicates = match goal.bound {
+            TraitIdentity::Declared(index) => self.source.traits[index].predicates.clone(),
+            _ => Vec::new(),
+        };
+        if predicates.is_empty() && trait_predicates.is_empty() { return Ok(witness); }
+        if self.trait_proofs.as_ref().unwrap().projections.contains_key(goal) {
+            return Err(err(self.source.impls[witness.implementation].span, "E_TRAIT",
+                "recursive implementation predicates do not establish a trait witness"));
+        }
+        // The selected implementation supplies equations for its associated
+        // types while its own predicates are checked. Those equations do not
+        // establish the trait goal: recursive satisfaction still fails through
+        // Session.active until every outer prerequisite has been proved.
+        let associated = self.implementation_associated(witness.implementation, witness.substitutions.clone())?;
+        let proved = self.trait_proofs.as_ref().unwrap().proved.clone();
+        self.trait_proofs.as_mut().unwrap().projections.insert(goal.clone(), associated);
+        let mut checked = self.check_where_predicates(&predicates, &witness.substitutions);
+        if checked.is_ok() {
+            checked = self.check_where_predicates(&trait_predicates, &witness.substitutions);
+        }
+        let session = self.trait_proofs.as_mut().unwrap();
+        session.projections.remove(goal);
+        if checked.is_err() { session.proved = proved; }
+        checked?;
         Ok(witness)
     }
 

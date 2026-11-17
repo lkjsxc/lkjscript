@@ -1,0 +1,12 @@
+// expect: reject E_TRAIT
+// witness: {}
+mod left { pub trait Value { fn make() -> i64; } }
+mod right { pub trait Value { fn make() -> i64; } }
+use left::Value;
+use right::Value as OtherValue;
+trait Source { type Item; }
+fn invalid<T: Source>() -> i64
+where <T as Source>::Item: left::Value + right::Value {
+    <T as Source>::Item::make()
+}
+pub fn probe() -> i64 { 42 }

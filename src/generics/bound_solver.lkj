@@ -85,7 +85,7 @@ impl BoundSolver {
                         self.state.insert(goal, 1);
                         continue;
                     }
-                    if !requirements.parameterized.is_empty() {
+                    if !requirements.parameterized.is_empty() || requirements.where_predicates {
                         return BoundStep::Validate {
                             goal,
                             witness: requirements.witness.unwrap(),

@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {}
+mod left { pub trait Value { fn make() -> i64; } }
+mod right { pub trait Value { fn make() -> bool; } }
+use left::Value;
+use right::Value as OtherValue;
+trait Source { type Item; }
+struct Number {}
+struct Root {}
+impl Source for Root { type Item = Number; }
+impl left::Value for Number { fn make() -> i64 { 42 } }
+impl right::Value for Number { fn make() -> bool { false } }
+fn answer<T: Source>() -> i64 where <T as Source>::Item: left::Value {
+    <T as Source>::Item::make()
+}
+pub fn probe() -> i64 { answer::<Root>() }

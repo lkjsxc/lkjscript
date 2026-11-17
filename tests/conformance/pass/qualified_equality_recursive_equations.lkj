@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+trait Value { type Item; }
+trait Loop {
+    type Next: Loop<Next = <Self as Loop>::Next> + Value<Item = i64>;
+}
+struct End {}
+impl Value for End { type Item = i64; }
+impl Loop for End { type Next = End; }
+fn answer<T: Loop>(value: <<T as Loop>::Next as Value>::Item) -> i64 {
+    let repeated: <<T as Loop>::Next as Value>::Item = value;
+    repeated
+}
+pub fn probe() -> i64 { answer::<End>(42) }

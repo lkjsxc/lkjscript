@@ -2,6 +2,56 @@
 use super::*;
 use crate::elaborate::semantic::{Evidence, LocalTarget, MethodTarget};
 
+pub(super) fn self_trait_owners(program: &a::Program) -> BTreeMap<String, usize> {
+    let mut owners = BTreeMap::new();
+    for (index, declaration) in program.traits.iter().enumerate() {
+        owners.insert(qualified(&declaration.module, &declaration.name), index);
+    }
+    for (index, implementation) in program.impls.iter().enumerate() {
+        let Some(trait_ty) = implementation.trait_ty else { continue; };
+        let a::Type::Path(path) = &program.types[trait_ty].kind else { continue; };
+        if let crate::generics::TraitIdentity::Declared(owner) = crate::generics::bound_identity(program, path) {
+            owners.insert(implementation_identity(program, index), owner);
+        }
+    }
+    owners
+}
+
+pub(super) fn self_associated_identity(program: &a::Program, catalog: &Catalog,
+    owners: &BTreeMap<String, usize>, owner: &str, name: &str) -> Option<String> {
+    if !name.starts_with("Self::") { return None; }
+    let member = &name[6usize..];
+    if member.is_empty() || member.contains("::") { return None; }
+    let mut current = owner.to_string();
+    let first = loop {
+        if let Some(index) = owners.get(&current) { break *index; }
+        let index = *catalog.by_identity.get(&current)?;
+        let parent = &catalog.items[index].parent;
+        if parent.is_empty() || *parent == current { return None; }
+        current = parent.clone();
+    };
+    let mut pending = vec![first];
+    let mut seen = BTreeSet::<usize>::new();
+    let mut found: Option<usize> = None;
+    while let Some(index) = pending.pop() {
+        if !seen.insert(index) { continue; }
+        let declaration = &program.traits[index];
+        for associated in &declaration.associated {
+            if associated.name != member { continue; }
+            if found.is_some_and(|previous| previous != index) { return None; }
+            found = Some(index);
+        }
+        for bound in &declaration.bounds {
+            let a::Type::Path(path) = &program.types[*bound].kind else { continue; };
+            if let crate::generics::TraitIdentity::Declared(parent) = crate::generics::bound_identity(program, path) {
+                pending.push(parent);
+            }
+        }
+    }
+    let declaration = &program.traits[found?];
+    Some(format!("{}::type:{}", qualified(&declaration.module, &declaration.name), member))
+}
+
 pub(super) fn value_identity(program: &a::Program, path: &a::Path, functions: &[String]) -> Option<String> {
     let declaration = path.declaration?;
     let target = declaration_identity(program, declaration, functions)?;
@@ -266,7 +316,7 @@ pub(super) fn import_qualifications(result: &mut Catalog, files: &[SourceText], 
                 let token = &files[imported.span.file].tokens[at];
                 if inherited && token.text == leaf_name(&imported.path)
                     && resolve::semantic_type_path(resolver, scope, &imported.path, imported.span).is_err() {
-                    let path = a::Path { bindings: Vec::new(), declaration: None, name: imported.path.clone(), args: Vec::new() };
+                    let path = a::Path { qualification: None, bindings: Vec::new(), declaration: None, name: imported.path.clone(), args: Vec::new() };
                     if let Ok(resolved) = resolver.value_path(scope, &path, imported.span) {
                         if let Some(target) = value_identity(program, &resolved, &result.function_ids) {
                             if result.by_identity.contains_key(&target) {
@@ -454,8 +504,9 @@ pub(super) fn typed_associated(result: &mut Catalog, files: &[SourceText], progr
     let a::Expr::Path(path) = &node.kind else { return false; };
     let Some(selection) = evidence.methods.get(&expression) else { return false; };
     let name = leaf_name(&path.name);
+    let explicit_receiver = path.qualification.as_ref().is_some_and(|qualification| qualification.trait_ty.is_none());
     let source = match selection {
-        MethodTarget::Source(index) if closed_owner => Some(*index),
+        MethodTarget::Source(index) if closed_owner || explicit_receiver => Some(*index),
         MethodTarget::Trait(index) => {
             let mut selected: Option<usize> = None;
             for method in &program.traits[*index].methods {
@@ -474,6 +525,11 @@ pub(super) fn typed_associated(result: &mut Catalog, files: &[SourceText], progr
         return true;
     };
     let target = result.function_ids[source].clone();
+    if let Some(qualification) = &path.qualification {
+        record_site(result, files, owner.to_string(), target,
+            qualification.member_span, "associated-call", true);
+        return true;
+    }
     // The owner may be an alias; only the selector's exact member token is edited.
     // The ordinary prefix references retain that owner's independent provenance.
     let token = path_token(&files[node.span.file], node.span).map(|index| &files[node.span.file].tokens[index]);

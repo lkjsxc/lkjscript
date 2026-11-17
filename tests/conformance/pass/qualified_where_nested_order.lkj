@@ -1,0 +1,21 @@
+// expect: value 42
+// witness: {}
+trait First { type Next; }
+trait Second { type Last; }
+trait Value { fn answer() -> i64; }
+struct Root {}
+struct Middle {}
+impl First for Root { type Next = Middle; }
+impl Second for Middle { type Last = i64; }
+impl Value for i64 { fn answer() -> i64 { 21 } }
+fn forward<T: First>() -> i64
+where <T as First>::Next: Second,
+      <<T as First>::Next as Second>::Last: Value {
+    <<<T as First>::Next as Second>::Last as Value>::answer()
+}
+fn reverse<T: First>() -> i64
+where <<T as First>::Next as Second>::Last: Value,
+      <T as First>::Next: Second {
+    <<<T as First>::Next as Second>::Last as Value>::answer()
+}
+pub fn probe() -> i64 { forward::<Root>() + reverse::<Root>() }

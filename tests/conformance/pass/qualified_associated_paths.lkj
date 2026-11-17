@@ -1,0 +1,18 @@
+// expect: value 42
+// witness: {}
+trait Left { type Item; fn value() -> Self::Item; }
+trait Right { type Item; fn value() -> Self::Item; }
+struct Both {}
+impl Left for Both { type Item = i64; fn value() -> i64 { 40 } }
+impl Right for Both { type Item = bool; fn value() -> bool { true } }
+impl Both { fn value() -> i64 { 999 } }
+fn pair<T: Left + Right>() -> (<T as Left>::Item, <T as Right>::Item) {
+    let value = 9;
+    assert!(value == 9);
+    (<T as Left>::value(), <T as Right>::value())
+}
+fn preserve<T: Left>(item: <T as Left>::Item) -> <T as Left>::Item { item }
+pub fn probe() -> i64 {
+    let (left, right) = pair::<Both>();
+    if right { preserve::<Both>(left) + 2 } else { 0 }
+}

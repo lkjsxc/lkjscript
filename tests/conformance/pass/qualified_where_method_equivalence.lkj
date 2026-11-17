@@ -1,0 +1,17 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; }
+trait Value { fn answer() -> i64; }
+trait Consumer {
+    fn consume<T: Source>() -> i64 where <T as Source>::Item: Value;
+}
+struct Number {}
+struct Adapter {}
+impl Source for Number { type Item = i64; }
+impl Value for i64 { fn answer() -> i64 { 42 } }
+impl Consumer for Adapter {
+    fn consume<U: Source>() -> i64 where U::Item: Value {
+        <U::Item as Value>::answer()
+    }
+}
+pub fn probe() -> i64 { <Adapter as Consumer>::consume::<Number>() }

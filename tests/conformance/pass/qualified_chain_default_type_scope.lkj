@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+trait Value { fn choose<T>(value: T) -> T { value } }
+struct Number<T> { value: T }
+impl<T> Value for Number<T> {}
+trait Source { type Item: Value; }
+struct SourceType {}
+impl Source for SourceType { type Item = Number<bool>; }
+fn selected<T: Source>() -> i64 { <T as Source>::Item::choose::<i64>(40) }
+pub fn probe() -> i64 {
+    let value = <SourceType as Source>::Item::choose::<i64>(2);
+    value + selected::<SourceType>()
+}

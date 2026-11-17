@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; }
+trait Value { fn answer() -> i64; }
+impl Value for i64 { fn answer() -> i64 { 42 } }
+trait Producer: Source where <Self as Source>::Item: Value {}
+struct Number {}
+impl Source for Number { type Item = i64; }
+impl Producer for Number {}
+fn answer<T: Producer>() -> i64 where <T as Source>::Item: Value {
+    <<T as Source>::Item as Value>::answer()
+}
+pub fn probe() -> i64 { answer::<Number>() }

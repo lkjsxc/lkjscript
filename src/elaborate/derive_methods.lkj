@@ -975,7 +975,7 @@ impl Builder<'_, '_> {
                 || !self.trait_available(&implementation, receiver, span)
                 || self
                     .compiler
-                    .bounds(&implementation.generics, &substitutions)
+                    .implementation_bounds(&implementation, &substitutions)
                     .is_err()
             {
                 continue;

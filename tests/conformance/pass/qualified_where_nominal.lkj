@@ -1,0 +1,19 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; }
+trait Value { fn value(&self) -> i64; }
+struct Number {}
+impl Source for Number { type Item = i64; }
+impl Value for i64 { fn value(&self) -> i64 { *self } }
+struct Holder<T: Source> where <T as Source>::Item: Value {
+    value: <T as Source>::Item,
+}
+impl<T: Source> Holder<T> where <T as Source>::Item: Value {
+    fn answer(&self) -> i64 {
+        <<T as Source>::Item as Value>::value(&self.value)
+    }
+}
+pub fn probe() -> i64 {
+    let holder: Holder<Number> = Holder { value: 42 };
+    holder.answer()
+}

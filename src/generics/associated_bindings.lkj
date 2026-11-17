@@ -43,15 +43,37 @@ fn parameter_bounds(parameters: &[GenericParam], bounds: &mut BTreeSet<TypeId>) 
     }
 }
 
+fn predicate_bounds(predicates: &[WherePredicate], bounds: &mut BTreeSet<TypeId>) {
+    for predicate in predicates {
+        for bound in &predicate.bounds { bounds.insert(*bound); }
+    }
+}
+
 pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
     let mut bounds = BTreeSet::<TypeId>::new();
-    for function in &source.functions { parameter_bounds(&function.generics, &mut bounds); }
-    for item in &source.structs { parameter_bounds(&item.generics, &mut bounds); }
-    for item in &source.enums { parameter_bounds(&item.generics, &mut bounds); }
-    for item in &source.aliases { parameter_bounds(&item.generics, &mut bounds); }
-    for item in &source.impls { parameter_bounds(&item.generics, &mut bounds); }
+    for function in &source.functions {
+        parameter_bounds(&function.generics, &mut bounds);
+        predicate_bounds(&function.predicates, &mut bounds);
+    }
+    for item in &source.structs {
+        parameter_bounds(&item.generics, &mut bounds);
+        predicate_bounds(&item.predicates, &mut bounds);
+    }
+    for item in &source.enums {
+        parameter_bounds(&item.generics, &mut bounds);
+        predicate_bounds(&item.predicates, &mut bounds);
+    }
+    for item in &source.aliases {
+        parameter_bounds(&item.generics, &mut bounds);
+        predicate_bounds(&item.predicates, &mut bounds);
+    }
+    for item in &source.impls {
+        parameter_bounds(&item.generics, &mut bounds);
+        predicate_bounds(&item.predicates, &mut bounds);
+    }
     for item in &source.traits {
         parameter_bounds(&item.generics, &mut bounds);
+        predicate_bounds(&item.predicates, &mut bounds);
         for bound in &item.bounds { bounds.insert(*bound); }
         for associated in &item.associated {
             for bound in &associated.bounds { bounds.insert(*bound); }

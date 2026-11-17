@@ -1,0 +1,13 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Source { type Item; }
+trait Family { type Value; }
+trait Needs {}
+struct Number {}
+struct Root {}
+impl Source for Root { type Item = Number; }
+impl Family for Number { type Value = i64; }
+fn invalid<T: Source>() -> i64
+where <<T as Source>::Item as Family>::Value: Needs,
+      <T as Source>::Item: Family<Value = i64> { 42 }
+pub fn probe() -> i64 { invalid::<Root>() }

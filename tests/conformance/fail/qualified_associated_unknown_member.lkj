@@ -1,0 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Value { type Item; }
+fn unused<T: Value>(value: <T as Value>::Missing) {}
+pub fn probe() -> i64 { 42 }

@@ -1,0 +1,10 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Source { type Item; }
+trait First { fn make() -> i64 { 42 } }
+trait Second { fn make() -> i64 { 7 } }
+struct SourceType {}
+impl Source for SourceType { type Item = i64; }
+impl First for i64 {}
+impl Second for i64 {}
+pub fn probe() -> i64 { <SourceType as Source>::Item::make() }

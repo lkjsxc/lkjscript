@@ -580,6 +580,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
     }
     if include_references {
         let owners = Owners::new(&result);
+        let self_traits = self_trait_owners(program);
         import_qualifications(&mut result, &files, program, &resolver);
         visibility_qualifications(&mut result, &files, &owners);
         // Every declaration-backed type path is a resolved reference, including aliases.
@@ -604,6 +605,26 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             if let a::Type::Path(path) = &node.kind {
                 let file = &files[node.span.file];
                 let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) else { continue; };
+                if let Some(qualification) = &path.qualification {
+                    let Some(trait_ty) = qualification.trait_ty else { continue; };
+                    if let a::Type::Path(bound) = &program.types[trait_ty].kind {
+                        if let Some(declaration) = bound.declaration {
+                            if let Some(identity) = declaration_identity(program, declaration, &result.function_ids) {
+                                let target = format!("{}::type:{}", identity, path.name);
+                                let known = result.by_identity.contains_key(&target);
+                                record_site(&mut result, &files, owner, target, qualification.member_span, "associated-type", known);
+                            }
+                        }
+                    }
+                    continue;
+                }
+                if path.declaration.is_none() {
+                    if let Some(target) = self_associated_identity(program, &result, &self_traits, &owner, &path.name) {
+                        add_reference(&mut result, &files, owner, target, node.span,
+                            leaf_name(&path.name), "associated-type", true);
+                        continue;
+                    }
+                }
                 path_qualifications(&mut result, &files, program, &resolver, &owner, node.scope, node.span);
                 for binding in &path.bindings {
                     match crate::generics::associated_binding_owner(program, path, binding) {
@@ -632,7 +653,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         for imported in &program.uses {
             if imported.glob { continue; }
             let scope = resolve::module(program, &imported.module);
-            let path = a::Path { bindings: Vec::new(), declaration: None, name: imported.path.clone(), args: Vec::new() };
+            let path = a::Path { qualification: None, bindings: Vec::new(), declaration: None, name: imported.path.clone(), args: Vec::new() };
             let mut target: Option<String> = None;
             let mut alias = false;
             if let Ok(resolved) = resolver.value_path(scope, &path, imported.span) {
@@ -709,6 +730,31 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             } else { result.expression_types.insert(key, ty); }
             match &node.kind {
                 a::Expr::Path(path) | a::Expr::Struct { path, .. } => {
+                    if let Some(qualification) = &path.qualification {
+                        let Some(trait_ty) = qualification.trait_ty else {
+                            let closed = source_functions.get(&owner).is_some_and(|function|
+                                crate::elaborate::semantic::closed_source_owner(program, *function));
+                            if evidence.as_ref().is_some_and(|evidence|
+                                typed_associated(&mut result, &files, program, evidence, expression, &owner, closed)) {
+                                continue;
+                            }
+                            record_site(&mut result, &files, owner.clone(), path.name.clone(),
+                                qualification.member_span, "associated-function", false);
+                            continue;
+                        };
+                        if let a::Type::Path(bound) = &program.types[trait_ty].kind {
+                            if let Some(declaration) = bound.declaration {
+                                if let a::Item::Trait(index) = program.declarations[declaration].item {
+                                    if let Some(method) = program.traits[index].methods.iter()
+                                        .find(|method| program.functions[**method].name == path.name) {
+                                        let target = result.function_ids[*method].clone();
+                                        record_site(&mut result, &files, owner.clone(), target, qualification.member_span, "associated-call", true);
+                                    }
+                                }
+                            }
+                        }
+                        continue;
+                    }
                     path_qualifications(&mut result, &files, program, &resolver, &owner, node.scope, node.span);
                     let typed_owner = evidence.as_ref().is_some_and(|evidence| source_functions.get(&owner).is_some_and(|function| evidence.definitions.contains(function)));
                     let mut local_target = evidence.as_ref().and_then(|evidence| evidence.locals.get(&expression)).copied();

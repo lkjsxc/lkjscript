@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; }
+struct Number {}
+impl Source for Number { type Item = i64; }
+struct Holder<T: Source>(<T as Source>::Item) where <T as Source>::Item: Copy;
+pub fn probe() -> i64 {
+    let holder = Holder::<Number>(42i64);
+    holder.0
+}

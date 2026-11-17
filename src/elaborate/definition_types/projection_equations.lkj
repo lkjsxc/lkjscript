@@ -13,6 +13,61 @@ pub(super) enum Match {
 }
 
 impl Infer<'_, '_> {
+    // Equal receiver structure shares its projection result. This comparison
+    // creates no equations: different unknowns and opaque projections remain
+    // different, and equality of outputs never constrains their receivers.
+    pub(super) fn same_projection_receiver(&self, left: Variable, right: Variable) -> bool {
+        let mut pending = vec![(left, right)];
+        let mut seen = BTreeSet::<(Variable, Variable)>::new();
+        while let Some((left, right)) = pending.pop() {
+            let left = self.definition.root(left);
+            let right = self.definition.root(right);
+            if left == right || !seen.insert((left, right)) { continue; }
+            match (self.shape(left), self.shape(right)) {
+                (Some(Shape::Atom(left)), Some(Shape::Atom(right))) if left == right => {}
+                (Some(Shape::Never), Some(Shape::Never)) => {}
+                (Some(Shape::Vec(left)), Some(Shape::Vec(right)))
+                | (Some(Shape::Box(left)), Some(Shape::Box(right)))
+                | (Some(Shape::Slice(left)), Some(Shape::Slice(right))) => pending.push((left, right)),
+                (Some(Shape::Ref(lm, left)), Some(Shape::Ref(rm, right))) if lm == rm => pending.push((left, right)),
+                (Some(Shape::Array(left, ln)), Some(Shape::Array(right, rn))) if ln == rn => pending.push((left, right)),
+                (Some(Shape::Tuple(left)), Some(Shape::Tuple(right))) if left.len() == right.len() => {
+                    for index in 0..left.len() { pending.push((left[index], right[index])); }
+                }
+                (Some(Shape::Nominal(ld, left)), Some(Shape::Nominal(rd, right)))
+                | (Some(Shape::Closure(ld, left)), Some(Shape::Closure(rd, right)))
+                    if ld == rd && left.len() == right.len() => {
+                    for index in 0..left.len() { pending.push((left[index], right[index])); }
+                }
+                _ => return false,
+            }
+        }
+        true
+    }
+
+    pub(super) fn projection_receiver(&mut self, receiver: Variable) -> Variable {
+        let receiver = self.root(receiver);
+        for previous in &self.projection_receivers {
+            if self.same_projection_receiver(*previous, receiver) {
+                return self.definition.root(*previous);
+            }
+        }
+        self.projection_receivers.push(receiver);
+        receiver
+    }
+
+    fn projection_argument_contains(&self, outer: Variable, inner: Variable) -> bool {
+        let mut pending = vec![outer];
+        let mut seen = BTreeSet::<Variable>::new();
+        while let Some(variable) = pending.pop() {
+            let root = self.definition.root(variable);
+            if self.same_projection_receiver(root, inner) { return true; }
+            if !seen.insert(root) { continue; }
+            if let Some(shape) = self.shape(root) { pending.extend_from_slice(&shape.children()); }
+        }
+        false
+    }
+
     pub(super) fn parameter_equations(
         &mut self,
         parameters: &[a::GenericParam],
@@ -82,7 +137,7 @@ impl Infer<'_, '_> {
                 let Some(declaration) = declaration else {
                     return Err(err(binding.span, "E_TRAIT", "associated-type equality binding has no trait identity"));
                 };
-                let root = self.root(receiver);
+                let root = self.projection_receiver(receiver);
                 let key = (declaration, binding.name.clone());
                 let value = self.source_type(binding.value, &substitutions)?;
                 let previous = self.projections[root].get(&key).copied();
@@ -90,7 +145,7 @@ impl Infer<'_, '_> {
                     self.projection_bindings.insert(previous, binding.span);
                     let previous = self.root(previous);
                     let value = self.root(value);
-                    if previous != value && rigid && matches!(self.shape(previous), Some(Shape::Projected(_, _))) {
+                    if previous != value && rigid && matches!(self.shape(previous), Some(Shape::Projected(_, _) | Shape::Projection(_, _, _))) {
                         if self.occurs(previous, value) {
                             return Err(err(binding.span, "E_TYPE", "cyclic associated-type equality binding"));
                         }
@@ -138,13 +193,14 @@ impl Infer<'_, '_> {
             if !seen.insert(declaration) {
                 continue;
             }
+            self.trait_headers.push((receiver, bound));
             let definition = self.source.traits[index].clone();
             for bound in &definition.bounds {
                 pending.push(*bound);
             }
             for associated in definition.associated {
                 let name = format!("{alias}::{}", associated.name);
-                let root = self.root(receiver);
+                let root = self.projection_receiver(receiver);
                 let key = (declaration, associated.name.clone());
                 let previous = match self.projections[root].get(&key) {
                     Some(previous) => Some(*previous),
@@ -318,7 +374,7 @@ impl Infer<'_, '_> {
         if matches!(shape, Shape::Rigid(_)) {
             // Joining the receiver with a declared parameter has already joined
             // the corresponding projection slot; no concrete impl is guessed.
-            return Ok(matches!(self.shape(result), Some(Shape::Projected(_, _))));
+            return Ok(matches!(self.shape(result), Some(Shape::Projected(_, _) | Shape::Projection(_, _, _))));
         }
         let a::Item::Trait(trait_index) = self.source.declarations[declaration].item else {
             return Ok(false);
@@ -351,7 +407,32 @@ impl Infer<'_, '_> {
             return Ok(false);
         };
         let implementation = self.source.impls[candidate].clone();
+        let mut arguments: Vec<Variable> = Vec::new();
+        for parameter in &implementation.generics {
+            if !parameter.lifetime {
+                if let Some(argument) = environment.get(&parameter.name) { arguments.push(*argument); }
+            }
+        }
+        let mut ancestry: Vec<(usize, String, Vec<Variable>)> = match self.projection_ancestry.get(&id) {
+            Some(previous) => previous.clone(),
+            None => Vec::new(),
+        };
+        for (previous, name, previous_arguments) in &ancestry {
+            if *previous != candidate || name != member || previous_arguments.len() != arguments.len() { continue; }
+            let mut contains = true;
+            let mut larger = false;
+            for position in 0..arguments.len() {
+                contains = contains && self.projection_argument_contains(arguments[position], previous_arguments[position]);
+                larger = larger || !self.same_projection_receiver(arguments[position], previous_arguments[position]);
+            }
+            if contains && larger {
+                return Err(err(span, "E_RECURSION", "associated type arguments expand inside a recursive query"));
+            }
+        }
+        ancestry.push((candidate, member.to_string(), arguments));
+        let first_child = self.obligations.len();
         self.parameter_equations(&implementation.generics, &mut environment, false)?;
+        self.predicate_equations(&implementation.predicates, &mut environment, false)?;
         if let Some(bound) = implementation.trait_ty {
             self.trait_equations(receiver, "Self", bound, &mut environment, false)?;
         }
@@ -374,6 +455,11 @@ impl Infer<'_, '_> {
             return Ok(false);
         };
         let value = self.source_type(associated, &environment)?;
+        for child in first_child..self.obligations.len() {
+            if matches!(self.obligations[child], Some(Obligation::Projection { .. })) {
+                self.projection_ancestry.insert(child, ancestry.clone());
+            }
+        }
         if let Err(problem) = self.unify(result, value, span) {
             if let Some(binding) = self.projection_bindings.get(&result) {
                 return Err(err(*binding, "E_TRAIT",

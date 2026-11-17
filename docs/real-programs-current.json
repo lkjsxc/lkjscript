@@ -1,1418 +1,1471 @@
 {
-  "schema": 1,
-  "kind": "current_foreign_program_refusal_frontier",
-  "stage": "associated_type_equality_gated",
-  "compiler_sha256": "809c5052274cb61ba0c31897a22ad4b6849f581f54c329f9676959e700a32a9f",
-  "baseline_compiler_sha256": "eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f",
-  "validation": {
-    "observations": 12,
-    "projected_roots": 6,
-    "admitted_projected_roots": 0,
-    "nom_own_tests_run_under_lkjscript": 0,
-    "focused_cases": 29,
-    "focused_route_checks": 87,
-    "focused_result": "passed",
-    "fixed_point": {
-      "candidate_self_rebuild": "byte_identical",
-      "matching_seed": "refreshed",
-      "refreshed_seed_bootstrap": "passed",
-      "seed_sha256": "d9531f24d1add59ba43a7d2235959db602adba1d4329670b6923d213cbc71efd"
-    },
-    "full_gate": {
-      "status": "passed",
-      "command": "LKJSCRIPT_GATE_JOBS=4 bash tools/check.sh",
-      "workers": 4,
-      "elapsed_seconds": 1165.546,
-      "fresh_case_requests": 5543,
-      "reused_case_requests": 0,
-      "ir_mutants": 128,
-      "mutation_findings": 0,
-      "log": "/home/coder/workspace/prompts/reports/lkjscript-equality/equality-full-gate.log",
-      "log_sha256": "4302c2caeb2c20bce96d489e1a6654d8165a1cb2e1253e23604aa76ccaac973a"
-    },
-    "standalone_real_programs_test": {
-      "status": "passed",
-      "command": "bash tools/real-programs-test.sh target/lkjscript",
-      "log": "/home/coder/workspace/prompts/reports/lkjscript-equality/equality-real-programs.log",
-      "log_sha256": "bfe050316ba1664049ab530cb4ea400a72ef27a18a88620f0f19e8efe78c69bf"
-    },
-    "focused_log": "/home/coder/workspace/prompts/reports/lkjscript-equality/equality-focused-final.log",
-    "focused_log_sha256": "df1e0b463dfb090de0e576548dd29e465e607d198322269753ff2d02922f9d89",
-    "query_edit_log": "/home/coder/workspace/prompts/reports/lkjscript-equality/equality-query-final.log",
-    "query_edit_log_sha256": "88e8262baaa591b6ffb7c98380ef80917265b08fc51cd1de9b473d68b267ee8b",
-    "publication_ci": {
-      "status_at_commit": "pending",
-      "result_record": "/home/coder/workspace/prompts/reports/lkjscript-equality/publication-ci.json"
-    }
-  },
-  "accounting": {
-    "removed_old_target_sites": {
-      "nom": 10,
-      "dom": 3,
-      "total": 13
-    },
-    "new_independent_primary_sites": {
-      "nom": 4,
-      "dom": 0,
-      "sozu": 0
-    },
-    "nom_dom_primary_sites": {
-      "before": 244,
-      "after": 235
-    },
-    "source_semantic_edits": 0
-  },
-  "interpretation": [
-    "This producer passes 29 focused cases across 87 route checks, the complete merged-tree gate and the standalone real-programs test. The refreshed seed reproduces the fixed point. Publication CI is recorded separately after the source-and-seed commit. No large root admits and no large-program own test has run under lkjscript.",
-    "Original source bytes, projection identities and the selected library inventory remain unchanged. Original-suffix refusals are unchanged.",
-    "A vanished diagnostic is not proof that the surrounding program admits. New independent sites and recovery artifacts are counted separately.",
-    "The three original classification JSON files remain the immutable baseline; this file records the current frontier and exact deltas.",
-    "Source/frontend edits receive no operation-adoption credit from these observations."
-  ],
-  "specimens": {
-    "nom": {
-      "package": {
-        "commit": "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
-        "name": "nom",
-        "object_format": "sha1",
-        "origin": "https://github.com/rust-bakery/nom.git",
-        "root": "/home/coder/workspace/lkjscript-specimens/nom-8.0.0",
-        "version": "8.0.0"
+   "accounting" : {
+      "changed_primary_diagnostic_identities" : {
+         "dom" : 1,
+         "nom" : 0,
+         "sozu" : 0
       },
-      "baseline_classification": {
-        "path": "docs/real-programs-nom.json",
-        "sha256": "d8303c07db0c8073b7fa393ba39b8d439ee5ce8ed28523f0179dbf59b88f6418"
+      "new_independent_primary_sites" : {
+         "dom" : 1,
+         "nom" : 2,
+         "sozu" : 0
       },
-      "probe_receipt": {
-        "path": "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-equality-809c5052274cb61b.json",
-        "sha256": "142d9249f37b9d9aeba5348962d2d54431bde5fd95a3892b6202eceaa1225e16"
+      "nom_dom_primary_sites" : {
+         "after" : 183,
+         "before" : 244
       },
-      "baseline_probe_receipt": {
-        "path": "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-units-eb08fbaa.json",
-        "sha256": "5c61766cf5f33b2bf13e9028686b2d5b938a0be1907ffbab45457f917b74b41c"
+      "removed_old_target_diagnostic_identities" : {
+         "dom" : 12,
+         "nom" : 51,
+         "total" : 63
       },
-      "projection_manifest_sha256": "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
-      "library_manifest_sha256": "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
-      "observations": [
-        {
-          "entry_sha256": "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
-          "exit_status": 1,
-          "launcher_signal": 0,
-          "peak_rss_kib": 5488,
-          "route": "original_suffix",
-          "stderr_sha256": "1170c98833b245d8181dc2850bcfc1d36d34bc83792f33ec55fd3787b0b748e1",
-          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "upstream_entry": "src/lib.rs",
-          "wall_seconds": 0.001836
-        },
-        {
-          "entry_sha256": "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
-          "exit_status": 1,
-          "launcher_signal": 0,
-          "peak_rss_kib": 32352,
-          "route": "suffix_projection",
-          "stderr_sha256": "64082d32ccfae877d37e94c9bed15dab757bc6d99b575efb9af3168be3f5bb4d",
-          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "upstream_entry": "src/lib.rs",
-          "wall_seconds": 0.272036
-        }
-      ],
-      "accounting": {
-        "raw_projected_diagnostic_rows": 445,
-        "raw_by_code": {
-          "E_BLOCKED": 223,
-          "E_LEX": 8,
-          "E_PARSE": 55,
-          "E_UNSUPPORTED": 159
-        },
-        "baseline_primary_sites": 149,
-        "current_primary_sites": 143,
-        "prior_unclassified_rows": 0,
-        "recovery_rows_excluded": 79,
-        "new_unclassified_rows": 0,
-        "upstream_default_candidate_sites": 139,
-        "upstream_default_inactive_sites": 4
+      "removed_old_target_sites" : {
+         "dom" : 12,
+         "nom" : 51,
+         "total" : 63
       },
-      "ranked_causes": [
-        {
-          "id": "return_position_impl_trait",
-          "title": "Opaque impl Trait return types",
-          "owner": "Language / compiler source lowering",
-          "baseline_rank": 2,
-          "site_count": 78,
-          "overlapping_file_physical_lines": 5964,
-          "affected_files": [
-            "src/bits/complete.rs",
-            "src/bits/mod.rs",
-            "src/bits/streaming.rs",
-            "src/bytes/complete.rs",
-            "src/bytes/mod.rs",
-            "src/bytes/streaming.rs",
-            "src/character/mod.rs",
-            "src/combinator/mod.rs",
-            "src/multi/mod.rs"
-          ]
-        },
-        {
-          "id": "qualified_associated_paths",
-          "title": "Qualified associated type and value paths",
-          "owner": "Language / compiler parser and resolution",
-          "baseline_rank": 3,
-          "site_count": 45,
-          "overlapping_file_physical_lines": 4360,
-          "affected_files": [
-            "src/bytes/mod.rs",
-            "src/character/mod.rs",
-            "src/combinator/mod.rs",
-            "src/multi/mod.rs"
-          ]
-        },
-        {
-          "id": "macro_rules_dollar_token",
-          "title": "Rust declarative macro input stops at dollar tokens",
-          "owner": "Language / checked source-producer route",
-          "baseline_rank": 1,
-          "site_count": 8,
-          "overlapping_file_physical_lines": 6418,
-          "affected_files": [
-            "src/branch/mod.rs",
-            "src/character/complete.rs",
-            "src/character/streaming.rs",
-            "src/error.rs",
-            "src/internal.rs",
-            "src/macros.rs",
-            "src/number/mod.rs",
-            "src/sequence/mod.rs"
-          ]
-        },
-        {
-          "id": "const_generics",
-          "title": "Const generic parameters",
-          "owner": "Language / compiler generic parameters",
-          "baseline_rank": 5,
-          "site_count": 6,
-          "overlapping_file_physical_lines": 1681,
-          "affected_files": [
-            "src/traits.rs"
-          ]
-        },
-        {
-          "id": "doc_doctest_cfg",
-          "title": "Documentation cfg predicates",
-          "owner": "Language / configuration and source loading",
-          "baseline_rank": 7,
-          "site_count": 3,
-          "overlapping_file_physical_lines": 460,
-          "affected_files": [
-            "src/lib.rs"
-          ]
-        },
-        {
-          "id": "unsafe_blocks",
-          "title": "Unsafe block surface",
-          "owner": "Refused by design / checked-memory admission policy",
-          "baseline_rank": 8,
-          "site_count": 2,
-          "overlapping_file_physical_lines": 1681,
-          "affected_files": [
-            "src/traits.rs"
-          ]
-        },
-        {
-          "id": "maybe_sized_bounds",
-          "title": "Relaxed ?Sized bound syntax",
-          "owner": "Language / compiler generic bounds",
-          "baseline_rank": 6,
-          "site_count": 1,
-          "overlapping_file_physical_lines": 1044,
-          "affected_files": [
-            "src/combinator/mod.rs"
-          ]
-        }
-      ],
-      "old_site_counts": [
-        {
-          "baseline_rank": 4,
-          "baseline_sites": 10,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 0,
-          "id": "associated_type_equality_bindings",
-          "not_observed_sites": 10,
-          "owner": "Language / compiler parser and bounds",
-          "title": "Associated-type equality bindings in trait arguments"
-        },
-        {
-          "baseline_rank": 5,
-          "baseline_sites": 6,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 6,
-          "id": "const_generics",
-          "not_observed_sites": 0,
-          "owner": "Language / compiler generic parameters",
-          "title": "Const generic parameters"
-        },
-        {
-          "baseline_rank": 7,
-          "baseline_sites": 3,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 3,
-          "id": "doc_doctest_cfg",
-          "not_observed_sites": 0,
-          "owner": "Language / configuration and source loading",
-          "title": "Documentation cfg predicates"
-        },
-        {
-          "baseline_rank": 1,
-          "baseline_sites": 8,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 8,
-          "id": "macro_rules_dollar_token",
-          "not_observed_sites": 0,
-          "owner": "Language / checked source-producer route",
-          "title": "Rust declarative macro input stops at dollar tokens"
-        },
-        {
-          "baseline_rank": 6,
-          "baseline_sites": 1,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 1,
-          "id": "maybe_sized_bounds",
-          "not_observed_sites": 0,
-          "owner": "Language / compiler generic bounds",
-          "title": "Relaxed ?Sized bound syntax"
-        },
-        {
-          "baseline_rank": 3,
-          "baseline_sites": 41,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 41,
-          "id": "qualified_associated_paths",
-          "not_observed_sites": 0,
-          "owner": "Language / compiler parser and resolution",
-          "title": "Qualified associated type and value paths"
-        },
-        {
-          "baseline_rank": 2,
-          "baseline_sites": 78,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 78,
-          "id": "return_position_impl_trait",
-          "not_observed_sites": 0,
-          "owner": "Language / compiler source lowering",
-          "title": "Opaque impl Trait return types"
-        },
-        {
-          "baseline_rank": 8,
-          "baseline_sites": 2,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 2,
-          "id": "unsafe_blocks",
-          "not_observed_sites": 0,
-          "owner": "Refused by design / checked-memory admission policy",
-          "title": "Unsafe block surface"
-        }
-      ],
-      "new_primary_sites": [
-        {
-          "path": "src/bytes/mod.rs",
-          "line": 941,
-          "column": 3,
-          "code": "E_PARSE",
-          "message": "expected an identifier",
-          "cause": "qualified_associated_paths",
-          "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
-          "reason": "This qualified associated projection is a separately parsed impl where predicate or associated-type definition, reached after an earlier equality binding is consumed; no rejected impl-Trait return shares its item."
-        },
-        {
-          "path": "src/multi/mod.rs",
-          "line": 1440,
-          "column": 3,
-          "code": "E_PARSE",
-          "message": "expected an identifier",
-          "cause": "qualified_associated_paths",
-          "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
-          "reason": "This qualified associated projection is a separately parsed impl where predicate or associated-type definition, reached after an earlier equality binding is consumed; no rejected impl-Trait return shares its item."
-        },
-        {
-          "path": "src/multi/mod.rs",
-          "line": 982,
-          "column": 16,
-          "code": "E_PARSE",
-          "message": "expected an identifier",
-          "cause": "qualified_associated_paths",
-          "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
-          "reason": "This qualified associated projection is a separately parsed impl where predicate or associated-type definition, reached after an earlier equality binding is consumed; no rejected impl-Trait return shares its item."
-        },
-        {
-          "path": "src/multi/mod.rs",
-          "line": 996,
-          "column": 13,
-          "code": "E_PARSE",
-          "message": "expected an expression",
-          "cause": "qualified_associated_paths",
-          "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
-          "reason": "A qualified associated value call is reached in the independently parsed Fill::process body after its impl bound equality is consumed. The source uses <F as Parser<I>>::Error::append(...)."
-        }
-      ],
-      "removed_previously_unclassified_sites": [],
-      "review": {
-        "path": "docs/real-programs-equality-review.json",
-        "sha256": "d0d823df8612c459909ed975a5d4ac9eed21b8e9b58d9615b404480586702196",
-        "new_primary_sites": 4,
-        "changed_recovery_rows": 51,
-        "unchanged_recovery_rows": 28
-      },
-      "observed_at_utc": "2026-11-17T17:55:10Z",
-      "rerank_payload_sha256": "a81a836ed71435e0db31cf9d951c63b344ce1050ff0e695fb6a5f3021861304f"
-    },
-    "dom": {
-      "package": {
-        "commit": "186c02d9359762404054fbc8af3a5b07cdf795a9",
-        "name": "dom_query",
-        "object_format": "sha1",
-        "origin": "https://github.com/niklak/dom_query.git",
-        "root": "/home/coder/workspace/lkjscript-specimens/dom_query-0.28.0",
-        "version": "0.28.0"
-      },
-      "baseline_classification": {
-        "path": "docs/real-programs-dom.json",
-        "sha256": "93427cd739b9426b609c4f83b3a7fd4aed7f62fad27103d8b9d4cc662e825d3d"
-      },
-      "probe_receipt": {
-        "path": "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-equality-809c5052274cb61b.json",
-        "sha256": "7223601461fab958a27dcd2cd84b1658e63ce44dc43e6e613b1ce6fc1838e568"
-      },
-      "baseline_probe_receipt": {
-        "path": "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-units-eb08fbaa.json",
-        "sha256": "1e6e0b9eab83c826e041888e067a4e4029f6f7de733ebec4a93d32da22509abb"
-      },
-      "projection_manifest_sha256": "7eef776218daecb22822d613a609a00039600c34cea05a6047216111148272c9",
-      "library_manifest_sha256": "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
-      "observations": [
-        {
-          "entry_sha256": "81441eac6c5af9fe4aa7eea33f2f11ebad8a6d309a0f0fb80a17c9d2174f5779",
-          "exit_status": 1,
-          "launcher_signal": 0,
-          "peak_rss_kib": 5488,
-          "route": "original_suffix",
-          "stderr_sha256": "1170c98833b245d8181dc2850bcfc1d36d34bc83792f33ec55fd3787b0b748e1",
-          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "upstream_entry": "src/lib.rs",
-          "wall_seconds": 0.002526
-        },
-        {
-          "entry_sha256": "81441eac6c5af9fe4aa7eea33f2f11ebad8a6d309a0f0fb80a17c9d2174f5779",
-          "exit_status": 1,
-          "launcher_signal": 0,
-          "peak_rss_kib": 34456,
-          "route": "suffix_projection",
-          "stderr_sha256": "edc515500ab829e097fc9f1ed34f88f90d730634c4fa1090d80a06a4f0abfd7f",
-          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "upstream_entry": "src/lib.rs",
-          "wall_seconds": 0.293683
-        }
-      ],
-      "accounting": {
-        "raw_projected_diagnostic_rows": 191,
-        "raw_by_code": {
-          "E_BLOCKED": 96,
-          "E_CAPABILITY": 10,
-          "E_PARSE": 19,
-          "E_UNSUPPORTED": 49,
-          "E_UNSUPPORTED_MACRO": 17
-        },
-        "baseline_primary_sites": 95,
-        "current_primary_sites": 92,
-        "prior_unclassified_rows": 0,
-        "recovery_rows_excluded": 3,
-        "new_unclassified_rows": 0,
-        "upstream_default_candidate_sites": 85,
-        "upstream_test_only_sites": 7
-      },
-      "ranked_causes": [
-        {
-          "id": "debug_format_specification",
-          "title": "Debug format specification requires an unimplemented source-formatting contract",
-          "owner": "language",
-          "baseline_rank": 2,
-          "site_count": 24,
-          "overlapping_file_physical_lines": 207,
-          "affected_files": [
-            "src/dom_tree/validation.rs"
-          ]
-        },
-        {
-          "id": "foreign_atom_macros",
-          "title": "Dependency-provided atom macros in expressions and patterns",
-          "owner": "language",
-          "baseline_rank": 1,
-          "site_count": 21,
-          "overlapping_file_physical_lines": 1843,
-          "affected_files": [
-            "src/document.rs",
-            "src/dom_tree/tree.rs",
-            "src/node/node_data.rs",
+      "source_semantic_edits" : 0,
+      "target_site_interpretation" : "A changed diagnostic retaining the same reviewed cause at an original target coordinate remains an observed target site; message disappearance alone earns no form-removal credit."
+   },
+   "baseline_compiler_sha256" : "eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f",
+   "compiler_sha256" : "92c4caac762373609bb19e8eaa38559de060d59c41e9197a9ca59413e1690bde",
+   "interpretation" : [
+      "Original source bytes, projection identities and the selected library inventory remain unchanged. Original-suffix refusals are compared byte-for-byte.",
+      "A vanished diagnostic is not proof that the surrounding program admits. New independent sites, changed diagnostic identities at old coordinates, and recovery artifacts are reported separately.",
+      "The three original classification JSON files remain the immutable baseline; this file records the current frontier and exact deltas.",
+      "Source/frontend edits receive no operation-adoption credit from these observations.",
+      "The verify where predicate at src/combinator/mod.rs:503:7 is current same-function recovery after rejected impl Trait; it may become an independent ?Sized refusal when opaque-return parsing proceeds. No sizedness support or module admission is inferred."
+   ],
+   "kind" : "current_foreign_program_refusal_frontier",
+   "rerank_payload_fingerprint" : "sha256(JSON::PP canonical ascii encode(rerank without inputs))",
+   "schema" : 1,
+   "specimens" : {
+      "dom" : {
+         "accounting" : {
+            "baseline_primary_sites" : 95,
+            "current_primary_sites" : 83,
+            "new_unclassified_rows" : 0,
+            "prior_unclassified_rows" : 0,
+            "raw_by_code" : {
+               "E_BLOCKED" : 87,
+               "E_CAPABILITY" : 10,
+               "E_PARSE" : 8,
+               "E_UNSUPPORTED" : 50,
+               "E_UNSUPPORTED_MACRO" : 18
+            },
+            "raw_projected_diagnostic_rows" : 173,
+            "recovery_rows_excluded" : 3,
+            "upstream_default_candidate_sites" : 76,
+            "upstream_test_only_sites" : 7
+         },
+         "baseline_classification" : {
+            "path" : "docs/real-programs-dom.json",
+            "sha256" : "93427cd739b9426b609c4f83b3a7fd4aed7f62fad27103d8b9d4cc662e825d3d"
+         },
+         "baseline_probe_receipt" : {
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-units-eb08fbaa.json",
+            "sha256" : "1e6e0b9eab83c826e041888e067a4e4029f6f7de733ebec4a93d32da22509abb"
+         },
+         "library_manifest_sha256" : "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+         "new_primary_sites" : [
+            "path",
             "src/node/selector.rs",
-            "src/node/text_formatting.rs"
-          ]
-        },
-        {
-          "id": "const_functions",
-          "title": "const fn declarations",
-          "owner": "language",
-          "baseline_rank": 3,
-          "site_count": 14,
-          "overlapping_file_physical_lines": 2839,
-          "affected_files": [
-            "src/dom_tree/tree.rs",
-            "src/node.rs",
-            "src/node/inner.rs",
-            "src/node/node_ref.rs",
-            "src/node/text_formatting.rs",
-            "src/selection.rs"
-          ]
-        },
-        {
-          "id": "qualified_associated_type_paths",
-          "title": "Qualified associated-type paths",
-          "owner": "language",
-          "baseline_rank": 4,
-          "site_count": 9,
-          "overlapping_file_physical_lines": 556,
-          "affected_files": [
-            "src/matcher.rs",
-            "src/node/selector.rs"
-          ]
-        },
-        {
-          "id": "shared_interior_mutation",
-          "title": "Shared interior mutation and borrow guards",
-          "owner": "refused_by_design",
-          "baseline_rank": 15,
-          "site_count": 9,
-          "overlapping_file_physical_lines": 4073,
-          "affected_files": [
-            "src/document.rs",
-            "src/dom_tree/ops.rs",
-            "src/dom_tree/traversal.rs",
-            "src/dom_tree/tree.rs",
-            "src/node/iters.rs",
-            "src/node/node_ref.rs",
-            "src/node/serializing.rs",
-            "src/node/text_formatting.rs",
-            "src/selection.rs"
-          ]
-        },
-        {
-          "id": "opaque_impl_trait",
-          "title": "impl Trait argument/return types",
-          "owner": "language",
-          "baseline_rank": 5,
-          "site_count": 5,
-          "overlapping_file_physical_lines": 1784,
-          "affected_files": [
-            "src/node/node_ref.rs",
-            "src/selection.rs"
-          ]
-        },
-        {
-          "id": "generic_associated_types",
-          "title": "Generic associated types",
-          "owner": "language",
-          "baseline_rank": 7,
-          "site_count": 2,
-          "overlapping_file_physical_lines": 844,
-          "affected_files": [
-            "src/document.rs",
-            "src/matcher.rs"
-          ]
-        },
-        {
-          "id": "documentation_attribute_macro",
-          "title": "Macro-valued documentation attribute",
-          "owner": "language",
-          "baseline_rank": 11,
-          "site_count": 1,
-          "overlapping_file_physical_lines": 45,
-          "affected_files": [
-            "src/lib.rs"
-          ]
-        },
-        {
-          "id": "dynamic_trait_object",
-          "title": "Boxed dyn Iterator",
-          "owner": "language",
-          "baseline_rank": 10,
-          "site_count": 1,
-          "overlapping_file_physical_lines": 917,
-          "affected_files": [
-            "src/selection.rs"
-          ]
-        },
-        {
-          "id": "lifetime_outlives_where",
-          "title": "Lifetime outlives predicate in where",
-          "owner": "language",
-          "baseline_rank": 8,
-          "site_count": 1,
-          "overlapping_file_physical_lines": 917,
-          "affected_files": [
-            "src/selection.rs"
-          ]
-        },
-        {
-          "id": "qualified_attribute_path",
-          "title": "Namespaced rustfmt attribute",
-          "owner": "language",
-          "baseline_rank": 13,
-          "site_count": 1,
-          "overlapping_file_physical_lines": 692,
-          "affected_files": [
-            "src/dom_tree/tree.rs"
-          ]
-        },
-        {
-          "id": "statement_cfg_attribute",
-          "title": "Attribute on an expression statement",
-          "owner": "language",
-          "baseline_rank": 12,
-          "site_count": 1,
-          "overlapping_file_physical_lines": 510,
-          "affected_files": [
-            "src/document.rs"
-          ]
-        },
-        {
-          "id": "static_test_fixture",
-          "title": "Immutable static test data",
-          "owner": "language",
-          "baseline_rank": 13,
-          "site_count": 1,
-          "overlapping_file_physical_lines": 692,
-          "affected_files": [
-            "src/dom_tree/tree.rs"
-          ]
-        },
-        {
-          "id": "std_io_result_facade",
-          "title": "std::io data/type facade",
-          "owner": "library",
-          "baseline_rank": 14,
-          "site_count": 1,
-          "overlapping_file_physical_lines": 115,
-          "affected_files": [
-            "src/node/serializing.rs"
-          ]
-        },
-        {
-          "id": "where_bound_on_path_type",
-          "title": "where bound with a qualified concrete type on its left",
-          "owner": "language",
-          "baseline_rank": 9,
-          "site_count": 1,
-          "overlapping_file_physical_lines": 867,
-          "affected_files": [
-            "src/node/node_ref.rs"
-          ]
-        }
-      ],
-      "old_site_counts": [
-        {
-          "baseline_rank": 6,
-          "baseline_sites": 3,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 0,
-          "id": "associated_type_bindings",
-          "not_observed_sites": 3,
-          "owner": "language",
-          "title": "Associated-type equality bindings"
-        },
-        {
-          "baseline_rank": 3,
-          "baseline_sites": 14,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 14,
-          "id": "const_functions",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "const fn declarations"
-        },
-        {
-          "baseline_rank": 2,
-          "baseline_sites": 24,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 24,
-          "id": "debug_format_specification",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "Debug format specification requires an unimplemented source-formatting contract"
-        },
-        {
-          "baseline_rank": 11,
-          "baseline_sites": 1,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 1,
-          "id": "documentation_attribute_macro",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "Macro-valued documentation attribute"
-        },
-        {
-          "baseline_rank": 10,
-          "baseline_sites": 1,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 1,
-          "id": "dynamic_trait_object",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "Boxed dyn Iterator"
-        },
-        {
-          "baseline_rank": 1,
-          "baseline_sites": 21,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 21,
-          "id": "foreign_atom_macros",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "Dependency-provided atom macros in expressions and patterns"
-        },
-        {
-          "baseline_rank": 7,
-          "baseline_sites": 2,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 2,
-          "id": "generic_associated_types",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "Generic associated types"
-        },
-        {
-          "baseline_rank": 8,
-          "baseline_sites": 1,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 1,
-          "id": "lifetime_outlives_where",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "Lifetime outlives predicate in where"
-        },
-        {
-          "baseline_rank": 5,
-          "baseline_sites": 5,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 5,
-          "id": "opaque_impl_trait",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "impl Trait argument/return types"
-        },
-        {
-          "baseline_rank": 4,
-          "baseline_sites": 9,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 9,
-          "id": "qualified_associated_type_paths",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "Qualified associated-type paths"
-        },
-        {
-          "baseline_rank": 13,
-          "baseline_sites": 1,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 1,
-          "id": "qualified_attribute_path",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "Namespaced rustfmt attribute"
-        },
-        {
-          "baseline_rank": 15,
-          "baseline_sites": 9,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 9,
-          "id": "shared_interior_mutation",
-          "not_observed_sites": 0,
-          "owner": "refused_by_design",
-          "title": "Shared interior mutation and borrow guards"
-        },
-        {
-          "baseline_rank": 12,
-          "baseline_sites": 1,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 1,
-          "id": "statement_cfg_attribute",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "Attribute on an expression statement"
-        },
-        {
-          "baseline_rank": 13,
-          "baseline_sites": 1,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 1,
-          "id": "static_test_fixture",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "Immutable static test data"
-        },
-        {
-          "baseline_rank": 14,
-          "baseline_sites": 1,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 1,
-          "id": "std_io_result_facade",
-          "not_observed_sites": 0,
-          "owner": "library",
-          "title": "std::io data/type facade"
-        },
-        {
-          "baseline_rank": 9,
-          "baseline_sites": 1,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 1,
-          "id": "where_bound_on_path_type",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "where bound with a qualified concrete type on its left"
-        }
-      ],
-      "new_primary_sites": [],
-      "removed_previously_unclassified_sites": [],
-      "observed_at_utc": "2026-11-17T17:55:13Z",
-      "rerank_payload_sha256": "9db89468c03fd7a0d466376a6fd519da6cadcc7670c4cd96bfe093ca8d76622f"
-    },
-    "sozu": {
-      "package": {
-        "commit": "c5ff06a12bd514e06ab28965052d0ad1e19c45b3",
-        "name": "sozu",
-        "object_format": "sha1",
-        "origin": "https://github.com/sozu-proxy/sozu.git",
-        "root": "/home/coder/workspace/lkjscript-specimens/sozu-1.0.6",
-        "version": "1.0.6"
+            "line",
+            178,
+            "column",
+            40,
+            "code",
+            "E_UNSUPPORTED_MACRO",
+            "message",
+            "unsupported macro: local_name!",
+            "cause",
+            "foreign_atom_macros",
+            "file_sha256",
+            "64ddf365e224fde342c457d8c0543d3851a01cb3112bd730db730500755a2798",
+            "reason",
+            "The has_id body compares attr.name.local with local_name!(\"id\"). The source contains a real dependency-provided atom macro call. The previously refused qualified associated parameter type now permits reaching this expression; it is a new macro primary, not recovery from the earlier ns! in a different method.",
+            "relationship_to_baseline",
+            "new_independent_coordinate",
+            "path",
+            "src/selection.rs",
+            "line",
+            569,
+            "column",
+            9,
+            "code",
+            "E_UNSUPPORTED",
+            "message",
+            "unsupported construct: lifetime-outlives where predicate",
+            "cause",
+            "lifetime_outlives_where",
+            "file_sha256",
+            "6c8c45408ccb02f813709f93b118bdf4e174640968a41a2d0d531b53ad60027a",
+            "reason",
+            "The original Selection::select signature contains the explicit where predicate lifetime a outlives lifetime b. The diagnostic wording changed at the already classified source coordinate, but the unsupported source requirement remains the same lifetime-outlives predicate.",
+            "relationship_to_baseline",
+            "changed_diagnostic_at_old_primary_coordinate"
+         ],
+         "observations" : [
+            {
+               "entry_sha256" : "81441eac6c5af9fe4aa7eea33f2f11ebad8a6d309a0f0fb80a17c9d2174f5779",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 5428,
+               "route" : "original_suffix",
+               "stderr_sha256" : "1170c98833b245d8181dc2850bcfc1d36d34bc83792f33ec55fd3787b0b748e1",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "src/lib.rs",
+               "wall_seconds" : 0.002373
+            },
+            {
+               "entry_sha256" : "81441eac6c5af9fe4aa7eea33f2f11ebad8a6d309a0f0fb80a17c9d2174f5779",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 35080,
+               "route" : "suffix_projection",
+               "stderr_sha256" : "0d390d815c0a8c83a16a03b1760c371692a425758ff33b0eb6835c3e80ad5d2d",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "src/lib.rs",
+               "wall_seconds" : 0.174094
+            }
+         ],
+         "observed_at_utc" : "2026-11-17T19:07:11Z",
+         "old_site_counts" : [
+            {
+               "baseline_rank" : 6,
+               "baseline_sites" : 3,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "associated_type_bindings",
+               "not_observed_sites" : 3,
+               "owner" : "language",
+               "title" : "Associated-type equality bindings"
+            },
+            {
+               "baseline_rank" : 3,
+               "baseline_sites" : 14,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 14,
+               "id" : "const_functions",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "const fn declarations"
+            },
+            {
+               "baseline_rank" : 2,
+               "baseline_sites" : 24,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 24,
+               "id" : "debug_format_specification",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "Debug format specification requires an unimplemented source-formatting contract"
+            },
+            {
+               "baseline_rank" : 11,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "documentation_attribute_macro",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "Macro-valued documentation attribute"
+            },
+            {
+               "baseline_rank" : 10,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "dynamic_trait_object",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "Boxed dyn Iterator"
+            },
+            {
+               "baseline_rank" : 1,
+               "baseline_sites" : 21,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 21,
+               "id" : "foreign_atom_macros",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "Dependency-provided atom macros in expressions and patterns"
+            },
+            {
+               "baseline_rank" : 7,
+               "baseline_sites" : 2,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 2,
+               "id" : "generic_associated_types",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "Generic associated types"
+            },
+            {
+               "baseline_rank" : 8,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 1,
+               "exact_surviving_sites" : 0,
+               "id" : "lifetime_outlives_where",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "Lifetime outlives predicate in where"
+            },
+            {
+               "baseline_rank" : 5,
+               "baseline_sites" : 5,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 5,
+               "id" : "opaque_impl_trait",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "impl Trait argument/return types"
+            },
+            {
+               "baseline_rank" : 4,
+               "baseline_sites" : 9,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "qualified_associated_type_paths",
+               "not_observed_sites" : 9,
+               "owner" : "language",
+               "title" : "Qualified associated-type paths"
+            },
+            {
+               "baseline_rank" : 13,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "qualified_attribute_path",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "Namespaced rustfmt attribute"
+            },
+            {
+               "baseline_rank" : 15,
+               "baseline_sites" : 9,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 9,
+               "id" : "shared_interior_mutation",
+               "not_observed_sites" : 0,
+               "owner" : "refused_by_design",
+               "title" : "Shared interior mutation and borrow guards"
+            },
+            {
+               "baseline_rank" : 12,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "statement_cfg_attribute",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "Attribute on an expression statement"
+            },
+            {
+               "baseline_rank" : 13,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "static_test_fixture",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "Immutable static test data"
+            },
+            {
+               "baseline_rank" : 14,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "std_io_result_facade",
+               "not_observed_sites" : 0,
+               "owner" : "library",
+               "title" : "std::io data/type facade"
+            },
+            {
+               "baseline_rank" : 9,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "where_bound_on_path_type",
+               "not_observed_sites" : 1,
+               "owner" : "language",
+               "title" : "where bound with a qualified concrete type on its left"
+            }
+         ],
+         "package" : {
+            "commit" : "186c02d9359762404054fbc8af3a5b07cdf795a9",
+            "name" : "dom_query",
+            "object_format" : "sha1",
+            "origin" : "https://github.com/niklak/dom_query.git",
+            "root" : "/home/coder/workspace/lkjscript-specimens/dom_query-0.28.0",
+            "version" : "0.28.0"
+         },
+         "probe_receipt" : {
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-qualified-92c4caac76237360.json",
+            "sha256" : "ac368a8205953f832a51ddbd7a2513fd0d799e491133d790ee448d9ad42bbf57"
+         },
+         "projection_manifest_sha256" : "7eef776218daecb22822d613a609a00039600c34cea05a6047216111148272c9",
+         "ranked_causes" : [
+            {
+               "affected_files" : [
+                  "src/dom_tree/validation.rs"
+               ],
+               "baseline_rank" : 2,
+               "id" : "debug_format_specification",
+               "overlapping_file_physical_lines" : 207,
+               "owner" : "language",
+               "site_count" : 24,
+               "title" : "Debug format specification requires an unimplemented source-formatting contract"
+            },
+            {
+               "affected_files" : [
+                  "src/document.rs",
+                  "src/dom_tree/tree.rs",
+                  "src/node/node_data.rs",
+                  "src/node/selector.rs",
+                  "src/node/text_formatting.rs"
+               ],
+               "baseline_rank" : 1,
+               "id" : "foreign_atom_macros",
+               "overlapping_file_physical_lines" : 1843,
+               "owner" : "language",
+               "site_count" : 22,
+               "title" : "Dependency-provided atom macros in expressions and patterns"
+            },
+            {
+               "affected_files" : [
+                  "src/dom_tree/tree.rs",
+                  "src/node.rs",
+                  "src/node/inner.rs",
+                  "src/node/node_ref.rs",
+                  "src/node/text_formatting.rs",
+                  "src/selection.rs"
+               ],
+               "baseline_rank" : 3,
+               "id" : "const_functions",
+               "overlapping_file_physical_lines" : 2839,
+               "owner" : "language",
+               "site_count" : 14,
+               "title" : "const fn declarations"
+            },
+            {
+               "affected_files" : [
+                  "src/document.rs",
+                  "src/dom_tree/ops.rs",
+                  "src/dom_tree/traversal.rs",
+                  "src/dom_tree/tree.rs",
+                  "src/node/iters.rs",
+                  "src/node/node_ref.rs",
+                  "src/node/serializing.rs",
+                  "src/node/text_formatting.rs",
+                  "src/selection.rs"
+               ],
+               "baseline_rank" : 15,
+               "id" : "shared_interior_mutation",
+               "overlapping_file_physical_lines" : 4073,
+               "owner" : "refused_by_design",
+               "site_count" : 9,
+               "title" : "Shared interior mutation and borrow guards"
+            },
+            {
+               "affected_files" : [
+                  "src/node/node_ref.rs",
+                  "src/selection.rs"
+               ],
+               "baseline_rank" : 5,
+               "id" : "opaque_impl_trait",
+               "overlapping_file_physical_lines" : 1784,
+               "owner" : "language",
+               "site_count" : 5,
+               "title" : "impl Trait argument/return types"
+            },
+            {
+               "affected_files" : [
+                  "src/document.rs",
+                  "src/matcher.rs"
+               ],
+               "baseline_rank" : 7,
+               "id" : "generic_associated_types",
+               "overlapping_file_physical_lines" : 844,
+               "owner" : "language",
+               "site_count" : 2,
+               "title" : "Generic associated types"
+            },
+            {
+               "affected_files" : [
+                  "src/lib.rs"
+               ],
+               "baseline_rank" : 11,
+               "id" : "documentation_attribute_macro",
+               "overlapping_file_physical_lines" : 45,
+               "owner" : "language",
+               "site_count" : 1,
+               "title" : "Macro-valued documentation attribute"
+            },
+            {
+               "affected_files" : [
+                  "src/selection.rs"
+               ],
+               "baseline_rank" : 10,
+               "id" : "dynamic_trait_object",
+               "overlapping_file_physical_lines" : 917,
+               "owner" : "language",
+               "site_count" : 1,
+               "title" : "Boxed dyn Iterator"
+            },
+            {
+               "affected_files" : [
+                  "src/selection.rs"
+               ],
+               "baseline_rank" : 8,
+               "id" : "lifetime_outlives_where",
+               "overlapping_file_physical_lines" : 917,
+               "owner" : "language",
+               "site_count" : 1,
+               "title" : "Lifetime outlives predicate in where"
+            },
+            {
+               "affected_files" : [
+                  "src/dom_tree/tree.rs"
+               ],
+               "baseline_rank" : 13,
+               "id" : "qualified_attribute_path",
+               "overlapping_file_physical_lines" : 692,
+               "owner" : "language",
+               "site_count" : 1,
+               "title" : "Namespaced rustfmt attribute"
+            },
+            {
+               "affected_files" : [
+                  "src/document.rs"
+               ],
+               "baseline_rank" : 12,
+               "id" : "statement_cfg_attribute",
+               "overlapping_file_physical_lines" : 510,
+               "owner" : "language",
+               "site_count" : 1,
+               "title" : "Attribute on an expression statement"
+            },
+            {
+               "affected_files" : [
+                  "src/dom_tree/tree.rs"
+               ],
+               "baseline_rank" : 13,
+               "id" : "static_test_fixture",
+               "overlapping_file_physical_lines" : 692,
+               "owner" : "language",
+               "site_count" : 1,
+               "title" : "Immutable static test data"
+            },
+            {
+               "affected_files" : [
+                  "src/node/serializing.rs"
+               ],
+               "baseline_rank" : 14,
+               "id" : "std_io_result_facade",
+               "overlapping_file_physical_lines" : 115,
+               "owner" : "library",
+               "site_count" : 1,
+               "title" : "std::io data/type facade"
+            }
+         ],
+         "removed_previously_unclassified_sites" : [],
+         "rerank_payload_sha256" : "7574db480a4af92f6865f1dd055e367324b62df00bf4e0db22074eef0004fd34",
+         "review" : {
+            "changed_primary_diagnostics" : 1,
+            "changed_recovery_rows" : 0,
+            "new_independent_primary_sites" : 1,
+            "path" : "docs/real-programs-qualified-dom-review.json",
+            "reviewed_primary_sites" : 2,
+            "sha256" : "b5bcddb0fa33a346b41e2f1d649e9cb8f315da927ed7f5cc2b1dd914eaa9e0ec",
+            "unchanged_recovery_rows" : 3
+         }
       },
-      "baseline_classification": {
-        "path": "docs/real-programs-sozu.json",
-        "sha256": "dde8854bfe85d310d90182ba13756212cc3a5684d28baf1d1b4b35bdefb9118e"
+      "nom" : {
+         "accounting" : {
+            "baseline_primary_sites" : 149,
+            "current_primary_sites" : 100,
+            "new_unclassified_rows" : 0,
+            "prior_unclassified_rows" : 0,
+            "raw_by_code" : {
+               "E_BLOCKED" : 206,
+               "E_LEX" : 8,
+               "E_PARSE" : 4,
+               "E_UNSUPPORTED" : 193
+            },
+            "raw_projected_diagnostic_rows" : 411,
+            "recovery_rows_excluded" : 105,
+            "upstream_default_candidate_sites" : 96,
+            "upstream_default_inactive_sites" : 4
+         },
+         "baseline_classification" : {
+            "path" : "docs/real-programs-nom.json",
+            "sha256" : "d8303c07db0c8073b7fa393ba39b8d439ee5ce8ed28523f0179dbf59b88f6418"
+         },
+         "baseline_probe_receipt" : {
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-units-eb08fbaa.json",
+            "sha256" : "5c61766cf5f33b2bf13e9028686b2d5b938a0be1907ffbab45457f917b74b41c"
+         },
+         "library_manifest_sha256" : "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+         "new_primary_sites" : [
+            "path",
+            "src/multi/mod.rs",
+            "line",
+            961,
+            "column",
+            6,
+            "code",
+            "E_UNSUPPORTED",
+            "message",
+            "unsupported construct: impl",
+            "cause",
+            "return_position_impl_trait",
+            "file_sha256",
+            "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+            "reason",
+            "The fill function directly returns impl Parser<I, Output = (), Error = E> + lifetime. Its preceding parameter contains a qualified associated projection; progression through that parameter now exposes the genuine opaque-result refusal at this later source occurrence.",
+            "relationship_to_baseline",
+            "new_independent_coordinate",
+            "path",
+            "src/combinator/mod.rs",
+            "line",
+            524,
+            "column",
+            7,
+            "code",
+            "E_PARSE",
+            "message",
+            "expected an identifier",
+            "cause",
+            "maybe_sized_bounds",
+            "file_sha256",
+            "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+            "reason",
+            "The original where clause of the Parser implementation for Verify explicitly contains O2: ?Sized. The earlier ?Sized diagnostic at the separate Verify struct declaration (line 513) is not a recovery parent for this independently declared implementation bound.",
+            "relationship_to_baseline",
+            "new_independent_coordinate"
+         ],
+         "observations" : [
+            {
+               "entry_sha256" : "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 5428,
+               "route" : "original_suffix",
+               "stderr_sha256" : "1170c98833b245d8181dc2850bcfc1d36d34bc83792f33ec55fd3787b0b748e1",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "src/lib.rs",
+               "wall_seconds" : 0.002779
+            },
+            {
+               "entry_sha256" : "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 35284,
+               "route" : "suffix_projection",
+               "stderr_sha256" : "c8ddbb70bfd49a5ef5998e6f2334d6de8690311ffc0d2b91a76c14a5f0aa5be1",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "src/lib.rs",
+               "wall_seconds" : 0.229299
+            }
+         ],
+         "observed_at_utc" : "2026-11-17T19:07:08Z",
+         "old_site_counts" : [
+            {
+               "baseline_rank" : 4,
+               "baseline_sites" : 10,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "associated_type_equality_bindings",
+               "not_observed_sites" : 10,
+               "owner" : "Language / compiler parser and bounds",
+               "title" : "Associated-type equality bindings in trait arguments"
+            },
+            {
+               "baseline_rank" : 5,
+               "baseline_sites" : 6,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 6,
+               "id" : "const_generics",
+               "not_observed_sites" : 0,
+               "owner" : "Language / compiler generic parameters",
+               "title" : "Const generic parameters"
+            },
+            {
+               "baseline_rank" : 7,
+               "baseline_sites" : 3,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 3,
+               "id" : "doc_doctest_cfg",
+               "not_observed_sites" : 0,
+               "owner" : "Language / configuration and source loading",
+               "title" : "Documentation cfg predicates"
+            },
+            {
+               "baseline_rank" : 1,
+               "baseline_sites" : 8,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 8,
+               "id" : "macro_rules_dollar_token",
+               "not_observed_sites" : 0,
+               "owner" : "Language / checked source-producer route",
+               "title" : "Rust declarative macro input stops at dollar tokens"
+            },
+            {
+               "baseline_rank" : 6,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "maybe_sized_bounds",
+               "not_observed_sites" : 0,
+               "owner" : "Language / compiler generic bounds",
+               "title" : "Relaxed ?Sized bound syntax"
+            },
+            {
+               "baseline_rank" : 3,
+               "baseline_sites" : 41,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "qualified_associated_paths",
+               "not_observed_sites" : 41,
+               "owner" : "Language / compiler parser and resolution",
+               "title" : "Qualified associated type and value paths"
+            },
+            {
+               "baseline_rank" : 2,
+               "baseline_sites" : 78,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 78,
+               "id" : "return_position_impl_trait",
+               "not_observed_sites" : 0,
+               "owner" : "Language / compiler source lowering",
+               "title" : "Opaque impl Trait return types"
+            },
+            {
+               "baseline_rank" : 8,
+               "baseline_sites" : 2,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 2,
+               "id" : "unsafe_blocks",
+               "not_observed_sites" : 0,
+               "owner" : "Refused by design / checked-memory admission policy",
+               "title" : "Unsafe block surface"
+            }
+         ],
+         "package" : {
+            "commit" : "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
+            "name" : "nom",
+            "object_format" : "sha1",
+            "origin" : "https://github.com/rust-bakery/nom.git",
+            "root" : "/home/coder/workspace/lkjscript-specimens/nom-8.0.0",
+            "version" : "8.0.0"
+         },
+         "probe_receipt" : {
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-qualified-92c4caac76237360.json",
+            "sha256" : "035964f1cfdd5e6fb7f05e051611950549709b41837a805b47d170d82742cebd"
+         },
+         "projection_manifest_sha256" : "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
+         "ranked_causes" : [
+            {
+               "affected_files" : [
+                  "src/bits/complete.rs",
+                  "src/bits/mod.rs",
+                  "src/bits/streaming.rs",
+                  "src/bytes/complete.rs",
+                  "src/bytes/mod.rs",
+                  "src/bytes/streaming.rs",
+                  "src/character/mod.rs",
+                  "src/combinator/mod.rs",
+                  "src/multi/mod.rs"
+               ],
+               "baseline_rank" : 2,
+               "id" : "return_position_impl_trait",
+               "overlapping_file_physical_lines" : 5964,
+               "owner" : "Language / compiler source lowering",
+               "site_count" : 79,
+               "title" : "Opaque impl Trait return types"
+            },
+            {
+               "affected_files" : [
+                  "src/branch/mod.rs",
+                  "src/character/complete.rs",
+                  "src/character/streaming.rs",
+                  "src/error.rs",
+                  "src/internal.rs",
+                  "src/macros.rs",
+                  "src/number/mod.rs",
+                  "src/sequence/mod.rs"
+               ],
+               "baseline_rank" : 1,
+               "id" : "macro_rules_dollar_token",
+               "overlapping_file_physical_lines" : 6418,
+               "owner" : "Language / checked source-producer route",
+               "site_count" : 8,
+               "title" : "Rust declarative macro input stops at dollar tokens"
+            },
+            {
+               "affected_files" : [
+                  "src/traits.rs"
+               ],
+               "baseline_rank" : 5,
+               "id" : "const_generics",
+               "overlapping_file_physical_lines" : 1681,
+               "owner" : "Language / compiler generic parameters",
+               "site_count" : 6,
+               "title" : "Const generic parameters"
+            },
+            {
+               "affected_files" : [
+                  "src/lib.rs"
+               ],
+               "baseline_rank" : 7,
+               "id" : "doc_doctest_cfg",
+               "overlapping_file_physical_lines" : 460,
+               "owner" : "Language / configuration and source loading",
+               "site_count" : 3,
+               "title" : "Documentation cfg predicates"
+            },
+            {
+               "affected_files" : [
+                  "src/combinator/mod.rs"
+               ],
+               "baseline_rank" : 6,
+               "id" : "maybe_sized_bounds",
+               "overlapping_file_physical_lines" : 1044,
+               "owner" : "Language / compiler generic bounds",
+               "site_count" : 2,
+               "title" : "Relaxed ?Sized bound syntax"
+            },
+            {
+               "affected_files" : [
+                  "src/traits.rs"
+               ],
+               "baseline_rank" : 8,
+               "id" : "unsafe_blocks",
+               "overlapping_file_physical_lines" : 1681,
+               "owner" : "Refused by design / checked-memory admission policy",
+               "site_count" : 2,
+               "title" : "Unsafe block surface"
+            }
+         ],
+         "removed_previously_unclassified_sites" : [],
+         "rerank_payload_sha256" : "c2193eae6728a8131dd6bd9d969283da8fd99dd325c58404b752abee7ff18784",
+         "review" : {
+            "changed_primary_diagnostics" : 0,
+            "changed_recovery_rows" : 105,
+            "new_independent_primary_sites" : 2,
+            "path" : "docs/real-programs-qualified-nom-review.json",
+            "reviewed_primary_sites" : 2,
+            "sha256" : "b027d4fa8e1306092db7049fa241cad73aa769b068463650d631472ce2ddaa36",
+            "unchanged_recovery_rows" : 0
+         }
       },
-      "probe_receipt": {
-        "path": "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-equality-809c5052274cb61b.json",
-        "sha256": "6c1d3dcb9f702e05e89cf167a958fac60ebc6a3d8c7acdca44380bf08aeb19ef"
+      "sozu" : {
+         "accounting" : {
+            "baseline_primary_sites" : 449,
+            "current_primary_sites" : 449,
+            "new_unclassified_rows" : 0,
+            "prior_unclassified_rows" : 35,
+            "raw_by_code" : {
+               "E_BLOCKED" : 488,
+               "E_CAPABILITY" : 117,
+               "E_LEX" : 3,
+               "E_MODULE_MISSING" : 1,
+               "E_PARSE" : 35,
+               "E_UNSUPPORTED" : 93,
+               "E_UNSUPPORTED_MACRO" : 235
+            },
+            "raw_projected_diagnostic_rows" : 972,
+            "recovery_rows_excluded" : 0
+         },
+         "baseline_classification" : {
+            "path" : "docs/real-programs-sozu.json",
+            "sha256" : "dde8854bfe85d310d90182ba13756212cc3a5684d28baf1d1b4b35bdefb9118e"
+         },
+         "baseline_probe_receipt" : {
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-units-eb08fbaa.json",
+            "sha256" : "3c203d7b11d97d5faa0310cace27173ba36d4ffe2e800b6dc044f29ebdc10ac4"
+         },
+         "library_manifest_sha256" : "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+         "new_primary_sites" : [],
+         "observations" : [
+            {
+               "entry_sha256" : "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 5428,
+               "route" : "original_suffix",
+               "stderr_sha256" : "7b549de4db0927e5cfce74b5932bada29e9eb2d1f4453c00765287200f698e06",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "bin/src/main.rs",
+               "wall_seconds" : 0.002555
+            },
+            {
+               "entry_sha256" : "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 33548,
+               "route" : "suffix_projection",
+               "stderr_sha256" : "5a511b9ace6c5b6e56e3cb5266a12315b94102c4439f714268406eef6520fcda",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "bin/src/main.rs",
+               "wall_seconds" : 0.230686
+            },
+            {
+               "entry_sha256" : "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 5428,
+               "route" : "original_suffix",
+               "stderr_sha256" : "6c077bd9d3f3ddf7b4272ee7183242c23fa8a77a2d0212dfba601bb1b82481f8",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "lib/src/lib.rs",
+               "wall_seconds" : 0.002284
+            },
+            {
+               "entry_sha256" : "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 29452,
+               "route" : "suffix_projection",
+               "stderr_sha256" : "4a94594ccc6f875d67e35105a6b479f997764d9fa831195a8ab1cce128447579",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "lib/src/lib.rs",
+               "wall_seconds" : 0.144032
+            },
+            {
+               "entry_sha256" : "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 5428,
+               "route" : "original_suffix",
+               "stderr_sha256" : "a9f468a468db306f90ff1c8629d09a0a9e63bc215ad0f16255d5b664965a7b6c",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "command/src/lib.rs",
+               "wall_seconds" : 0.001783
+            },
+            {
+               "entry_sha256" : "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 34972,
+               "route" : "suffix_projection",
+               "stderr_sha256" : "066d558f87407ae23b0eb9a006440134dbe41154b6674f20bcb811b32a7a76b4",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "command/src/lib.rs",
+               "wall_seconds" : 0.282442
+            },
+            {
+               "entry_sha256" : "8a8900e43c1479621cabd4e27575bdc49624d5c43469a754dc2b6bd5272efa78",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 5428,
+               "route" : "original_suffix",
+               "stderr_sha256" : "a00167481ac5fad74f5a5729cc5c94ae44f197d913df9a7a953f1767f9b210f3",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "e2e/src/lib.rs",
+               "wall_seconds" : 0.00325
+            },
+            {
+               "entry_sha256" : "8a8900e43c1479621cabd4e27575bdc49624d5c43469a754dc2b6bd5272efa78",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 30988,
+               "route" : "suffix_projection",
+               "stderr_sha256" : "146fbabe3156eed526d9105f8f0984bc3dcd5f6c62e120f5988aa6c13f99075e",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "e2e/src/lib.rs",
+               "wall_seconds" : 0.176936
+            }
+         ],
+         "observed_at_utc" : "2026-11-17T19:07:14Z",
+         "old_site_counts" : [
+            {
+               "baseline_rank" : 14,
+               "baseline_sites" : 86,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 86,
+               "id" : "ambient_effect_calls",
+               "not_observed_sites" : 0,
+               "owner" : "design: calls require explicit authority",
+               "title" : "ambient_effect_calls"
+            },
+            {
+               "baseline_rank" : 5,
+               "baseline_sites" : 6,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 6,
+               "id" : "associated_constants",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "associated_constants"
+            },
+            {
+               "baseline_rank" : 8,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "async_block",
+               "not_observed_sites" : 0,
+               "owner" : "language producer; runtime design separately needed",
+               "title" : "async_block"
+            },
+            {
+               "baseline_rank" : 7,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "at_pattern_lexing",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "at_pattern_lexing"
+            },
+            {
+               "baseline_rank" : 10,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "build_generated_source",
+               "not_observed_sites" : 0,
+               "owner" : "package/build producer",
+               "title" : "build_generated_source"
+            },
+            {
+               "baseline_rank" : 6,
+               "baseline_sites" : 2,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 2,
+               "id" : "compile_time_evaluation",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "compile_time_evaluation"
+            },
+            {
+               "baseline_rank" : 3,
+               "baseline_sites" : 21,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 21,
+               "id" : "debug_formatting",
+               "not_observed_sites" : 0,
+               "owner" : "language / format producer; later Debug trait or derive work is not yet reached",
+               "title" : "debug_formatting"
+            },
+            {
+               "baseline_rank" : 9,
+               "baseline_sites" : 4,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 4,
+               "id" : "external_crate_binding",
+               "not_observed_sites" : 0,
+               "owner" : "package/language",
+               "title" : "external_crate_binding"
+            },
+            {
+               "baseline_rank" : 1,
+               "baseline_sites" : 235,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 235,
+               "id" : "macro_expansion",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "macro_expansion"
+            },
+            {
+               "baseline_rank" : 2,
+               "baseline_sites" : 2,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 2,
+               "id" : "macro_token_lexing",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "macro_token_lexing"
+            },
+            {
+               "baseline_rank" : null,
+               "baseline_sites" : 37,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 35,
+               "id" : "parse_recovery_or_unclassified",
+               "not_observed_sites" : 2,
+               "owner" : "unclassified; no independent gap count",
+               "title" : "parse_recovery_or_unclassified"
+            },
+            {
+               "baseline_rank" : 11,
+               "baseline_sites" : 14,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 14,
+               "id" : "pure_standard_data_types",
+               "not_observed_sites" : 0,
+               "owner" : "library plus language namespace routing",
+               "title" : "pure_standard_data_types"
+            },
+            {
+               "baseline_rank" : 17,
+               "baseline_sites" : 2,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 2,
+               "id" : "same_process_thread_api",
+               "not_observed_sites" : 0,
+               "owner" : "design and missing IR concurrency",
+               "title" : "same_process_thread_api"
+            },
+            {
+               "baseline_rank" : 16,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "shared_heap_ownership",
+               "not_observed_sites" : 0,
+               "owner" : "design: owner/index or a new checked sharing contract",
+               "title" : "shared_heap_ownership"
+            },
+            {
+               "baseline_rank" : 12,
+               "baseline_sites" : 6,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 6,
+               "id" : "standard_io_traits",
+               "not_observed_sites" : 0,
+               "owner" : "library plus language namespace routing; imports are not proof of ambient I/O",
+               "title" : "standard_io_traits"
+            },
+            {
+               "baseline_rank" : 13,
+               "baseline_sites" : 8,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 8,
+               "id" : "standard_os_imports",
+               "not_observed_sites" : 0,
+               "owner" : "library adapter plus explicit authority; imported names are not execution sites",
+               "title" : "standard_os_imports"
+            },
+            {
+               "baseline_rank" : 4,
+               "baseline_sites" : 15,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 15,
+               "id" : "trait_object_dispatch",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "trait_object_dispatch"
+            },
+            {
+               "baseline_rank" : 15,
+               "baseline_sites" : 44,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 44,
+               "id" : "unsafe_or_raw_pointer",
+               "not_observed_sites" : 0,
+               "owner" : "design",
+               "title" : "unsafe_or_raw_pointer"
+            }
+         ],
+         "package" : {
+            "commit" : "c5ff06a12bd514e06ab28965052d0ad1e19c45b3",
+            "name" : "sozu",
+            "object_format" : "sha1",
+            "origin" : "https://github.com/sozu-proxy/sozu.git",
+            "root" : "/home/coder/workspace/lkjscript-specimens/sozu-1.0.6",
+            "version" : "1.0.6"
+         },
+         "probe_receipt" : {
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-qualified-92c4caac76237360.json",
+            "sha256" : "1e84f2f62748b2e7c49e63e5b3ec93e07fec3c0d7230984608333a2bea2a5f41"
+         },
+         "projection_manifest_sha256" : "3ad1b9efdc73fb42f61aa3cb5d0dfaf1edea4d5fecf68e4b48e4cedd01db38b0",
+         "ranked_causes" : [
+            {
+               "affected_files" : [
+                  "bin/src/command/mod.rs",
+                  "bin/src/command/requests.rs",
+                  "bin/src/command/server.rs",
+                  "bin/src/command/sessions.rs",
+                  "bin/src/command/upgrade.rs",
+                  "bin/src/ctl/command.rs",
+                  "bin/src/ctl/mod.rs",
+                  "bin/src/ctl/request_builder.rs",
+                  "bin/src/main.rs",
+                  "bin/src/upgrade.rs",
+                  "bin/src/util.rs",
+                  "bin/src/worker.rs",
+                  "command/src/buffer/fixed.rs",
+                  "command/src/channel.rs",
+                  "command/src/config.rs",
+                  "command/src/proto/display.rs",
+                  "command/src/scm_socket.rs",
+                  "command/src/state.rs",
+                  "e2e/src/http_utils/mod.rs"
+               ],
+               "baseline_rank" : 1,
+               "id" : "macro_expansion",
+               "overlapping_file_physical_lines" : 11224,
+               "owner" : "language",
+               "site_count" : 235,
+               "title" : "macro_expansion"
+            },
+            {
+               "affected_files" : [
+                  "bin/src/ctl/command.rs",
+                  "bin/src/ctl/mod.rs",
+                  "bin/src/main.rs",
+                  "bin/src/upgrade.rs",
+                  "command/src/channel.rs",
+                  "command/src/config.rs",
+                  "command/src/proto/display.rs",
+                  "command/src/state.rs",
+                  "e2e/src/mock/async_backend.rs",
+                  "e2e/src/mock/client.rs",
+                  "e2e/src/mock/sync_backend.rs",
+                  "e2e/src/sozu/worker.rs"
+               ],
+               "baseline_rank" : 14,
+               "id" : "ambient_effect_calls",
+               "overlapping_file_physical_lines" : 7562,
+               "owner" : "design: calls require explicit authority",
+               "site_count" : 86,
+               "title" : "ambient_effect_calls"
+            },
+            {
+               "affected_files" : [
+                  "bin/src/command/mod.rs",
+                  "bin/src/command/server.rs",
+                  "bin/src/main.rs",
+                  "bin/src/upgrade.rs",
+                  "bin/src/util.rs",
+                  "bin/src/worker.rs",
+                  "command/src/buffer/fixed.rs",
+                  "command/src/buffer/growable.rs",
+                  "command/src/channel.rs",
+                  "command/src/logging/access_logs.rs",
+                  "command/src/scm_socket.rs",
+                  "e2e/src/mock/sync_backend.rs",
+                  "e2e/src/sozu/worker.rs"
+               ],
+               "baseline_rank" : 15,
+               "id" : "unsafe_or_raw_pointer",
+               "overlapping_file_physical_lines" : 4399,
+               "owner" : "design",
+               "site_count" : 44,
+               "title" : "unsafe_or_raw_pointer"
+            },
+            {
+               "affected_files" : [
+                  "bin/src/command/requests.rs",
+                  "bin/src/command/upgrade.rs",
+                  "command/src/certificate.rs",
+                  "command/src/config.rs",
+                  "command/src/proto/display.rs",
+                  "command/src/request.rs",
+                  "command/src/response.rs",
+                  "command/src/state.rs"
+               ],
+               "baseline_rank" : 3,
+               "id" : "debug_formatting",
+               "overlapping_file_physical_lines" : 7344,
+               "owner" : "language / format producer; later Debug trait or derive work is not yet reached",
+               "site_count" : 21,
+               "title" : "debug_formatting"
+            },
+            {
+               "affected_files" : [
+                  "bin/src/command/requests.rs",
+                  "bin/src/command/server.rs",
+                  "bin/src/command/upgrade.rs",
+                  "command/src/request.rs",
+                  "e2e/src/mock/async_backend.rs",
+                  "e2e/src/mock/https_client.rs"
+               ],
+               "baseline_rank" : 4,
+               "id" : "trait_object_dispatch",
+               "overlapping_file_physical_lines" : 2622,
+               "owner" : "language",
+               "site_count" : 15,
+               "title" : "trait_object_dispatch"
+            },
+            {
+               "affected_files" : [
+                  "bin/src/cli.rs",
+                  "bin/src/command/server.rs",
+                  "bin/src/ctl/command.rs",
+                  "bin/src/ctl/mod.rs",
+                  "bin/src/main.rs",
+                  "command/src/logging/access_logs.rs",
+                  "command/src/logging/mod.rs",
+                  "command/src/proto/display.rs",
+                  "command/src/response.rs",
+                  "command/src/scm_socket.rs",
+                  "e2e/src/mock/async_backend.rs",
+                  "e2e/src/mock/sync_backend.rs",
+                  "e2e/src/sozu/worker.rs"
+               ],
+               "baseline_rank" : 11,
+               "id" : "pure_standard_data_types",
+               "overlapping_file_physical_lines" : 5106,
+               "owner" : "library plus language namespace routing",
+               "site_count" : 14,
+               "title" : "pure_standard_data_types"
+            },
+            {
+               "affected_files" : [
+                  "bin/src/command/mod.rs",
+                  "bin/src/command/requests.rs",
+                  "bin/src/upgrade.rs",
+                  "bin/src/util.rs",
+                  "bin/src/worker.rs",
+                  "command/src/config.rs",
+                  "command/src/request.rs",
+                  "command/src/state.rs"
+               ],
+               "baseline_rank" : 13,
+               "id" : "standard_os_imports",
+               "overlapping_file_physical_lines" : 6175,
+               "owner" : "library adapter plus explicit authority; imported names are not execution sites",
+               "site_count" : 8,
+               "title" : "standard_os_imports"
+            },
+            {
+               "affected_files" : [
+                  "command/src/ready.rs"
+               ],
+               "baseline_rank" : 5,
+               "id" : "associated_constants",
+               "overlapping_file_physical_lines" : 148,
+               "owner" : "language",
+               "site_count" : 6,
+               "title" : "associated_constants"
+            },
+            {
+               "affected_files" : [
+                  "command/src/buffer/fixed.rs",
+                  "command/src/buffer/growable.rs",
+                  "command/src/channel.rs",
+                  "command/src/writer.rs",
+                  "e2e/src/mock/client.rs",
+                  "e2e/src/mock/sync_backend.rs"
+               ],
+               "baseline_rank" : 12,
+               "id" : "standard_io_traits",
+               "overlapping_file_physical_lines" : 1802,
+               "owner" : "library plus language namespace routing; imports are not proof of ambient I/O",
+               "site_count" : 6,
+               "title" : "standard_io_traits"
+            },
+            {
+               "affected_files" : [
+                  "bin/src/main.rs",
+                  "command/src/lib.rs"
+               ],
+               "baseline_rank" : 9,
+               "id" : "external_crate_binding",
+               "overlapping_file_physical_lines" : 320,
+               "owner" : "package/language",
+               "site_count" : 4,
+               "title" : "external_crate_binding"
+            },
+            {
+               "affected_files" : [
+                  "command/src/channel.rs",
+                  "command/src/scm_socket.rs"
+               ],
+               "baseline_rank" : 6,
+               "id" : "compile_time_evaluation",
+               "overlapping_file_physical_lines" : 1092,
+               "owner" : "language",
+               "site_count" : 2,
+               "title" : "compile_time_evaluation"
+            },
+            {
+               "affected_files" : [
+                  "command/src/logging/logs.rs",
+                  "lib/src/lib.rs"
+               ],
+               "baseline_rank" : 2,
+               "id" : "macro_token_lexing",
+               "overlapping_file_physical_lines" : 2306,
+               "owner" : "language",
+               "site_count" : 2,
+               "title" : "macro_token_lexing"
+            },
+            {
+               "affected_files" : [
+                  "bin/src/ctl/command.rs"
+               ],
+               "baseline_rank" : 17,
+               "id" : "same_process_thread_api",
+               "overlapping_file_physical_lines" : 209,
+               "owner" : "design and missing IR concurrency",
+               "site_count" : 2,
+               "title" : "same_process_thread_api"
+            },
+            {
+               "affected_files" : [
+                  "e2e/src/mock/https_client.rs"
+               ],
+               "baseline_rank" : 8,
+               "id" : "async_block",
+               "overlapping_file_physical_lines" : 68,
+               "owner" : "language producer; runtime design separately needed",
+               "site_count" : 1,
+               "title" : "async_block"
+            },
+            {
+               "affected_files" : [
+                  "command/src/logging/display.rs"
+               ],
+               "baseline_rank" : 7,
+               "id" : "at_pattern_lexing",
+               "overlapping_file_physical_lines" : 167,
+               "owner" : "language",
+               "site_count" : 1,
+               "title" : "at_pattern_lexing"
+            },
+            {
+               "affected_files" : [
+                  "command/src/proto/mod.rs"
+               ],
+               "baseline_rank" : 10,
+               "id" : "build_generated_source",
+               "overlapping_file_physical_lines" : 257,
+               "owner" : "package/build producer",
+               "site_count" : 1,
+               "title" : "build_generated_source"
+            },
+            {
+               "affected_files" : [
+                  "e2e/src/mock/https_client.rs"
+               ],
+               "baseline_rank" : 16,
+               "id" : "shared_heap_ownership",
+               "overlapping_file_physical_lines" : 68,
+               "owner" : "design: owner/index or a new checked sharing contract",
+               "site_count" : 1,
+               "title" : "shared_heap_ownership"
+            }
+         ],
+         "removed_previously_unclassified_sites" : [
+            {
+               "coordinate" : "command/src/state.rs:1409:23",
+               "diagnostic_keys" : [
+                  "[\"command/src/state.rs\",1409,23,\"E_PARSE\",\"expected `>`\"]"
+               ],
+               "file_sha256" : "8d60ac243fdc0c9cff1622fe83290ae3a264ae69e1acb9d3c701bcad1b9a15e8",
+               "line_text" : "    I1: Iterator<Item = (K, &'a V)>,"
+            },
+            {
+               "coordinate" : "command/src/state.rs:1435:27",
+               "diagnostic_keys" : [
+                  "[\"command/src/state.rs\",1435,27,\"E_PARSE\",\"expected `>`\"]"
+               ],
+               "file_sha256" : "8d60ac243fdc0c9cff1622fe83290ae3a264ae69e1acb9d3c701bcad1b9a15e8",
+               "line_text" : "        I1: Iterator<Item = (K, &'a V)>,"
+            }
+         ],
+         "rerank_payload_sha256" : "139f56ef5982db2ef50f4bdf463137f31695f1824ce828cd3f190a84888db696",
+         "review" : {
+            "changed_primary_diagnostics" : 0,
+            "changed_recovery_rows" : 0,
+            "new_independent_primary_sites" : 0,
+            "path" : "docs/real-programs-qualified-sozu-review.json",
+            "reviewed_primary_sites" : 0,
+            "sha256" : "d317d3c0c473678dce040eba9a57ec8d7f7558d4a18f00b76cc35e0a3f3e38f6",
+            "unchanged_recovery_rows" : 0
+         }
+      }
+   },
+   "stage" : "qualified_associated_paths_gated",
+   "validation" : {
+      "admitted_projected_roots" : 0,
+      "fixed_point" : {
+         "bootstrap_log" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/bootstrap.log",
+            "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
+         },
+         "candidate_self_rebuild" : "byte_identical",
+         "gate_bootstrap_log" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/bootstrap-gate.log",
+            "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
+         },
+         "matching_seed" : "refreshed",
+         "producer_and_seed" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/producer-and-seed.sha256",
+            "sha256" : "16c84fb97255b7e6470beb6c1d29288cc18e79ef3b4eb8430ee3b865bd1e9242"
+         },
+         "refreshed_seed_bootstrap" : "passed_byte_identical",
+         "seed_sha256" : "a6ed66a27cb81f8ea5ef414790c8408ddbcc3f2e1e5bb90d9b94d4ba70fc7709",
+         "source_anchor" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/source-anchor.txt",
+            "sha256" : "8df79d53067f1bf6c04b4e39eff1264f5d3693247a6c4322b1015d804361e8a5"
+         }
       },
-      "baseline_probe_receipt": {
-        "path": "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-units-eb08fbaa.json",
-        "sha256": "3c203d7b11d97d5faa0310cace27173ba36d4ffe2e800b6dc044f29ebdc10ac4"
+      "focused_cases" : 97,
+      "focused_engine_route_checks" : 194,
+      "focused_logs" : {
+         "engines" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/focused-routes.log",
+            "sha256" : "9f3d4761ad405b877e44d556632cd3459a27af16772c183c496f2fa21b0e711c"
+         },
+         "rust" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/focused-rust.log",
+            "sha256" : "8a0a6f19e5d556c08748f55eaad9a79f57de160dc39977cd0f639ee173b45856"
+         }
       },
-      "projection_manifest_sha256": "3ad1b9efdc73fb42f61aa3cb5d0dfaf1edea4d5fecf68e4b48e4cedd01db38b0",
-      "library_manifest_sha256": "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
-      "observations": [
-        {
-          "entry_sha256": "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289",
-          "exit_status": 1,
-          "launcher_signal": 0,
-          "peak_rss_kib": 5488,
-          "route": "original_suffix",
-          "stderr_sha256": "7b549de4db0927e5cfce74b5932bada29e9eb2d1f4453c00765287200f698e06",
-          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "upstream_entry": "bin/src/main.rs",
-          "wall_seconds": 0.003385
-        },
-        {
-          "entry_sha256": "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289",
-          "exit_status": 1,
-          "launcher_signal": 0,
-          "peak_rss_kib": 33300,
-          "route": "suffix_projection",
-          "stderr_sha256": "5a511b9ace6c5b6e56e3cb5266a12315b94102c4439f714268406eef6520fcda",
-          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "upstream_entry": "bin/src/main.rs",
-          "wall_seconds": 0.272385
-        },
-        {
-          "entry_sha256": "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789",
-          "exit_status": 1,
-          "launcher_signal": 0,
-          "peak_rss_kib": 5488,
-          "route": "original_suffix",
-          "stderr_sha256": "6c077bd9d3f3ddf7b4272ee7183242c23fa8a77a2d0212dfba601bb1b82481f8",
-          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "upstream_entry": "lib/src/lib.rs",
-          "wall_seconds": 0.002167
-        },
-        {
-          "entry_sha256": "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789",
-          "exit_status": 1,
-          "launcher_signal": 0,
-          "peak_rss_kib": 33296,
-          "route": "suffix_projection",
-          "stderr_sha256": "4a94594ccc6f875d67e35105a6b479f997764d9fa831195a8ab1cce128447579",
-          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "upstream_entry": "lib/src/lib.rs",
-          "wall_seconds": 0.122957
-        },
-        {
-          "entry_sha256": "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44",
-          "exit_status": 1,
-          "launcher_signal": 0,
-          "peak_rss_kib": 5488,
-          "route": "original_suffix",
-          "stderr_sha256": "a9f468a468db306f90ff1c8629d09a0a9e63bc215ad0f16255d5b664965a7b6c",
-          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "upstream_entry": "command/src/lib.rs",
-          "wall_seconds": 0.001894
-        },
-        {
-          "entry_sha256": "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44",
-          "exit_status": 1,
-          "launcher_signal": 0,
-          "peak_rss_kib": 36868,
-          "route": "suffix_projection",
-          "stderr_sha256": "066d558f87407ae23b0eb9a006440134dbe41154b6674f20bcb811b32a7a76b4",
-          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "upstream_entry": "command/src/lib.rs",
-          "wall_seconds": 0.354364
-        },
-        {
-          "entry_sha256": "8a8900e43c1479621cabd4e27575bdc49624d5c43469a754dc2b6bd5272efa78",
-          "exit_status": 1,
-          "launcher_signal": 0,
-          "peak_rss_kib": 5488,
-          "route": "original_suffix",
-          "stderr_sha256": "a00167481ac5fad74f5a5729cc5c94ae44f197d913df9a7a953f1767f9b210f3",
-          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "upstream_entry": "e2e/src/lib.rs",
-          "wall_seconds": 0.002274
-        },
-        {
-          "entry_sha256": "8a8900e43c1479621cabd4e27575bdc49624d5c43469a754dc2b6bd5272efa78",
-          "exit_status": 1,
-          "launcher_signal": 0,
-          "peak_rss_kib": 30036,
-          "route": "suffix_projection",
-          "stderr_sha256": "146fbabe3156eed526d9105f8f0984bc3dcd5f6c62e120f5988aa6c13f99075e",
-          "stdout_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-          "upstream_entry": "e2e/src/lib.rs",
-          "wall_seconds": 0.162148
-        }
-      ],
-      "accounting": {
-        "raw_projected_diagnostic_rows": 972,
-        "raw_by_code": {
-          "E_BLOCKED": 488,
-          "E_CAPABILITY": 117,
-          "E_LEX": 3,
-          "E_MODULE_MISSING": 1,
-          "E_PARSE": 35,
-          "E_UNSUPPORTED": 93,
-          "E_UNSUPPORTED_MACRO": 235
-        },
-        "baseline_primary_sites": 449,
-        "current_primary_sites": 449,
-        "prior_unclassified_rows": 35,
-        "recovery_rows_excluded": 0,
-        "new_unclassified_rows": 0
+      "focused_producer" : "Rust-hosted source build; final full gate uses the fixed-point native producer",
+      "focused_result" : "passed",
+      "focused_route_checks" : 291,
+      "focused_rust_route_checks" : 97,
+      "full_gate" : {
+         "command" : "LKJSCRIPT_GATE_JOBS=4 bash tools/check.sh",
+         "elapsed_seconds" : 1109.296,
+         "fresh_case_requests" : 5679,
+         "ir_mutation" : {
+            "findings" : 0,
+            "log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/ir-mutation.log",
+               "sha256" : "2d2701c137caaafcc7254efdbf06c05455a44d3c492a5360aa0c229950b5f09c"
+            },
+            "mutants" : 128
+         },
+         "log" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/full-gate.log",
+            "sha256" : "be71256a5b7f9e7fa84209e7c137377e877c6e07bc8fb9ee59831aa096ae94c2"
+         },
+         "log_archive" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/gate-logs.tar.gz",
+            "sha256" : "6f848d6696e8f1ec63e86ddb388a4c2c8a17ea0103e8b99188020955888c381d"
+         },
+         "reused_case_requests" : 0,
+         "status" : "passed",
+         "workers" : 4
       },
-      "ranked_causes": [
-        {
-          "id": "macro_expansion",
-          "title": "macro_expansion",
-          "owner": "language",
-          "baseline_rank": 1,
-          "site_count": 235,
-          "overlapping_file_physical_lines": 11224,
-          "affected_files": [
-            "bin/src/command/mod.rs",
-            "bin/src/command/requests.rs",
-            "bin/src/command/server.rs",
-            "bin/src/command/sessions.rs",
-            "bin/src/command/upgrade.rs",
-            "bin/src/ctl/command.rs",
-            "bin/src/ctl/mod.rs",
-            "bin/src/ctl/request_builder.rs",
-            "bin/src/main.rs",
-            "bin/src/upgrade.rs",
-            "bin/src/util.rs",
-            "bin/src/worker.rs",
-            "command/src/buffer/fixed.rs",
-            "command/src/channel.rs",
-            "command/src/config.rs",
-            "command/src/proto/display.rs",
-            "command/src/scm_socket.rs",
-            "command/src/state.rs",
-            "e2e/src/http_utils/mod.rs"
-          ]
-        },
-        {
-          "id": "ambient_effect_calls",
-          "title": "ambient_effect_calls",
-          "owner": "design: calls require explicit authority",
-          "baseline_rank": 14,
-          "site_count": 86,
-          "overlapping_file_physical_lines": 7562,
-          "affected_files": [
-            "bin/src/ctl/command.rs",
-            "bin/src/ctl/mod.rs",
-            "bin/src/main.rs",
-            "bin/src/upgrade.rs",
-            "command/src/channel.rs",
-            "command/src/config.rs",
-            "command/src/proto/display.rs",
-            "command/src/state.rs",
-            "e2e/src/mock/async_backend.rs",
-            "e2e/src/mock/client.rs",
-            "e2e/src/mock/sync_backend.rs",
-            "e2e/src/sozu/worker.rs"
-          ]
-        },
-        {
-          "id": "unsafe_or_raw_pointer",
-          "title": "unsafe_or_raw_pointer",
-          "owner": "design",
-          "baseline_rank": 15,
-          "site_count": 44,
-          "overlapping_file_physical_lines": 4399,
-          "affected_files": [
-            "bin/src/command/mod.rs",
-            "bin/src/command/server.rs",
-            "bin/src/main.rs",
-            "bin/src/upgrade.rs",
-            "bin/src/util.rs",
-            "bin/src/worker.rs",
-            "command/src/buffer/fixed.rs",
-            "command/src/buffer/growable.rs",
-            "command/src/channel.rs",
-            "command/src/logging/access_logs.rs",
-            "command/src/scm_socket.rs",
-            "e2e/src/mock/sync_backend.rs",
-            "e2e/src/sozu/worker.rs"
-          ]
-        },
-        {
-          "id": "parse_recovery_or_unclassified",
-          "title": "parse_recovery_or_unclassified",
-          "owner": "unclassified; no independent gap count",
-          "baseline_rank": null,
-          "site_count": 35,
-          "overlapping_file_physical_lines": 9351,
-          "affected_files": [
-            "bin/src/cli.rs",
-            "bin/src/command/mod.rs",
-            "bin/src/command/server.rs",
-            "bin/src/ctl/mod.rs",
-            "bin/src/main.rs",
-            "bin/src/upgrade.rs",
-            "bin/src/util.rs",
-            "bin/src/worker.rs",
-            "command/src/certificate.rs",
-            "command/src/channel.rs",
-            "command/src/config.rs",
-            "command/src/logging/access_logs.rs",
-            "command/src/logging/mod.rs",
-            "command/src/proto/mod.rs",
-            "command/src/request.rs",
-            "command/src/scm_socket.rs",
-            "command/src/state.rs"
-          ]
-        },
-        {
-          "id": "debug_formatting",
-          "title": "debug_formatting",
-          "owner": "language / format producer; later Debug trait or derive work is not yet reached",
-          "baseline_rank": 3,
-          "site_count": 21,
-          "overlapping_file_physical_lines": 7344,
-          "affected_files": [
-            "bin/src/command/requests.rs",
-            "bin/src/command/upgrade.rs",
-            "command/src/certificate.rs",
-            "command/src/config.rs",
-            "command/src/proto/display.rs",
-            "command/src/request.rs",
-            "command/src/response.rs",
-            "command/src/state.rs"
-          ]
-        },
-        {
-          "id": "trait_object_dispatch",
-          "title": "trait_object_dispatch",
-          "owner": "language",
-          "baseline_rank": 4,
-          "site_count": 15,
-          "overlapping_file_physical_lines": 2622,
-          "affected_files": [
-            "bin/src/command/requests.rs",
-            "bin/src/command/server.rs",
-            "bin/src/command/upgrade.rs",
-            "command/src/request.rs",
-            "e2e/src/mock/async_backend.rs",
-            "e2e/src/mock/https_client.rs"
-          ]
-        },
-        {
-          "id": "pure_standard_data_types",
-          "title": "pure_standard_data_types",
-          "owner": "library plus language namespace routing",
-          "baseline_rank": 11,
-          "site_count": 14,
-          "overlapping_file_physical_lines": 5106,
-          "affected_files": [
-            "bin/src/cli.rs",
-            "bin/src/command/server.rs",
-            "bin/src/ctl/command.rs",
-            "bin/src/ctl/mod.rs",
-            "bin/src/main.rs",
-            "command/src/logging/access_logs.rs",
-            "command/src/logging/mod.rs",
-            "command/src/proto/display.rs",
-            "command/src/response.rs",
-            "command/src/scm_socket.rs",
-            "e2e/src/mock/async_backend.rs",
-            "e2e/src/mock/sync_backend.rs",
-            "e2e/src/sozu/worker.rs"
-          ]
-        },
-        {
-          "id": "standard_os_imports",
-          "title": "standard_os_imports",
-          "owner": "library adapter plus explicit authority; imported names are not execution sites",
-          "baseline_rank": 13,
-          "site_count": 8,
-          "overlapping_file_physical_lines": 6175,
-          "affected_files": [
-            "bin/src/command/mod.rs",
-            "bin/src/command/requests.rs",
-            "bin/src/upgrade.rs",
-            "bin/src/util.rs",
-            "bin/src/worker.rs",
-            "command/src/config.rs",
-            "command/src/request.rs",
-            "command/src/state.rs"
-          ]
-        },
-        {
-          "id": "associated_constants",
-          "title": "associated_constants",
-          "owner": "language",
-          "baseline_rank": 5,
-          "site_count": 6,
-          "overlapping_file_physical_lines": 148,
-          "affected_files": [
-            "command/src/ready.rs"
-          ]
-        },
-        {
-          "id": "standard_io_traits",
-          "title": "standard_io_traits",
-          "owner": "library plus language namespace routing; imports are not proof of ambient I/O",
-          "baseline_rank": 12,
-          "site_count": 6,
-          "overlapping_file_physical_lines": 1802,
-          "affected_files": [
-            "command/src/buffer/fixed.rs",
-            "command/src/buffer/growable.rs",
-            "command/src/channel.rs",
-            "command/src/writer.rs",
-            "e2e/src/mock/client.rs",
-            "e2e/src/mock/sync_backend.rs"
-          ]
-        },
-        {
-          "id": "external_crate_binding",
-          "title": "external_crate_binding",
-          "owner": "package/language",
-          "baseline_rank": 9,
-          "site_count": 4,
-          "overlapping_file_physical_lines": 320,
-          "affected_files": [
-            "bin/src/main.rs",
-            "command/src/lib.rs"
-          ]
-        },
-        {
-          "id": "compile_time_evaluation",
-          "title": "compile_time_evaluation",
-          "owner": "language",
-          "baseline_rank": 6,
-          "site_count": 2,
-          "overlapping_file_physical_lines": 1092,
-          "affected_files": [
-            "command/src/channel.rs",
-            "command/src/scm_socket.rs"
-          ]
-        },
-        {
-          "id": "macro_token_lexing",
-          "title": "macro_token_lexing",
-          "owner": "language",
-          "baseline_rank": 2,
-          "site_count": 2,
-          "overlapping_file_physical_lines": 2306,
-          "affected_files": [
-            "command/src/logging/logs.rs",
-            "lib/src/lib.rs"
-          ]
-        },
-        {
-          "id": "same_process_thread_api",
-          "title": "same_process_thread_api",
-          "owner": "design and missing IR concurrency",
-          "baseline_rank": 17,
-          "site_count": 2,
-          "overlapping_file_physical_lines": 209,
-          "affected_files": [
-            "bin/src/ctl/command.rs"
-          ]
-        },
-        {
-          "id": "async_block",
-          "title": "async_block",
-          "owner": "language producer; runtime design separately needed",
-          "baseline_rank": 8,
-          "site_count": 1,
-          "overlapping_file_physical_lines": 68,
-          "affected_files": [
-            "e2e/src/mock/https_client.rs"
-          ]
-        },
-        {
-          "id": "at_pattern_lexing",
-          "title": "at_pattern_lexing",
-          "owner": "language",
-          "baseline_rank": 7,
-          "site_count": 1,
-          "overlapping_file_physical_lines": 167,
-          "affected_files": [
-            "command/src/logging/display.rs"
-          ]
-        },
-        {
-          "id": "build_generated_source",
-          "title": "build_generated_source",
-          "owner": "package/build producer",
-          "baseline_rank": 10,
-          "site_count": 1,
-          "overlapping_file_physical_lines": 257,
-          "affected_files": [
-            "command/src/proto/mod.rs"
-          ]
-        },
-        {
-          "id": "shared_heap_ownership",
-          "title": "shared_heap_ownership",
-          "owner": "design: owner/index or a new checked sharing contract",
-          "baseline_rank": 16,
-          "site_count": 1,
-          "overlapping_file_physical_lines": 68,
-          "affected_files": [
-            "e2e/src/mock/https_client.rs"
-          ]
-        }
+      "nom_own_tests_run_under_lkjscript" : 0,
+      "observations" : 12,
+      "projected_roots" : 6,
+      "publication_ci" : {
+         "result_record" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/publication-ci.json",
+         "status_at_commit" : "pending"
+      },
+      "query_edit_logs" : [
+         {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/equality-query.log",
+            "sha256" : "63b7767f6405309fb8fa3164f980a14cb737f87a852f8442cf6e7f483ff202ba"
+         },
+         {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/qualified-query.log",
+            "sha256" : "f07f059b07dd0632f7720dc867321367a398117743e4d438ef212d29648be0cd"
+         }
       ],
-      "old_site_counts": [
-        {
-          "baseline_rank": 14,
-          "baseline_sites": 86,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 86,
-          "id": "ambient_effect_calls",
-          "not_observed_sites": 0,
-          "owner": "design: calls require explicit authority",
-          "title": "ambient_effect_calls"
-        },
-        {
-          "baseline_rank": 5,
-          "baseline_sites": 6,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 6,
-          "id": "associated_constants",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "associated_constants"
-        },
-        {
-          "baseline_rank": 8,
-          "baseline_sites": 1,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 1,
-          "id": "async_block",
-          "not_observed_sites": 0,
-          "owner": "language producer; runtime design separately needed",
-          "title": "async_block"
-        },
-        {
-          "baseline_rank": 7,
-          "baseline_sites": 1,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 1,
-          "id": "at_pattern_lexing",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "at_pattern_lexing"
-        },
-        {
-          "baseline_rank": 10,
-          "baseline_sites": 1,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 1,
-          "id": "build_generated_source",
-          "not_observed_sites": 0,
-          "owner": "package/build producer",
-          "title": "build_generated_source"
-        },
-        {
-          "baseline_rank": 6,
-          "baseline_sites": 2,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 2,
-          "id": "compile_time_evaluation",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "compile_time_evaluation"
-        },
-        {
-          "baseline_rank": 3,
-          "baseline_sites": 21,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 21,
-          "id": "debug_formatting",
-          "not_observed_sites": 0,
-          "owner": "language / format producer; later Debug trait or derive work is not yet reached",
-          "title": "debug_formatting"
-        },
-        {
-          "baseline_rank": 9,
-          "baseline_sites": 4,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 4,
-          "id": "external_crate_binding",
-          "not_observed_sites": 0,
-          "owner": "package/language",
-          "title": "external_crate_binding"
-        },
-        {
-          "baseline_rank": 1,
-          "baseline_sites": 235,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 235,
-          "id": "macro_expansion",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "macro_expansion"
-        },
-        {
-          "baseline_rank": 2,
-          "baseline_sites": 2,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 2,
-          "id": "macro_token_lexing",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "macro_token_lexing"
-        },
-        {
-          "baseline_rank": null,
-          "baseline_sites": 37,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 35,
-          "id": "parse_recovery_or_unclassified",
-          "not_observed_sites": 2,
-          "owner": "unclassified; no independent gap count",
-          "title": "parse_recovery_or_unclassified"
-        },
-        {
-          "baseline_rank": 11,
-          "baseline_sites": 14,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 14,
-          "id": "pure_standard_data_types",
-          "not_observed_sites": 0,
-          "owner": "library plus language namespace routing",
-          "title": "pure_standard_data_types"
-        },
-        {
-          "baseline_rank": 17,
-          "baseline_sites": 2,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 2,
-          "id": "same_process_thread_api",
-          "not_observed_sites": 0,
-          "owner": "design and missing IR concurrency",
-          "title": "same_process_thread_api"
-        },
-        {
-          "baseline_rank": 16,
-          "baseline_sites": 1,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 1,
-          "id": "shared_heap_ownership",
-          "not_observed_sites": 0,
-          "owner": "design: owner/index or a new checked sharing contract",
-          "title": "shared_heap_ownership"
-        },
-        {
-          "baseline_rank": 12,
-          "baseline_sites": 6,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 6,
-          "id": "standard_io_traits",
-          "not_observed_sites": 0,
-          "owner": "library plus language namespace routing; imports are not proof of ambient I/O",
-          "title": "standard_io_traits"
-        },
-        {
-          "baseline_rank": 13,
-          "baseline_sites": 8,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 8,
-          "id": "standard_os_imports",
-          "not_observed_sites": 0,
-          "owner": "library adapter plus explicit authority; imported names are not execution sites",
-          "title": "standard_os_imports"
-        },
-        {
-          "baseline_rank": 4,
-          "baseline_sites": 15,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 15,
-          "id": "trait_object_dispatch",
-          "not_observed_sites": 0,
-          "owner": "language",
-          "title": "trait_object_dispatch"
-        },
-        {
-          "baseline_rank": 15,
-          "baseline_sites": 44,
-          "changed_diagnostic_sites": 0,
-          "exact_surviving_sites": 44,
-          "id": "unsafe_or_raw_pointer",
-          "not_observed_sites": 0,
-          "owner": "design",
-          "title": "unsafe_or_raw_pointer"
-        }
-      ],
-      "new_primary_sites": [],
-      "removed_previously_unclassified_sites": [
-        {
-          "coordinate": "command/src/state.rs:1409:23",
-          "line_text": "    I1: Iterator<Item = (K, &'a V)>,",
-          "file_sha256": "8d60ac243fdc0c9cff1622fe83290ae3a264ae69e1acb9d3c701bcad1b9a15e8",
-          "diagnostic_keys": [
-            "[\"command/src/state.rs\",1409,23,\"E_PARSE\",\"expected `>`\"]"
-          ]
-        },
-        {
-          "coordinate": "command/src/state.rs:1435:27",
-          "line_text": "        I1: Iterator<Item = (K, &'a V)>,",
-          "file_sha256": "8d60ac243fdc0c9cff1622fe83290ae3a264ae69e1acb9d3c701bcad1b9a15e8",
-          "diagnostic_keys": [
-            "[\"command/src/state.rs\",1435,27,\"E_PARSE\",\"expected `>`\"]"
-          ]
-        }
-      ],
-      "observed_at_utc": "2026-11-17T17:55:14Z",
-      "rerank_payload_sha256": "139f56ef5982db2ef50f4bdf463137f31695f1824ce828cd3f190a84888db696"
-    }
-  },
-  "rerank_payload_fingerprint": "sha256(JSON::PP canonical ascii encode(rerank without inputs))"
+      "source_check" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/source-check.log",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "standalone_real_programs_test" : {
+         "command" : "bash tools/real-programs-test.sh target/lkjscript",
+         "log" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/qualified/standalone-real-programs.log",
+            "sha256" : "bfe050316ba1664049ab530cb4ea400a72ef27a18a88620f0f19e8efe78c69bf"
+         },
+         "status" : "passed"
+      }
+   }
 }

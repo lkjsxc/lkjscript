@@ -1,0 +1,88 @@
+{
+   "inputs" : {
+      "bank" : {
+         "path" : "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/review-bank.json",
+         "sha256" : "7eccd770ee1b911e1b212ba564daa45574048b4298df477a48d8b698bbae0455"
+      },
+      "projection" : {
+         "path" : "/home/coder/workspace/lkjscript-specimens/projections/dom_query-0.28.0/projection.json",
+         "sha256" : "7eef776218daecb22822d613a609a00039600c34cea05a6047216111148272c9",
+         "source" : {
+            "commit" : "186c02d9359762404054fbc8af3a5b07cdf795a9",
+            "object_format" : "sha1",
+            "origin" : "https://github.com/niklak/dom_query.git",
+            "root" : "/home/coder/workspace/lkjscript-specimens/dom_query-0.28.0"
+         }
+      },
+      "receipt" : {
+         "compiler" : {
+            "path" : "/home/coder/workspace/lkjscript-programs-paths-20261118/target/lkjscript",
+            "sha256" : "92c4caac762373609bb19e8eaa38559de060d59c41e9197a9ca59413e1690bde"
+         },
+         "path" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-qualified-92c4caac76237360.json",
+         "sha256" : "ac368a8205953f832a51ddbd7a2513fd0d799e491133d790ee448d9ad42bbf57"
+      },
+      "unreviewed_report" : {
+         "path" : "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/qualified-92c4caac/dom-unreviewed.json",
+         "sha256" : "c7b71b23ee85786cd6d1bc2fc035792c008845668fa33d929e287c836aea0075"
+      }
+   },
+   "interpretation" : "Previously reviewed exact diagnostic identities only; every recovery parent was revalidated earlier in every current root. Unmatched or parentless entries remain unclassified.",
+   "kind" : "explicit_foreign_diagnostic_site_review",
+   "package" : "dom",
+   "schema" : 1,
+   "sites" : [
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 40,
+         "disposition" : "primary",
+         "file_sha256" : "64ddf365e224fde342c457d8c0543d3851a01cb3112bd730db730500755a2798",
+         "line" : 178,
+         "message" : "unsupported macro: local_name!",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/node/selector.rs",
+         "reason" : "The has_id body compares attr.name.local with local_name!(\"id\"). The source contains a real dependency-provided atom macro call. The previously refused qualified associated parameter type now permits reaching this expression; it is a new macro primary, not recovery from the earlier ns! in a different method.",
+         "source_anchor" : {
+            "byte_offset" : 5609,
+            "file_bytes" : 6908,
+            "file_physical_lines" : 222,
+            "file_sha256" : "64ddf365e224fde342c457d8c0543d3851a01cb3112bd730db730500755a2798",
+            "line_sha256" : "e0b7b65bcdebd1c1dcde9bd0b77ab1f3adfe8c8b41516581b1c47a77cd835793",
+            "line_text" : "                    attr.name.local == local_name!(\"id\")"
+         },
+         "source_review" : "q2",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "lifetime_outlives_where",
+         "code" : "E_UNSUPPORTED",
+         "column" : 9,
+         "disposition" : "primary",
+         "file_sha256" : "6c8c45408ccb02f813709f93b118bdf4e174640968a41a2d0d531b53ad60027a",
+         "line" : 569,
+         "message" : "unsupported construct: lifetime-outlives where predicate",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/selection.rs",
+         "reason" : "The original Selection::select signature contains the explicit where predicate lifetime a outlives lifetime b. The diagnostic wording changed at the already classified source coordinate, but the unsupported source requirement remains the same lifetime-outlives predicate.",
+         "source_anchor" : {
+            "byte_offset" : 19895,
+            "file_bytes" : 31573,
+            "file_physical_lines" : 917,
+            "file_sha256" : "6c8c45408ccb02f813709f93b118bdf4e174640968a41a2d0d531b53ad60027a",
+            "line_sha256" : "88500fe77ee15714bac85af4b82b56715059b19fef0f770bc84573746600c2b8",
+            "line_text" : "        'a: 'b,"
+         },
+         "source_review" : "q2",
+         "title" : "Lifetime outlives predicate in where"
+      }
+   ]
+}

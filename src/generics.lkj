@@ -25,7 +25,12 @@ fn push(terms: &mut Vec<Term>, term: Term) -> usize {
 fn type_children(source: &Program, id: TypeId) -> Vec<TypeId> {
     match &source.types[id].kind {
         Type::Path(p) => {
-            let mut children = p.args.clone();
+            let mut children = Vec::new();
+            if let Some(qualification) = &p.qualification {
+                children.push(qualification.receiver);
+                if let Some(trait_ty) = qualification.trait_ty { children.push(trait_ty); }
+            }
+            for argument in &p.args { children.push(*argument); }
             for binding in &p.bindings { children.push(binding.value); }
             children
         }
@@ -40,6 +45,30 @@ fn type_children(source: &Program, id: TypeId) -> Vec<TypeId> {
         _ => Vec::new(),
     }
 }
+
+fn projection_name(member: &str) -> String {
+    format!("$projection:{member}")
+}
+
+fn qualified_trait_index(source: &Program, qualification: &QualifiedPath) -> Option<usize> {
+    let Type::Path(path) = &source.types[qualification.trait_ty?].kind else { return None; };
+    match bound_identity(source, path) {
+        TraitIdentity::Declared(index) => Some(index),
+        _ => None,
+    }
+}
+
+fn self_projection_key(source: &Program, path: &Path) -> Option<String> {
+    let qualification = path.qualification.as_ref()?;
+    let Type::Path(receiver) = &source.types[qualification.receiver].kind else { return None; };
+    if receiver.qualification.is_some() || receiver.declaration.is_some()
+        || !receiver.args.is_empty() || receiver.name != "Self" || !path.args.is_empty() {
+        return None;
+    }
+    let index = qualified_trait_index(source, qualification)?;
+    Some(format!("$self-projection:{index}:{}", path.name))
+}
+
 fn type_term(
     source: &Program,
     id: TypeId,
@@ -54,7 +83,13 @@ fn type_term(
         }
         if !ready {
             if let Type::Path(p) = &source.types[ty].kind {
-                if p.declaration.is_none() && p.args.is_empty() && p.bindings.is_empty() {
+                if let Some(key) = self_projection_key(source, p) {
+                    if let Some(value) = env.get(&key) {
+                        done.insert(ty, *value);
+                        continue;
+                    }
+                }
+                if p.qualification.is_none() && p.declaration.is_none() && p.args.is_empty() && p.bindings.is_empty() {
                     if let Some(value) = env.get(&p.name) {
                         done.insert(ty, *value);
                         continue;
@@ -75,11 +110,29 @@ fn type_term(
         for child in kids {
             values.push(*done.get(&child).unwrap());
         }
+        // A concrete spelling of the current receiver uses the same recorded
+        // implementation equation as Self. Only structural receiver equality
+        // and the exact declared trait/member key permit this substitution.
+        if let Type::Path(path) = &source.types[ty].kind {
+            if let (Some(qualification), Some(self_ty)) = (&path.qualification, env.get(&"Self".to_string())) {
+                if path.args.is_empty() && equivalent(terms, values[0], *self_ty) {
+                    if let Some(owner) = qualified_trait_index(source, qualification) {
+                        let key = format!("$self-projection:{owner}:{}", path.name);
+                        if let Some(value) = env.get(&key) {
+                            done.insert(ty, *value);
+                            continue;
+                        }
+                    }
+                }
+            }
+        }
         let term = match &source.types[ty].kind {
             Type::Infer => Term::Unknown,
             Type::Never => Term::Named("!".to_string(), values),
             Type::Path(p) => {
-                if !p.bindings.is_empty() {
+                if p.qualification.is_some() {
+                    Term::Named(projection_name(&p.name), values)
+                } else if !p.bindings.is_empty() {
                     let args = values[..p.args.len()].to_vec();
                     let base = match bound_identity(source, p) {
                         TraitIdentity::Declared(index) => Term::DeclaredTrait(index, args),
@@ -115,6 +168,48 @@ fn type_term(
     }
     *done.get(&id).unwrap()
 }
+
+// Shorthand T::Item and <T as Trait>::Item have one symbolic identity when the
+// parameter has exactly one declared owner for that member. Ambiguous members
+// remain unresolved; spelling never chooses between unrelated trait contracts.
+fn parameter_projection_terms(
+    source: &Program,
+    params: &[GenericParam],
+    env: &mut BTreeMap<String, usize>,
+    terms: &mut Vec<Term>,
+) {
+    for parameter in params {
+        if parameter.lifetime { continue; }
+        let receiver = match env.get(&parameter.name) { Some(receiver) => Some(*receiver), None => None };
+        let Some(receiver) = receiver else { continue; };
+        let mut pending = parameter.bounds.clone();
+        let mut seen = BTreeSet::new();
+        let mut owners: BTreeMap<String, Option<usize>> = BTreeMap::new();
+        while let Some(bound) = pending.pop() {
+            let Type::Path(path) = &source.types[bound].kind else { continue; };
+            if !path.args.is_empty() { continue; }
+            let TraitIdentity::Declared(index) = bound_identity(source, path) else { continue; };
+            if !seen.insert(index) { continue; }
+            let declaration = &source.traits[index];
+            for parent in &declaration.bounds { pending.push(*parent); }
+            for member in &declaration.associated {
+                if owners.contains_key(&member.name) { owners.insert(member.name.clone(), None); }
+                else { owners.insert(member.name.clone(), Some(index)); }
+            }
+        }
+        for (member, owner) in owners {
+            let key = format!("{}::{member}", parameter.name);
+            if let Some(owner) = owner {
+                let bound = push(terms, Term::DeclaredTrait(owner, Vec::new()));
+                let projection = push(terms, Term::Named(projection_name(&member), vec![receiver, bound]));
+                env.insert(key, projection);
+            } else {
+                env.remove(&key);
+            }
+        }
+    }
+}
+
 fn variables(
     source: &Program,
     params: &[GenericParam],
@@ -478,7 +573,7 @@ fn infer(
     let mut stack = vec![(pattern, actual)];
     while let Some((p, a)) = stack.pop() {
         if let Type::Path(path) = &source.types[p].kind {
-            if path.declaration.is_none() && path.args.is_empty() {
+            if path.qualification.is_none() && path.declaration.is_none() && path.args.is_empty() {
                 let mut parameter = false;
                 for g in parameters {
                     if !g.lifetime && g.name == path.name {
@@ -495,7 +590,10 @@ fn infer(
             }
         }
         let expected = match &source.types[p].kind {
-            Type::Path(path) => path.name.as_str().to_string(),
+            Type::Path(path) => {
+                if path.qualification.is_some() { projection_name(&path.name) }
+                else { path.name.as_str().to_string() }
+            }
             Type::Ref { mutable, .. } => if *mutable { "&mut" } else { "&" }.to_string(),
             Type::Tuple(_) => "tuple".to_string(),
             Type::Slice(_) => "[]".to_string(),
@@ -820,7 +918,7 @@ impl Analysis<'_> {
                             let mut i = bindings.len();
                             while i > 0 {
                                 i -= 1;
-                                if bindings[i].0 == p.name {
+                                if p.qualification.is_none() && bindings[i].0 == p.name {
                                     t = bindings[i].1;
                                     break;
                                 }
@@ -916,10 +1014,10 @@ impl Analysis<'_> {
                                         &ts,
                                         expression.span,
                                     )
-                                } else if path.name == "Box::new" && ts.len() == 1 {
+                                } else if path.qualification.is_none() && path.name == "Box::new" && ts.len() == 1 {
                                     self.term(Term::Named("Box".to_string(), ts))
-                                } else if path.name == "Vec::new"
-                                    || path.name == "Vec::with_capacity"
+                                } else if path.qualification.is_none() && (path.name == "Vec::new"
+                                    || path.name == "Vec::with_capacity")
                                 {
                                     let inner = if path.args.is_empty() {
                                         0
@@ -1068,6 +1166,7 @@ fn impl_arguments(
         let actual_type = types.get(actual)?;
         match &source.types[pattern].kind {
             Type::Path(path) => {
+                if path.qualification.is_some() { return None; }
                 let name: &str = path.name.as_str();
                 let mut generic = false;
                 for param in &implementation.generics {
@@ -1228,6 +1327,9 @@ pub(crate) fn builtin_parents(name: &str) -> Vec<String> {
 }
 
 pub(crate) fn bound_identity(source: &Program, path: &Path) -> TraitIdentity {
+    if path.qualification.is_some() {
+        return TraitIdentity::Unknown(format!("qualified associated type {}", path.name));
+    }
     if let Some(declaration) = path.declaration {
         return match source.declarations.get(declaration).map(|item| item.item) {
             Some(Item::Trait(index)) => TraitIdentity::Declared(index),
@@ -1273,6 +1375,7 @@ struct Requirements {
     witness: Option<ImplementationWitness>,
     infer: bool,
     parameterized: Vec<(TypeId, usize)>,
+    where_predicates: bool,
 }
 impl Requirements {
     fn structural(children: Vec<Goal>) -> Self {
@@ -1282,6 +1385,7 @@ impl Requirements {
             witness: None,
             infer: false,
             parameterized: Vec::new(),
+            where_predicates: false,
         }
     }
 }
@@ -1514,6 +1618,54 @@ impl ImplementationIndex {
         values.sort();
         values
     }
+
+    /// A provided associated function belongs to each implementation that does
+    /// not override it. This only supplies candidates; callers still prove the
+    /// implementation and enforce trait scope before selecting a function.
+    pub(crate) fn associated_method_candidates_by_head(
+        &self, source: &Program, head: Option<&str>, name: &str,
+    ) -> Vec<usize> {
+        let mut candidates = BTreeSet::new();
+        for candidate in self.method_candidates_by_head(head, name) {
+            candidates.insert(candidate);
+        }
+        for (owner, declaration) in source.traits.iter().enumerate() {
+            let provided = declaration.methods.iter().any(|method| {
+                let function = &source.functions[*method];
+                function.name == name && function.body.is_some()
+                    && function.params.first().is_none_or(|parameter| parameter.name != "self")
+            });
+            if !provided { continue; }
+            for candidate in self.trait_candidates_by_head(owner, head) {
+                candidates.insert(candidate);
+            }
+        }
+        let mut values = Vec::new();
+        for candidate in candidates { values.push(candidate); }
+        values
+    }
+
+    pub(crate) fn associated_method_candidates(
+        &self, source: &Program, types: &[crate::ir::Type],
+        applications: &BTreeMap<usize, (String, Vec<usize>)>, ty: usize, name: &str,
+    ) -> Vec<usize> {
+        self.associated_method_candidates_by_head(source, Self::receiver_head(types, applications, ty), name)
+    }
+}
+
+pub(crate) fn implementation_method(source: &Program, implementation: usize, name: &str) -> Option<usize> {
+    let implementation = &source.impls[implementation];
+    for method in &implementation.methods {
+        if source.functions[*method].name == name { return Some(*method); }
+    }
+    let trait_type = implementation.trait_ty?;
+    let Type::Path(path) = &source.types[trait_type].kind else { return None; };
+    let TraitIdentity::Declared(owner) = bound_identity(source, path) else { return None; };
+    for method in &source.traits[owner].methods {
+        let function = &source.functions[*method];
+        if function.name == name && function.body.is_some() { return Some(*method); }
+    }
+    None
 }
 
 pub(crate) fn select_implementation(
@@ -1773,6 +1925,7 @@ fn trait_requirements(
             witness: Some(selected),
             infer: true,
             parameterized: Vec::new(),
+            where_predicates: false,
         });
     }
     let env = &selected.substitutions;
@@ -1789,7 +1942,9 @@ fn trait_requirements(
             }
         }
     }
+    let mut where_predicates = !implementation.predicates.is_empty();
     if let TraitIdentity::Declared(index) = goal.bound {
+        where_predicates = where_predicates || !source.traits[index].predicates.is_empty();
         for constraint in &source.traits[index].bounds {
             if !add_bound(source, *constraint, goal.ty, &mut children) {
                 parameterized.push((*constraint, goal.ty));
@@ -1802,6 +1957,7 @@ fn trait_requirements(
         witness: Some(selected),
         infer: false,
         parameterized,
+        where_predicates,
     })
 }
 
@@ -1896,11 +2052,11 @@ pub(crate) fn alias_cycle_problems(source: &Program) -> Vec<(usize, Diagnostic)>
             if let Type::Path(path) = &source.types[ty].kind {
                 let mut parameter = false;
                 for g in &alias.generics {
-                    if path.declaration.is_none() && g.name == path.name {
+                    if path.qualification.is_none() && path.declaration.is_none() && g.name == path.name {
                         parameter = true;
                     }
                 }
-                if !parameter {
+                if !parameter && path.qualification.is_none() {
                     if let Some(to) = names.get(&path.name) {
                         edges.push(Edge {
                             from: i,
@@ -2123,6 +2279,46 @@ fn known_bounds(
     }
     Ok(known)
 }
+
+fn where_bounds(
+    source: &Program,
+    predicates: &[WherePredicate],
+    env: &BTreeMap<String, usize>,
+    terms: &mut Vec<Term>,
+) -> Result<Vec<(usize, usize)>, Diagnostic> {
+    let mut known = Vec::new();
+    for predicate in predicates {
+        let receiver = signature_type(source, predicate.target, env, terms)?;
+        for bound in &predicate.bounds {
+            let bound = signature_type(source, *bound, env, terms)?;
+            for inherited in bound_closure(source, bound, receiver, terms)? {
+                known.push((receiver, inherited));
+            }
+        }
+    }
+    Ok(known)
+}
+
+fn prove_where_bounds(
+    source: &Program,
+    index: &ImplementationIndex,
+    predicates: &[WherePredicate],
+    env: &BTreeMap<String, usize>,
+    terms: &mut Vec<Term>,
+    known: &[(usize, usize)],
+    message: &str,
+) -> Result<(), Diagnostic> {
+    for predicate in predicates {
+        let receiver = signature_type(source, predicate.target, env, terms)?;
+        for bound in &predicate.bounds {
+            let bound = signature_type(source, *bound, env, terms)?;
+            if !signature_bounds::prove(source, index, terms, receiver, bound, known)? {
+                return Err(Diagnostic::new(predicate.span, "E_TRAIT", message));
+            }
+        }
+    }
+    Ok(())
+}
 fn symbolic_bound(
     terms: &mut Vec<Term>,
     ty: usize,
@@ -2238,6 +2434,9 @@ fn associated_dependencies(source: &Program, ty: TypeId, env: &BTreeMap<String, 
     let mut work = vec![ty];
     while let Some(t) = work.pop() {
         if let Type::Path(path) = &source.types[t].kind {
+            if let Some(key) = self_projection_key(source, path) {
+                if !env.contains_key(&key) { return false; }
+            }
             if path.name.starts_with("Self::") && !env.contains_key(&path.name) {
                 return false;
             }
@@ -2248,6 +2447,40 @@ fn associated_dependencies(source: &Program, ty: TypeId, env: &BTreeMap<String, 
     }
     true
 }
+
+fn implementation_projection_terms(
+    source: &Program,
+    implementation: &Impl,
+    trait_index: usize,
+    env: &mut BTreeMap<String, usize>,
+    terms: &mut Vec<Term>,
+) -> Result<bool, Diagnostic> {
+    let declaration = &source.traits[trait_index];
+    let mut pending: Vec<(String, TypeId)> = Vec::new();
+    for member in &declaration.associated {
+        let value = implementation.associated.iter().find(|item| item.name == member.name)
+            .and_then(|item| item.value).or(member.value);
+        let Some(value) = value else { return Ok(false); };
+        pending.push((member.name.clone(), value));
+    }
+    while !pending.is_empty() {
+        let before = pending.len();
+        let mut retry = Vec::new();
+        for (member, source_type) in pending {
+            if !associated_dependencies(source, source_type, env) {
+                retry.push((member, source_type));
+                continue;
+            }
+            let value = signature_type(source, source_type, env, terms)?;
+            env.insert(format!("Self::{member}"), value);
+            env.insert(format!("$self-projection:{trait_index}:{member}"), value);
+        }
+        if retry.len() == before { return Ok(false); }
+        pending = retry;
+    }
+    Ok(true)
+}
+
 fn signatures(source: &Program) -> Result<(), Diagnostic> {
     let implementations = ImplementationIndex::new(source)?;
     for implementation in &source.impls {
@@ -2259,13 +2492,15 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
             Type::Path(p) => p,
             _ => continue,
         };
-        let declaration = match bound_identity(source, path) {
-            TraitIdentity::Declared(index) => &source.traits[index],
+        let trait_index = match bound_identity(source, path) {
+            TraitIdentity::Declared(index) => index,
             _ => continue,
         };
+        let declaration = &source.traits[trait_index];
         let mut terms = Vec::new();
         let mut next = 0;
         let mut actual_env = variables(source, &implementation.generics, &mut terms, &mut next);
+        parameter_projection_terms(source, &implementation.generics, &mut actual_env, &mut terms);
         let target = signature_type(source, implementation.target, &actual_env, &mut terms)?;
         actual_env.insert("Self".to_string(), target);
         let mut expected_env = BTreeMap::new();
@@ -2281,7 +2516,11 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
             let t = signature_type(source, path.args[i], &actual_env, &mut terms)?;
             expected_env.insert(declaration.generics[i].name.clone(), t);
         }
-        let known = known_bounds(source, &implementation.generics, &actual_env, &mut terms)?;
+        parameter_projection_terms(source, &declaration.generics, &mut expected_env, &mut terms);
+        let mut known = known_bounds(source, &implementation.generics, &actual_env, &mut terms)?;
+        for bound in where_bounds(source, &implementation.predicates, &actual_env, &mut terms)? {
+            known.push(bound);
+        }
         for generic in &declaration.generics {
             if generic.lifetime {
                 continue;
@@ -2335,6 +2574,9 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
                 let key = format!("Self::{name}");
                 actual_env.insert(key.clone(), value);
                 expected_env.insert(key, value);
+                let key = format!("$self-projection:{trait_index}:{name}");
+                actual_env.insert(key.clone(), value);
+                expected_env.insert(key, value);
                 done[i] = true;
                 remaining -= 1;
             }
@@ -2346,12 +2588,25 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
                 ));
             }
         }
+        // Associated definitions can turn a Self projection in an implementation
+        // predicate into its actual result. Rebuild assumptions after those
+        // definitions, rather than retain an earlier symbolic placeholder.
+        known = known_bounds(source, &implementation.generics, &actual_env, &mut terms)?;
+        for bound in where_bounds(source, &implementation.predicates, &actual_env, &mut terms)? {
+            known.push(bound);
+        }
         for bound in &declaration.bounds {
             let constraint = signature_type(source, *bound, &expected_env, &mut terms)?;
             if !signature_bounds::prove(source, &implementations, &mut terms, target, constraint, &known)? {
                 return Err(Diagnostic::new(implementation.span, "E_TRAIT",
                     "implementation does not establish its declared supertrait bound"));
             }
+        }
+        prove_where_bounds(source, &implementations, &declaration.predicates,
+            &expected_env, &mut terms, &known,
+            "implementation does not establish a trait where predicate")?;
+        for bound in where_bounds(source, &declaration.predicates, &expected_env, &mut terms)? {
+            known.push(bound);
         }
         for associated in &declaration.associated {
             if let Some(concrete) = expected_env.get(&format!("Self::{}", associated.name)) {
@@ -2412,6 +2667,8 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
                 aenv.insert(a.name.clone(), value);
                 eenv.insert(e.name.clone(), value);
             }
+            parameter_projection_terms(source, &actual.generics, &mut aenv, &mut terms);
+            parameter_projection_terms(source, &expected.generics, &mut eenv, &mut terms);
             let mut pairs = vec![(actual.result, expected.result)];
             for i in 0..actual.params.len() {
                 pairs.push((actual.params[i].ty, expected.params[i].ty));
@@ -2429,6 +2686,9 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
             }
             let mut available = known.clone();
             for bound in known_bounds(source, &expected.generics, &eenv, &mut terms)? {
+                available.push(bound);
+            }
+            for bound in where_bounds(source, &expected.predicates, &eenv, &mut terms)? {
                 available.push(bound);
             }
             for g in &actual.generics {
@@ -2454,6 +2714,9 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
                     }
                 }
             }
+            prove_where_bounds(source, &implementations, &actual.predicates,
+                &aenv, &mut terms, &available,
+                "implementation method requires a stronger where predicate")?;
         }
     }
     Ok(())
@@ -2597,6 +2860,7 @@ fn constant_cycles(source: &Program) -> Result<(), Diagnostic> {
         if expression.span.end > source.exprs[constant.value].span.end {
             continue;
         }
+        if path.qualification.is_some() { continue; }
         let mut name = qualified(&constant.module, &path.name);
         if let Some(rest) = path.name.as_str().strip_prefix("crate::") {
             name = rest.to_string();

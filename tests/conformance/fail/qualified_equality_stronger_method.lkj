@@ -1,0 +1,13 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Source { type Item; }
+trait Container { type Element; }
+trait Consumer {
+    fn answer<T: Source>() -> i64 where <T as Source>::Item: Container;
+}
+struct Adapter {}
+impl Consumer for Adapter {
+    fn answer<T: Source>() -> i64
+    where <T as Source>::Item: Container<Element = i64> { 42 }
+}
+pub fn probe() -> i64 { 42 }

@@ -1,0 +1,15 @@
+// expect: value 42
+// witness: {}
+trait Value { fn make<T>(value: T) -> T; }
+trait Layer { type Item: Value; }
+trait Source { type Item: Layer; }
+struct Number {}
+struct Middle {}
+struct Root {}
+impl Value for Number { fn make<T>(value: T) -> T { value } }
+impl Layer for Middle { type Item = Number; }
+impl Source for Root { type Item = Middle; }
+fn answer<T: Source>() -> i64 {
+    <<T as Source>::Item as Layer>::Item::make::<i64>(42)
+}
+pub fn probe() -> i64 { answer::<Root>() }

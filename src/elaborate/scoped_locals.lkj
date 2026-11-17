@@ -97,6 +97,10 @@ impl Builder<'_, '_> {
                     pending.push((*inner, bound));
                 }
                 a::Type::Path(path) => {
+                    if let Some(qualification) = &path.qualification {
+                        pending.push((qualification.receiver, bound));
+                        if let Some(trait_ty) = qualification.trait_ty { pending.push((trait_ty, bound)); }
+                    }
                     if path.name.starts_with('\'')
                         && named_region_argument(&path.name, &environments[bound])
                     {

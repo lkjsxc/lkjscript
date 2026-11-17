@@ -1,0 +1,19 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; }
+trait Family { type Value; fn make() -> Self::Value; }
+struct Number {}
+struct Root {}
+impl Source for Root { type Item = Number; }
+impl Family for Number { type Value = i64; fn make() -> i64 { 21 } }
+fn forward<T: Source, U: Source>() -> i64
+where <T as Source>::Item: Family<Value = <<U as Source>::Item as Family>::Value>,
+      <U as Source>::Item: Family<Value = i64> {
+    <T as Source>::Item::make()
+}
+fn reverse<T: Source, U: Source>() -> i64
+where <U as Source>::Item: Family<Value = i64>,
+      <T as Source>::Item: Family<Value = <<U as Source>::Item as Family>::Value> {
+    <T as Source>::Item::make()
+}
+pub fn probe() -> i64 { forward::<Root, Root>() + reverse::<Root, Root>() }

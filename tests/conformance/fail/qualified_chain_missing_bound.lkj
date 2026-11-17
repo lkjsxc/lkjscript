@@ -1,0 +1,8 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Source { type Item; }
+trait Value { fn make() -> i64; }
+struct Number {}
+impl Value for Number { fn make() -> i64 { 42 } }
+fn invalid<T: Source>() -> i64 { <T as Source>::Item::make() }
+pub fn probe() -> i64 { 42 }

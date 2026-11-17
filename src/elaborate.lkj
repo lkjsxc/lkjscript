@@ -12,6 +12,9 @@ mod diagnostic_inference;
 mod diagnostic_edits;
 mod floats;
 mod generic_check;
+mod qualified_paths;
+mod associated_types;
+mod where_predicates;
 mod inference;
 pub mod incremental;
 mod integers;
@@ -122,6 +125,7 @@ struct Compiler<'a> {
     scoped_bodies: BTreeMap<usize, scoped_locals::Body>,
     trait_proofs: Option<trait_proofs::Session>,
     return_inference: BTreeSet<usize>,
+    associated_queries: associated_types::Queries,
     diagnostic_functions: Option<&'a BTreeSet<usize>>,
 }
 
@@ -490,7 +494,8 @@ fn instantiate_type_headers(
                 .copied();
             let _ = c.named_type(
                 &a::Path {
-                    bindings: Vec::new(), declaration,
+                    qualification: None, bindings: Vec::new(),
+                    declaration,
                     name: qualified(&s.module, &s.name),
                     args: Vec::new(),
                 },
@@ -507,7 +512,8 @@ fn instantiate_type_headers(
                 .copied();
             let _ = c.named_type(
                 &a::Path {
-                    bindings: Vec::new(), declaration,
+                    qualification: None, bindings: Vec::new(),
+                    declaration,
                     name: qualified(&e.module, &e.name),
                     args: Vec::new(),
                 },
@@ -698,6 +704,7 @@ impl<'a> Compiler<'a> {
             scoped_bodies: BTreeMap::new(),
             trait_proofs: None,
             return_inference: BTreeSet::new(),
+            associated_queries: associated_types::Queries::default(),
             diagnostic_functions: None,
         };
         c.initialize_primitive_names();
@@ -1130,6 +1137,7 @@ impl Compiler<'_> {
             name.push('>');
         }
         self.bounds(&source.generics, &sub)?;
+        self.check_where_predicates(&source.predicates, &sub)?;
         let mut locals = Vec::new();
         for p in &source.params {
             locals.push(ir::Local {
@@ -1278,7 +1286,7 @@ impl Compiler<'_> {
                         }
                     }
                     sub.insert("Self".to_string(), ty);
-                    self.bounds(&im.generics, &sub)?;
+                    self.implementation_bounds(&im, &sub)?;
                     let mut methods = Vec::new();
                     for method in &im.methods {
                         if self.source.functions[*method].name == "drop" {
@@ -1923,6 +1931,7 @@ impl Builder<'_, '_> {
         }
         match self.compiler.source.exprs[id].kind.clone() {
             a::Expr::Path(p) => {
+                if p.qualification.is_some() { return None; }
                 let guarded = match self.guard_aliases.get(&p.name) {
                     Some(place) => place_type(&self.compiler.types, self.function, place),
                     None => None,
@@ -2070,9 +2079,9 @@ impl Builder<'_, '_> {
     fn addressable_with_mutability(&mut self, id: usize, mutable: bool) -> Result<ir::Place> {
         let place = match &self.compiler.source.exprs[id].kind {
             a::Expr::Path(path) => {
-                self.capture_aliases.contains_key(&id)
+                path.qualification.is_none() && (self.capture_aliases.contains_key(&id)
                     || self.binding(&path.name).is_some()
-                    || self.guard_aliases.contains_key(&path.name)
+                    || self.guard_aliases.contains_key(&path.name))
             }
             a::Expr::Field { .. } | a::Expr::Index { .. } => true,
             a::Expr::Unary { op, .. } => op == "*",
@@ -2724,6 +2733,9 @@ impl Builder<'_, '_> {
                 Ok((dst, ir::F64))
             }
             a::Expr::Path(path) => {
+                if path.qualification.is_some() {
+                    return Err(err(node.span, "E_UNSUPPORTED", "fully qualified function values require an immediate call"));
+                }
                 if self.binding(&path.name).is_some() || self.guard_aliases.contains_key(&path.name)
                 {
                     let place = self.place(id)?;
@@ -3575,8 +3587,8 @@ impl Builder<'_, '_> {
             .or(context.inferred.filter(|ty| !self.compiler.has_view(*ty)));
         let path = match self.compiler.source.exprs[callee].kind.clone() {
             a::Expr::Path(p)
-                if self.binding(&p.name).is_some()
-                    || self.capture_aliases.contains_key(&callee) =>
+                if p.qualification.is_none() && (self.binding(&p.name).is_some()
+                    || self.capture_aliases.contains_key(&callee)) =>
             {
                 return self.callable_call(callee, args, expected, span);
             }
@@ -3742,7 +3754,8 @@ impl Builder<'_, '_> {
             } else if !path.args.is_empty() {
                 self.compiler.named_type(
                     &a::Path {
-                        bindings: Vec::new(), declaration: None,
+                        qualification: None, bindings: Vec::new(),
+                        declaration: None,
                         name: if boxed { "Box" } else { "Vec" }.to_string(),
                         args: path.args.clone(),
                     },
@@ -3822,7 +3835,18 @@ impl Builder<'_, '_> {
         }
         let mut initial_sub = BTreeMap::new();
         let mut associated = None;
-        if let Some(at) = path.name.rfind("::") {
+        if let Some(qualification) = &path.qualification {
+            let receiver = self.compiler.resolve(qualification.receiver, &self.sub)?;
+            let instance = if qualification.trait_ty.is_some() {
+                self.compiler.qualified_method(receiver, qualification, &path.name, callee, span)?
+            } else {
+                self.associated_receiver(receiver, &path.name, callee, true, span)?
+                    .ok_or_else(|| err(qualification.member_span, "E_TRAIT",
+                        "associated function requires a receiver implementation or declared trait bound"))?
+            };
+            associated = Some(instance.source);
+            initial_sub = instance.substitutions;
+        } else if let Some(at) = path.name.rfind("::") {
             let owner = &path.name[..at];
             let method = &path.name[at + 2..];
             let target_type = if path.args.is_empty()
@@ -3837,7 +3861,8 @@ impl Builder<'_, '_> {
                 self.compiler
                     .named_type(
                         &a::Path {
-                            bindings: Vec::new(), declaration: path.declaration,
+                            qualification: None, bindings: Vec::new(),
+                            declaration: path.declaration,
                             name: owner.to_string(),
                             args: path.args.clone(),
                         },
@@ -3847,70 +3872,9 @@ impl Builder<'_, '_> {
                     .ok()
             };
             if let Some(t) = target_type {
-                if let Some(instance) = self.compiler.static_contract(t, method, callee, span)? {
+                if let Some(instance) = self.associated_receiver(t, method, callee, false, span)? {
                     associated = Some(instance.source);
                     initial_sub = instance.substitutions;
-                }
-                let impls = if associated.is_some() {
-                    Vec::new()
-                } else {
-                    self.compiler.implementations.method_candidates(
-                        &self.compiler.types,
-                        &self.compiler.applications,
-                        t,
-                        method,
-                    )
-                };
-                let mut candidates: Vec<(usize, BTreeMap<String, usize>)> = Vec::new();
-                let mut inherent: Vec<(usize, BTreeMap<String, usize>)> = Vec::new();
-                let mut prerequisite_problem = None;
-                for index in impls {
-                    let im = self.compiler.source.impls[index].clone();
-                    let mut methods = Vec::new();
-                    for candidate in &im.methods {
-                        let function = &self.compiler.source.functions[*candidate];
-                        if function.name == method
-                            && function.params.first().is_none_or(|p| p.name != "self")
-                        {
-                            methods.push(*candidate);
-                        }
-                    }
-                    if methods.is_empty() {
-                        continue;
-                    }
-                    let mut sub = BTreeMap::new();
-                    if !self.infer_type_matches(im.target, t, &mut sub)? {
-                        continue;
-                    }
-                    sub.insert("Self".to_string(), t);
-                    if self.compiler.resolve(im.target, &sub).ok() != Some(t)
-                        || !self.trait_available(&im, t, span)
-                    {
-                        continue;
-                    }
-                    if let Err(problem) = self.compiler.bounds(&im.generics, &sub) {
-                        prerequisite_problem.get_or_insert(problem);
-                        continue;
-                    }
-                    for candidate in methods {
-                        if im.trait_ty.is_none() {
-                            inherent.push((candidate, sub.clone()));
-                        } else {
-                            candidates.push((candidate, sub.clone()));
-                        }
-                    }
-                }
-                if !inherent.is_empty() {
-                    candidates = inherent;
-                }
-                if candidates.len() > 1 {
-                    return Err(err(span, "E_TRAIT", "ambiguous associated function"));
-                }
-                if let Some((candidate, substitutions)) = candidates.pop() {
-                    associated = Some(candidate);
-                    initial_sub = substitutions;
-                } else if let Some(problem) = prerequisite_problem {
-                    return Err(problem);
                 }
             }
         }
@@ -3947,7 +3911,7 @@ impl Builder<'_, '_> {
                 generic.push(index);
             }
         }
-        if !path.args.is_empty() && associated.is_none() {
+        if !path.args.is_empty() && (associated.is_none() || path.qualification.is_some()) {
             if path.args.len() != generic.len() {
                 return Err(err(span, "E_TYPE", "wrong generic argument count"));
             }
@@ -4071,7 +4035,7 @@ impl Builder<'_, '_> {
                 && self.trait_available(&implementation, base, span)
                 && self
                     .compiler
-                    .bounds(&implementation.generics, &substitutions)
+                    .implementation_bounds(&implementation, &substitutions)
                     .is_ok()
             {
                 return Ok(true);
@@ -4444,7 +4408,8 @@ impl Builder<'_, '_> {
                 let option_name = self.compiler.names.prelude_type("Option", span)?;
                 let ty = self.compiler.named_type(
                     &a::Path {
-                        bindings: Vec::new(), declaration: None,
+                        qualification: None, bindings: Vec::new(),
+                        declaration: None,
                         name: option_name,
                         args: Vec::new(),
                     },
@@ -4507,7 +4472,7 @@ impl Builder<'_, '_> {
                                 }
                                 continue;
                             }
-                            if let Err(problem) = self.compiler.bounds(&im.generics, &sub) {
+                            if let Err(problem) = self.compiler.implementation_bounds(&im, &sub) {
                                 prerequisite_problem.get_or_insert(problem);
                                 continue;
                             }

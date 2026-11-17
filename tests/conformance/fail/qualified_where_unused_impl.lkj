@@ -1,0 +1,7 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Needs {}
+trait Flag {}
+struct Number {}
+impl Flag for Number where bool: Needs {}
+pub fn probe() -> i64 { 42 }

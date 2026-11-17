@@ -1,0 +1,10 @@
+// expect: reject E_TRAIT
+// witness: {}
+mod left { pub trait Source { type Item; } }
+mod right { pub trait Source { type Item; } }
+trait Value { fn answer() -> i64; }
+fn unused<T: left::Source + right::Source>() -> i64
+where <T as left::Source>::Item: Value {
+    <<T as right::Source>::Item as Value>::answer()
+}
+pub fn probe() -> i64 { 42 }

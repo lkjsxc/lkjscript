@@ -1,0 +1,10 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Source { type Item; }
+trait Value {}
+impl Value for i64 {}
+trait Producer: Source where <Self as Source>::Item: Value {}
+struct Number {}
+impl Source for Number { type Item = bool; }
+impl Producer for Number {}
+pub fn probe() -> i64 { 42 }

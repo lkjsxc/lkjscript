@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; }
+struct Leaf {}
+struct Chain<T> { value: T }
+impl Source for Leaf { type Item = i64; }
+impl<T: Source> Source for Chain<T> { type Item = <T as Source>::Item; }
+pub fn probe() -> i64 {
+    let value: <Chain<Chain<Leaf>> as Source>::Item = 42i64;
+    value
+}

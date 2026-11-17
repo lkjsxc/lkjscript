@@ -38,7 +38,17 @@ pub struct AssociatedBinding {
 }
 
 #[derive(Clone)]
+pub struct QualifiedPath {
+    pub receiver: TypeId,
+    // A missing trait selects a value member on the explicit receiver type.
+    // Associated type projections always retain their declared trait.
+    pub trait_ty: Option<TypeId>,
+    pub member_span: Span,
+}
+
+#[derive(Clone)]
 pub struct Path {
+    pub qualification: Option<QualifiedPath>,
     pub declaration: Option<DeclarationId>,
     pub name: String,
     pub args: Vec<TypeId>,
@@ -75,6 +85,13 @@ pub struct TypeNode {
 }
 
 #[derive(Clone)]
+pub struct WherePredicate {
+    pub target: TypeId,
+    pub bounds: Vec<TypeId>,
+    pub span: Span,
+}
+
+#[derive(Clone)]
 pub struct GenericParam {
     pub name: String,
     pub bounds: Vec<TypeId>,
@@ -102,6 +119,7 @@ pub struct Function {
     pub name: String,
     pub module: String,
     pub generics: Vec<GenericParam>,
+    pub predicates: Vec<WherePredicate>,
     pub params: Vec<Param>,
     pub result: TypeId,
     pub body: Option<BlockId>,
@@ -123,6 +141,7 @@ pub struct Struct {
     pub name: String,
     pub module: String,
     pub generics: Vec<GenericParam>,
+    pub predicates: Vec<WherePredicate>,
     pub fields: Vec<Field>,
     pub tuple: bool,
     pub unit: bool,
@@ -152,6 +171,7 @@ pub struct Enum {
     pub name: String,
     pub module: String,
     pub generics: Vec<GenericParam>,
+    pub predicates: Vec<WherePredicate>,
     pub variants: Vec<Variant>,
     pub attrs: Vec<Attribute>,
     pub public: Visibility,
@@ -171,6 +191,7 @@ pub struct Trait {
     pub name: String,
     pub module: String,
     pub generics: Vec<GenericParam>,
+    pub predicates: Vec<WherePredicate>,
     pub bounds: Vec<TypeId>,
     pub methods: Vec<usize>,
     pub associated: Vec<AssociatedType>,
@@ -182,6 +203,7 @@ pub struct Trait {
 pub struct Impl {
     pub module: String,
     pub generics: Vec<GenericParam>,
+    pub predicates: Vec<WherePredicate>,
     pub target: TypeId,
     pub trait_ty: Option<TypeId>,
     pub methods: Vec<usize>,
@@ -217,6 +239,7 @@ pub struct Alias {
     pub name: String,
     pub module: String,
     pub generics: Vec<GenericParam>,
+    pub predicates: Vec<WherePredicate>,
     pub ty: TypeId,
     pub public: Visibility,
     pub span: Span,

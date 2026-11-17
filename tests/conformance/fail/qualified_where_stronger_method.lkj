@@ -1,0 +1,11 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Source { type Item; }
+trait Value {}
+trait Consumer { fn consume<T: Source>(value: T) -> i64; }
+struct Adapter {}
+impl Consumer for Adapter {
+    fn consume<T: Source>(_value: T) -> i64
+    where <T as Source>::Item: Value { 42 }
+}
+pub fn probe() -> i64 { 42 }

@@ -9,7 +9,7 @@ impl Infer<'_, '_> {
             match self.shape(subject) {
                 Some(Shape::Ref(_, inner)) => subject = inner,
                 None => return self.definition.nodes[self.definition.root(subject)].producers != 0,
-                Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Source(_)) => return true,
+                Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Source(_)) => return true,
                 _ => return false,
             }
         }
@@ -28,7 +28,7 @@ impl Infer<'_, '_> {
         loop {
             match self.shape(subject) {
                 Some(Shape::Ref(_, inner)) => subject = inner,
-                None | Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Source(_)) => {
+                None | Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Source(_)) => {
                     return true;
                 }
                 _ => return false,

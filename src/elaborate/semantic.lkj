@@ -66,7 +66,14 @@ pub fn source_type_name(program: &a::Program, ty: usize) -> String {
         a::Type::Infer => "_".to_string(),
         a::Type::Never => "!".to_string(),
         a::Type::Path(path) => {
-            let mut out = source_module_name(&path.name);
+            let mut out = if let Some(qualification) = &path.qualification {
+                if let Some(trait_ty) = qualification.trait_ty {
+                    format!("<{} as {}>::{}", source_type_name(program, qualification.receiver),
+                        source_type_name(program, trait_ty), path.name)
+                } else {
+                    format!("{}::{}", source_type_name(program, qualification.receiver), path.name)
+                }
+            } else { source_module_name(&path.name) };
             if !path.args.is_empty() || !path.bindings.is_empty() {
                 out.push('<');
                 for (index, argument) in path.args.iter().enumerate() {

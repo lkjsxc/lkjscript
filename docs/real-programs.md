@@ -257,24 +257,35 @@ Intentional ownership and authority refusals retain their distinct port cost.
 These are observed frontier lower bounds, not all gaps that the complete dependency
 graph will expose.
 
-The [current equality implementation](real-programs-current.json), producer
-`809c5052…0a32a9f`, repeats all twelve observations on unchanged upstream bytes.
-Its ten nom and three DOM equality-binding sites are no longer observed. Four
-qualified-path sites become independently visible in nom, so its primary frontier
-changes from 149 to 143; DOM changes from 95 to 92. Sōzu keeps its 449 classified
-sites while two previously unclassified parse rows disappear. No large root admits
-and no nom own test has run under lkjscript. All three raw receipts are retained
-in the shared specimen evidence directory at the paths and hashes in the current
-summary. Their complete diagnostic streams and exact re-ranking payloads match
-the source-reviewed candidate; the new receipt identities and measurements are recorded.
-To reproduce this frontier, add `--review docs/real-programs-equality-review.json`
-to the nom comparison. DOM and Sōzu need only their frozen baseline classifications.
+The [current qualified-path implementation](real-programs-current.json), producer
+`92c4caac…e1690bde`, repeats all twelve observations on unchanged upstream bytes.
+All 41 original nom and nine DOM qualified-path sites are no longer observed,
+alongside the ten nom and three DOM equality sites removed by the preceding
+landing. That is **63 of the original 146 target sites**; the original 78 nom and
+five DOM impl-Trait sites remain. The current nom frontier additionally exposes
+one returned impl-Trait site in `fill`, so the current impl-Trait total is 84.
+The original 244-site nom/DOM primary frontier is now 183: nom 149→100 and
+DOM 95→83. From the equality landing those changes are 143→100 and 92→83.
+Sōzu retains 449 classified sites and 35 previously unclassified rows.
+No large root admits and no nom own test has run under lkjscript.
 
-The producer passes 29 focused cases across 87 route checks. Its refreshed seed
-reproduces the fixed point; the full four-worker gate passes in 1,165.546 seconds
-with 5,543 fresh case requests and 128 IR mutants, zero findings. The standalone
-real-programs test also passes. [Retained proof records](real-programs-current.json)
-identify the logs; publication CI is recorded with the landing report.
+The current summary pins all three retained raw receipts, complete diagnostic
+streams, exact re-ranking payloads, and the reviewed source-file hashes.
+To reproduce the current comparison, pass the corresponding
+[`nom` review](real-programs-qualified-nom-review.json),
+[`DOM` review](real-programs-qualified-dom-review.json), or
+[empty `Sōzu` review](real-programs-qualified-sozu-review.json) to `rerank.pl --review`.
+Every reviewed recovery parent survives earlier in the same observed root.
+A missing diagnostic establishes progress at this frontier, not admission of the
+surrounding function, module, or crate.
+
+The producer passes 97 focused cases across 291 route checks: 194 native/interpreter
+checks and 97 separate Rust-witness checks. Meaning/reference queries and checked
+renames/body changes pass. The native self-build reaches a byte-identical fixed
+point and the seed is refreshed. The full four-worker gate passes in 1,109.296
+seconds with 5,679 fresh case requests and 128 IR mutants, zero findings. The
+standalone real-programs test also passes. [Retained proof records](real-programs-current.json)
+identify the completed logs; publication CI is recorded with the landing report.
 
 The tables give **observed unique sites** and physical lines in files containing
 those sites. File coverage overlaps between rows and includes inactive code;
@@ -286,30 +297,35 @@ transitive blocked-line count is used.
 #### nom: generic code
 
 [Original site table](real-programs-nom.json) and [current frontier](real-programs-current.json):
-the equality candidate has 445 raw rows, 143 unique primary sites, 79 recovery
-artifacts and 223 E_BLOCKED rows. Of its primary sites, 139 are upstream default-path
-candidates and four remain inactive (three documentation predicates and one test
-macro). The baseline was 457 rows, 149 primary sites, 79 recovery rows and 229
-E_BLOCKED rows. The ten original equality-binding sites disappear; four newly
-exposed qualified paths explain why the net primary reduction is six.
+the qualified-path producer emits 411 raw rows: 100 unique primary sites,
+105 reviewed recovery rows and 206 E_BLOCKED rows. There are 96 upstream
+default-path candidates and four inactive sites (three documentation predicates
+and one test macro). The frozen baseline had 457 rows, 149 primary sites,
+79 recovery rows and 229 E_BLOCKED rows; the equality landing had 143 primary sites.
+The 41 original qualified paths and four additional qualified sites exposed by
+equality are absent. Two independently reached original-source sites remain newly
+classified: returned impl Trait in `fill` and the `?Sized` bound on the separate
+`Verify` implementation.
 
 | Rank | Cause | Sites | Affected file lines | Owner / next route |
 | --- | --- | ---: | ---: | --- |
 | 1 | Macro $ tokenization | 8 | 6,418 | Compiler / checked expansion producer |
-| 2 | Returned impl Trait | 78 | 5,964 | Programs |
-| 3 | Fully qualified associated paths | 45 | 4,360 | Programs; 38 type/where/nested paths and seven value calls |
-| 4 | Const generics | 6 | 1,681 | Programs after the three leading ordinary forms |
-| 5 | ?Sized bound syntax | 1 | 1,044 | Programs |
-| 6 | Documentation/doctest cfg predicates | 3 | 460 | Language/configuration; inactive candidates |
-| 7 | Unsafe blocks | 2 | 1,681 | Refused by design; checked indexing/ownership port |
+| 2 | Returned impl Trait | 79 | 5,964 | Programs; 78 original sites plus fill |
+| 3 | Const generics | 6 | 1,681 | Programs after impl Trait |
+| 4 | ?Sized bound syntax | 2 | 1,044 | Programs; independent struct and implementation headers |
+| 5 | Documentation/doctest cfg predicates | 3 | 460 | Language/configuration; inactive candidates |
+| 6 | Unsafe blocks | 2 | 1,681 | Refused by design; checked indexing/ownership port |
 
-All eight lexical errors are macro $ tokens. The [explicit source review](real-programs-equality-review.json)
-classifies 51 changed recovery rows: forty where-clause messages after a rejected
-`impl Trait`, eight reparsed qualified return types, two function-body constructors
-mistaken for impl members, and one return reparsed after a qualified parameter
-failure. Another 28 recovery rows survive unchanged. These do not become new
-language causes. The four independent new sites are `src/bytes/mod.rs:941:3` and
-`src/multi/mod.rs:982:16`, `996:13`, `1440:3`.
+All eight lexical errors are macro $ tokens. The [explicit source review](real-programs-qualified-nom-review.json)
+excludes 105 dependent recovery rows. In addition to 46 earlier reviewed identities,
+57 body statements or constructors were reparsed as impl members after a rejected
+impl-Trait return, one `verify` where predicate was reached under that wrong
+impl parse, and one `fill` return lifetime suffix was mistaken for the start of a
+body. These are not 105 additional language causes. The `O2: ?Sized` predicate at
+`src/combinator/mod.rs:503:7` may become an independent refusal when the preceding
+opaque return parses; no sizedness support is claimed, and its recovery status
+must be reviewed again at that frontier. Its distinct struct and implementation
+bounds at 513:29 and 524:7 are already counted as independent `?Sized` sites.
 Generic associated types, heap-held views and raw offsets
 occur in source inventory behind this frontier; inventory does not establish an
 independently observed semantic refusal. The unsafe get_unchecked paths need
@@ -319,29 +335,30 @@ rewrite still costs the original gap.
 #### DOM: parser, owned tree and selector views
 
 [Original site table](real-programs-dom.json) and [current frontier](real-programs-current.json):
-95 candidate primary messages reduce to 92 unique sites after three same-coordinate
-impl-item recovery duplicates; 96 E_BLOCKED rows are excluded. There are 85
-default-path candidates and seven test-only sites; diagnosed files still cover
-5,375 physical lines in 16 files. The baseline was 95 unique sites and 99
-E_BLOCKED rows. All three equality sites in `src/matcher.rs` disappear without
-new independent or unclassified diagnostics.
+86 nonblocked messages reduce to 83 unique primary sites after three same-coordinate
+impl-item recovery duplicates; 87 E_BLOCKED rows are excluded. There are 76
+upstream default-path candidates and seven test-only inventory sites. Diagnosed
+files still cover 5,375 physical lines in 16 files. The original baseline had
+95 primary sites and the equality landing had 92. The nine qualified-type sites
+and the concrete-type where predicate disappear. One newly reached `local_name!`
+call in `has_id` remains a macro primary; the lifetime-outlives predicate retains
+its old cause under a more explicit diagnostic. The [DOM source review](real-programs-qualified-dom-review.json)
+records both exact identities.
 
 | Rank | Cause | Sites | Affected file lines | Owner / next route |
 | --- | --- | ---: | ---: | --- |
-| 1 | ns! / local_name! expansion | 21 | 1,843 | Compiler / producer; 16 default candidates and five test-only |
+| 1 | ns! / local_name! expansion | 22 | 1,843 | Compiler / producer; 17 default candidates and five test-only |
 | 2 | Debug ? formatting | 24 | 207 | Compiler formatting producer |
-| 3 | const fn | 14 | 2,839 | Programs after the three leading ordinary forms |
-| 4 | Fully qualified associated types | 9 | 556 | Programs |
-| 5 | impl Trait arguments/results | 5 | 1,784 | Programs |
-| 6 | Generic associated types | 2 | 844 | Language |
-| 7 | Lifetime-outlives where predicate | 1 | 917 | Programs |
-| 8 | Concrete-type where left-hand side | 1 | 867 | Programs |
-| 9 | Box with dyn Iterator | 1 | 917 | Language |
-| 10 | doc include_str! attribute | 1 | 45 | Language / producer |
-| 11 | Expression-statement cfg | 1 | 510 | Language/configuration |
-| 12 | rustfmt::skip; static CONTENTS | 1 + 1 | 692 each | Language; test-only |
-| 13 | std::io imported as io::Result | 1 | 115 | Library data facade; not an ambient-I/O proof |
-| 14 | Ref / RefCell / Cell | 9 | 4,073 | Refused by design; explicit ownership/tree port |
+| 3 | const fn | 14 | 2,839 | Programs after impl Trait |
+| 4 | impl Trait arguments/results | 5 | 1,784 | Programs |
+| 5 | Generic associated types | 2 | 844 | Language |
+| 6 | Lifetime-outlives where predicate | 1 | 917 | Programs |
+| 7 | Box with dyn Iterator | 1 | 917 | Language |
+| 8 | doc include_str! attribute | 1 | 45 | Language / producer |
+| 9 | Expression-statement cfg | 1 | 510 | Language/configuration |
+| 10 | rustfmt::skip; static CONTENTS | 1 + 1 | 692 each | Language; test-only |
+| 11 | std::io imported as io::Result | 1 | 115 | Library data facade; not an ambient-I/O proof |
+| 12 | Ref / RefCell / Cell | 9 | 4,073 | Refused by design; explicit ownership/tree port |
 
 All 24 Debug-format refusals are direct producer refusals; the compiler formatting
 parser unconditionally rejects that syntax. RefCell supports upstream's shared
@@ -353,7 +370,7 @@ count both representation and API/test adaptation.
 #### Sōzu: concurrent network service
 
 [Original site table](real-programs-sozu.json) and [current frontier](real-programs-current.json):
-four roots produce 484 unique located nonblocked rows in the equality candidate.
+four roots produce 484 unique located nonblocked rows in the qualified-path candidate.
 Of these, the same 449 have a classified cause; 35 parse/recovery rows stay
 unclassified. Another 488 E_BLOCKED rows are excluded. The baseline had 486
 nonblocked rows, including 37 unclassified, and 490 E_BLOCKED rows. The two removed
@@ -410,8 +427,8 @@ bypassing a refusal remains charged to it.
 
 Fifteen independently reduced Rust-valid diagnostic fixtures retain specific
 exposed forms. Their original 105 handwritten .lkj lines earn no operation credit.
-The associated-equality reduction now checks; fourteen other reductions retain
-located refusals. The optional Rust witness compiles those exact final files as
+The associated-equality and three qualified-path reductions now check; eleven
+other reductions retain located refusals. The optional Rust witness compiles those exact final files as
 Rust metadata; the required diagnostic gate checks each current verdict. These
 are compiler work items, not extra sites added to the root census.
 

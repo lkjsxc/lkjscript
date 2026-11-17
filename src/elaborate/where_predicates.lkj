@@ -1,0 +1,233 @@
+//! Source where predicates are producer obligations on resolved source types.
+//! They introduce no checked-IR operation or trusted trait evidence.
+use super::{Compiler, Result, a, err};
+use std::collections::BTreeMap;
+
+impl Compiler<'_> {
+    pub(super) fn implementation_bounds(
+        &mut self,
+        implementation: &a::Impl,
+        substitutions: &BTreeMap<String, usize>,
+    ) -> Result<()> {
+        self.bounds(&implementation.generics, substitutions)?;
+        self.check_where_predicates(&implementation.predicates, substitutions)
+    }
+
+    pub(super) fn check_where_predicates(
+        &mut self,
+        predicates: &[a::WherePredicate],
+        substitutions: &BTreeMap<String, usize>,
+    ) -> Result<()> {
+        for predicate in predicates {
+            let receiver = self.resolve(predicate.target, substitutions)?;
+            for bound in &predicate.bounds {
+                self.check_where_bound(receiver, *bound, substitutions, predicate.span)?;
+            }
+        }
+        Ok(())
+    }
+
+    fn check_where_bound(
+        &mut self,
+        receiver: usize,
+        bound: a::TypeId,
+        substitutions: &BTreeMap<String, usize>,
+        span: a::Span,
+    ) -> Result<()> {
+        let node = self.source.types[bound].clone();
+        let a::Type::Path(path) = node.kind else {
+            return Err(err(span, "E_TRAIT", "where predicate requires a declared trait bound"));
+        };
+        if path.name.starts_with('\'') {
+            return Err(err(node.span, "E_UNSUPPORTED", "lifetime-outlives where predicates are not implemented"));
+        }
+        if self.callable_bound(receiver, &path, substitutions, span)? {
+            return Ok(());
+        }
+        if !path.args.is_empty() {
+            return Err(err(node.span, "E_UNSUPPORTED", "parameterized where-predicate trait bounds are not implemented"));
+        }
+        let identity = crate::generics::bound_identity(self.source, &path);
+        if !self.satisfies_identity(receiver, &identity) {
+            return Err(err(span, "E_TRAIT", &format!(
+                "where predicate requires {} to implement {}", self.display_type(receiver), path.name)));
+        }
+        self.check_associated_bindings(receiver, &path, substitutions, span)
+    }
+
+    pub(super) fn assume_where_parameters(
+        &mut self,
+        predicates: &[a::WherePredicate],
+        substitutions: &BTreeMap<String, usize>,
+    ) -> Result<()> {
+        let parameters = self.parameter_where_predicates(predicates);
+        self.assume_where_predicates(&parameters, substitutions)
+    }
+
+    pub(super) fn parameter_where_predicates(&self, predicates: &[a::WherePredicate]) -> Vec<a::WherePredicate> {
+        // Establish parameter-only facts before resolving an implementation's
+        // target, which can itself instantiate a constrained nominal type.
+        // Self-dependent facts become available once that target is resolved.
+        let mut parameters = Vec::new();
+        for predicate in predicates {
+            let mut pending = vec![predicate.target];
+            pending.extend_from_slice(&predicate.bounds);
+            let mut needs_self = false;
+            while let Some(ty) = pending.pop() {
+                match &self.source.types[ty].kind {
+                    a::Type::Path(path) => {
+                        if path.qualification.is_none() && path.declaration.is_none()
+                            && (path.name == "Self" || path.name.starts_with("Self::"))
+                        {
+                            needs_self = true;
+                            break;
+                        }
+                        if let Some(qualification) = &path.qualification {
+                            pending.push(qualification.receiver);
+                            if let Some(trait_ty) = qualification.trait_ty { pending.push(trait_ty); }
+                        }
+                        pending.extend_from_slice(&path.args);
+                        for binding in &path.bindings { pending.push(binding.value); }
+                    }
+                    a::Type::Ref { inner, .. } | a::Type::Slice(inner)
+                    | a::Type::Array { inner, .. } => pending.push(*inner),
+                    a::Type::Tuple(items) => pending.extend_from_slice(items),
+                    a::Type::Function { params, result } => {
+                        pending.extend_from_slice(params);
+                        pending.push(*result);
+                    }
+                    _ => {}
+                }
+            }
+            if !needs_self { parameters.push(predicate.clone()); }
+        }
+        parameters
+    }
+
+    pub(super) fn introduce_where_predicates(
+        &mut self,
+        predicates: &[a::WherePredicate],
+        substitutions: &BTreeMap<String, usize>,
+    ) -> Result<Vec<(a::WherePredicate, usize)>> {
+        // Introduce ordinary trait identities before resolving any equality
+        // right-hand side. A projected target may depend on a later predicate.
+        // Only unresolved targets are retried; failed bounds never become proof.
+        let mut pending = predicates.to_vec();
+        let mut resolved: Vec<(a::WherePredicate, usize)> = Vec::new();
+        while !pending.is_empty() {
+            let before = pending.len();
+            let mut retry = Vec::new();
+            let mut failure = None;
+            for predicate in pending {
+                if !self.contracts.as_mut().unwrap().active_where_predicates.insert(predicate.target) {
+                    return Err(err(predicate.span, "E_UNSUPPORTED", "recursive where-predicate assumptions require a lazy projection contract"));
+                }
+                let target = self.resolve(predicate.target, substitutions);
+                self.contracts.as_mut().unwrap().active_where_predicates.remove(&predicate.target);
+                let receiver = match target {
+                    Ok(receiver) => receiver,
+                    Err(problem) => {
+                        if failure.is_none() { failure = Some(problem); }
+                        retry.push(predicate);
+                        continue;
+                    }
+                };
+                self.contracts.as_mut().unwrap().active_where_predicates.insert(predicate.target);
+                let result = self.assume_where_bound_headers(&predicate, receiver, substitutions, false);
+                self.contracts.as_mut().unwrap().active_where_predicates.remove(&predicate.target);
+                result?;
+                resolved.push((predicate, receiver));
+            }
+            if retry.len() == before {
+                return Err(failure.unwrap());
+            }
+            pending = retry;
+        }
+        Ok(resolved)
+    }
+
+    pub(super) fn assume_where_predicates(
+        &mut self,
+        predicates: &[a::WherePredicate],
+        substitutions: &BTreeMap<String, usize>,
+    ) -> Result<()> {
+        if predicates.is_empty() { return Ok(()); }
+        let resolved = self.introduce_where_predicates(predicates, substitutions)?;
+        let collecting = self.contracts.as_ref().unwrap().equality_collecting;
+        self.contracts.as_mut().unwrap().equality_collecting = true;
+        let collected = self.collect_where_equalities(&resolved, substitutions);
+        self.contracts.as_mut().unwrap().equality_collecting = collecting;
+        collected?;
+        if !collecting && self.contracts.as_ref().unwrap().equality_active.is_empty() {
+            self.finish_associated_equalities()?;
+        }
+        self.finish_where_predicates(&resolved, substitutions)
+    }
+
+    pub(super) fn finish_where_predicates(
+        &mut self,
+        resolved: &[(a::WherePredicate, usize)],
+        substitutions: &BTreeMap<String, usize>,
+    ) -> Result<()> {
+        // Equalities can replace an earlier rigid projection with a concrete
+        // type. Re-resolve every target and check its complete written bound.
+        for (predicate, _) in resolved {
+            if !self.contracts.as_mut().unwrap().active_where_predicates.insert(predicate.target) {
+                return Err(err(predicate.span, "E_UNSUPPORTED", "recursive where-predicate assumptions require a lazy projection contract"));
+            }
+            let target = self.resolve(predicate.target, substitutions);
+            self.contracts.as_mut().unwrap().active_where_predicates.remove(&predicate.target);
+            let receiver = target?;
+            let rigid = self.contracts.as_ref().unwrap().rigid.contains_key(&receiver);
+            self.contracts.as_mut().unwrap().active_where_predicates.insert(predicate.target);
+            let result = self.assume_where_bounds(predicate, receiver, rigid, substitutions);
+            self.contracts.as_mut().unwrap().active_where_predicates.remove(&predicate.target);
+            result?;
+        }
+        Ok(())
+    }
+
+    fn assume_where_bound_headers(
+        &mut self,
+        predicate: &a::WherePredicate,
+        receiver: usize,
+        substitutions: &BTreeMap<String, usize>,
+        equalities: bool,
+    ) -> Result<()> {
+        if !self.contracts.as_ref().unwrap().rigid.contains_key(&receiver) { return Ok(()); }
+        for bound in &predicate.bounds {
+            if !self.is_callable_bound(*bound) {
+                let _ = self.assume_bound_with_equalities(receiver, *bound, substitutions, equalities)?;
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn collect_where_equalities(
+        &mut self,
+        predicates: &[(a::WherePredicate, usize)],
+        substitutions: &BTreeMap<String, usize>,
+    ) -> Result<()> {
+        for (predicate, receiver) in predicates {
+            self.assume_where_bound_headers(predicate, *receiver, substitutions, true)?;
+        }
+        Ok(())
+    }
+
+    fn assume_where_bounds(
+        &mut self,
+        predicate: &a::WherePredicate,
+        receiver: usize,
+        rigid: bool,
+        substitutions: &BTreeMap<String, usize>,
+    ) -> Result<()> {
+        for bound in &predicate.bounds {
+            if rigid {
+                self.assume_bound(receiver, *bound, substitutions)?;
+            } else {
+                self.check_where_bound(receiver, *bound, substitutions, predicate.span)?;
+            }
+        }
+        Ok(())
+    }
+}

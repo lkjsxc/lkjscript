@@ -1,0 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Needs {}
+struct Unused<T> where bool: Needs { value: T }
+fn probe() -> i64 { 42 }

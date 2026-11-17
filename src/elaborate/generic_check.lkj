@@ -10,10 +10,10 @@ use crate::generics::TraitIdentity;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone)]
-struct MethodWitness {
-    declaration: usize,
-    method: usize,
-    substitutions: BTreeMap<String, usize>,
+pub(super) struct MethodWitness {
+    pub(super) declaration: usize,
+    pub(super) method: usize,
+    pub(super) substitutions: BTreeMap<String, usize>,
 }
 
 /// Builtin operations have typed contracts only in the discarded verification
@@ -104,6 +104,7 @@ pub(super) type MethodSelections = BTreeMap<a::ExprId, MethodSelection>;
 pub(super) struct Contracts {
     pub(super) active_scope: usize,
     pub(super) rigid: BTreeMap<usize, BTreeSet<TraitIdentity>>,
+    pub(super) active_where_predicates: BTreeSet<a::TypeId>,
     // (rigid receiver, resolved trait declaration) -> associated-type identities.
     pub(super) traits: BTreeMap<(usize, usize), BTreeMap<String, usize>>,
     pub(super) equalities: BTreeMap<(usize, usize, String), usize>,
@@ -160,7 +161,8 @@ fn validate_selected(
                 break;
             }
         }
-        if generic || source.function_owner(a::FunctionId { index }) != a::FunctionOwner::Free {
+        if generic || !function.predicates.is_empty()
+            || source.function_owner(a::FunctionId { index }) != a::FunctionOwner::Free {
             roots.push(index);
         }
     }
@@ -178,6 +180,7 @@ fn validate_selected(
     compiler.definition_types = definitions;
     compiler.contracts = Some(Contracts::default());
     if validate_derives {
+        compiler.validate_qualified_headers()?;
         super::instantiate_type_headers(source, compiler, true)?;
         super::derive_check::validate(compiler)?;
     }
@@ -365,6 +368,7 @@ impl Compiler<'_> {
         self.scoped_bodies = BTreeMap::new();
         self.trait_proofs = None;
         self.return_inference = BTreeSet::new();
+        self.associated_queries = super::associated_types::Queries::default();
         self.diagnostic_functions = None;
         self.initialize_primitive_names();
     }
@@ -386,7 +390,7 @@ impl Compiler<'_> {
         id
     }
 
-    pub(super) fn declare_parameters(
+    fn introduce_parameters(
         &mut self,
         parameters: &[a::GenericParam],
         substitutions: &mut BTreeMap<String, usize>,
@@ -405,14 +409,53 @@ impl Compiler<'_> {
             let ty = self.rigid_type(&parameter.name);
             substitutions.insert(parameter.name.clone(), ty);
         }
+        Ok(())
+    }
+
+    pub(super) fn declare_parameters(
+        &mut self,
+        parameters: &[a::GenericParam],
+        substitutions: &mut BTreeMap<String, usize>,
+    ) -> Result<()> {
+        self.introduce_parameters(parameters, substitutions)?;
+        self.assume_parameter_bounds(parameters, substitutions)
+    }
+
+    pub(super) fn declare_parameters_with_predicates(
+        &mut self,
+        parameters: &[a::GenericParam],
+        predicates: &[a::WherePredicate],
+        substitutions: &mut BTreeMap<String, usize>,
+    ) -> Result<()> {
+        self.introduce_parameters(parameters, substitutions)?;
+        self.assume_parameter_contract(parameters, predicates, substitutions)
+    }
+
+    pub(super) fn assume_parameter_bounds(
+        &mut self,
+        parameters: &[a::GenericParam],
+        substitutions: &BTreeMap<String, usize>,
+    ) -> Result<()> {
+        let predicates: Vec<a::WherePredicate> = Vec::new();
+        self.assume_parameter_contract(parameters, &predicates, substitutions)
+    }
+
+    fn assume_parameter_contract(
+        &mut self,
+        parameters: &[a::GenericParam],
+        predicates: &[a::WherePredicate],
+        substitutions: &BTreeMap<String, usize>,
+    ) -> Result<()> {
         // Associated identities come from declared trait bounds. Establish all
         // of them before a callable signature resolves a sibling's I::Item,
         // regardless of the source order of generic parameter declarations.
+        let mut where_headers: Vec<(a::WherePredicate, usize)> = Vec::new();
         for phase in 0..3usize {
             // Register every sibling equation before resolving any of them.
             // A projection on the right may be defined by a later parameter.
             self.contracts.as_mut().unwrap().equality_collecting = phase == 1;
             let callable = phase == 2;
+            let mut declared_predicates = Vec::new();
             for parameter in parameters {
                 if parameter.lifetime {
                     continue;
@@ -420,13 +463,26 @@ impl Compiler<'_> {
                 let ty = *substitutions.get(&parameter.name).unwrap();
                 for bound in &parameter.bounds {
                     if self.is_callable_bound(*bound) == callable {
-                        self.assume_bound_with_equalities(ty, *bound, substitutions, phase != 0)?;
+                        let declared = self.assume_bound_with_equalities(ty, *bound, substitutions, phase != 0)?;
+                        if phase == 1 { declared_predicates.push((ty, declared)); }
                     }
                 }
             }
-            if phase == 1 {
+            if phase == 0 {
+                where_headers = self.introduce_where_predicates(predicates, substitutions)?;
+            } else if phase == 1 {
+                let collected = self.collect_where_equalities(&where_headers, substitutions);
                 self.contracts.as_mut().unwrap().equality_collecting = false;
+                collected?;
                 self.finish_associated_equalities()?;
+                // Trait predicates can use a sibling equality or a supertrait
+                // projection. Establish both before resolving their targets.
+                for (receiver, declared) in declared_predicates {
+                    let mut environment = substitutions.clone();
+                    environment.insert("Self".to_string(), receiver);
+                    self.assume_where_predicates(&declared, &environment)?;
+                }
+                self.finish_where_predicates(&where_headers, substitutions)?;
             }
         }
         Ok(())
@@ -452,19 +508,23 @@ impl Compiler<'_> {
         first: a::TypeId,
         substitutions: &BTreeMap<String, usize>,
     ) -> Result<()> {
-        self.assume_bound_with_equalities(ty, first, substitutions, true)
+        let predicates = self.assume_bound_with_equalities(ty, first, substitutions, true)?;
+        let mut environment = substitutions.clone();
+        environment.insert("Self".to_string(), ty);
+        self.assume_where_predicates(&predicates, &environment)
     }
 
-    fn assume_bound_with_equalities(
+    pub(super) fn assume_bound_with_equalities(
         &mut self,
         ty: usize,
         first: a::TypeId,
         substitutions: &BTreeMap<String, usize>,
         equalities: bool,
-    ) -> Result<()> {
+    ) -> Result<Vec<a::WherePredicate>> {
         let mut pending = vec![(first, false)];
         let mut seen = BTreeSet::<a::TypeId>::new();
         let mut bindings: Vec<(a::Path, BTreeMap<String, usize>)> = Vec::new();
+        let mut predicates = Vec::new();
         while let Some((id, inherited)) = pending.pop() {
             if !seen.insert(id) { continue; }
             let node = self.source.types[id].clone();
@@ -528,12 +588,15 @@ impl Compiler<'_> {
                 }
                 // Associated projections are introduced lazily. A valid bound
                 // such as A::Next: A must not eagerly create an infinite family.
-                let traits = &mut self.contracts.as_mut().unwrap().traits;
-                let key = (ty, trait_index);
-                if !traits.contains_key(&key) {
-                    traits.insert(key, BTreeMap::new());
+                {
+                    let traits = &mut self.contracts.as_mut().unwrap().traits;
+                    let key = (ty, trait_index);
+                    if !traits.contains_key(&key) {
+                        traits.insert(key, BTreeMap::new());
+                    }
                 }
                 if equalities && !path.bindings.is_empty() { bindings.push((path.clone(), inherited_substitutions)); }
+                predicates.extend_from_slice(&declaration.predicates);
             } else if !matches!(
                 builtin,
                 "Copy"
@@ -554,19 +617,21 @@ impl Compiler<'_> {
             }
         }
         for (path, environment) in bindings { self.assume_associated_bindings(ty, &path, &environment)?; }
-        Ok(())
+        Ok(predicates)
     }
 
-    fn definition_parameters(&mut self, index: usize) -> Result<BTreeMap<String, usize>> {
+    pub(super) fn definition_parameters(&mut self, index: usize) -> Result<BTreeMap<String, usize>> {
         self.contracts.as_mut().unwrap().active_scope = index;
         let function = self.source.functions[index].clone();
         let mut substitutions = BTreeMap::new();
         let owner = self.source.function_owner(a::FunctionId { index });
         if let a::FunctionOwner::Implementation(owner) = owner {
             let implementation = self.source.impls[owner.index].clone();
-            self.declare_parameters(&implementation.generics, &mut substitutions)?;
+            let predicates = self.parameter_where_predicates(&implementation.predicates);
+            self.declare_parameters_with_predicates(&implementation.generics, &predicates, &mut substitutions)?;
             let self_ty = self.resolve(implementation.target, &substitutions)?;
             substitutions.insert("Self".to_string(), self_ty);
+            self.assume_where_predicates(&implementation.predicates, &substitutions)?;
             let mut remaining = implementation.associated.clone();
             while !remaining.is_empty() {
                 let before = remaining.len();
@@ -596,54 +661,58 @@ impl Compiler<'_> {
                 remaining = retry;
             }
         } else if let a::FunctionOwner::Trait(owner) = owner {
-            let trait_index = owner.index;
-            let declaration = self.source.traits[trait_index].clone();
-            self.declare_parameters(&declaration.generics, &mut substitutions)?;
-            let self_ty = self.rigid_type("Self");
-            substitutions.insert("Self".to_string(), self_ty);
-            self.contracts
-                .as_mut()
-                .unwrap()
-                .rigid
-                .get_mut(&self_ty)
-                .unwrap()
-                .insert(TraitIdentity::Declared(trait_index));
-            let mut associated: BTreeMap<String, usize> = BTreeMap::new();
-            for item in &declaration.associated {
-                let ty = self.rigid_type(&format!("Self::{}", item.name));
-                associated.insert(item.name.clone(), ty);
-                substitutions.insert(format!("Self::{}", item.name), ty);
-            }
-            self.contracts
-                .as_mut()
-                .unwrap()
-                .traits
-                .insert((self_ty, trait_index), associated.clone());
-            for bound in &declaration.bounds {
-                self.assume_bound(self_ty, *bound, &substitutions)?;
-            }
-            for item in &declaration.associated {
-                for bound in &item.bounds {
-                    self.assume_bound(
-                        *associated.get(&item.name).unwrap(),
-                        *bound,
-                        &substitutions,
-                    )?;
-                }
+            substitutions = self.trait_parameters(owner.index)?;
+        }
+        self.declare_parameters_with_predicates(&function.generics, &function.predicates, &mut substitutions)?;
+        Ok(substitutions)
+    }
+
+    pub(super) fn trait_parameters(&mut self, trait_index: usize) -> Result<BTreeMap<String, usize>> {
+        let mut substitutions = BTreeMap::new();
+        let declaration = self.source.traits[trait_index].clone();
+        self.declare_parameters(&declaration.generics, &mut substitutions)?;
+        let self_ty = self.rigid_type("Self");
+        substitutions.insert("Self".to_string(), self_ty);
+        self.contracts
+            .as_mut()
+            .unwrap()
+            .rigid
+            .get_mut(&self_ty)
+            .unwrap()
+            .insert(TraitIdentity::Declared(trait_index));
+        let mut associated: BTreeMap<String, usize> = BTreeMap::new();
+        for item in &declaration.associated {
+            let ty = self.rigid_type(&format!("Self::{}", item.name));
+            associated.insert(item.name.clone(), ty);
+            substitutions.insert(format!("Self::{}", item.name), ty);
+        }
+        self.contracts
+            .as_mut()
+            .unwrap()
+            .traits
+            .insert((self_ty, trait_index), associated.clone());
+        for bound in &declaration.bounds {
+            self.assume_bound(self_ty, *bound, &substitutions)?;
+        }
+        for item in &declaration.associated {
+            for bound in &item.bounds {
+                self.assume_bound(
+                    *associated.get(&item.name).unwrap(),
+                    *bound,
+                    &substitutions,
+                )?;
             }
         }
-        self.declare_parameters(&function.generics, &mut substitutions)?;
+        self.assume_where_predicates(&declaration.predicates, &substitutions)?;
         Ok(substitutions)
     }
 
     pub(super) fn implementation_associated(
         &mut self,
         index: usize,
-        mut environment: BTreeMap<String, usize>,
+        environment: BTreeMap<String, usize>,
     ) -> Result<BTreeMap<String, usize>> {
         let implementation = self.source.impls[index].clone();
-        self.prepare_callable_arguments(&implementation.generics, &mut environment)?;
-        self.prepare_parameter_associated(&implementation.generics, &mut environment)?;
         let mut pending = implementation.associated.clone();
         if let Some(trait_type) = implementation.trait_ty {
             if let a::Type::Path(path) = &self.source.types[trait_type].kind {
@@ -666,33 +735,9 @@ impl Compiler<'_> {
             }
         }
         let mut result = BTreeMap::new();
-        while !pending.is_empty() {
-            let before = pending.len();
-            let mut retry: Vec<a::AssociatedType> = Vec::new();
-            let mut failure = None;
-            for associated in pending {
-                let Some(value) = associated.value else {
-                    return Err(err(
-                        associated.span,
-                        "E_TRAIT",
-                        "associated witness is missing its type definition",
-                    ));
-                };
-                match self.resolve(value, &environment) {
-                    Ok(ty) => {
-                        environment.insert(format!("Self::{}", associated.name), ty);
-                        result.insert(associated.name, ty);
-                    }
-                    Err(error) => {
-                        failure = Some(error);
-                        retry.push(associated);
-                    }
-                }
-            }
-            if retry.len() == before {
-                return Err(failure.unwrap());
-            }
-            pending = retry;
+        for associated in pending {
+            let ty = self.implementation_associated_member(index, environment.clone(), &associated.name)?;
+            result.insert(associated.name, ty);
         }
         Ok(result)
     }
@@ -1155,6 +1200,14 @@ impl Compiler<'_> {
                     }));
                 }
             }
+            if let TraitIdentity::Declared(owner) = identity {
+                let provided = self.source.traits[owner].methods.iter().any(|method|
+                    self.source.functions[*method].name == name && self.source.functions[*method].body.is_some());
+                if provided {
+                    let instance = self.declared_associated_method(base, owner, name, expression, span, span)?;
+                    return Ok(Some(instance));
+                }
+            }
             return Err(err(
                 span,
                 "E_UNSUPPORTED",
@@ -1186,7 +1239,7 @@ impl Compiler<'_> {
         }
     }
 
-    fn declared_methods(&mut self, base: usize, name: &str) -> Result<Vec<MethodWitness>> {
+    pub(super) fn declared_methods(&mut self, base: usize, name: &str) -> Result<Vec<MethodWitness>> {
         let declarations = {
             let Some(contracts) = &self.contracts else {
                 return Ok(Vec::new());

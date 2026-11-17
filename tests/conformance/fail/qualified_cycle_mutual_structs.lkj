@@ -1,0 +1,11 @@
+// expect: reject E_TYPE
+// witness: {}
+trait Source { type Item; }
+struct S {}
+struct T {}
+impl Source for S { type Item = <T as Source>::Item; }
+impl Source for T { type Item = <S as Source>::Item; }
+pub fn probe() -> i64 {
+    let _: Option<<S as Source>::Item> = None;
+    42
+}

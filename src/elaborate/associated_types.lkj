@@ -1,0 +1,192 @@
+//! Associated definitions are lazy queries, not whole-witness expansion.
+//! Completed members can be reused by siblings. Active transparent equations
+//! must make progress through an interned nominal identity before recurring.
+use super::{Compiler, Result, TypeKey, a, err, ir, is_copy};
+use crate::generics::TraitIdentity;
+use std::collections::{BTreeMap, BTreeSet};
+
+type Key = (usize, Vec<usize>, String);
+
+struct Active {
+    key: Key,
+    arguments: Vec<usize>,
+    interned: usize,
+}
+
+#[derive(Default)]
+pub(super) struct Queries {
+    completed: BTreeMap<Key, usize>,
+    active: Vec<Active>,
+    pub(super) resolution_depth: usize,
+    pub(super) refresh_copy: bool,
+}
+
+impl Compiler<'_> {
+    fn associated_definition(&self, implementation: usize, name: &str) -> Option<a::AssociatedType> {
+        let implementation = &self.source.impls[implementation];
+        for item in &implementation.associated {
+            if item.name == name { return Some(item.clone()); }
+        }
+        let trait_ty = implementation.trait_ty?;
+        let a::Type::Path(path) = &self.source.types[trait_ty].kind else { return None; };
+        let TraitIdentity::Declared(owner) = crate::generics::bound_identity(self.source, path) else { return None; };
+        self.source.traits[owner].associated.iter().find(|item| item.name == name).cloned()
+    }
+
+    // Follow type arguments, never a nominal declaration's recursive fields.
+    // This distinguishes a decreasing family such as Chain<Chain<T>> -> Chain<T>
+    // from an expanding family such as Grow<T> -> Grow<Vec<T>>.
+    fn associated_argument_contains(&self, outer: usize, inner: usize) -> bool {
+        let mut pending = vec![outer];
+        let mut seen = BTreeSet::<usize>::new();
+        while let Some(ty) = pending.pop() {
+            if ty == inner { return true; }
+            if !seen.insert(ty) { continue; }
+            if let Some((_, arguments)) = self.applications.get(&ty) {
+                pending.extend_from_slice(arguments);
+                continue;
+            }
+            match &self.types[ty].kind {
+                ir::TypeKind::Ref { inner, .. } | ir::TypeKind::Slice { inner, .. }
+                | ir::TypeKind::Vec { inner } | ir::TypeKind::Box { inner }
+                | ir::TypeKind::Array { inner, .. } => pending.push(*inner),
+                ir::TypeKind::Struct { fields, .. } => {
+                    for field in fields { pending.push(field.ty); }
+                }
+                _ => {}
+            }
+        }
+        false
+    }
+
+    pub(super) fn implementation_associated_member(
+        &mut self, index: usize, mut environment: BTreeMap<String, usize>, name: &str,
+    ) -> Result<usize> {
+        let implementation = self.source.impls[index].clone();
+        self.prepare_callable_arguments(&implementation.generics, &mut environment)?;
+        let Some(associated) = self.associated_definition(index, name) else {
+            return Err(err(implementation.span, "E_TRAIT", "associated witness has no such type definition"));
+        };
+        let Some(value) = associated.value else {
+            return Err(err(associated.span, "E_TRAIT", "associated witness is missing its type definition"));
+        };
+        let receiver = if let Some(receiver) = environment.get(&"Self".to_string()) { *receiver }
+            else { self.resolve(implementation.target, &environment)? };
+        environment.insert("Self".to_string(), receiver);
+        let mut arguments: Vec<usize> = Vec::new();
+        for parameter in &implementation.generics {
+            if !parameter.lifetime {
+                let Some(argument) = environment.get(&parameter.name) else {
+                    return Err(err(parameter.span, "E_TYPE", "associated witness needs its type arguments"));
+                };
+                arguments.push(*argument);
+            }
+        }
+        let mut identity = arguments.clone();
+        identity.push(receiver);
+        let key = (index, identity, name.to_string());
+        // Rigid associated identities can still acquire an equality while a
+        // definition's contracts are being built. Reuse only production results.
+        let reusable = self.contracts.is_none();
+        if reusable {
+            if let Some(result) = self.associated_queries.completed.get(&key) { return Ok(*result); }
+        }
+        for active in &self.associated_queries.active {
+            if active.key.0 != index || active.key.2 != name || active.arguments.len() != arguments.len() {
+                continue;
+            }
+            let mut contains = true;
+            let mut larger = false;
+            for position in 0..arguments.len() {
+                contains = contains && self.associated_argument_contains(arguments[position], active.arguments[position]);
+                larger = larger || arguments[position] != active.arguments[position];
+            }
+            if contains && larger {
+                return Err(err(self.source.types[value].span, "E_RECURSION",
+                    "associated type arguments expand inside a recursive query"));
+            }
+        }
+        let mut previous: Option<usize> = None;
+        for position in 0..self.associated_queries.active.len() {
+            if self.associated_queries.active[position].key == key {
+                previous = Some(position);
+                break;
+            }
+        }
+        let outermost = previous.is_none();
+        if let Some(previous) = previous {
+            // A nominal layout is reserved before its fields. Reentering after
+            // that reservation can now resolve the same RHS through its name.
+            // A transparent cycle without a new interned identity has no result.
+            let interned = self.type_keys.len();
+            if self.associated_queries.active[previous].interned == interned {
+                return Err(err(self.source.types[value].span, "E_TYPE", "recursive associated type definition"));
+            }
+            self.associated_queries.active[previous].interned = interned;
+            self.associated_queries.refresh_copy = true;
+        } else {
+            self.associated_queries.active.push(Active { key: key.clone(), arguments,
+                interned: self.type_keys.len() });
+        }
+        let result = self.resolve_associated_member(index, value, environment);
+        if outermost { self.associated_queries.active.pop(); }
+        if reusable {
+            if let Ok(ty) = &result { self.associated_queries.completed.insert(key, *ty); }
+        }
+        result
+    }
+
+    pub(super) fn refresh_associated_tuple_copy(&mut self) {
+        // A recursive member may expose a reserved nominal ID before its fields
+        // are ready. Tuple Copy is inferred, so compute it from the completed
+        // graph before any body consumes the resolved source type. Explicit
+        // nominal Copy declarations remain obligations for the existing checker.
+        let mut tuples: Vec<(usize, Vec<usize>)> = Vec::new();
+        for (key, ty) in &self.type_keys {
+            if let TypeKey::Tuple(fields) = key { tuples.push((*ty, fields.clone())); }
+        }
+        for (ty, _) in &tuples {
+            if let ir::TypeKind::Struct { copy, .. } = &mut self.types[*ty].kind { *copy = true; }
+        }
+        for (ty, fields) in tuples {
+            let fields_copy = fields.iter().all(|field| is_copy(&self.types, *field));
+            if let ir::TypeKind::Struct { copy, .. } = &mut self.types[ty].kind { *copy = fields_copy; }
+        }
+    }
+
+    fn resolve_associated_member(
+        &mut self, index: usize, value: a::TypeId, mut environment: BTreeMap<String, usize>,
+    ) -> Result<usize> {
+        let parameters = self.source.impls[index].generics.clone();
+        self.prepare_parameter_associated(&parameters, &mut environment)?;
+        let mut pending = vec![value];
+        let mut dependencies = BTreeSet::<String>::new();
+        while let Some(ty) = pending.pop() {
+            match &self.source.types[ty].kind {
+                a::Type::Path(path) => {
+                    if path.qualification.is_none() && path.name.starts_with("Self::") {
+                        dependencies.insert(path.name.as_str()[6..].to_string());
+                    }
+                    if let Some(qualification) = &path.qualification { pending.push(qualification.receiver); }
+                    pending.extend_from_slice(&path.args);
+                }
+                a::Type::Ref { inner, .. } | a::Type::Slice(inner)
+                | a::Type::Array { inner, .. } => pending.push(*inner),
+                a::Type::Tuple(fields) => pending.extend_from_slice(fields),
+                a::Type::Function { params, result } => {
+                    pending.extend_from_slice(params);
+                    pending.push(*result);
+                }
+                _ => {}
+            }
+        }
+        for dependency in dependencies {
+            let key = format!("Self::{dependency}");
+            if !environment.contains_key(&key) {
+                let ty = self.implementation_associated_member(index, environment.clone(), &dependency)?;
+                environment.insert(key, ty);
+            }
+        }
+        self.resolve(value, &environment)
+    }
+}

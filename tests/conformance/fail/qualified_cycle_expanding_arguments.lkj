@@ -1,0 +1,9 @@
+// expect: reject E_RECURSION
+// witness: {}
+trait Source { type Item; }
+struct Grow<T> { value: T }
+impl<T> Source for Grow<T> { type Item = <Grow<Vec<T>> as Source>::Item; }
+pub fn probe() -> i64 {
+    let _: Option<<Grow<i64> as Source>::Item> = None;
+    42
+}

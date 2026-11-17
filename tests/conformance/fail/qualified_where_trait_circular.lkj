@@ -1,0 +1,10 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Needs {}
+trait Producer where <Self as Producer>::Item: Needs { type Item; }
+struct Number {}
+impl Producer for Number where <Number as Producer>::Item: Needs {
+    type Item = Number;
+}
+impl Needs for Number where Number: Producer {}
+pub fn probe() -> i64 { 42 }

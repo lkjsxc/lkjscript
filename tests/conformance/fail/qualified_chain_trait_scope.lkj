@@ -1,0 +1,8 @@
+// expect: reject E_TRAIT
+// witness: {}
+mod service { pub trait Value { fn make() -> i64; } }
+trait Source { type Item; }
+fn invalid<T: Source>() -> i64 where <T as Source>::Item: service::Value {
+    <T as Source>::Item::make()
+}
+pub fn probe() -> i64 { 42 }

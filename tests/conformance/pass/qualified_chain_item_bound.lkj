@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+trait Value { fn make() -> i64; }
+trait Source { type Item: Value; }
+struct Number {}
+struct Root {}
+impl Source for Root { type Item = Number; }
+impl Value for Number { fn make() -> i64 { 40 } }
+fn answer<T: Source>() -> i64 {
+    let value = <T as Source>::Item::make();
+    value + 2
+}
+pub fn probe() -> i64 { answer::<Root>() }

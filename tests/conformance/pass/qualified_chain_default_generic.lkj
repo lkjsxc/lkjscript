@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item: Value; }
+trait Value { fn make() -> i64 { 42 } }
+trait Other { fn make() -> i64 { 7 } }
+struct SourceType {}
+impl Source for SourceType { type Item = i64; }
+impl Value for i64 {}
+impl Other for i64 {}
+fn selected<T: Source>() -> i64 { <T as Source>::Item::make() }
+pub fn probe() -> i64 { selected::<SourceType>() }

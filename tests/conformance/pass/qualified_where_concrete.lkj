@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; }
+trait Value { fn answer() -> i64; }
+struct Number {}
+impl Source for Number { type Item = i64; }
+impl Value for i64 { fn answer() -> i64 { 21 } }
+fn direct() -> i64 where i64: Value { <i64 as Value>::answer() }
+fn projected() -> i64 where <Number as Source>::Item: Value {
+    <<Number as Source>::Item as Value>::answer()
+}
+pub fn probe() -> i64 { direct() + projected() }

@@ -20,6 +20,11 @@ enum Work {
         environment: usize,
         span: a::Span,
     },
+    Qualified {
+        qualification: a::QualifiedPath,
+        name: String,
+        span: a::Span,
+    },
     Apply {
         path: a::Path,
         environment: usize,
@@ -112,6 +117,17 @@ impl Compiler<'_> {
     }
 
     fn resolve_work(&mut self, start: Work, sub: &BTreeMap<String, usize>) -> Result<usize> {
+        self.associated_queries.resolution_depth += 1;
+        let result = self.resolve_frames(start, sub);
+        self.associated_queries.resolution_depth -= 1;
+        if self.associated_queries.resolution_depth == 0 && self.associated_queries.refresh_copy {
+            if result.is_ok() { self.refresh_associated_tuple_copy(); }
+            self.associated_queries.refresh_copy = false;
+        }
+        result
+    }
+
+    fn resolve_frames(&mut self, start: Work, sub: &BTreeMap<String, usize>) -> Result<usize> {
         let mut work = Resolution::new(start, sub);
         while let Some(frame) = work.pending.pop() {
             match frame {
@@ -194,6 +210,14 @@ impl Compiler<'_> {
                         return Err(err(path.bindings[0].span, "E_TRAIT",
                             "associated-type equality bindings are only accepted in trait bounds"));
                     }
+                    if let Some(qualification) = &path.qualification {
+                        if !path.args.is_empty() {
+                            return Err(err(span, "E_UNSUPPORTED", "generic associated types in fully qualified paths are not implemented"));
+                        }
+                        work.pending.push(Work::Qualified { qualification: qualification.clone(), name: path.name, span });
+                        work.pending.push(Work::Source { id: qualification.receiver, environment });
+                        continue;
+                    }
                     if self.diagnostic_functions.is_some()
                         && path.declaration.is_some_and(|id| {
                             matches!(
@@ -258,6 +282,11 @@ impl Compiler<'_> {
                             environment,
                         });
                     }
+                }
+                Work::Qualified { qualification, name, span } => {
+                    let receiver = work.values.pop().expect("qualified path receiver");
+                    let ty = self.qualified_associated_type(receiver, &qualification, &name, span)?;
+                    work.values.push(ty);
                 }
                 Work::Apply {
                     path,
@@ -582,6 +611,14 @@ impl Compiler<'_> {
             bindings.insert(parameter.clone(), *argument);
         }
         self.bounds(&parameters, &bindings)
+            .map_err(|problem| super::at_use_site(problem, span))?;
+        let predicates = match item {
+            Some(a::Item::Struct(index)) => self.source.structs[index].predicates.clone(),
+            Some(a::Item::Enum(index)) => self.source.enums[index].predicates.clone(),
+            Some(a::Item::Alias(index)) => self.source.aliases[index].predicates.clone(),
+            _ => Vec::new(),
+        };
+        self.check_where_predicates(&predicates, &bindings)
             .map_err(|problem| super::at_use_site(problem, span))?;
         let environment = work.environment(bindings);
         if let Some(a::Item::Alias(index)) = item {

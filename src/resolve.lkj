@@ -642,6 +642,9 @@ impl<'a> Resolver<'a> {
         namespace: Namespace,
         span: Span,
     ) -> Result<()> {
+        // Receiver and trait have their own arena nodes and lexical scopes.
+        // The member is selected only after the receiver's trait proof exists.
+        if path.qualification.is_some() { return Ok(()); }
         if let Some(resolved) = self.path(scope, &path.name, namespace, span, true)? {
             path.name = resolved.name;
             path.declaration = resolved.binding.map(|binding| binding.declaration);
@@ -1026,7 +1029,7 @@ impl Resolver<'_> {
     /// a declaration with the same spelling. Resolved items are never parameters.
     pub(crate) fn generic_path(&self, path: &Path, span: Span) -> bool {
         let root = first_name(&path.name);
-        path.declaration.is_none() && !root.starts_with('\'') && self.generic(span, root)
+        path.qualification.is_none() && path.declaration.is_none() && !root.starts_with('\'') && self.generic(span, root)
     }
 
     pub(crate) fn is_type_parameter(&self, path: &Path, span: Span) -> bool {
@@ -1079,7 +1082,8 @@ impl Resolver<'_> {
             }
         };
         let mut path = Path {
-            bindings: Vec::new(), declaration: None,
+            qualification: None, bindings: Vec::new(),
+            declaration: None,
             name: name.to_string(),
             args: Vec::new(),
         };
@@ -1101,7 +1105,8 @@ impl Resolver<'_> {
         let path = self.value_path(
             scope,
             &Path {
-                bindings: Vec::new(), declaration: None,
+                qualification: None, bindings: Vec::new(),
+                declaration: None,
                 name: name.to_string(),
                 args: Vec::new(),
             },
@@ -1176,7 +1181,7 @@ impl Resolver<'_> {
 
 /// Resolve one written type/module prefix with its declaration identity.
 pub fn semantic_type_path(resolver: &Resolver<'_>, scope: ModuleId, name: &str, span: Span) -> Result<Path> {
-    let mut path = Path { bindings: Vec::new(), declaration: None, name: name.to_string(), args: Vec::new() };
+    let mut path = Path { qualification: None, bindings: Vec::new(), declaration: None, name: name.to_string(), args: Vec::new() };
     resolver.resolve_path(scope, &mut path, Namespace::Type, span)?;
     Ok(path)
 }

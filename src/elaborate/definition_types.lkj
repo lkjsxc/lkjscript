@@ -2,13 +2,14 @@
 //! before IR construction; integer fallback happens only after those constraints
 //! have propagated. Method selection and ownership remain checked separately.
 use super::{Bindings, Compiler, Result, a, err, ir, is_copy};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 mod capabilities;
 mod closures;
 mod method_headers;
 mod pattern_equations;
 mod projection_equations;
+mod qualified_types;
 mod source_types;
 mod semantic;
 
@@ -23,6 +24,7 @@ enum Shape {
     Atom(String),
     Rigid(String),
     Projected(a::DeclarationId, String),
+    Projection(a::DeclarationId, String, Variable),
     Source(a::TypeId),
     Vec(Variable),
     Box(Variable),
@@ -196,7 +198,10 @@ impl DefinitionTypes {
                 known.insert(id, None);
                 continue;
             };
-            let children = shape.children();
+            let children = match &shape {
+                Shape::Projection(_, _, receiver) => vec![*receiver],
+                _ => shape.children(),
+            };
             if !ready && !children.is_empty() {
                 pending.push((id, true));
                 let mut next = children.len();
@@ -234,7 +239,8 @@ impl DefinitionTypes {
                     } else {
                         Some(compiler.named_type(
                             &a::Path {
-                                bindings: Vec::new(), declaration: None,
+                                qualification: None, bindings: Vec::new(),
+                                declaration: None,
                                 name,
                                 args: Vec::new(),
                             },
@@ -244,6 +250,12 @@ impl DefinitionTypes {
                     }
                 }
                 Shape::Rigid(name) | Shape::Projected(_, name) => substitutions.get(&name).copied(),
+                Shape::Projection(declaration, member, _) => {
+                    let a::Item::Trait(owner) = compiler.source.declarations[declaration].item else {
+                        return Err(err(span, "E_TRAIT", "qualified projection requires a declared trait"));
+                    };
+                    Some(compiler.associated_type_for_trait(values[0], owner, &member, span)?)
+                }
                 Shape::Source(source) => compiler.resolve_if_known(source, substitutions)?,
                 Shape::Vec(_) => {
                     Some(compiler.intern(String::new(), ir::TypeKind::Vec { inner: values[0] }))
@@ -309,7 +321,8 @@ impl DefinitionTypes {
                     let name = compiler.source.declarations[declaration].name.clone();
                     Some(compiler.named_type(
                         &a::Path {
-                            bindings: Vec::new(), declaration: Some(declaration),
+                            qualification: None, bindings: Vec::new(),
+                            declaration: Some(declaration),
                             name,
                             args: Vec::new(),
                         },
@@ -430,6 +443,15 @@ enum Obligation {
         result: Variable,
         span: a::Span,
     },
+    Associated {
+        receiver: Variable,
+        name: String,
+        types: Vec<a::TypeId>,
+        scope: a::ModuleId,
+        arguments: Vec<Variable>,
+        result: Variable,
+        span: a::Span,
+    },
 }
 struct Infer<'a, 'b> {
     source_function: usize,
@@ -437,7 +459,11 @@ struct Infer<'a, 'b> {
     capture_frames: Vec<closures::Frame>,
     callable_parameters: BTreeMap<String, (Vec<Variable>, Variable)>,
     projections: Vec<BTreeMap<(a::DeclarationId, String), Variable>>,
+    projection_headers: Vec<BTreeSet<(a::DeclarationId, String)>>,
     projection_bindings: BTreeMap<Variable, a::Span>,
+    trait_headers: Vec<(Variable, a::TypeId)>,
+    projection_receivers: Vec<Variable>,
+    projection_ancestry: BTreeMap<usize, Vec<(usize, String, Vec<Variable>)>>,
     source: &'a a::Program,
     names: &'b crate::resolve::Resolver<'a>,
     implementations: &'b crate::generics::ImplementationIndex,
@@ -467,6 +493,7 @@ impl Infer<'_, '_> {
         });
         self.waiting.push(Vec::new());
         self.projections.push(BTreeMap::new());
+        self.projection_headers.push(BTreeSet::new());
         id
     }
     fn unknown(&mut self) -> Variable {
@@ -538,7 +565,7 @@ impl Infer<'_, '_> {
                     format!("{name}<{}>", self.display_variables(&args))
                 }
             }
-            Some(Shape::Projected(_, member)) => format!("associated type {member}"),
+            Some(Shape::Projected(_, member)) | Some(Shape::Projection(_, member, _)) => format!("associated type {member}"),
             Some(Shape::Source(id)) => match &self.source.types[id].kind {
                 a::Type::Path(path) => path.name.clone(),
                 _ => "declared type".to_string(),
@@ -607,6 +634,9 @@ impl Infer<'_, '_> {
                 equations.push((previous, value));
             }
         }
+        for key in std::mem::replace(&mut self.projection_headers[b], BTreeSet::new()) {
+            self.projection_headers[a].insert(key);
+        }
         equations
     }
     fn unify(&mut self, left: Variable, right: Variable, span: a::Span) -> Result<()> {
@@ -632,10 +662,10 @@ impl Infer<'_, '_> {
                 // Opaque generic projections stay with the original type checker.
                 if matches!(
                     sa,
-                    Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Source(_))
+                    Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Source(_))
                 ) || matches!(
                     sb,
-                    Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Source(_))
+                    Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Source(_))
                 ) {
                     continue;
                 }
@@ -646,6 +676,8 @@ impl Infer<'_, '_> {
                 ));
             }
             let merge = match (&sa, &sb) {
+                (Some(Shape::Projection(ad, an, ar)), Some(Shape::Projection(bd, bn, br)))
+                    if ad == bd && an == bn && self.root(*ar) == self.root(*br) => true,
                 (None, _) | (_, None) => {
                     if self.occurs(a, b) || self.occurs(b, a) {
                         return Err(err(
@@ -697,8 +729,8 @@ impl Infer<'_, '_> {
                         ),
                     ));
                 }
-                (Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Source(_)), _)
-                | (_, Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Source(_))) => {
+                (Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Source(_)), _)
+                | (_, Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Source(_))) => {
                     sa == sb
                 }
                 _ if sa == sb => true,
@@ -811,7 +843,7 @@ impl Infer<'_, '_> {
             if matches!(
                 self.shape(to),
                 None | Some(
-                    Shape::Box(_) | Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Source(_)
+                    Shape::Box(_) | Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Source(_)
                 )
             ) {
                 break;
@@ -1015,6 +1047,7 @@ impl Infer<'_, '_> {
             }
         }
         self.parameter_equations(&function.generics, &mut environment, false)?;
+        self.predicate_equations(&function.predicates, &mut environment, false)?;
         let parameters = &function.params[first..];
         let mut index = 0;
         while index < parameters.len() && index < values.len() {
@@ -1423,8 +1456,9 @@ impl Infer<'_, '_> {
                 self.shaped(Shape::Ref(false, array))
             }
             a::Expr::Path(path) => {
-                self.capture_path(id, &path.name);
-                if let Some((entry, value)) = self.bindings.entry(&path.name) {
+                if path.qualification.is_none() { self.capture_path(id, &path.name); }
+                let local = if path.qualification.is_none() { self.bindings.entry(&path.name) } else { None };
+                if let Some((entry, value)) = local {
                     if self.capture_references {
                         self.definition.local_paths.push((id, self.bindings.origin_at(entry)));
                     }
@@ -1580,14 +1614,16 @@ impl Infer<'_, '_> {
                     values.push(self.expr(*arg)?);
                 }
                 let path = match &self.source.exprs[callee].kind {
-                    a::Expr::Path(path) if self.bindings.get(&path.name).is_none() => self
+                    a::Expr::Path(path) if path.qualification.is_some() || self.bindings.get(&path.name).is_none() => self
                         .names
                         .value_path(self.source.exprs[callee].scope, path, span)
                         .ok(),
                     _ => None,
                 };
                 if let Some(path) = path {
-                    if path.declaration.is_none()
+                    if path.qualification.is_some() {
+                        self.qualified_header(&path, &values, callee_scope, span)?
+                    } else if path.declaration.is_none()
                         && matches!(path.name.as_str(), "Vec::new" | "Box::new")
                     {
                         let environment = self.environment.clone();
@@ -2013,7 +2049,7 @@ impl Infer<'_, '_> {
                 let Shape::Nominal(declaration, arguments) = shape else {
                     if matches!(
                         shape,
-                        Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Source(_)
+                        Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Source(_)
                     ) {
                         return Ok(false);
                     }
@@ -2208,6 +2244,9 @@ impl Infer<'_, '_> {
                     _ => return Ok(false),
                 }
             }
+            Obligation::Associated { receiver, name, types, scope, arguments, result, span } => {
+                return self.associated_receiver_header(receiver, &name, &types, &arguments, result, (id, scope, span));
+            }
             Obligation::Method {
                 receiver,
                 name,
@@ -2364,6 +2403,7 @@ impl Infer<'_, '_> {
                     | Obligation::Deref { result, .. }
                     | Obligation::Index { result, .. }
                     | Obligation::Field { result, .. }
+                    | Obligation::Associated { result, .. }
                     | Obligation::Method { result, .. } => Some(*result),
                 };
                 if self.solve_obligation(id, obligation)? {
@@ -2453,7 +2493,11 @@ pub(super) fn infer(
         capture_frames: Vec::new(),
         callable_parameters: BTreeMap::new(),
         projections: Vec::new(),
+        projection_headers: Vec::new(),
         projection_bindings: BTreeMap::new(),
+        trait_headers: Vec::new(),
+        projection_receivers: Vec::new(),
+        projection_ancestry: BTreeMap::new(),
         source,
         names,
         implementations,
@@ -2518,6 +2562,7 @@ pub(super) fn infer(
         a::FunctionOwner::Implementation(owner) => {
             let implementation = source.impls[owner.index].clone();
             inference.parameter_equations(&implementation.generics, &mut environment, true)?;
+            inference.predicate_equations(&implementation.predicates, &mut environment, true)?;
             if let Some(bound) = implementation.trait_ty {
                 let receiver = *environment.get(&"Self".to_string()).unwrap();
                 inference.trait_equations(receiver, "Self", bound, &mut environment, true)?;
@@ -2529,10 +2574,12 @@ pub(super) fn infer(
                 &mut environment,
                 true,
             )?;
+            inference.predicate_equations(&source.traits[owner.index].predicates, &mut environment, true)?;
         }
         a::FunctionOwner::Free => {}
     }
     inference.parameter_equations(&function.generics, &mut environment, true)?;
+    inference.predicate_equations(&function.predicates, &mut environment, true)?;
     inference.environment = environment.clone();
     inference.result = inference.source_type(function.result, &environment)?;
     for (position, parameter) in function.params.iter().enumerate() {
@@ -2582,7 +2629,11 @@ pub(super) fn assert_reference_capture_deferred(source: &a::Program, index: usiz
             capture_frames: Vec::new(),
             callable_parameters: BTreeMap::new(),
             projections: Vec::new(),
+            projection_headers: Vec::new(),
             projection_bindings: BTreeMap::new(),
+            trait_headers: Vec::new(),
+            projection_receivers: Vec::new(),
+            projection_ancestry: BTreeMap::new(),
             source,
             names: &names,
             implementations: &implementations,

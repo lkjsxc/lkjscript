@@ -1,0 +1,11 @@
+// expect: reject E_TYPE
+// witness: {}
+trait Value { type Item; }
+trait Loop {
+    type Next: Loop<Next = <Self as Loop>::Next> + Value<Item = i64>;
+}
+fn invalid<T: Loop>(value: <<T as Loop>::Next as Value>::Item) -> bool {
+    let repeated: <<T as Loop>::Next as Value>::Item = value;
+    repeated
+}
+pub fn probe() -> i64 { 42 }

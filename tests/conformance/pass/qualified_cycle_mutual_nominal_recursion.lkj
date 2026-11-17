@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; }
+struct S {}
+struct Left { next: Option<Box<<S as Source>::Item>> }
+struct Right { next: Option<Box<<S as Source>::Item>> }
+impl Source for S { type Item = (Left, Right); }
+pub fn probe() -> i64 {
+    let value: Option<<S as Source>::Item> = None;
+    if value.is_none() { 42 } else { 0 }
+}

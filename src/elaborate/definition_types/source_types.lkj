@@ -14,6 +14,7 @@ enum Work {
         environment: usize,
         arguments: usize,
     },
+    Qualified { id: a::TypeId, qualification: a::QualifiedPath, name: String, environment: usize },
     Reference(bool),
     Slice,
     Array(String),
@@ -64,6 +65,11 @@ impl Infer<'_, '_> {
                         }
                     }
                     a::Type::Path(path) => {
+                        if let Some(qualification) = &path.qualification {
+                            pending.push(Work::Qualified { id, qualification: qualification.clone(), name: path.name, environment });
+                            pending.push(Work::Source { id: qualification.receiver, environment });
+                            continue;
+                        }
                         if path.declaration.is_none() && path.args.is_empty() {
                             let bindings = if environment == 0 {
                                 base_environment
@@ -128,6 +134,27 @@ impl Infer<'_, '_> {
                     }
                     a::Type::Function { .. } => values.push(self.blocked()),
                 },
+                Work::Qualified { id, qualification, name, environment } => {
+                    let receiver = values.pop().expect("qualified inference receiver");
+                    let declaration = match qualification.trait_ty {
+                        Some(trait_ty) => match &self.source.types[trait_ty].kind {
+                            a::Type::Path(path) if path.args.is_empty() => path.declaration,
+                            _ => None,
+                        },
+                        None => None,
+                    };
+                    let value = if let Some(declaration) = declaration {
+                        let span = self.source.types[id].span;
+                        let value = self.qualified_projection(receiver, declaration, &name, span);
+                        let mut bindings = if environment == 0 { base_environment.clone() }
+                            else { environments[environment - 1].clone() };
+                        bindings.insert("Self".to_string(), receiver);
+                        let alias = super::super::semantic::source_type_name(self.source, id);
+                        self.associated_bound_headers(receiver, value, declaration, &name, &alias, &mut bindings)?;
+                        value
+                    } else { self.blocked() };
+                    values.push(value);
+                }
                 Work::Reference(mutable) => {
                     let inner = values.pop().expect("reference inference child");
                     values.push(self.shaped(Shape::Ref(mutable, inner)));
@@ -201,6 +228,8 @@ impl Infer<'_, '_> {
                             }
                             let generics = self.source.aliases[index].generics.clone();
                             self.parameter_equations(&generics, &mut aliases, false)?;
+                            let predicates = self.source.aliases[index].predicates.clone();
+                            self.predicate_equations(&predicates, &mut aliases, false)?;
                             let environment = environments.len() + 1;
                             environments.push(aliases);
                             pending.push(Work::Source {

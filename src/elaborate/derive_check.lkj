@@ -93,7 +93,12 @@ pub(super) fn validate(compiler: &mut Compiler<'_>) -> Result<()> {
                 }
                 crate::generics::derived_coherence(compiler.source, declaration, bound)?;
                 let mut substitutions = BTreeMap::new();
-                compiler.declare_parameters(&parameters, &mut substitutions)?;
+                let predicates = match item.item {
+                    a::Item::Struct(index) => compiler.source.structs[index].predicates.clone(),
+                    a::Item::Enum(index) => compiler.source.enums[index].predicates.clone(),
+                    _ => Vec::new(),
+                };
+                compiler.declare_parameters_with_predicates(&parameters, &predicates, &mut substitutions)?;
                 for ty in substitutions.values() {
                     compiler.assume_builtin(*ty, bound);
                 }
@@ -112,7 +117,8 @@ pub(super) fn validate(compiler: &mut Compiler<'_>) -> Result<()> {
                 }
                 let ty = compiler.named_type(
                     &a::Path {
-                        bindings: Vec::new(), declaration: Some(declaration),
+                        qualification: None, bindings: Vec::new(),
+                        declaration: Some(declaration),
                         name: item.name.clone(),
                         args: Vec::new(),
                     },
@@ -172,7 +178,8 @@ fn implementation_contracts(compiler: &mut Compiler<'_>) -> Result<()> {
             ));
         }
         let mut environment = BTreeMap::new();
-        compiler.declare_parameters(&implementation.generics, &mut environment)?;
+        let predicates = compiler.parameter_where_predicates(&implementation.predicates);
+        compiler.declare_parameters_with_predicates(&implementation.generics, &predicates, &mut environment)?;
         let receiver = compiler.resolve(implementation.target, &environment)?;
         if !compiler.applications.contains_key(&receiver) {
             return Err(err(
@@ -182,6 +189,7 @@ fn implementation_contracts(compiler: &mut Compiler<'_>) -> Result<()> {
             ));
         }
         environment.insert("Self".to_string(), receiver);
+        compiler.assume_where_predicates(&implementation.predicates, &environment)?;
         let shared = compiler.reference(receiver, false);
         let exclusive = compiler.reference(receiver, true);
         let mut methods: BTreeSet<String> = BTreeSet::new();

@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; }
+trait Family { type Value; }
+struct Number {}
+struct First {}
+struct Root {}
+impl Source for First { type Item = i64; }
+impl Source for Root { type Item = Number; }
+impl Family for Number { type Value = i64; }
+fn answer<T: Source<Item = <<U as Source>::Item as Family>::Value>, U: Source>(
+    value: <T as Source>::Item,
+) -> i64 where <U as Source>::Item: Family<Value = i64> { value }
+pub fn probe() -> i64 { answer::<First, Root>(42) }

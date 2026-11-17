@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+trait Read { fn read(&self) -> i64; fn echo<T>(value: T) -> T; }
+struct Number { value: i64 }
+impl Read for Number {
+    fn read(&self) -> i64 { self.value }
+    fn echo<T>(value: T) -> T { value }
+}
+impl Number { fn read(&self) -> i64 { 0 } }
+pub fn probe() -> i64 {
+    let number = Number { value: 40 };
+    <Number as Read>::read(&number) + <Number as Read>::echo::<i64>(2)
+}

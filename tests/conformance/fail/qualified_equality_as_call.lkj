@@ -1,0 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Source { type Item; fn get() -> Self::Item; }
+fn invalid<T: Source<Item = i64>>() -> i64 { <T as Source<Item = i64>>::get() }
+pub fn probe() -> i64 { 42 }

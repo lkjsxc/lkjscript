@@ -32,6 +32,7 @@ impl Infer<'_, '_> {
             return Ok(false);
         }
         let implementation = self.source.impls[candidates[0]].clone();
+        if !implementation.predicates.is_empty() { return Ok(false); }
         for parameter in &implementation.generics {
             if !parameter.bounds.is_empty() {
                 return Ok(false);
@@ -177,6 +178,8 @@ impl Infer<'_, '_> {
         };
         let generics = self.source.impls[candidate].generics.clone();
         self.parameter_equations(&generics, &mut environment, false)?;
+        let predicates = self.source.impls[candidate].predicates.clone();
+        self.predicate_equations(&predicates, &mut environment, false)?;
         if let Some(bound) = self.source.impls[candidate].trait_ty {
             self.trait_equations(receiver, "Self", bound, &mut environment, false)?;
         }
@@ -254,6 +257,7 @@ impl Infer<'_, '_> {
         }
         environment.insert("Self".to_string(), target);
         self.parameter_equations(&implementation.generics, &mut environment, false)?;
+        self.predicate_equations(&implementation.predicates, &mut environment, false)?;
         let no_type_args: Vec<a::TypeId> = Vec::new();
         Ok(Some(self.header_signature(
             method,

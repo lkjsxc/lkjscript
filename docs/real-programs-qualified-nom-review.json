@@ -1,0 +1,3553 @@
+{
+  "inputs": {
+    "bank": {
+      "path": "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/review-bank.json",
+      "sha256": "7eccd770ee1b911e1b212ba564daa45574048b4298df477a48d8b698bbae0455"
+    },
+    "projection": {
+      "path": "/home/coder/workspace/lkjscript-specimens/projections/nom-8.0.0/projection.json",
+      "sha256": "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
+      "source": {
+        "commit": "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
+        "object_format": "sha1",
+        "origin": "https://github.com/rust-bakery/nom.git",
+        "root": "/home/coder/workspace/lkjscript-specimens/nom-8.0.0"
+      }
+    },
+    "receipt": {
+      "compiler": {
+        "path": "/home/coder/workspace/lkjscript-programs-paths-20261118/target/lkjscript",
+        "sha256": "92c4caac762373609bb19e8eaa38559de060d59c41e9197a9ca59413e1690bde"
+      },
+      "path": "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-qualified-92c4caac76237360.json",
+      "sha256": "035964f1cfdd5e6fb7f05e051611950549709b41837a805b47d170d82742cebd"
+    },
+    "unreviewed_report": {
+      "path": "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/qualified-92c4caac/nom-unreviewed.json",
+      "sha256": "37b3b2f32a1f631a994c296eba4675fe92b0618d9f7ecfc6a3fd09ec6f6b50aa"
+    }
+  },
+  "interpretation": "Exact inherited reviews plus 59 newly inspected same-function recovery diagnostics: 57 body statements/constructors, one verify where predicate, and one fill return lifetime suffix. Every exact earlier parent is checked by rerank.pl. No new primary is assigned by message keywords.",
+  "kind": "explicit_foreign_diagnostic_site_review",
+  "package": "nom",
+  "schema": 1,
+  "sites": [
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 109,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 54,
+        "line": 104,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original is_not function has an opaque Fn/FnMut return refused at line 104. Line 109 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 3530,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "7d4aafca5310e29e27220fa4b7825072deaae56afe0364e5f6e47b2721ead65e",
+        "line_text": "  let mut parser = super::is_not(arr);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 111,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 54,
+        "line": 104,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original is_not function has an opaque Fn/FnMut return refused at line 104. Line 111 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 3570,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "ed118eadb922eae34c96a5ea1b6a8d9b76f0389a5b0d5d743fad23f826147a7e",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Complete>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 140,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 52,
+        "line": 135,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original is_a function has an opaque Fn/FnMut return refused at line 135. Line 140 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 4625,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "8cea2f4c7bc9e2a6a79852a6234b7c6db1a51100016108ccb3b9a4cad8d6e0d2",
+        "line_text": "  let mut parser = super::is_a(arr);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 142,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 52,
+        "line": 135,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original is_a function has an opaque Fn/FnMut return refused at line 135. Line 142 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 4663,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "ed118eadb922eae34c96a5ea1b6a8d9b76f0389a5b0d5d743fad23f826147a7e",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Complete>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 169,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 59,
+        "line": 164,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original take_while function has an opaque Fn/FnMut return refused at line 164. Line 169 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 5607,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "6e20829dde3130a1669ec1c01dd6ae1a2df0b29372ea07f29dca87ea6d3772eb",
+        "line_text": "  let mut parser = super::take_while(cond);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 171,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 59,
+        "line": 164,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original take_while function has an opaque Fn/FnMut return refused at line 164. Line 171 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 5652,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "ed118eadb922eae34c96a5ea1b6a8d9b76f0389a5b0d5d743fad23f826147a7e",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Complete>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 199,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 60,
+        "line": 194,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original take_while1 function has an opaque Fn/FnMut return refused at line 194. Line 199 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 6693,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "f06f5a662c9e6c777ccdc885763e7a132d54213a1908e29b789f4acdc4e4a298",
+        "line_text": "  let mut parser = super::take_while1(cond);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 201,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 60,
+        "line": 194,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original take_while1 function has an opaque Fn/FnMut return refused at line 194. Line 201 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 6739,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "ed118eadb922eae34c96a5ea1b6a8d9b76f0389a5b0d5d743fad23f826147a7e",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Complete>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 236,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 6,
+        "line": 231,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original take_while_m_n function has an opaque Fn/FnMut return refused at line 231. Line 236 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 8062,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "591645cc7250a32fd72724bf2383cdc1c2471e3bea8880360e7c9a6d85c79b8d",
+        "line_text": "  let mut parser = super::take_while_m_n(m, n, cond);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 238,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 6,
+        "line": 231,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original take_while_m_n function has an opaque Fn/FnMut return refused at line 231. Line 238 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 8117,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "ed118eadb922eae34c96a5ea1b6a8d9b76f0389a5b0d5d743fad23f826147a7e",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Complete>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 265,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 58,
+        "line": 260,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original take_till function has an opaque Fn/FnMut return refused at line 260. Line 265 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 9058,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "110ece134952d2773502ff163637478c81bdf8c09e1dfbfca18d4bdb0b8577c5",
+        "line_text": "  let mut parser = super::take_till(cond);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 267,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 58,
+        "line": 260,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original take_till function has an opaque Fn/FnMut return refused at line 260. Line 267 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 9102,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "ed118eadb922eae34c96a5ea1b6a8d9b76f0389a5b0d5d743fad23f826147a7e",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Complete>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 297,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 59,
+        "line": 292,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original take_till1 function has an opaque Fn/FnMut return refused at line 292. Line 297 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 10267,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "589723d3c21dbc0b5ce95633b50121bf9d998e01df86f02e38c8a75069a2d821",
+        "line_text": "  let mut parser = super::take_till1(cond);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 299,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 59,
+        "line": 292,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original take_till1 function has an opaque Fn/FnMut return refused at line 292. Line 299 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 10312,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "ed118eadb922eae34c96a5ea1b6a8d9b76f0389a5b0d5d743fad23f826147a7e",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Complete>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 336,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 54,
+        "line": 331,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original take function has an opaque Fn/FnMut return refused at line 331. Line 336 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 11646,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "88d2064dd45f2673a8ee025a2619d849d3651e2ce55e508cce999f00dd7741cd",
+        "line_text": "  let mut parser = super::take(count);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 338,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 54,
+        "line": 331,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original take function has an opaque Fn/FnMut return refused at line 331. Line 338 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 11686,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "ed118eadb922eae34c96a5ea1b6a8d9b76f0389a5b0d5d743fad23f826147a7e",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Complete>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 364,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 58,
+        "line": 359,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original take_until function has an opaque Fn/FnMut return refused at line 359. Line 364 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 12676,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "b5f4be03dda2a4679405e9e28719a3ff9ab6b0cb613a65ff6a5e31ce04c14b68",
+        "line_text": "  let mut parser = super::take_until(tag);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 366,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 58,
+        "line": 359,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original take_until function has an opaque Fn/FnMut return refused at line 359. Line 366 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 12720,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "ed118eadb922eae34c96a5ea1b6a8d9b76f0389a5b0d5d743fad23f826147a7e",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Complete>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 37,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 51,
+        "line": 32,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original tag function has an opaque Fn/FnMut return refused at line 32. Line 37 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 1173,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "9d33cad88ab83cfae70b51e71a0c9ea56f10e0812fe96c1a48e23bb12ac41595",
+        "line_text": "  move |i: I| {"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 393,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 59,
+        "line": 388,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original take_until1 function has an opaque Fn/FnMut return refused at line 388. Line 393 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 13815,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "e16539a411ad005983c91b804209118bc7b47b1a8b457b81524812b0f8a2210e",
+        "line_text": "  let mut parser = super::take_until1(tag);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 395,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 59,
+        "line": 388,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original take_until1 function has an opaque Fn/FnMut return refused at line 388. Line 395 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 13860,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "ed118eadb922eae34c96a5ea1b6a8d9b76f0389a5b0d5d743fad23f826147a7e",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Complete>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "line": 73,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 59,
+        "line": 68,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/complete.rs"
+      },
+      "path": "src/bytes/complete.rs",
+      "reason": "The original tag_no_case function has an opaque Fn/FnMut return refused at line 68. Line 73 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 2406,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "9d33cad88ab83cfae70b51e71a0c9ea56f10e0812fe96c1a48e23bb12ac41595",
+        "line_text": "  move |i: I| {"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 106,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 54,
+        "line": 101,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original is_not function has an opaque Fn/FnMut return refused at line 101. Line 106 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 3380,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "7d4aafca5310e29e27220fa4b7825072deaae56afe0364e5f6e47b2721ead65e",
+        "line_text": "  let mut parser = super::is_not(arr);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 108,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 54,
+        "line": 101,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original is_not function has an opaque Fn/FnMut return refused at line 101. Line 108 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 3420,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "8466a2d2075e90ecf0a58ea6a6e685de6428e215674def16c6fde9c888a9c90b",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Streaming>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 139,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 52,
+        "line": 134,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original is_a function has an opaque Fn/FnMut return refused at line 134. Line 139 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 4562,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "8cea2f4c7bc9e2a6a79852a6234b7c6db1a51100016108ccb3b9a4cad8d6e0d2",
+        "line_text": "  let mut parser = super::is_a(arr);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 141,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 52,
+        "line": 134,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original is_a function has an opaque Fn/FnMut return refused at line 134. Line 141 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 4600,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "8466a2d2075e90ecf0a58ea6a6e685de6428e215674def16c6fde9c888a9c90b",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Streaming>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 171,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 59,
+        "line": 166,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original take_while function has an opaque Fn/FnMut return refused at line 166. Line 171 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 5711,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "6e20829dde3130a1669ec1c01dd6ae1a2df0b29372ea07f29dca87ea6d3772eb",
+        "line_text": "  let mut parser = super::take_while(cond);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 173,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 59,
+        "line": 166,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original take_while function has an opaque Fn/FnMut return refused at line 166. Line 173 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 5756,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "8466a2d2075e90ecf0a58ea6a6e685de6428e215674def16c6fde9c888a9c90b",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Streaming>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 205,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 60,
+        "line": 200,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original take_while1 function has an opaque Fn/FnMut return refused at line 200. Line 205 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 6959,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "f06f5a662c9e6c777ccdc885763e7a132d54213a1908e29b789f4acdc4e4a298",
+        "line_text": "  let mut parser = super::take_while1(cond);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 207,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 60,
+        "line": 200,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original take_while1 function has an opaque Fn/FnMut return refused at line 200. Line 207 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 7005,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "8466a2d2075e90ecf0a58ea6a6e685de6428e215674def16c6fde9c888a9c90b",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Streaming>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 244,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 6,
+        "line": 239,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original take_while_m_n function has an opaque Fn/FnMut return refused at line 239. Line 244 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 8435,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "591645cc7250a32fd72724bf2383cdc1c2471e3bea8880360e7c9a6d85c79b8d",
+        "line_text": "  let mut parser = super::take_while_m_n(m, n, cond);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 246,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 6,
+        "line": 239,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original take_while_m_n function has an opaque Fn/FnMut return refused at line 239. Line 246 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 8490,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "8466a2d2075e90ecf0a58ea6a6e685de6428e215674def16c6fde9c888a9c90b",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Streaming>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 278,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 58,
+        "line": 273,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original take_till function has an opaque Fn/FnMut return refused at line 273. Line 278 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 9650,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "110ece134952d2773502ff163637478c81bdf8c09e1dfbfca18d4bdb0b8577c5",
+        "line_text": "  let mut parser = super::take_till(cond);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 280,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 58,
+        "line": 273,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original take_till function has an opaque Fn/FnMut return refused at line 273. Line 280 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 9694,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "8466a2d2075e90ecf0a58ea6a6e685de6428e215674def16c6fde9c888a9c90b",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Streaming>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 311,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 59,
+        "line": 306,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original take_till1 function has an opaque Fn/FnMut return refused at line 306. Line 311 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 10897,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "589723d3c21dbc0b5ce95633b50121bf9d998e01df86f02e38c8a75069a2d821",
+        "line_text": "  let mut parser = super::take_till1(cond);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 313,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 59,
+        "line": 306,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original take_till1 function has an opaque Fn/FnMut return refused at line 306. Line 313 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 10942,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "8466a2d2075e90ecf0a58ea6a6e685de6428e215674def16c6fde9c888a9c90b",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Streaming>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 344,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 54,
+        "line": 339,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original take function has an opaque Fn/FnMut return refused at line 339. Line 344 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 12076,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "88d2064dd45f2673a8ee025a2619d849d3651e2ce55e508cce999f00dd7741cd",
+        "line_text": "  let mut parser = super::take(count);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 346,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 54,
+        "line": 339,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original take function has an opaque Fn/FnMut return refused at line 339. Line 346 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 12116,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "8466a2d2075e90ecf0a58ea6a6e685de6428e215674def16c6fde9c888a9c90b",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Streaming>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 36,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 51,
+        "line": 31,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original tag function has an opaque Fn/FnMut return refused at line 31. Line 36 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 1140,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "9d33cad88ab83cfae70b51e71a0c9ea56f10e0812fe96c1a48e23bb12ac41595",
+        "line_text": "  move |i: I| {"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 375,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 58,
+        "line": 370,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original take_until function has an opaque Fn/FnMut return refused at line 370. Line 375 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 13161,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "b5f4be03dda2a4679405e9e28719a3ff9ab6b0cb613a65ff6a5e31ce04c14b68",
+        "line_text": "  let mut parser = super::take_until(tag);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 377,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 58,
+        "line": 370,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original take_until function has an opaque Fn/FnMut return refused at line 370. Line 377 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 13205,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "8466a2d2075e90ecf0a58ea6a6e685de6428e215674def16c6fde9c888a9c90b",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Streaming>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 407,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 59,
+        "line": 402,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original take_until1 function has an opaque Fn/FnMut return refused at line 402. Line 407 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 14365,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "e16539a411ad005983c91b804209118bc7b47b1a8b457b81524812b0f8a2210e",
+        "line_text": "  let mut parser = super::take_until1(tag);"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 409,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 59,
+        "line": 402,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original take_until1 function has an opaque Fn/FnMut return refused at line 402. Line 409 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 14410,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "8466a2d2075e90ecf0a58ea6a6e685de6428e215674def16c6fde9c888a9c90b",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Streaming>>(i)"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "return_impl_trait_body_recovery",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "line": 70,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler parser recovery",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 59,
+        "line": 65,
+        "message": "unsupported construct: impl",
+        "path": "src/bytes/streaming.rs"
+      },
+      "path": "src/bytes/streaming.rs",
+      "reason": "The original tag_no_case function has an opaque Fn/FnMut return refused at line 65. Line 70 is a let statement or move-closure expression inside that same function body, not an impl member. The recorded earlier header diagnostic is the concrete recovery parent in every observed root.",
+      "source_anchor": {
+        "byte_offset": 2262,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "9d33cad88ab83cfae70b51e71a0c9ea56f10e0812fe96c1a48e23bb12ac41595",
+        "line_text": "  move |i: I| {"
+      },
+      "source_review": "q2",
+      "title": "Function body reparsed as implementation items after an opaque-return refusal"
+    },
+    {
+      "cause": "reparsed_opaque_return_constructor",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "line": 1020,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Recovery; no independent language cause",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 42,
+        "line": 1019,
+        "message": "unsupported construct: impl",
+        "path": "src/combinator/mod.rs"
+      },
+      "path": "src/combinator/mod.rs",
+      "reason": "The rejected return-position impl Trait is reparsed as an impl item; this diagnostic points to the ordinary Success or Fail constructor in the original function body, not to an independent impl member.",
+      "source_anchor": {
+        "byte_offset": 27713,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "14e45135b64a456d1d00c7f224911de94a23a38b47b53370c93d60b1b870bdaf",
+        "line_text": "  Fail {"
+      },
+      "source_review": "equality",
+      "title": "Recovery after a rejected function signature"
+    },
+    {
+      "cause": "maybe_sized_bounds",
+      "code": "E_PARSE",
+      "column": 7,
+      "disposition": "primary",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "line": 524,
+      "message": "expected an identifier",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler generic bounds",
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "reason": "The original where clause of the Parser implementation for Verify explicitly contains O2: ?Sized. The earlier ?Sized diagnostic at the separate Verify struct declaration (line 513) is not a recovery parent for this independently declared implementation bound.",
+      "source_anchor": {
+        "byte_offset": 14082,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "baade81f77aee47e84b2c5a18099601fdac1762254403cd781b175e82a4f5613",
+        "line_text": "  O2: ?Sized,"
+      },
+      "source_review": "q2",
+      "title": "Relaxed ?Sized bound syntax"
+    },
+    {
+      "cause": "reparsed_opaque_return_constructor",
+      "code": "E_UNSUPPORTED",
+      "column": 3,
+      "disposition": "recovery",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "line": 985,
+      "message": "unsupported construct: impl item",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Recovery; no independent language cause",
+      "package": "nom",
+      "parent": {
+        "code": "E_UNSUPPORTED",
+        "column": 58,
+        "line": 984,
+        "message": "unsupported construct: impl",
+        "path": "src/combinator/mod.rs"
+      },
+      "path": "src/combinator/mod.rs",
+      "reason": "The rejected return-position impl Trait is reparsed as an impl item; this diagnostic points to the ordinary Success or Fail constructor in the original function body, not to an independent impl member.",
+      "source_anchor": {
+        "byte_offset": 26940,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "4a47b5baaabdcde3f31202fb2a321010eb7f32f2cb7ef7f0ba257c3004dc8b7a",
+        "line_text": "  Success {"
+      },
+      "source_review": "equality",
+      "title": "Recovery after a rejected function signature"
+    },
+    {
+      "cause": "return_position_impl_trait",
+      "code": "E_UNSUPPORTED",
+      "column": 6,
+      "disposition": "primary",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "line": 961,
+      "message": "unsupported construct: impl",
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "owner": "Language / compiler source lowering",
+      "package": "nom",
+      "path": "src/multi/mod.rs",
+      "reason": "The fill function directly returns impl Parser<I, Output = (), Error = E> + lifetime. Its preceding parameter contains a qualified associated projection; progression through that parameter now exposes the genuine opaque-result refusal at this later source occurrence.",
+      "source_anchor": {
+        "byte_offset": 28880,
+        "file_bytes": 53630,
+        "file_physical_lines": 1870,
+        "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+        "line_sha256": "47a3953fbd172cce4a256ba003b4ffb54ebee36092f6c5966136a7a70aa715cf",
+        "line_text": ") -> impl Parser<I, Output = (), Error = E> + 'a"
+      },
+      "source_review": "q2",
+      "title": "Opaque impl Trait return types"
+    },
+    {
+      "package": "nom",
+      "path": "src/bits/complete.rs",
+      "line": 41,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "467122d4056c0e2655fd4ba087f1ee5042fb86453b662ae7ebe2e42c0066a09a",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 35:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bits/complete.rs",
+        "line": 35,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 1492,
+        "file_bytes": 5372,
+        "file_physical_lines": 195,
+        "file_sha256": "467122d4056c0e2655fd4ba087f1ee5042fb86453b662ae7ebe2e42c0066a09a",
+        "line_sha256": "8c0d749bc4575d749b47a5b1325693c74644d4f16e938937441fc290e6e67dcf",
+        "line_text": "  let count = count.to_usize();"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bits/complete.rs",
+      "line": 42,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "467122d4056c0e2655fd4ba087f1ee5042fb86453b662ae7ebe2e42c0066a09a",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 35:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bits/complete.rs",
+        "line": 35,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 1524,
+        "file_bytes": 5372,
+        "file_physical_lines": 195,
+        "file_sha256": "467122d4056c0e2655fd4ba087f1ee5042fb86453b662ae7ebe2e42c0066a09a",
+        "line_sha256": "47e3429fc009755503abb003cc326829d994c7c47639e6387565a794297a986b",
+        "line_text": "  move |(input, bit_offset): (I, usize)| {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bits/complete.rs",
+      "line": 92,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "467122d4056c0e2655fd4ba087f1ee5042fb86453b662ae7ebe2e42c0066a09a",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 86:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bits/complete.rs",
+        "line": 86,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 2954,
+        "file_bytes": 5372,
+        "file_physical_lines": 195,
+        "file_sha256": "467122d4056c0e2655fd4ba087f1ee5042fb86453b662ae7ebe2e42c0066a09a",
+        "line_sha256": "8c0d749bc4575d749b47a5b1325693c74644d4f16e938937441fc290e6e67dcf",
+        "line_text": "  let count = count.to_usize();"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bits/complete.rs",
+      "line": 93,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "467122d4056c0e2655fd4ba087f1ee5042fb86453b662ae7ebe2e42c0066a09a",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 86:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bits/complete.rs",
+        "line": 86,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 2986,
+        "file_bytes": 5372,
+        "file_physical_lines": 195,
+        "file_sha256": "467122d4056c0e2655fd4ba087f1ee5042fb86453b662ae7ebe2e42c0066a09a",
+        "line_sha256": "0b01b80d0a3879bd85966d0d42228e5c4e2ad7f039215ad775dc7464c362e47d",
+        "line_text": "  move |input: (I, usize)| {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bits/mod.rs",
+      "line": 46,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "6b8e799f513834da948525002cb0e2a0b5da5f71715c443ede31bdd18424df36",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 39:48. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bits/mod.rs",
+        "line": 39,
+        "column": 48,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 1331,
+        "file_bytes": 5924,
+        "file_physical_lines": 174,
+        "file_sha256": "6b8e799f513834da948525002cb0e2a0b5da5f71715c443ede31bdd18424df36",
+        "line_sha256": "299a9249c804bee19db894e8bc7141a52ac1a1f85b830cf8bc8d994f2dd02b35",
+        "line_text": "  move |input: I| match parser.parse((input, 0)) {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bits/mod.rs",
+      "line": 91,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "6b8e799f513834da948525002cb0e2a0b5da5f71715c443ede31bdd18424df36",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 84:49. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bits/mod.rs",
+        "line": 84,
+        "column": 49,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 3056,
+        "file_bytes": 5924,
+        "file_physical_lines": 174,
+        "file_sha256": "6b8e799f513834da948525002cb0e2a0b5da5f71715c443ede31bdd18424df36",
+        "line_sha256": "61aff7fa347fc5c595f2b23ff95e90a49c186edba69b01ca2ee44a4af2324ad4",
+        "line_text": "  move |(input, offset): (I, usize)| {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bits/streaming.rs",
+      "line": 18,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "dfba58d569c1ab89f6cb9e33153775ed19d45385e39d5047eb717c44b07e3cc0",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 12:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bits/streaming.rs",
+        "line": 12,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 489,
+        "file_bytes": 4434,
+        "file_physical_lines": 170,
+        "file_sha256": "dfba58d569c1ab89f6cb9e33153775ed19d45385e39d5047eb717c44b07e3cc0",
+        "line_sha256": "8c0d749bc4575d749b47a5b1325693c74644d4f16e938937441fc290e6e67dcf",
+        "line_text": "  let count = count.to_usize();"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bits/streaming.rs",
+      "line": 19,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "dfba58d569c1ab89f6cb9e33153775ed19d45385e39d5047eb717c44b07e3cc0",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 12:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bits/streaming.rs",
+        "line": 12,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 521,
+        "file_bytes": 4434,
+        "file_physical_lines": 170,
+        "file_sha256": "dfba58d569c1ab89f6cb9e33153775ed19d45385e39d5047eb717c44b07e3cc0",
+        "line_sha256": "47e3429fc009755503abb003cc326829d994c7c47639e6387565a794297a986b",
+        "line_text": "  move |(input, bit_offset): (I, usize)| {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bits/streaming.rs",
+      "line": 68,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "dfba58d569c1ab89f6cb9e33153775ed19d45385e39d5047eb717c44b07e3cc0",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 62:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bits/streaming.rs",
+        "line": 62,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 1962,
+        "file_bytes": 4434,
+        "file_physical_lines": 170,
+        "file_sha256": "dfba58d569c1ab89f6cb9e33153775ed19d45385e39d5047eb717c44b07e3cc0",
+        "line_sha256": "8c0d749bc4575d749b47a5b1325693c74644d4f16e938937441fc290e6e67dcf",
+        "line_text": "  let count = count.to_usize();"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bits/streaming.rs",
+      "line": 69,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "dfba58d569c1ab89f6cb9e33153775ed19d45385e39d5047eb717c44b07e3cc0",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 62:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bits/streaming.rs",
+        "line": 62,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 1994,
+        "file_bytes": 4434,
+        "file_physical_lines": 170,
+        "file_sha256": "dfba58d569c1ab89f6cb9e33153775ed19d45385e39d5047eb717c44b07e3cc0",
+        "line_sha256": "0b01b80d0a3879bd85966d0d42228e5c4e2ad7f039215ad775dc7464c362e47d",
+        "line_text": "  move |input: (I, usize)| {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bytes/complete.rs",
+      "line": 430,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 422:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/complete.rs",
+        "line": 422,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 14965,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "b230b3f30df22cc2cd37d725bc9d9025a9ee56b8bd5d5a75181a7c001a750e20",
+        "line_text": "  let mut parser = super::escaped(normal, control_char, escapable);"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bytes/complete.rs",
+      "line": 432,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 422:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/complete.rs",
+        "line": 422,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 15034,
+        "file_bytes": 19430,
+        "file_physical_lines": 566,
+        "file_sha256": "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+        "line_sha256": "ed118eadb922eae34c96a5ea1b6a8d9b76f0389a5b0d5d743fad23f826147a7e",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Complete>>(i)"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bytes/mod.rs",
+      "line": 119,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 114:59. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 114,
+        "column": 59,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 3433,
+        "file_bytes": 31734,
+        "file_physical_lines": 1044,
+        "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+        "line_sha256": "442e4925ca446ae83265de6632d5cc2089c58e42e0fdd5736239f99679be8042",
+        "line_text": "  TagNoCase {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bytes/mod.rs",
+      "line": 233,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 228:54. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 228,
+        "column": 54,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 6503,
+        "file_bytes": 31734,
+        "file_physical_lines": 1044,
+        "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+        "line_sha256": "015a57bc4d3e4aa4efeb6f9d2df33d4c3462091c82e2a4d1f4c7f3f76d20cb03",
+        "line_text": "  SplitPosition1 {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bytes/mod.rs",
+      "line": 266,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 261:52. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 261,
+        "column": 52,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 7612,
+        "file_bytes": 31734,
+        "file_physical_lines": 1044,
+        "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+        "line_sha256": "015a57bc4d3e4aa4efeb6f9d2df33d4c3462091c82e2a4d1f4c7f3f76d20cb03",
+        "line_text": "  SplitPosition1 {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bytes/mod.rs",
+      "line": 297,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 292:59. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 292,
+        "column": 59,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 8624,
+        "file_bytes": 31734,
+        "file_physical_lines": 1044,
+        "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+        "line_sha256": "77f2f25a1c5a1f5478d715eb5a9d48143600a92bc22564e8d04608c4d07a3188",
+        "line_text": "  SplitPosition {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bytes/mod.rs",
+      "line": 332,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 327:60. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 327,
+        "column": 60,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 9860,
+        "file_bytes": 31734,
+        "file_physical_lines": 1044,
+        "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+        "line_sha256": "015a57bc4d3e4aa4efeb6f9d2df33d4c3462091c82e2a4d1f4c7f3f76d20cb03",
+        "line_text": "  SplitPosition1 {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bytes/mod.rs",
+      "line": 373,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 368:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 368,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 11359,
+        "file_bytes": 31734,
+        "file_physical_lines": 1044,
+        "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+        "line_sha256": "00480dbbc3e5ba7a0e376aba76d95c821e4dfbd5c81c5e58d7a31910cb89bb28",
+        "line_text": "  TakeWhileMN {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bytes/mod.rs",
+      "line": 470,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 465:58. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 465,
+        "column": 58,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 13862,
+        "file_bytes": 31734,
+        "file_physical_lines": 1044,
+        "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+        "line_sha256": "77f2f25a1c5a1f5478d715eb5a9d48143600a92bc22564e8d04608c4d07a3188",
+        "line_text": "  SplitPosition {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bytes/mod.rs",
+      "line": 50,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 45:51. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 45,
+        "column": 51,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 1396,
+        "file_bytes": 31734,
+        "file_physical_lines": 1044,
+        "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+        "line_sha256": "2e28e54ba0c24b24874680a4e71b37e7be475e71d1b42255963f12998bab3444",
+        "line_text": "  Tag {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bytes/mod.rs",
+      "line": 504,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 499:59. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 499,
+        "column": 59,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 15070,
+        "file_bytes": 31734,
+        "file_physical_lines": 1044,
+        "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+        "line_sha256": "015a57bc4d3e4aa4efeb6f9d2df33d4c3462091c82e2a4d1f4c7f3f76d20cb03",
+        "line_text": "  SplitPosition1 {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bytes/mod.rs",
+      "line": 539,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 534:54. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 534,
+        "column": 54,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 16239,
+        "file_bytes": 31734,
+        "file_physical_lines": 1044,
+        "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+        "line_sha256": "f136699dba0df8353781ea3a7eb6cb811e2ca739d31a077c4a729ae59225623a",
+        "line_text": "  Take {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bytes/mod.rs",
+      "line": 601,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 596:58. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 596,
+        "column": 58,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 18025,
+        "file_bytes": 31734,
+        "file_physical_lines": 1044,
+        "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+        "line_sha256": "5c390ec583a30d837d6174bbe2768edfe310c75a56a5dd0571226e36d2e6f9ef",
+        "line_text": "  TakeUntil {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bytes/mod.rs",
+      "line": 665,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 660:59. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 660,
+        "column": 59,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 19977,
+        "file_bytes": 31734,
+        "file_physical_lines": 1044,
+        "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+        "line_sha256": "cb0793d7b5c2356fd3d9009a8cb52e8c3999f712d340f26259ec53ac50b214f7",
+        "line_text": "  TakeUntil1 {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bytes/mod.rs",
+      "line": 738,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 730:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 730,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 21989,
+        "file_bytes": 31734,
+        "file_physical_lines": 1044,
+        "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+        "line_sha256": "792c58a982c8c1d60d27531e7e3ed648e76915581520fbf93ab7743f9fd82fe3",
+        "line_text": "  Escaped {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bytes/streaming.rs",
+      "line": 444,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 436:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/streaming.rs",
+        "line": 436,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 15506,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "b230b3f30df22cc2cd37d725bc9d9025a9ee56b8bd5d5a75181a7c001a750e20",
+        "line_text": "  let mut parser = super::escaped(normal, control_char, escapable);"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/bytes/streaming.rs",
+      "line": 446,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 436:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/streaming.rs",
+        "line": 436,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 15575,
+        "file_bytes": 17485,
+        "file_physical_lines": 499,
+        "file_sha256": "6c1e454839c99fcb19704ee82b1b74b5492073dc71faa364694853d2a564ca11",
+        "line_sha256": "8466a2d2075e90ecf0a58ea6a6e685de6428e215674def16c6fde9c888a9c90b",
+        "line_text": "  move |i: I| parser.process::<OutputM<Emit, Emit, Streaming>>(i)"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/character/mod.rs",
+      "line": 103,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 98:50. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/character/mod.rs",
+        "line": 98,
+        "column": 50,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 2559,
+        "file_bytes": 11130,
+        "file_physical_lines": 402,
+        "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+        "line_sha256": "31a2e826b0ae15d2cae7d375fe266991a22f532f0573f131b4fb4e44c3980121",
+        "line_text": "  Char { c, e: PhantomData }"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/character/mod.rs",
+      "line": 163,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 157:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/character/mod.rs",
+        "line": 157,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 4239,
+        "file_bytes": 11130,
+        "file_physical_lines": 402,
+        "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+        "line_sha256": "62677978471007f44c69eadb6170837ea4616d4761244ec0ebc1423838a97fdf",
+        "line_text": "  Satisfy {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/character/mod.rs",
+      "line": 225,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 219:55. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/character/mod.rs",
+        "line": 219,
+        "column": 55,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 5980,
+        "file_bytes": 11130,
+        "file_physical_lines": 402,
+        "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+        "line_sha256": "62677978471007f44c69eadb6170837ea4616d4761244ec0ebc1423838a97fdf",
+        "line_text": "  Satisfy {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/character/mod.rs",
+      "line": 248,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 242:56. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/character/mod.rs",
+        "line": 242,
+        "column": 56,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 6766,
+        "file_bytes": 11130,
+        "file_physical_lines": 402,
+        "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+        "line_sha256": "62677978471007f44c69eadb6170837ea4616d4761244ec0ebc1423838a97fdf",
+        "line_text": "  Satisfy {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/character/mod.rs",
+      "line": 330,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 325:41. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/character/mod.rs",
+        "line": 325,
+        "column": 41,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 9183,
+        "file_bytes": 11130,
+        "file_physical_lines": 402,
+        "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+        "line_sha256": "036436da178bb314dcf0c508062a5e00aa5c41ad815d3d71eb97c073a8a496b8",
+        "line_text": "  Digit1 { e: PhantomData }"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/character/mod.rs",
+      "line": 373,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 368:46. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/character/mod.rs",
+        "line": 368,
+        "column": 46,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 10446,
+        "file_bytes": 11130,
+        "file_physical_lines": 402,
+        "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+        "line_sha256": "bdc769d65560e29bc44337bd38ff3de0eb410389edebc15fb8522357b53cb93b",
+        "line_text": "  MultiSpace0 { e: PhantomData }"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 110,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 105:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 105,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 3106,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "9367d62e530ecac02e6e878f84ac9e7801e40b24a5187807f6af2740dfb13540",
+        "line_text": "  parser.map_res(f)"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 141,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 136:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 136,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 4083,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "3925c285e26dd836a7af9c99b6e1d1e32e7edbeaef89dc67e682a80a6564c88e",
+        "line_text": "  parser.map_opt(f)"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 168,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 163:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 163,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 4852,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "cd650c503c6cb2bce3ccd4bedaa32c086222c3c23ae8f8b0c27fc2dc0b95cf20",
+        "line_text": "  parser.and_then(applied_parser)"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 195,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 189:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 189,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 5682,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "e45031377bc902ae72915afd9f8f5f2ca59b5dae44b828e44301836ce4a30be0",
+        "line_text": "  parser.flat_map(applied_parser)"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 222,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 218:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 218,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 6366,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "f5f677bd0ac1fd7d6b755fa6fa28097b260fbf0edec7fdf8e38413986271c364",
+        "line_text": "  Opt { parser: f }"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 278,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 274:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 274,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 7892,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "e87e3ca50a920ab17e193e087477789ce084895b13270811cd46dc0c27885111",
+        "line_text": "  Cond {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 325,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 321:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 321,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 9055,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "3c1006b9fa95ac1c83739193dc990534fda8edcbb47e4c809ce032deb0c6e92f",
+        "line_text": "  Peek { parser }"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 395,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 391:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 391,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 10773,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "cac98518d94c390a340a7d5769020ca3eaeefc47d8179820096cb4e14d30455b",
+        "line_text": "  MakeComplete { parser }"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 449,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 444:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 444,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 12192,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "ea4470e1781ac312206f759e4b6ef0d42563aae762ee1bfbae44b10f397164e3",
+        "line_text": "  AllConsuming { parser }"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 503,
+      "column": 7,
+      "code": "E_PARSE",
+      "message": "expected an identifier",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "This O2: ?Sized predicate is in the same verify function signature as the rejected impl Trait return at 498:6. It is reached while recovering that signature, rather than as an independently parsed declaration. The separate Verify struct (513:29) and Parser impl predicate (524:7) retain their own independently counted ?Sized sites.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 498,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 13739,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "baade81f77aee47e84b2c5a18099601fdac1762254403cd781b175e82a4f5613",
+        "line_text": "  O2: ?Sized,"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 567,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 563:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 563,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 15237,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "7147e73175015b12cefb140412a535d78411d30565e2a1e1bc52bf84048d4345",
+        "line_text": "  parser.map(move |_| val.clone())"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 588,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 584:57. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 584,
+        "column": 57,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 15811,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "e256486807f12ef8a8c08ed88736be5cf717d5f9b74d7c81087cbd6e3b4398fd",
+        "line_text": "  Not { parser }"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 637,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 633:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 633,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 17132,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "3f9366b550cd1f5ec241649b5ac7289a6c252822d3ea0fbf1ce8733fa91091a8",
+        "line_text": "  Recognize { parser }"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 714,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 708:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 708,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 19528,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "c3a6844b2c9fb8bd5a11c6c32a973dcd47680d640484d34281b66cc91cb84a84",
+        "line_text": "  Consumed { parser }"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 79,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 74:62. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 74,
+        "column": 62,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 2104,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "379e2cf110cd082ca8e89ae4b58c49c9dfcdf3637b6c1047d532593ff566c013",
+        "line_text": "  parser.map(f)"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 807,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 803:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 803,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 21919,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "18aef319a53a28158ae9ee2b3cc6afc131308bfaac2812d3f8ab3437dd46971f",
+        "line_text": "  Cut { parser }"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/combinator/mod.rs",
+      "line": 867,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 859:49. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 859,
+        "column": 49,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 23457,
+        "file_bytes": 28179,
+        "file_physical_lines": 1044,
+        "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+        "line_sha256": "0070a1924953dd44fde3aed03bf8c9c80a0229397c9dc859f98992ee859575b7",
+        "line_text": "  parser.into::<O2, E2>()"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/multi/mod.rs",
+      "line": 1056,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 1048:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 1048,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 31345,
+        "file_bytes": 53630,
+        "file_physical_lines": 1870,
+        "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+        "line_sha256": "84823b28625eaa4f038be6d5c81502a0e4e2704f2aa7fb733f744c2cfcc01568",
+        "line_text": "  FoldMany0 {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/multi/mod.rs",
+      "line": 1160,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 1152:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 1152,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 34166,
+        "file_bytes": 53630,
+        "file_physical_lines": 1870,
+        "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+        "line_sha256": "feb0ac745d6dbb6024031e4f93286dc7b876b860a867ba2cd7c87abb22c626eb",
+        "line_text": "  FoldMany1 {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/multi/mod.rs",
+      "line": 1282,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 1274:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 1274,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 37587,
+        "file_bytes": 53630,
+        "file_physical_lines": 1870,
+        "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+        "line_sha256": "5c028d256a2667dc609e20c991845f2b97baaad5d76c52fe6abc9a1ef6d41c1a",
+        "line_text": "  FoldManyMN {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/multi/mod.rs",
+      "line": 1380,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 1373:38. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 1373,
+        "column": 38,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 40173,
+        "file_bytes": 53630,
+        "file_physical_lines": 1870,
+        "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+        "line_sha256": "910615ad638cfbbd32039e250c9b1e40bc6340670404053515e5eac34ac1456b",
+        "line_text": "  f.flat_map(|size| take(size))"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/multi/mod.rs",
+      "line": 1421,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 1408:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 1408,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 41448,
+        "file_bytes": 53630,
+        "file_physical_lines": 1870,
+        "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+        "line_sha256": "1df207a16ab356cccb45e5012a464df0a7897720bde8a4233e1726c5b41a8520",
+        "line_text": "  LengthValue {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/multi/mod.rs",
+      "line": 1801,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 1792:6. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 1792,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 51900,
+        "file_bytes": 53630,
+        "file_physical_lines": 1870,
+        "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+        "line_sha256": "b4e4dae182b018e07add30b126d7fcb1776be1cd318b4036913ba167d542234d",
+        "line_text": "  Fold {"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/multi/mod.rs",
+      "line": 708,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 702:43. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 702,
+        "column": 43,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 21435,
+        "file_bytes": 53630,
+        "file_physical_lines": 1870,
+        "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+        "line_sha256": "8008ab482363fdbbd897fa2dee3db6faaf0bd2ffdc06c6d75a8f3275caec2791",
+        "line_text": "  Many0Count { parser }"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/multi/mod.rs",
+      "line": 789,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The original source at this coordinate is a statement or constructor expression inside the free function whose return type is rejected at 783:43. The parser has resumed from that impl Trait token as an impl item; this is not a separately declared associated member. The exact earlier return-type diagnostic is the recovery parent.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 783,
+        "column": 43,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 23744,
+        "file_bytes": 53630,
+        "file_physical_lines": 1870,
+        "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+        "line_sha256": "17effc7f7c231b3f639d0f19818fb1bafdc363ed13c2c2a3e52c3b5439b1a7ab",
+        "line_text": "  Many1Count { parser }"
+      },
+      "source_review": "qualified-final-source-review"
+    },
+    {
+      "package": "nom",
+      "path": "src/multi/mod.rs",
+      "line": 961,
+      "column": 45,
+      "code": "E_PARSE",
+      "message": "expected `{`, found `+`",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "cause": "recovery_after_return_position_impl_trait",
+      "title": "Parser recovery after a rejected opaque return type",
+      "owner": "Language / compiler parser recovery",
+      "reason": "The + lifetime suffix belongs to the same fill return type whose impl Trait token is now independently rejected at 961:6. The old qualified-parameter recovery parent at 960:17 disappeared; the exact earlier return-type refusal now explains this expected-block parser recovery.",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 961,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "observed_roots": [
+        "src/lib.rs"
+      ],
+      "source_anchor": {
+        "byte_offset": 28919,
+        "file_bytes": 53630,
+        "file_physical_lines": 1870,
+        "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+        "line_sha256": "47a3953fbd172cce4a256ba003b4ffb54ebee36092f6c5966136a7a70aa715cf",
+        "line_text": ") -> impl Parser<I, Output = (), Error = E> + 'a"
+      },
+      "source_review": "qualified-final-source-review"
+    }
+  ]
+}

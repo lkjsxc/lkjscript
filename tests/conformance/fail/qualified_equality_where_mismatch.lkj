@@ -1,0 +1,11 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Source { type Item; }
+trait Container { type Element; }
+struct Number {}
+struct Root {}
+impl Source for Root { type Item = Number; }
+impl Container for Number { type Element = bool; }
+fn answer<T: Source>() -> i64
+where <T as Source>::Item: Container<Element = i64> { 42 }
+pub fn probe() -> i64 { answer::<Root>() }

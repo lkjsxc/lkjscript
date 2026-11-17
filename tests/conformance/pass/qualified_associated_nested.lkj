@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; }
+trait Value { type Output; fn answer() -> Self::Output; }
+struct Number {}
+impl Source for Number { type Item = i64; }
+impl Value for i64 { type Output = i64; fn answer() -> i64 { 42 } }
+fn nested<T: Source>() -> <<T as Source>::Item as Value>::Output
+where <T as Source>::Item: Value {
+    <<T as Source>::Item as Value>::answer()
+}
+pub fn probe() -> i64 { nested::<Number>() }

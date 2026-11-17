@@ -329,7 +329,8 @@ impl Builder<'_, '_> {
             .clone();
         let ty = self.compiler.named_type(
             &a::Path {
-                bindings: Vec::new(), declaration: Some(target.declaration),
+                qualification: None, bindings: Vec::new(),
+                declaration: Some(target.declaration),
                 name,
                 args: Vec::new(),
             },
@@ -360,6 +361,7 @@ impl Builder<'_, '_> {
                 ));
             }
             self.compiler.bounds(&alias.generics, &substitutions)?;
+            self.compiler.check_where_predicates(&alias.predicates, &substitutions)?;
             if self.compiler.resolve(alias.ty, &substitutions)? != ty {
                 return Err(err(
                     span,

@@ -1,0 +1,11 @@
+// expect: reject E_TYPE
+// witness: {}
+trait Left { type Item; }
+trait Right { type Item; }
+struct S {}
+impl Left for S { type Item = <S as Right>::Item; }
+impl Right for S { type Item = <S as Left>::Item; }
+pub fn probe() -> i64 {
+    let _: Option<<S as Left>::Item> = None;
+    42
+}
