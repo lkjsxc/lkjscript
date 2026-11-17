@@ -1,0 +1,121 @@
+{
+   "adoption" : {
+      "deleted_lines" : 1,
+      "inserted_lines" : 30,
+      "operations" : 1,
+      "scope" : "Only the retained tools/toolchain-test.lkj change; transient dispatch probes and preparation are uncredited."
+   },
+   "application" : "\"rewrite_diagnostics\" level=source-claim operation-target\n\"./tools/toolchain-test.lkj\" level=source-claim file before=5368c5a334f7829239ca9059bcb1efb526ac023dd1af64c2791136ea081af8a3 after=e15c35ea2194a5f21acf569cc796c403fea21ec4512492c8ae97d477de9aaa78\ntransaction sites=1 files=1 identities=1\n\"rewrite_diagnostics\" level=source-claim changed=body\nprogram level=checked-ir authority-delta=none\nprogram level=checked-ir before=0086a3fb88cd725d7a1595016335face7883925a4d3ce59d1d94e61f8e24694c after=044764de80383447025fc5c6d941b2ecec1dca7e8f3a6d8693e58680e2e4f4dc checked-instances=424 fresh-checked=424 proof-reused=0 frontend-resumed=0 library-validation=demanded\ntransaction source-before=35b3bbcaad83eb92e911ed1ac5a592c3f7c8a71826bd3e0315fa7a908ef364b7 source-after=ba5d0c4e4a25192fc58c2d5bc47bde54557b9aa18fa0c377f41181b1429d25a7 mode=apply\n",
+   "application_stderr" : "",
+   "apply_command" : "target/lkjscript edit tools/toolchain-test.lkj --source-dir . --library-dir library --request REQUEST --store-key PRIVATE_KEY",
+   "base_commit" : "65a4d3992c03c9e5c031769da7a1505bb9f778b1",
+   "candidate_item_sha256" : "47c18977fd5a263237499d05bbaa75f120c525ca190b96e37e55bfd6599ad365",
+   "compiler_sha256" : "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+   "counterexample" : {
+      "cause" : "The first integrated gate expected a repaired custom .count() call to run. Newly available IteratorExt::count makes that call genuinely ambiguous.",
+      "expected_repair" : "Preserve .count(); reject exactly two applicable implementations on both routes, with no follow-on diagnostic edit.",
+      "first_gate_failures" : [
+         "FAIL run split-custom-count.lkj probe native: {\"index\":0,\"engine\":\"native\",\"checkStatus\":1,\"status\":1,\"stdoutHex\":\"\",\"stderrHex\":\"\",\"stderr\":\"target/gate/toolchain-work/split-custom-count.lkj:5:28: E_TRAIT method count on str::Split<char> has 2 applicable implementations; help: use an implemented method or write an explicit loop\\u000atarget/gate/toolchain-work/split-custom-count.lkj:1:1: E_BLOCKED remaining semantic analysis: failed bodies are blocked; independent typed bodies were constructed and checked\"}",
+         "FAIL run split-custom-count.lkj probe interpreter: {\"index\":0,\"engine\":\"interpreter\",\"checkStatus\":1,\"status\":1,\"stdoutHex\":\"\",\"stderrHex\":\"\",\"stderr\":\"target/gate/toolchain-work/split-custom-count.lkj:5:28: E_TRAIT method count on str::Split<char> has 2 applicable implementations; help: use an implemented method or write an explicit loop\\u000atarget/gate/toolchain-work/split-custom-count.lkj:1:1: E_BLOCKED remaining semantic analysis: failed bodies are blocked; independent typed bodies were constructed and checked\"}"
+      ],
+      "log_reference" : "target/programs-fifth-first-gate.log",
+      "original_fixture" : "trait Count { fn count(self) -> usize; }\nimpl<'a> Count for std::str::Split<'a, char> {\n    fn count(self) -> usize { 99usize }\n}\npub fn probe() -> usize { \"a\\nb\".to_string().split('\\n').count() }\n",
+      "original_fixture_sha256" : "46e93deafd7c129591913d5c9ba0c71762d69160ad5f0f320b071b3724be0f37"
+   },
+   "file" : "tools/toolchain-test.lkj",
+   "file_after_sha256" : "e15c35ea2194a5f21acf569cc796c403fea21ec4512492c8ae97d477de9aaa78",
+   "file_before_sha256" : "5368c5a334f7829239ca9059bcb1efb526ac023dd1af64c2791136ea081af8a3",
+   "indexed_snapshot" : "LKJSCRIPT_SNAPSHOT f181dcbc65c692ff512e0a0d2f42a23e4249aaf2af8d93b2bd2aec2cdb760fa6 source=35b3bbcaad83eb92e911ed1ac5a592c3f7c8a71826bd3e0315fa7a908ef364b7 checked-ir=e5fbc85c8e4e0d9f4de2778f477aba63b6978a3a458b9f80c530c35054bc21fd\n",
+   "positive_fixture" : {
+      "dispatch" : "The explicit generic bound T: Count selects the custom implementation on the same str::Split type.",
+      "engines" : [
+         "native",
+         "interpreter"
+      ],
+      "expected_stdout" : "99\n",
+      "sha256" : "e2b97a5ed90f1479dd081ebb074d3d597ce0fa114654b693fcd07b82c47b52a2",
+      "source" : "trait Count { fn count(self) -> usize; }\nimpl<'a> Count for std::str::Split<'a, char> {\n    fn count(self) -> usize { 99usize }\n}\n// This explicit Count bound selects the user's implementation.\nfn custom_count<T: Count>(value: T) -> usize { value.count() }\npub fn probe() -> usize { custom_count(\"a\\nb\".to_string().split('\\n')) }\n"
+   },
+   "purpose" : "Preserve custom-count diagnostic protection after ordinary IteratorExt::count became available.",
+   "queried_item_sha256" : "bad861adab8ecbb73be7732d3752ebd8c0686093c30de4f2ac39c1d5690e66ac",
+   "query_command" : "target/lkjscript query tools/toolchain-test.lkj --source-dir . --library-dir library --store STORE --store-key PRIVATE_KEY --snapshot f181dcbc65c692ff512e0a0d2f42a23e4249aaf2af8d93b2bd2aec2cdb760fa6 --kind item --id rewrite_diagnostics --limit 40 --bytes 48000",
+   "query_metadata" : [
+      "\"rewrite_diagnostics\"\tlevel=protocol\tfact=query\tversion=3 producer=60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca validation=authenticated-producing-compiler current-check=not-performed snapshot=f181dcbc65c692ff512e0a0d2f42a23e4249aaf2af8d93b2bd2aec2cdb760fa6 source=35b3bbcaad83eb92e911ed1ac5a592c3f7c8a71826bd3e0315fa7a908ef364b7 checked-ir=e5fbc85c8e4e0d9f4de2778f477aba63b6978a3a458b9f80c530c35054bc21fd kind=item depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit",
+      "\"rewrite_diagnostics\"\tlevel=source-claim\tfact=identity\tsignature=5189686794b4b9f150f9c9a74c7b72e8e446623cd9c9c2e13088edd2c2623934 body=4afb3bc20ac20eda9779a7f7d0978bb8d5a2182314f4749c97a3a4c658f851e4 scope=semantic-path body-locals=token-body-epoch",
+      "\"rewrite_diagnostics\"\tlevel=source-claim\tfact=item\tkind=function parent=\"crate\" file=\"./tools/toolchain-test.lkj\" start=13574 end=21790 file-sha256=5368c5a334f7829239ca9059bcb1efb526ac023dd1af64c2791136ea081af8a3 item-sha256=bad861adab8ecbb73be7732d3752ebd8c0686093c30de4f2ac39c1d5690e66ac references-complete=false",
+      "\"rewrite_diagnostics\"\tlevel=protocol\tfact=continuation\tcursor=none facts=11 pages-read=7 traversal-steps=13"
+   ],
+   "query_text_sha256" : "bad861adab8ecbb73be7732d3752ebd8c0686093c30de4f2ac39c1d5690e66ac",
+   "rejected_dispatch_forms" : [
+      {
+         "source" : "trait Count { fn count(self) -> usize; }\nimpl<'a> Count for std::str::Split<'a, char> {\n    fn count(self) -> usize { 99usize }\n}\npub fn probe() -> usize { Count::count(\"a\\nb\".split('\\n')) }\n",
+         "source_sha256" : "d64ec283e981972f11a0b57e07122c0a12d16fade1fa4121de08c38800d599ba",
+         "status" : 1,
+         "stderr" : "./target/programs-count-integration.rkp4rM/explicit.lkj:5:27: E_TYPE unknown function Count::count\ntarget/programs-count-integration.rkp4rM/explicit.lkj:1:1: E_BLOCKED remaining semantic analysis: failed bodies are blocked; independent typed bodies were constructed and checked\n",
+         "stdout" : ""
+      },
+      {
+         "source" : "trait Count { fn count(self) -> usize; }\nimpl<'a> Count for std::str::Split<'a, char> {\n    fn count(self) -> usize { 99usize }\n}\npub fn probe() -> usize { <std::str::Split<'_, char> as Count>::count(\"a\\nb\".split('\\n')) }\n",
+         "source_sha256" : "564da251166f95a1522aa5832bd79b6f8f09f94afca33c03b3805fb34681c6a4",
+         "status" : 1,
+         "stderr" : "target/programs-count-integration.rkp4rM/qualified-dispatch.lkj:5:27: E_PARSE expected an expression\ntarget/programs-count-integration.rkp4rM/qualified-dispatch.lkj:5:27: E_BLOCKED statement: not analyzed after E_PARSE\ntarget/programs-count-integration.rkp4rM/qualified-dispatch.lkj:0:0: E_BLOCKED semantic phase: source errors prevent complete name resolution and semantic checking\n",
+         "stdout" : ""
+      }
+   ],
+   "request" : {
+      "operations" : [
+         {
+            "expect" : "bad861adab8ecbb73be7732d3752ebd8c0686093c30de4f2ac39c1d5690e66ac",
+            "id" : "rewrite_diagnostics",
+            "op" : "replace-body",
+            "source" : "{\n    diagnostic_edits::self_test();\n    let cases: Vec<(String, String, String, String)> = vec![\n        (\"split-edit.lkj\".to_string(), include_str!(\"../tests/diagnostics/string_split.lkj\").to_string(), \"probe\".to_string(), \"2\\n\".to_string()),\n        (\"empty-edit.lkj\".to_string(), include_str!(\"../tests/diagnostics/empty_slice_argument.lkj\").to_string(), \"probe\".to_string(), \"0\\n\".to_string()),\n        (\"const-edit.lkj\".to_string(), include_str!(\"../tests/diagnostics/local_const_declaration.lkj\").to_string(), \"probe\".to_string(), \"7\\n\".to_string()),\n        (\"iteration-edit.lkj\".to_string(), include_str!(\"../tests/diagnostics/owned_array_iteration.lkj\").to_string(), \"probe\".to_string(), \"3\\n\".to_string()),\n        (\"split-custom-count.lkj\".to_string(), r#\"trait Count { fn count(self) -> usize; }\nimpl<'a> Count for std::str::Split<'a, char> {\n    fn count(self) -> usize { 99usize }\n}\npub fn probe() -> usize { \"a\\nb\".to_string().split('\\n').count() }\n\"#.to_string(), \"probe\".to_string(), \"99\\n\".to_string()),\n        (\"split-custom-count-explicit.lkj\".to_string(), r#\"trait Count { fn count(self) -> usize; }\nimpl<'a> Count for std::str::Split<'a, char> {\n    fn count(self) -> usize { 99usize }\n}\n// This explicit Count bound selects the user's implementation.\nfn custom_count<T: Count>(value: T) -> usize { value.count() }\npub fn probe() -> usize { custom_count(\"a\\nb\".to_string().split('\\n')) }\n\"#.to_string(), \"probe\".to_string(), \"99\\n\".to_string()),\n        (\"split-once.lkj\".to_string(), r#\"fn text(calls: &mut i64) -> String { *calls += 1; \"a\\nb\".to_string() }\npub fn probe() -> i64 {\n    let mut calls = 0i64;\n    let count = text(&mut calls).split('\\n').count();\n    calls * 100i64 + count as i64\n}\"#.to_string(), \"probe\".to_string(), \"102\\n\".to_string()),\n        (\"iteration-once.lkj\".to_string(), r#\"fn item(calls: &mut u64, value: u64) -> u64 { *calls = *calls * 10u64 + value; value }\npub fn probe() -> u64 {\n    let mut calls = 0u64;\n    let mut sum = 0u64;\n    for value in [item(&mut calls, 1u64), item(&mut calls, 2u64)] { sum += value; }\n    calls * 100u64 + sum\n}\"#.to_string(), \"probe\".to_string(), \"1203\\n\".to_string()),\n        (\"const-π.lkj\".to_string(), r#\"// π: edits count bytes and preserve the public function and its attributes.\n#[allow(dead_code)]\npub fn probe() -> i64 { const VALUE: i64 = 7; VALUE }\n\"#.to_string(), \"probe\".to_string(), \"7\\n\".to_string()),\n        (\"array-edit.lkj\".to_string(), include_str!(\"../tests/diagnostics/array_to_vec.lkj\").to_string(), \"probe\".to_string(), \"4\\n\".to_string()),\n        (\"string-edit.lkj\".to_string(), include_str!(\"../tests/diagnostics/string_parse.lkj\").to_string(), \"probe\".to_string(), \"123\\n\".to_string()),\n        (\"map-edit.lkj\".to_string(), include_str!(\"../tests/diagnostics/map_err_closure_context.lkj\").to_string(), \"probe\".to_string(), \"true\\n\".to_string()),\n        (\"quote\\\"-π.lkj\".to_string(), r#\"// π 😀: offsets count UTF-8 bytes.\nfn bytes(calls: &mut i64) -> [u8; 4] { *calls += 1; [1u8, 2u8, 3u8, 4u8] }\npub fn probe() -> i64 {\n    let mut calls = 0i64;\n    let values = bytes(&mut calls).to_vec();\n    calls * 100i64 + values.len() as i64\n}\"#.to_string(), \"probe\".to_string(), \"104\\n\".to_string()),\n        (\"string-once.lkj\".to_string(), r#\"fn text(calls: &mut i64) -> String { *calls += 1; \"123\".to_string() }\npub fn probe() -> i64 {\n    let mut calls = 0i64;\n    let value = text(&mut calls).parse::<u16>().unwrap();\n    calls * 1000i64 + value as i64\n}\"#.to_string(), \"probe\".to_string(), \"1123\\n\".to_string()),\n        (\"map-once.lkj\".to_string(), r#\"fn scenario(world: &mut World, bad: bool) {\n    let __lkjscript_result_0 = 2i64;\n    let __lkjscript_value_0 = 5i64;\n    let result: Result<i64, i64> = if bad { Err(7i64) } else { Ok(42i64) };\n    let good = { world.stdout().write(b\"R\"); result }\n        .map_err(|_| \"invalid\".to_string()).is_ok();\n    assert!(__lkjscript_result_0 + __lkjscript_value_0 == 7i64);\n    if good { world.stdout().write(b\"O\"); } else { world.stdout().write(b\"E\"); }\n}\npub fn main(mut world: World) { scenario(&mut world, false); scenario(&mut world, true); world.stdout().write(b\"\\n\"); }\n\"#.to_string(), \"main\".to_string(), \"RORE\\n\".to_string()),\n    ];\n    for (name, source, entry, expected) in cases {\n        write(directory, &name, source.as_bytes())?;\n        let checked = invoke(world, executable, &command(config, \"check\", &name), b\"\")?;\n        if checked.status != 1 {\n            return Err(format!(\"diagnostic edit fixture {name} did not reject before its rewrite\"));\n        }\n        let required = match name.as_str() {\n            \"split-edit.lkj\" => \"String.split requires a str receiver\",\n            \"empty-edit.lkj\" => \"empty array literal [] needs an element type\",\n            \"const-edit.lkj\" => \"local const declarations are unsupported\",\n            \"iteration-edit.lkj\" => \"owned-array iteration requires an IntoIterator implementation\",\n            _ => \"\",\n        };\n        report.require(\n            contains(&checked.errors, b\"docs/language.md\") && contains(&checked.errors, required.as_bytes()),\n            format!(\"diagnostic edit fixture {name} omitted its construct, rule or language reference\"),\n        );\n        let rewritten = diagnostic_edits::apply(&source, &checked.errors, &path(config, &name))?;\n        write(directory, &name, rewritten.as_bytes())?;\n        if name == \"split-custom-count.lkj\" {\n            // Repair the String receiver without choosing between two count traits.\n            report.require(\n                contains(rewritten.as_bytes(), b\".count()\"),\n                \"String split repair replaced the user's count call\".to_string(),\n            );\n            for engine in pair(\"native\", \"interpreter\") {\n                let mut arguments = command(config, \"run\", &name);\n                option(&mut arguments, \"--entry\", &entry);\n                option(&mut arguments, \"--engine\", &engine);\n                let ambiguous = invoke(world, executable, &arguments, b\"\")?;\n                report.require(\n                    ambiguous.status == 1\n                        && ambiguous.output.is_empty() && ambiguous.result.is_empty()\n                        && contains(&ambiguous.errors, b\"E_TRAIT method count on str::Split<char> has 2 applicable implementations\")\n                        && !contains(&ambiguous.errors, b\"LKJSCRIPT_EDITS \"),\n                    format!(\"custom count ambiguity {engine}: {}\", display_bytes(&ambiguous.errors)),\n                );\n            }\n        } else {\n            run_value(world, executable, config, report, &name, &entry, &expected)?;\n        }\n    }\n    let unchanged: Vec<(String, String)> = vec![\n        (\"nested-const.lkj\".to_string(), r#\"mod nested {\n    pub fn value() -> i64 { const VALUE: i64 = 7; VALUE }\n}\npub fn probe() -> i64 { nested::value() }\n\"#.to_string()),\n        (\"captured-const.lkj\".to_string(), r#\"pub fn probe(input: i64) -> i64 { const VALUE: i64 = input; VALUE }\n\"#.to_string()),\n        (\"shadowed-const.lkj\".to_string(), r#\"pub fn probe(VALUE: i64) -> i64 { const VALUE: i64 = 7; VALUE }\n\"#.to_string()),\n        (\"array-place.lkj\".to_string(), r#\"pub fn probe() -> u64 {\n    let values = [1u64, 2u64];\n    let mut sum = 0u64;\n    for value in values { sum += value; }\n    sum\n}\"#.to_string()),\n        (\"shadowed-string.lkj\".to_string(), r#\"struct String { value: u64 }\npub fn probe() -> usize { String { value: 1u64 }.split('\\n').count() }\n\"#.to_string()),\n        (\"borrowed-map.lkj\".to_string(), r#\"pub fn probe() -> bool {\n    let value = String::from_utf8(Vec::new());\n    (&value).map_err(|_| \"invalid\".to_string()).is_ok()\n}\"#.to_string()),\n        (\"map-captures.lkj\".to_string(), r#\"struct Marker { output: Stdout }\nimpl Drop for Marker { fn drop(&mut self) { self.output.write(b\"D\"); } }\nfn consumed(mut marker: Marker) { marker.output.write(b\"C\"); }\npub fn main(mut world: World) {\n    let marker = Marker { output: world.stdout() };\n    let _good = String::from_utf8(vec![255u8]).map_err(move |_| {\n        consumed(marker);\n        \"invalid\".to_string()\n    }).is_ok();\n}\"#.to_string()),\n        (\"map-return.lkj\".to_string(), r#\"pub fn probe() -> bool {\n    String::from_utf8(vec![255u8]).map_err(|_| {\n        if true { return \"early\".to_string(); }\n        \"invalid\".to_string()\n    }).is_ok()\n}\"#.to_string()),\n        (\"map-question.lkj\".to_string(), r#\"pub fn probe() -> bool {\n    String::from_utf8(vec![255u8]).map_err(|_| {\n        let input: Result<i64, i64> = Err(7i64);\n        let _value = input?;\n        Ok::<_, i64>(\"invalid\".to_string())\n    }).is_ok()\n}\"#.to_string()),\n    ];\n    for (name, source) in unchanged {\n        write(directory, &name, source.as_bytes())?;\n        let rejected = invoke(world, executable, &command(config, \"check\", &name), b\"\")?;\n        report.require(\n            rejected.status == 1 && !contains(&rejected.errors, b\"LKJSCRIPT_EDITS \"),\n            format!(\"unsafe or context-dependent diagnostic rewrite for {name}: {}\", display_bytes(&rejected.errors)),\n        );\n    }\n    // A user implementation reaches ordinary resolution before any rewrite is\n    // considered. Do not diagnose the literal array merely from its syntax.\n    let implemented = r#\"impl IntoIterator for [u64; 2] {\n    type IntoIter = std::iter::IntoIter<u64>;\n    fn into_iter(self) -> std::iter::IntoIter<u64> { vec![self[0], self[1]].into_iter() }\n}\npub fn probe() -> u64 {\n    let mut sum = 0u64;\n    for value in [1u64, 2u64] { sum += value; }\n    sum\n}\n\"#;\n    write(directory, \"array-implemented.lkj\", implemented.as_bytes())?;\n    run_value(world, executable, config, report, \"array-implemented.lkj\", \"probe\", \"3\\n\")?;\n    Ok(())\n}"
+         }
+      ],
+      "snapshot" : "35b3bbcaad83eb92e911ed1ac5a592c3f7c8a71826bd3e0315fa7a908ef364b7",
+      "version" : 1
+   },
+   "request_id" : "programs-count-integration-edit-20261117-014",
+   "setup_refusals" : [
+      {
+         "resolution" : "Create the requested authenticated store directory before indexing.",
+         "status" : 1,
+         "stderr" : "E_QUERY_STORE index needs an available authenticated store; create --store DIRECTORY first\n"
+      },
+      {
+         "resolution" : "Encode decoded query text to UTF-8 before SHA-256; no edit operation ran in that preparation attempt.",
+         "status" : 255,
+         "stderr" : "Wide character in subroutine entry at target/programs-count-integration.rkp4rM/prepare.pl line 14.\n"
+      }
+   ],
+   "uncredited_comment" : {
+      "after" : "// diagnostic edits: Borrow String as str once; retain the iterator's count call.",
+      "after_sha256" : "85661de91c71319cd0b957a321f9ac438c7504dbcb271f74b5e0ba959027ffb8",
+      "before" : "// diagnostic edits: Borrow String as str once; replace the unavailable count with the source fold operation.",
+      "before_sha256" : "be045ae8de83cffd40c5f9960902295b3eed25c71322ac5dc8b491fd54ac2d58",
+      "deleted_lines" : 1,
+      "inserted_lines" : 1,
+      "path" : "tests/diagnostics/string_split.lkj",
+      "reason" : "Plain comment outside the semantic item span; direct documentary correction earns no operation credit."
+   },
+   "verification" : {
+      "build_command" : "target/lkjscript build tools/toolchain-test.lkj --source-dir . --library-dir library --no-store -o TEMP/toolchain-after",
+      "build_status" : 0,
+      "build_stdout" : "build_stderr",
+      "case_requests_rerun" : 96,
+      "case_requests_reused" : 0,
+      "command" : "LKJSCRIPT_GATE_JOBS=1 timeout --kill-after=10s 600s TEMP/toolchain-after target/lkjscript TEMP/work --library-dir library",
+      "completion_request_id" : "programs-count-integration-focused-poll-20261117-019",
+      "coverage" : "Complete toolchain suite, including precise custom-count ambiguity rejection on native/interpreter and explicit Count-bound dispatch returning 99 after receiver repair on both routes.",
+      "elapsed_seconds" : 66.322987,
+      "exit_status" : 0,
+      "raw_log_retained" : false,
+      "request_id" : "programs-count-integration-focused-20261117-016",
+      "result" : "ok toolchain\n",
+      "stats_records" : 26,
+      "status" : "pass",
+      "stderr" : "",
+      "stdout_bytes" : 19301,
+      "stdout_sha256" : "26aac8847da9d959f88a0ee37a4a7adcb8ba5774c99ce3ba44a0a6d6f78ae2ca"
+   },
+   "version" : 1
+}

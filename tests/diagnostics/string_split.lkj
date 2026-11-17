@@ -1,3 +1,3 @@
 // expect: reject E_UNSUPPORTED
-// diagnostic edits: Borrow String as str once; replace the unavailable count with the source fold operation.
+// diagnostic edits: Borrow String as str once; retain the iterator's count call.
 pub fn probe() -> usize { "a\nb".to_string().split('\n').count() }

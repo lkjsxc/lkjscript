@@ -419,6 +419,14 @@ impl<'a> Count for std::str::Split<'a, char> {
 }
 pub fn probe() -> usize { "a\nb".to_string().split('\n').count() }
 "#.to_string(), "probe".to_string(), "99\n".to_string()),
+        ("split-custom-count-explicit.lkj".to_string(), r#"trait Count { fn count(self) -> usize; }
+impl<'a> Count for std::str::Split<'a, char> {
+    fn count(self) -> usize { 99usize }
+}
+// This explicit Count bound selects the user's implementation.
+fn custom_count<T: Count>(value: T) -> usize { value.count() }
+pub fn probe() -> usize { custom_count("a\nb".to_string().split('\n')) }
+"#.to_string(), "probe".to_string(), "99\n".to_string()),
         ("split-once.lkj".to_string(), r#"fn text(calls: &mut i64) -> String { *calls += 1; "a\nb".to_string() }
 pub fn probe() -> i64 {
     let mut calls = 0i64;
@@ -483,7 +491,28 @@ pub fn main(mut world: World) { scenario(&mut world, false); scenario(&mut world
         );
         let rewritten = diagnostic_edits::apply(&source, &checked.errors, &path(config, &name))?;
         write(directory, &name, rewritten.as_bytes())?;
-        run_value(world, executable, config, report, &name, &entry, &expected)?;
+        if name == "split-custom-count.lkj" {
+            // Repair the String receiver without choosing between two count traits.
+            report.require(
+                contains(rewritten.as_bytes(), b".count()"),
+                "String split repair replaced the user's count call".to_string(),
+            );
+            for engine in pair("native", "interpreter") {
+                let mut arguments = command(config, "run", &name);
+                option(&mut arguments, "--entry", &entry);
+                option(&mut arguments, "--engine", &engine);
+                let ambiguous = invoke(world, executable, &arguments, b"")?;
+                report.require(
+                    ambiguous.status == 1
+                        && ambiguous.output.is_empty() && ambiguous.result.is_empty()
+                        && contains(&ambiguous.errors, b"E_TRAIT method count on str::Split<char> has 2 applicable implementations")
+                        && !contains(&ambiguous.errors, b"LKJSCRIPT_EDITS "),
+                    format!("custom count ambiguity {engine}: {}", display_bytes(&ambiguous.errors)),
+                );
+            }
+        } else {
+            run_value(world, executable, config, report, &name, &entry, &expected)?;
+        }
     }
     let unchanged: Vec<(String, String)> = vec![
         ("nested-const.lkj".to_string(), r#"mod nested {
