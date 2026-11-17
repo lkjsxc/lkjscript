@@ -135,8 +135,10 @@ silently scoring them as success or failure.
 
 ## Run the repository gate on the first submitted candidate
 
-The agent's first gate submission is saved before its checker runs. Use that
-snapshot, not the agent's corrected final files, for the separate full-gate metric:
+The agent's first explicit gate attempt saves its current source before allowance
+checking. An attempt beyond the allowance still refuses and runs no checker, but
+its proposed source is retained for later external validation. Use that snapshot,
+not the agent's corrected final files, for the separate full-gate metric:
 
 ~~~sh
 perl bench/compiler-stranger.pl full-gate \
@@ -154,10 +156,13 @@ must run while the campaign and other builds are paused.
 The gate evidence records both revisions, the candidate snapshot and resulting
 compiler hashes, exit status, duration and raw output. A failed historical
 baseline or a test-harness failure needs separate attribution; neither is silently
-counted as an agent regression. No submitted candidate means not-run. The first
-two text-arm snapshots predated direct capture and are recoverable by replaying
-the exact recorded successful text writes up to their first gate; the recovery
-record identifies those tool calls.
+counted as an agent regression. No attempted gate means not-run. Early text-arm
+snapshots are recoverable by replaying the exact recorded successful writes up to
+their first gate attempt; the recovery record identifies those calls and whether
+the experiment actually ran its checker. Case 8 files reached the gate after its
+24-call allowance: its refusal remains recorded, and its source was recovered
+from successful writes 23 and 24 before gate attempt 26. A later external full-gate
+result does not turn this into an in-allowance workflow success.
 
 ## Adapter regressions
 

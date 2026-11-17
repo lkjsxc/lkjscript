@@ -129,7 +129,6 @@ sub candidate_changes {
 }
 sub gate {
     my ($run,$state)=@_;
-    save_json(sprintf("$run/gate-%02d-files.json",scalar(@{$state->{gates}})+1),candidate_changes($run,$state));
     my $check=compiler_run($run,$state,'check');
     my $result={checker_pass=>$check->{exit}==0?JSON::PP::true:JSON::PP::false,
         checker=>$check,canonical_target_pass=>undef,full_repository_gate=>"not-run",
@@ -259,7 +258,16 @@ sub serve {
         elsif ($method eq 'tools/call') {
             $state->{calls}++;
             my $t0=time;my $tool=$request->{params}{name};my $args=$request->{params}{arguments}//{};
-            my $result=eval {perform($run,$state,$tool,$args)};
+            my $candidate_path;
+            my $result=eval {
+                if ($tool eq 'gate') {
+                    $state->{gate_attempts}=($state->{gate_attempts}//scalar(@{$state->{gates}}))+1;
+                    $candidate_path=sprintf("$run/gate-%02d-files.json",$state->{gate_attempts});
+                    die "candidate snapshot already exists" if -e $candidate_path;
+                    save_json($candidate_path,candidate_changes($run,$state));
+                }
+                perform($run,$state,$tool,$args);
+            };
             my $error=$@;
             $result={error=>$error} if $error;
             my $payload=$text_json->encode($result);
@@ -270,6 +278,8 @@ sub serve {
             $state->{response_bytes}+=$response_bytes;
             my $record={number=>$state->{calls},tool=>$tool,arguments=>$args,result=>$result,seconds=>time-$t0,
                 payload_bytes=>$payload_bytes,response_bytes=>$response_bytes,adapter_sha256=>$adapter_sha256};
+            $record->{candidate_snapshot_sha256}=sha256_hex(read_bytes($candidate_path))
+                if defined($candidate_path) && -f $candidate_path;
             save_json(sprintf("$run/logs/tool-%03d.json",$state->{calls}),$record);
             save_json("$run/state.json",$state);
         } else {
@@ -400,12 +410,11 @@ sub recover_first_candidate {
     my ($repository,$run,$state)=@_;
     my $path="$run/gate-01-files.json";
     return load_json($path) if -f $path;
-    die "no first candidate was submitted" unless @{$state->{gates}};
     die "missing command-arm snapshot requires inspection" unless $state->{mode} eq 'files';
-    my %files;my @used;my $saw_gate=0;
+    my %files;my @used;my $saw_gate=0;my $gate_number;
     for my $log (sort glob("$run/logs/tool-*.json")) {
         my $record=load_json($log);
-        if ($record->{tool} eq 'gate') {$saw_gate=1;last;}
+        if ($record->{tool} eq 'gate') {$saw_gate=1;$gate_number=$record->{number};last;}
         next unless $record->{tool} eq 'replace' || $record->{tool} eq 'write';
         next if exists $record->{result}{error};
         my $a=$record->{arguments};my $name=$a->{path};
@@ -425,7 +434,9 @@ sub recover_first_candidate {
     die "first gate record is missing" unless $saw_gate;
     save_json($path,\%files);
     save_json("$run/gate-01-recovery.json",{method=>'deterministic replay of recorded successful text edits up to first gate',
-        parent=>$state->{parent},tool_records=>\@used,snapshot_sha256=>sha256_hex(read_bytes($path))});
+        parent=>$state->{parent},tool_records=>\@used,first_gate_tool_record=>$gate_number,
+        explicit_checker_executed=>@{$state->{gates}}?JSON::PP::true:JSON::PP::false,
+        snapshot_sha256=>sha256_hex(read_bytes($path))});
     return \%files;
 }
 sub full_gate {

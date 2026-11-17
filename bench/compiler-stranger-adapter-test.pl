@@ -34,21 +34,25 @@ sub run {
 sub require_true {die "$_[1]\n" unless $_[0];}
 my $run="$fixture/utf8";
 make_path("$run/source/src","$run/logs");
-put("$run/state.json",{mode=>'files',calls=>0,max_calls=>4,payload_bytes=>0,response_bytes=>0,gates=>[]});
+put("$run/state.json",{mode=>'files',calls=>0,max_calls=>2,payload_bytes=>0,response_bytes=>0,gates=>[],baseline=>{}});
 my $sample=pack('U*',0x3c0,0x1f642)."\n";
 write_bytes("$run/source/src/main.lkj",encode('UTF-8',$sample));
 my @requests=(
     {jsonrpc=>'2.0',id=>1,method=>'tools/call',params=>{name=>'read',arguments=>{path=>'src/main.lkj'}}},
     {jsonrpc=>'2.0',id=>2,method=>'tools/call',params=>{name=>'write',arguments=>{path=>'src/main.lkj',text=>$sample}}},
+    {jsonrpc=>'2.0',id=>3,method=>'tools/call',params=>{name=>'gate',arguments=>{}}},
 );
 my $wire=run(join('',map {$json->encode($_)."\n"} @requests),$^X,$harness,'serve',$run);
 my @replies=map {$json->decode($_)} grep {length} split /\n/,$wire;
-require_true(@replies==2,'response count');
+require_true(@replies==3,'response count');
 my $read=$text_json->decode($replies[0]{result}{content}[0]{text});
 my $write=$text_json->decode($replies[1]{result}{content}[0]{text});
 require_true($read->{text} eq $sample,'non-ASCII source changed in MCP transit');
 require_true($write->{written_bytes}==length(encode('UTF-8',$sample)),'written byte count');
-for my $i (0..1) {
+require_true($replies[2]{result}{isError},'exhausted gate must remain refused');
+require_true($text_json->decode($replies[2]{result}{content}[0]{text})->{error}=~/allowance exhausted/,'gate refusal reason');
+require_true(get("$run/gate-01-files.json")->{'src/main.lkj'} eq $sample,'first attempted gate candidate lost after budget refusal');
+for my $i (0..2) {
     my $record=get(sprintf("$run/logs/tool-%03d.json",$i+1));
     require_true($record->{payload_bytes}==length(encode('UTF-8',$replies[$i]{result}{content}[0]{text})),'payload byte count');
     require_true($record->{response_bytes}==length($json->encode($replies[$i]{result})),'MCP result byte count');
@@ -116,4 +120,4 @@ require_true(!$?,'synthetic coordinator failed');
 require_true(get("$pause_arm/state.json")->{finished}==$observed,'resume changed observed finish time');
 require_true(bytes("$pause_cohort/resumed")>$observed,'finish was timestamped at resume');
 close $coordinator_out;close $coordinator_err;
-print "ok stranger adapter: UTF-8 bytes, request/help attribution, drained wall clock and timeout report\n";
+print "ok stranger adapter: UTF-8 bytes, request/help attribution, budget-refused candidate, drained wall clock and timeout report\n";
