@@ -1,0 +1,274 @@
+//! Source-specialization, authenticated reuse and native consumption controls.
+use crate::{check, ir, ir_text, native, reuse, runtime, programs_unit_policy as policy};
+use crate::check::units::{CheckedUnit, Import, Interface};
+
+fn read(world: &mut World, path: &str) -> Vec<u8> {
+    let mut root = world.directory(".").unwrap();
+    let mut file = root.open(path).unwrap();
+    file.read_to_end().unwrap()
+}
+fn fixture(world: &mut World, root: &str, name: &str) -> CheckedUnit {
+    let text = String::from_utf8(read(world, &format!("{root}/{name}.lkjir"))).unwrap();
+    let bytes = text.as_bytes();
+    let input = crate::sha256::hex_digest(bytes);
+    let program = ir_text::read(&text).unwrap();
+    let mut exports = Vec::new();
+    for (index, function) in program.functions.iter().enumerate() {
+        if function.name == "entry" { exports.push(index); }
+    }
+    assert_eq!(exports.len(), 1usize);
+    let imports: Vec<Import> = Vec::new();
+    check::units::check_unit_with_exports(name, &input, program, &imports, &exports, &[0usize; 0]).unwrap()
+}
+fn effect(interface: &Interface, operation: &str) -> bool {
+    for index in 0usize..interface.program().functions.len() {
+        for found in interface.effects(index) { if found.as_str() == operation { return true; } }
+    }
+    false
+}
+fn producer(text: &str) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    assert_eq!(text.len(), 64usize);
+    for pair in 0usize..32usize {
+        let mut value = 0u8;
+        for offset in 0usize..2usize {
+            let byte = text.as_bytes()[pair * 2usize + offset];
+            let digit = if byte >= b'0' && byte <= b'9' { byte - b'0' }
+                else { assert!(byte >= b'a' && byte <= b'f'); byte - b'a' + 10u8 };
+            value = value * 16u8 + digit;
+        }
+        bytes.push(value);
+    }
+    bytes
+}
+fn runtime(world: &mut World, root: &str) -> runtime::Runtime {
+    let text = String::from_utf8(read(world, &format!("{root}/runtime.lkjir"))).unwrap();
+    runtime::seal(check::check(ir_text::read(&text).unwrap()).unwrap()).unwrap()
+}
+fn execute(world: &mut World, mut file: File) -> i64 {
+    file.set_executable().unwrap();
+    let input = world.temporary_file().unwrap();
+    let output = world.temporary_file().unwrap();
+    let errors = world.temporary_file().unwrap();
+    let mut result = world.temporary_file().unwrap();
+    let arguments: Vec<Vec<u8>> = Vec::new();
+    let mut process = world.process();
+    let mut child = process.spawn_file(&file, &arguments, &input, &output, &errors, &result).unwrap();
+    assert_eq!(child.wait().unwrap(), 0i64);
+    result.rewind().unwrap();
+    let bytes = result.read_to_end().unwrap();
+    assert_eq!(bytes.len(), 8usize);
+    let mut value = 0u64;
+    for index in 0usize..8usize { value |= (bytes[index] as u64) << (index * 8usize); }
+    value as i64
+}
+fn linked(world: &mut World, runtime: &runtime::Runtime, interface: &Interface,
+    object: native::units::Object, sources: &[String], messages: &[String]) -> i64 {
+    let mut linker = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();
+    linker.push(object).unwrap();
+    let grants: Vec<ir::EntryGrant> = Vec::new();
+    let context = native::units::Context::new(runtime);
+    let (file, _) = linker.finish(&context, interface, "entry", &grants, sources, messages, Some(3u32)).unwrap();
+    execute(world, file)
+}
+fn positive_and_reuse(world: &mut World, root: &str, producer: &[u8], runtime: &runtime::Runtime) -> usize {
+    let selected = policy::computation_v1();
+    let secret = [19u8; 32];
+    let unit = fixture(world, root, "compute");
+    let interface = unit.interface().clone();
+    assert!(effect(&interface, "vec_new"));
+    assert!(effect(&interface, "str_len"));
+    let sources = unit.program().sources.clone();
+    let messages = native::messages(unit.program());
+    let expected = policy::Binding::new(producer, &interface).unwrap();
+    let envelope = interface.seal(producer, &secret);
+    let admitted = policy::checked(unit, producer, &selected).unwrap();
+    assert_eq!(admitted.policy_identity(), selected.identity());
+    assert!(*admitted.binding() == expected);
+    let object = admitted.emit(&expected, &selected, runtime, 0usize).unwrap();
+    let bytes = object.encode();
+    let object_envelope = reuse::seal(producer, &secret, native::units::namespace(), object.key(), &bytes);
+    assert_eq!(linked(world, runtime, &interface, object, &sources, &messages), 9i64);
+    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();
+    let object = restored.open(&expected, &selected, runtime, 0usize, &sources, &secret, &object_envelope).unwrap();
+    assert_eq!(object.encode(), bytes);
+    assert_eq!(linked(world, runtime, &interface, object, &sources, &messages), 9i64);
+    let narrower = selected.without("vec_new").unwrap();
+    assert!(selected.identity() != narrower.identity());
+    assert!(Interface::authenticate(producer, &secret, interface.name(), interface.input_identity(),
+        interface.dependencies(), &envelope).is_some());
+    assert_eq!(policy::authenticated(&expected, &secret, &envelope, &narrower).err().unwrap().code, "E_COMPUTATION_EFFECT");
+    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();
+    assert_eq!(restored.open(&expected, &narrower, runtime, 0usize, &sources, &secret, &object_envelope)
+        .err().unwrap().code, "E_COMPUTATION_EFFECT");
+    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();
+    assert_eq!(restored.emit(&expected, &selected, runtime, 0usize).err().unwrap().code, "E_COMPUTATION_BODY");
+    let mut changed = bytes.clone(); changed.push(0u8);
+    let context = native::units::Context::new(runtime);
+    let bad_object = reuse::seal(producer, &secret, native::units::namespace(),
+        &native::units::object_key(&interface, &context, 0usize, &sources), &changed);
+    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();
+    assert_eq!(restored.open(&expected, &selected, runtime, 0usize, &sources, &secret, &bad_object)
+        .err().unwrap().code, "E_COMPUTATION_OBJECT");
+    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();
+    assert_eq!(restored.open(&expected, &selected, runtime, 1usize, &sources, &secret, &object_envelope)
+        .err().unwrap().code, "E_COMPUTATION_OBJECT");
+    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();
+    assert_eq!(restored.open(&expected, &selected, runtime, 0usize, &sources, &[20u8; 32], &object_envelope)
+        .err().unwrap().code, "E_COMPUTATION_OBJECT");
+    8usize
+}
+fn negatives(world: &mut World, root: &str, producer: &[u8]) -> usize {
+    let selected = policy::computation_v1();
+    let mut count = 0usize;
+    let cases = vec![("file".to_string(), "read_directory_open".to_string()),
+        ("socket".to_string(), "connector_connect".to_string()),
+        ("callback".to_string(), "stdout_write".to_string()),
+        ("custom_drop".to_string(), "stdout_write".to_string()),
+        ("structural_drop".to_string(), "file_close".to_string())];
+    for (name, operation) in cases {
+        let unit = fixture(world, root, name.as_str());
+        assert!(effect(unit.interface(), operation.as_str()));
+        assert_eq!(policy::checked(unit, producer, &selected).err().unwrap().code, "E_COMPUTATION_EFFECT");
+        count += 1usize;
+    }
+    count
+}
+fn callback_positive(world: &mut World, root: &str, producer: &[u8], runtime: &runtime::Runtime) -> usize {
+    let unit = fixture(world, root, "callback_pure");
+    let interface = unit.interface().clone();
+    let sources = unit.program().sources.clone();
+    let messages = native::messages(unit.program());
+    let selected = policy::computation_v1();
+    let expected = policy::Binding::new(producer, &interface).unwrap();
+    let object = policy::checked(unit, producer, &selected).unwrap().emit(&expected, &selected, runtime, 0usize).unwrap();
+    assert_eq!(linked(world, runtime, &interface, object, &sources, &messages), 42i64);
+    1usize
+}
+fn binding_and_policy_changes(world: &mut World, root: &str, producer: &[u8], runtime: &runtime::Runtime) -> usize {
+    let selected = policy::computation_v1();
+    let narrower = selected.without("vec_new").unwrap();
+    let unit = fixture(world, root, "literal");
+    let interface = unit.interface().clone();
+    let expected = policy::Binding::new(producer, &interface).unwrap();
+    let wrong = policy::Binding::new(&[3u8; 32], &interface).unwrap();
+    let admission = policy::checked(unit, producer, &selected).unwrap();
+    assert_eq!(admission.emit(&wrong, &selected, runtime, 0usize).err().unwrap().code, "E_COMPUTATION_BINDING");
+    let admission = policy::checked(fixture(world, root, "literal"), producer, &selected).unwrap();
+    assert_eq!(admission.emit(&expected, &narrower, runtime, 0usize).err().unwrap().code, "E_COMPUTATION_POLICY");
+    let admission = policy::checked(fixture(world, root, "literal"), producer, &narrower).unwrap();
+    assert!(admission.emit(&expected, &narrower, runtime, 0usize).is_ok());
+    let other = fixture(world, root, "literal_changed");
+    let other_binding = policy::Binding::new(producer, other.interface()).unwrap();
+    let admission = policy::checked(fixture(world, root, "literal"), producer, &selected).unwrap();
+    assert_eq!(admission.emit(&other_binding, &selected, runtime, 0usize).err().unwrap().code, "E_COMPUTATION_BINDING");
+    let secret = [11u8; 32];
+    let envelope = interface.seal(producer, &secret);
+    assert_eq!(policy::authenticated(&wrong, &secret, &envelope, &selected).err().unwrap().code, "E_COMPUTATION_AUTH");
+    assert_eq!(policy::authenticated(&expected, &[12u8; 32], &envelope, &selected).err().unwrap().code, "E_COMPUTATION_AUTH");
+    assert_eq!(policy::authenticated(&other_binding, &secret, &envelope, &selected).err().unwrap().code, "E_COMPUTATION_AUTH");
+    assert!(policy::Binding::new(&[0u8; 31], &interface).is_err());
+    assert!(selected.without("future_unknown_operation").is_err());
+    9usize
+}
+fn unknown_operation(world: &mut World, root: &str, producer: &[u8]) -> usize {
+    let unit = fixture(world, root, "compute");
+    let interface = unit.interface();
+    let mut bytes = interface.encode();
+    let pattern = b"str_len";
+    let replacement = b"str_lex";
+    let mut replaced = 0usize;
+    for index in 0usize..bytes.len() - pattern.len() + 1usize {
+        let mut equal = true;
+        for offset in 0usize..pattern.len() { if bytes[index + offset] != pattern[offset] { equal = false; } }
+        if equal {
+            for offset in 0usize..pattern.len() { bytes[index + offset] = replacement[offset]; }
+            replaced += 1usize;
+        }
+    }
+    assert!(replaced > 0usize);
+    let secret = [7u8; 32];
+    let key = Interface::store_key(interface.name(), interface.input_identity(), interface.dependencies());
+    // A deliberately signed future summary exercises the policy's unknown-name
+    // default. This is not a claim that the current IR vocabulary can emit it.
+    let envelope = reuse::seal(producer, &secret, check::units::STORE_NAMESPACE, &key, &bytes);
+    let future = Interface::authenticate(producer, &secret, interface.name(), interface.input_identity(),
+        interface.dependencies(), &envelope).unwrap();
+    assert!(effect(&future, "str_lex"));
+    let expected = policy::Binding::new(producer, &future).unwrap();
+    assert_eq!(policy::authenticated(&expected, &secret, &envelope, &policy::computation_v1())
+        .err().unwrap().code, "E_COMPUTATION_EFFECT");
+    1usize
+}
+fn import_all(interface: &Interface) -> Import {
+    let mut types = Vec::new();
+    let mut functions = Vec::new();
+    for index in 0usize..interface.program().types.len() { types.push((index, index)); }
+    for index in 0usize..interface.program().functions.len() { functions.push((index, index)); }
+    Import { interface: interface.clone(), types, functions }
+}
+fn bridge(interface: &Interface) -> CheckedUnit {
+    let mut program = interface.program().clone();
+    let called = program.functions.iter().position(|function: &ir::Function| -> bool { function.name == "entry" }).unwrap();
+    let mut function = program.functions[called].clone();
+    function.name = "bridge::entry".to_string();
+    let mut arguments = Vec::new();
+    for index in 0usize..function.params { arguments.push(index); }
+    let result = function.locals.len();
+    function.locals.push(ir::Local { name: "result".to_string(), ty: function.result, mutable: false });
+    function.body.push(ir::Instruction { file: None, line: 1usize, column: 1usize,
+        op: ir::Op::Call { dst: result, function: called, args: arguments } });
+    function.body.push(ir::Instruction { file: None, line: 1usize, column: 1usize,
+        op: ir::Op::Return { src: result } });
+    let export = program.functions.len();
+    program.functions.push(function);
+    check::units::check_unit_with_exports("bridge", "bridge-input", program, &[import_all(interface)],
+        &[export], &[0usize; 0]).unwrap()
+}
+fn exact_body_and_dependencies(world: &mut World, root: &str, producer: &[u8]) -> usize {
+    let selected = policy::computation_v1();
+    let source = fixture(world, root, "literal");
+    let interface = source.interface().clone();
+    let original = source.program().clone();
+    let mut changed = original.clone();
+    let entry = changed.functions.iter().position(|function: &ir::Function| -> bool { function.name == "entry" }).unwrap();
+    let mut edits = 0usize;
+    for index in 0usize..changed.functions[entry].body.len() {
+        if let ir::Op::Int { value, .. } = &mut changed.functions[entry].body[index].op { *value += 1i64; edits += 1usize; }
+    }
+    assert_eq!(edits, 1usize);
+    let imports: Vec<Import> = Vec::new();
+    let changed = check::units::check_unit_with_exports("literal", interface.input_identity(), changed,
+        &imports, &[entry], &[0usize; 0]).unwrap();
+    assert_eq!(changed.interface().identity(), interface.identity());
+    assert!(changed.interface().body_identity() != interface.body_identity());
+    let expected = policy::Binding::new(producer, changed.interface()).unwrap();
+    let secret = [6u8; 32];
+    assert_eq!(policy::authenticated(&expected, &secret, &interface.seal(producer, &secret), &selected)
+        .err().unwrap().code, "E_COMPUTATION_BINDING");
+    let first = check::units::check_unit_with_exports("alpha", "provider", original.clone(),
+        &imports, &[entry], &[0usize; 0]).unwrap();
+    let second = check::units::check_unit_with_exports("beta", "provider", original,
+        &imports, &[entry], &[0usize; 0]).unwrap();
+    let first = bridge(first.interface());
+    let second = bridge(second.interface());
+    assert!(first.interface().dependencies() != second.interface().dependencies());
+    let expected = policy::Binding::new(producer, second.interface()).unwrap();
+    assert_eq!(policy::authenticated(&expected, &secret, &first.interface().seal(producer, &secret), &selected)
+        .err().unwrap().code, "E_COMPUTATION_AUTH");
+    let foreign = fixture(world, root, "structural_drop");
+    let consumer = bridge(foreign.interface());
+    assert!(effect(consumer.interface(), "file_close"));
+    assert_eq!(policy::checked(consumer, producer, &selected).err().unwrap().code, "E_COMPUTATION_EFFECT");
+    3usize
+}
+pub fn run(world: &mut World, root: &str, compiler: &str) -> usize {
+    let producer = producer(compiler);
+    let runtime = runtime(world, root);
+    positive_and_reuse(world, root, &producer, &runtime)
+        + negatives(world, root, &producer)
+        + callback_positive(world, root, &producer, &runtime)
+        + binding_and_policy_changes(world, root, &producer, &runtime)
+        + unknown_operation(world, root, &producer)
+        + exact_body_and_dependencies(world, root, &producer)
+}

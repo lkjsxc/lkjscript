@@ -1,0 +1,2502 @@
+{
+   "causes" : [
+      {
+         "affected_file_physical_line_coverage" : 1843,
+         "affected_files" : [
+            "src/document.rs",
+            "src/dom_tree/tree.rs",
+            "src/node/node_data.rs",
+            "src/node/selector.rs",
+            "src/node/text_formatting.rs"
+         ],
+         "causal_blocked_lines" : null,
+         "cause" : "Dependency-provided atom macros in expressions and patterns",
+         "default_candidate_affected_file_physical_line_coverage" : 1843,
+         "id" : "foreign_atom_macros",
+         "note" : "ns!/local_name! are genuine unexpanded dependency macros. Four pattern sites report E_PARSE; seventeen expression sites report E_UNSUPPORTED_MACRO. This is not an exhaustive count of macro invocations.",
+         "owner" : "language",
+         "rank" : 1,
+         "test_only_sites" : 5,
+         "unique_observed_sites" : 21,
+         "upstream_default_candidate_sites" : 16
+      },
+      {
+         "affected_file_physical_line_coverage" : 207,
+         "affected_files" : [
+            "src/dom_tree/validation.rs"
+         ],
+         "causal_blocked_lines" : null,
+         "cause" : "Debug format specification requires an unimplemented source-formatting contract",
+         "default_candidate_affected_file_physical_line_coverage" : 207,
+         "id" : "debug_format_specification",
+         "note" : "Twenty-four located format! sites in Tree::validate. The producer unconditionally rejects '?' formatting; these are not discarded as name-resolution recovery.",
+         "owner" : "language",
+         "rank" : 2,
+         "test_only_sites" : 0,
+         "unique_observed_sites" : 24,
+         "upstream_default_candidate_sites" : 24
+      },
+      {
+         "affected_file_physical_line_coverage" : 2839,
+         "affected_files" : [
+            "src/dom_tree/tree.rs",
+            "src/node.rs",
+            "src/node/inner.rs",
+            "src/node/node_ref.rs",
+            "src/node/text_formatting.rs",
+            "src/selection.rs"
+         ],
+         "causal_blocked_lines" : null,
+         "cause" : "const fn declarations",
+         "default_candidate_affected_file_physical_line_coverage" : 2839,
+         "id" : "const_functions",
+         "note" : "Includes the explicit free const-fn diagnostic and impl-item diagnostics whose original declaration is const fn.",
+         "owner" : "language",
+         "rank" : 3,
+         "test_only_sites" : 0,
+         "unique_observed_sites" : 14,
+         "upstream_default_candidate_sites" : 14
+      },
+      {
+         "affected_file_physical_line_coverage" : 556,
+         "affected_files" : [
+            "src/matcher.rs",
+            "src/node/selector.rs"
+         ],
+         "causal_blocked_lines" : null,
+         "cause" : "Qualified associated-type paths",
+         "default_candidate_affected_file_physical_line_coverage" : 556,
+         "id" : "qualified_associated_type_paths",
+         "note" : "Original <Self::Impl as SelectorImpl>::... type paths, including a nested Result<<...>> return type.",
+         "owner" : "language",
+         "rank" : 4,
+         "test_only_sites" : 0,
+         "unique_observed_sites" : 9,
+         "upstream_default_candidate_sites" : 9
+      },
+      {
+         "affected_file_physical_line_coverage" : 1784,
+         "affected_files" : [
+            "src/node/node_ref.rs",
+            "src/selection.rs"
+         ],
+         "causal_blocked_lines" : null,
+         "cause" : "impl Trait argument/return types",
+         "default_candidate_affected_file_physical_line_coverage" : 1784,
+         "id" : "opaque_impl_trait",
+         "note" : "Two argument-position callable types and three return-position iterator types; the three coincident impl-item messages are recovery duplicates.",
+         "owner" : "language",
+         "rank" : 5,
+         "test_only_sites" : 0,
+         "unique_observed_sites" : 5,
+         "upstream_default_candidate_sites" : 5
+      },
+      {
+         "affected_file_physical_line_coverage" : 334,
+         "affected_files" : [
+            "src/matcher.rs"
+         ],
+         "causal_blocked_lines" : null,
+         "cause" : "Associated-type equality bindings",
+         "default_candidate_affected_file_physical_line_coverage" : 334,
+         "id" : "associated_type_bindings",
+         "note" : "Element<Impl = ...> and Iterator<Item = ...> parse refusals.",
+         "owner" : "language",
+         "rank" : 6,
+         "test_only_sites" : 0,
+         "unique_observed_sites" : 3,
+         "upstream_default_candidate_sites" : 3
+      },
+      {
+         "affected_file_physical_line_coverage" : 844,
+         "affected_files" : [
+            "src/document.rs",
+            "src/matcher.rs"
+         ],
+         "causal_blocked_lines" : null,
+         "cause" : "Generic associated types",
+         "default_candidate_affected_file_physical_line_coverage" : 844,
+         "id" : "generic_associated_types",
+         "note" : "SelectorImpl::ExtraMatchingData<'a> and TreeSink::ElemName<'a> declarations.",
+         "owner" : "language",
+         "rank" : 7,
+         "test_only_sites" : 0,
+         "unique_observed_sites" : 2,
+         "upstream_default_candidate_sites" : 2
+      },
+      {
+         "affected_file_physical_line_coverage" : 917,
+         "affected_files" : [
+            "src/selection.rs"
+         ],
+         "causal_blocked_lines" : null,
+         "cause" : "Lifetime outlives predicate in where",
+         "default_candidate_affected_file_physical_line_coverage" : 917,
+         "id" : "lifetime_outlives_where",
+         "note" : "The original predicate is 'a: 'b.",
+         "owner" : "language",
+         "rank" : 8,
+         "test_only_sites" : 0,
+         "unique_observed_sites" : 1,
+         "upstream_default_candidate_sites" : 1
+      },
+      {
+         "affected_file_physical_line_coverage" : 867,
+         "affected_files" : [
+            "src/node/node_ref.rs"
+         ],
+         "causal_blocked_lines" : null,
+         "cause" : "where bound with a qualified concrete type on its left",
+         "default_candidate_affected_file_physical_line_coverage" : 867,
+         "id" : "where_bound_on_path_type",
+         "note" : "tendril::Tendril<tendril::fmt::UTF8>: std::convert::From<T>.",
+         "owner" : "language",
+         "rank" : 9,
+         "test_only_sites" : 0,
+         "unique_observed_sites" : 1,
+         "upstream_default_candidate_sites" : 1
+      },
+      {
+         "affected_file_physical_line_coverage" : 917,
+         "affected_files" : [
+            "src/selection.rs"
+         ],
+         "causal_blocked_lines" : null,
+         "cause" : "Boxed dyn Iterator",
+         "default_candidate_affected_file_physical_line_coverage" : 917,
+         "id" : "dynamic_trait_object",
+         "note" : "Observed dyn refusal. Further lifetime/heap consequences have not been semantically checked.",
+         "owner" : "language",
+         "rank" : 10,
+         "test_only_sites" : 0,
+         "unique_observed_sites" : 1,
+         "upstream_default_candidate_sites" : 1
+      },
+      {
+         "affected_file_physical_line_coverage" : 45,
+         "affected_files" : [
+            "src/lib.rs"
+         ],
+         "causal_blocked_lines" : null,
+         "cause" : "Macro-valued documentation attribute",
+         "default_candidate_affected_file_physical_line_coverage" : 45,
+         "id" : "documentation_attribute_macro",
+         "note" : "Nested include_str! in #![doc=...] is refused in the preserved crate root.",
+         "owner" : "language",
+         "rank" : 11,
+         "test_only_sites" : 0,
+         "unique_observed_sites" : 1,
+         "upstream_default_candidate_sites" : 1
+      },
+      {
+         "affected_file_physical_line_coverage" : 510,
+         "affected_files" : [
+            "src/document.rs"
+         ],
+         "causal_blocked_lines" : null,
+         "cause" : "Attribute on an expression statement",
+         "default_candidate_affected_file_physical_line_coverage" : 510,
+         "id" : "statement_cfg_attribute",
+         "note" : "The diagnostic names contents after #[cfg(not(feature = \"atomic\"))]. Classification follows exact source context; no reduced reproducer was executed. This branch is active under upstream defaults.",
+         "owner" : "language",
+         "rank" : 12,
+         "test_only_sites" : 0,
+         "unique_observed_sites" : 1,
+         "upstream_default_candidate_sites" : 1
+      },
+      {
+         "affected_file_physical_line_coverage" : 692,
+         "affected_files" : [
+            "src/dom_tree/tree.rs"
+         ],
+         "causal_blocked_lines" : null,
+         "cause" : "Namespaced rustfmt attribute",
+         "default_candidate_affected_file_physical_line_coverage" : 0,
+         "id" : "qualified_attribute_path",
+         "note" : "#[rustfmt::skip] immediately precedes a #[cfg(test)] module. Retained as a test-only observation, not a default-library requirement.",
+         "owner" : "language",
+         "rank" : 13,
+         "test_only_sites" : 1,
+         "unique_observed_sites" : 1,
+         "upstream_default_candidate_sites" : 0
+      },
+      {
+         "affected_file_physical_line_coverage" : 692,
+         "affected_files" : [
+            "src/dom_tree/tree.rs"
+         ],
+         "causal_blocked_lines" : null,
+         "cause" : "Immutable static test data",
+         "default_candidate_affected_file_physical_line_coverage" : 0,
+         "id" : "static_test_fixture",
+         "note" : "static CONTENTS: &str occurs inside the test-only module; it is not mutable global state or a default-library requirement.",
+         "owner" : "language",
+         "rank" : 13,
+         "test_only_sites" : 1,
+         "unique_observed_sites" : 1,
+         "upstream_default_candidate_sites" : 0
+      },
+      {
+         "affected_file_physical_line_coverage" : 115,
+         "affected_files" : [
+            "src/node/serializing.rs"
+         ],
+         "causal_blocked_lines" : null,
+         "cause" : "std::io data/type facade",
+         "default_candidate_affected_file_physical_line_coverage" : 115,
+         "id" : "std_io_result_facade",
+         "note" : "The original use is io::Result<()> in a generic Serializer implementation. The import refusal does not demonstrate opening a file/socket or accessing ambient stdio.",
+         "owner" : "library",
+         "rank" : 14,
+         "test_only_sites" : 0,
+         "unique_observed_sites" : 1,
+         "upstream_default_candidate_sites" : 1
+      },
+      {
+         "affected_file_physical_line_coverage" : 4073,
+         "affected_files" : [
+            "src/document.rs",
+            "src/dom_tree/ops.rs",
+            "src/dom_tree/traversal.rs",
+            "src/dom_tree/tree.rs",
+            "src/node/iters.rs",
+            "src/node/node_ref.rs",
+            "src/node/serializing.rs",
+            "src/node/text_formatting.rs",
+            "src/selection.rs"
+         ],
+         "causal_blocked_lines" : null,
+         "cause" : "Shared interior mutation and borrow guards",
+         "default_candidate_affected_file_physical_line_coverage" : 4073,
+         "id" : "shared_interior_mutation",
+         "note" : "Nine std::cell import refusals match the documented interior-mutation restriction. Tree and Document actually store RefCell/Cell state; this is not an ambient-I/O claim.",
+         "owner" : "refused_by_design",
+         "rank" : 15,
+         "test_only_sites" : 0,
+         "unique_observed_sites" : 9,
+         "upstream_default_candidate_sites" : 9
+      }
+   ],
+   "classifier_support" : {
+      "debug_formatting" : {
+         "fact" : "The '?' format specification returns E_UNSUPPORTED unconditionally in the observed producer source; all24 diagnostic coordinates remain observed causes.",
+         "git_revision" : "e6d13590b7bb2d665d668727f1a8d1ee4f76c33d",
+         "lines" : [
+            81,
+            85
+         ],
+         "path" : "/home/coder/workspace/lkjscript-programs-20261115/src/syntax/formatting.lkj",
+         "sha256" : "e1699026a980f60cc0cee32666847b0e282a010eb623234d12c5b1764891ef8a"
+      }
+   },
+   "counts" : {
+      "E_BLOCKED_annotations_excluded" : 99,
+      "cfg_disabled_inventory_sites" : 7,
+      "observed_cause_sites" : 88,
+      "observed_source_file_physical_line_union" : 5375,
+      "observed_source_files" : 16,
+      "proven_recovery_only_unique_sites" : 0,
+      "raw_primary_diagnostics" : 98,
+      "recovery_duplicate_primary_messages" : 3,
+      "unique_primary_sites" : 95
+   },
+   "coverage_definition" : {
+      "causal_blocked_line_count" : null,
+      "overlap" : "per-cause file unions overlap",
+      "unit" : "physical source lines including comments and inline tests"
+   },
+   "current_verification" : {
+      "compiler_sha256" : "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0",
+      "complete_stdout_stderr_exit_and_source_entry_bytes_equal" : true,
+      "initial_compiler_sha256" : "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+      "initial_receipt_sha256" : "0b2c95970214ac8137d440cea09b3f3ca9ef5f3462669458bcdaaebb77b9eb90",
+      "library_manifest_sha256" : "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+      "observations" : 2,
+      "probe_sha256" : "afc7174933a0e67862e43d2f5d0f991a093609b86bb08c6e42ff39d6ccb9cbff",
+      "projection_manifest_sha256" : "7eef776218daecb22822d613a609a00039600c34cea05a6047216111148272c9",
+      "projector_sha256" : "622f63b9d22c23beb6db3f3dd77ef2cc6a1a0aa20d8620ac36a6730baafa0f95",
+      "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-units-9db99295.json",
+      "receipt_sha256" : "f8b182ec72fd5f610382dca10a4378a3435d911d7ad08866401fcf413cdc7ae2",
+      "source_commit" : "d095ba7cd32a44bea7e7964767f02fa5195c3462"
+   },
+   "design_and_inventory" : {
+      "heap_views" : {
+         "lexical_occurrences" : 20,
+         "node_ref_view_evidence" : {
+            "line" : 39,
+            "path" : "src/node/node_ref.rs",
+            "text" : "pub tree: &'a Tree,"
+         },
+         "note" : "The root check ended before complete semantic checking. Existing heap-view rules suggest a representation question; no causal/refusal count is inferred.",
+         "pattern" : "Vec<NodeRef...> or Vec<&...> in masked source; repeated occurrences on one line retained as multiplicity",
+         "sites" : [
+            {
+               "coordinate" : "src/dom_tree/tree.rs:183",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "default_library_candidate"
+            },
+            {
+               "coordinate" : "src/dom_tree/tree.rs:226",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "default_library_candidate"
+            },
+            {
+               "coordinate" : "src/matcher.rs:95",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "default_library_candidate"
+            },
+            {
+               "coordinate" : "src/mini_selector/extension.rs:37",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "feature_mini_selector_default_disabled"
+            },
+            {
+               "coordinate" : "src/mini_selector/extension.rs:112",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "feature_mini_selector_default_disabled"
+            },
+            {
+               "coordinate" : "src/mini_selector/extension.rs:139",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "feature_mini_selector_default_disabled"
+            },
+            {
+               "coordinate" : "src/mini_selector/parser.rs:32",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "feature_mini_selector_default_disabled"
+            },
+            {
+               "coordinate" : "src/mini_selector/selector.rs:69",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "feature_mini_selector_default_disabled"
+            },
+            {
+               "coordinate" : "src/node/node_data.rs:18",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "default_library_candidate"
+            },
+            {
+               "coordinate" : "src/node/node_data.rs:147",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "default_library_candidate"
+            },
+            {
+               "coordinate" : "src/node/node_data.rs:172",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "default_library_candidate"
+            },
+            {
+               "coordinate" : "src/node/node_data.rs:173",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "default_library_candidate"
+            },
+            {
+               "coordinate" : "src/node/serializing.rs:107",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "test_only"
+            },
+            {
+               "coordinate" : "src/node/serializing.rs:111",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "test_only"
+            },
+            {
+               "coordinate" : "src/selection.rs:17",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "default_library_candidate"
+            },
+            {
+               "coordinate" : "src/selection.rs:26",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "default_library_candidate"
+            },
+            {
+               "coordinate" : "src/selection.rs:27",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "default_library_candidate"
+            },
+            {
+               "coordinate" : "src/selection.rs:417",
+               "lexical_occurrences" : 2,
+               "upstream_applicability" : "default_library_candidate"
+            },
+            {
+               "coordinate" : "src/selection.rs:419",
+               "lexical_occurrences" : 1,
+               "upstream_applicability" : "default_library_candidate"
+            }
+         ],
+         "status" : "inventory_only_not_a_measured_compiler_refusal",
+         "unique_line_sites" : 19
+      },
+      "interior_mutation" : {
+         "diagnosed_import_sites" : 9,
+         "evidence" : [
+            {
+               "line" : 21,
+               "path" : "src/dom_tree/tree.rs",
+               "text" : "pub(crate) nodes: RefCell<Vec<TreeNode>>,"
+            },
+            {
+               "line" : 28,
+               "path" : "src/document.rs",
+               "text" : "pub errors: RefCell<Vec<Cow<'static, str>>>,"
+            },
+            {
+               "line" : 31,
+               "path" : "src/document.rs",
+               "text" : "pub quirks_mode: Cell<QuirksMode>,"
+            }
+         ],
+         "inventory_pattern" : "RefCell<T>, Cell<T>, or .borrow_mut( in masked source; not a complete mutation/effect count",
+         "lexical_mutable_borrow_or_cell_type_inventory_count" : 34,
+         "status" : "observed_refusal_by_design"
+      },
+      "std_io" : {
+         "import_line" : 2,
+         "note" : "This source usage is an error/result type and a caller-supplied serializer. It does not establish ambient file/socket/stdio access or package authority.",
+         "path" : "src/node/serializing.rs",
+         "status" : "library_data_type_facade_refusal",
+         "text" : "fn serialize<S>(...) -> io::Result<()> where S: Serializer",
+         "use_line" : 26
+      }
+   },
+   "evidence" : {
+      "command" : [
+         "/home/coder/workspace/lkjscript-programs-20261115/target/lkjscript",
+         "check",
+         "src/lib.lkj",
+         "--source-dir",
+         "/home/coder/workspace/lkjscript-specimens/projections/dom_query-0.28.0",
+         "--library-dir",
+         "/home/coder/workspace/lkjscript-programs-20261115/library"
+      ],
+      "compiler" : {
+         "path" : "/home/coder/workspace/lkjscript-programs-20261115/target/lkjscript",
+         "sha256" : "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca"
+      },
+      "exit_status" : 1,
+      "library_manifest_sha256" : "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+      "package" : {
+         "commit" : "186c02d9359762404054fbc8af3a5b07cdf795a9",
+         "name" : "dom_query",
+         "object_format" : "sha1",
+         "origin" : "https://github.com/niklak/dom_query.git",
+         "root" : "/home/coder/workspace/lkjscript-specimens/dom_query-0.28.0",
+         "version" : "0.28.0"
+      },
+      "path" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified.json",
+      "projection_manifest_sha256" : "7eef776218daecb22822d613a609a00039600c34cea05a6047216111148272c9",
+      "route" : "suffix_projection",
+      "sha256" : "0b2c95970214ac8137d440cea09b3f3ca9ef5f3462669458bcdaaebb77b9eb90",
+      "stderr_sha256" : "d9f836b240b8d881dbf9295603785a639ae6844f25f885f81fe9ea25682bdb05",
+      "timestamp_utc" : "2026-11-17T01:09:26Z"
+   },
+   "interpretation" : [
+      "Historical observations from compiler SHA601490...; no re-probe or compiler/dependency build was performed for this report.",
+      "This was one complete crate-root check over the byte-identical suffix projection. No standalone-file errors are promoted to root refusals.",
+      "The probe supplied no Cargo package/feature/test configuration. Upstream-default annotations describe Cargo.toml/source expectations, not proof that lkjscript matched that configuration.",
+      "Counts are diagnosed source coordinates, not exhaustive feature refusals. Three coincident impl-item messages are recovery duplicates; 99 E_BLOCKED annotations add no new refusal sites.",
+      "Seven sites attached to or inside src/dom_tree/tree.rs #[cfg(test)] mod tests remain visible as test-only inventory and are excluded from default-library candidate requirements.",
+      "Affected-file coverage counts whole physical source files containing sites. Groups overlap; their coverages are not additive and are not causal blocked-line estimates.",
+      "Core dependency source inventories below are measured named packages, not compiler admission or upstream test-result accounting. Separate Rust baseline runs are outside this report. Source hashes, notices and archive/lock checksums remain attached."
+   ],
+   "kind" : "independent_foreign_refusal_frontier",
+   "named_core_stack" : {
+      "benchmark_physical_lines_excluded" : 506,
+      "build_script_physical_lines_excluded" : 77,
+      "census_tool_sha256" : "28b9ac3cbfbd72ae20186d9b69e22f3cd2ef497e0015d3ac5c35cfeeaf71d4d7",
+      "example_physical_lines_excluded" : 1089,
+      "external_test_physical_lines" : 4201,
+      "file_columns" : [
+         "path",
+         "role",
+         "physical_lines",
+         "sha256",
+         "lexical_test_attributes",
+         "known_test_only_lines"
+      ],
+      "generated_and_producer_work" : {
+         "cssparser" : {
+            "default_macro_producer_dependencies" : [
+               "cssparser-macros",
+               "phf/macros"
+            ],
+            "test_data_excluded_by_published_manifest" : [
+               "src/css-parsing-tests/**",
+               "src/big-data-url.css"
+            ]
+         },
+         "markup5ever" : {
+            "atom_macros_and_entity_tables_reexported_from" : "web_atoms (outside the counted four-package dependency scope)"
+         },
+         "note" : "No generator or macro was executed by this census. Generated output is excluded and unmeasured here; it may already exist in the separate Rust baseline build directory.",
+         "selectors" : {
+            "consumer" : {
+               "line" : 3225,
+               "path" : "parser.rs"
+            },
+            "generated_output_excluded_from_library_count" : true,
+            "generated_output_lines" : null,
+            "generator" : "build.rs",
+            "generator_lines" : 77,
+            "output" : "OUT_DIR/ascii_case_insensitive_html_attributes.rs",
+            "static_build_effect_inventory" : [
+               "read OUT_DIR environment variable",
+               "create/write generated Rust output"
+            ]
+         }
+      },
+      "library_files" : 80,
+      "library_physical_lines" : 32180,
+      "library_physical_lines_less_recognized_test_only_regions" : 27995,
+      "not_a_complete_dependency_closure" : true,
+      "not_counted_dependency_components" : [
+         "web_atoms",
+         "tendril",
+         "foldhash",
+         "precomputed-hash",
+         "bit-set",
+         "bitflags",
+         "log",
+         "derive_more",
+         "new_debug_unreachable",
+         "phf",
+         "phf_codegen",
+         "rustc-hash",
+         "servo_arc",
+         "smallvec",
+         "cssparser-macros",
+         "dtoa-short",
+         "itoa",
+         "test/build-only dependency closures"
+      ],
+      "packages" : [
+         {
+            "declared_features" : {
+               "default" : [
+                  "markdown"
+               ],
+               "optional_not_default" : [
+                  "atomic",
+                  "hashbrown",
+                  "mini_selector"
+               ]
+            },
+            "files" : [
+               [
+                  "dom-query-bench/benches/add_class.rs",
+                  "separate_workspace_benchmark",
+                  79,
+                  "d7deb96856adcb96a64225eea17bc692fb485dd44310668c9bb8caf950a52100",
+                  0,
+                  0
+               ],
+               [
+                  "dom-query-bench/benches/merging.rs",
+                  "separate_workspace_benchmark",
+                  35,
+                  "1290d1cf6ac681c2a294fa68fd634ae4a452e8e81d25e132e248e6645d02f853",
+                  0,
+                  0
+               ],
+               [
+                  "dom-query-bench/benches/normalized_char_count.rs",
+                  "separate_workspace_benchmark",
+                  63,
+                  "8f3c7f4e37e838b2ae0e5677274f4e696527c0656101d80c3f8149cbce5cac7e",
+                  0,
+                  0
+               ],
+               [
+                  "dom-query-bench/benches/parsing.rs",
+                  "separate_workspace_benchmark",
+                  26,
+                  "e23f425ae3f74b37358171837444ababd4e8f6aeab024ab21b34677b45ff4cf6",
+                  0,
+                  0
+               ],
+               [
+                  "dom-query-bench/benches/remove_class.rs",
+                  "separate_workspace_benchmark",
+                  63,
+                  "fd4730383c0de7d5f74b5c9993ff684e165ed8a4c8f1307015607b90aa73e7f4",
+                  0,
+                  0
+               ],
+               [
+                  "dom-query-bench/benches/selection.rs",
+                  "separate_workspace_benchmark",
+                  98,
+                  "516c73832c92688df642f8980d13977816fd5a2da653ee37636efe2e726de2d6",
+                  0,
+                  0
+               ],
+               [
+                  "dom-query-bench/benches/serializing.rs",
+                  "separate_workspace_benchmark",
+                  23,
+                  "84bb12aa645025e4c2ebb5ed3fd6a5885fda9bf1680f144b53dd8dfbdfde610e",
+                  0,
+                  0
+               ],
+               [
+                  "dom-query-bench/tests/selection.rs",
+                  "separate_workspace_benchmark",
+                  33,
+                  "c77b5a1f8e9481b50b456c3b5c6c84bddcdd844b5c1d9be9a806612915fd9910",
+                  1,
+                  0
+               ],
+               [
+                  "examples/descendant_elements.rs",
+                  "example",
+                  30,
+                  "3c9904c41d239f0ee9995487b128fdf362e050622f0a5ebfaafd5aac8796473f",
+                  0,
+                  0
+               ],
+               [
+                  "examples/hacker_news.rs",
+                  "example",
+                  14,
+                  "f08dedc38d67450babf0e0604f58dbcea554655dfe6b9055d6fea1e18b91d7b0",
+                  0,
+                  0
+               ],
+               [
+                  "examples/manipulate_html.rs",
+                  "example",
+                  46,
+                  "13ab03bcd340a95c50df1e31fb78df9c69cc2bf72b48d1784ff991a23f5ca831",
+                  0,
+                  0
+               ],
+               [
+                  "examples/markdown.rs",
+                  "example",
+                  8,
+                  "75b4ec4f6e33645023164b45765236b7caa2b8c4e557a5c3281920d4f53ffd9a",
+                  0,
+                  0
+               ],
+               [
+                  "examples/pseudo_classes.rs",
+                  "example",
+                  49,
+                  "96b880d8ec50a3a56cdfdaf54fd89ced1b0d59f98fd55d157926f502b11f0167",
+                  0,
+                  0
+               ],
+               [
+                  "examples/remove_elements.rs",
+                  "example",
+                  23,
+                  "0bbfef60a79cc05710213fd7635f9f8c85c8507902d4f920087c9187dc2c7146",
+                  0,
+                  0
+               ],
+               [
+                  "examples/send_document.rs",
+                  "example",
+                  23,
+                  "53ef57fc70a6b59edc2174f2674a5a24ac1f16a791a10b92db828d79f909d5a6",
+                  0,
+                  0
+               ],
+               [
+                  "examples/serialize_html.rs",
+                  "example",
+                  36,
+                  "c0a76ba5e3b038ecdceb7ad27210217251a461421764fd218917296ed52a2207",
+                  0,
+                  0
+               ],
+               [
+                  "src/css.rs",
+                  "library",
+                  72,
+                  "d69edcc901663b1a6119207f98409733d191107beefeca9d2de0e6d57b3f8cd9",
+                  0,
+                  0
+               ],
+               [
+                  "src/document.rs",
+                  "library",
+                  510,
+                  "825093383717021e0003e3bf9a86ad07cfa6ae003b87a0755ed2afd9a969b096",
+                  0,
+                  0
+               ],
+               [
+                  "src/dom_tree.rs",
+                  "library",
+                  9,
+                  "f58d055bc4ccc95bbc70b8ec87b23d740424ffa895051fd0bf7c02580540aa71",
+                  0,
+                  0
+               ],
+               [
+                  "src/dom_tree/helpers.rs",
+                  "library",
+                  13,
+                  "8b066a4e3e38435d49e1d21668671ea3a578f506e308bcc8e0b7e33b645fb375",
+                  0,
+                  0
+               ],
+               [
+                  "src/dom_tree/ops.rs",
+                  "library",
+                  476,
+                  "c2c6a2975fbe261c1a91db2d74b3bf77e1fecf18fc3f9a83c87c5f5b4e9bcd4d",
+                  0,
+                  0
+               ],
+               [
+                  "src/dom_tree/traversal.rs",
+                  "library",
+                  138,
+                  "736838d946dffe43dcdb3dca06fabc164bd5fae96945da95609d352428996ef0",
+                  0,
+                  0
+               ],
+               [
+                  "src/dom_tree/tree.rs",
+                  "library",
+                  692,
+                  "45d039636ca7089903cba492baf370592fdec3a6fea1b2f8d574984f45c0aa4d",
+                  7,
+                  191
+               ],
+               [
+                  "src/dom_tree/validation.rs",
+                  "library",
+                  207,
+                  "96adb0dcdf8e5417e45305182f2a63d10aa3a7ea58e6283bb4a9983c416a6ec1",
+                  0,
+                  0
+               ],
+               [
+                  "src/entities.rs",
+                  "library",
+                  99,
+                  "acd33fd98cecaf5b5d92b8d532c631c23730bd447f330770c3e89f720046c4f4",
+                  0,
+                  0
+               ],
+               [
+                  "src/lib.rs",
+                  "library",
+                  45,
+                  "81441eac6c5af9fe4aa7eea33f2f11ebad8a6d309a0f0fb80a17c9d2174f5779",
+                  0,
+                  0
+               ],
+               [
+                  "src/matcher.rs",
+                  "library",
+                  334,
+                  "5d61aca8d85c1e617ef74560d3b5977721a039c2993daf85c004e20ceac586ad",
+                  0,
+                  0
+               ],
+               [
+                  "src/mini_selector.rs",
+                  "library",
+                  10,
+                  "d2aa195e03788706e97ad95b24e65571c9e3db0cdc44d0b0bc2f5c7e90446b2d",
+                  0,
+                  0
+               ],
+               [
+                  "src/mini_selector/extension.rs",
+                  "library",
+                  278,
+                  "a2cf798e012c46860b4eaec354d729f95630d14055c3995f99077d46cd13db9b",
+                  4,
+                  103
+               ],
+               [
+                  "src/mini_selector/parser.rs",
+                  "library",
+                  332,
+                  "0f2764fdbdc31b1f90a1769335a29e56519c364920514053a35de66d93cc2ba8",
+                  4,
+                  183
+               ],
+               [
+                  "src/mini_selector/selector.rs",
+                  "library",
+                  164,
+                  "0603073fdec20935d999aec616e1959864df4406e8b9f4ac5b838b5b5a9c806e",
+                  0,
+                  0
+               ],
+               [
+                  "src/node.rs",
+                  "library",
+                  33,
+                  "a629710b53af233a04d3a4264f6a4d35208f41d4e5b631a9a4df5538d3cf3f50",
+                  0,
+                  0
+               ],
+               [
+                  "src/node/id_provider.rs",
+                  "library",
+                  19,
+                  "7d7bd688841090dca20412f97b074828c764ba7e7fa6380148b89f3cc2c8721e",
+                  0,
+                  0
+               ],
+               [
+                  "src/node/inner.rs",
+                  "library",
+                  186,
+                  "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
+                  0,
+                  0
+               ],
+               [
+                  "src/node/iters.rs",
+                  "library",
+                  214,
+                  "5b7d5d4d3b87fc0ceb86626ca9722247935172af9829783e97a2661280311be3",
+                  0,
+                  0
+               ],
+               [
+                  "src/node/node_data.rs",
+                  "library",
+                  275,
+                  "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+                  0,
+                  0
+               ],
+               [
+                  "src/node/node_ref.rs",
+                  "library",
+                  867,
+                  "74462c1319fd372fb98867e396adcdb89e85b04dd0efb1122582390a55aa1a84",
+                  0,
+                  0
+               ],
+               [
+                  "src/node/selector.rs",
+                  "library",
+                  222,
+                  "64ddf365e224fde342c457d8c0543d3851a01cb3112bd730db730500755a2798",
+                  0,
+                  0
+               ],
+               [
+                  "src/node/serializing.rs",
+                  "library",
+                  115,
+                  "943dd620f28a904213e21a3bda8d9bcbf188f8286bf137e1571c045e134e6a40",
+                  1,
+                  28
+               ],
+               [
+                  "src/node/text_formatting.rs",
+                  "library",
+                  144,
+                  "3decd34d73e7a8ed7e09edc24823370baeb328cc006e83c99fed978281e319e7",
+                  0,
+                  0
+               ],
+               [
+                  "src/selection.rs",
+                  "library",
+                  917,
+                  "6c8c45408ccb02f813709f93b118bdf4e174640968a41a2d0d531b53ad60027a",
+                  0,
+                  0
+               ],
+               [
+                  "src/serializing.rs",
+                  "library",
+                  4,
+                  "0f1f882fc228639e024e3d164034a798235017523cf9775bfc316407fdc1a359",
+                  0,
+                  0
+               ],
+               [
+                  "src/serializing/md.rs",
+                  "library",
+                  669,
+                  "ad6f3007fe7edb0e49d14747de589dfdd56dedb4cdcb4c663553b3851d4930bb",
+                  31,
+                  652
+               ],
+               [
+                  "src/serializing/md/constants.rs",
+                  "library",
+                  7,
+                  "addcb6b10a308de5c786750080976e1cb25f9fd58c29c34ba7dbd582e20ad335",
+                  0,
+                  0
+               ],
+               [
+                  "src/serializing/md/ext.rs",
+                  "library",
+                  26,
+                  "8135f6ef70c8e619a751a6fbde2ac118f69ede1bedd5e008d000d2f0315b101a",
+                  0,
+                  0
+               ],
+               [
+                  "src/serializing/md/serializer.rs",
+                  "library",
+                  583,
+                  "da9dcbe6c59247915decdf8a4a4defa48409488c8a73a971ed3f83305e5e7860",
+                  0,
+                  0
+               ],
+               [
+                  "src/serializing/md/text_utils.rs",
+                  "library",
+                  113,
+                  "fe2b9432a2f4dbc1c8a5dba699c1bf289f963731f4a719b08d66c806dea4c068",
+                  1,
+                  26
+               ],
+               [
+                  "tests/alloc.rs",
+                  "external_test",
+                  3,
+                  "d062602a055304ad4a8a6441b52aba920bc8bde6ad6f6768c6a705edc2e8ad88",
+                  0,
+                  0
+               ],
+               [
+                  "tests/data.rs",
+                  "external_test",
+                  150,
+                  "9f066ae46853f290c6be43cc5be42b372435ad9492997a5a5c8a21fe736287e3",
+                  0,
+                  0
+               ],
+               [
+                  "tests/html-dom.rs",
+                  "external_test",
+                  187,
+                  "3a56e79ed872f2a48445e45b68f5c5d2433ecbb0533f2c4d0be238cf4253ac12",
+                  2,
+                  0
+               ],
+               [
+                  "tests/node-manipulation.rs",
+                  "external_test",
+                  924,
+                  "3317621d55aebfeeea24e5c716425ff5d0169c99c98fd30fd68bb62209b7494f",
+                  42,
+                  0
+               ],
+               [
+                  "tests/node-traversal.rs",
+                  "external_test",
+                  691,
+                  "bfc1086ee0919608a75fc5d1fd7bf3b25ee32683676290fd83518074f7aaff86",
+                  31,
+                  0
+               ],
+               [
+                  "tests/parsing.rs",
+                  "external_test",
+                  112,
+                  "7ce190875bc51ab7f81a73905bc14d91d49d45c638b5393edf4454be412082e9",
+                  9,
+                  0
+               ],
+               [
+                  "tests/pseudo-classes.rs",
+                  "external_test",
+                  309,
+                  "89ea6d5d5e2af3cb65867091eff091dca829da3e7d9a41e2971228c0020df5f7",
+                  22,
+                  0
+               ],
+               [
+                  "tests/selection-manipulation.rs",
+                  "external_test",
+                  543,
+                  "d6c2a085df424c7928eb4840b4f948463581146a81ca910c79aba66e806b3261",
+                  27,
+                  0
+               ],
+               [
+                  "tests/selection-property.rs",
+                  "external_test",
+                  353,
+                  "d75761581a58614ff5d3d84c3015da7926983a1120abc81e6ff7ffd709ec1a8a",
+                  27,
+                  0
+               ],
+               [
+                  "tests/selection-query.rs",
+                  "external_test",
+                  180,
+                  "64abb89299f8a76c84603d6a18140af12175cb8088620c40bc33ece468b0dcb1",
+                  11,
+                  0
+               ],
+               [
+                  "tests/selection-traversal.rs",
+                  "external_test",
+                  633,
+                  "36632c35027e949902341463845010aa69a90d33e332290aa3373a349a4ccf80",
+                  45,
+                  0
+               ],
+               [
+                  "tests/utils.rs",
+                  "external_test",
+                  5,
+                  "c7879fdba7ce5ddfdd7e5b40f4fedc6676c5c459849a3e9efdf41138880d268f",
+                  0,
+                  0
+               ]
+            ],
+            "library_entry" : "src/lib.rs",
+            "library_physical_lines_less_recognized_test_only_regions" : 6590,
+            "library_source_roots" : [
+               "src"
+            ],
+            "license" : "MIT",
+            "metadata" : [
+               {
+                  "path" : "Cargo.toml",
+                  "sha256" : "0938bcf511505419e557eb42a8180f4b204bcd1ae0a299dd9055f3ad26801a5c"
+               }
+            ],
+            "name" : "dom_query",
+            "notices" : [
+               {
+                  "bytes" : 1328,
+                  "path" : "LICENSE",
+                  "sha256" : "7554701d1e74fc434f68c522b1dd743c8c16d816a4b761b5213f367b898884c8"
+               }
+            ],
+            "provenance" : {
+               "git_commit" : "186c02d9359762404054fbc8af3a5b07cdf795a9",
+               "origin" : "https://github.com/niklak/dom_query.git"
+            },
+            "roles" : {
+               "example" : {
+                  "files" : 8,
+                  "known_test_only_lines" : 0,
+                  "lexical_test_attributes" : 0,
+                  "physical_lines" : 229
+               },
+               "external_test" : {
+                  "files" : 12,
+                  "known_test_only_lines" : 0,
+                  "lexical_test_attributes" : 216,
+                  "physical_lines" : 4090
+               },
+               "library" : {
+                  "files" : 31,
+                  "known_test_only_lines" : 1183,
+                  "lexical_test_attributes" : 48,
+                  "physical_lines" : 7773
+               },
+               "separate_workspace_benchmark" : {
+                  "files" : 8,
+                  "known_test_only_lines" : 0,
+                  "lexical_test_attributes" : 1,
+                  "physical_lines" : 420
+               }
+            },
+            "root" : "/home/coder/workspace/lkjscript-specimens/dom_query-0.28.0",
+            "version" : "0.28.0"
+         },
+         {
+            "declared_features" : {
+               "default" : [],
+               "optional" : [
+                  "serde",
+                  "trace_tokenizer"
+               ]
+            },
+            "files" : [
+               [
+                  "benches/html5ever.rs",
+                  "benchmark",
+                  86,
+                  "848ca1aac420dd2dd9a7ca19e3fc9ec7737b47e5ea328e5021688eba5270066a",
+                  0,
+                  0
+               ],
+               [
+                  "examples/arena.rs",
+                  "example",
+                  385,
+                  "485dae462d5edfdf786f14018c525d214567877c61f5b4417a3ff6926b0a8e31",
+                  0,
+                  0
+               ],
+               [
+                  "examples/noop-tokenize.rs",
+                  "example",
+                  47,
+                  "79c1d34c8c941e3e6b6a1953455d0502fdc56195a7d932cdd7665a0011a9da9a",
+                  0,
+                  0
+               ],
+               [
+                  "examples/noop-tree-builder.rs",
+                  "example",
+                  132,
+                  "c87386e9f4b83cd52d7ffa8ff22cc0dd54f5f0b54398e7d41fb7a6352d9bfa72",
+                  0,
+                  0
+               ],
+               [
+                  "examples/print-tree-actions.rs",
+                  "example",
+                  185,
+                  "d04287c1a129fe7c18ff621cfe1a69c5411fa905733f895af420d948e80ec65d",
+                  0,
+                  0
+               ],
+               [
+                  "examples/tokenize.rs",
+                  "example",
+                  111,
+                  "fbf13646df42d4536691c62422b073e80b3f5cacfbc47294130c265134e21337",
+                  0,
+                  0
+               ],
+               [
+                  "src/driver.rs",
+                  "library",
+                  162,
+                  "760eca0d36fcb90c07858102928aa41efea9adb1eac2df74b972352c2b8c21b3",
+                  0,
+                  0
+               ],
+               [
+                  "src/encoding.rs",
+                  "library",
+                  173,
+                  "5b569fcd7f419fb521f86f970f53e943f5c23cc5afce32cd4364b66057c7bc42",
+                  7,
+                  96
+               ],
+               [
+                  "src/lib.rs",
+                  "library",
+                  31,
+                  "4b9193c2483083e52713aaa71689c18eeada669cbca3c1e08097a02141e2582b",
+                  0,
+                  0
+               ],
+               [
+                  "src/macros.rs",
+                  "library",
+                  34,
+                  "9d964d34792195764fc7d53c7bfdec3ba468ee7708ab4dd0891a37c211f96977",
+                  0,
+                  0
+               ],
+               [
+                  "src/serialize/mod.rs",
+                  "library",
+                  255,
+                  "b1c12517e34d4b109bdcecdb34895b6838f94b863c7f533e83f77c63aad2f1e2",
+                  0,
+                  0
+               ],
+               [
+                  "src/tokenizer/char_ref/mod.rs",
+                  "library",
+                  438,
+                  "e753058cb7ab64c63bb13e2156c583bdc60a8468efe6b9c64b8768c6effadf8f",
+                  0,
+                  0
+               ],
+               [
+                  "src/tokenizer/interface.rs",
+                  "library",
+                  141,
+                  "cdab80709a6e27663b9a349a607cf85da93fcc9ee3b3a54cf97ee635a9ae7cf4",
+                  0,
+                  0
+               ],
+               [
+                  "src/tokenizer/mod.rs",
+                  "library",
+                  2324,
+                  "815a67a13c70ac8935b8fa506cc16f44abe7730684c3fa6abababa9ed0aa3297",
+                  5,
+                  185
+               ],
+               [
+                  "src/tokenizer/states.rs",
+                  "library",
+                  131,
+                  "35ea888082a92b77a428af263224169b05ff5740bd519efdace90e44858a0b7d",
+                  0,
+                  0
+               ],
+               [
+                  "src/tree_builder/data.rs",
+                  "library",
+                  170,
+                  "256c72e7d368b0be3d1f473c7b36907b6f6b602aff7d1441b9be109fea3375b1",
+                  0,
+                  0
+               ],
+               [
+                  "src/tree_builder/mod.rs",
+                  "library",
+                  1891,
+                  "e8f6636fe93aa3c27892ae4742932c19ce2fd5e925d8139096178607b54a28c1",
+                  0,
+                  0
+               ],
+               [
+                  "src/tree_builder/rules.rs",
+                  "library",
+                  1690,
+                  "877f811266d9d1098f07892473e583b8218d01c0895c8c2d08e40acaec98aa6d",
+                  0,
+                  0
+               ],
+               [
+                  "src/tree_builder/tag_sets.rs",
+                  "library",
+                  109,
+                  "5f1e1adffe46f4af0fe063d5847cf1e0fcc03312ca2e3b0062945a341b836716",
+                  0,
+                  0
+               ],
+               [
+                  "src/tree_builder/types.rs",
+                  "library",
+                  111,
+                  "85d2b3f8221faa9cbb561ad1dba8443ad4ed988b8a544511d3e01c28cdc8992f",
+                  0,
+                  0
+               ],
+               [
+                  "src/util/str.rs",
+                  "library",
+                  52,
+                  "48ca91feaa5e352cafb1743f996f57e6209c34851da6400488fb2fede2593161",
+                  4,
+                  25
+               ],
+               [
+                  "tests/driver.rs",
+                  "external_test",
+                  111,
+                  "ed917e950d7d43ade5e6eb63961bf40c77729d1df074d9f8cee5575daa9d2826",
+                  1,
+                  0
+               ]
+            ],
+            "library_entry" : "src/lib.rs",
+            "library_physical_lines_less_recognized_test_only_regions" : 7406,
+            "library_source_roots" : [
+               "src"
+            ],
+            "license" : "MIT OR Apache-2.0",
+            "metadata" : [
+               {
+                  "path" : "Cargo.toml",
+                  "sha256" : "fdd4c475861e3761a4a73e7ef08f310950032579628fd0b488000a47b9d8b834"
+               },
+               {
+                  "path" : "Cargo.toml.orig",
+                  "sha256" : "512759192eb48ad87acc334ec5284db60cc9e5d461e551a1aa7c7fbe53b140f1"
+               },
+               {
+                  "path" : ".cargo_vcs_info.json",
+                  "sha256" : "a03b7c5471f16270b26a7701138fa249adc598c862eaf34b6504387f03d9ff64"
+               }
+            ],
+            "name" : "html5ever",
+            "notices" : [
+               {
+                  "bytes" : 10847,
+                  "path" : "LICENSE-APACHE",
+                  "sha256" : "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+               },
+               {
+                  "bytes" : 1076,
+                  "path" : "LICENSE-MIT",
+                  "sha256" : "86dd7f026f916daf7511e39951ad8ea8cf55a8db67ae64060dacf829761c18f3"
+               }
+            ],
+            "provenance" : {
+               "archive_path" : "/home/coder/workspace/lkjscript-specimens/rust-cache/registry/cache/index.crates.io-1949cf8c6b5b557f/html5ever-0.39.0.crate",
+               "archive_sha256" : "46a1761807faccc9a19e86944bbf40610014066306f96edcdedc2fb714bcb7b8",
+               "lock_checksum" : "46a1761807faccc9a19e86944bbf40610014066306f96edcdedc2fb714bcb7b8",
+               "origin" : "https://github.com/servo/html5ever",
+               "path_in_vcs" : "html5ever",
+               "reported_rust_notice_metadata_files_match_locked_archive" : true,
+               "vcs_commit_from_package_metadata" : "ce64836c685025a5fef0860fa2e9c80b2683e8d0"
+            },
+            "roles" : {
+               "benchmark" : {
+                  "files" : 1,
+                  "known_test_only_lines" : 0,
+                  "lexical_test_attributes" : 0,
+                  "physical_lines" : 86
+               },
+               "example" : {
+                  "files" : 5,
+                  "known_test_only_lines" : 0,
+                  "lexical_test_attributes" : 0,
+                  "physical_lines" : 860
+               },
+               "external_test" : {
+                  "files" : 1,
+                  "known_test_only_lines" : 0,
+                  "lexical_test_attributes" : 1,
+                  "physical_lines" : 111
+               },
+               "library" : {
+                  "files" : 15,
+                  "known_test_only_lines" : 306,
+                  "lexical_test_attributes" : 16,
+                  "physical_lines" : 7712
+               }
+            },
+            "root" : "/home/coder/workspace/lkjscript-specimens/rust-cache/registry/src/index.crates.io-1949cf8c6b5b557f/html5ever-0.39.0",
+            "version" : "0.39.0"
+         },
+         {
+            "declared_features" : {
+               "default" : [],
+               "optional" : [
+                  "serde"
+               ]
+            },
+            "files" : [
+               [
+                  "interface/mod.rs",
+                  "library",
+                  430,
+                  "0197c378a17f19d31ae1cf91f64e1d9cdd9f8e877b24ac2f76ab0cc534a3f082",
+                  1,
+                  22
+               ],
+               [
+                  "interface/tree_builder.rs",
+                  "library",
+                  307,
+                  "139026eb80fe1c063592509104125bed1cae024e85c98be5c613b9a5ce528ab1",
+                  0,
+                  0
+               ],
+               [
+                  "lib.rs",
+                  "library",
+                  55,
+                  "4043ce4ca34ec2ca62ac1a078df937197802f2d025c22be5041d91023033847c",
+                  0,
+                  0
+               ],
+               [
+                  "serialize.rs",
+                  "library",
+                  77,
+                  "871f613fdc4e9e8508cf12bf74087d4c39a5e19c5701324961e7e13491c0b7ac",
+                  0,
+                  0
+               ],
+               [
+                  "util/buffer_queue.rs",
+                  "library",
+                  333,
+                  "5d0bcdd8b2d0e4aa7c7c881c44ae66258e384a00f3faeadfc4dc7086a1a63f97",
+                  4,
+                  66
+               ],
+               [
+                  "util/smallcharset.rs",
+                  "library",
+                  88,
+                  "97ee1244744875deba3664c4c6eb638ddd69c68c4699899dbac4df26c3efcac8",
+                  1,
+                  18
+               ]
+            ],
+            "library_entry" : "lib.rs",
+            "library_physical_lines_less_recognized_test_only_regions" : 1184,
+            "library_source_roots" : [
+               "lib.rs",
+               "interface",
+               "serialize.rs",
+               "util"
+            ],
+            "license" : "MIT OR Apache-2.0",
+            "metadata" : [
+               {
+                  "path" : "Cargo.toml",
+                  "sha256" : "df5bfe616acd0adeb69ad210eb63bfb9125cb025574c7dcdc7714dc1eff228a9"
+               },
+               {
+                  "path" : "Cargo.toml.orig",
+                  "sha256" : "eb5b6f8e08ca88767d271c6fa89b6484fe310f23bbe44cf717b818527e3afa63"
+               },
+               {
+                  "path" : ".cargo_vcs_info.json",
+                  "sha256" : "01d3802fae68d757b9adbd05c78a841c46925b373d0c5b15540fd668daef1cd4"
+               }
+            ],
+            "name" : "markup5ever",
+            "notices" : [
+               {
+                  "bytes" : 10847,
+                  "path" : "LICENSE-APACHE",
+                  "sha256" : "a60eea817514531668d7e00765731449fe14d059d3249e0bc93b36de45f759f2"
+               },
+               {
+                  "bytes" : 1076,
+                  "path" : "LICENSE-MIT",
+                  "sha256" : "86dd7f026f916daf7511e39951ad8ea8cf55a8db67ae64060dacf829761c18f3"
+               }
+            ],
+            "provenance" : {
+               "archive_path" : "/home/coder/workspace/lkjscript-specimens/rust-cache/registry/cache/index.crates.io-1949cf8c6b5b557f/markup5ever-0.39.0.crate",
+               "archive_sha256" : "7122d987ec5f704ee56f6e5b41a7d93722e9aae27ae07cafa4036c4d3f9757de",
+               "lock_checksum" : "7122d987ec5f704ee56f6e5b41a7d93722e9aae27ae07cafa4036c4d3f9757de",
+               "origin" : "https://github.com/servo/html5ever",
+               "path_in_vcs" : "markup5ever",
+               "reported_rust_notice_metadata_files_match_locked_archive" : true,
+               "vcs_commit_from_package_metadata" : "ce64836c685025a5fef0860fa2e9c80b2683e8d0"
+            },
+            "roles" : {
+               "library" : {
+                  "files" : 6,
+                  "known_test_only_lines" : 106,
+                  "lexical_test_attributes" : 6,
+                  "physical_lines" : 1290
+               }
+            },
+            "root" : "/home/coder/workspace/lkjscript-specimens/rust-cache/registry/src/index.crates.io-1949cf8c6b5b557f/markup5ever-0.39.0",
+            "version" : "0.39.0"
+         },
+         {
+            "declared_features" : {
+               "default" : [],
+               "optional" : [
+                  "bench",
+                  "to_shmem"
+               ]
+            },
+            "embedded_notice" : {
+               "license" : "MPL-2.0",
+               "lines" : [
+                  1,
+                  3
+               ],
+               "paths" : [
+                  "attr.rs",
+                  "bloom.rs",
+                  "build.rs",
+                  "builder.rs",
+                  "context.rs",
+                  "kleene_value.rs",
+                  "lib.rs",
+                  "matching.rs",
+                  "nth_index_cache.rs",
+                  "parser.rs",
+                  "relative_selector/cache.rs",
+                  "relative_selector/filter.rs",
+                  "relative_selector/mod.rs",
+                  "sink.rs",
+                  "tree.rs",
+                  "visitor.rs"
+               ],
+               "representative_path" : "lib.rs",
+               "standalone_license_file_in_package" : false
+            },
+            "files" : [
+               [
+                  "attr.rs",
+                  "library",
+                  196,
+                  "cfb9ba3ae47538a05b218ed63cc1360ebcf7ba448cb910f2af638f66244c1ae6",
+                  0,
+                  0
+               ],
+               [
+                  "bloom.rs",
+                  "library",
+                  422,
+                  "3ce89fe5366a0f3e493ad00cdca426be1d4cdd8fa9d3e995759cb794eb794f33",
+                  1,
+                  81
+               ],
+               [
+                  "build.rs",
+                  "build_script",
+                  77,
+                  "36ba09a8d2089d0cae8e310829ecf0e94bcbaa87e775a6578c7d2f0459a5b6ca",
+                  0,
+                  0
+               ],
+               [
+                  "builder.rs",
+                  "library",
+                  455,
+                  "be4ce2818710343d2f6841a78013a26c86ca72d8ca62e68f8b580435a92bfc19",
+                  0,
+                  0
+               ],
+               [
+                  "context.rs",
+                  "library",
+                  525,
+                  "ae29c12c063fcfd4f1b121d84688a2c4d16291d6247a0e03f104e57a6361d575",
+                  0,
+                  0
+               ],
+               [
+                  "kleene_value.rs",
+                  "library",
+                  131,
+                  "1932450194f7114d89151a09efa79130f34961e2556fb79b92d4c5e174adb823",
+                  0,
+                  0
+               ],
+               [
+                  "lib.rs",
+                  "library",
+                  23,
+                  "d54c6e13e9e952dac17d209171df8657e3cae93beaddace4906150cdec8d02e9",
+                  0,
+                  0
+               ],
+               [
+                  "matching.rs",
+                  "library",
+                  1609,
+                  "90fb23dfb0dc9b9fa51e711ec4feb2b5a61d8f6bb8b284069d69f80ba82500fa",
+                  0,
+                  0
+               ],
+               [
+                  "nth_index_cache.rs",
+                  "library",
+                  102,
+                  "2f4e94a1010c867ce4b96619e90f1574449769fc5f3f419a2b84e4613d4ab39c",
+                  0,
+                  0
+               ],
+               [
+                  "parser.rs",
+                  "library",
+                  4857,
+                  "9164d43a4411cf1690a2e04c728e11ae8eddff91e696abda1049ef78b746f919",
+                  11,
+                  1095
+               ],
+               [
+                  "relative_selector/cache.rs",
+                  "library",
+                  81,
+                  "c6460f5db8c74421af0890c4c69119450397258f64be169c91d0320e2d8626f4",
+                  0,
+                  0
+               ],
+               [
+                  "relative_selector/filter.rs",
+                  "library",
+                  159,
+                  "7ea15f5d310fca2254ac36989bfeee06dd0e9897ccec0b886b75b550e0225177",
+                  0,
+                  0
+               ],
+               [
+                  "relative_selector/mod.rs",
+                  "library",
+                  6,
+                  "29e305635f471d8467a6eca83ef83dcbda769ecc62976a708c98afa418ab76a6",
+                  0,
+                  0
+               ],
+               [
+                  "sink.rs",
+                  "library",
+                  31,
+                  "34d4cd4127a6e4979eba11f8e6c41dbc527c0a996be78bd2e3167916c025a04b",
+                  0,
+                  0
+               ],
+               [
+                  "tree.rs",
+                  "library",
+                  184,
+                  "257a2b30dcdd07bcf0d2519301c4e0678b8ae1a0ba22ad122a7a9132027b62ee",
+                  0,
+                  0
+               ],
+               [
+                  "visitor.rs",
+                  "library",
+                  137,
+                  "3b39f678c2f89c720d2d4fe9bb9064e283609ed49c190cc5a657705522f91dfd",
+                  0,
+                  0
+               ]
+            ],
+            "library_entry" : "lib.rs",
+            "library_physical_lines_less_recognized_test_only_regions" : 7742,
+            "library_source_roots" : [
+               "attr.rs",
+               "bloom.rs",
+               "builder.rs",
+               "context.rs",
+               "kleene_value.rs",
+               "lib.rs",
+               "matching.rs",
+               "nth_index_cache.rs",
+               "parser.rs",
+               "relative_selector",
+               "sink.rs",
+               "tree.rs",
+               "visitor.rs"
+            ],
+            "license" : "MPL-2.0",
+            "metadata" : [
+               {
+                  "path" : "Cargo.toml",
+                  "sha256" : "83630f5e117638281303f757127dfffc3f621c8d2ff03f99ff7f7589748bacd8"
+               },
+               {
+                  "path" : "Cargo.toml.orig",
+                  "sha256" : "26a19ba53c3dfff3f572e04f72ed224dca7b03a76a8e0593fc48b458ec6ab535"
+               },
+               {
+                  "path" : ".cargo_vcs_info.json",
+                  "sha256" : "1ddc4845786a1b1ebc7fb2f940878d9b923c4385d7d66841f25c765d1312fe74"
+               }
+            ],
+            "name" : "selectors",
+            "notices" : [],
+            "provenance" : {
+               "archive_path" : "/home/coder/workspace/lkjscript-specimens/rust-cache/registry/cache/index.crates.io-1949cf8c6b5b557f/selectors-0.38.0.crate",
+               "archive_sha256" : "8adfa1c298912827b8a28b223b3b874357397ae706e6190acd9bf28cee99114d",
+               "lock_checksum" : "8adfa1c298912827b8a28b223b3b874357397ae706e6190acd9bf28cee99114d",
+               "origin" : "https://github.com/servo/stylo",
+               "path_in_vcs" : "selectors",
+               "reported_rust_notice_metadata_files_match_locked_archive" : true,
+               "vcs_commit_from_package_metadata" : "572ecba2d1600e7c3d490586692a209faf703baa"
+            },
+            "roles" : {
+               "build_script" : {
+                  "files" : 1,
+                  "known_test_only_lines" : 0,
+                  "lexical_test_attributes" : 0,
+                  "physical_lines" : 77
+               },
+               "library" : {
+                  "files" : 15,
+                  "known_test_only_lines" : 1176,
+                  "lexical_test_attributes" : 12,
+                  "physical_lines" : 8918
+               }
+            },
+            "root" : "/home/coder/workspace/lkjscript-specimens/rust-cache/registry/src/index.crates.io-1949cf8c6b5b557f/selectors-0.38.0",
+            "version" : "0.38.0"
+         },
+         {
+            "declared_features" : {
+               "default" : [
+                  "fast_match_byte",
+                  "fast_match_color"
+               ],
+               "optional" : [
+                  "bench",
+                  "skip_long_tests",
+                  "serde",
+                  "malloc_size_of"
+               ]
+            },
+            "files" : [
+               [
+                  "src/color.rs",
+                  "library",
+                  352,
+                  "5d6e933cea7b1eaca4f257a682f8c3597f185e21bc64c53cf77f0c91e6ea9b84",
+                  0,
+                  0
+               ],
+               [
+                  "src/cow_rc_str.rs",
+                  "library",
+                  185,
+                  "88edf6a4a1b3d4338885a8eacc29a9e7115d4fae0f227c9a81a4d53c5a546693",
+                  0,
+                  0
+               ],
+               [
+                  "src/from_bytes.rs",
+                  "library",
+                  64,
+                  "1223c1ccf619735ccf7c28a8d154d516aa117fdbddcf091e2e8952e68fe53a80",
+                  0,
+                  0
+               ],
+               [
+                  "src/lib.rs",
+                  "library",
+                  142,
+                  "0ed4b253cac886f3b365958279c5efa094f7b4bfd4e44896b6ebaf32994d6fa9",
+                  0,
+                  2
+               ],
+               [
+                  "src/macros.rs",
+                  "library",
+                  292,
+                  "731f263f6a7a1dd41029e522b58f2c8e193ddd3243f814da588635283128cd36",
+                  0,
+                  0
+               ],
+               [
+                  "src/nth.rs",
+                  "library",
+                  145,
+                  "86b0a3c19ecaac27ca95a97ee0f9f703b0d21f7b14c3e6d2f2ce12af78cb24a2",
+                  0,
+                  0
+               ],
+               [
+                  "src/parser.rs",
+                  "library",
+                  1179,
+                  "c6d56e8921b4cb2f02d7b9620044f0d79fc911350d73199c7797ad690b4cc79f",
+                  0,
+                  0
+               ],
+               [
+                  "src/rules_and_declarations.rs",
+                  "library",
+                  540,
+                  "b9e2a9b8b6c52b0fc18237f71432ed37276ba274f1c8257570c704bfc05579a3",
+                  0,
+                  0
+               ],
+               [
+                  "src/serializer.rs",
+                  "library",
+                  592,
+                  "ccc3f0e44189284b46dfad1d48ca5c21860f2c7e1c00540da5cee77e0c891275",
+                  0,
+                  0
+               ],
+               [
+                  "src/size_of_tests.rs",
+                  "library",
+                  52,
+                  "f29de7c5cb681cb36b81d22f6b103df61e3bf1406758fa5606138dbf6b49db58",
+                  1,
+                  52
+               ],
+               [
+                  "src/tests.rs",
+                  "library",
+                  1360,
+                  "5ed73aa37e42ebb06bccd0860686504d3467ae3ddd75e513812dfaf5a83e926a",
+                  35,
+                  1360
+               ],
+               [
+                  "src/tokenizer.rs",
+                  "library",
+                  1401,
+                  "0be69dc2fb909133a4e3148e1f70b5fae4328175ad49634b465f4126f5351ebd",
+                  0,
+                  0
+               ],
+               [
+                  "src/unicode_range.rs",
+                  "library",
+                  183,
+                  "7ea876f64e2c83679e9cecccf9f332bebffe512f487da47a0c06e423c8662110",
+                  0,
+                  0
+               ]
+            ],
+            "library_entry" : "src/lib.rs",
+            "library_physical_lines_less_recognized_test_only_regions" : 5073,
+            "library_source_roots" : [
+               "src"
+            ],
+            "license" : "MPL-2.0",
+            "metadata" : [
+               {
+                  "path" : "Cargo.toml",
+                  "sha256" : "0ac783c96e15668a9efd9e43c9218953c49bf1441779ea622d065d7b643c7697"
+               },
+               {
+                  "path" : "Cargo.toml.orig",
+                  "sha256" : "1b018bdc84c21092d9dfc56f33b722ee0cea01547d59821dd5eec2f3338b90e6"
+               },
+               {
+                  "path" : ".cargo_vcs_info.json",
+                  "sha256" : "f962147af040486a7d5e1159d3724d7e2bd4050cf0265f1e0087a263e2a915e0"
+               }
+            ],
+            "name" : "cssparser",
+            "notices" : [
+               {
+                  "bytes" : 16726,
+                  "path" : "LICENSE",
+                  "sha256" : "fab3dd6bdab226f1c08630b1dd917e11fcb4ec5e1e020e2c16f83a0a13863e85"
+               }
+            ],
+            "provenance" : {
+               "archive_path" : "/home/coder/workspace/lkjscript-specimens/rust-cache/registry/cache/index.crates.io-1949cf8c6b5b557f/cssparser-0.37.0.crate",
+               "archive_sha256" : "8c9cdaae01d5ed7882b04d795e7f752f46ff52d2fa3b50a20d28c464510bba98",
+               "lock_checksum" : "8c9cdaae01d5ed7882b04d795e7f752f46ff52d2fa3b50a20d28c464510bba98",
+               "origin" : "https://github.com/servo/rust-cssparser",
+               "path_in_vcs" : "",
+               "reported_rust_notice_metadata_files_match_locked_archive" : true,
+               "vcs_commit_from_package_metadata" : "4c49486494fb24dc01390e3baca9698ef1744c71"
+            },
+            "roles" : {
+               "library" : {
+                  "files" : 13,
+                  "known_test_only_lines" : 1414,
+                  "lexical_test_attributes" : 36,
+                  "physical_lines" : 6487
+               }
+            },
+            "root" : "/home/coder/workspace/lkjscript-specimens/rust-cache/registry/src/index.crates.io-1949cf8c6b5b557f/cssparser-0.37.0",
+            "version" : "0.37.0"
+         }
+      ],
+      "physical_counts_are_not_sloc" : true,
+      "recognized_test_only_lines_within_library" : 4185,
+      "root_cargo_lock_sha256" : "fad8acf7cf3817a83faa3af635a29be0f59b80f4e4da71ed0c3f1d722a4b6ee1",
+      "scope" : "dom_query root DOM implementation + html5ever HTML parser + markup5ever interfaces + selectors matching + cssparser syntax; each package counted once",
+      "test_region_convention" : "Direct cfg(test) module blocks/declarations; cssparser tests.rs and size_of_tests.rs are separately verified test-only modules. Remaining lines include comments, unrecognized test-only helpers and optional-feature branches; they are not measured executable SLOC."
+   },
+   "original_suffix_refusal" : {
+      "category" : "source naming/admission convention",
+      "code" : "E_SOURCE_EXTENSION",
+      "count" : 1,
+      "stderr" : "src/lib.rs: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir"
+   },
+   "primary_site_columns" : [
+      "coordinate_in_original_rs",
+      "cause",
+      "diagnostic_code",
+      "partition"
+   ],
+   "primary_sites" : [
+      [
+         "src/document.rs:2:21",
+         "shared_interior_mutation",
+         "E_CAPABILITY",
+         "observed_cause"
+      ],
+      [
+         "src/document.rs:74:33",
+         "foreign_atom_macros",
+         "E_UNSUPPORTED_MACRO",
+         "observed_cause"
+      ],
+      [
+         "src/document.rs:259:18",
+         "generic_associated_types",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/document.rs:501:17",
+         "statement_cfg_attribute",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/ops.rs:1:19",
+         "shared_interior_mutation",
+         "E_CAPABILITY",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/traversal.rs:1:19",
+         "shared_interior_mutation",
+         "E_CAPABILITY",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/tree.rs:1:20",
+         "shared_interior_mutation",
+         "E_CAPABILITY",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/tree.rs:42:40",
+         "foreign_atom_macros",
+         "E_UNSUPPORTED_MACRO",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/tree.rs:126:9",
+         "const_functions",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/tree.rs:501:10",
+         "qualified_attribute_path",
+         "E_PARSE",
+         "cfg_disabled_inventory"
+      ],
+      [
+         "src/dom_tree/tree.rs:507:5",
+         "static_test_fixture",
+         "E_UNSUPPORTED",
+         "cfg_disabled_inventory"
+      ],
+      [
+         "src/dom_tree/tree.rs:604:49",
+         "foreign_atom_macros",
+         "E_UNSUPPORTED_MACRO",
+         "cfg_disabled_inventory"
+      ],
+      [
+         "src/dom_tree/tree.rs:629:33",
+         "foreign_atom_macros",
+         "E_UNSUPPORTED_MACRO",
+         "cfg_disabled_inventory"
+      ],
+      [
+         "src/dom_tree/tree.rs:635:33",
+         "foreign_atom_macros",
+         "E_UNSUPPORTED_MACRO",
+         "cfg_disabled_inventory"
+      ],
+      [
+         "src/dom_tree/tree.rs:673:33",
+         "foreign_atom_macros",
+         "E_UNSUPPORTED_MACRO",
+         "cfg_disabled_inventory"
+      ],
+      [
+         "src/dom_tree/tree.rs:679:33",
+         "foreign_atom_macros",
+         "E_UNSUPPORTED_MACRO",
+         "cfg_disabled_inventory"
+      ],
+      [
+         "src/dom_tree/validation.rs:56:28",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:59:28",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:62:28",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:65:28",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:68:28",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:74:21",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:78:32",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:82:32",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:93:40",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:96:36",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:103:29",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:106:40",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:114:29",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:117:40",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:129:32",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:140:36",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:143:32",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:147:32",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:157:36",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:160:32",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:169:36",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:172:32",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:185:32",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/dom_tree/validation.rs:198:36",
+         "debug_format_specification",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/lib.rs:18:20",
+         "documentation_attribute_macro",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/matcher.rs:38:25",
+         "associated_type_bindings",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/matcher.rs:47:25",
+         "associated_type_bindings",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/matcher.rs:102:33",
+         "associated_type_bindings",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/matcher.rs:195:16",
+         "qualified_associated_type_paths",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/matcher.rs:219:27",
+         "generic_associated_types",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/node.rs:30:16",
+         "const_functions",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/node/inner.rs:27:16",
+         "const_functions",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/node/inner.rs:60:9",
+         "const_functions",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/node/inner.rs:65:9",
+         "const_functions",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/node/inner.rs:70:9",
+         "const_functions",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/node/inner.rs:75:9",
+         "const_functions",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/node/inner.rs:80:9",
+         "const_functions",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/node/inner.rs:85:9",
+         "const_functions",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/node/inner.rs:90:9",
+         "const_functions",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/node/inner.rs:101:9",
+         "const_functions",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/node/iters.rs:1:19",
+         "shared_interior_mutation",
+         "E_CAPABILITY",
+         "observed_cause"
+      ],
+      [
+         "src/node/node_data.rs:107:39",
+         "foreign_atom_macros",
+         "E_UNSUPPORTED_MACRO",
+         "observed_cause"
+      ],
+      [
+         "src/node/node_data.rs:115:39",
+         "foreign_atom_macros",
+         "E_UNSUPPORTED_MACRO",
+         "observed_cause"
+      ],
+      [
+         "src/node/node_data.rs:121:23",
+         "foreign_atom_macros",
+         "E_UNSUPPORTED_MACRO",
+         "observed_cause"
+      ],
+      [
+         "src/node/node_data.rs:127:23",
+         "foreign_atom_macros",
+         "E_UNSUPPORTED_MACRO",
+         "observed_cause"
+      ],
+      [
+         "src/node/node_data.rs:144:45",
+         "foreign_atom_macros",
+         "E_UNSUPPORTED_MACRO",
+         "observed_cause"
+      ],
+      [
+         "src/node/node_data.rs:153:44",
+         "foreign_atom_macros",
+         "E_UNSUPPORTED_MACRO",
+         "observed_cause"
+      ],
+      [
+         "src/node/node_data.rs:170:45",
+         "foreign_atom_macros",
+         "E_UNSUPPORTED_MACRO",
+         "observed_cause"
+      ],
+      [
+         "src/node/node_data.rs:194:44",
+         "foreign_atom_macros",
+         "E_UNSUPPORTED_MACRO",
+         "observed_cause"
+      ],
+      [
+         "src/node/node_data.rs:261:44",
+         "foreign_atom_macros",
+         "E_UNSUPPORTED_MACRO",
+         "observed_cause"
+      ],
+      [
+         "src/node/node_data.rs:269:23",
+         "foreign_atom_macros",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/node/node_ref.rs:1:19",
+         "shared_interior_mutation",
+         "E_CAPABILITY",
+         "observed_cause"
+      ],
+      [
+         "src/node/node_ref.rs:44:9",
+         "const_functions",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/node/node_ref.rs:90:45",
+         "opaque_impl_trait",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/node/node_ref.rs:117:61",
+         "opaque_impl_trait",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/node/node_ref.rs:137:37",
+         "opaque_impl_trait",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/node/node_ref.rs:468:16",
+         "where_bound_on_path_type",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/node/selector.rs:22:40",
+         "qualified_associated_type_paths",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/node/selector.rs:73:37",
+         "foreign_atom_macros",
+         "E_UNSUPPORTED_MACRO",
+         "observed_cause"
+      ],
+      [
+         "src/node/selector.rs:80:43",
+         "qualified_associated_type_paths",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/node/selector.rs:92:34",
+         "qualified_associated_type_paths",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/node/selector.rs:117:35",
+         "qualified_associated_type_paths",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/node/selector.rs:134:18",
+         "qualified_associated_type_paths",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/node/selector.rs:151:15",
+         "qualified_associated_type_paths",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/node/selector.rs:172:16",
+         "qualified_associated_type_paths",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/node/selector.rs:188:16",
+         "qualified_associated_type_paths",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/node/serializing.rs:1:19",
+         "shared_interior_mutation",
+         "E_CAPABILITY",
+         "observed_cause"
+      ],
+      [
+         "src/node/serializing.rs:2:12",
+         "std_io_result_facade",
+         "E_CAPABILITY",
+         "observed_cause"
+      ],
+      [
+         "src/node/text_formatting.rs:1:19",
+         "shared_interior_mutation",
+         "E_CAPABILITY",
+         "observed_cause"
+      ],
+      [
+         "src/node/text_formatting.rs:42:61",
+         "foreign_atom_macros",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/node/text_formatting.rs:113:19",
+         "foreign_atom_macros",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/node/text_formatting.rs:124:7",
+         "const_functions",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/node/text_formatting.rs:127:19",
+         "foreign_atom_macros",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/selection.rs:1:19",
+         "shared_interior_mutation",
+         "E_CAPABILITY",
+         "observed_cause"
+      ],
+      [
+         "src/selection.rs:569:9",
+         "lifetime_outlives_where",
+         "E_PARSE",
+         "observed_cause"
+      ],
+      [
+         "src/selection.rs:821:31",
+         "opaque_impl_trait",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/selection.rs:831:37",
+         "opaque_impl_trait",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/selection.rs:871:14",
+         "dynamic_trait_object",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ],
+      [
+         "src/selection.rs:900:5",
+         "const_functions",
+         "E_UNSUPPORTED",
+         "observed_cause"
+      ]
+   ],
+   "producer_friction" : {
+      "classification" : "producer/tooling friction; not a compiler refusal",
+      "initial_refusal" : "The first projector refused Git mode120000 at dom-query-bench/test-pages -> ../test-pages before creating DEST.",
+      "internal_symlinks" : 1,
+      "resolution" : "Safe internal relative symlink inode hardlinks; no source target-byte change or target payload copy.",
+      "retained_source_changes" : 0,
+      "rust_aliases" : 59,
+      "tracked_nodes" : 86
+   },
+   "recovery_duplicate_messages" : [
+      {
+         "coordinate" : "src/node/node_ref.rs:90:45",
+         "primary_code" : "E_UNSUPPORTED",
+         "primary_message" : "unsupported construct: impl",
+         "reason" : "Same coordinate and rejected impl-Trait signature; no additional source site.",
+         "secondary_code" : "E_UNSUPPORTED",
+         "secondary_message" : "unsupported construct: impl item"
+      },
+      {
+         "coordinate" : "src/node/node_ref.rs:117:61",
+         "primary_code" : "E_UNSUPPORTED",
+         "primary_message" : "unsupported construct: impl",
+         "reason" : "Same coordinate and rejected impl-Trait signature; no additional source site.",
+         "secondary_code" : "E_UNSUPPORTED",
+         "secondary_message" : "unsupported construct: impl item"
+      },
+      {
+         "coordinate" : "src/node/node_ref.rs:137:37",
+         "primary_code" : "E_UNSUPPORTED",
+         "primary_message" : "unsupported construct: impl",
+         "reason" : "Same coordinate and rejected impl-Trait signature; no additional source site.",
+         "secondary_code" : "E_UNSUPPORTED",
+         "secondary_message" : "unsupported construct: impl item"
+      }
+   ],
+   "schema" : 1
+}

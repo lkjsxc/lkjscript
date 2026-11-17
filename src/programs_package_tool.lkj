@@ -1,0 +1,28 @@
+// Initial two-line tool scaffold is uncredited bootstrap work.
+
+pub use std::sha256;
+
+mod diagnostic;
+
+mod ir;
+
+mod ir_text;
+
+mod ir_binary;
+
+mod reuse;
+
+mod programs_package;
+
+mod programs_package_command;
+
+mod programs_package_cases;
+fn main(mut arguments: Arguments, mut source: ReadDirectory, mut policy: ReadDirectory,
+    mut store: ReadDirectory, mut issuer: ReadDirectory, mut sink: Directory, mut output: Stdout,
+    mut errors: Stderr, mut status: ExitStatus) {
+    if let Err(message) = programs_package_command::run(&mut arguments, &mut source, &mut policy,
+        &mut store, &mut issuer, &mut sink, &mut output) {
+        errors.write(format!("package {message}\n").as_bytes());
+        status.set_status(1u8);
+    }
+}

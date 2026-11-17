@@ -1,0 +1,1329 @@
+{
+   "accounting" : {
+      "context_migration_changed_lines" : 14,
+      "context_migration_new_manual_scaffold_lines" : 0,
+      "failed_candidate_changes_published" : 0,
+      "failed_edit_transactions" : 2,
+      "initial_scaffold_lines_uncredited" : 2,
+      "retained_handwritten_fixture_lines_in_shell_uncredited" : 19,
+      "retained_language_lines" : 459,
+      "retained_language_lines_published_by_operations" : 458,
+      "retained_scaffold_lines_uncredited" : 1,
+      "source_shape_repairs" : [
+         "Owned String vectors replace forbidden owned arrays of views.",
+         "Byte literal converts through a slice; closure parameter/result context is explicit.",
+         "Indexed mutable traversal avoids the observed associated-projection witness refusal.",
+         "World argument bytes are decoded and argv[0] is not assumed present.",
+         "The standalone fixture uses String::as_str().len() to explicitly exercise str_len; no policy relaxation."
+      ],
+      "successful_edit_transactions" : 3,
+      "successful_operations" : 38,
+      "successful_operations_scope" : "All successful tool operations: 24 Programs operations plus 14 temporary, already-published SDK integration operations. SDK operations earn no retained Programs source credit.",
+      "successful_programs_operations" : 24,
+      "successful_upstream_sdk_operations_uncredited" : 14
+   },
+   "compiler" : {
+      "git" : "d095ba7cd32a44bea7e7964767f02fa5195c3462",
+      "sha256" : "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0"
+   },
+   "final_files" : {
+      "src/programs_unit_policy.lkj" : {
+         "bytes" : 7815,
+         "lines" : 140,
+         "mode" : "0600",
+         "sha256" : "64ea8958685bc308ee69498a1157fb14d0b46d18c46e6fc50f060d7b62ac9be0"
+      },
+      "src/programs_unit_policy_cases.lkj" : {
+         "bytes" : 15970,
+         "lines" : 274,
+         "mode" : "0600",
+         "sha256" : "3d954a4ac36e0d75d174c4e0e02f2ab1375424722a9d0e0e88e58c7e3f4eadbc"
+      },
+      "src/programs_unit_policy_main.lkj" : {
+         "bytes" : 793,
+         "lines" : 45,
+         "mode" : "0600",
+         "sha256" : "c54938472ccecdd0aee9c0dfd561d72f2ab297bdb8443aa57184089f0216560c"
+      },
+      "tools/programs-unit-policy-test.sh" : {
+         "bytes" : 2839,
+         "lines" : 74,
+         "mode" : "0744",
+         "sha256" : "43b66c3b17556597f510c6702fbded8cf44e753e30cec41fe45462da14628b84"
+      }
+   },
+   "gate" : {
+      "command" : "bash tools/programs-unit-policy-test.sh target/lkjscript",
+      "controls" : [
+         "Vec and string-view computation accepted and executed.",
+         "File open, socket connect, specialized output callback, custom Drop, structural Drop, and imported structural Drop refused.",
+         "Authentic unchanged interface refused under policy excluding vec_new.",
+         "Already-created admission refused after current-policy narrowing; harmless policy changes require readmission.",
+         "Authenticated interface cannot fabricate checked bodies for emission.",
+         "Unknown future operation summary refused even in deliberately authenticated framing.",
+         "Wrong producer, key, body with unchanged interface/input, unit binding and dependency pins refused.",
+         "Malformed native payload, wrong source base and wrong native key refused."
+      ],
+      "controls_are" : "27 controls across six named groups; not an assertion count, original-package tests, or a measured performance comparison.",
+      "evidence" : "native_context_migration.focused_gate",
+      "exit_code" : 0,
+      "native_oracles" : [
+         {
+            "result" : 9,
+            "route" : "cold computation object"
+         },
+         {
+            "result" : 9,
+            "route" : "authenticated reused computation object"
+         },
+         {
+            "result" : 42,
+            "route" : "specialized pure callback"
+         }
+      ],
+      "peak_rss_kib" : 251028,
+      "reported_controls" : 27,
+      "sdk_git" : "4cb38cb850fe8b47522699df9176cca79f71b64d",
+      "sdk_sha256" : "6210f415e8df630da03c14791e69bcf1d4cce9ca391b2ceb5722c86f680a11bf",
+      "wall_ms" : 7996
+   },
+   "history" : {
+      "before_native_context_migration" : {
+         "accounting" : {
+            "failed_candidate_changes_published" : 0,
+            "failed_edit_transactions" : 2,
+            "initial_scaffold_lines_uncredited" : 2,
+            "retained_handwritten_fixture_lines_in_shell_uncredited" : 19,
+            "retained_language_lines" : 455,
+            "retained_language_lines_published_by_operations" : 454,
+            "retained_scaffold_lines_uncredited" : 1,
+            "source_shape_repairs" : [
+               "Owned String vectors replace forbidden owned arrays of views.",
+               "Byte literal converts through a slice; closure parameter/result context is explicit.",
+               "Indexed mutable traversal avoids the observed associated-projection witness refusal.",
+               "World argument bytes are decoded and argv[0] is not assumed present.",
+               "The standalone fixture uses String::as_str().len() to explicitly exercise str_len; no policy relaxation."
+            ],
+            "successful_edit_transactions" : 2,
+            "successful_operations" : 20
+         },
+         "compiler" : {
+            "git" : "d095ba7cd32a44bea7e7964767f02fa5195c3462",
+            "sha256" : "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0"
+         },
+         "final_files" : {
+            "src/programs_unit_policy.lkj" : {
+               "bytes" : 7692,
+               "lines" : 138,
+               "mode" : "0600",
+               "sha256" : "00f3f0b5dd1aa9e276969598204771e74b598c81f99d2ad86fdb3364f5f1f48b"
+            },
+            "src/programs_unit_policy_cases.lkj" : {
+               "bytes" : 15856,
+               "lines" : 272,
+               "mode" : "0600",
+               "sha256" : "890b00dd9b947318f6bb2b802dac933e993282f2c0bf44846aa5b9f46939ac44"
+            },
+            "src/programs_unit_policy_main.lkj" : {
+               "bytes" : 793,
+               "lines" : 45,
+               "mode" : "0600",
+               "sha256" : "c54938472ccecdd0aee9c0dfd561d72f2ab297bdb8443aa57184089f0216560c"
+            },
+            "tools/programs-unit-policy-test.sh" : {
+               "bytes" : 2839,
+               "lines" : 74,
+               "mode" : "0744",
+               "sha256" : "43b66c3b17556597f510c6702fbded8cf44e753e30cec41fe45462da14628b84"
+            }
+         },
+         "gate" : {
+            "command" : "bash tools/programs-unit-policy-test.sh",
+            "controls" : [
+               "Vec and string-view computation accepted and executed.",
+               "File open, socket connect, specialized output callback, custom Drop, structural Drop, and imported structural Drop refused.",
+               "Authentic unchanged interface refused under policy excluding vec_new.",
+               "Already-created admission refused after current-policy narrowing; harmless policy changes require readmission.",
+               "Authenticated interface cannot fabricate checked bodies for emission.",
+               "Unknown future operation summary refused even in deliberately authenticated framing.",
+               "Wrong producer, key, body with unchanged interface/input, unit binding and dependency pins refused.",
+               "Malformed native payload, wrong source base and wrong native key refused."
+            ],
+            "controls_are" : "27 control groups; not an assertion count, original-package tests, or measured performance comparison.",
+            "exit_code" : 0,
+            "native_oracles" : [
+               {
+                  "result" : 9,
+                  "route" : "cold computation object"
+               },
+               {
+                  "result" : 9,
+                  "route" : "authenticated reused computation object"
+               },
+               {
+                  "result" : 42,
+                  "route" : "specialized pure callback"
+               }
+            ],
+            "peak_rss" : "not measured",
+            "reported_controls" : 27,
+            "wall_ms" : 6969
+         },
+         "note" : "Exact pre-Context results remain historical evidence on the original d095 SDK. Original publication requests and raw record summaries remain unchanged at their existing keys.",
+         "receipt_before_sha256" : "15bc0d12429a32549ffd8f86f8718f0514eefb6be2a4f999d142a0b5fc6a6967"
+      }
+   },
+   "kind" : "checked concrete interface export computation policy",
+   "native_context_migration" : {
+      "accounting" : {
+         "changed_native_calls" : 5,
+         "changed_programs_function_bodies" : 4,
+         "failed_candidate_changes_published" : 0,
+         "new_failed_edit_transactions" : 0,
+         "new_manual_language_scaffold_lines" : 0,
+         "new_manual_programs_repairs" : 0,
+         "per_file" : [
+            {
+               "added" : 5,
+               "path" : "src/programs_unit_policy.lkj",
+               "removed" : 3
+            },
+            {
+               "added" : 4,
+               "path" : "src/programs_unit_policy_cases.lkj",
+               "removed" : 2
+            }
+         ],
+         "programs_added_lines" : 9,
+         "programs_changed_lines" : 14,
+         "programs_operations" : 4,
+         "programs_removed_lines" : 5,
+         "successful_edit_transactions" : 1,
+         "successful_operations" : 18,
+         "upstream_sdk_operations_uncredited" : 14
+      },
+      "compiler" : {
+         "git" : "d095ba7cd32a44bea7e7964767f02fa5195c3462",
+         "sha256" : "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0"
+      },
+      "focused_gate" : {
+         "argv" : [
+            "/usr/bin/time",
+            "-f",
+            "wall_seconds=%e\nmax_rss_kib=%M",
+            "-o",
+            "target/programs-policy-context-20261117-r214/focused.time",
+            "bash",
+            "tools/programs-unit-policy-test.sh",
+            "target/lkjscript"
+         ],
+         "err" : {
+            "bytes" : 0,
+            "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "text" : ""
+         },
+         "exit_code" : 0,
+         "expected_output" : "ok concrete computation 27 controls\n",
+         "out" : {
+            "bytes" : 36,
+            "sha256" : "616a3f9a9a6d7f072c76f95c7fe2603d3f90418031d6b942ec92c882e63d1d89",
+            "text" : "ok concrete computation 27 controls\n"
+         },
+         "output_equal" : true,
+         "signal" : 0,
+         "time" : {
+            "bytes" : 37,
+            "sha256" : "5a1d15a53d2ea19ad8bac5e5b666ac71f99ad8e67fb9e0b6dea8d877c8bee72f",
+            "text" : "wall_seconds=7.99\nmax_rss_kib=251028\n"
+         },
+         "wall_ms" : 7996
+      },
+      "normalized_check" : {
+         "argv" : [
+            "target/lkjscript",
+            "check",
+            "src/programs_unit_policy_main.lkj",
+            "--source-dir",
+            ".",
+            "--library-dir",
+            "library",
+            "--no-store"
+         ],
+         "err" : {
+            "bytes" : 0,
+            "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "text" : ""
+         },
+         "exit_code" : 0,
+         "out" : {
+            "bytes" : 0,
+            "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "text" : ""
+         },
+         "signal" : 0,
+         "wall_ms" : 6308
+      },
+      "publication" : {
+         "after_files" : {
+            "src/native/units.lkj" : {
+               "bytes" : 40585,
+               "lines" : 760,
+               "sha256" : "7f00eaa000531ec99f6820da747857e4b30eada73f54539a82be988ffebce370"
+            },
+            "src/programs_unit_policy.lkj" : {
+               "bytes" : 7815,
+               "lines" : 140,
+               "sha256" : "64ea8958685bc308ee69498a1157fb14d0b46d18c46e6fc50f060d7b62ac9be0"
+            },
+            "src/programs_unit_policy_cases.lkj" : {
+               "bytes" : 15970,
+               "lines" : 274,
+               "sha256" : "3d954a4ac36e0d75d174c4e0e02f2ab1375424722a9d0e0e88e58c7e3f4eadbc"
+            },
+            "src/programs_unit_policy_main.lkj" : {
+               "bytes" : 793,
+               "lines" : 45,
+               "sha256" : "c54938472ccecdd0aee9c0dfd561d72f2ab297bdb8443aa57184089f0216560c"
+            },
+            "src/units.lkj" : {
+               "bytes" : 26849,
+               "lines" : 520,
+               "sha256" : "ae786dd66d63ef97e9c70f641c8d4af3432749c4313beadd641cbefa34384969"
+            },
+            "tools/programs-unit-policy-test.sh" : {}
+         },
+         "argv" : [
+            "target/lkjscript",
+            "edit",
+            "src/programs_unit_policy_main.lkj",
+            "--source-dir",
+            ".",
+            "--library-dir",
+            "library",
+            "--request",
+            "target/programs-policy-context-20261117-r214/request.json",
+            "--store",
+            "target/programs-policy-context-20261117-r214/store",
+            "--store-key",
+            "/tmp/lkjscript-programs-context-L6_rYd_M/key"
+         ],
+         "err" : {
+            "bytes" : 0,
+            "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "text" : ""
+         },
+         "exit_code" : 0,
+         "out" : {
+            "bytes" : 9058,
+            "sha256" : "b96f78113b6a2e3b3ff1d4b38190ac192f067411086f6bb01c9fd1a874c4fc58",
+            "summary" : [
+               "\"./src/native/units.lkj\" level=source-claim file before=ebfb31a1a3ab23b87e9ad99c5aa3e3503fd6907eee26c950aa13c8073aa57010 after=7f00eaa000531ec99f6820da747857e4b30eada73f54539a82be988ffebce370",
+               "\"./src/programs_unit_policy.lkj\" level=source-claim file before=00f3f0b5dd1aa9e276969598204771e74b598c81f99d2ad86fdb3364f5f1f48b after=64ea8958685bc308ee69498a1157fb14d0b46d18c46e6fc50f060d7b62ac9be0",
+               "\"./src/programs_unit_policy_cases.lkj\" level=source-claim file before=890b00dd9b947318f6bb2b802dac933e993282f2c0bf44846aa5b9f46939ac44 after=3d954a4ac36e0d75d174c4e0e02f2ab1375424722a9d0e0e88e58c7e3f4eadbc",
+               "transaction sites=13 files=3 identities=12",
+               "program level=checked-ir authority-delta=none",
+               "program level=checked-ir before=3ad52b111739958597344e054b5f99b9b0fe6561445c66ba639178e2d9f70bb9 after=373ef57b7280d40193c2005d7c4ea844155558fee48649b92c964617f0c4d320 checked-instances=4375 fresh-checked=4375 proof-reused=0 frontend-resumed=0 library-validation=demanded",
+               "transaction source-before=5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36 source-after=53b957437619e5f101096ae04e8254c81133fb38c046f2a366c1f5b854c7b06b mode=apply"
+            ]
+         },
+         "signal" : 0,
+         "wall_ms" : 13370
+      },
+      "publication_request" : "publication.request5",
+      "purpose" : "Preserve the public Runtime policy API while constructing a local native::units::Context for emit, object_key, Object::open, Linker::finish and the object-key negative control.",
+      "query" : {
+         "complete_item_texts" : [
+            {
+               "bytes" : 464,
+               "id" : "programs_unit_policy::Admission::emit",
+               "text_sha256" : "2777140ec20780ad9dffc96f8febe2276cbcabd834e10b93de7d81e1ba40d2b6"
+            },
+            {
+               "bytes" : 1247,
+               "id" : "programs_unit_policy::Admission::open",
+               "text_sha256" : "02ee52153c62f5e94c9037430ee695fb85ec08be709b530fdb0e4dc48b8c8327"
+            },
+            {
+               "bytes" : 512,
+               "id" : "programs_unit_policy_cases::linked",
+               "text_sha256" : "1deee957191a2cc2bdffd8d54838f886f23c3d8656e7d743f234b10ae5703747"
+            },
+            {
+               "bytes" : 3269,
+               "id" : "programs_unit_policy_cases::positive_and_reuse",
+               "text_sha256" : "c1b6be67dfec03d86061fcde8a8b77b184d1f917a71a02b591dba074c19ca84f"
+            },
+            {
+               "bytes" : 573,
+               "id" : "native::units::object_key",
+               "text_sha256" : "9c32b2aa92db66c03e80d2b2534d56ff1f027e03f8e1883d9b21541405dcd988"
+            },
+            {
+               "bytes" : 222,
+               "id" : "native::units::Object",
+               "text_sha256" : "58adf3acea268b3bb7b248378bfe68aad9c678e691d4c58cb78cd98cc7d48d7d"
+            },
+            {
+               "bytes" : 5640,
+               "id" : "impl:native::units::Object#b7771cc4d9891560",
+               "text_sha256" : "76cff4c53dd50f5b9d0193c73661252fd7460d6ba61beb11a22016cc0ce108ca"
+            },
+            {
+               "bytes" : 4268,
+               "id" : "native::units::emit",
+               "text_sha256" : "bd9f9d894d02a6f8e94f5549883af0a02ef6a4f59f70b256122b0db42dc4ac40"
+            },
+            {
+               "bytes" : 11389,
+               "id" : "impl:native::units::Linker#8ace89006d24dd8b",
+               "text_sha256" : "82e5af0ca5828e6e41858b38f63a51abf3cd786d0d928af2767e2f2e5b3c94f0"
+            }
+         ],
+         "index" : {
+            "argv" : [
+               "target/lkjscript",
+               "build",
+               "src/programs_unit_policy_main.lkj",
+               "--source-dir",
+               ".",
+               "--library-dir",
+               "library",
+               "--runtime-source",
+               "library/runtime.lkj",
+               "--index",
+               "--store",
+               "target/programs-policy-context-20261117-r214/store",
+               "--store-key",
+               "/tmp/lkjscript-programs-context-L6_rYd_M/key",
+               "-o",
+               "target/programs-policy-context-20261117-r214/before"
+            ],
+            "err" : {
+               "bytes" : 0,
+               "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "text" : ""
+            },
+            "exit_code" : 0,
+            "out" : {
+               "bytes" : 232,
+               "sha256" : "deb98a2dc0c8eb9456701b56363056b791994be73cc2d35731706735b6f11e94",
+               "text" : "LKJSCRIPT_SNAPSHOT 04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71 source=5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36 checked-ir=946f2c4ccbacf659fe8e3798ec20c5a6353c0e013415b63d0a7a4d307b685ab4\n"
+            },
+            "signal" : 0,
+            "wall_ms" : 29561
+         },
+         "queries" : [
+            {
+               "argv" : [
+                  "target/lkjscript",
+                  "query",
+                  "src/programs_unit_policy_main.lkj",
+                  "--source-dir",
+                  ".",
+                  "--library-dir",
+                  "library",
+                  "--store",
+                  "target/programs-policy-context-20261117-r214/store",
+                  "--store-key",
+                  "/tmp/lkjscript-programs-context-L6_rYd_M/key",
+                  "--snapshot",
+                  "04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71",
+                  "--kind",
+                  "outline",
+                  "--id",
+                  "native::units",
+                  "--depth",
+                  1,
+                  "--limit",
+                  100,
+                  "--bytes",
+                  "32768"
+               ],
+               "err" : {
+                  "bytes" : 0,
+                  "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "text" : ""
+               },
+               "exit_code" : 0,
+               "out" : {
+                  "bytes" : 8677,
+                  "sha256" : "2e9a26e542422dca4d63b554899756f68569c547021563a9931d26017b2e6403",
+                  "summary" : [
+                     "\"native::units\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71 source=5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36 checked-ir=946f2c4ccbacf659fe8e3798ec20c5a6353c0e013415b63d0a7a4d307b685ab4 kind=outline depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit",
+                     "\"native::units\"\tlevel=protocol\tfact=continuation\tcursor=none facts=46 pages-read=13 traversal-steps=49"
+                  ]
+               },
+               "signal" : 0,
+               "wall_ms" : 2
+            },
+            {
+               "argv" : [
+                  "target/lkjscript",
+                  "query",
+                  "src/programs_unit_policy_main.lkj",
+                  "--source-dir",
+                  ".",
+                  "--library-dir",
+                  "library",
+                  "--store",
+                  "target/programs-policy-context-20261117-r214/store",
+                  "--store-key",
+                  "/tmp/lkjscript-programs-context-L6_rYd_M/key",
+                  "--snapshot",
+                  "04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71",
+                  "--kind",
+                  "outline",
+                  "--id",
+                  "programs_unit_policy",
+                  "--depth",
+                  2,
+                  "--limit",
+                  100,
+                  "--bytes",
+                  "32768"
+               ],
+               "err" : {
+                  "bytes" : 0,
+                  "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "text" : ""
+               },
+               "exit_code" : 0,
+               "out" : {
+                  "bytes" : 23537,
+                  "sha256" : "49c82a2550c8317f9e665a9295096927d9b8caaa16cfcbbd5c81676a08e1416e",
+                  "summary" : [
+                     "\"programs_unit_policy\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71 source=5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36 checked-ir=946f2c4ccbacf659fe8e3798ec20c5a6353c0e013415b63d0a7a4d307b685ab4 kind=outline depth=2 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit",
+                     "\"programs_unit_policy\"\tlevel=protocol\tfact=continuation\tcursor=6c6b6a7363726970742d73746f72652d320aa7000000000000009896a5fc32658d0358d429ae3274303fa03e30ce6ae1f66c122fd695830eb930428ac2707c1021cf50961fe6db40c6576a0b4bcbf7c0ecd60bee38cbeebfefb6030000000000000002000000000000000800000000000000406f75746c696e65140000000000000070726f6772616d735f756e69745f706f6c696379010000000000000000000000000000000b0000000000000007000000000000006f75746c696e65240000000000000070726f6772616d735f756e69745f706f6c6963793a3a636f6d7075746174696f6e5f7631010000000000000001000000000000000100000000000000 facts=100 pages-read=53 traversal-steps=124"
+                  ]
+               },
+               "signal" : 0,
+               "wall_ms" : 10
+            },
+            {
+               "argv" : [
+                  "target/lkjscript",
+                  "query",
+                  "src/programs_unit_policy_main.lkj",
+                  "--source-dir",
+                  ".",
+                  "--library-dir",
+                  "library",
+                  "--store",
+                  "target/programs-policy-context-20261117-r214/store",
+                  "--store-key",
+                  "/tmp/lkjscript-programs-context-L6_rYd_M/key",
+                  "--snapshot",
+                  "04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71",
+                  "--kind",
+                  "outline",
+                  "--id",
+                  "programs_unit_policy_cases",
+                  "--depth",
+                  1,
+                  "--limit",
+                  100,
+                  "--bytes",
+                  "32768"
+               ],
+               "err" : {
+                  "bytes" : 0,
+                  "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "text" : ""
+               },
+               "exit_code" : 0,
+               "out" : {
+                  "bytes" : 3826,
+                  "sha256" : "1dea6435303c660785ca915b1426c9f7840d131d6cf03e5f2e8e036b04f548aa",
+                  "summary" : [
+                     "\"programs_unit_policy_cases\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71 source=5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36 checked-ir=946f2c4ccbacf659fe8e3798ec20c5a6353c0e013415b63d0a7a4d307b685ab4 kind=outline depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit",
+                     "\"programs_unit_policy_cases\"\tlevel=protocol\tfact=continuation\tcursor=none facts=16 pages-read=5 traversal-steps=17"
+                  ]
+               },
+               "signal" : 0,
+               "wall_ms" : 1
+            },
+            {
+               "argv" : [
+                  "target/lkjscript",
+                  "query",
+                  "src/programs_unit_policy_main.lkj",
+                  "--source-dir",
+                  ".",
+                  "--library-dir",
+                  "library",
+                  "--store",
+                  "target/programs-policy-context-20261117-r214/store",
+                  "--store-key",
+                  "/tmp/lkjscript-programs-context-L6_rYd_M/key",
+                  "--snapshot",
+                  "04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71",
+                  "--kind",
+                  "item",
+                  "--id",
+                  "programs_unit_policy::Admission::emit",
+                  "--limit",
+                  100,
+                  "--bytes",
+                  32768
+               ],
+               "err" : {
+                  "bytes" : 0,
+                  "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "text" : ""
+               },
+               "exit_code" : 0,
+               "out" : {
+                  "bytes" : 1950,
+                  "sha256" : "9b2ab209fb5361ec81332980c741b0b850fb8cb6c9578cc0b482eeaa19194e05",
+                  "summary" : [
+                     "\"programs_unit_policy::Admission::emit\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71 source=5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36 checked-ir=946f2c4ccbacf659fe8e3798ec20c5a6353c0e013415b63d0a7a4d307b685ab4 kind=item depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit",
+                     "\"programs_unit_policy::Admission::emit\"\tlevel=protocol\tfact=continuation\tcursor=none facts=3 pages-read=9 traversal-steps=5"
+                  ]
+               },
+               "signal" : 0,
+               "wall_ms" : 2
+            },
+            {
+               "argv" : [
+                  "target/lkjscript",
+                  "query",
+                  "src/programs_unit_policy_main.lkj",
+                  "--source-dir",
+                  ".",
+                  "--library-dir",
+                  "library",
+                  "--store",
+                  "target/programs-policy-context-20261117-r214/store",
+                  "--store-key",
+                  "/tmp/lkjscript-programs-context-L6_rYd_M/key",
+                  "--snapshot",
+                  "04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71",
+                  "--kind",
+                  "item",
+                  "--id",
+                  "programs_unit_policy::Admission::open",
+                  "--limit",
+                  100,
+                  "--bytes",
+                  32768
+               ],
+               "err" : {
+                  "bytes" : 0,
+                  "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "text" : ""
+               },
+               "exit_code" : 0,
+               "out" : {
+                  "bytes" : 2896,
+                  "sha256" : "cc6bbd70974736313b6912a5900100e57ccf281d5416201a55ac9591be0dfa95",
+                  "summary" : [
+                     "\"programs_unit_policy::Admission::open\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71 source=5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36 checked-ir=946f2c4ccbacf659fe8e3798ec20c5a6353c0e013415b63d0a7a4d307b685ab4 kind=item depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit",
+                     "\"programs_unit_policy::Admission::open\"\tlevel=protocol\tfact=continuation\tcursor=none facts=4 pages-read=9 traversal-steps=6"
+                  ]
+               },
+               "signal" : 0,
+               "wall_ms" : 2
+            },
+            {
+               "argv" : [
+                  "target/lkjscript",
+                  "query",
+                  "src/programs_unit_policy_main.lkj",
+                  "--source-dir",
+                  ".",
+                  "--library-dir",
+                  "library",
+                  "--store",
+                  "target/programs-policy-context-20261117-r214/store",
+                  "--store-key",
+                  "/tmp/lkjscript-programs-context-L6_rYd_M/key",
+                  "--snapshot",
+                  "04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71",
+                  "--kind",
+                  "item",
+                  "--id",
+                  "programs_unit_policy_cases::linked",
+                  "--limit",
+                  100,
+                  "--bytes",
+                  32768
+               ],
+               "err" : {
+                  "bytes" : 0,
+                  "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "text" : ""
+               },
+               "exit_code" : 0,
+               "out" : {
+                  "bytes" : 1961,
+                  "sha256" : "10ceca4e4c7fe14f7c2a9a434b2643e7dfb10d5acea7469cbc4efb9e2f9e2dd5",
+                  "summary" : [
+                     "\"programs_unit_policy_cases::linked\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71 source=5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36 checked-ir=946f2c4ccbacf659fe8e3798ec20c5a6353c0e013415b63d0a7a4d307b685ab4 kind=item depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit",
+                     "\"programs_unit_policy_cases::linked\"\tlevel=protocol\tfact=continuation\tcursor=none facts=3 pages-read=9 traversal-steps=5"
+                  ]
+               },
+               "signal" : 0,
+               "wall_ms" : 1
+            },
+            {
+               "argv" : [
+                  "target/lkjscript",
+                  "query",
+                  "src/programs_unit_policy_main.lkj",
+                  "--source-dir",
+                  ".",
+                  "--library-dir",
+                  "library",
+                  "--store",
+                  "target/programs-policy-context-20261117-r214/store",
+                  "--store-key",
+                  "/tmp/lkjscript-programs-context-L6_rYd_M/key",
+                  "--snapshot",
+                  "04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71",
+                  "--kind",
+                  "item",
+                  "--id",
+                  "programs_unit_policy_cases::positive_and_reuse",
+                  "--limit",
+                  100,
+                  "--bytes",
+                  32768
+               ],
+               "err" : {
+                  "bytes" : 0,
+                  "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "text" : ""
+               },
+               "exit_code" : 0,
+               "out" : {
+                  "bytes" : 5316,
+                  "sha256" : "b2612c6561104e73481b4c337f5c8de0cbd16ab177472346739870b06a9d48aa",
+                  "summary" : [
+                     "\"programs_unit_policy_cases::positive_and_reuse\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71 source=5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36 checked-ir=946f2c4ccbacf659fe8e3798ec20c5a6353c0e013415b63d0a7a4d307b685ab4 kind=item depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit",
+                     "\"programs_unit_policy_cases::positive_and_reuse\"\tlevel=protocol\tfact=continuation\tcursor=none facts=6 pages-read=9 traversal-steps=8"
+                  ]
+               },
+               "signal" : 0,
+               "wall_ms" : 1
+            },
+            {
+               "argv" : [
+                  "target/lkjscript",
+                  "query",
+                  "src/programs_unit_policy_main.lkj",
+                  "--source-dir",
+                  ".",
+                  "--library-dir",
+                  "library",
+                  "--store",
+                  "target/programs-policy-context-20261117-r214/store",
+                  "--store-key",
+                  "/tmp/lkjscript-programs-context-L6_rYd_M/key",
+                  "--snapshot",
+                  "04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71",
+                  "--kind",
+                  "item",
+                  "--id",
+                  "native::units::object_key",
+                  "--limit",
+                  100,
+                  "--bytes",
+                  32768
+               ],
+               "err" : {
+                  "bytes" : 0,
+                  "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "text" : ""
+               },
+               "exit_code" : 0,
+               "out" : {
+                  "bytes" : 1956,
+                  "sha256" : "fd9c888202d59da8e5e38e38abf14433255de588e196785e1049644c050a8671",
+                  "summary" : [
+                     "\"native::units::object_key\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71 source=5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36 checked-ir=946f2c4ccbacf659fe8e3798ec20c5a6353c0e013415b63d0a7a4d307b685ab4 kind=item depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit",
+                     "\"native::units::object_key\"\tlevel=protocol\tfact=continuation\tcursor=none facts=3 pages-read=9 traversal-steps=5"
+                  ]
+               },
+               "signal" : 0,
+               "wall_ms" : 1
+            },
+            {
+               "argv" : [
+                  "target/lkjscript",
+                  "query",
+                  "src/programs_unit_policy_main.lkj",
+                  "--source-dir",
+                  ".",
+                  "--library-dir",
+                  "library",
+                  "--store",
+                  "target/programs-policy-context-20261117-r214/store",
+                  "--store-key",
+                  "/tmp/lkjscript-programs-context-L6_rYd_M/key",
+                  "--snapshot",
+                  "04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71",
+                  "--kind",
+                  "item",
+                  "--id",
+                  "native::units::Object",
+                  "--limit",
+                  100,
+                  "--bytes",
+                  32768
+               ],
+               "err" : {
+                  "bytes" : 0,
+                  "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "text" : ""
+               },
+               "exit_code" : 0,
+               "out" : {
+                  "bytes" : 1525,
+                  "sha256" : "4b837975a4a43ab4f55ccf321fdddaaf11dd2dc069bb689b4617997988a1b5f0",
+                  "summary" : [
+                     "\"native::units::Object\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71 source=5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36 checked-ir=946f2c4ccbacf659fe8e3798ec20c5a6353c0e013415b63d0a7a4d307b685ab4 kind=item depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit",
+                     "\"native::units::Object\"\tlevel=protocol\tfact=continuation\tcursor=none facts=3 pages-read=9 traversal-steps=5"
+                  ]
+               },
+               "signal" : 0,
+               "wall_ms" : 1
+            },
+            {
+               "argv" : [
+                  "target/lkjscript",
+                  "query",
+                  "src/programs_unit_policy_main.lkj",
+                  "--source-dir",
+                  ".",
+                  "--library-dir",
+                  "library",
+                  "--store",
+                  "target/programs-policy-context-20261117-r214/store",
+                  "--store-key",
+                  "/tmp/lkjscript-programs-context-L6_rYd_M/key",
+                  "--snapshot",
+                  "04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71",
+                  "--kind",
+                  "item",
+                  "--id",
+                  "impl:native::units::Object#b7771cc4d9891560",
+                  "--limit",
+                  100,
+                  "--bytes",
+                  32768
+               ],
+               "err" : {
+                  "bytes" : 0,
+                  "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "text" : ""
+               },
+               "exit_code" : 0,
+               "out" : {
+                  "bytes" : 8049,
+                  "sha256" : "6ac6ea50dcb835568ac2ea19290d033de93abdaf799a83b7cfb19d1cc6a5988d",
+                  "summary" : [
+                     "\"impl:native::units::Object#b7771cc4d9891560\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71 source=5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36 checked-ir=946f2c4ccbacf659fe8e3798ec20c5a6353c0e013415b63d0a7a4d307b685ab4 kind=item depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit",
+                     "\"impl:native::units::Object#b7771cc4d9891560\"\tlevel=protocol\tfact=continuation\tcursor=none facts=8 pages-read=9 traversal-steps=10"
+                  ]
+               },
+               "signal" : 0,
+               "wall_ms" : 2
+            },
+            {
+               "argv" : [
+                  "target/lkjscript",
+                  "query",
+                  "src/programs_unit_policy_main.lkj",
+                  "--source-dir",
+                  ".",
+                  "--library-dir",
+                  "library",
+                  "--store",
+                  "target/programs-policy-context-20261117-r214/store",
+                  "--store-key",
+                  "/tmp/lkjscript-programs-context-L6_rYd_M/key",
+                  "--snapshot",
+                  "04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71",
+                  "--kind",
+                  "item",
+                  "--id",
+                  "native::units::emit",
+                  "--limit",
+                  100,
+                  "--bytes",
+                  32768
+               ],
+               "err" : {
+                  "bytes" : 0,
+                  "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "text" : ""
+               },
+               "exit_code" : 0,
+               "out" : {
+                  "bytes" : 6299,
+                  "sha256" : "3b279c903ba81973526f4bf174e930d5c5d2617610484f535acbc076bf01d42e",
+                  "summary" : [
+                     "\"native::units::emit\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71 source=5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36 checked-ir=946f2c4ccbacf659fe8e3798ec20c5a6353c0e013415b63d0a7a4d307b685ab4 kind=item depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit",
+                     "\"native::units::emit\"\tlevel=protocol\tfact=continuation\tcursor=none facts=7 pages-read=9 traversal-steps=9"
+                  ]
+               },
+               "signal" : 0,
+               "wall_ms" : 1
+            },
+            {
+               "argv" : [
+                  "target/lkjscript",
+                  "query",
+                  "src/programs_unit_policy_main.lkj",
+                  "--source-dir",
+                  ".",
+                  "--library-dir",
+                  "library",
+                  "--store",
+                  "target/programs-policy-context-20261117-r214/store",
+                  "--store-key",
+                  "/tmp/lkjscript-programs-context-L6_rYd_M/key",
+                  "--snapshot",
+                  "04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71",
+                  "--kind",
+                  "item",
+                  "--id",
+                  "impl:native::units::Linker#8ace89006d24dd8b",
+                  "--limit",
+                  100,
+                  "--bytes",
+                  32768
+               ],
+               "err" : {
+                  "bytes" : 0,
+                  "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+                  "text" : ""
+               },
+               "exit_code" : 0,
+               "out" : {
+                  "bytes" : 14893,
+                  "sha256" : "b1285d3ea121dbc1356e29272c3144cea33c3a1f973fd0eb0fc182aab5e3921e",
+                  "summary" : [
+                     "\"impl:native::units::Linker#8ace89006d24dd8b\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71 source=5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36 checked-ir=946f2c4ccbacf659fe8e3798ec20c5a6353c0e013415b63d0a7a4d307b685ab4 kind=item depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit",
+                     "\"impl:native::units::Linker#8ace89006d24dd8b\"\tlevel=protocol\tfact=continuation\tcursor=none facts=14 pages-read=9 traversal-steps=16"
+                  ]
+               },
+               "signal" : 0,
+               "wall_ms" : 2
+            }
+         ]
+      },
+      "raw_log_policy" : "Exact request and publication/query identities are retained here. Disposable query store, indexed image, task key and intermediate logs are removed after this receipt is verified.",
+      "review" : {
+         "finding" : "Context's private cached identity remains tied to its immutably borrowed Runtime. The reviewed payload/domain, relocation extent/hash and patch-bound checks remain enforced; the full integrated gate belongs to the subsequent root integration.",
+         "mode" : "Read-only review of d095..4cb native SDK delta plus a checked transaction and one focused control run"
+      },
+      "sdk_normalization" : {
+         "blank_line_only" : true,
+         "from_bytes" : 40585,
+         "from_sha256" : "7f00eaa000531ec99f6820da747857e4b30eada73f54539a82be988ffebce370",
+         "path" : "src/native/units.lkj",
+         "programs_credit" : 0,
+         "to_bytes" : 40586,
+         "to_sha256" : "6210f415e8df630da03c14791e69bcf1d4cce9ca391b2ceb5722c86f680a11bf",
+         "upstream_git" : "4cb38cb850fe8b47522699df9176cca79f71b64d"
+      },
+      "upstream_sdk" : {
+         "final_exact_sha256" : "6210f415e8df630da03c14791e69bcf1d4cce9ca391b2ceb5722c86f680a11bf",
+         "git" : "4cb38cb850fe8b47522699df9176cca79f71b64d",
+         "operation_candidate_sha256" : "7f00eaa000531ec99f6820da747857e4b30eada73f54539a82be988ffebce370",
+         "original_sha256" : "ebfb31a1a3ab23b87e9ad99c5aa3e3503fd6907eee26c950aa13c8073aa57010",
+         "path" : "src/native/units.lkj",
+         "programs_credit" : 0,
+         "scope" : "Temporary import of already-published compiler SDK definitions; after integration/rebase it must have zero retained Programs delta. src/units.lkj was not changed."
+      }
+   },
+   "publication" : {
+      "bootstrap" : "// Initial two-line bootstrap scaffold; not operation credit.\nfn main() {}\n",
+      "raw_log_policy" : "Retain query, diagnostics and publication summaries here. The full repetitive edit catalog and disposable store/build outputs are removed after this receipt is verified.",
+      "request3" : {
+         "operations" : [
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "source" : "mod ast;"
+            },
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "source" : "mod diagnostic;"
+            },
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "source" : "mod facts;"
+            },
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "source" : "mod ir;"
+            },
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "source" : "mod ir_binary;"
+            },
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "source" : "mod ir_text;"
+            },
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "source" : "mod check;"
+            },
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "source" : "mod reuse;"
+            },
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "source" : "mod native;"
+            },
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "source" : "mod runtime;"
+            },
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "source" : "mod runtime_diagnostics;"
+            },
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "source" : "mod child_image;"
+            },
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "source" : "mod entry_grants;"
+            },
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "source" : "mod json;"
+            },
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "source" : "mod x86;"
+            },
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "source" : "pub use std::sha256;"
+            },
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "projection" : {
+                  "path" : "src/programs_unit_policy.lkj",
+                  "source" : "//! A concrete interface-export computation policy, applied after specialization.\n//! This is neither a package principal nor a promise about future templates or\n//! later invocation of returned callables. The trusted caller pins the compiler.\n//! Admission owns its exact proof, is not cloneable or serializable, and can only\n//! emit/open a native object against that proof after checking current policy.\nuse crate::{diagnostic::Diagnostic, diagnostic::Span, native, reuse, runtime, sha256};\nuse crate::check::units::{CheckedUnit, Dependency, Interface};\n\npub struct Policy { allowed: Vec<String>, identity: String }\n#[derive(Clone, PartialEq, Eq)]\npub struct Binding {\n    producer: Vec<u8>, name: String, input: String, body: String,\n    interface: String, dependencies: Vec<Dependency>,\n}\nenum Proof { Checked(CheckedUnit), Authenticated(Interface) }\npub struct Admission { proof: Proof, binding: Binding, policy: String }\n\nfn error(code: &str, detail: &str) -> Diagnostic {\n    Diagnostic::new(Span::default(), code, detail)\n}\nfn policy(allowed: Vec<String>) -> Policy {\n    let mut bytes = b\"lkjscript-concrete-export-computation-1\\n\"[..].to_vec();\n    for operation in &allowed {\n        bytes.extend_from_slice(operation.as_bytes());\n        bytes.push(b'\\n');\n    }\n    Policy { allowed, identity: sha256::hex_digest(&bytes) }\n}\npub fn computation_v1() -> Policy {\n    let allowed = vec![\"array_repeat\".to_string(), \"assert\".to_string(), \"box_new\".to_string(),\n        \"cast\".to_string(), \"char_from_u32\".to_string(), \"clone\".to_string(),\n        \"f64_from_bits\".to_string(), \"f64_to_bits\".to_string(), \"replace\".to_string(),\n        \"str_as_bytes\".to_string(), \"str_from_utf8\".to_string(), \"str_len\".to_string(),\n        \"vec_len\".to_string(), \"vec_new\".to_string(), \"vec_pop\".to_string(), \"vec_push\".to_string()];\n    policy(allowed)\n}\nimpl Policy {\n    pub fn identity(&self) -> &str { self.identity.as_str() }\n    /// The public policy constructor can only narrow the closed v1 allowlist.\n    pub fn without(&self, operation: &str) -> Result<Policy, Diagnostic> {\n        let mut allowed = Vec::new();\n        let mut found = false;\n        for name in &self.allowed {\n            if name.as_str() == operation { found = true; }\n            else { allowed.push(name.clone()); }\n        }\n        if !found { return Err(error(\"E_COMPUTATION_POLICY\", \"operation is not allowed by this policy\")); }\n        Ok(policy(allowed))\n    }\n}\nimpl Binding {\n    /// This metadata is not approval. Its compiler identity is trusted caller input.\n    pub fn new(producer: &[u8], interface: &Interface) -> Result<Binding, Diagnostic> {\n        if producer.len() != 32usize {\n            return Err(error(\"E_COMPUTATION_PRODUCER\", \"expected compiler identity must contain exactly 32 bytes\"));\n        }\n        Ok(Binding { producer: producer.to_vec(), name: interface.name().to_string(),\n            input: interface.input_identity().to_string(), body: interface.body_identity().to_string(),\n            interface: interface.identity().to_string(), dependencies: interface.dependencies().to_vec() })\n    }\n}\nfn audit(interface: &Interface, selected: &Policy) -> Result<(), Diagnostic> {\n    if interface.program().functions.is_empty() {\n        return Err(error(\"E_COMPUTATION_EMPTY\", \"no concrete interface function is selected\"));\n    }\n    for index in 0usize..interface.program().functions.len() {\n        for operation in interface.effects(index) {\n            if !selected.allowed.contains(operation) {\n                return Err(error(\"E_COMPUTATION_EFFECT\", &format!(\"{} requires refused operation {}\",\n                    interface.program().functions[index].name, operation)));\n            }\n        }\n    }\n    Ok(())\n}\npub fn checked(unit: CheckedUnit, producer: &[u8], selected: &Policy) -> Result<Admission, Diagnostic> {\n    audit(unit.interface(), selected)?;\n    let binding = Binding::new(producer, unit.interface())?;\n    Ok(Admission { proof: Proof::Checked(unit), binding, policy: selected.identity.clone() })\n}\n/// Authentication restores checker facts; the current policy is evaluated again.\npub fn authenticated(expected: &Binding, secret: &[u8], envelope: &[u8], selected: &Policy)\n    -> Result<Admission, Diagnostic> {\n    let interface = Interface::authenticate(&expected.producer, secret, &expected.name,\n        &expected.input, &expected.dependencies, envelope)\n        .ok_or_else(|| error(\"E_COMPUTATION_AUTH\", \"interface authentication or expected input failed\"))?;\n    if Binding::new(&expected.producer, &interface)? != *expected {\n        return Err(error(\"E_COMPUTATION_BINDING\", \"interface body or semantic identity differs from the expected binding\"));\n    }\n    audit(&interface, selected)?;\n    Ok(Admission { proof: Proof::Authenticated(interface), binding: expected.clone(), policy: selected.identity.clone() })\n}\nimpl Admission {\n    fn interface(&self) -> &Interface {\n        match &self.proof { Proof::Checked(unit) => unit.interface(), Proof::Authenticated(interface) => interface }\n    }\n    pub fn binding(&self) -> &Binding { &self.binding }\n    pub fn policy_identity(&self) -> &str { self.policy.as_str() }\n    fn current(&self, expected: &Binding, selected: &Policy) -> Result<(), Diagnostic> {\n        if self.binding != *expected || Binding::new(&expected.producer, self.interface())? != *expected {\n            return Err(error(\"E_COMPUTATION_BINDING\", \"admission belongs to a different exact unit or compiler\"));\n        }\n        audit(self.interface(), selected)?;\n        if self.policy != selected.identity {\n            return Err(error(\"E_COMPUTATION_POLICY\", \"policy changed; admit again under the current policy\"));\n        }\n        Ok(())\n    }\n    /// Consuming cold path: emission receives exactly the checked proof that passed.\n    pub fn emit(self, expected: &Binding, selected: &Policy, runtime: &runtime::Runtime,\n        source_base: usize) -> Result<native::units::Object, Diagnostic> {\n        self.current(expected, selected)?;\n        match self.proof {\n            Proof::Checked(unit) => native::units::emit(&unit, runtime, source_base),\n            Proof::Authenticated(_) => Err(error(\"E_COMPUTATION_BODY\", \"interface authentication cannot fabricate a checked body\")),\n        }\n    }\n    /// Consuming reuse path: no caller-supplied replacement interface is accepted.\n    /// The object envelope must bind this compiler, key, body, ABI and source table.\n    pub fn open(self, expected: &Binding, selected: &Policy, runtime: &runtime::Runtime,\n        source_base: usize, sources: &[String], secret: &[u8], envelope: &[u8])\n        -> Result<native::units::Object, Diagnostic> {\n        self.current(expected, selected)?;\n        let key = native::units::object_key(self.interface(), runtime, source_base, sources);\n        let header = reuse::header_size();\n        if envelope.len() < header {\n            return Err(error(\"E_COMPUTATION_OBJECT\", \"native object envelope is truncated\"));\n        }\n        let root = reuse::AuthenticatedRoot::new(&expected.producer, secret,\n            native::units::namespace(), &key, &envelope[..header])\n            .ok_or_else(|| error(\"E_COMPUTATION_OBJECT\", \"native object authentication failed\"))?;\n        let payload = root.verify(envelope[header..].to_vec())\n            .ok_or_else(|| error(\"E_COMPUTATION_OBJECT\", \"native object payload differs\"))?;\n        let domain = reuse::ProofDomain::new(&expected.producer, secret);\n        native::units::Object::open(&domain, self.interface(), runtime, source_base, sources, payload)\n            .ok_or_else(|| error(\"E_COMPUTATION_OBJECT\", \"native object is incompatible with the exact admitted interface\"))\n    }\n}\n"
+               },
+               "source" : "mod programs_unit_policy;"
+            },
+            {
+               "id" : "crate",
+               "op" : "add-item",
+               "projection" : {
+                  "path" : "src/programs_unit_policy_cases.lkj",
+                  "source" : "//! Source-specialization, authenticated reuse and native consumption controls.\nuse crate::{check, ir, ir_text, native, reuse, runtime, programs_unit_policy as policy};\nuse crate::check::units::{CheckedUnit, Import, Interface};\n\nfn read(world: &mut World, path: &str) -> Vec<u8> {\n    let mut root = world.directory(\".\").unwrap();\n    let mut file = root.open(path).unwrap();\n    file.read_to_end().unwrap()\n}\nfn fixture(world: &mut World, root: &str, name: &str) -> CheckedUnit {\n    let text = String::from_utf8(read(world, &format!(\"{root}/{name}.lkjir\"))).unwrap();\n    let bytes = text.as_bytes();\n    let input = crate::sha256::hex_digest(bytes);\n    let program = ir_text::read(&text).unwrap();\n    let mut exports = Vec::new();\n    for (index, function) in program.functions.iter().enumerate() {\n        if function.name == \"entry\" { exports.push(index); }\n    }\n    assert_eq!(exports.len(), 1usize);\n    let imports: Vec<Import> = Vec::new();\n    check::units::check_unit_with_exports(name, &input, program, &imports, &exports, &[0usize; 0]).unwrap()\n}\nfn effect(interface: &Interface, operation: &str) -> bool {\n    for index in 0usize..interface.program().functions.len() {\n        for found in interface.effects(index) { if found.as_str() == operation { return true; } }\n    }\n    false\n}\nfn producer(text: &str) -> Vec<u8> {\n    let mut bytes = Vec::new();\n    assert_eq!(text.len(), 64usize);\n    for pair in 0usize..32usize {\n        let mut value = 0u8;\n        for offset in 0usize..2usize {\n            let byte = text.as_bytes()[pair * 2usize + offset];\n            let digit = if byte >= b'0' && byte <= b'9' { byte - b'0' }\n                else { assert!(byte >= b'a' && byte <= b'f'); byte - b'a' + 10u8 };\n            value = value * 16u8 + digit;\n        }\n        bytes.push(value);\n    }\n    bytes\n}\nfn runtime(world: &mut World, root: &str) -> runtime::Runtime {\n    let text = String::from_utf8(read(world, &format!(\"{root}/runtime.lkjir\"))).unwrap();\n    runtime::seal(check::check(ir_text::read(&text).unwrap()).unwrap()).unwrap()\n}\nfn execute(world: &mut World, mut file: File) -> i64 {\n    file.set_executable().unwrap();\n    let input = world.temporary_file().unwrap();\n    let output = world.temporary_file().unwrap();\n    let errors = world.temporary_file().unwrap();\n    let mut result = world.temporary_file().unwrap();\n    let arguments: Vec<Vec<u8>> = Vec::new();\n    let mut process = world.process();\n    let mut child = process.spawn_file(&file, &arguments, &input, &output, &errors, &result).unwrap();\n    assert_eq!(child.wait().unwrap(), 0i64);\n    result.rewind().unwrap();\n    let bytes = result.read_to_end().unwrap();\n    assert_eq!(bytes.len(), 8usize);\n    let mut value = 0u64;\n    for index in 0usize..8usize { value |= (bytes[index] as u64) << (index * 8usize); }\n    value as i64\n}\nfn linked(world: &mut World, runtime: &runtime::Runtime, interface: &Interface,\n    object: native::units::Object, sources: &[String], messages: &[String]) -> i64 {\n    let mut linker = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();\n    linker.push(object).unwrap();\n    let grants: Vec<ir::EntryGrant> = Vec::new();\n    let (file, _) = linker.finish(runtime, interface, \"entry\", &grants, sources, messages, Some(3u32)).unwrap();\n    execute(world, file)\n}\nfn positive_and_reuse(world: &mut World, root: &str, producer: &[u8], runtime: &runtime::Runtime) -> usize {\n    let selected = policy::computation_v1();\n    let secret = [19u8; 32];\n    let unit = fixture(world, root, \"compute\");\n    let interface = unit.interface().clone();\n    assert!(effect(&interface, \"vec_new\"));\n    assert!(effect(&interface, \"str_len\"));\n    let sources = unit.program().sources.clone();\n    let messages = native::messages(unit.program());\n    let expected = policy::Binding::new(producer, &interface).unwrap();\n    let envelope = interface.seal(producer, &secret);\n    let admitted = policy::checked(unit, producer, &selected).unwrap();\n    assert_eq!(admitted.policy_identity(), selected.identity());\n    assert!(*admitted.binding() == expected);\n    let object = admitted.emit(&expected, &selected, runtime, 0usize).unwrap();\n    let bytes = object.encode();\n    let object_envelope = reuse::seal(producer, &secret, native::units::namespace(), object.key(), &bytes);\n    assert_eq!(linked(world, runtime, &interface, object, &sources, &messages), 9i64);\n    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();\n    let object = restored.open(&expected, &selected, runtime, 0usize, &sources, &secret, &object_envelope).unwrap();\n    assert_eq!(object.encode(), bytes);\n    assert_eq!(linked(world, runtime, &interface, object, &sources, &messages), 9i64);\n    let narrower = selected.without(\"vec_new\").unwrap();\n    assert!(selected.identity() != narrower.identity());\n    assert!(Interface::authenticate(producer, &secret, interface.name(), interface.input_identity(),\n        interface.dependencies(), &envelope).is_some());\n    assert_eq!(policy::authenticated(&expected, &secret, &envelope, &narrower).err().unwrap().code, \"E_COMPUTATION_EFFECT\");\n    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();\n    assert_eq!(restored.open(&expected, &narrower, runtime, 0usize, &sources, &secret, &object_envelope)\n        .err().unwrap().code, \"E_COMPUTATION_EFFECT\");\n    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();\n    assert_eq!(restored.emit(&expected, &selected, runtime, 0usize).err().unwrap().code, \"E_COMPUTATION_BODY\");\n    let mut changed = bytes.clone(); changed.push(0u8);\n    let bad_object = reuse::seal(producer, &secret, native::units::namespace(),\n        &native::units::object_key(&interface, runtime, 0usize, &sources), &changed);\n    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();\n    assert_eq!(restored.open(&expected, &selected, runtime, 0usize, &sources, &secret, &bad_object)\n        .err().unwrap().code, \"E_COMPUTATION_OBJECT\");\n    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();\n    assert_eq!(restored.open(&expected, &selected, runtime, 1usize, &sources, &secret, &object_envelope)\n        .err().unwrap().code, \"E_COMPUTATION_OBJECT\");\n    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();\n    assert_eq!(restored.open(&expected, &selected, runtime, 0usize, &sources, &[20u8; 32], &object_envelope)\n        .err().unwrap().code, \"E_COMPUTATION_OBJECT\");\n    8usize\n}\nfn negatives(world: &mut World, root: &str, producer: &[u8]) -> usize {\n    let selected = policy::computation_v1();\n    let mut count = 0usize;\n    let cases = vec![(\"file\".to_string(), \"read_directory_open\".to_string()),\n        (\"socket\".to_string(), \"connector_connect\".to_string()),\n        (\"callback\".to_string(), \"stdout_write\".to_string()),\n        (\"custom_drop\".to_string(), \"stdout_write\".to_string()),\n        (\"structural_drop\".to_string(), \"file_close\".to_string())];\n    for (name, operation) in cases {\n        let unit = fixture(world, root, name.as_str());\n        assert!(effect(unit.interface(), operation.as_str()));\n        assert_eq!(policy::checked(unit, producer, &selected).err().unwrap().code, \"E_COMPUTATION_EFFECT\");\n        count += 1usize;\n    }\n    count\n}\nfn callback_positive(world: &mut World, root: &str, producer: &[u8], runtime: &runtime::Runtime) -> usize {\n    let unit = fixture(world, root, \"callback_pure\");\n    let interface = unit.interface().clone();\n    let sources = unit.program().sources.clone();\n    let messages = native::messages(unit.program());\n    let selected = policy::computation_v1();\n    let expected = policy::Binding::new(producer, &interface).unwrap();\n    let object = policy::checked(unit, producer, &selected).unwrap().emit(&expected, &selected, runtime, 0usize).unwrap();\n    assert_eq!(linked(world, runtime, &interface, object, &sources, &messages), 42i64);\n    1usize\n}\nfn binding_and_policy_changes(world: &mut World, root: &str, producer: &[u8], runtime: &runtime::Runtime) -> usize {\n    let selected = policy::computation_v1();\n    let narrower = selected.without(\"vec_new\").unwrap();\n    let unit = fixture(world, root, \"literal\");\n    let interface = unit.interface().clone();\n    let expected = policy::Binding::new(producer, &interface).unwrap();\n    let wrong = policy::Binding::new(&[3u8; 32], &interface).unwrap();\n    let admission = policy::checked(unit, producer, &selected).unwrap();\n    assert_eq!(admission.emit(&wrong, &selected, runtime, 0usize).err().unwrap().code, \"E_COMPUTATION_BINDING\");\n    let admission = policy::checked(fixture(world, root, \"literal\"), producer, &selected).unwrap();\n    assert_eq!(admission.emit(&expected, &narrower, runtime, 0usize).err().unwrap().code, \"E_COMPUTATION_POLICY\");\n    let admission = policy::checked(fixture(world, root, \"literal\"), producer, &narrower).unwrap();\n    assert!(admission.emit(&expected, &narrower, runtime, 0usize).is_ok());\n    let other = fixture(world, root, \"literal_changed\");\n    let other_binding = policy::Binding::new(producer, other.interface()).unwrap();\n    let admission = policy::checked(fixture(world, root, \"literal\"), producer, &selected).unwrap();\n    assert_eq!(admission.emit(&other_binding, &selected, runtime, 0usize).err().unwrap().code, \"E_COMPUTATION_BINDING\");\n    let secret = [11u8; 32];\n    let envelope = interface.seal(producer, &secret);\n    assert_eq!(policy::authenticated(&wrong, &secret, &envelope, &selected).err().unwrap().code, \"E_COMPUTATION_AUTH\");\n    assert_eq!(policy::authenticated(&expected, &[12u8; 32], &envelope, &selected).err().unwrap().code, \"E_COMPUTATION_AUTH\");\n    assert_eq!(policy::authenticated(&other_binding, &secret, &envelope, &selected).err().unwrap().code, \"E_COMPUTATION_AUTH\");\n    assert!(policy::Binding::new(&[0u8; 31], &interface).is_err());\n    assert!(selected.without(\"future_unknown_operation\").is_err());\n    9usize\n}\nfn unknown_operation(world: &mut World, root: &str, producer: &[u8]) -> usize {\n    let unit = fixture(world, root, \"compute\");\n    let interface = unit.interface();\n    let mut bytes = interface.encode();\n    let pattern = b\"str_len\";\n    let replacement = b\"str_lex\";\n    let mut replaced = 0usize;\n    for index in 0usize..bytes.len() - pattern.len() + 1usize {\n        let mut equal = true;\n        for offset in 0usize..pattern.len() { if bytes[index + offset] != pattern[offset] { equal = false; } }\n        if equal {\n            for offset in 0usize..pattern.len() { bytes[index + offset] = replacement[offset]; }\n            replaced += 1usize;\n        }\n    }\n    assert!(replaced > 0usize);\n    let secret = [7u8; 32];\n    let key = Interface::store_key(interface.name(), interface.input_identity(), interface.dependencies());\n    // A deliberately signed future summary exercises the policy's unknown-name\n    // default. This is not a claim that the current IR vocabulary can emit it.\n    let envelope = reuse::seal(producer, &secret, check::units::STORE_NAMESPACE, &key, &bytes);\n    let future = Interface::authenticate(producer, &secret, interface.name(), interface.input_identity(),\n        interface.dependencies(), &envelope).unwrap();\n    assert!(effect(&future, \"str_lex\"));\n    let expected = policy::Binding::new(producer, &future).unwrap();\n    assert_eq!(policy::authenticated(&expected, &secret, &envelope, &policy::computation_v1())\n        .err().unwrap().code, \"E_COMPUTATION_EFFECT\");\n    1usize\n}\nfn import_all(interface: &Interface) -> Import {\n    let mut types = Vec::new();\n    let mut functions = Vec::new();\n    for index in 0usize..interface.program().types.len() { types.push((index, index)); }\n    for index in 0usize..interface.program().functions.len() { functions.push((index, index)); }\n    Import { interface: interface.clone(), types, functions }\n}\nfn bridge(interface: &Interface) -> CheckedUnit {\n    let mut program = interface.program().clone();\n    let called = program.functions.iter().position(|function: &ir::Function| -> bool { function.name == \"entry\" }).unwrap();\n    let mut function = program.functions[called].clone();\n    function.name = \"bridge::entry\".to_string();\n    let mut arguments = Vec::new();\n    for index in 0usize..function.params { arguments.push(index); }\n    let result = function.locals.len();\n    function.locals.push(ir::Local { name: \"result\".to_string(), ty: function.result, mutable: false });\n    function.body.push(ir::Instruction { file: None, line: 1usize, column: 1usize,\n        op: ir::Op::Call { dst: result, function: called, args: arguments } });\n    function.body.push(ir::Instruction { file: None, line: 1usize, column: 1usize,\n        op: ir::Op::Return { src: result } });\n    let export = program.functions.len();\n    program.functions.push(function);\n    check::units::check_unit_with_exports(\"bridge\", \"bridge-input\", program, &[import_all(interface)],\n        &[export], &[0usize; 0]).unwrap()\n}\nfn exact_body_and_dependencies(world: &mut World, root: &str, producer: &[u8]) -> usize {\n    let selected = policy::computation_v1();\n    let source = fixture(world, root, \"literal\");\n    let interface = source.interface().clone();\n    let original = source.program().clone();\n    let mut changed = original.clone();\n    let entry = changed.functions.iter().position(|function: &ir::Function| -> bool { function.name == \"entry\" }).unwrap();\n    let mut edits = 0usize;\n    for index in 0usize..changed.functions[entry].body.len() {\n        if let ir::Op::Int { value, .. } = &mut changed.functions[entry].body[index].op { *value += 1i64; edits += 1usize; }\n    }\n    assert_eq!(edits, 1usize);\n    let imports: Vec<Import> = Vec::new();\n    let changed = check::units::check_unit_with_exports(\"literal\", interface.input_identity(), changed,\n        &imports, &[entry], &[0usize; 0]).unwrap();\n    assert_eq!(changed.interface().identity(), interface.identity());\n    assert!(changed.interface().body_identity() != interface.body_identity());\n    let expected = policy::Binding::new(producer, changed.interface()).unwrap();\n    let secret = [6u8; 32];\n    assert_eq!(policy::authenticated(&expected, &secret, &interface.seal(producer, &secret), &selected)\n        .err().unwrap().code, \"E_COMPUTATION_BINDING\");\n    let first = check::units::check_unit_with_exports(\"alpha\", \"provider\", original.clone(),\n        &imports, &[entry], &[0usize; 0]).unwrap();\n    let second = check::units::check_unit_with_exports(\"beta\", \"provider\", original,\n        &imports, &[entry], &[0usize; 0]).unwrap();\n    let first = bridge(first.interface());\n    let second = bridge(second.interface());\n    assert!(first.interface().dependencies() != second.interface().dependencies());\n    let expected = policy::Binding::new(producer, second.interface()).unwrap();\n    assert_eq!(policy::authenticated(&expected, &secret, &first.interface().seal(producer, &secret), &selected)\n        .err().unwrap().code, \"E_COMPUTATION_AUTH\");\n    let foreign = fixture(world, root, \"structural_drop\");\n    let consumer = bridge(foreign.interface());\n    assert!(effect(consumer.interface(), \"file_close\"));\n    assert_eq!(policy::checked(consumer, producer, &selected).err().unwrap().code, \"E_COMPUTATION_EFFECT\");\n    3usize\n}\npub fn run(world: &mut World, root: &str, compiler: &str) -> usize {\n    let producer = producer(compiler);\n    let runtime = runtime(world, root);\n    positive_and_reuse(world, root, &producer, &runtime)\n        + negatives(world, root, &producer)\n        + callback_positive(world, root, &producer, &runtime)\n        + binding_and_policy_changes(world, root, &producer, &runtime)\n        + unknown_operation(world, root, &producer)\n        + exact_body_and_dependencies(world, root, &producer)\n}\n"
+               },
+               "source" : "mod programs_unit_policy_cases;"
+            },
+            {
+               "id" : "main",
+               "op" : "replace-item",
+               "source" : "fn main(mut world: World) {\n    let arguments = world.args();\n    assert_eq!(arguments.len(), 3usize);\n    let root = String::from_utf8(arguments[1usize].clone()).unwrap();\n    let compiler = String::from_utf8(arguments[2usize].clone()).unwrap();\n    let count = programs_unit_policy_cases::run(&mut world, root.as_str(), compiler.as_str());\n    world.stdout().write(format!(\"ok concrete computation {count} controls\\n\").as_bytes());\n}"
+            }
+         ],
+         "snapshot" : "e2ddfcefe1debe65eac31ad05d1029d5a8c29a5700638dc5c2cc58ab2fe1a28c",
+         "version" : 1
+      },
+      "request4" : {
+         "operations" : [
+            {
+               "id" : "main",
+               "op" : "replace-item",
+               "source" : "fn main(mut world: World) {\n    let arguments = world.args();\n    assert_eq!(arguments.len(), 2usize);\n    let root = String::from_utf8(arguments[0usize].clone()).unwrap();\n    let compiler = String::from_utf8(arguments[1usize].clone()).unwrap();\n    let count = programs_unit_policy_cases::run(&mut world, root.as_str(), compiler.as_str());\n    world.stdout().write(format!(\"ok concrete computation {count} controls\\n\").as_bytes());\n}"
+            }
+         ],
+         "snapshot" : "7d87b73d1bad665c2b3fcaa0d7074b10c24e3d8c053b81d0974bfe8529da2931",
+         "version" : 1
+      },
+      "request5" : {
+         "operations" : [
+            {
+               "expect" : "9c32b2aa92db66c03e80d2b2534d56ff1f027e03f8e1883d9b21541405dcd988",
+               "id" : "native::units::object_key",
+               "op" : "replace-item",
+               "source" : "pub fn object_key(interface: &Interface, context: &Context<'_>, source_base: usize, sources: &[String]) -> String {\n    let mut bytes = b\"lkjscript-unit-native-object-1\\0\"[..].to_vec();\n    string(&mut bytes, interface.name()); string(&mut bytes, interface.identity());\n    string(&mut bytes, interface.body_identity()); string(&mut bytes, interface.input_identity());\n    string(&mut bytes, &context.identity); word(&mut bytes, source_base);\n    word(&mut bytes, sources.len());\n    for path in sources { string(&mut bytes, path); }\n    crate::sha256::hex_digest(&bytes)\n}"
+            },
+            {
+               "expect" : "58adf3acea268b3bb7b248378bfe68aad9c678e691d4c58cb78cd98cc7d48d7d",
+               "id" : "native::units::Object",
+               "op" : "replace-item",
+               "source" : "pub struct Object {\n    claim: Claim,\n    context: String,\n    key: String,\n    source_base: usize,\n    flags: u64,\n    sites: Vec<(String, Span)>,\n    sources: Vec<String>,\n    messages: Vec<String>,\n    code: Linkable,\n    payload: Vec<u8>,\n    code_start: usize,\n    code_length: usize,\n}"
+            },
+            {
+               "expect" : "76cff4c53dd50f5b9d0193c73661252fd7460d6ba61beb11a22016cc0ce108ca",
+               "id" : "impl:native::units::Object#b7771cc4d9891560",
+               "op" : "replace-item",
+               "source" : "impl Object {\n    pub fn key(&self) -> &str { &self.key }\n    pub fn bytes(&self) -> usize { self.code_length }\n    fn code_bytes(&self) -> &[u8] {\n        if self.payload.is_empty() { return self.code.bytes.as_slice(); }\n        &self.payload[self.code_start..self.code_start + self.code_length]\n    }\n    pub fn encode(&self) -> Vec<u8> {\n        let mut bytes = b\"LKJUNITOBJECT1\\n\"[..].to_vec();\n        string(&mut bytes, &self.key); string(&mut bytes, &self.context);\n        word(&mut bytes, self.source_base); word(&mut bytes, self.flags as usize);\n        word(&mut bytes, self.sources.len());\n        for path in &self.sources { string(&mut bytes, path); }\n        word(&mut bytes, self.messages.len());\n        for message in &self.messages { string(&mut bytes, message); }\n        word(&mut bytes, self.sites.len());\n        for (name, value) in &self.sites { string(&mut bytes, name); site(&mut bytes, *value); }\n        blob(&mut bytes, self.code_bytes());\n        word(&mut bytes, self.code.definitions.len());\n        for (name, offset) in &self.code.definitions { string(&mut bytes, name); word(&mut bytes, *offset); }\n        word(&mut bytes, self.code.references.len());\n        for reference in &self.code.references { word(&mut bytes, reference.at); string(&mut bytes, &reference.name); site(&mut bytes, reference.site); }\n        word(&mut bytes, self.code.immediates.len());\n        for reference in &self.code.immediates { word(&mut bytes, reference.at); string(&mut bytes, &reference.message); site(&mut bytes, reference.site); }\n        bytes\n    }\n    pub fn open(domain: &ProofDomain, interface: &Interface, context: &Context<'_>,\n        source_base: usize, sources: &[String], payload: VerifiedPayload,\n    ) -> Option<Self> {\n        let key = object_key(interface, context, source_base, sources);\n        if !payload.matches_domain(domain, NAMESPACE, &key) { return None; }\n        let bytes = payload.into_bytes();\n        let magic = b\"LKJUNITOBJECT1\\n\";\n        if !bytes.starts_with(magic) { return None; }\n        let mut at = magic.len();\n        if take_string(&bytes, &mut at)? != key { return None; }\n        let stored_context = take_string(&bytes, &mut at)?;\n        if stored_context != context.identity || take_word(&bytes, &mut at)? != source_base { return None; }\n        let flags = take_word(&bytes, &mut at)? as u64;\n        if flags & !0x1ffffu64 != 0u64 { return None; }\n        let count = take_word(&bytes, &mut at)?;\n        if count != sources.len() || count > (bytes.len() - at) / 8usize { return None; }\n        let mut own_sources = Vec::new();\n        for index in 0usize..count {\n            let path = take_string(&bytes, &mut at)?;\n            if path != sources[index] { return None; }\n            own_sources.push(path);\n        }\n        let count = take_word(&bytes, &mut at)?;\n        if count > (bytes.len() - at) / 16usize { return None; }\n        let mut own_messages = Vec::new();\n        for _ in 0usize..count {\n            let message = take_string(&bytes, &mut at)?;\n            own_messages.push(message);\n        }\n        let claim = claim(interface);\n        let count = take_word(&bytes, &mut at)?;\n        if count != claim.definitions.len() || count > (bytes.len() - at) / 32usize { return None; }\n        let mut sites = Vec::new();\n        for index in 0usize..count {\n            let name = take_string(&bytes, &mut at)?;\n            let value = take_site(&bytes, &mut at)?;\n            if name != claim.definitions[index] || value.file < source_base || value.file - source_base >= sources.len() { return None; }\n            sites.push((name, value));\n        }\n        // Keep the exact already-authenticated owned bytes. Cloning this span\n        // would copy every code byte again on every unchanged build.\n        let code_length = take_word(&bytes, &mut at)?;\n        if code_length > bytes.len() - at { return None; }\n        let code_start = at;\n        at += code_length;\n        let count = take_word(&bytes, &mut at)?;\n        if count != claim.definitions.len() || count > (bytes.len() - at) / 16usize { return None; }\n        let mut definitions = Vec::new();\n        for index in 0usize..count {\n            let name = take_string(&bytes, &mut at)?;\n            let offset = take_word(&bytes, &mut at)?;\n            if name != claim.definitions[index] || offset >= code_length { return None; }\n            definitions.push((name, offset));\n        }\n        let count = take_word(&bytes, &mut at)?;\n        if count > (bytes.len() - at) / 40usize { return None; }\n        let mut references = Vec::new();\n        let mut previous = None;\n        for _ in 0usize..count {\n            let position = take_word(&bytes, &mut at)?;\n            let name = take_string(&bytes, &mut at)?;\n            let value = take_site(&bytes, &mut at)?;\n            if position > code_length || code_length - position < 4usize || value.file < source_base || value.file - source_base >= sources.len()\n                || previous.is_some_and(|last| last + 4usize > position) { return None; }\n            previous = Some(position);\n            references.push(SymbolReference { at: position, name, site: value });\n        }\n        let count = take_word(&bytes, &mut at)?;\n        if count > (bytes.len() - at) / 40usize { return None; }\n        let mut immediates = Vec::new();\n        for _ in 0usize..count {\n            let position = take_word(&bytes, &mut at)?;\n            let message = take_string(&bytes, &mut at)?;\n            let value = take_site(&bytes, &mut at)?;\n            if position > code_length || code_length - position < 8usize || value.file < source_base\n                || value.file - source_base >= sources.len() || !own_messages.contains(&message) { return None; }\n            immediates.push(ImmediateReference { at: position, message, site: value });\n        }\n        if at != bytes.len() { return None; }\n        Some(Self { claim, context: stored_context, key, source_base, flags, sites, sources: own_sources, messages: own_messages,\n            code: Linkable { bytes: Vec::new(), definitions, references, immediates }, payload: bytes, code_start, code_length })\n    }\n}"
+            },
+            {
+               "expect" : "bd9f9d894d02a6f8e94f5549883af0a02ef6a4f59f70b256122b0db42dc4ac40",
+               "id" : "native::units::emit",
+               "op" : "replace-item",
+               "source" : "pub fn emit(unit: &CheckedUnit, context: &Context<'_>, source_base: usize) -> Result<Object, Diagnostic> {\n    let runtime = context.runtime;\n    let program = unit.program();\n    if program.sources.len().max(1usize) > (!0usize) - source_base { return Err(error(\"unit source table extent overflow\")); }\n    let messages = super::messages(program);\n    let layout = Layouts::new(program)?;\n    if unit.layouts().len() != program.types.len() { return Err(error(\"unit layout inventory differs\")); }\n    for (index, expected) in unit.layouts().iter().enumerate() {\n        let actual = layout.storage(index);\n        if actual.bytes != expected.bytes || actual.alignment != expected.alignment\n            || actual.fields != expected.fields || actual.variants != expected.variants\n            || actual.scalar != expected.scalar || actual.signed != expected.signed || actual.cleanup != expected.cleanup {\n            return Err(error(\"native layout disagrees with the authenticated unit layout\"));\n        }\n    }\n    let mut a = Assembler::new();\n    a.enable_symbolic_messages();\n    let p = platform::Platform::new(&mut a);\n    let mut names = Vec::new();\n    for index in 0usize..a.label_count() { names.push((index, platform_symbol(index))); }\n    let runtime_functions = labels(&mut a, runtime.checked_program().functions.len());\n    for (index, function) in runtime.checked_program().functions.iter().enumerate() {\n        names.push((runtime_functions[index], runtime_symbol(&function.name)));\n    }\n    let functions = labels(&mut a, program.functions.len());\n    for index in 0usize..functions.len() {\n        if unit.imported(index) || unit.exported(index) { names.push((functions[index], symbol(&unit.binding(index)))); }\n    }\n    let drops = labels(&mut a, program.types.len());\n    let runtime_labels = RuntimeLabels::new(runtime, &runtime_functions);\n    let mut needed = vec![false; functions.len()];\n    let mut needed_drops = vec![false; drops.len()];\n    let mut emitted_drops = vec![false; drops.len()];\n    let mut literals = BTreeMap::new();\n    let mut sites = Vec::new();\n    let selection = Selection { program, layout: &layout, functions: &functions, drops: &drops,\n        runtime: runtime_labels, messages: &messages, source_base };\n    for index in 0usize..functions.len() {\n        if !unit.imported(index) {\n            let mut site = first_site(&program.functions[index]); site.file += source_base;\n            if unit.exported(index) { sites.push((symbol(&unit.binding(index)), site)); }\n            emit_function(&mut a, p, &selection, index, &mut needed, &mut needed_drops, &mut literals)?;\n        }\n    }\n    loop {\n        let mut progress = false;\n        for ty in 0usize..drops.len() {\n            if needed_drops[ty] && !emitted_drops[ty] {\n                emitted_drops[ty] = true; progress = true;\n                emit_drop(&mut a, p, &selection, ty, &mut needed_drops, &mut needed)?;\n            }\n        }\n        if !progress { break; }\n    }\n    for (bytes, label) in &literals { a.bind(*label); a.raw(bytes); }\n    let mut code = a.linkable(&names)?;\n    let claim = claim(unit.interface());\n    let mut by_name = BTreeMap::new();\n    for (name, offset) in code.definitions { by_name.insert(name, offset); }\n    code.definitions = Vec::new();\n    let mut by_site = BTreeMap::new();\n    for (name, value) in sites { by_site.insert(name, value); }\n    sites = Vec::new();\n    for name in &claim.definitions {\n        let offset = *by_name.get(name).ok_or_else(|| error(\"exported function has no code\"))?;\n        let value = *by_site.get(name).ok_or_else(|| error(\"exported function has no source site\"))?;\n        code.definitions.push((name.clone(), offset)); sites.push((name.clone(), value));\n    }\n    let own_sources = if program.sources.is_empty() { vec![\"<ir>\".to_string()] } else { program.sources.clone() };\n    let mut own_messages: Vec<String> = Vec::new();\n    for reference in &code.immediates {\n        if !own_messages.contains(&reference.message) { own_messages.push(reference.message.clone()); }\n    }\n    let code_length = code.bytes.len();\n    Ok(Object { claim, context: context.identity.clone(),\n        key: object_key(unit.interface(), context, source_base, &own_sources), source_base,\n        flags: features(program), sites, sources: own_sources, messages: own_messages, code,\n        payload: Vec::new(), code_start: 0usize, code_length })\n}"
+            },
+            {
+               "expect" : "82e5af0ca5828e6e41858b38f63a51abf3cd786d0d928af2767e2f2e5b3c94f0",
+               "id" : "impl:native::units::Linker#8ace89006d24dd8b",
+               "op" : "replace-item",
+               "source" : "impl Linker {\n    pub fn new(mut output: File, mut relocations: File) -> Result<Self, Diagnostic> {\n        output.truncate(0usize).map_err(|errno: i64| io(\"truncate unit output\", errno))?;\n        output.seek(0i64, 0u8).map_err(|errno: i64| io(\"seek unit output\", errno))?;\n        relocations.truncate(0usize).map_err(|errno: i64| io(\"truncate relocation spool\", errno))?;\n        relocations.seek(0i64, 0u8).map_err(|errno: i64| io(\"seek relocation spool\", errno))?;\n        output.write_all(&vec![0u8; platform::CODE_OFFSET]).map_err(|errno: i64| io(\"reserve ELF header\", errno))?;\n        output.write_all(&[0xe9u8, 0u8, 0u8, 0u8, 0u8]).map_err(|errno: i64| io(\"write entry branch\", errno))?;\n        let mut result = Self { output, position: 5usize, context: None, flags: 0u64,\n            claims: BTreeMap::new(), symbols: BTreeMap::new(), sites: BTreeMap::new(),\n            relocations, reference_count: 0usize, relocation_bytes: 0usize, relocation_hash: crate::sha256::Sha256::new(), failed: false,\n            tables: Vec::new() };\n        result.reference(0usize, 1usize, \"entry\", Span::default())?;\n        Ok(result)\n    }\n    fn reference(&mut self, kind: usize, position: usize, name: &str, value: Span) -> Result<(), Diagnostic> {\n        let mut record = Vec::new();\n        word(&mut record, kind); word(&mut record, position); string(&mut record, name); site(&mut record, value);\n        self.records(&record, 1usize)\n    }\n    fn records(&mut self, records: &[u8], count: usize) -> Result<(), Diagnostic> {\n        if records.is_empty() { return Ok(()); }\n        let next = self.relocation_bytes.checked_add(records.len()).ok_or_else(|| error(\"relocation spool extent overflow\"))?;\n        if next > 9223372036854775807usize { return Err(error(\"relocation spool exceeds file seek representation\")); }\n        self.relocations.seek(self.relocation_bytes as i64, 0u8).map_err(|errno: i64| io(\"seek relocation append\", errno))?;\n        self.relocations.write_all(records).map_err(|errno: i64| io(\"write relocation spool\", errno))?;\n        self.relocation_hash.update(records);\n        self.relocation_bytes = next;\n        self.reference_count += count;\n        Ok(())\n    }\n    fn append(&mut self, code: &Linkable, bytes: &[u8]) -> Result<(), Diagnostic> {\n        let next = self.position.checked_add(bytes.len()).ok_or_else(|| error(\"unit image extent overflow\"))?;\n        if next > 9223372036854775807usize - platform::CODE_OFFSET { return Err(error(\"unit image exceeds file seek representation\")); }\n        for (name, offset) in &code.definitions {\n            if *offset > bytes.len() || self.symbols.contains_key(name) {\n                return Err(error(&format!(\"duplicate or out-of-range unit symbol {name}\")));\n            }\n            self.symbols.insert(name.clone(), self.position + *offset);\n        }\n        let mut records = Vec::new();\n        let mut count = 0usize;\n        for reference in &code.references {\n            if reference.at > bytes.len() || bytes.len() - reference.at < 4usize {\n                return Err(error(\"unit relocation is outside its object\"));\n            }\n            word(&mut records, 0usize); word(&mut records, self.position + reference.at);\n            string(&mut records, &reference.name); site(&mut records, reference.site); count += 1usize;\n        }\n        for reference in &code.immediates {\n            if reference.at > bytes.len() || bytes.len() - reference.at < 8usize { return Err(error(\"unit message relocation is outside its object\")); }\n            word(&mut records, 1usize); word(&mut records, self.position + reference.at);\n            string(&mut records, &reference.message); site(&mut records, reference.site); count += 1usize;\n        }\n        self.records(&records, count)?;\n        let position = self.position + platform::CODE_OFFSET;\n        self.output.seek(position as i64, 0u8).map_err(|errno: i64| io(\"seek unit object\", errno))?;\n        self.output.write_all(bytes).map_err(|errno: i64| io(\"write unit object\", errno))?;\n        self.position = next;\n        Ok(())\n    }\n    pub fn push(&mut self, object: Object) -> Result<(), Diagnostic> {\n        if self.failed { return Err(error(\"unit linker is poisoned by an earlier failure\")); }\n        self.failed = true;\n        let result = self.push_object(object);\n        if result.is_ok() { self.failed = false; }\n        result\n    }\n    fn push_object(&mut self, object: Object) -> Result<(), Diagnostic> {\n        let existing_context = self.context.clone();\n        if let Some(context) = existing_context {\n            if context != object.context { return Err(error(\"unit objects use different runtime or target identities\")); }\n        } else { self.context = Some(object.context.clone()); }\n        if self.claims.contains_key(&object.claim.name) {\n            return Err(error(&format!(\"duplicate unit implementation {}\", object.claim.name)));\n        }\n        if object.code.definitions.len() != object.claim.definitions.len() {\n            return Err(error(\"unit object does not define its complete checked interface\"));\n        }\n        for (index, (name, _)) in object.code.definitions.iter().enumerate() {\n            if *name != object.claim.definitions[index] { return Err(error(\"unit object export differs from checked interface\")); }\n        }\n        self.append(&object.code, object.code_bytes())?;\n        self.flags |= object.flags;\n        for (name, site) in object.sites { self.sites.insert(name, site); }\n        self.tables.push(Tables { source_base: object.source_base, sources: object.sources, messages: object.messages });\n        self.claims.insert(object.claim.name.clone(), object.claim);\n        Ok(())\n    }\n    pub fn finish(mut self, context: &Context<'_>, entry: &Interface, entry_name: &str,\n        grants: &[ir::EntryGrant], sources: &[String], messages: &[String], result_fd: Option<u32>,\n    ) -> Result<(File, usize), Diagnostic> {\n        let runtime = context.runtime;\n        if self.failed { return Err(error(\"unit linker is poisoned by an earlier failure\")); }\n        if self.context.as_ref() != Some(&context.identity) {\n            return Err(error(\"linked runtime differs from unit object runtime\"));\n        }\n        let entry_unit_name = entry.name().to_string();\n        let selected_claim = self.claims.get(&entry_unit_name).ok_or_else(|| error(\"entry unit has no implementation\"))?;\n        if selected_claim.interface.as_str() != entry.identity() || selected_claim.body.as_str() != entry.body_identity() {\n            return Err(error(\"entry interface or implementation is stale\"));\n        }\n        for (_, claim) in &self.claims {\n            for (name, identity) in &claim.dependencies {\n                let actual = self.claims.get(name).ok_or_else(|| error(&format!(\"unit {} is missing dependency {name}\", claim.name)))?;\n                if actual.interface != *identity { return Err(error(&format!(\"unit {} has a stale dependency interface {name}\", claim.name))); }\n            }\n            for imported in &claim.imports {\n                if !self.symbols.contains_key(imported) { return Err(error(&format!(\"unit {} has no exact implementation for {imported}\", claim.name))); }\n            }\n        }\n        for table in &self.tables {\n            if table.source_base > sources.len() || table.sources.len() > sources.len() - table.source_base {\n                return Err(error(\"unit source table does not fit the final image\"));\n            }\n            for (index, path) in table.sources.iter().enumerate() {\n                if *path != sources[table.source_base + index] { return Err(error(\"unit source table changed after emission\")); }\n            }\n            for message in &table.messages {\n                if !messages.contains(message) { return Err(error(\"unit trap message is absent from the final image\")); }\n            }\n        }\n        let mut message_set: BTreeSet<String> = BTreeSet::new();\n        for message in messages { message_set.insert(message.clone()); }\n        let mut message_names = Vec::new();\n        let mut message_codes = BTreeMap::new();\n        for message in message_set {\n            message_codes.insert(message.clone(), message_names.len() + 16usize);\n            message_names.push(message);\n        }\n        let program = entry.program();\n        let selected = program.functions.iter().position(|function| function.name == entry_name)\n            .ok_or_else(|| error(&format!(\"unknown unit entry {entry_name}\")))?;\n        if !entry.defined(selected) { return Err(error(\"entry must be defined by its selected unit\")); }\n        let binding = symbol(&entry.binding(selected));\n        let site = *self.sites.get(&binding).ok_or_else(|| error(\"entry site has no implementation\"))?;\n        let (support, data_offset) = support(runtime, program, selected, &binding, site, grants,\n            sources, &message_names, result_fd, self.flags, self.position)?;\n        self.append(&support, &support.bytes)?;\n        self.relocations.seek(0i64, 0u8).map_err(|errno: i64| io(\"rewind relocation spool\", errno))?;\n        let expected_hash = std::mem::replace(&mut self.relocation_hash, crate::sha256::Sha256::new()).finish();\n        {\n            let mut records = Relocations::new(&mut self.relocations, self.relocation_bytes);\n            let mut patches = PatchWindow::new(&mut self.output, platform::CODE_OFFSET + self.position);\n            for _ in 0usize..self.reference_count {\n                let (kind, position, name, site) = records.record()?;\n                let width = if kind == 0usize { 4usize } else if kind == 1usize { 8usize } else { return Err(error(\"unknown unit relocation kind\")); };\n                if position > data_offset || width > data_offset - position { return Err(error(\"unit relocation is outside image code\")); }\n                let bytes = if kind == 0usize {\n                    let target = *self.symbols.get(&name)\n                        .ok_or_else(|| Diagnostic::new(site, \"E_UNIT_LINK\", &format!(\"unresolved unit symbol {name}\")))?;\n                    crate::x86::displacement(target, position, site)?[..].to_vec()\n                } else {\n                    let code = *message_codes.get(&name).ok_or_else(|| error(\"unit message relocation is absent from final table\"))?;\n                    let mut bytes = Vec::new(); word(&mut bytes, code); bytes\n                };\n                patches.write(platform::CODE_OFFSET + position, &bytes)?;\n            }\n            records.finish(expected_hash)?;\n            patches.flush()?;\n        }\n        let header = platform::elf_header(self.position, data_offset)?;\n        self.output.seek(0i64, 0u8).map_err(|errno: i64| io(\"seek ELF header\", errno))?;\n        self.output.write_all(&header).map_err(|errno: i64| io(\"write ELF header\", errno))?;\n        let length = platform::CODE_OFFSET + self.position;\n        self.output.seek(length as i64, 0u8).map_err(|errno: i64| io(\"seek finished image\", errno))?;\n        Ok((self.output, length))\n    }\n}"
+            },
+            {
+               "id" : "native::units::exact",
+               "op" : "remove-item"
+            },
+            {
+               "id" : "native::units::relocation_record",
+               "op" : "remove-item"
+            },
+            {
+               "before" : "native::units::namespace",
+               "id" : "native::units",
+               "op" : "add-item",
+               "source" : "pub struct Context<'a> {\n    runtime: &'a Runtime,\n    identity: String,\n}"
+            },
+            {
+               "before" : "native::units::namespace",
+               "id" : "native::units",
+               "op" : "add-item",
+               "source" : "impl<'a> Context<'a> {\n    pub fn new(runtime: &'a Runtime) -> Self {\n        Self { runtime, identity: context_key(runtime) }\n    }\n}"
+            },
+            {
+               "before" : "native::units::support",
+               "id" : "native::units",
+               "op" : "add-item",
+               "source" : "const LINK_BUFFER: usize = 65536usize;"
+            },
+            {
+               "before" : "native::units::support",
+               "id" : "native::units",
+               "op" : "add-item",
+               "source" : "struct Relocations<'a> {\n    file: &'a mut File,\n    buffer: Vec<u8>,\n    at: usize,\n    available: usize,\n    unread: usize,\n    remaining: usize,\n    hash: crate::sha256::Sha256,\n}"
+            },
+            {
+               "before" : "native::units::support",
+               "id" : "native::units",
+               "op" : "add-item",
+               "source" : "impl<'a> Relocations<'a> {\n    fn new(file: &'a mut File, length: usize) -> Self {\n        Self { file, buffer: vec![0u8; LINK_BUFFER], at: 0usize, available: 0usize,\n            unread: length, remaining: length, hash: crate::sha256::Sha256::new() }\n    }\n    fn exact(&mut self, bytes: &mut [u8]) -> Result<(), Diagnostic> {\n        if bytes.len() > self.remaining { return Err(error(\"truncated relocation spool\")); }\n        let mut written = 0usize;\n        while written < bytes.len() {\n            if self.at == self.available {\n                let wanted = self.unread.min(LINK_BUFFER);\n                if wanted == 0usize { return Err(error(\"truncated relocation spool\")); }\n                let count = self.file.read(&mut self.buffer[..wanted]).map_err(|errno: i64| io(\"read relocation spool\", errno))?;\n                if count == 0usize { return Err(error(\"truncated relocation spool\")); }\n                self.hash.update(&self.buffer[..count]);\n                self.unread -= count;\n                self.at = 0usize;\n                self.available = count;\n            }\n            let count = (bytes.len() - written).min(self.available - self.at);\n            bytes[written..written + count].copy_from_slice(&self.buffer[self.at..self.at + count]);\n            self.at += count;\n            written += count;\n            self.remaining -= count;\n        }\n        Ok(())\n    }\n    fn record(&mut self) -> Result<(usize, usize, String, Span), Diagnostic> {\n        if self.remaining < 48usize { return Err(error(\"truncated relocation record\")); }\n        let mut prefix = [0u8; 24]; self.exact(&mut prefix)?;\n        let mut at = 0usize;\n        let kind = take_word(&prefix, &mut at).unwrap();\n        let position = take_word(&prefix, &mut at).unwrap();\n        let length = take_word(&prefix, &mut at).unwrap();\n        if length > self.remaining - 24usize { return Err(error(\"invalid relocation symbol extent\")); }\n        let mut name = vec![0u8; length]; self.exact(&mut name)?;\n        let name = String::from_utf8(name).map_err(|_| error(\"relocation symbol is not UTF-8\"))?;\n        let mut coordinates = [0u8; 24]; self.exact(&mut coordinates)?;\n        let mut at = 0usize;\n        let site = take_site(&coordinates, &mut at).unwrap();\n        Ok((kind, position, name, site))\n    }\n    fn finish(mut self, expected: [u8; 32]) -> Result<(), Diagnostic> {\n        if self.remaining != 0usize || self.unread != 0usize || self.at != self.available {\n            return Err(error(\"relocation spool has trailing bytes\"));\n        }\n        let mut extra = [0u8; 1];\n        if self.file.read(&mut extra).map_err(|errno: i64| io(\"check relocation EOF\", errno))? != 0usize {\n            return Err(error(\"relocation spool changed its extent\"));\n        }\n        if self.hash.finish() != expected { return Err(error(\"relocation spool changed after emission\")); }\n        Ok(())\n    }\n}"
+            },
+            {
+               "before" : "native::units::support",
+               "id" : "native::units",
+               "op" : "add-item",
+               "source" : "struct PatchWindow<'a> {\n    file: &'a mut File,\n    buffer: Vec<u8>,\n    start: usize,\n    length: usize,\n    image_length: usize,\n    dirty: bool,\n}"
+            },
+            {
+               "before" : "native::units::support",
+               "id" : "native::units",
+               "op" : "add-item",
+               "source" : "impl<'a> PatchWindow<'a> {\n    fn new(file: &'a mut File, image_length: usize) -> Self {\n        Self { file, buffer: vec![0u8; LINK_BUFFER], start: 0usize, length: 0usize, image_length, dirty: false }\n    }\n    fn flush(&mut self) -> Result<(), Diagnostic> {\n        if self.dirty {\n            self.file.seek(self.start as i64, 0u8).map_err(|errno: i64| io(\"seek relocation window\", errno))?;\n            self.file.write_all(&self.buffer[..self.length]).map_err(|errno: i64| io(\"write relocation window\", errno))?;\n            self.dirty = false;\n        }\n        Ok(())\n    }\n    fn load(&mut self, start: usize) -> Result<(), Diagnostic> {\n        self.flush()?;\n        if start >= self.image_length { return Err(error(\"relocation window is outside image\")); }\n        self.start = start;\n        self.length = (self.image_length - start).min(LINK_BUFFER);\n        self.file.seek(start as i64, 0u8).map_err(|errno: i64| io(\"seek relocation window\", errno))?;\n        let mut at = 0usize;\n        while at < self.length {\n            let count = self.file.read(&mut self.buffer[at..self.length]).map_err(|errno: i64| io(\"read relocation window\", errno))?;\n            if count == 0usize { return Err(error(\"linked image was truncated before relocation\")); }\n            at += count;\n        }\n        Ok(())\n    }\n    fn write(&mut self, position: usize, bytes: &[u8]) -> Result<(), Diagnostic> {\n        if position > self.image_length || bytes.len() > self.image_length - position {\n            return Err(error(\"relocation patch is outside image\"));\n        }\n        let mut written = 0usize;\n        while written < bytes.len() {\n            let at = position + written;\n            let start = at - at % LINK_BUFFER;\n            if self.length == 0usize || start != self.start { self.load(start)?; }\n            let offset = at - start;\n            let count = (bytes.len() - written).min(self.length - offset);\n            self.buffer[offset..offset + count].copy_from_slice(&bytes[written..written + count]);\n            self.dirty = true;\n            written += count;\n        }\n        Ok(())\n    }\n}"
+            },
+            {
+               "expect" : "2777140ec20780ad9dffc96f8febe2276cbcabd834e10b93de7d81e1ba40d2b6",
+               "id" : "programs_unit_policy::Admission::emit",
+               "op" : "replace-body",
+               "source" : "{\n        self.current(expected, selected)?;\n        let context = native::units::Context::new(runtime);\n        match self.proof {\n            Proof::Checked(unit) => native::units::emit(&unit, &context, source_base),\n            Proof::Authenticated(_) => Err(error(\"E_COMPUTATION_BODY\", \"interface authentication cannot fabricate a checked body\")),\n        }\n    }"
+            },
+            {
+               "expect" : "02ee52153c62f5e94c9037430ee695fb85ec08be709b530fdb0e4dc48b8c8327",
+               "id" : "programs_unit_policy::Admission::open",
+               "op" : "replace-body",
+               "source" : "{\n        self.current(expected, selected)?;\n        let context = native::units::Context::new(runtime);\n        let key = native::units::object_key(self.interface(), &context, source_base, sources);\n        let header = reuse::header_size();\n        if envelope.len() < header {\n            return Err(error(\"E_COMPUTATION_OBJECT\", \"native object envelope is truncated\"));\n        }\n        let root = reuse::AuthenticatedRoot::new(&expected.producer, secret,\n            native::units::namespace(), &key, &envelope[..header])\n            .ok_or_else(|| error(\"E_COMPUTATION_OBJECT\", \"native object authentication failed\"))?;\n        let payload = root.verify(envelope[header..].to_vec())\n            .ok_or_else(|| error(\"E_COMPUTATION_OBJECT\", \"native object payload differs\"))?;\n        let domain = reuse::ProofDomain::new(&expected.producer, secret);\n        native::units::Object::open(&domain, self.interface(), &context, source_base, sources, payload)\n            .ok_or_else(|| error(\"E_COMPUTATION_OBJECT\", \"native object is incompatible with the exact admitted interface\"))\n    }"
+            },
+            {
+               "expect" : "1deee957191a2cc2bdffd8d54838f886f23c3d8656e7d743f234b10ae5703747",
+               "id" : "programs_unit_policy_cases::linked",
+               "op" : "replace-body",
+               "source" : "{\n    let mut linker = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();\n    linker.push(object).unwrap();\n    let grants: Vec<ir::EntryGrant> = Vec::new();\n    let context = native::units::Context::new(runtime);\n    let (file, _) = linker.finish(&context, interface, \"entry\", &grants, sources, messages, Some(3u32)).unwrap();\n    execute(world, file)\n}"
+            },
+            {
+               "expect" : "c1b6be67dfec03d86061fcde8a8b77b184d1f917a71a02b591dba074c19ca84f",
+               "id" : "programs_unit_policy_cases::positive_and_reuse",
+               "op" : "replace-body",
+               "source" : "{\n    let selected = policy::computation_v1();\n    let secret = [19u8; 32];\n    let unit = fixture(world, root, \"compute\");\n    let interface = unit.interface().clone();\n    assert!(effect(&interface, \"vec_new\"));\n    assert!(effect(&interface, \"str_len\"));\n    let sources = unit.program().sources.clone();\n    let messages = native::messages(unit.program());\n    let expected = policy::Binding::new(producer, &interface).unwrap();\n    let envelope = interface.seal(producer, &secret);\n    let admitted = policy::checked(unit, producer, &selected).unwrap();\n    assert_eq!(admitted.policy_identity(), selected.identity());\n    assert!(*admitted.binding() == expected);\n    let object = admitted.emit(&expected, &selected, runtime, 0usize).unwrap();\n    let bytes = object.encode();\n    let object_envelope = reuse::seal(producer, &secret, native::units::namespace(), object.key(), &bytes);\n    assert_eq!(linked(world, runtime, &interface, object, &sources, &messages), 9i64);\n    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();\n    let object = restored.open(&expected, &selected, runtime, 0usize, &sources, &secret, &object_envelope).unwrap();\n    assert_eq!(object.encode(), bytes);\n    assert_eq!(linked(world, runtime, &interface, object, &sources, &messages), 9i64);\n    let narrower = selected.without(\"vec_new\").unwrap();\n    assert!(selected.identity() != narrower.identity());\n    assert!(Interface::authenticate(producer, &secret, interface.name(), interface.input_identity(),\n        interface.dependencies(), &envelope).is_some());\n    assert_eq!(policy::authenticated(&expected, &secret, &envelope, &narrower).err().unwrap().code, \"E_COMPUTATION_EFFECT\");\n    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();\n    assert_eq!(restored.open(&expected, &narrower, runtime, 0usize, &sources, &secret, &object_envelope)\n        .err().unwrap().code, \"E_COMPUTATION_EFFECT\");\n    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();\n    assert_eq!(restored.emit(&expected, &selected, runtime, 0usize).err().unwrap().code, \"E_COMPUTATION_BODY\");\n    let mut changed = bytes.clone(); changed.push(0u8);\n    let context = native::units::Context::new(runtime);\n    let bad_object = reuse::seal(producer, &secret, native::units::namespace(),\n        &native::units::object_key(&interface, &context, 0usize, &sources), &changed);\n    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();\n    assert_eq!(restored.open(&expected, &selected, runtime, 0usize, &sources, &secret, &bad_object)\n        .err().unwrap().code, \"E_COMPUTATION_OBJECT\");\n    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();\n    assert_eq!(restored.open(&expected, &selected, runtime, 1usize, &sources, &secret, &object_envelope)\n        .err().unwrap().code, \"E_COMPUTATION_OBJECT\");\n    let restored = policy::authenticated(&expected, &secret, &envelope, &selected).unwrap();\n    assert_eq!(restored.open(&expected, &selected, runtime, 0usize, &sources, &[20u8; 32], &object_envelope)\n        .err().unwrap().code, \"E_COMPUTATION_OBJECT\");\n    8usize\n}"
+            }
+         ],
+         "snapshot" : "5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36",
+         "version" : 1
+      },
+      "request_sha256" : {
+         "request1" : "63fc31128fe3f874ba2dbebf55d7c729a7b0bf2c843918dbb9fe0e197f25aab3",
+         "request2" : "5ba742211000c9065a49594058d7bad09e1e28ded9e26bd0eaabbbb1fda42b0e",
+         "request3" : "38d30962441f6e0fe21016d79c22e83fa918b0c63153de133c30164072d1c3da",
+         "request4" : "2c8e7d4aa89f374e330805142c3aec1ca2e970fe32b2b68333f447050ae30fe0",
+         "request5" : "aa017d0da4ce4dc6f3fdc1c19971c90e287e5470cc25575190af940fb7d49fd6"
+      }
+   },
+   "records" : {
+      "context-check.err" : {
+         "bytes" : 0,
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "text" : ""
+      },
+      "context-check.out" : {
+         "bytes" : 0,
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "text" : ""
+      },
+      "context-edit.err" : {
+         "bytes" : 0,
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "text" : ""
+      },
+      "context-edit.out" : {
+         "bytes" : 9058,
+         "sha256" : "b96f78113b6a2e3b3ff1d4b38190ac192f067411086f6bb01c9fd1a874c4fc58",
+         "summary" : [
+            "\"./src/native/units.lkj\" level=source-claim file before=ebfb31a1a3ab23b87e9ad99c5aa3e3503fd6907eee26c950aa13c8073aa57010 after=7f00eaa000531ec99f6820da747857e4b30eada73f54539a82be988ffebce370",
+            "\"./src/programs_unit_policy.lkj\" level=source-claim file before=00f3f0b5dd1aa9e276969598204771e74b598c81f99d2ad86fdb3364f5f1f48b after=64ea8958685bc308ee69498a1157fb14d0b46d18c46e6fc50f060d7b62ac9be0",
+            "\"./src/programs_unit_policy_cases.lkj\" level=source-claim file before=890b00dd9b947318f6bb2b802dac933e993282f2c0bf44846aa5b9f46939ac44 after=3d954a4ac36e0d75d174c4e0e02f2ab1375424722a9d0e0e88e58c7e3f4eadbc",
+            "transaction sites=13 files=3 identities=12",
+            "program level=checked-ir authority-delta=none",
+            "program level=checked-ir before=3ad52b111739958597344e054b5f99b9b0fe6561445c66ba639178e2d9f70bb9 after=373ef57b7280d40193c2005d7c4ea844155558fee48649b92c964617f0c4d320 checked-instances=4375 fresh-checked=4375 proof-reused=0 frontend-resumed=0 library-validation=demanded",
+            "transaction source-before=5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36 source-after=53b957437619e5f101096ae04e8254c81133fb38c046f2a366c1f5b854c7b06b mode=apply"
+         ]
+      },
+      "context-gate.err" : {
+         "bytes" : 0,
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "text" : ""
+      },
+      "context-gate.out" : {
+         "bytes" : 36,
+         "sha256" : "616a3f9a9a6d7f072c76f95c7fe2603d3f90418031d6b942ec92c882e63d1d89",
+         "text" : "ok concrete computation 27 controls\n"
+      },
+      "context-gate.time" : {
+         "bytes" : 37,
+         "sha256" : "5a1d15a53d2ea19ad8bac5e5b666ac71f99ad8e67fb9e0b6dea8d877c8bee72f",
+         "text" : "wall_seconds=7.99\nmax_rss_kib=251028\n"
+      },
+      "context-index.err" : {
+         "bytes" : 0,
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "text" : ""
+      },
+      "context-index.out" : {
+         "bytes" : 232,
+         "sha256" : "deb98a2dc0c8eb9456701b56363056b791994be73cc2d35731706735b6f11e94",
+         "text" : "LKJSCRIPT_SNAPSHOT 04e0161b6ed444a88588b87a41f6ccff9446d565ed878cbf6db34661b951ab71 source=5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36 checked-ir=946f2c4ccbacf659fe8e3798ec20c5a6353c0e013415b63d0a7a4d307b685ab4\n"
+      },
+      "edit1.err" : {
+         "bytes" : 1394,
+         "sha256" : "0500d9767cba6850cb6a2e93d41ea38a43221c39d45440d7117daf7821722f33",
+         "text" : "transaction E_EDIT_CHECK identities=\"crate,main,programs_unit_policy,programs_unit_policy_cases\" ./src/programs_unit_policy_main.lkj:5:61: E_UNSUPPORTED method as_str on Vec<u8> has 0 applicable implementations; help: use an implemented method or write an explicit loop\n./src/programs_unit_policy_cases.lkj:122:30: E_BORROW views cannot be stored in Box, Vec, or owned arrays; help: store an owned String/value or an owner index, and keep views in locals or view structs\n./src/programs_unit_policy_cases.lkj:206:52: E_TYPE closure parameter or result type needs context\n./src/programs_unit_policy_cases.lkj:228:51: E_TYPE closure parameter or result type needs context\n./src/programs_unit_policy.lkj:22:21: E_UNSUPPORTED array.to_vec requires a slice receiver and Clone elements; help: write array[..].to_vec() (docs/language.md, Source library)\nLKJSCRIPT_EDITS {\"version\":1,\"path\":\"./src/programs_unit_policy.lkj\",\"code\":\"E_UNSUPPORTED\",\"edits\":[{\"start\":1097,\"end\":1097,\"replacement\":\"(\"},{\"start\":1141,\"end\":1141,\"replacement\":\")[..]\"}]}\n./src/programs_unit_policy.lkj:31:17: E_BORROW views cannot be stored in Box, Vec, or owned arrays; help: store an owned String/value or an owner index, and keep views in locals or view structs\nsrc/programs_unit_policy_main.lkj:1:1: E_BLOCKED remaining semantic analysis: failed bodies are blocked; independent typed bodies were constructed and checked\n"
+      },
+      "edit2.err" : {
+         "bytes" : 372,
+         "sha256" : "243dea2749d6ff95430fb72f28d20411f6a2b658733fecfb45588f0ced51095e",
+         "text" : "transaction E_EDIT_CHECK identities=\"crate,main,programs_unit_policy,programs_unit_policy_cases\" ./src/programs_unit_policy_cases.lkj:234:5: E_TRAIT associated projection needs its declared implementation witness\nsrc/programs_unit_policy_main.lkj:1:1: E_BLOCKED remaining semantic analysis: failed bodies are blocked; independent typed bodies were constructed and checked\n"
+      },
+      "edit3.out" : {
+         "bytes" : 339715,
+         "sha256" : "ff9a599ed9048f39d8ddf50392f5424d59eec635624bcf7e87e0f8bf27b2ecfa",
+         "summary" : [
+            "\"programs_unit_policy\" level=source-claim projection parent=\"crate\" path=\"src/programs_unit_policy.lkj\" bytes=7692 source=00f3f0b5dd1aa9e276969598204771e74b598c81f99d2ad86fdb3364f5f1f48b",
+            "\"programs_unit_policy_cases\" level=source-claim projection parent=\"crate\" path=\"src/programs_unit_policy_cases.lkj\" bytes=15856 source=890b00dd9b947318f6bb2b802dac933e993282f2c0bf44846aa5b9f46939ac44",
+            "\"./src/programs_unit_policy_main.lkj\" level=source-claim file before=1eb2af0a79959e96938446bd8df0a9f044829e606293fac46005d061d731e4b1 after=c2c1789d01924f497b378d11eb05aca3cb3c830aacc251d35d9f3abe098c55f8",
+            "\"src/programs_unit_policy.lkj\" level=source-claim file before=absent after=00f3f0b5dd1aa9e276969598204771e74b598c81f99d2ad86fdb3364f5f1f48b",
+            "\"src/programs_unit_policy_cases.lkj\" level=source-claim file before=absent after=890b00dd9b947318f6bb2b802dac933e993282f2c0bf44846aa5b9f46939ac44",
+            "transaction sites=2 files=3 identities=4",
+            "program level=checked-ir before=0787d4e10a9d6f6f032b3d5364d202c9745ef3260a9f9d3a070e5aa0654ddaff after=c3471ece944246fadd59e22764369349807e4c4d8398ef3cd6c02ffd57c827a5 checked-instances=4375 fresh-checked=4375 proof-reused=0 frontend-resumed=0 library-validation=demanded",
+            "transaction source-before=e2ddfcefe1debe65eac31ad05d1029d5a8c29a5700638dc5c2cc58ab2fe1a28c source-after=7d87b73d1bad665c2b3fcaa0d7074b10c24e3d8c053b81d0974bfe8529da2931 mode=apply"
+         ]
+      },
+      "edit4.out" : {
+         "bytes" : 829,
+         "sha256" : "dc4263368ee361eec714a0b9d43121b6ce8e50974658d041c03b264093db119d",
+         "summary" : [
+            "\"./src/programs_unit_policy_main.lkj\" level=source-claim file before=c2c1789d01924f497b378d11eb05aca3cb3c830aacc251d35d9f3abe098c55f8 after=c54938472ccecdd0aee9c0dfd561d72f2ab297bdb8443aa57184089f0216560c",
+            "transaction sites=1 files=1 identities=1",
+            "program level=checked-ir authority-delta=none",
+            "program level=checked-ir before=c3471ece944246fadd59e22764369349807e4c4d8398ef3cd6c02ffd57c827a5 after=3ad52b111739958597344e054b5f99b9b0fe6561445c66ba639178e2d9f70bb9 checked-instances=4375 fresh-checked=1 proof-reused=4374 frontend-resumed=1662 library-validation=demanded",
+            "transaction source-before=7d87b73d1bad665c2b3fcaa0d7074b10c24e3d8c053b81d0974bfe8529da2931 source-after=5775c1554e91143a4bddbdf4d15405b57b5820541b4712122e10aa58a29a4d36 mode=apply"
+         ]
+      },
+      "gate1.err" : {
+         "bytes" : 1346,
+         "sha256" : "945740a4dbc0b68d6f63973c6935efdaa9a8604b65ca651d2373e43c603e0a55",
+         "summary" : [
+            "./src/programs_unit_policy_main.lkj:4: R0005 assertion failed"
+         ]
+      },
+      "gate2.err" : {
+         "bytes" : 1348,
+         "sha256" : "a7c4f457a81815b79d7f5894a85bcf2f53676cb0c12cdbc95d8ca4aa19c4d9dc",
+         "summary" : [
+            "./src/programs_unit_policy_cases.lkj:79: R0005 assertion failed"
+         ]
+      },
+      "gate3.err" : {
+         "bytes" : 0,
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+         "text" : ""
+      },
+      "gate3.out" : {
+         "bytes" : 36,
+         "sha256" : "616a3f9a9a6d7f072c76f95c7fe2603d3f90418031d6b942ec92c882e63d1d89",
+         "text" : "ok concrete computation 27 controls\n"
+      },
+      "index.err" : {
+         "bytes" : 91,
+         "sha256" : "a92dd65d71fbe0adb5a0adf580ff7fcd6319e580c3fc41d920dfcdb10481f61d",
+         "text" : "E_QUERY_STORE index needs an available authenticated store; create --store DIRECTORY first\n"
+      },
+      "index2.out" : {
+         "bytes" : 232,
+         "sha256" : "220790b0cefe277fa07d215fb5a225e30078c2fadc5e60a99995c7348b00dda3",
+         "text" : "LKJSCRIPT_SNAPSHOT a5109e55d55b7a466fde97a2f68397bd798861ddda607c8d7702297480c2dff4 source=e2ddfcefe1debe65eac31ad05d1029d5a8c29a5700638dc5c2cc58ab2fe1a28c checked-ir=136f85b42a8df6eff6efc5276e6cb86f45278e0a21a5e24a265ebea6499c33dd\n"
+      },
+      "query.out" : {
+         "bytes" : 729,
+         "sha256" : "1f44fa2cab7d6042cde87be0f47b75d57921f634573f291e7f19de9a5d416a23",
+         "text" : "\"crate\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=a5109e55d55b7a466fde97a2f68397bd798861ddda607c8d7702297480c2dff4 source=e2ddfcefe1debe65eac31ad05d1029d5a8c29a5700638dc5c2cc58ab2fe1a28c checked-ir=136f85b42a8df6eff6efc5276e6cb86f45278e0a21a5e24a265ebea6499c33dd kind=outline depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit\n\"main\"\tlevel=source-claim\tfact=signature\tkind=function text=\"fn main()\" bytes=9 complete=true\n\"crate\"\tlevel=protocol\tfact=continuation\tcursor=none facts=1 pages-read=4 traversal-steps=2\n"
+      }
+   },
+   "review" : {
+      "mode" : "independent static source review only; no rerun",
+      "result" : "No concrete binding/proof substitution hole found; cold compiler pin remains trusted caller input.",
+      "reviewer" : "operation_route"
+   },
+   "schema" : 1,
+   "scope" : {
+      "cold_producer" : "The trusted caller supplies the exact checker/compiler identity; the API does not infer executable provenance from a byte label.",
+      "limits" : [
+         "Not a package principal or a general per-package capability ceiling.",
+         "No promise about future template instantiation or later invocation of returned callables.",
+         "Only the concrete projected export graphs, not every unexported body, are claimed.",
+         "The wrapper is an opt-in native admission consumer; ordinary compiler/driver routes are unchanged."
+      ],
+      "native_consumer" : "A private noncloneable Admission owns the CheckedUnit or authenticated Interface. Consuming emit/open methods compare the exact compiler/name/input/body/interface/dependencies Binding, re-evaluate current policy and reject changed policy identity. Cached native payloads authenticate against that same owned interface.",
+      "profile" : "lkjscript-concrete-export-computation-1",
+      "proof" : "After specialization, all selected interface functions' authenticated transitive operation summaries satisfy a versioned closed allowlist. Custom and structural cleanup are included by checked-unit effects."
+   }
+}

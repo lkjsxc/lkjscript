@@ -1,0 +1,93 @@
+//! Trusted local issuer/reader entry. Policy and issuer directories are separate
+//! from source grants. The issuer key is never serialized in a package payload.
+use crate::programs_package::{self, Error, Package};
+
+fn checked<T>(result: Result<T, Error>) -> Result<T, String> {
+    match result { Ok(value) => Ok(value), Err(error) => Err(error.code().to_string()) }
+}
+fn read(root: &mut ReadDirectory, path: &str) -> Result<Vec<u8>, String> {
+    let mut file = match root.open(path) {
+        Ok(file) => file, Err(_) => return Err(format!("cannot open {path}")),
+    };
+    match file.read_to_end() { Ok(bytes) => Ok(bytes), Err(_) => Err(format!("cannot read {path}")) }
+}
+fn label(value: &str) -> bool {
+    if value.is_empty() || value == "." || value == ".." { return false; }
+    for byte in value.as_bytes() {
+        if !(*byte >= b'a' && *byte <= b'z') && !(*byte >= b'A' && *byte <= b'Z')
+            && !(*byte >= b'0' && *byte <= b'9') && *byte != b'_' && *byte != b'-' && *byte != b'.' {
+            return false;
+        }
+    }
+    true
+}
+fn load(policy: &mut ReadDirectory, store: &mut ReadDirectory, secret: &[u8], name: &str) -> Result<Package, String> {
+    // The trusted catalog supplies expected pins; envelope storage cannot replace them.
+    let pin = checked(programs_package::expected(&read(policy, format!("{name}.pin.json").as_str())?))?;
+    let mut envelope = match store.open(format!("{name}.package").as_str()) {
+        Ok(file) => file, Err(_) => return Err(format!("cannot open {name}.package")),
+    };
+    checked(programs_package::authenticate_file(secret, &pin, &mut envelope))
+}
+pub fn run(arguments: &mut Arguments, source: &mut ReadDirectory, policy: &mut ReadDirectory,
+    store: &mut ReadDirectory, issuer: &mut ReadDirectory, sink: &mut Directory, output: &mut Stdout) -> Result<(), String> {
+    let mut args: Vec<String> = Vec::new();
+    for bytes in arguments.args() {
+        match String::from_utf8(bytes) {
+            Ok(value) => args.push(value), Err(_) => return Err("arguments must be UTF-8".to_string()),
+        }
+    }
+    if args.len() < 2usize || !label(args[1usize].as_str()) {
+        return Err("usage: issue LABEL | read LABEL PATH | read-edge PARENT CHILD PATH".to_string());
+    }
+    let secret = read(issuer, "source-key")?;
+    let mode = args[0usize].as_str();
+    let name = args[1usize].as_str();
+    if mode == "issue" && args.len() == 2usize {
+        let pin = checked(programs_package::expected(&read(policy, format!("{name}.pin.json").as_str())?))?;
+        let description = read(policy, format!("{name}.manifest.json").as_str())?;
+        let envelope = checked(programs_package::issue(&secret, &pin, &description, source))?;
+        let mut file = match sink.create_new(format!("{name}.package").as_str()) {
+            Ok(file) => file, Err(_) => return Err("cannot create envelope".to_string()),
+        };
+        if let Err(_) = file.write_all(&envelope) { return Err("cannot write envelope".to_string()); }
+        if let Err(_) = file.sync() { return Err("cannot sync envelope".to_string()); }
+        output.write(format!("issued {name}\n").as_bytes());
+        return Ok(());
+    }
+    if mode == "read" && args.len() == 3usize {
+        let package = load(policy, store, &secret, name)?;
+        let verified = checked(package.read(source, args[2usize].as_str()))?;
+        output.write(verified.bytes());
+        return Ok(());
+    }
+    if mode == "read-edge" && args.len() == 4usize && label(args[2usize].as_str()) {
+        let parent = load(policy, store, &secret, name)?;
+        let child = load(policy, store, &secret, args[2usize].as_str())?;
+        checked(parent.require_dependency(&child))?;
+        let owned = checked(child.read(source, args[3usize].as_str()))?.into_bytes();
+        output.write(&owned);
+        return Ok(());
+    }
+    // The focused I/O gate supplies a separate writable authority to its disposable
+    // fixture through sink. Package itself owns no write authority or host path.
+    if mode == "owned-snapshot" && args.len() == 3usize {
+        let package = load(policy, store, &secret, name)?;
+        let path = args[2usize].as_str();
+        let owned = checked(package.read(source, path))?;
+        let mut changed = owned.bytes().to_vec();
+        if changed.is_empty() { return Err("snapshot fixture must be nonempty".to_string()); }
+        changed[0usize] ^= 1u8;
+        let mut file = match sink.create(path) {
+            Ok(file) => file, Err(_) => return Err("cannot open snapshot fixture".to_string()),
+        };
+        if let Err(_) = file.write_all(&changed) { return Err("cannot change snapshot fixture".to_string()); }
+        if let Err(_) = file.sync() { return Err("cannot sync snapshot fixture".to_string()); }
+        match package.read(source, path) {
+            Err(Error::SourceDigest) => {}, _ => return Err("changed source was not rejected".to_string()),
+        }
+        output.write(owned.bytes());
+        return Ok(());
+    }
+    Err("usage: issue LABEL | read LABEL PATH | read-edge PARENT CHILD PATH".to_string())
+}

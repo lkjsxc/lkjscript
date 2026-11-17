@@ -1,0 +1,127 @@
+//! Host-independent negative controls. File I/O controls are in the focused shell gate.
+use crate::{programs_package, reuse, sha256};
+use crate::programs_package::{Error, Expected, Package};
+
+fn checked<T>(result: Result<T, Error>) -> T {
+    match result { Ok(value) => value, Err(error) => panic!("package test {}", error.code()) }
+}
+fn files(path: &str) -> String {
+    let notice = b"permission\n";
+    let code = b"pub fn answer() -> u8 { 7 }\n";
+    format!("[[\"LICENSE\",{},\"{}\"],[\"{}\",{},\"{}\"]]",
+        notice.len(), sha256::hex_digest(notice), path, code.len(), sha256::hex_digest(code))
+}
+fn tree(files: &str) -> String {
+    let mut bytes = (b"lkjscript-source-tree-1\0")[..].to_vec();
+    bytes.extend_from_slice(files.as_bytes());
+    sha256::hex_digest(&bytes)
+}
+fn id(name: &str, version: &str, origin: &str, revision: &str, tree: &str) -> String {
+    format!("[\"{name}\",\"{version}\",\"{origin}\",\"{revision}\",\"{tree}\"]")
+}
+fn fixture_id(name: &str) -> String { id(name, "1.0", "https://example.invalid/source", "commit-one", tree(files("src/lib.rs").as_str()).as_str()) }
+fn pin(identity: &str, dependencies: &str) -> Expected {
+    checked(programs_package::expected(format!("[\"lkjscript-package-pin-1\",{identity},{dependencies}]").as_bytes()))
+}
+fn document(identity: &str, dependencies: &str, files: &str, notices: &str) -> String {
+    format!("[\"lkjscript-package-source-1-regular\",{identity},{dependencies},{files},{notices}]")
+}
+fn fixture(identity: &str, dependencies: &str) -> String {
+    document(identity, dependencies, files("src/lib.rs").as_str(), "[\"LICENSE\"]")
+}
+fn seal(text: &str) -> Vec<u8> {
+    reuse::seal(&sha256::digest(b"lkjscript-package-source-reader-1"), &[31u8; 32],
+        "package-source-1", "manifest", text.as_bytes())
+}
+fn open(text: &str, expected: &Expected) -> Result<Package, Error> {
+    programs_package::authenticate(&[31u8; 32], expected, &seal(text))
+}
+fn rejected(result: Result<Package, Error>, expected: Error) {
+    match result { Ok(_) => panic!("accepted a rejected package"), Err(error) => assert!(error == expected) }
+}
+#[test]
+fn authenticated_identity_and_notice_inventory() {
+    let identity = fixture_id("fixture");
+    let package = checked(open(fixture(identity.as_str(), "[]").as_str(), &pin(identity.as_str(), "[]")));
+    assert!(package.identity().name == "fixture");
+    assert!(package.identity().tree == tree(files("src/lib.rs").as_str()));
+    assert!(package.file_count() == 2usize && package.notice_count() == 1usize);
+}
+#[test]
+fn authentication_rejects_bytes_key_and_namespace_substitution() {
+    let identity = fixture_id("fixture");
+    let expected = pin(identity.as_str(), "[]");
+    let text = fixture(identity.as_str(), "[]");
+    let envelope = seal(text.as_str());
+    for index in vec![0usize, 8usize, envelope.len() - 1usize] {
+        let mut changed = envelope.clone();
+        changed[index] ^= 1u8;
+        rejected(programs_package::authenticate(&[31u8; 32], &expected, &changed), Error::Authentication);
+    }
+    rejected(programs_package::authenticate(&[31u8; 32], &expected, &envelope[..envelope.len() - 1usize]), Error::Authentication);
+    rejected(programs_package::authenticate(&[32u8; 32], &expected, &envelope), Error::Authentication);
+    rejected(programs_package::authenticate(&[31u8; 31], &expected, &envelope), Error::Key);
+    let other_namespace = reuse::seal(&sha256::digest(b"lkjscript-package-source-reader-1"), &[31u8; 32],
+        "other-source-namespace", "manifest", text.as_bytes());
+    rejected(programs_package::authenticate(&[31u8; 32], &expected, &other_namespace), Error::Authentication);
+    let other_producer = reuse::seal(&sha256::digest(b"different-reader"), &[31u8; 32],
+        "package-source-1", "manifest", text.as_bytes());
+    rejected(programs_package::authenticate(&[31u8; 32], &expected, &other_producer), Error::Authentication);
+}
+#[test]
+fn every_identity_field_is_pinned() {
+    let tree = tree(files("src/lib.rs").as_str());
+    let identity = fixture_id("fixture");
+    let text = fixture(identity.as_str(), "[]");
+    rejected(open(text.as_str(), &pin(id("other", "1.0", "https://example.invalid/source", "commit-one", tree.as_str()).as_str(), "[]")), Error::Identity);
+    rejected(open(text.as_str(), &pin(id("fixture", "2.0", "https://example.invalid/source", "commit-one", tree.as_str()).as_str(), "[]")), Error::Identity);
+    rejected(open(text.as_str(), &pin(id("fixture", "1.0", "https://other.invalid/source", "commit-one", tree.as_str()).as_str(), "[]")), Error::Identity);
+    rejected(open(text.as_str(), &pin(id("fixture", "1.0", "https://example.invalid/source", "commit-two", tree.as_str()).as_str(), "[]")), Error::Identity);
+    rejected(open(text.as_str(), &pin(id("fixture", "1.0", "https://example.invalid/source", "commit-one",
+        "0000000000000000000000000000000000000000000000000000000000000000").as_str(), "[]")), Error::Identity);
+}
+#[test]
+fn exact_dependency_edges_survive_separate_authentication() {
+    let parent_id = fixture_id("parent");
+    let child_id = fixture_id("child");
+    let edges = format!("[{child_id}]");
+    let text = fixture(parent_id.as_str(), edges.as_str());
+    let parent = checked(open(text.as_str(), &pin(parent_id.as_str(), edges.as_str())));
+    let child = checked(open(fixture(child_id.as_str(), "[]").as_str(), &pin(child_id.as_str(), "[]")));
+    assert!(parent.require_dependency(&child).is_ok());
+    rejected(open(text.as_str(), &pin(parent_id.as_str(), "[]")), Error::Dependencies);
+    let substituted = fixture_id("other");
+    rejected(open(text.as_str(), &pin(parent_id.as_str(), format!("[{substituted}]").as_str())), Error::Dependencies);
+    let other = checked(open(fixture(substituted.as_str(), "[]").as_str(), &pin(substituted.as_str(), "[]")));
+    assert!(parent.require_dependency(&other).is_err());
+    assert!(child.require_dependency(&parent).is_err());
+}
+fn bad_path(path: &str) {
+    let identity = fixture_id("fixture");
+    let text = document(identity.as_str(), "[]", files(path).as_str(), "[\"LICENSE\"]");
+    rejected(open(text.as_str(), &pin(identity.as_str(), "[]")), Error::Path);
+}
+#[test]
+fn paths_are_canonical_and_unique() {
+    bad_path("../lib.rs");
+    bad_path("/lib.rs");
+    bad_path("src//lib.rs");
+    bad_path("src/./lib.rs");
+    bad_path("src\\\\lib.rs");
+    bad_path("src\\u0000lib.rs");
+    bad_path("LICENSE");
+    bad_path("AAA");
+}
+#[test]
+fn canonical_shape_tree_and_notice_membership_are_checked() {
+    let identity = fixture_id("fixture");
+    let expected = pin(identity.as_str(), "[]");
+    rejected(open(format!(" {}", fixture(identity.as_str(), "[]")).as_str(), &expected), Error::Canonical);
+    rejected(open("[]", &expected), Error::Schema);
+    rejected(open(document(identity.as_str(), "[]", files("src/lib.rs").as_str(), "[]").as_str(), &expected), Error::Notice);
+    rejected(open(document(identity.as_str(), "[]", files("src/lib.rs").as_str(), "[\"absent\"]").as_str(), &expected), Error::Notice);
+    rejected(open(document(identity.as_str(), "[]", files("src/lib.rs").as_str(), "[\"LICENSE\",\"LICENSE\"]").as_str(), &expected), Error::Notice);
+    let wrong_tree = id("fixture", "1.0", "https://example.invalid/source", "commit-one",
+        "0000000000000000000000000000000000000000000000000000000000000000");
+    rejected(open(fixture(wrong_tree.as_str(), "[]").as_str(), &expected), Error::Tree);
+}

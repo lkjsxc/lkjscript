@@ -1,0 +1,290 @@
+//! Locally authenticated logical source bytes, not executable package authority.
+//! The issuer's separate inventory producer must enumerate the complete original
+//! regular-file tree and retain its notices. This reader does not attest host inode
+//! kinds or inventory completeness, and consumers must use its returned owned bytes.
+use crate::{reuse, sha256};
+use std::json::{self, Value};
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct Identity {
+    pub name: String,
+    pub version: String,
+    pub origin: String,
+    pub revision: String,
+    pub tree: String,
+}
+pub struct Expected { identity: Identity, dependencies: Vec<Identity> }
+struct FileEntry { path: String, size: usize, digest: String }
+pub struct Package {
+    identity: Identity,
+    dependencies: Vec<Identity>,
+    files: Vec<FileEntry>,
+    notices: Vec<String>,
+}
+pub struct VerifiedSource { bytes: Vec<u8> }
+impl VerifiedSource {
+    pub fn bytes(&self) -> &[u8] { self.bytes.as_slice() }
+    pub fn into_bytes(self) -> Vec<u8> { self.bytes }
+}
+#[derive(Clone, PartialEq, Eq)]
+pub enum Error {
+    Json, Canonical, Schema, Path, Tree, Notice, Identity, Dependencies,
+    Key, Authentication, SourceMissing, SourceLength, SourceDigest,
+}
+impl Error {
+    pub fn code(&self) -> &str {
+        match self {
+            Error::Json => "json", Error::Canonical => "canonical",
+            Error::Schema => "schema", Error::Path => "path",
+            Error::Tree => "tree", Error::Notice => "notice",
+            Error::Identity => "identity", Error::Dependencies => "dependencies",
+            Error::Key => "key", Error::Authentication => "authentication",
+            Error::SourceMissing => "source-missing",
+            Error::SourceLength => "source-length", Error::SourceDigest => "source-digest",
+        }
+    }
+}
+fn array(value: &Value) -> Result<&[Value], Error> {
+    match value.as_array() { Some(values) => Ok(values), None => Err(Error::Schema) }
+}
+fn text(value: &Value) -> Result<&str, Error> {
+    match value.as_str() { Some(value) => Ok(value), None => Err(Error::Schema) }
+}
+fn clean(value: &str) -> bool {
+    if value.is_empty() { return false; }
+    for byte in value.as_bytes() {
+        if *byte < 32u8 || *byte == 127u8 { return false; }
+    }
+    true
+}
+fn hex_digest(value: &str) -> bool {
+    if value.len() != 64usize { return false; }
+    for byte in value.as_bytes() {
+        if !(*byte >= b'0' && *byte <= b'9') && !(*byte >= b'a' && *byte <= b'f') {
+            return false;
+        }
+    }
+    true
+}
+fn before(left: &str, right: &str) -> bool {
+    let a = left.as_bytes();
+    let b = right.as_bytes();
+    let mut index = 0usize;
+    while index < a.len() && index < b.len() {
+        if a[index] != b[index] { return a[index] < b[index]; }
+        index += 1usize;
+    }
+    a.len() < b.len()
+}
+fn valid_path(path: &str) -> bool {
+    if !clean(path) || path.as_bytes()[0usize] == b'/' { return false; }
+    for byte in path.as_bytes() { if *byte == b'\\' { return false; } }
+    for part in path.split('/') {
+        if part.is_empty() || part == "." || part == ".." { return false; }
+    }
+    true
+}
+fn canonical(bytes: &[u8]) -> Result<Value, Error> {
+    let value = match json::parse(bytes) { Ok(value) => value, Err(_) => return Err(Error::Json) };
+    let rendered = match json::stringify(&value) {
+        Ok(rendered) => rendered, Err(_) => return Err(Error::Json),
+    };
+    if rendered.as_bytes() != bytes { return Err(Error::Canonical); }
+    Ok(value)
+}
+fn identity(value: &Value) -> Result<Identity, Error> {
+    let fields = array(value)?;
+    if fields.len() != 5usize { return Err(Error::Schema); }
+    let name = text(&fields[0usize])?;
+    let version = text(&fields[1usize])?;
+    let origin = text(&fields[2usize])?;
+    let revision = text(&fields[3usize])?;
+    let tree = text(&fields[4usize])?;
+    if !clean(name) || !clean(version) || !clean(origin) || !clean(revision) || !hex_digest(tree) {
+        return Err(Error::Schema);
+    }
+    for byte in name.as_bytes() {
+        if !(*byte >= b'a' && *byte <= b'z') && !(*byte >= b'A' && *byte <= b'Z')
+            && !(*byte >= b'0' && *byte <= b'9') && *byte != b'_' && *byte != b'-' {
+            return Err(Error::Schema);
+        }
+    }
+    Ok(Identity { name: name.to_string(), version: version.to_string(),
+        origin: origin.to_string(), revision: revision.to_string(), tree: tree.to_string() })
+}
+fn dependencies(value: &Value) -> Result<Vec<Identity>, Error> {
+    let mut result: Vec<Identity> = Vec::new();
+    for value in array(value)? {
+        let item = identity(value)?;
+        if !result.is_empty() && !before(result[result.len() - 1usize].name.as_str(), item.name.as_str()) {
+            return Err(Error::Dependencies);
+        }
+        result.push(item);
+    }
+    Ok(result)
+}
+/// This separate pin input is trusted caller policy, never learned from an envelope.
+/// Build mode, Cargo features, target and test selection are deliberately absent.
+pub fn expected(bytes: &[u8]) -> Result<Expected, Error> {
+    let value = canonical(bytes)?;
+    let fields = array(&value)?;
+    if fields.len() != 3usize || text(&fields[0usize])? != "lkjscript-package-pin-1" {
+        return Err(Error::Schema);
+    }
+    Ok(Expected { identity: identity(&fields[1usize])?, dependencies: dependencies(&fields[2usize])? })
+}
+fn manifest(bytes: &[u8]) -> Result<Package, Error> {
+    let value = canonical(bytes)?;
+    let fields = array(&value)?;
+    if fields.len() != 5usize || text(&fields[0usize])? != "lkjscript-package-source-1-regular" {
+        return Err(Error::Schema);
+    }
+    let identity = identity(&fields[1usize])?;
+    let dependencies = dependencies(&fields[2usize])?;
+    let records = array(&fields[3usize])?;
+    let mut files: Vec<FileEntry> = Vec::new();
+    for record in records {
+        let parts = array(record)?;
+        if parts.len() != 3usize { return Err(Error::Schema); }
+        let path = text(&parts[0usize])?;
+        if !valid_path(path) { return Err(Error::Path); }
+        if !files.is_empty() && !before(files[files.len() - 1usize].path.as_str(), path) {
+            return Err(Error::Path);
+        }
+        let size = match parts[1usize].as_usize() { Some(size) => size, None => return Err(Error::Schema) };
+        let digest = text(&parts[2usize])?;
+        if !hex_digest(digest) { return Err(Error::Schema); }
+        files.push(FileEntry { path: path.to_string(), size, digest: digest.to_string() });
+    }
+    if files.is_empty() { return Err(Error::Schema); }
+    let records_text = match json::stringify(&fields[3usize]) {
+        Ok(value) => value, Err(_) => return Err(Error::Json),
+    };
+    let mut tree_bytes = (b"lkjscript-source-tree-1\0")[..].to_vec();
+    tree_bytes.extend_from_slice(records_text.as_bytes());
+    if sha256::hex_digest(&tree_bytes) != identity.tree { return Err(Error::Tree); }
+    let mut notices: Vec<String> = Vec::new();
+    for value in array(&fields[4usize])? {
+        let path = text(value)?;
+        if !notices.is_empty() && !before(notices[notices.len() - 1usize].as_str(), path) {
+            return Err(Error::Notice);
+        }
+        let mut found = false;
+        for file in &files { if file.path.as_str() == path { found = true; } }
+        if !found { return Err(Error::Notice); }
+        notices.push(path.to_string());
+    }
+    if notices.is_empty() { return Err(Error::Notice); }
+    Ok(Package { identity, dependencies, files, notices })
+}
+fn matches(package: &Package, expected: &Expected) -> Result<(), Error> {
+    if package.identity != expected.identity { return Err(Error::Identity); }
+    if package.dependencies != expected.dependencies { return Err(Error::Dependencies); }
+    Ok(())
+}
+fn producer() -> [u8; 32] { sha256::digest(b"lkjscript-package-source-reader-1") }
+/// The issuer/key is trusted tooling. Source and manifest producers are untrusted.
+/// Every listed source is verified before issuance; enumeration is a separate duty.
+pub fn issue(secret: &[u8], expected: &Expected, description: &[u8], source: &mut ReadDirectory) -> Result<Vec<u8>, Error> {
+    if secret.len() != 32usize { return Err(Error::Key); }
+    let package = manifest(description)?;
+    matches(&package, expected)?;
+    for file in &package.files { let _verified = package.read(source, file.path.as_str())?; }
+    Ok(reuse::seal(&producer(), secret, "package-source-1", "manifest", description))
+}
+/// A valid foreign package still fails when its full identity or pinned edges differ.
+pub fn authenticate(secret: &[u8], expected: &Expected, envelope: &[u8]) -> Result<Package, Error> {
+    if secret.len() != 32usize { return Err(Error::Key); }
+    let payload = match reuse::authenticate(&producer(), secret, "package-source-1", "manifest", envelope) {
+        Some(payload) => payload, None => return Err(Error::Authentication),
+    };
+    let package = manifest(&payload)?;
+    matches(&package, expected)?;
+    Ok(package)
+}
+impl Package {
+    pub fn identity(&self) -> &Identity { &self.identity }
+    pub fn file_count(&self) -> usize { self.files.len() }
+    pub fn notice_count(&self) -> usize { self.notices.len() }
+    /// Both packages were authenticated separately. This checks the parent's exact edge.
+    pub fn require_dependency(&self, child: &Package) -> Result<(), Error> {
+        for dependency in &self.dependencies {
+            if dependency.name == child.identity.name {
+                if *dependency == child.identity { return Ok(()); }
+                return Err(Error::Dependencies);
+            }
+        }
+        Err(Error::Dependencies)
+    }
+    /// Read once, verify that owned buffer, return it. Never return an approved host path.
+    /// Any later module/include read must come through this same manifest-bound operation.
+    pub fn read(&self, source: &mut ReadDirectory, path: &str) -> Result<VerifiedSource, Error> {
+        if !valid_path(path) { return Err(Error::Path); }
+        for entry in &self.files {
+            if entry.path.as_str() == path {
+                let mut file = match source.open(path) {
+                    Ok(file) => file, Err(_) => return Err(Error::SourceMissing),
+                };
+                // ReadDirectory.open admits regular files. Read at most the pinned
+                // length plus one probing byte before rejecting a substituted large file.
+                let mut bytes: Vec<u8> = Vec::new();
+                let mut buffer = [0u8; 8192];
+                while bytes.len() < entry.size {
+                    let remaining = entry.size - bytes.len();
+                    let wanted = if remaining < buffer.len() { remaining } else { buffer.len() };
+                    let count = match file.read(&mut buffer[..wanted]) {
+                        Ok(count) => count, Err(_) => return Err(Error::SourceMissing),
+                    };
+                    if count == 0usize { return Err(Error::SourceLength); }
+                    bytes.extend_from_slice(&buffer[..count]);
+                }
+                let extra = match file.read(&mut buffer[..1usize]) {
+                    Ok(count) => count, Err(_) => return Err(Error::SourceMissing),
+                };
+                if extra != 0usize { return Err(Error::SourceLength); }
+                if sha256::hex_digest(&bytes) != entry.digest { return Err(Error::SourceDigest); }
+                return Ok(VerifiedSource { bytes });
+            }
+        }
+        Err(Error::Path)
+    }
+}
+
+/// Authenticate the fixed header before its length can authorize payload reads.
+/// The regular file is read once; trailing bytes and truncated payloads refuse.
+pub fn authenticate_file(secret: &[u8], expected: &Expected, file: &mut ReadFile) -> Result<Package, Error> {
+    if secret.len() != 32usize { return Err(Error::Key); }
+    let mut header = vec![0u8; reuse::header_size()];
+    let mut filled = 0usize;
+    while filled < header.len() {
+        let count = match file.read(&mut header[filled..]) {
+            Ok(count) => count, Err(_) => return Err(Error::Authentication),
+        };
+        if count == 0usize { return Err(Error::Authentication); }
+        filled += count;
+    }
+    let root = match reuse::AuthenticatedRoot::new(&producer(), secret, "package-source-1", "manifest", &header) {
+        Some(root) => root, None => return Err(Error::Authentication),
+    };
+    let mut bytes: Vec<u8> = Vec::new();
+    let mut buffer = [0u8; 8192];
+    while bytes.len() < root.length() {
+        let remaining = root.length() - bytes.len();
+        let wanted = if remaining < buffer.len() { remaining } else { buffer.len() };
+        let count = match file.read(&mut buffer[..wanted]) {
+            Ok(count) => count, Err(_) => return Err(Error::Authentication),
+        };
+        if count == 0usize { return Err(Error::Authentication); }
+        bytes.extend_from_slice(&buffer[..count]);
+    }
+    let extra = match file.read(&mut buffer[..1usize]) {
+        Ok(count) => count, Err(_) => return Err(Error::Authentication),
+    };
+    if extra != 0usize { return Err(Error::Authentication); }
+    let payload = match root.verify(bytes) {
+        Some(payload) => payload, None => return Err(Error::Authentication),
+    };
+    let package = manifest(payload.bytes())?;
+    matches(&package, expected)?;
+    Ok(package)
+}

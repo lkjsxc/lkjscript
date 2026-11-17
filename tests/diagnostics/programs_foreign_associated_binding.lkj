@@ -1,0 +1,7 @@
+// expect: reject E_PARSE
+// cause: expected Rust form/support gap.
+// pending: Resolve the independently authored program barrier recorded in docs/real-programs.md.
+// Reduced from nom 8.0.0 src/traits.rs:31, src/bits/streaming.rs:99.
+// This handwritten invalid input is uncredited; it does not add a whole-root site.
+trait P { type Item; }
+fn binding_probe<T: P<Item = usize>>(value: T) {}

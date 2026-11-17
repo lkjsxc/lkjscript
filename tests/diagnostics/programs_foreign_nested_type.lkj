@@ -1,0 +1,7 @@
+// expect: reject E_PARSE
+// cause: expected Rust form/support gap.
+// pending: Resolve the independently authored program barrier recorded in docs/real-programs.md.
+// Reduced from nom 8.0.0 src/combinator/mod.rs:234.
+// This handwritten invalid input is uncredited; it does not add a whole-root site.
+trait P { type Item; }
+fn nested_probe<T: P>(value: Option<<T as P>::Item>) {}

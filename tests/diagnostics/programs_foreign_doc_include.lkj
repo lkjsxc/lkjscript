@@ -1,0 +1,7 @@
+// expect: reject E_PARSE
+// cause: expected Rust form/support gap.
+// pending: Resolve the independently authored program barrier recorded in docs/real-programs.md.
+// Reduced from dom_query 0.28.0 src/lib.rs:18.
+// This handwritten invalid input is uncredited; it does not add a whole-root site.
+#![doc = include_str!("programs_foreign_doc_include.lkj")]
+pub fn probe() -> usize { 1usize }

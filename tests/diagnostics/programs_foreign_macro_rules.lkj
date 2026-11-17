@@ -1,0 +1,7 @@
+// expect: reject E_LEX
+// cause: expected Rust form/support gap.
+// pending: Resolve the independently authored program barrier recorded in docs/real-programs.md.
+// Reduced from nom 8.0.0 src/internal.rs:526-527, src/character/streaming.rs:650-651.
+// This handwritten invalid input is uncredited; it does not add a whole-root site.
+macro_rules! passthrough { ($value:expr) => { $value }; }
+pub fn probe() -> usize { passthrough!(1usize) }

@@ -1,0 +1,140 @@
+//! A concrete interface-export computation policy, applied after specialization.
+//! This is neither a package principal nor a promise about future templates or
+//! later invocation of returned callables. The trusted caller pins the compiler.
+//! Admission owns its exact proof, is not cloneable or serializable, and can only
+//! emit/open a native object against that proof after checking current policy.
+use crate::{diagnostic::Diagnostic, diagnostic::Span, native, reuse, runtime, sha256};
+use crate::check::units::{CheckedUnit, Dependency, Interface};
+
+pub struct Policy { allowed: Vec<String>, identity: String }
+#[derive(Clone, PartialEq, Eq)]
+pub struct Binding {
+    producer: Vec<u8>, name: String, input: String, body: String,
+    interface: String, dependencies: Vec<Dependency>,
+}
+enum Proof { Checked(CheckedUnit), Authenticated(Interface) }
+pub struct Admission { proof: Proof, binding: Binding, policy: String }
+
+fn error(code: &str, detail: &str) -> Diagnostic {
+    Diagnostic::new(Span::default(), code, detail)
+}
+fn policy(allowed: Vec<String>) -> Policy {
+    let mut bytes = b"lkjscript-concrete-export-computation-1\n"[..].to_vec();
+    for operation in &allowed {
+        bytes.extend_from_slice(operation.as_bytes());
+        bytes.push(b'\n');
+    }
+    Policy { allowed, identity: sha256::hex_digest(&bytes) }
+}
+pub fn computation_v1() -> Policy {
+    let allowed = vec!["array_repeat".to_string(), "assert".to_string(), "box_new".to_string(),
+        "cast".to_string(), "char_from_u32".to_string(), "clone".to_string(),
+        "f64_from_bits".to_string(), "f64_to_bits".to_string(), "replace".to_string(),
+        "str_as_bytes".to_string(), "str_from_utf8".to_string(), "str_len".to_string(),
+        "vec_len".to_string(), "vec_new".to_string(), "vec_pop".to_string(), "vec_push".to_string()];
+    policy(allowed)
+}
+impl Policy {
+    pub fn identity(&self) -> &str { self.identity.as_str() }
+    /// The public policy constructor can only narrow the closed v1 allowlist.
+    pub fn without(&self, operation: &str) -> Result<Policy, Diagnostic> {
+        let mut allowed = Vec::new();
+        let mut found = false;
+        for name in &self.allowed {
+            if name.as_str() == operation { found = true; }
+            else { allowed.push(name.clone()); }
+        }
+        if !found { return Err(error("E_COMPUTATION_POLICY", "operation is not allowed by this policy")); }
+        Ok(policy(allowed))
+    }
+}
+impl Binding {
+    /// This metadata is not approval. Its compiler identity is trusted caller input.
+    pub fn new(producer: &[u8], interface: &Interface) -> Result<Binding, Diagnostic> {
+        if producer.len() != 32usize {
+            return Err(error("E_COMPUTATION_PRODUCER", "expected compiler identity must contain exactly 32 bytes"));
+        }
+        Ok(Binding { producer: producer.to_vec(), name: interface.name().to_string(),
+            input: interface.input_identity().to_string(), body: interface.body_identity().to_string(),
+            interface: interface.identity().to_string(), dependencies: interface.dependencies().to_vec() })
+    }
+}
+fn audit(interface: &Interface, selected: &Policy) -> Result<(), Diagnostic> {
+    if interface.program().functions.is_empty() {
+        return Err(error("E_COMPUTATION_EMPTY", "no concrete interface function is selected"));
+    }
+    for index in 0usize..interface.program().functions.len() {
+        for operation in interface.effects(index) {
+            if !selected.allowed.contains(operation) {
+                return Err(error("E_COMPUTATION_EFFECT", &format!("{} requires refused operation {}",
+                    interface.program().functions[index].name, operation)));
+            }
+        }
+    }
+    Ok(())
+}
+pub fn checked(unit: CheckedUnit, producer: &[u8], selected: &Policy) -> Result<Admission, Diagnostic> {
+    audit(unit.interface(), selected)?;
+    let binding = Binding::new(producer, unit.interface())?;
+    Ok(Admission { proof: Proof::Checked(unit), binding, policy: selected.identity.clone() })
+}
+/// Authentication restores checker facts; the current policy is evaluated again.
+pub fn authenticated(expected: &Binding, secret: &[u8], envelope: &[u8], selected: &Policy)
+    -> Result<Admission, Diagnostic> {
+    let interface = Interface::authenticate(&expected.producer, secret, &expected.name,
+        &expected.input, &expected.dependencies, envelope)
+        .ok_or_else(|| error("E_COMPUTATION_AUTH", "interface authentication or expected input failed"))?;
+    if Binding::new(&expected.producer, &interface)? != *expected {
+        return Err(error("E_COMPUTATION_BINDING", "interface body or semantic identity differs from the expected binding"));
+    }
+    audit(&interface, selected)?;
+    Ok(Admission { proof: Proof::Authenticated(interface), binding: expected.clone(), policy: selected.identity.clone() })
+}
+impl Admission {
+    fn interface(&self) -> &Interface {
+        match &self.proof { Proof::Checked(unit) => unit.interface(), Proof::Authenticated(interface) => interface }
+    }
+    pub fn binding(&self) -> &Binding { &self.binding }
+    pub fn policy_identity(&self) -> &str { self.policy.as_str() }
+    fn current(&self, expected: &Binding, selected: &Policy) -> Result<(), Diagnostic> {
+        if self.binding != *expected || Binding::new(&expected.producer, self.interface())? != *expected {
+            return Err(error("E_COMPUTATION_BINDING", "admission belongs to a different exact unit or compiler"));
+        }
+        audit(self.interface(), selected)?;
+        if self.policy != selected.identity {
+            return Err(error("E_COMPUTATION_POLICY", "policy changed; admit again under the current policy"));
+        }
+        Ok(())
+    }
+    /// Consuming cold path: emission receives exactly the checked proof that passed.
+    pub fn emit(self, expected: &Binding, selected: &Policy, runtime: &runtime::Runtime,
+        source_base: usize) -> Result<native::units::Object, Diagnostic> {
+        self.current(expected, selected)?;
+        let context = native::units::Context::new(runtime);
+        match self.proof {
+            Proof::Checked(unit) => native::units::emit(&unit, &context, source_base),
+            Proof::Authenticated(_) => Err(error("E_COMPUTATION_BODY", "interface authentication cannot fabricate a checked body")),
+        }
+    }
+    /// Consuming reuse path: no caller-supplied replacement interface is accepted.
+    /// The object envelope must bind this compiler, key, body, ABI and source table.
+    pub fn open(self, expected: &Binding, selected: &Policy, runtime: &runtime::Runtime,
+        source_base: usize, sources: &[String], secret: &[u8], envelope: &[u8])
+        -> Result<native::units::Object, Diagnostic> {
+        self.current(expected, selected)?;
+        let context = native::units::Context::new(runtime);
+        let key = native::units::object_key(self.interface(), &context, source_base, sources);
+        let header = reuse::header_size();
+        if envelope.len() < header {
+            return Err(error("E_COMPUTATION_OBJECT", "native object envelope is truncated"));
+        }
+        let root = reuse::AuthenticatedRoot::new(&expected.producer, secret,
+            native::units::namespace(), &key, &envelope[..header])
+            .ok_or_else(|| error("E_COMPUTATION_OBJECT", "native object authentication failed"))?;
+        let payload = root.verify(envelope[header..].to_vec())
+            .ok_or_else(|| error("E_COMPUTATION_OBJECT", "native object payload differs"))?;
+        let domain = reuse::ProofDomain::new(&expected.producer, secret);
+        native::units::Object::open(&domain, self.interface(), &context, source_base, sources, payload)
+            .ok_or_else(|| error("E_COMPUTATION_OBJECT", "native object is incompatible with the exact admitted interface"))
+    }
+}

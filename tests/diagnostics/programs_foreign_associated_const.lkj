@@ -1,0 +1,8 @@
+// expect: reject E_UNSUPPORTED
+// cause: expected Rust form/support gap.
+// pending: Resolve the independently authored program barrier recorded in docs/real-programs.md.
+// Reduced from Sōzu 1.0.6 command/src/ready.rs:8.
+// This handwritten invalid input is uncredited; it does not add a whole-root site.
+pub struct Ready(u8);
+impl Ready { pub const EMPTY: Ready = Ready(0); }
+pub fn probe() -> u8 { Ready::EMPTY.0 }

@@ -1,0 +1,985 @@
+{
+ "schema": "lkjscript.real-programs-rust.v1",
+ "measured_at": "2026-11-17",
+ "purpose": "Replayable upstream own-test baseline; no admitted large lkjscript port or runtime ratio is claimed.",
+ "unit_build_profile": {
+  "cargo_jobs": 2,
+  "codegen_units": 1,
+  "debug_assertions": true,
+  "debuginfo": 2,
+  "incremental": false,
+  "lto": false,
+  "name": "test",
+  "opt_levels": [0, 3],
+  "overflow_checks": true,
+  "test_threads": 1,
+  "tokio_workers": 1
+ },
+ "timing_scope": "Initial cargo test --no-run and complete Cargo test driver measured separately; test driver includes Cargo verification and any unit or doctest compilation.",
+ "memory_scope": "GNU time maximum resident set size of individual measured processes; not a sampled simultaneous aggregate peak.",
+ "rustdoc_scope": "Doctest snippets use Cargo rustdoc defaults with embed-bitcode=no and codegen-units=1; no opt-level or debuginfo flags were supplied. Dependency libraries retain the selected test profile.",
+ "network_scope": "Build scripts and broad tests use a fresh loopback-only network namespace, private writable source overlay/target/tmp, read-only registry/toolchains/system, no host home or credentials, dropped capabilities and no-new-privileges. Only the already-built exact Sōzu RTT test was separately granted host network in a read-only view; no Cargo or build script ran in that grant.",
+ "limitations": ["One observation per profile/phase on a shared host; test-driver timing includes Cargo verification, additional compilation and rustdoc compilation, not just test execution.", "Sōzu's initial suite exits 101 for its external-network test in both profiles. Successful coverage is assembled across recorded broad, doctest and exact network-case runs; it is not a single all-pass suite.", "Early Sōzu phases did not capture exact command argv or harness digests; their null values are not backfilled with later harness bytes.", "Source/lock/licence inputs and decision-bearing raw phase evidence are retained once; disposable build outputs have been removed."],
+ "specimens": [
+  {
+   "specimen": "nom-8.0.0",
+   "origin": "https://github.com/rust-bakery/nom.git",
+   "commit": "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
+   "tree": "daf62e3ab366a426373e6731ab1222826ae52d45",
+   "scope": "Original upstream cargo test -p nom with locked dependencies and default features; workspace benchmark packages excluded by package selection, no source/test/feature edits",
+   "source": "/home/coder/workspace/lkjscript-specimens/nom-8.0.0",
+   "tracked_source_pristine": true,
+   "rustc_version": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+   "cargo_version": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+   "upstream_tracks_lock": false,
+   "lock_sha256": "16ef4424aa511b26ebc875522b0d0b1403c10f018312044eba273a9c743abe8f",
+   "lock_note": "Resolved once before baseline by Cargo; original upstream ignores Cargo.lock; every run uses --locked --offline",
+   "licences": [
+    {
+     "path": "LICENSE",
+     "sha256": "4dbda04344456f09a7a588140455413a9ac59b6b26a1ef7cdf9c800c012d87f0"
+    }
+   ],
+   "reviewed_config": null,
+   "source_summary": {
+    "path": "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-rust/summary.json",
+    "sha256": "9d138922c5b5808a0d419a56422e880fe35a4061e8173837873ad408540a7eb4"
+   },
+   "profiles": {
+    "0": {
+     "coverage": null,
+     "generated_command": null,
+     "phases": [
+      {
+       "phase": "build",
+       "measurements": {
+        "max_rss_kib": 559496,
+        "system_seconds": 2.07,
+        "user_seconds": 14.44,
+        "wall_seconds": 9.77
+       },
+       "exit_status": 0,
+       "counts": {
+        "failed": 0,
+        "filtered": 0,
+        "ignored": 0,
+        "passed": 0
+       },
+       "failed_tests": [],
+       "rustdoc_codegen_flags": [],
+       "load_before": "7.35 6.62 7.16 4/6220 2869893",
+       "load_after": "7.15 6.60 7.14 4/6100 2873576",
+       "started": "2026-11-17T01:51:25Z",
+       "finished": "2026-11-17T01:51:35Z",
+       "network": "isolated-loopback",
+       "command_argv": ["/bin/bash", "-c", "cd /src && exec \"$@\"", "baseline-cargo", "/toolchain/bin/cargo", "test", "-p", "nom", "--locked", "--offline", "--no-run", "--verbose"],
+       "harness_sha256": "31b411a93de3f495ff2fe7c18444ac26e78df8aae3a62068105c6b5aa16e1823",
+       "containment_sha256": "84c2dbc7af99c25f815fb5270b5c59fb9d5c3bc3cfb519ad79abb8b3f0befca7",
+       "binary_sha256": null,
+       "resolver_sha256": null,
+       "files": {
+        "meta.json": {
+         "bytes": 2757,
+         "path": "opt0-build.meta.json",
+         "sha256": "470d89ea84e9dd5f9f821ccca44e3279813a3eaf6058f4f7a28cc2c63162ca5d"
+        },
+        "stderr": {
+         "bytes": 62539,
+         "path": "opt0-build.stderr",
+         "sha256": "d12e1eb0f1ed9a9ed75213606e4de706f4cc47e56e10f761ad46bdf859cafaa5"
+        },
+        "stdout": {
+         "bytes": 0,
+         "path": "opt0-build.stdout",
+         "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "time": {
+         "bytes": 1381,
+         "path": "opt0-build.time",
+         "sha256": "86254e9de5f07d8b5734d03058c1673c2d7860b20f7a69d30ec5855f478fad9c"
+        }
+       }
+      },
+      {
+       "phase": "test",
+       "measurements": {
+        "max_rss_kib": 167680,
+        "system_seconds": 8.87,
+        "user_seconds": 11.1,
+        "wall_seconds": 15.51
+       },
+       "exit_status": 0,
+       "counts": {
+        "failed": 0,
+        "filtered": 0,
+        "ignored": 0,
+        "passed": 582
+       },
+       "failed_tests": [],
+       "rustdoc_codegen_flags": [
+        ["-C embed-bitcode=no", "-C codegen-units=1"]
+       ],
+       "load_before": "7.15 6.60 7.14 2/6100 2873660",
+       "load_after": "6.69 6.52 7.11 7/6119 2885772",
+       "started": "2026-11-17T01:51:35Z",
+       "finished": "2026-11-17T01:51:50Z",
+       "network": "isolated-loopback",
+       "command_argv": ["/bin/bash", "-c", "cd /src && exec \"$@\"", "baseline-cargo", "/toolchain/bin/cargo", "test", "-p", "nom", "--locked", "--offline", "--verbose", "--", "--test-threads=1"],
+       "harness_sha256": "31b411a93de3f495ff2fe7c18444ac26e78df8aae3a62068105c6b5aa16e1823",
+       "containment_sha256": "84c2dbc7af99c25f815fb5270b5c59fb9d5c3bc3cfb519ad79abb8b3f0befca7",
+       "binary_sha256": null,
+       "resolver_sha256": null,
+       "files": {
+        "meta.json": {
+         "bytes": 2796,
+         "path": "opt0-test.meta.json",
+         "sha256": "359ab9f95e240fe8e7e399ccf40de05d0971a8d5561df7061515da08f8569541"
+        },
+        "stderr": {
+         "bytes": 4009,
+         "path": "opt0-test.stderr",
+         "sha256": "9722e8e7eab05eb549adc6c5dcd05435ed578531a40591f21e80e9c54819f8e2"
+        },
+        "stdout": {
+         "bytes": 35239,
+         "path": "opt0-test.stdout",
+         "sha256": "2233173513f35a4cadf85246cff257ac473757023bcde0c8ff8a5717c4d2d4ea"
+        },
+        "time": {
+         "bytes": 1394,
+         "path": "opt0-test.time",
+         "sha256": "c8786c5dc6b08c0fcb25205bfb86cdc9980ed8c6983e4a89943e3d77056caf22"
+        }
+       }
+      }
+     ]
+    },
+    "3": {
+     "coverage": null,
+     "generated_command": null,
+     "phases": [
+      {
+       "phase": "build",
+       "measurements": {
+        "max_rss_kib": 674188,
+        "system_seconds": 2.23,
+        "user_seconds": 33.59,
+        "wall_seconds": 22.01
+       },
+       "exit_status": 0,
+       "counts": {
+        "failed": 0,
+        "filtered": 0,
+        "ignored": 0,
+        "passed": 0
+       },
+       "failed_tests": [],
+       "rustdoc_codegen_flags": [],
+       "load_before": "6.69 6.52 7.11 2/6088 2885869",
+       "load_after": "7.34 6.67 7.14 2/6176 2892115",
+       "started": "2026-11-17T01:51:51Z",
+       "finished": "2026-11-17T01:52:13Z",
+       "network": "isolated-loopback",
+       "command_argv": ["/bin/bash", "-c", "cd /src && exec \"$@\"", "baseline-cargo", "/toolchain/bin/cargo", "test", "-p", "nom", "--locked", "--offline", "--no-run", "--verbose"],
+       "harness_sha256": "31b411a93de3f495ff2fe7c18444ac26e78df8aae3a62068105c6b5aa16e1823",
+       "containment_sha256": "84c2dbc7af99c25f815fb5270b5c59fb9d5c3bc3cfb519ad79abb8b3f0befca7",
+       "binary_sha256": null,
+       "resolver_sha256": null,
+       "files": {
+        "meta.json": {
+         "bytes": 2757,
+         "path": "opt3-build.meta.json",
+         "sha256": "c6ffe8c2ac44ef6f1897c2dd5d7f5a985dbbf68eda9c56bca1e5115094267530"
+        },
+        "stderr": {
+         "bytes": 64704,
+         "path": "opt3-build.stderr",
+         "sha256": "ce8001b1060245354a1ee8294e9f4072129a6d3a71edd3a02d7522f4aabb75fd"
+        },
+        "stdout": {
+         "bytes": 0,
+         "path": "opt3-build.stdout",
+         "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "time": {
+         "bytes": 1380,
+         "path": "opt3-build.time",
+         "sha256": "c0f554f462d22ade31514a289b6176a7256633752812692f4c14c9e9cca9e1f4"
+        }
+       }
+      },
+      {
+       "phase": "test",
+       "measurements": {
+        "max_rss_kib": 170728,
+        "system_seconds": 8.85,
+        "user_seconds": 10.6,
+        "wall_seconds": 15.02
+       },
+       "exit_status": 0,
+       "counts": {
+        "failed": 0,
+        "filtered": 0,
+        "ignored": 0,
+        "passed": 582
+       },
+       "failed_tests": [],
+       "rustdoc_codegen_flags": [
+        ["-C embed-bitcode=no", "-C codegen-units=1"]
+       ],
+       "load_before": "7.34 6.67 7.14 2/6176 2892199",
+       "load_after": "6.46 6.51 7.08 2/6244 2903495",
+       "started": "2026-11-17T01:52:13Z",
+       "finished": "2026-11-17T01:52:28Z",
+       "network": "isolated-loopback",
+       "command_argv": ["/bin/bash", "-c", "cd /src && exec \"$@\"", "baseline-cargo", "/toolchain/bin/cargo", "test", "-p", "nom", "--locked", "--offline", "--verbose", "--", "--test-threads=1"],
+       "harness_sha256": "31b411a93de3f495ff2fe7c18444ac26e78df8aae3a62068105c6b5aa16e1823",
+       "containment_sha256": "84c2dbc7af99c25f815fb5270b5c59fb9d5c3bc3cfb519ad79abb8b3f0befca7",
+       "binary_sha256": null,
+       "resolver_sha256": null,
+       "files": {
+        "meta.json": {
+         "bytes": 2796,
+         "path": "opt3-test.meta.json",
+         "sha256": "87581a76127db1ae313f638f7ce1322b3ff36dfafb50ece7cbf3e13ade6a8951"
+        },
+        "stderr": {
+         "bytes": 4007,
+         "path": "opt3-test.stderr",
+         "sha256": "e0795a2c39a273409dba792a5acdb035efb40307e971feaf7afd5e41bb35e472"
+        },
+        "stdout": {
+         "bytes": 35239,
+         "path": "opt3-test.stdout",
+         "sha256": "418d12c8ee9ed150a12a91b598eb03cd8debfc3ee86a75bb55ad31dfbd7f16a5"
+        },
+        "time": {
+         "bytes": 1392,
+         "path": "opt3-test.time",
+         "sha256": "e276ad7330357a1e5910116df827422052a715b5b2102297883a3d346c003424"
+        }
+       }
+      }
+     ]
+    }
+   },
+   "replay_lock": "../tests/fixtures/real_programs_nom.Cargo.lock",
+   "evidence_directory": "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-rust"
+  },
+  {
+   "specimen": "dom_query-0.28.0",
+   "origin": "https://github.com/niklak/dom_query.git",
+   "commit": "186c02d9359762404054fbc8af3a5b07cdf795a9",
+   "tree": "09ce9e410a22d9accc26979c69bf555129be7515",
+   "scope": "Original upstream cargo test -p dom_query with locked dependencies and default features; workspace benchmark packages excluded by package selection, no source/test/feature edits",
+   "source": "/home/coder/workspace/lkjscript-specimens/dom_query-0.28.0",
+   "tracked_source_pristine": true,
+   "rustc_version": "rustc 1.98.1 (48a229cea 2026-09-01)\nbinary: rustc\ncommit-hash: 48a229ceaefd4985c50990b14116b6d856af0985\ncommit-date: 2026-09-01\nhost: x86_64-unknown-linux-gnu\nrelease: 1.98.1\nLLVM version: 22.1.8",
+   "cargo_version": "cargo 1.98.1 (797e8a9bc 2026-08-05)",
+   "upstream_tracks_lock": true,
+   "lock_sha256": "fad8acf7cf3817a83faa3af635a29be0f59b80f4e4da71ed0c3f1d722a4b6ee1",
+   "lock_note": "Original tracked upstream Cargo.lock unchanged",
+   "licences": [
+    {
+     "path": "LICENSE",
+     "sha256": "7554701d1e74fc434f68c522b1dd743c8c16d816a4b761b5213f367b898884c8"
+    }
+   ],
+   "reviewed_config": {
+    "path": ".cargo/config.toml",
+    "review": "Only target.wasm32-unknown-unknown runner; unchanged, inactive for native x86_64 host",
+    "sha256": "c61514b5b0144ce3ff2b63c490f51b38db47d553feaadad3047c83afaf2928af"
+   },
+   "source_summary": {
+    "path": "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-rust/summary.json",
+    "sha256": "b91a8d830d185a1f20ddb99c2d534b8089c10182f9f9485982adaa61e2ad9f37"
+   },
+   "profiles": {
+    "0": {
+     "coverage": null,
+     "generated_command": null,
+     "phases": [
+      {
+       "phase": "build",
+       "measurements": {
+        "max_rss_kib": 592084,
+        "system_seconds": 3.73,
+        "user_seconds": 24.52,
+        "wall_seconds": 14.39
+       },
+       "exit_status": 0,
+       "counts": {
+        "failed": 0,
+        "filtered": 0,
+        "ignored": 0,
+        "passed": 0
+       },
+       "failed_tests": [],
+       "rustdoc_codegen_flags": [],
+       "load_before": "3.69 5.72 6.78 4/6147 2912052",
+       "load_after": "3.69 5.61 6.73 6/6195 2916275",
+       "started": "2026-11-17T01:53:21Z",
+       "finished": "2026-11-17T01:53:36Z",
+       "network": "isolated-loopback",
+       "command_argv": ["/bin/bash", "-c", "cd /src && exec \"$@\"", "baseline-cargo", "/toolchain/bin/cargo", "test", "-p", "dom_query", "--locked", "--offline", "--no-run", "--verbose"],
+       "harness_sha256": "31b411a93de3f495ff2fe7c18444ac26e78df8aae3a62068105c6b5aa16e1823",
+       "containment_sha256": "84c2dbc7af99c25f815fb5270b5c59fb9d5c3bc3cfb519ad79abb8b3f0befca7",
+       "binary_sha256": null,
+       "resolver_sha256": null,
+       "files": {
+        "meta.json": {
+         "bytes": 2865,
+         "path": "opt0-build.meta.json",
+         "sha256": "014587e971ab83ee9347b592086b2b0d952e8310c2486eff68625da1f61f4c30"
+        },
+        "stderr": {
+         "bytes": 124786,
+         "path": "opt0-build.stderr",
+         "sha256": "ed5adaffe615de4978c80e90929c9a54967871bf07feed4efbc39470425de835"
+        },
+        "stdout": {
+         "bytes": 0,
+         "path": "opt0-build.stdout",
+         "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "time": {
+         "bytes": 1409,
+         "path": "opt0-build.time",
+         "sha256": "e8db96694e2e4c91c311c9444cd0180ff726e3a8b6ebd474067ed75849690add"
+        }
+       }
+      },
+      {
+       "phase": "test",
+       "measurements": {
+        "max_rss_kib": 206948,
+        "system_seconds": 1.45,
+        "user_seconds": 4.67,
+        "wall_seconds": 5.26
+       },
+       "exit_status": 0,
+       "counts": {
+        "failed": 0,
+        "filtered": 0,
+        "ignored": 0,
+        "passed": 314
+       },
+       "failed_tests": [],
+       "rustdoc_codegen_flags": [
+        ["-C embed-bitcode=no", "-C codegen-units=1"]
+       ],
+       "load_before": "3.69 5.61 6.73 5/6199 2916366",
+       "load_after": "3.63 5.57 6.71 3/6210 2918223",
+       "started": "2026-11-17T01:53:36Z",
+       "finished": "2026-11-17T01:53:41Z",
+       "network": "isolated-loopback",
+       "command_argv": ["/bin/bash", "-c", "cd /src && exec \"$@\"", "baseline-cargo", "/toolchain/bin/cargo", "test", "-p", "dom_query", "--locked", "--offline", "--verbose", "--", "--test-threads=1"],
+       "harness_sha256": "31b411a93de3f495ff2fe7c18444ac26e78df8aae3a62068105c6b5aa16e1823",
+       "containment_sha256": "84c2dbc7af99c25f815fb5270b5c59fb9d5c3bc3cfb519ad79abb8b3f0befca7",
+       "binary_sha256": null,
+       "resolver_sha256": null,
+       "files": {
+        "meta.json": {
+         "bytes": 2904,
+         "path": "opt0-test.meta.json",
+         "sha256": "a6a2ff1f54cc74c1343332824c4cd46b5bb3b69db6f144d35447f491cbd764d5"
+        },
+        "stderr": {
+         "bytes": 5444,
+         "path": "opt0-test.stderr",
+         "sha256": "d7a8bf0ffe7f9c8b3e34944b08895852a4b6c2ccfeb8f319fc1b294cde0f1cf0"
+        },
+        "stdout": {
+         "bytes": 13271,
+         "path": "opt0-test.stdout",
+         "sha256": "94cdc3e91e2111ecf5ef389d2877ebf69e6b4e6c0e9f2405c0e914e79d3f76f6"
+        },
+        "time": {
+         "bytes": 1415,
+         "path": "opt0-test.time",
+         "sha256": "5d0ef270d7486762e84789c76144ba5759e483fde3cc9aa91af491b7ba50abca"
+        }
+       }
+      }
+     ]
+    },
+    "3": {
+     "coverage": null,
+     "generated_command": null,
+     "phases": [
+      {
+       "phase": "build",
+       "measurements": {
+        "max_rss_kib": 628628,
+        "system_seconds": 4.02,
+        "user_seconds": 70.15,
+        "wall_seconds": 37.81
+       },
+       "exit_status": 0,
+       "counts": {
+        "failed": 0,
+        "filtered": 0,
+        "ignored": 0,
+        "passed": 0
+       },
+       "failed_tests": [],
+       "rustdoc_codegen_flags": [],
+       "load_before": "3.63 5.57 6.71 2/6224 2918335",
+       "load_after": "3.62 5.35 6.59 2/6264 2927019",
+       "started": "2026-11-17T01:53:41Z",
+       "finished": "2026-11-17T01:54:19Z",
+       "network": "isolated-loopback",
+       "command_argv": ["/bin/bash", "-c", "cd /src && exec \"$@\"", "baseline-cargo", "/toolchain/bin/cargo", "test", "-p", "dom_query", "--locked", "--offline", "--no-run", "--verbose"],
+       "harness_sha256": "31b411a93de3f495ff2fe7c18444ac26e78df8aae3a62068105c6b5aa16e1823",
+       "containment_sha256": "84c2dbc7af99c25f815fb5270b5c59fb9d5c3bc3cfb519ad79abb8b3f0befca7",
+       "binary_sha256": null,
+       "resolver_sha256": null,
+       "files": {
+        "meta.json": {
+         "bytes": 2865,
+         "path": "opt3-build.meta.json",
+         "sha256": "bbd555046816a6460e0e07b184abcbfce1a6abebaceceb5333c1d20980ad2dcf"
+        },
+        "stderr": {
+         "bytes": 130940,
+         "path": "opt3-build.stderr",
+         "sha256": "5a71818c6f5b03eee23e3758975205e11eff942c4557417a68855203e95a27b6"
+        },
+        "stdout": {
+         "bytes": 0,
+         "path": "opt3-build.stdout",
+         "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "time": {
+         "bytes": 1409,
+         "path": "opt3-build.time",
+         "sha256": "38c5a038adf90076de07d76296785a2ce608df9bd618dbcce76981eb27754d44"
+        }
+       }
+      },
+      {
+       "phase": "test",
+       "measurements": {
+        "max_rss_kib": 208788,
+        "system_seconds": 1.4,
+        "user_seconds": 4.24,
+        "wall_seconds": 4.82
+       },
+       "exit_status": 0,
+       "counts": {
+        "failed": 0,
+        "filtered": 0,
+        "ignored": 0,
+        "passed": 314
+       },
+       "failed_tests": [],
+       "rustdoc_codegen_flags": [
+        ["-C embed-bitcode=no", "-C codegen-units=1"]
+       ],
+       "load_before": "3.62 5.35 6.59 2/6278 2927141",
+       "load_after": "3.81 5.36 6.58 1/6294 2928643",
+       "started": "2026-11-17T01:54:19Z",
+       "finished": "2026-11-17T01:54:24Z",
+       "network": "isolated-loopback",
+       "command_argv": ["/bin/bash", "-c", "cd /src && exec \"$@\"", "baseline-cargo", "/toolchain/bin/cargo", "test", "-p", "dom_query", "--locked", "--offline", "--verbose", "--", "--test-threads=1"],
+       "harness_sha256": "31b411a93de3f495ff2fe7c18444ac26e78df8aae3a62068105c6b5aa16e1823",
+       "containment_sha256": "84c2dbc7af99c25f815fb5270b5c59fb9d5c3bc3cfb519ad79abb8b3f0befca7",
+       "binary_sha256": null,
+       "resolver_sha256": null,
+       "files": {
+        "meta.json": {
+         "bytes": 2904,
+         "path": "opt3-test.meta.json",
+         "sha256": "f46b9941f6c1e435187b646c97cfb12059f2528a5fef584ccc8724e6947a23a8"
+        },
+        "stderr": {
+         "bytes": 5442,
+         "path": "opt3-test.stderr",
+         "sha256": "fda11e7058bcc39a625b72b7e836321c191d5efdde4dee4aa10e787e9edec599"
+        },
+        "stdout": {
+         "bytes": 13271,
+         "path": "opt3-test.stdout",
+         "sha256": "27e9ef524d8597d817333e8a37043580f2bc734ade96d1b30d4c2516a77ba428"
+        },
+        "time": {
+         "bytes": 1415,
+         "path": "opt3-test.time",
+         "sha256": "9582045f10d4e0fe81e707ddf4407a395b48c3faec012191049b35ac0b0f2d16"
+        }
+       }
+      }
+     ]
+    }
+   },
+   "evidence_directory": "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-rust"
+  },
+  {
+   "specimen": "sozu-1.0.6",
+   "origin": "https://github.com/sozu-proxy/sozu.git",
+   "commit": "c5ff06a12bd514e06ab28965052d0ad1e19c45b3",
+   "tree": "4e6a1146ba66225a929b4680df7255b85dadb368",
+   "scope": "Original upstream cargo test --workspace with locked dependencies and default features; no source, test, feature, or lock edits",
+   "source": "/home/coder/workspace/lkjscript-specimens/sozu-1.0.6",
+   "tracked_source_pristine": true,
+   "rustc_version": "rustc 1.80.0 (051478957 2024-07-21)\nbinary: rustc\ncommit-hash: 051478957371ee0084a7c0913941d2a8c4757bb9\ncommit-date: 2024-07-21\nhost: x86_64-unknown-linux-gnu\nrelease: 1.80.0\nLLVM version: 18.1.7",
+   "cargo_version": "cargo 1.80.0 (376290515 2024-07-16)",
+   "upstream_tracks_lock": true,
+   "lock_sha256": "b3f790f2dcfdb926bfbfc340bfef5db4c2420e4a357af905a7596ce8d84a3964",
+   "lock_note": "Original tracked lock unchanged",
+   "licences": [
+    {
+     "path": "/home/coder/workspace/lkjscript-specimens/sozu-1.0.6/LICENSE",
+     "sha256": "44e847b4a47db0acc996395b06e5fb721470b15a7d56fa1a280186ae796b9395"
+    }
+   ],
+   "reviewed_config": null,
+   "source_summary": {
+    "path": "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-rust/summary.json",
+    "sha256": "5b59726cb09e3b19e8b116bedf358cfb16a946447ad9a2c909fffdc2fc9f7ed3"
+   },
+   "profiles": {
+    "0": {
+     "coverage": {
+      "distinct_registered_tests": 133,
+      "exact_host_network_case_passed": 1,
+      "isolated_initial_failed": 1,
+      "isolated_initial_passed": 123,
+      "nonignored_tests_successfully_covered": 124,
+      "single_all_pass_suite": false,
+      "upstream_ignored_doctests": 9
+     },
+     "generated_command": {
+      "bytes": 68847,
+      "lines": 1678,
+      "path_in_overlay": "command/src/proto/command.rs",
+      "sha256": "145d713a68f1ffb6b05de24ddfcae546a0e67a003fad306648022ba4c8accfdc"
+     },
+     "phases": [
+      {
+       "phase": "build",
+       "measurements": {
+        "max_rss_kib": 1532260,
+        "system_seconds": 19.64,
+        "user_seconds": 162.77,
+        "wall_seconds": 96.59
+       },
+       "exit_status": 0,
+       "counts": {},
+       "failed_tests": [],
+       "rustdoc_codegen_flags": [],
+       "load_before": "4.10 4.22 4.70 3/5805 2257772",
+       "load_after": "7.25 5.20 5.01 5/5995 2283698",
+       "started": "2026-11-17T01:03:35Z",
+       "finished": "2026-11-17T01:05:12Z",
+       "network": "fresh namespace; loopback only",
+       "command_argv": null,
+       "harness_sha256": null,
+       "containment_sha256": null,
+       "binary_sha256": null,
+       "resolver_sha256": null,
+       "files": {
+        "meta.json": {
+         "bytes": 1035,
+         "path": "opt0-build.meta.json",
+         "sha256": "f2a4c620007f0d4ef130ef18b10ccbd11b3e1d0e42de4d640e85c878d1c2641f"
+        },
+        "stderr": {
+         "bytes": 292793,
+         "path": "opt0-build.stderr",
+         "sha256": "035562051a4017e28747f4020191690bff2e5f71c8fdcf3b1df295ad2898ec3b"
+        },
+        "stdout": {
+         "bytes": 0,
+         "path": "opt0-build.stdout",
+         "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "time": {
+         "bytes": 1374,
+         "path": "opt0-build.time",
+         "sha256": "9e6e96b90883ab8bfea79783b493b57909b75469998c28676fcdab95995d7a9a"
+        }
+       }
+      },
+      {
+       "phase": "test",
+       "measurements": {
+        "max_rss_kib": 1623832,
+        "system_seconds": 3.21,
+        "user_seconds": 34.09,
+        "wall_seconds": 47.66
+       },
+       "exit_status": 101,
+       "counts": {
+        "passed": 118,
+        "failed": 1,
+        "ignored": 0,
+        "filtered": 0
+       },
+       "failed_tests": ["socket::stats::test_rtt"],
+       "rustdoc_codegen_flags": [],
+       "load_before": "6.39 5.20 5.01 1/5896 2290427",
+       "load_after": "3.64 4.64 4.83 1/5952 2298880",
+       "started": "2026-11-17T01:05:37Z",
+       "finished": "2026-11-17T01:06:25Z",
+       "network": "fresh namespace; loopback only",
+       "command_argv": null,
+       "harness_sha256": null,
+       "containment_sha256": null,
+       "binary_sha256": null,
+       "resolver_sha256": null,
+       "files": {
+        "meta.json": {
+         "bytes": 1036,
+         "path": "opt0-test.meta.json",
+         "sha256": "b075fcda4edad7a3d4858e46bf93a84c280abed7c0521611be749bc0bf099535"
+        },
+        "stderr": {
+         "bytes": 33105,
+         "path": "opt0-test.stderr",
+         "sha256": "a0b1e4a1cca6f4b14967055eac3c25724cf15d4e5102cec92b9f274f5d2a7b45"
+        },
+        "stdout": {
+         "bytes": 95809,
+         "path": "opt0-test.stdout",
+         "sha256": "ab334d64b4ef42729e46e0bc2a51aaa9a8c5040f300057caf65545bee34337fe"
+        },
+        "time": {
+         "bytes": 1419,
+         "path": "opt0-test.time",
+         "sha256": "3a8ebcda1a548afc83334759d8533b371dc6727d0291e2babf9eb6169bbdeeae"
+        }
+       }
+      },
+      {
+       "phase": "doc",
+       "measurements": {
+        "max_rss_kib": 1374888,
+        "system_seconds": 1.77,
+        "user_seconds": 18.4,
+        "wall_seconds": 15.47
+       },
+       "exit_status": 0,
+       "counts": {
+        "passed": 5,
+        "failed": 0,
+        "ignored": 9,
+        "filtered": 0
+       },
+       "failed_tests": [],
+       "rustdoc_codegen_flags": [
+        ["-C embed-bitcode=no", "-C codegen-units=1"],
+        ["-C embed-bitcode=no", "-C codegen-units=1"],
+        ["-C embed-bitcode=no", "-C codegen-units=1"]
+       ],
+       "load_before": "3.48 4.22 4.63 6/5945 2345011",
+       "load_after": "3.89 4.27 4.64 6/5915 2347970",
+       "started": "2026-11-17T01:11:25Z",
+       "finished": "2026-11-17T01:11:40Z",
+       "network": "fresh namespace; loopback only",
+       "command_argv": null,
+       "harness_sha256": null,
+       "containment_sha256": null,
+       "binary_sha256": null,
+       "resolver_sha256": null,
+       "files": {
+        "meta.json": {
+         "bytes": 1037,
+         "path": "opt0-doc.meta.json",
+         "sha256": "d0ee1d323f78ecf11c7a567c348d179305a700f7fe4b9b07b3a24954bdcf0a3c"
+        },
+        "stderr": {
+         "bytes": 25058,
+         "path": "opt0-doc.stderr",
+         "sha256": "e0066d5bdf67cc5b47b2dcd7835ffe2faa20b0e9aa6682a113a3ba8164a1e0ce"
+        },
+        "stdout": {
+         "bytes": 988,
+         "path": "opt0-doc.stdout",
+         "sha256": "301ea8265f0f40039f6802a15b3537831b4dda2492108ad0864f321507313cfc"
+        },
+        "time": {
+         "bytes": 1382,
+         "path": "opt0-doc.time",
+         "sha256": "7ee61eb5ee5511cf3a6b67279876aa4538b76dce946ead908497ac2d2450baeb"
+        }
+       }
+      },
+      {
+       "phase": "network-rtt",
+       "measurements": {
+        "max_rss_kib": 7320,
+        "system_seconds": 0.09,
+        "user_seconds": 0,
+        "wall_seconds": 0.58
+       },
+       "exit_status": 0,
+       "counts": {
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "filtered": 68
+       },
+       "failed_tests": [],
+       "rustdoc_codegen_flags": [],
+       "load_before": "6.34 7.47 7.83 15/6684 2776535",
+       "load_after": "6.34 7.47 7.83 27/6719 2776704",
+       "started": "2026-11-17T01:43:22Z",
+       "finished": "2026-11-17T01:43:23Z",
+       "network": "host-network-exact-rtt-case",
+       "command_argv": ["/target/debug/deps/sozu_lib-4d4d5ead47c9d651", "--exact", "socket::stats::test_rtt", "--nocapture", "--test-threads=1"],
+       "harness_sha256": "91e6ef4930b3176343c6fb33f5a8b27eeef4455f7e269b4a2b235818babb747c",
+       "containment_sha256": "84c2dbc7af99c25f815fb5270b5c59fb9d5c3bc3cfb519ad79abb8b3f0befca7",
+       "binary_sha256": "d659d69a62fe2e8730dbfd1fc736bc91c1a176fe3c1b4ab4b79183063abeff44",
+       "resolver_sha256": "ef5c7d44a6596c1ebd81dbe81aea6e1c5ff955b49c30a70d87e60eb756d015d5",
+       "files": {
+        "meta.json": {
+         "bytes": 2603,
+         "path": "opt0-network-rtt.meta.json",
+         "sha256": "a905baecaead7dc00b929c52c097b5ab9d6a11ac1d2f608342596a1372baaa5d"
+        },
+        "stderr": {
+         "bytes": 0,
+         "path": "opt0-network-rtt.stderr",
+         "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout": {
+         "bytes": 955,
+         "path": "opt0-network-rtt.stdout",
+         "sha256": "8d0b164ae87cf740e2e601b92258e0c67afc8e6dd3899aa10dcfc2515f04078b"
+        },
+        "time": {
+         "bytes": 1378,
+         "path": "opt0-network-rtt.time",
+         "sha256": "e60c7a66172d3aa285b58e8f3b27a8fd3019d972a598ab36549d8eb421dd9628"
+        }
+       }
+      }
+     ]
+    },
+    "3": {
+     "coverage": {
+      "distinct_registered_tests": 133,
+      "exact_host_network_case_passed": 1,
+      "isolated_initial_failed": 1,
+      "isolated_initial_passed": 123,
+      "nonignored_tests_successfully_covered": 124,
+      "single_all_pass_suite": false,
+      "upstream_ignored_doctests": 9
+     },
+     "generated_command": {
+      "bytes": 68847,
+      "lines": 1678,
+      "path_in_overlay": "command/src/proto/command.rs",
+      "sha256": "145d713a68f1ffb6b05de24ddfcae546a0e67a003fad306648022ba4c8accfdc"
+     },
+     "phases": [
+      {
+       "phase": "build",
+       "measurements": {
+        "max_rss_kib": 2012400,
+        "system_seconds": 16.68,
+        "user_seconds": 396.63,
+        "wall_seconds": 215.61
+       },
+       "exit_status": 0,
+       "counts": {},
+       "failed_tests": [],
+       "rustdoc_codegen_flags": [],
+       "load_before": "4.30 4.35 4.66 5/5968 2350088",
+       "load_after": "6.53 5.25 4.95 11/5970 2396805",
+       "started": "2026-11-17T01:11:55Z",
+       "finished": "2026-11-17T01:15:31Z",
+       "network": "fresh namespace; loopback only",
+       "command_argv": null,
+       "harness_sha256": null,
+       "containment_sha256": null,
+       "binary_sha256": null,
+       "resolver_sha256": null,
+       "files": {
+        "meta.json": {
+         "bytes": 1040,
+         "path": "opt3-build.meta.json",
+         "sha256": "5ae459b15724f1abbb990e0ade271555cb85cacf147cecc4736eaaa51f47ff27"
+        },
+        "stderr": {
+         "bytes": 311136,
+         "path": "opt3-build.stderr",
+         "sha256": "afc43286a42dd31686f594bb8f9683b0aa50c8504945f774c2cfeb85345b55a9"
+        },
+        "stdout": {
+         "bytes": 0,
+         "path": "opt3-build.stdout",
+         "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "time": {
+         "bytes": 1372,
+         "path": "opt3-build.time",
+         "sha256": "ec2c717a66354e9d5bddd228d6f6fcfc84de03748bc38cebe9ce0a959086009b"
+        }
+       }
+      },
+      {
+       "phase": "test",
+       "measurements": {
+        "max_rss_kib": 2205724,
+        "system_seconds": 3.89,
+        "user_seconds": 167.66,
+        "wall_seconds": 117.71
+       },
+       "exit_status": 101,
+       "counts": {
+        "passed": 118,
+        "failed": 1,
+        "ignored": 0,
+        "filtered": 0
+       },
+       "failed_tests": ["socket::stats::test_rtt"],
+       "rustdoc_codegen_flags": [],
+       "load_before": "8.22 9.38 8.39 2/6574 2713352",
+       "load_after": "6.39 8.54 8.21 4/6274 2739188",
+       "started": "2026-11-17T01:38:09Z",
+       "finished": "2026-11-17T01:40:06Z",
+       "network": "fresh namespace; loopback only",
+       "command_argv": ["/bin/bash", "-c", "cd /src && exec /toolchain/bin/cargo test --workspace --locked --offline --verbose -- --test-threads=1"],
+       "harness_sha256": "7f22ec1fbc5b651fe5fdf3f9eaccb484d96dad7f5bb967a2a7a8e3c7e1405cc3",
+       "containment_sha256": "48d6ee50ff2e72842bee73be4e0c30af43be264013969d6ef025610eccb77053",
+       "binary_sha256": null,
+       "resolver_sha256": null,
+       "files": {
+        "meta.json": {
+         "bytes": 2160,
+         "path": "opt3-test.meta.json",
+         "sha256": "ab6eaf1bfc364ac15761bffa3ce1a36f5fbefdaf424ad61a2886fe5e666e0b3a"
+        },
+        "stderr": {
+         "bytes": 33521,
+         "path": "opt3-test.stderr",
+         "sha256": "0b23dec096d1cb107e37d2f3c12d52c3319f4c1f19be6f0a6457f45fc107161c"
+        },
+        "stdout": {
+         "bytes": 83936,
+         "path": "opt3-test.stdout",
+         "sha256": "d43fa51cc192e6fc808eddfd4791d2b3a510eb84a2a0ea84155d14e59759afa8"
+        },
+        "time": {
+         "bytes": 1426,
+         "path": "opt3-test.time",
+         "sha256": "5b2e10ca2b89fa1ffef036e29ae5926e85d441f82bc4c8f6b0729ce489c23831"
+        }
+       }
+      },
+      {
+       "phase": "doc",
+       "measurements": {
+        "max_rss_kib": 541444,
+        "system_seconds": 0.93,
+        "user_seconds": 2.29,
+        "wall_seconds": 3.86
+       },
+       "exit_status": 0,
+       "counts": {
+        "passed": 5,
+        "failed": 0,
+        "ignored": 9,
+        "filtered": 0
+       },
+       "failed_tests": [],
+       "rustdoc_codegen_flags": [
+        ["-C embed-bitcode=no", "-C codegen-units=1"],
+        ["-C embed-bitcode=no", "-C codegen-units=1"],
+        ["-C embed-bitcode=no", "-C codegen-units=1"]
+       ],
+       "load_before": "5.83 8.19 8.10 8/6183 2744373",
+       "load_after": "5.83 8.19 8.10 9/6090 2745032",
+       "started": "2026-11-17T01:40:33Z",
+       "finished": "2026-11-17T01:40:37Z",
+       "network": "fresh namespace; loopback only",
+       "command_argv": ["/bin/bash", "-c", "cd /src && exec /toolchain/bin/cargo test --workspace --locked --offline --doc --verbose -- --test-threads=1"],
+       "harness_sha256": "7f22ec1fbc5b651fe5fdf3f9eaccb484d96dad7f5bb967a2a7a8e3c7e1405cc3",
+       "containment_sha256": "48d6ee50ff2e72842bee73be4e0c30af43be264013969d6ef025610eccb77053",
+       "binary_sha256": null,
+       "resolver_sha256": null,
+       "files": {
+        "meta.json": {
+         "bytes": 2169,
+         "path": "opt3-doc.meta.json",
+         "sha256": "bbd2f2e7ca4fdd980b6777bf84e83aacfc392f700b2d8dab0872c1c8405ff6b1"
+        },
+        "stderr": {
+         "bytes": 12699,
+         "path": "opt3-doc.stderr",
+         "sha256": "b3f564e650a33271db3974a83de15fcb8325710783bd44bd37eb2acf2be88f0b"
+        },
+        "stdout": {
+         "bytes": 988,
+         "path": "opt3-doc.stdout",
+         "sha256": "84ecd5889e9d8cd24469f483c54488581c96ce1d40935beb89b38d3fba7051e6"
+        },
+        "time": {
+         "bytes": 1379,
+         "path": "opt3-doc.time",
+         "sha256": "e24971bdffe6a29d0de42141d26d49bd960cb569f79bfda3e40ed2bccb2d1205"
+        }
+       }
+      },
+      {
+       "phase": "network-rtt",
+       "measurements": {
+        "max_rss_kib": 5160,
+        "system_seconds": 0.09,
+        "user_seconds": 0.01,
+        "wall_seconds": 0.43
+       },
+       "exit_status": 0,
+       "counts": {
+        "passed": 1,
+        "failed": 0,
+        "ignored": 0,
+        "filtered": 68
+       },
+       "failed_tests": [],
+       "rustdoc_codegen_flags": [],
+       "load_before": "7.35 7.65 7.89 14/6594 2778286",
+       "load_after": "7.35 7.65 7.89 10/6595 2778383",
+       "started": "2026-11-17T01:43:30Z",
+       "finished": "2026-11-17T01:43:30Z",
+       "network": "host-network-exact-rtt-case",
+       "command_argv": ["/target/debug/deps/sozu_lib-848b2c67a379ebd6", "--exact", "socket::stats::test_rtt", "--nocapture", "--test-threads=1"],
+       "harness_sha256": "91e6ef4930b3176343c6fb33f5a8b27eeef4455f7e269b4a2b235818babb747c",
+       "containment_sha256": "84c2dbc7af99c25f815fb5270b5c59fb9d5c3bc3cfb519ad79abb8b3f0befca7",
+       "binary_sha256": "e925c8829dfc67eb67e00dfdef6a2c478abf11e956255e77e896819623942591",
+       "resolver_sha256": "ef5c7d44a6596c1ebd81dbe81aea6e1c5ff955b49c30a70d87e60eb756d015d5",
+       "files": {
+        "meta.json": {
+         "bytes": 2603,
+         "path": "opt3-network-rtt.meta.json",
+         "sha256": "03a446b1f5309045ad6a8f68b7f4c365e98079ecded3431f20c92eb16b823cfc"
+        },
+        "stderr": {
+         "bytes": 0,
+         "path": "opt3-network-rtt.stderr",
+         "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+        },
+        "stdout": {
+         "bytes": 955,
+         "path": "opt3-network-rtt.stdout",
+         "sha256": "f69fef87a476bccb515fa14f06e633d3e74bffc8b75938a094b887e12cde9c4d"
+        },
+        "time": {
+         "bytes": 1379,
+         "path": "opt3-network-rtt.time",
+         "sha256": "cf4168d35095eef16a30e79c88e608af68edaf9c568398b101198ce9b417ea45"
+        }
+       }
+      }
+     ]
+    }
+   },
+   "protoc_version": "libprotoc 27.3",
+   "generated_output_absent_from_original": true,
+   "failure_preservation": "Each initial broad suite remains exit 101 with original DNS lookup failure for google.com:80; exact test continuations record their successful outcomes separately.",
+   "evidence_directory": "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-rust"
+  }
+ ]
+}

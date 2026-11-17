@@ -24,6 +24,12 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' HUP TERM
+# These handwritten refusal kernels must remain valid Rust; they add no upstream sites.
+for foreign_case in macro_rules impl_trait qualified_type qualified_call nested_type associated_binding const_generic maybe_sized unsafe_block doctest_cfg dyn_trait associated_const at_pattern async_block doc_include; do
+    "$rustc_bin" --edition=2021 --crate-name "foreign_$foreign_case" --crate-type lib --emit=metadata -Awarnings \
+        "tests/diagnostics/programs_foreign_$foreign_case.lkj" -o "$work/foreign_$foreign_case.rmeta" \
+        > "$work/foreign_$foreign_case.out" 2> "$work/foreign_$foreign_case.err"
+done
 perl tools/real-programs/verify-levenshtein.pl "$source" > "$work/provenance.json"
 # Invert the single recorded expression and restore the exact integration header.
 # Hash the reconstructed files again before rustc receives either one.
@@ -81,4 +87,4 @@ for optimization in 0 3; do
     cmp "$work/expected.out" "$work/opt-$optimization-corpus.out"
     test ! -s "$work/opt-$optimization-corpus.err"
 done
-printf 'ok optional real-program Rust witness: exact original source/tests, 8 tests and 7,239 corpus rows at opt-level 0 and 3\n'
+printf 'ok optional real-program Rust witness: exact original source/tests, 8 tests and 7,239 corpus rows at opt-level 0 and 3; 15 Rust-valid reduced refusal forms\n'

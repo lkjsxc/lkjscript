@@ -1,0 +1,911 @@
+{
+ "abandoned_preparation": {
+  "producer_sha256": "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+  "reason": "upstream fast-forward and fixed-point bootstrap before first implementation publication",
+  "successful_operations": 0
+ },
+ "actual_source_store": {
+  "dependency_round_trip": {
+   "child": "memchr-2.8.3",
+   "owned_bytes_matched_original": true,
+   "parent": "nom-8.0.0",
+   "path": "src/lib.rs",
+   "sha256": "614f778a41e88a29ea0ceb8e92c839dbb6b5a61c967f8bfd962975e18f932c71"
+  },
+  "issue_stderr": "",
+  "issue_stdout": "issued levenshtein-1.0.5\nissued memchr-2.8.3\nissued nom-8.0.0\n",
+  "issuer_directory_mode": "0700",
+  "issuer_key": "random 32-byte local key in a separate mode-0700 directory outside source/store grants; never serialized in payloads",
+  "issuer_key_bytes": 32,
+  "issuer_key_mode": "0600",
+  "key_outside_all_real_source_roots_and_store": true,
+  "packages": [
+   {
+    "compared_with_original": true,
+    "envelope_sha256": "88fd2ecc90dd937c49625cff01ad6f66da9b17baa14c87e0f99cae893485963e",
+    "inventory": {
+     "acquisition": {
+      "inventory": "exact HEAD regular-file tree; index equals HEAD; raw worktree bytes match Git objects",
+      "kind": "git",
+      "revision": "9c4730b1973d4e61e187f8fe6d5f299ad5c991fc"
+     },
+     "authentication": "local issuer only; this inventory producer has no key and makes no publisher-signature or execution-authority claim",
+     "configuration": "build target, features and test selection are separate caller policy",
+     "dependencies": [],
+     "files": 10,
+     "identity": [
+      "levenshtein",
+      "1.0.5",
+      "https://github.com/wooorm/levenshtein-rs",
+      "9c4730b1973d4e61e187f8fe6d5f299ad5c991fc",
+      "e14f95b9cf39e5b972cac8a194f2caee6db155885f6b918c548aeb8ecc15eef5"
+     ],
+     "notices": [
+      "license"
+     ],
+     "source_root": "/home/coder/workspace/lkjscript-specimens/levenshtein"
+    },
+    "label": "levenshtein-1.0.5",
+    "manifest_sha256": "0e4b921955af661e7c6203545801ff6ee11be9e391b81fe731d47169fb9c30ef",
+    "pin_sha256": "a92dfaed93110fc2a94d7d1681bb5efcc28f0e66bb4a416f8a350ceb24ef7245",
+    "returned_bytes": 1476,
+    "returned_path": "src/lib.rs",
+    "returned_sha256": "6f295e027783399df21c081465b2ebc2d3a499895635a839c1c00aae4455f267"
+   },
+   {
+    "compared_with_original": true,
+    "envelope_sha256": "c02b8af08b288f26486ff3f6190d09b11afb7bbdad16e78583af95e76b980771",
+    "inventory": {
+     "acquisition": {
+      "archive_sha256": "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98",
+      "inventory": "one fully consumed gzip stream and tar archive, regular files/directories without extension records; exact regular-file members match extracted bytes; extra acquisition state is not admitted",
+      "kind": "registry-archive"
+     },
+     "authentication": "local issuer only; this inventory producer has no key and makes no publisher-signature or execution-authority claim",
+     "configuration": "build target, features and test selection are separate caller policy",
+     "dependencies": [],
+     "files": 59,
+     "identity": [
+      "memchr",
+      "2.8.3",
+      "registry+https://github.com/rust-lang/crates.io-index",
+      "sha256:cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98",
+      "dd992afa2166589be045c468142bcddb4ec78b48cfd31a156e1e6837e809b303"
+     ],
+     "notices": [
+      "COPYING",
+      "LICENSE-MIT",
+      "UNLICENSE"
+     ],
+     "source_root": "/home/coder/workspace/lkjscript-specimens/rust-cache/registry/src/index.crates.io-1949cf8c6b5b557f/memchr-2.8.3"
+    },
+    "label": "memchr-2.8.3",
+    "manifest_sha256": "3ba8ee6935731f69695660450b4319e33a24001377198933c9b962ad3c7f7f14",
+    "pin_sha256": "139bb0a7a3af2475f5161af45e80ec4e0e5f8efd6e5c6209fbc6613934ddbc6c",
+    "returned_bytes": 8337,
+    "returned_path": "src/lib.rs",
+    "returned_sha256": "614f778a41e88a29ea0ceb8e92c839dbb6b5a61c967f8bfd962975e18f932c71"
+   },
+   {
+    "compared_with_original": true,
+    "envelope_sha256": "788fecb195d1a6fabbc89879a4c9507abef1f5dfe6da2e537a74c735b14069f0",
+    "inventory": {
+     "acquisition": {
+      "inventory": "exact HEAD regular-file tree; index equals HEAD; raw worktree bytes match Git objects",
+      "kind": "git",
+      "revision": "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1"
+     },
+     "authentication": "local issuer only; this inventory producer has no key and makes no publisher-signature or execution-authority claim",
+     "configuration": "build target, features and test selection are separate caller policy",
+     "dependencies": [
+      [
+       "memchr",
+       "2.8.3",
+       "registry+https://github.com/rust-lang/crates.io-index",
+       "sha256:cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98",
+       "dd992afa2166589be045c468142bcddb4ec78b48cfd31a156e1e6837e809b303"
+      ]
+     ],
+     "files": 106,
+     "identity": [
+      "nom",
+      "8.0.0",
+      "https://github.com/rust-bakery/nom",
+      "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
+      "57381fd5f735d3f56ad63fc0e59c1654a5357980d8c8ff32f39974ef7a96fa90"
+     ],
+     "notices": [
+      "LICENSE"
+     ],
+     "source_root": "/home/coder/workspace/lkjscript-specimens/nom-8.0.0"
+    },
+    "label": "nom-8.0.0",
+    "manifest_sha256": "f9e4afe5d5a9b464d3058132403f6558c17a5cb5c53584107a3187c992bd2950",
+    "pin_sha256": "60faf07932724e5f5585eb32b10a78e12662b6b485a3d13fe1b377c2e1b483ee",
+    "returned_bytes": 15533,
+    "returned_path": "src/lib.rs",
+    "returned_sha256": "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7"
+   }
+  ],
+  "path": "/home/coder/workspace/lkjscript-specimens/source-store/package-source-1",
+  "read_hashes": "614f778a41e88a29ea0ceb8e92c839dbb6b5a61c967f8bfd962975e18f932c71  target/programs-package.g6iMRb/current/catalog-real-edge.bytes\n6f295e027783399df21c081465b2ebc2d3a499895635a839c1c00aae4455f267  target/programs-package.g6iMRb/current/catalog-real-levenshtein-1.0.5.bytes\n614f778a41e88a29ea0ceb8e92c839dbb6b5a61c967f8bfd962975e18f932c71  target/programs-package.g6iMRb/current/catalog-real-memchr-2.8.3.bytes\n6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7  target/programs-package.g6iMRb/current/catalog-real-nom-8.0.0.bytes\n",
+  "read_stderr": "",
+  "selection": {
+   "build_test_configuration": "separate caller policy; this source reader applies no target, features, test selection or build scripts",
+   "dependency_scope": "one selected normal nom to memchr edge; no Cargo resolver and no claim of a complete test/build dependency graph",
+   "execution": "source issuance/authenticated owned-byte reads only; specimens were not built or executed by this step",
+   "expected_pins": "Trusted caller policy from the separate private catalog grant, never inferred from an envelope or the untrusted store.",
+   "limits": [
+    "local issuer authentication, not upstream publisher signatures",
+    "regular original files only; source-tree digest binds paths, lengths and SHA256 content, not current inode kinds or modes",
+    "dependency names are unique; aliases and multiple versions under one name are refused by the initial profile",
+    "no compiler loader integration and no package runtime authority ceiling"
+   ],
+   "resolver_lock_path": "/home/coder/workspace/lkjscript-specimens/nom-8.0.0/Cargo.lock",
+   "resolver_lock_sha256": "16ef4424aa511b26ebc875522b0d0b1403c10f018312044eba273a9c743abe8f",
+   "schema": "lkjscript-source-selection-1",
+   "source_storage": "Original shared sources are retained once; untrusted store has envelopes/public metadata; trusted pins/manifests are separate private copies; issuer key remains separate and is never serialized.",
+   "layout": {
+    "trusted_catalog": "/home/coder/workspace/programs-package-issuer.2fj6GN/catalog",
+    "untrusted_store": "/home/coder/workspace/lkjscript-specimens/source-store/package-source-1",
+    "catalog_mode": "0700",
+    "catalog_file_mode": "0600",
+    "catalog_file_links": 1
+   },
+   "envelope_reader": "Authenticate fixed header before trusting length, read authenticated payload length plus EOF probe, verify owned bytes before decoding.",
+   "informational_only": "This selection file grants no authority and is not a trust-anchor input to the reader."
+  },
+  "tested_tool_image_sha256": "d81277d644b8a20cfcf5fae852239586cc7c87ead90c4dbdc1a5b1d87e07ef48",
+  "tested_tool_source_files": [
+   {
+    "bytes": 13268,
+    "lines": 290,
+    "path": "src/programs_package.lkj",
+    "sha256": "544ed86197300543412d9918f11f068231128f0b1c27d5e9e592d46cd0005b0e"
+   },
+   {
+    "bytes": 5089,
+    "lines": 93,
+    "path": "src/programs_package_command.lkj",
+    "sha256": "d04668ffc96fa84d79a95bed5a6cfc66aa151f84f7e54a088e84dda87ee83641"
+   },
+   {
+    "bytes": 7420,
+    "lines": 127,
+    "path": "src/programs_package_cases.lkj",
+    "sha256": "f40192af179c2c2f936e3f95b7cedcc21f7d6dfb8e767c81154e36a07bf8a754"
+   },
+   {
+    "bytes": 735,
+    "lines": 28,
+    "path": "src/programs_package_tool.lkj",
+    "sha256": "3b8bbe07ce203edf9a1ed990c4509f562363e2a4f64ef1c411b5a59ec40dd96a"
+   }
+  ],
+  "tested_tool_source_snapshot": "c06f6eaf321cceeaeb118ee85a8c6cc19ad9769b1d7b17fc49be1a4e6533f25c",
+  "historical_round_trip": {
+   "receipt_sha256": "b15bb82fde132dc55d6b951509d73f4b6a054a0223062550c6a8483cfe26e880",
+   "backup_path": "target/programs-package.g6iMRb/current/receipt-v4.json",
+   "layout": "Trusted pins and manifests were beside envelopes. This historical roundtrip did not establish resistance to a store writer able to replace those pins.",
+   "tested_tool_image_sha256": "b71f82a47c1584ed95f5421af6e350efc0d4b6e094db27f1579491627dbeb2f0",
+   "tested_tool_source_files": [
+    {
+     "bytes": 11420,
+     "lines": 251,
+     "path": "src/programs_package.lkj",
+     "sha256": "8d73b35efaad5573ae2ec81da5bbf52d078a33eecc62679cc5f2a2dc78aa4a71"
+    },
+    {
+     "bytes": 4807,
+     "lines": 90,
+     "path": "src/programs_package_command.lkj",
+     "sha256": "5ccba26428ddd7487c97c5926e767a333d1396af704b066717ca8f2bdb4e44d7"
+    },
+    {
+     "bytes": 7420,
+     "lines": 127,
+     "path": "src/programs_package_cases.lkj",
+     "sha256": "f40192af179c2c2f936e3f95b7cedcc21f7d6dfb8e767c81154e36a07bf8a754"
+    },
+    {
+     "bytes": 697,
+     "lines": 28,
+     "path": "src/programs_package_tool.lkj",
+     "sha256": "664eab20057f5c3ceac80ef54ed659aa6a953fdc340e64a6a0c18bc251945ad1"
+    }
+   ],
+   "tested_tool_source_snapshot": "9988327838d3196210eb48905b463b90f818390c9916c45acb6c2c712c041cbb",
+   "read_hashes": "6f295e027783399df21c081465b2ebc2d3a499895635a839c1c00aae4455f267  target/programs-package.g6iMRb/current/real-levenshtein.bytes\n614f778a41e88a29ea0ceb8e92c839dbb6b5a61c967f8bfd962975e18f932c71  target/programs-package.g6iMRb/current/real-memchr.bytes\n6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7  target/programs-package.g6iMRb/current/real-nom.bytes\n614f778a41e88a29ea0ceb8e92c839dbb6b5a61c967f8bfd962975e18f932c71  target/programs-package.g6iMRb/current/real-edge.bytes\n",
+   "selection": {
+    "build_test_configuration": "separate caller policy; this source reader applies no target, features, test selection or build scripts",
+    "dependency_scope": "one selected normal nom to memchr edge; no Cargo resolver and no claim of a complete test/build dependency graph",
+    "execution": "source issuance/authenticated owned-byte reads only; specimens were not built or executed by this step",
+    "expected_pins": "trusted caller policy, never inferred from an untrusted envelope",
+    "limits": [
+     "local issuer authentication, not upstream publisher signatures",
+     "regular original files only; source-tree digest binds paths, lengths and SHA256 content, not current inode kinds or modes",
+     "dependency names are unique; aliases and multiple versions under one name are refused by the initial profile",
+     "no compiler loader integration and no package runtime authority ceiling"
+    ],
+    "resolver_lock_path": "/home/coder/workspace/lkjscript-specimens/nom-8.0.0/Cargo.lock",
+    "resolver_lock_sha256": "16ef4424aa511b26ebc875522b0d0b1403c10f018312044eba273a9c743abe8f",
+    "schema": "lkjscript-source-selection-1",
+    "source_storage": "original shared sources are retained once; envelopes and expected pins contain no private issuer key"
+   }
+  },
+  "tested_tool_image_bytes": 290816,
+  "catalog_migration": {
+   "catalog": "/home/coder/workspace/programs-package-issuer.2fj6GN/catalog",
+   "catalog_directory": {
+    "device": 144,
+    "inode": 39693016,
+    "links": 1,
+    "mode": "0700",
+    "size": 290
+   },
+   "files": [
+    {
+     "name": "levenshtein-1.0.5.pin.json",
+     "new": {
+      "device": 144,
+      "inode": 39693017,
+      "links": 1,
+      "mode": "0600",
+      "size": 207
+     },
+     "old": {
+      "device": 144,
+      "inode": 39229884,
+      "links": 1,
+      "mode": "0600",
+      "size": 207
+     },
+     "old_store_name_removed": true,
+     "sha256": "a92dfaed93110fc2a94d7d1681bb5efcc28f0e66bb4a416f8a350ceb24ef7245"
+    },
+    {
+     "name": "levenshtein-1.0.5.manifest.json",
+     "new": {
+      "device": 144,
+      "inode": 39693018,
+      "links": 1,
+      "mode": "0600",
+      "size": 1117
+     },
+     "old": {
+      "device": 144,
+      "inode": 39229883,
+      "links": 1,
+      "mode": "0600",
+      "size": 1117
+     },
+     "old_store_name_removed": true,
+     "sha256": "0e4b921955af661e7c6203545801ff6ee11be9e391b81fe731d47169fb9c30ef"
+    },
+    {
+     "name": "memchr-2.8.3.pin.json",
+     "new": {
+      "device": 144,
+      "inode": 39693019,
+      "links": 1,
+      "mode": "0600",
+      "size": 246
+     },
+     "old": {
+      "device": 144,
+      "inode": 39229881,
+      "links": 1,
+      "mode": "0600",
+      "size": 246
+     },
+     "old_store_name_removed": true,
+     "sha256": "139bb0a7a3af2475f5161af45e80ec4e0e5f8efd6e5c6209fbc6613934ddbc6c"
+    },
+    {
+     "name": "memchr-2.8.3.manifest.json",
+     "new": {
+      "device": 144,
+      "inode": 39693020,
+      "links": 1,
+      "mode": "0600",
+      "size": 6093
+     },
+     "old": {
+      "device": 144,
+      "inode": 39229880,
+      "links": 1,
+      "mode": "0600",
+      "size": 6093
+     },
+     "old_store_name_removed": true,
+     "sha256": "3ba8ee6935731f69695660450b4319e33a24001377198933c9b962ad3c7f7f14"
+    },
+    {
+     "name": "nom-8.0.0.pin.json",
+     "new": {
+      "device": 144,
+      "inode": 39693021,
+      "links": 1,
+      "mode": "0600",
+      "size": 408
+     },
+     "old": {
+      "device": 144,
+      "inode": 39229887,
+      "links": 1,
+      "mode": "0600",
+      "size": 408
+     },
+     "old_store_name_removed": true,
+     "sha256": "60faf07932724e5f5585eb32b10a78e12662b6b485a3d13fe1b377c2e1b483ee"
+    },
+    {
+     "name": "nom-8.0.0.manifest.json",
+     "new": {
+      "device": 144,
+      "inode": 39693022,
+      "links": 1,
+      "mode": "0600",
+      "size": 10879
+     },
+     "old": {
+      "device": 144,
+      "inode": 39229886,
+      "links": 1,
+      "mode": "0600",
+      "size": 10879
+     },
+     "old_store_name_removed": true,
+     "sha256": "f9e4afe5d5a9b464d3058132403f6558c17a5cb5c53584107a3187c992bd2950"
+    }
+   ],
+   "fresh_copies_no_writable_alias": true,
+   "preflight_anchor": "historical independently audited receipt b15bb82fde132dc55d6b951509d73f4b6a054a0223062550c6a8483cfe26e880",
+   "store": "/home/coder/workspace/lkjscript-specimens/source-store/package-source-1",
+   "driver_sha256": "739d28495aaf3e5c46f9ad331805cf7616091efa78399c21a5d0443573140bf8",
+   "measured_phase": {
+    "exit": 0,
+    "stdout": "issued levenshtein-1.0.5\nissued memchr-2.8.3\nissued nom-8.0.0\n614f778a41e88a29ea0ceb8e92c839dbb6b5a61c967f8bfd962975e18f932c71  target/programs-package.g6iMRb/current/catalog-real-edge.bytes\n6f295e027783399df21c081465b2ebc2d3a499895635a839c1c00aae4455f267  target/programs-package.g6iMRb/current/catalog-real-levenshtein-1.0.5.bytes\n614f778a41e88a29ea0ceb8e92c839dbb6b5a61c967f8bfd962975e18f932c71  target/programs-package.g6iMRb/current/catalog-real-memchr-2.8.3.bytes\n6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7  target/programs-package.g6iMRb/current/catalog-real-nom-8.0.0.bytes\n",
+    "stderr": "",
+    "time": "elapsed=0.16 max_rss_kib=9460\n",
+    "scope": "Private catalog migration, three identical envelope reissues and four original-byte comparisons; no specimen compilation or execution."
+   },
+   "controls": {
+    "old_store_pin_and_manifest_names_absent": true,
+    "fresh_private_regular_files": true,
+    "no_writable_alias_back_into_store_or_source_grants": true,
+    "namespace_assumption": "Quiescent filesystem during source inventory/migration; not protection from a hostile host administrator."
+   }
+  },
+  "reissued_envelopes_identical_to_historical": true,
+  "returned_buffers": [
+   {
+    "bytes": 8337,
+    "lines": 221,
+    "path": "target/programs-package.g6iMRb/current/catalog-real-edge.bytes",
+    "sha256": "614f778a41e88a29ea0ceb8e92c839dbb6b5a61c967f8bfd962975e18f932c71"
+   },
+   {
+    "bytes": 1476,
+    "lines": 65,
+    "path": "target/programs-package.g6iMRb/current/catalog-real-levenshtein-1.0.5.bytes",
+    "sha256": "6f295e027783399df21c081465b2ebc2d3a499895635a839c1c00aae4455f267"
+   },
+   {
+    "bytes": 8337,
+    "lines": 221,
+    "path": "target/programs-package.g6iMRb/current/catalog-real-memchr-2.8.3.bytes",
+    "sha256": "614f778a41e88a29ea0ceb8e92c839dbb6b5a61c967f8bfd962975e18f932c71"
+   },
+   {
+    "bytes": 15533,
+    "lines": 460,
+    "path": "target/programs-package.g6iMRb/current/catalog-real-nom-8.0.0.bytes",
+    "sha256": "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7"
+   }
+  ]
+ },
+ "adoption": {
+  "convention": "Count each retained added language line once; conservatively withhold both initial scaffold lines. Historical repairs, catalog split and bounded-envelope publication receive their actual operation count without adding their replaced lines a second time.",
+  "credited_language_lines": 536,
+  "handwritten_nonlanguage_tools": [
+   {
+    "bytes": 12028,
+    "lines": 223,
+    "path": "tools/programs-package-manifest.pl",
+    "sha256": "fcd82bd11fd092bfe0fc34585a90e9749f70c2e112b325e3a3ba268a99aa7d1d"
+   },
+   {
+    "bytes": 5190,
+    "lines": 113,
+    "path": "tools/programs-package-manifest-test.pl",
+    "sha256": "8764832873234b7dd60e1472079155f2ccbd02575425cad4a7a41108f9890b46"
+   },
+   {
+    "bytes": 9442,
+    "lines": 156,
+    "path": "tools/programs-package-test.sh",
+    "sha256": "c0e7f6e4e0f7c7274c8bcb15d5da127827370cc808e764478fb7f63b3862a302"
+   }
+  ],
+  "language_files": [
+   {
+    "bytes": 13268,
+    "lines": 290,
+    "path": "src/programs_package.lkj",
+    "sha256": "544ed86197300543412d9918f11f068231128f0b1c27d5e9e592d46cd0005b0e"
+   },
+   {
+    "bytes": 5089,
+    "lines": 93,
+    "path": "src/programs_package_command.lkj",
+    "sha256": "d04668ffc96fa84d79a95bed5a6cfc66aa151f84f7e54a088e84dda87ee83641"
+   },
+   {
+    "bytes": 7420,
+    "lines": 127,
+    "path": "src/programs_package_cases.lkj",
+    "sha256": "f40192af179c2c2f936e3f95b7cedcc21f7d6dfb8e767c81154e36a07bf8a754"
+   },
+   {
+    "bytes": 735,
+    "lines": 28,
+    "path": "src/programs_package_tool.lkj",
+    "sha256": "3b8bbe07ce203edf9a1ed990c4509f562363e2a4f64ef1c411b5a59ec40dd96a"
+   }
+  ],
+  "refused_transactions": 1,
+  "retained_changed_language_lines": 538,
+  "successful_operations": 17,
+  "successful_transactions": 5
+ },
+ "base_head": "d095ba7cd32a44bea7e7964767f02fa5195c3462",
+ "cryptographic_context": {
+  "canonical_manifest": "[profile,[name,version,origin,revision,tree],sorted_dependency_identities,sorted_[path,size,sha256]_entries,sorted_notice_paths]",
+  "checked_before_issue": "canonical structure, exact expected identity/edges, tree digest, notice membership, every listed file length/hash",
+  "checked_before_read": "For file envelopes: authenticate fixed header before its length authorizes payload reads, consume that authenticated length plus one EOF probe, verify the same owned payload, then full expected identity/edges and canonical manifest/tree/notices. Source reads use one regular-file descriptor, bounded pinned length plus one byte, and return the same owned verified bytes.",
+  "key": "manifest",
+  "namespace": "package-source-1",
+  "producer_domain": "SHA256(\"lkjscript-package-source-reader-1\")",
+  "tree_domain": "lkjscript-source-tree-1 followed by NUL, then compact canonical file-entry JSON",
+  "trust_anchor": "Expected pins come from a separate trusted catalog capability; store envelopes and decoy pins cannot replace caller expectations. The local issuer key stays outside source/store/catalog grants."
+ },
+ "producer_sha256": "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0",
+ "queries": {
+  "comment_item_header": "\"programs_package::Package::read\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=63adfe36602dde3a6fe888ec7b4084ff1778eb1db1449aba9957e4d7b40823db source=cecc21d5d24ff9f34a06a5988eae726f39977742c7514a5814e1958b0afd470b checked-ir=f3c3ad9af6527b67a6db051a0b88d4a7eed2395ad81fa859a9ba3b7d80e5928d kind=item depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit\n\"programs_package::Package::read\"\tlevel=source-claim\tfact=identity\tsignature=b40ba44e53892208092593d30eeb7fee57d7d601cd608270cce3566b5ac3f3fb body=253847bf865cd64cbbeb7058b93844fd6e3969011a197f7f2b350f42d2d0fa0c scope=semantic-path body-locals=token-body-epoch\n\"programs_package::Package::read\"\tlevel=source-claim\tfact=item\tkind=function parent=\"impl:programs_package::Package#645aa9e57848816f\" file=\"./src/programs_package.lkj\" start=9761 end=11417 file-sha256=8d73b35efaad5573ae2ec81da5bbf52d078a33eecc62679cc5f2a2dc78aa4a71 item-sha256=6870d9d1ec966843d66501b69e30ecaecf690e5a0ab75f7e2917c25cb3021ef2 references-complete=false\n",
+  "initial_main": "\"main\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=91c7251cdbd705c60ee7b23a597a48c2914486d1ba0db31bc676edbbced0ae0b source=224e7fb0b13824a024dab222c0d31338c43d2ba98c2f4870bb83d5eac76eb959 checked-ir=75f99d79a688c185da63e6c09ff844adf0b0c381b616021c193bd436144af1f7 kind=item depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit\n\"main\"\tlevel=source-claim\tfact=identity\tsignature=732547dc96006a6d85b6b515961fe6d5c3fffa59afe61c9bceb79af960323b16 body=31cbf2cbc0419c4109cc388506fbda568cb6a93fccc89acb33a223eac3fe98d7 scope=semantic-path body-locals=token-body-epoch\n\"main\"\tlevel=source-claim\tfact=item\tkind=function parent=\"crate\" file=\"./src/programs_package_tool.lkj\" start=64 end=76 file-sha256=9c96287b9d6e6be3e0146d88bf96d4772a9e77b7d88975d6ba4aa2d951fa40e0 item-sha256=ef32637cb9c3ec2e3968c9cbdf26a5e9c172be94f88af533e14bd43f892d5297 references-complete=true\n\"main\"\tlevel=source-claim\tfact=text\tchunk=0000000000000000 value=\"fn main() {}\"\n\"main\"\tlevel=protocol\tfact=continuation\tcursor=none facts=3 pages-read=7 traversal-steps=5\n",
+  "initial_outline": "\"crate\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=91c7251cdbd705c60ee7b23a597a48c2914486d1ba0db31bc676edbbced0ae0b source=224e7fb0b13824a024dab222c0d31338c43d2ba98c2f4870bb83d5eac76eb959 checked-ir=75f99d79a688c185da63e6c09ff844adf0b0c381b616021c193bd436144af1f7 kind=outline depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit\n\"main\"\tlevel=source-claim\tfact=signature\tkind=function text=\"fn main()\" bytes=9 complete=true\n\"crate\"\tlevel=protocol\tfact=continuation\tcursor=none facts=1 pages-read=4 traversal-steps=2\n",
+  "repair_item_header": "\"programs_package_command::run\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=63adfe36602dde3a6fe888ec7b4084ff1778eb1db1449aba9957e4d7b40823db source=cecc21d5d24ff9f34a06a5988eae726f39977742c7514a5814e1958b0afd470b checked-ir=f3c3ad9af6527b67a6db051a0b88d4a7eed2395ad81fa859a9ba3b7d80e5928d kind=item depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit\n\"programs_package_command::run\"\tlevel=source-claim\tfact=identity\tsignature=006fb23ca8c4336d78aab70cf05ebeb20d2f97f2345f5ff5e859ef659d407517 body=6ad5d5453bfb7a9b9c73fe3f2e6e09e35d4943153eeb647a3283611b553a62fc scope=semantic-path body-locals=token-body-epoch\n\"programs_package_command::run\"\tlevel=source-claim\tfact=item\tkind=function parent=\"programs_package_command\" file=\"./src/programs_package_command.lkj\" start=1396 end=4804 file-sha256=61ac88f5fe7be021f8f0b21dbadb900666832287073a722d0db690b8fd8c1b76 item-sha256=581fe839348dcaa7bebeb4b68f590f56813afd0f825750e456584d9669bc5eb4 references-complete=false\n",
+  "catalog_load": "\"programs_package_command::load\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=c5815dabcccb97d33ef8cafc0e9f61972e1d98c4267f13c99e6a24a5db5789e9 source=5d4048189d8893e19ce7592248ade1c48fee1e5aa36699762f31e26cbe8f16c2 checked-ir=387ce6ae1f6b6d72271c2dd5a080a824b4a36536b7990525879a1897a245802b kind=item depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit\n\"programs_package_command::load\"\tlevel=source-claim\tfact=identity\tsignature=6534cfeca5131e20c2a79c5e866e9d6911bd439297dd623d1b1206c5a14fecc3 body=7d39b1fbb9f700162aa59f38e6b247521a9eebed2f231367eb05aa263ed2841f scope=semantic-path body-locals=token-body-epoch\n\"programs_package_command::load\"\tlevel=source-claim\tfact=item\tkind=function parent=\"programs_package_command\" file=\"./src/programs_package_command.lkj\" start=1058 end=1395 file-sha256=5ccba26428ddd7487c97c5926e767a333d1396af704b066717ca8f2bdb4e44d7 item-sha256=d47a1e9e6545585f54727f4b5fb4a662f4e241a7bfdf04d63310bf22128b6e3e references-complete=false\n\"programs_package_command::load\"\tlevel=source-claim\tfact=text\tchunk=0000000000000000 value=\"fn load(policy: &mut ReadDirectory, secret: &[u8], name: &str) -> Result<Package, String> {\\u000a    let pin = checked(programs_package::expected(&read(policy, format!(\\\"{name}.pin.json\\\").as_str())?))?;\\u000a    let envelope = read(policy, format!(\\\"{name}.package\\\").as_str())?;\\u000a    checked(programs_package::authenticate(secret, &pin, &envelope))\\u000a}\"\n\"programs_package_command::load\"\tlevel=protocol\tfact=continuation\tcursor=none facts=3 pages-read=7 traversal-steps=5\n",
+  "catalog_run": "\"programs_package_command::run\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=c5815dabcccb97d33ef8cafc0e9f61972e1d98c4267f13c99e6a24a5db5789e9 source=5d4048189d8893e19ce7592248ade1c48fee1e5aa36699762f31e26cbe8f16c2 checked-ir=387ce6ae1f6b6d72271c2dd5a080a824b4a36536b7990525879a1897a245802b kind=item depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit\n\"programs_package_command::run\"\tlevel=source-claim\tfact=identity\tsignature=006fb23ca8c4336d78aab70cf05ebeb20d2f97f2345f5ff5e859ef659d407517 body=1ec13d163168012824ec6fcd8844d0da33acc9d5e0bfc9d6301e768f2ea76e1c scope=semantic-path body-locals=token-body-epoch\n\"programs_package_command::run\"\tlevel=source-claim\tfact=item\tkind=function parent=\"programs_package_command\" file=\"./src/programs_package_command.lkj\" start=1396 end=4806 file-sha256=5ccba26428ddd7487c97c5926e767a333d1396af704b066717ca8f2bdb4e44d7 item-sha256=a3090283b2eeae500b54fcb15090c926ca009425a43a645d2fb41ca4a9fc5730 references-complete=false\n\"programs_package_command::run\"\tlevel=source-claim\tfact=text\tchunk=0000000000000000 value=\"pub fn run(arguments: &mut Arguments, source: &mut ReadDirectory, policy: &mut ReadDirectory,\\u000a    issuer: &mut ReadDirectory, sink: &mut Directory, output: &mut Stdout) -> Result<(), String> {\\u000a    let mut args: Vec<String> = Vec::new();\\u000a    for bytes in arguments.args() {\\u000a        match String::from_utf8(bytes) {\\u000a            Ok(value) => args.push(value), Err(_) => return Err(\\\"arguments must be UTF-8\\\".to_string()),\\u000a        }\\u000a    }\\u000a    if args.len() < 2usize || !label(args[1usize].as_str()) {\\u000a        return Err(\\\"usage: issue LABEL | read LABEL PATH | read-edge PARENT CHILD PATH\\\".to_string());\\u000a    }\\u000a    let secret = read(issuer, \\\"source-key\\\")?;\\u000a    let mode = args[0usize].as_str();\\u000a    let name = args[1usize].as_str();\\u000a    if mode == \\\"issue\\\" && args.len() == 2usize {\\u000a        let pin = checked(programs_package::expected(&read(policy, format!(\\\"{name}.pin.json\\\").as_str())?))?;\\u000a        let description = read(policy, format!(\\\"{name}.manifest.json\\\").as_str())?;\\u000a        let envelope = checked(programs_package::issue(&s\"\n\"programs_package_command::run\"\tlevel=source-claim\tfact=text\tchunk=0000000000000001 value=\"ecret, &pin, &description, source))?;\\u000a        let mut file = match sink.create_new(format!(\\\"{name}.package\\\").as_str()) {\\u000a            Ok(file) => file, Err(_) => return Err(\\\"cannot create envelope\\\".to_string()),\\u000a        };\\u000a        if let Err(_) = file.write_all(&envelope) { return Err(\\\"cannot write envelope\\\".to_string()); }\\u000a        if let Err(_) = file.sync() { return Err(\\\"cannot sync envelope\\\".to_string()); }\\u000a        output.write(format!(\\\"issued {name}\\\\n\\\").as_bytes());\\u000a        return Ok(());\\u000a    }\\u000a    if mode == \\\"read\\\" && args.len() == 3usize {\\u000a        let package = load(policy, &secret, name)?;\\u000a        let verified = checked(package.read(source, args[2usize].as_str()))?;\\u000a        output.write(verified.bytes());\\u000a        return Ok(());\\u000a    }\\u000a    if mode == \\\"read-edge\\\" && args.len() == 4usize && label(args[2usize].as_str()) {\\u000a        let parent = load(policy, &secret, name)?;\\u000a        let child = load(policy, &secret, args[2usize].as_str())?;\\u000a        checked(parent.require_dependency(&child))?;\\u000a        let owned \"\n\"programs_package_command::run\"\tlevel=source-claim\tfact=text\tchunk=0000000000000002 value=\"= checked(child.read(source, args[3usize].as_str()))?.into_bytes();\\u000a        output.write(&owned);\\u000a        return Ok(());\\u000a    }\\u000a    // The focused I/O gate supplies a separate writable authority to its disposable\\u000a    // fixture through sink. Package itself owns no write authority or host path.\\u000a    if mode == \\\"owned-snapshot\\\" && args.len() == 3usize {\\u000a        let package = load(policy, &secret, name)?;\\u000a        let path = args[2usize].as_str();\\u000a        let owned = checked(package.read(source, path))?;\\u000a        let mut changed = owned.bytes().to_vec();\\u000a        if changed.is_empty() { return Err(\\\"snapshot fixture must be nonempty\\\".to_string()); }\\u000a        changed[0usize] ^= 1u8;\\u000a        let mut file = match sink.create(path) {\\u000a            Ok(file) => file, Err(_) => return Err(\\\"cannot open snapshot fixture\\\".to_string()),\\u000a        };\\u000a        if let Err(_) = file.write_all(&changed) { return Err(\\\"cannot change snapshot fixture\\\".to_string()); }\\u000a        if let Err(_) = file.sync() { return Err(\\\"cannot sync snapshot fixtu\"\n\"programs_package_command::run\"\tlevel=source-claim\tfact=text\tchunk=0000000000000003 value=\"re\\\".to_string()); }\\u000a        match package.read(source, path) {\\u000a            Err(Error::SourceDigest) => {}, _ => return Err(\\\"changed source was not rejected\\\".to_string()),\\u000a        }\\u000a        output.write(owned.bytes());\\u000a        return Ok(());\\u000a    }\\u000a    Err(\\\"usage: issue LABEL | read LABEL PATH | read-edge PARENT CHILD PATH\\\".to_string())\\u000a}\"\n\"programs_package_command::run\"\tlevel=protocol\tfact=continuation\tcursor=none facts=6 pages-read=7 traversal-steps=8\n",
+  "catalog_main": "\"main\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=c5815dabcccb97d33ef8cafc0e9f61972e1d98c4267f13c99e6a24a5db5789e9 source=5d4048189d8893e19ce7592248ade1c48fee1e5aa36699762f31e26cbe8f16c2 checked-ir=387ce6ae1f6b6d72271c2dd5a080a824b4a36536b7990525879a1897a245802b kind=item depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit\n\"main\"\tlevel=source-claim\tfact=identity\tsignature=99f8a999f2bcca390bf9b273378a6b111dcd94ed8398746f51c9d8f11e8d8b0a body=3127c0cb61d0149bcccceeb5ff9997f77728633789d6619aca19ac3ae54d76d0 scope=semantic-path body-locals=token-body-epoch\n\"main\"\tlevel=source-claim\tfact=item\tkind=function parent=\"crate\" file=\"./src/programs_package_tool.lkj\" start=237 end=696 file-sha256=664eab20057f5c3ceac80ef54ed659aa6a953fdc340e64a6a0c18bc251945ad1 item-sha256=fc0a12fab8fa73d458f438cae59f6f5a0fd7c8eae340b5e27613ebe491d4bff3 references-complete=false\n\"main\"\tlevel=source-claim\tfact=text\tchunk=0000000000000000 value=\"fn main(mut arguments: Arguments, mut source: ReadDirectory, mut policy: ReadDirectory,\\u000a    mut issuer: ReadDirectory, mut sink: Directory, mut output: Stdout,\\u000a    mut errors: Stderr, mut status: ExitStatus) {\\u000a    if let Err(message) = programs_package_command::run(&mut arguments, &mut source, &mut policy,\\u000a        &mut issuer, &mut sink, &mut output) {\\u000a        errors.write(format!(\\\"package {message}\\\\n\\\").as_bytes());\\u000a        status.set_status(1u8);\\u000a    }\\u000a}\"\n\"main\"\tlevel=protocol\tfact=continuation\tcursor=none facts=3 pages-read=7 traversal-steps=5\n",
+  "frame_load": "\"programs_package_command::load\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=ac07ba7a93ab6760544972ba3fcf84cf2422194d0da48f0a28f775af004f11c9 source=209bd35016470efdbb9eb9f4675affdd6d304dfb6ab1b33de1049e7f3d697cbc checked-ir=26f444b0d5170dfeb811afde2002d359f7db9e3e926a2c9825da60fd527a835e kind=item depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit\n\"programs_package_command::load\"\tlevel=source-claim\tfact=identity\tsignature=82f269c0511eae09fa003a1ddb0f1e9c5120e34662ec274cd3b5299351506132 body=8ecda686a53dc74203468080c5d7c9c26cac18f8403152c087fbf6e5d424e876 scope=semantic-path body-locals=token-body-epoch\n\"programs_package_command::load\"\tlevel=source-claim\tfact=item\tkind=function parent=\"programs_package_command\" file=\"./src/programs_package_command.lkj\" start=1058 end=1510 file-sha256=f31814516b36117808eb1e34b86c819d96edf9ecec14a61d091402078db19ca6 item-sha256=198a63fa93840dff7ac80f5977634de80f36934c4b161e2681059dd3ecc209c7 references-complete=false\n\"programs_package_command::load\"\tlevel=source-claim\tfact=text\tchunk=0000000000000000 value=\"fn load(policy: &mut ReadDirectory, store: &mut ReadDirectory, secret: &[u8], name: &str) -> Result<Package, String> {\\u000a    // The trusted catalog supplies expected pins; envelope storage cannot replace them.\\u000a    let pin = checked(programs_package::expected(&read(policy, format!(\\\"{name}.pin.json\\\").as_str())?))?;\\u000a    let envelope = read(store, format!(\\\"{name}.package\\\").as_str())?;\\u000a    checked(programs_package::authenticate(secret, &pin, &envelope))\\u000a}\"\n\"programs_package_command::load\"\tlevel=protocol\tfact=continuation\tcursor=none facts=3 pages-read=7 traversal-steps=5\n",
+  "frame_outline_header": "\"programs_package\"\tlevel=protocol\tfact=query\tversion=3 producer=9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0 validation=authenticated-producing-compiler current-check=not-performed snapshot=ac07ba7a93ab6760544972ba3fcf84cf2422194d0da48f0a28f775af004f11c9 source=209bd35016470efdbb9eb9f4675affdd6d304dfb6ab1b33de1049e7f3d697cbc checked-ir=26f444b0d5170dfeb811afde2002d359f7db9e3e926a2c9825da60fd527a835e kind=outline depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit\n",
+  "frame_outline_sha256": "74cc7c55c191436c19e6a476862cf347386d8452723698f943e9e34184e2c7bd"
+ },
+ "refused_candidate": {
+  "correction": "two byte-array to_vec receivers became slices, and one owned array loop used vec!, following the returned source edits",
+  "exit": 1,
+  "new_projections_absent_before_success": true,
+  "request_sha256": "58b6eb873a04099864eb7539a99b86e4f1955957009e79541f55c204b9a1d0e7",
+  "source_unchanged": "9c96287b9d6e6be3e0146d88bf96d4772a9e77b7d88975d6ba4aa2d951fa40e0  src/programs_package_tool.lkj\n",
+  "stderr": "transaction E_EDIT_CHECK identities=\"crate,main,programs_package,programs_package_command,programs_package_cases\" ./src/programs_package_cases.lkj:15:21: E_UNSUPPORTED array.to_vec requires a slice receiver and Clone elements; help: write array[..].to_vec() (docs/language.md, Source library)\nLKJSCRIPT_EDITS {\"version\":1,\"path\":\"./src/programs_package_cases.lkj\",\"code\":\"E_UNSUPPORTED\",\"edits\":[{\"start\":662,\"end\":662,\"replacement\":\"(\"},{\"start\":690,\"end\":690,\"replacement\":\")[..]\"}]}\n./src/programs_package_cases.lkj:56:5: E_TRAIT owned-array iteration requires an IntoIterator implementation; help: iterate by index, or use vec![elements] for owned literal elements (docs/language.md, Source library)\nLKJSCRIPT_EDITS {\"version\":1,\"path\":\"./src/programs_package_cases.lkj\",\"code\":\"E_TRAIT\",\"edits\":[{\"start\":2796,\"end\":2796,\"replacement\":\"vec!\"}]}\n./src/programs_package.lkj:163:26: E_UNSUPPORTED array.to_vec requires a slice receiver and Clone elements; help: write array[..].to_vec() (docs/language.md, Source library)\nLKJSCRIPT_EDITS {\"version\":1,\"path\":\"./src/programs_package.lkj\",\"code\":\"E_UNSUPPORTED\",\"edits\":[{\"start\":6671,\"end\":6671,\"replacement\":\"(\"},{\"start\":6699,\"end\":6699,\"replacement\":\")[..]\"}]}\nsrc/programs_package_tool.lkj:1:1: E_BLOCKED remaining semantic analysis: failed bodies are blocked; independent typed bodies were constructed and checked\n",
+  "stdout": ""
+ },
+ "scaffold": {
+  "sha256": "9c96287b9d6e6be3e0146d88bf96d4772a9e77b7d88975d6ba4aa2d951fa40e0",
+  "source": "// Initial two-line tool scaffold is uncredited bootstrap work.\nfn main() {}\n",
+  "uncredited_lines": 2
+ },
+ "schema": "lkjscript-programs-package-operation-1",
+ "scope": "Authenticated package SOURCE identity and owned verified bytes. This is not checked code, a Cargo resolver or package runtime authority.",
+ "static_review": [
+  "independent core review found no substitution/TOCTOU integrity gap; bounded reads changed to pinned length plus one byte",
+  "independent producer review found trailing archive framing risk; strict fully consumed framing plus recomputed-checksum controls reject it",
+  "Independent final audit reconstructed the first two transactions and found the allocation comment too strong; the third transaction clarifies only that comment and preserves identical checked IR.",
+  "Independent review required trusted expected pins outside untrusted envelope storage. v5 separates capabilities; the deployed catalog was migrated only after the final v6 native controls.",
+  "Independent review required header authentication before trusting its payload length. v6 adds an owned-file reader through reuse::AuthenticatedRoot, exact authenticated-length reads plus EOF probe, owned-payload verification before manifest parsing, and expected identity/edge matching. Final external audit remains separately reported by the parent."
+ ],
+ "tests": {
+  "comment_only_correction": {
+   "checked_ir_after": "22dfcee96fc230e3b5c74b3d0e8f27a8e072a4cc941871a7e2f5a1a4053794b7",
+   "checked_ir_before": "22dfcee96fc230e3b5c74b3d0e8f27a8e072a4cc941871a7e2f5a1a4053794b7",
+   "measured_run_scope": "Historical runs preceding v4 remain bound to their recorded earlier snapshots. Later catalog-split and authenticated-envelope phases below name their actual v5/v6 source snapshots.",
+   "query": "Authenticated prior snapshot for an unchanged target file; current file SHA matched the queried file SHA and edit checked the current complete source snapshot.",
+   "reason": "The bound concerns bytes read and retained, not exact Vec allocation capacity.",
+   "source_after": "5d4048189d8893e19ce7592248ade1c48fee1e5aa36699762f31e26cbe8f16c2"
+  },
+  "first_focused_counterexample": {
+   "cause": "Directory.open is read-only; the helper needed Directory.create for the separately granted disposable writable fixture",
+   "exit": 1,
+   "stage": "owned-snapshot fixture mutation",
+   "stderr": "/home/coder/workspace/lkjscript-programs-20261115/target/programs-package-test.m8bTDh/build.err\n/home/coder/workspace/lkjscript-programs-20261115/target/programs-package-test.m8bTDh/empty.err\n/home/coder/workspace/lkjscript-programs-20261115/target/programs-package-test.m8bTDh/expected-rejected.err\npackage notice\n/home/coder/workspace/lkjscript-programs-20261115/target/programs-package-test.m8bTDh/interpreter-tests.err\n/home/coder/workspace/lkjscript-programs-20261115/target/programs-package-test.m8bTDh/issue.err\n/home/coder/workspace/lkjscript-programs-20261115/target/programs-package-test.m8bTDh/native-tests.err\n/home/coder/workspace/lkjscript-programs-20261115/target/programs-package-test.m8bTDh/read.err\n/home/coder/workspace/lkjscript-programs-20261115/target/programs-package-test.m8bTDh/rejected.err\npackage notice\n/home/coder/workspace/lkjscript-programs-20261115/target/programs-package-test.m8bTDh/snapshot.err\npackage cannot change snapshot fixture\n/home/coder/workspace/lkjscript-programs-20261115/target/programs-package-test.m8bTDh/expected-tests.out\nok 6 tests\n/home/coder/workspace/lkjscript-programs-20261115/target/programs-package-test.m8bTDh/interpreter-tests.out\nok 6 tests\n/home/coder/workspace/lkjscript-programs-20261115/target/programs-package-test.m8bTDh/native-tests.out\nok 6 tests\n",
+   "stdout": "ok package inventory: 13 controls, exact Git/archive trees and compressed/tar framing refusals\n",
+   "time": "Command exited with non-zero status 1\nelapsed_seconds=121.82 max_rss_kib=76752\n"
+  },
+  "integrated_gate": "parent-owned; not run by this subtask",
+  "inventory_controls": 13,
+  "pure_contract_tests": {
+   "both_stderr_empty": true,
+   "core_and_case_sources_unchanged_by_io_repair": true,
+   "interpreter": "ok 6 tests\n",
+   "native": "ok 6 tests\n",
+   "tested_source_files": [
+    {
+     "bytes": 11420,
+     "lines": 251,
+     "path": "src/programs_package.lkj",
+     "sha256": "8d73b35efaad5573ae2ec81da5bbf52d078a33eecc62679cc5f2a2dc78aa4a71"
+    },
+    {
+     "bytes": 4805,
+     "lines": 90,
+     "path": "src/programs_package_command.lkj",
+     "sha256": "61ac88f5fe7be021f8f0b21dbadb900666832287073a722d0db690b8fd8c1b76"
+    },
+    {
+     "bytes": 7420,
+     "lines": 127,
+     "path": "src/programs_package_cases.lkj",
+     "sha256": "f40192af179c2c2f936e3f95b7cedcc21f7d6dfb8e767c81154e36a07bf8a754"
+    },
+    {
+     "bytes": 697,
+     "lines": 28,
+     "path": "src/programs_package_tool.lkj",
+     "sha256": "664eab20057f5c3ceac80ef54ed659aa6a953fdc340e64a6a0c18bc251945ad1"
+    }
+   ]
+  },
+  "repaired_io_phase": {
+   "command": "bash tools/programs-package-test.sh --io-only target/lkjscript NEW-IMAGE",
+   "exit": 0,
+   "source_snapshot": "9988327838d3196210eb48905b463b90f818390c9916c45acb6c2c712c041cbb",
+   "stderr": "",
+   "stdout": "ok package source: 19 native I/O and substitution controls, owned-buffer preservation, exact authenticated dependency edge\n",
+   "tested_source_files": [
+    {
+     "bytes": 11420,
+     "lines": 251,
+     "path": "src/programs_package.lkj",
+     "sha256": "8d73b35efaad5573ae2ec81da5bbf52d078a33eecc62679cc5f2a2dc78aa4a71"
+    },
+    {
+     "bytes": 4807,
+     "lines": 90,
+     "path": "src/programs_package_command.lkj",
+     "sha256": "5ccba26428ddd7487c97c5926e767a333d1396af704b066717ca8f2bdb4e44d7"
+    },
+    {
+     "bytes": 7420,
+     "lines": 127,
+     "path": "src/programs_package_cases.lkj",
+     "sha256": "f40192af179c2c2f936e3f95b7cedcc21f7d6dfb8e767c81154e36a07bf8a754"
+    },
+    {
+     "bytes": 697,
+     "lines": 28,
+     "path": "src/programs_package_tool.lkj",
+     "sha256": "664eab20057f5c3ceac80ef54ed659aa6a953fdc340e64a6a0c18bc251945ad1"
+    }
+   ],
+   "time": "elapsed_seconds=1.14 max_rss_kib=76700\n"
+  },
+  "required_gate_command": "bash tools/programs-package-test.sh target/lkjscript",
+  "inventory_nonblocking_phase": {
+   "exit": 0,
+   "stdout": "ok package inventory: 14 controls, exact Git/archive trees and compressed/tar framing refusals\n",
+   "stderr": "",
+   "controls": 14,
+   "scope": "The inventory producer opens direct regular-file inputs with O_NONBLOCK. Its FIFO control requires a normal rejection; its deliberate blocking mutant fails the watchdog and is not counted as a refusal.",
+   "producer_sha256": "fcd82bd11fd092bfe0fc34585a90e9749f70c2e112b325e3a3ba268a99aa7d1d",
+   "test_sha256": "8764832873234b7dd60e1472079155f2ccbd02575425cad4a7a41108f9890b46"
+  },
+  "catalog_split_phase": {
+   "exit": 0,
+   "stdout": "ok package source: 21 native I/O and substitution controls, owned-buffer preservation, pinned dependency edge and trusted-catalog isolation\n",
+   "stderr": "",
+   "time": "elapsed_seconds=1.38 max_rss_kib=64776\n",
+   "controls": 21,
+   "source_snapshot": "209bd35016470efdbb9eb9f4675affdd6d304dfb6ab1b33de1049e7f3d697cbc",
+   "scope": "v5 separate trusted pin/catalog and untrusted envelope directory. Valid wrong-version envelope plus a decoy pin in store refuses while trusted catalog hash stays unchanged. This run precedes v6 reader hardening."
+  },
+  "authenticated_envelope_read_phase": {
+   "exit": 0,
+   "stdout": "ok package source: 24 native I/O and substitution controls, owned-buffer preservation, pinned dependency edge and trusted-catalog isolation\n",
+   "stderr": "",
+   "time": "elapsed=1.20 max_rss_kib=65388\n",
+   "controls": 24,
+   "source_snapshot": "c06f6eaf321cceeaeb118ee85a8c6cc19ad9769b1d7b17fc49be1a4e6533f25c",
+   "tested_source_files": [
+    {
+     "bytes": 13268,
+     "lines": 290,
+     "path": "src/programs_package.lkj",
+     "sha256": "544ed86197300543412d9918f11f068231128f0b1c27d5e9e592d46cd0005b0e"
+    },
+    {
+     "bytes": 5089,
+     "lines": 93,
+     "path": "src/programs_package_command.lkj",
+     "sha256": "d04668ffc96fa84d79a95bed5a6cfc66aa151f84f7e54a088e84dda87ee83641"
+    },
+    {
+     "bytes": 7420,
+     "lines": 127,
+     "path": "src/programs_package_cases.lkj",
+     "sha256": "f40192af179c2c2f936e3f95b7cedcc21f7d6dfb8e767c81154e36a07bf8a754"
+    },
+    {
+     "bytes": 735,
+     "lines": 28,
+     "path": "src/programs_package_tool.lkj",
+     "sha256": "3b8bbe07ce203edf9a1ed990c4509f562363e2a4f64ef1c411b5a59ec40dd96a"
+    }
+   ],
+   "tested_tool_image": {
+    "path": "target/programs-package.g6iMRb/current/package-tool-final",
+    "bytes": 290816,
+    "sha256": "d81277d644b8a20cfcf5fae852239586cc7c87ead90c4dbdc1a5b1d87e07ef48"
+   },
+   "wrapper_sha256": "c0e7f6e4e0f7c7274c8bcb15d5da127827370cc808e764478fb7f63b3862a302",
+   "scope": "Native I/O only on final v6 bytes. Added forged-length-header, valid-header truncated-payload and trailing-byte refusals; every refusal must be normal exit 1 with exact stderr. No older interpreter run is relabeled as v6 execution."
+  }
+ },
+ "transactions": [
+  {
+   "exit": 0,
+   "full_stdout_sha256": "359b9c958d8bb6766f1aa901bbe4472f8684ed121e68186d1c047349880a57d4",
+   "operations": [
+    {
+     "before": "main",
+     "id": "crate",
+     "op": "add-item",
+     "source": "pub use std::sha256;"
+    },
+    {
+     "before": "main",
+     "id": "crate",
+     "op": "add-item",
+     "source": "mod diagnostic;"
+    },
+    {
+     "before": "main",
+     "id": "crate",
+     "op": "add-item",
+     "source": "mod ir;"
+    },
+    {
+     "before": "main",
+     "id": "crate",
+     "op": "add-item",
+     "source": "mod ir_text;"
+    },
+    {
+     "before": "main",
+     "id": "crate",
+     "op": "add-item",
+     "source": "mod ir_binary;"
+    },
+    {
+     "before": "main",
+     "id": "crate",
+     "op": "add-item",
+     "source": "mod reuse;"
+    },
+    {
+     "before": "main",
+     "id": "crate",
+     "op": "add-item",
+     "projection": {
+      "bytes": 11420,
+      "lines": 251,
+      "path": "src/programs_package.lkj",
+      "sha256": "8d73b35efaad5573ae2ec81da5bbf52d078a33eecc62679cc5f2a2dc78aa4a71"
+     },
+     "source": "mod programs_package;"
+    },
+    {
+     "before": "main",
+     "id": "crate",
+     "op": "add-item",
+     "projection": {
+      "bytes": 4805,
+      "lines": 90,
+      "path": "src/programs_package_command.lkj",
+      "sha256": "61ac88f5fe7be021f8f0b21dbadb900666832287073a722d0db690b8fd8c1b76"
+     },
+     "source": "mod programs_package_command;"
+    },
+    {
+     "before": "main",
+     "id": "crate",
+     "op": "add-item",
+     "projection": {
+      "bytes": 7420,
+      "lines": 127,
+      "path": "src/programs_package_cases.lkj",
+      "sha256": "f40192af179c2c2f936e3f95b7cedcc21f7d6dfb8e767c81154e36a07bf8a754"
+     },
+     "source": "mod programs_package_cases;"
+    },
+    {
+     "expect": "ef32637cb9c3ec2e3968c9cbdf26a5e9c172be94f88af533e14bd43f892d5297",
+     "id": "main",
+     "op": "replace-item",
+     "source": "fn main(mut arguments: Arguments, mut source: ReadDirectory, mut policy: ReadDirectory,\n    mut issuer: ReadDirectory, mut sink: Directory, mut output: Stdout,\n    mut errors: Stderr, mut status: ExitStatus) {\n    if let Err(message) = programs_package_command::run(&mut arguments, &mut source, &mut policy,\n        &mut issuer, &mut sink, &mut output) {\n        errors.write(format!(\"package {message}\\n\").as_bytes());\n        status.set_status(1u8);\n    }\n}"
+    }
+   ],
+   "report": "\"crate\" level=source-claim operation-target\n\"main\" level=source-claim operation-target\n\"programs_package\" level=source-claim operation-target\n\"programs_package_command\" level=source-claim operation-target\n\"programs_package_cases\" level=source-claim operation-target\n\"programs_package\" level=source-claim projection parent=\"crate\" path=\"src/programs_package.lkj\" bytes=11420 source=8d73b35efaad5573ae2ec81da5bbf52d078a33eecc62679cc5f2a2dc78aa4a71\n\"programs_package_command\" level=source-claim projection parent=\"crate\" path=\"src/programs_package_command.lkj\" bytes=4805 source=61ac88f5fe7be021f8f0b21dbadb900666832287073a722d0db690b8fd8c1b76\n\"programs_package_cases\" level=source-claim projection parent=\"crate\" path=\"src/programs_package_cases.lkj\" bytes=7420 source=f40192af179c2c2f936e3f95b7cedcc21f7d6dfb8e767c81154e36a07bf8a754\n\"./src/programs_package_tool.lkj\" level=source-claim file before=9c96287b9d6e6be3e0146d88bf96d4772a9e77b7d88975d6ba4aa2d951fa40e0 after=664eab20057f5c3ceac80ef54ed659aa6a953fdc340e64a6a0c18bc251945ad1\n\"src/programs_package.lkj\" level=source-claim file before=absent after=8d73b35efaad5573ae2ec81da5bbf52d078a33eecc62679cc5f2a2dc78aa4a71\n\"src/programs_package_command.lkj\" level=source-claim file before=absent after=61ac88f5fe7be021f8f0b21dbadb900666832287073a722d0db690b8fd8c1b76\n\"src/programs_package_cases.lkj\" level=source-claim file before=absent after=f40192af179c2c2f936e3f95b7cedcc21f7d6dfb8e767c81154e36a07bf8a754\ntransaction sites=2 files=4 identities=5\nprogram level=checked-ir before=0787d4e10a9d6f6f032b3d5364d202c9745ef3260a9f9d3a070e5aa0654ddaff after=9b760c2621b0e449e5d3ad05e9e81499668fac0d7bfd1799204c78f6bd17aeaa checked-instances=574 fresh-checked=574 proof-reused=0 frontend-resumed=0 library-validation=demanded\ntransaction source-before=224e7fb0b13824a024dab222c0d31338c43d2ba98c2f4870bb83d5eac76eb959 source-after=cecc21d5d24ff9f34a06a5988eae726f39977742c7514a5814e1958b0afd470b mode=apply\n",
+   "request_sha256": "f33dbf8577eca9484178eb9f9e331b6bed7a372cc62e3cb649b15f4e9f4dbfd3",
+   "source_snapshot": "224e7fb0b13824a024dab222c0d31338c43d2ba98c2f4870bb83d5eac76eb959",
+   "stderr": ""
+  },
+  {
+   "exit": 0,
+   "full_stdout_sha256": "580c8db627b861a41685f9f7afbeba31ba0d1cae49c77f62c230ba002ff1db76",
+   "operations": [
+    {
+     "expect": "581fe839348dcaa7bebeb4b68f590f56813afd0f825750e456584d9669bc5eb4",
+     "id": "programs_package_command::run",
+     "op": "replace-item",
+     "source_sha256": "a3090283b2eeae500b54fcb15090c926ca009425a43a645d2fb41ca4a9fc5730"
+    }
+   ],
+   "report": "\"programs_package_command::run\" level=source-claim operation-target\n\"./src/programs_package_command.lkj\" level=source-claim file before=61ac88f5fe7be021f8f0b21dbadb900666832287073a722d0db690b8fd8c1b76 after=5ccba26428ddd7487c97c5926e767a333d1396af704b066717ca8f2bdb4e44d7\ntransaction sites=1 files=1 identities=1\nprogram level=checked-ir authority-delta=none\nprogram level=checked-ir before=9b760c2621b0e449e5d3ad05e9e81499668fac0d7bfd1799204c78f6bd17aeaa after=22dfcee96fc230e3b5c74b3d0e8f27a8e072a4cc941871a7e2f5a1a4053794b7 checked-instances=574 fresh-checked=574 proof-reused=0 frontend-resumed=0 library-validation=demanded\ntransaction source-before=cecc21d5d24ff9f34a06a5988eae726f39977742c7514a5814e1958b0afd470b source-after=9988327838d3196210eb48905b463b90f818390c9916c45acb6c2c712c041cbb mode=apply\n",
+   "request_sha256": "42d5cb23b08f0f9f6c8fdd8b1f732eb53017e3abb47387c09725e554cac0bea2",
+   "source_snapshot": "cecc21d5d24ff9f34a06a5988eae726f39977742c7514a5814e1958b0afd470b",
+   "stderr": ""
+  },
+  {
+   "exit": 0,
+   "full_stdout_sha256": "6495a1c18ce2e6c5272dc242ff91078480cf8a207016e2ec1d0e2cecac55e292",
+   "operations": [
+    {
+     "expect": "6870d9d1ec966843d66501b69e30ecaecf690e5a0ab75f7e2917c25cb3021ef2",
+     "id": "programs_package::Package::read",
+     "op": "replace-item",
+     "source_sha256": "b14fcb393faa16a7703f0cd65e36b1c87665d18bb640903ec61f7a1e03c404f4"
+    }
+   ],
+   "report": "\"programs_package::Package::read\" level=source-claim operation-target\n\"./src/programs_package.lkj\" level=source-claim file before=8d73b35efaad5573ae2ec81da5bbf52d078a33eecc62679cc5f2a2dc78aa4a71 after=26ab9e4d393a5baf44d267e9a3ae26064dbe90bf5082ed61e0bcbee1fd4cc945\ntransaction sites=1 files=1 identities=1\n\"impl:programs_package::Package#645aa9e57848816f\" level=source-claim changed=text-only\n\"programs_package::Package::read\" level=source-claim changed=text-only\nprogram level=checked-ir authority-delta=none\nprogram level=checked-ir before=22dfcee96fc230e3b5c74b3d0e8f27a8e072a4cc941871a7e2f5a1a4053794b7 after=22dfcee96fc230e3b5c74b3d0e8f27a8e072a4cc941871a7e2f5a1a4053794b7 checked-instances=574 fresh-checked=574 proof-reused=0 frontend-resumed=0 library-validation=demanded\ntransaction source-before=9988327838d3196210eb48905b463b90f818390c9916c45acb6c2c712c041cbb source-after=5d4048189d8893e19ce7592248ade1c48fee1e5aa36699762f31e26cbe8f16c2 mode=apply\n",
+   "request_sha256": "61275ff00bf09887a15fe6e65dcd394bf04174aefc5b3a0ac00cb06340af9750",
+   "source_snapshot": "9988327838d3196210eb48905b463b90f818390c9916c45acb6c2c712c041cbb",
+   "stderr": ""
+  },
+  {
+   "exit": 0,
+   "full_stdout_sha256": "8e77764ae1b5b4c6ea439399b7eee5a5aad129734bead412037941137382af11",
+   "operations": [
+    {
+     "op": "replace-item",
+     "id": "programs_package_command::load",
+     "expect": "d47a1e9e6545585f54727f4b5fb4a662f4e241a7bfdf04d63310bf22128b6e3e",
+     "source": "fn load(policy: &mut ReadDirectory, store: &mut ReadDirectory, secret: &[u8], name: &str) -> Result<Package, String> {\n    // The trusted catalog supplies expected pins; envelope storage cannot replace them.\n    let pin = checked(programs_package::expected(&read(policy, format!(\"{name}.pin.json\").as_str())?))?;\n    let envelope = read(store, format!(\"{name}.package\").as_str())?;\n    checked(programs_package::authenticate(secret, &pin, &envelope))\n}"
+    },
+    {
+     "op": "replace-item",
+     "id": "programs_package_command::run",
+     "expect": "a3090283b2eeae500b54fcb15090c926ca009425a43a645d2fb41ca4a9fc5730",
+     "source": "pub fn run(arguments: &mut Arguments, source: &mut ReadDirectory, policy: &mut ReadDirectory,\n    store: &mut ReadDirectory, issuer: &mut ReadDirectory, sink: &mut Directory, output: &mut Stdout) -> Result<(), String> {\n    let mut args: Vec<String> = Vec::new();\n    for bytes in arguments.args() {\n        match String::from_utf8(bytes) {\n            Ok(value) => args.push(value), Err(_) => return Err(\"arguments must be UTF-8\".to_string()),\n        }\n    }\n    if args.len() < 2usize || !label(args[1usize].as_str()) {\n        return Err(\"usage: issue LABEL | read LABEL PATH | read-edge PARENT CHILD PATH\".to_string());\n    }\n    let secret = read(issuer, \"source-key\")?;\n    let mode = args[0usize].as_str();\n    let name = args[1usize].as_str();\n    if mode == \"issue\" && args.len() == 2usize {\n        let pin = checked(programs_package::expected(&read(policy, format!(\"{name}.pin.json\").as_str())?))?;\n        let description = read(policy, format!(\"{name}.manifest.json\").as_str())?;\n        let envelope = checked(programs_package::issue(&secret, &pin, &description, source))?;\n        let mut file = match sink.create_new(format!(\"{name}.package\").as_str()) {\n            Ok(file) => file, Err(_) => return Err(\"cannot create envelope\".to_string()),\n        };\n        if let Err(_) = file.write_all(&envelope) { return Err(\"cannot write envelope\".to_string()); }\n        if let Err(_) = file.sync() { return Err(\"cannot sync envelope\".to_string()); }\n        output.write(format!(\"issued {name}\\n\").as_bytes());\n        return Ok(());\n    }\n    if mode == \"read\" && args.len() == 3usize {\n        let package = load(policy, store, &secret, name)?;\n        let verified = checked(package.read(source, args[2usize].as_str()))?;\n        output.write(verified.bytes());\n        return Ok(());\n    }\n    if mode == \"read-edge\" && args.len() == 4usize && label(args[2usize].as_str()) {\n        let parent = load(policy, store, &secret, name)?;\n        let child = load(policy, store, &secret, args[2usize].as_str())?;\n        checked(parent.require_dependency(&child))?;\n        let owned = checked(child.read(source, args[3usize].as_str()))?.into_bytes();\n        output.write(&owned);\n        return Ok(());\n    }\n    // The focused I/O gate supplies a separate writable authority to its disposable\n    // fixture through sink. Package itself owns no write authority or host path.\n    if mode == \"owned-snapshot\" && args.len() == 3usize {\n        let package = load(policy, store, &secret, name)?;\n        let path = args[2usize].as_str();\n        let owned = checked(package.read(source, path))?;\n        let mut changed = owned.bytes().to_vec();\n        if changed.is_empty() { return Err(\"snapshot fixture must be nonempty\".to_string()); }\n        changed[0usize] ^= 1u8;\n        let mut file = match sink.create(path) {\n            Ok(file) => file, Err(_) => return Err(\"cannot open snapshot fixture\".to_string()),\n        };\n        if let Err(_) = file.write_all(&changed) { return Err(\"cannot change snapshot fixture\".to_string()); }\n        if let Err(_) = file.sync() { return Err(\"cannot sync snapshot fixture\".to_string()); }\n        match package.read(source, path) {\n            Err(Error::SourceDigest) => {}, _ => return Err(\"changed source was not rejected\".to_string()),\n        }\n        output.write(owned.bytes());\n        return Ok(());\n    }\n    Err(\"usage: issue LABEL | read LABEL PATH | read-edge PARENT CHILD PATH\".to_string())\n}"
+    },
+    {
+     "op": "replace-item",
+     "id": "main",
+     "expect": "fc0a12fab8fa73d458f438cae59f6f5a0fd7c8eae340b5e27613ebe491d4bff3",
+     "source": "fn main(mut arguments: Arguments, mut source: ReadDirectory, mut policy: ReadDirectory,\n    mut store: ReadDirectory, mut issuer: ReadDirectory, mut sink: Directory, mut output: Stdout,\n    mut errors: Stderr, mut status: ExitStatus) {\n    if let Err(message) = programs_package_command::run(&mut arguments, &mut source, &mut policy,\n        &mut store, &mut issuer, &mut sink, &mut output) {\n        errors.write(format!(\"package {message}\\n\").as_bytes());\n        status.set_status(1u8);\n    }\n}"
+    }
+   ],
+   "report": "\"main\" level=source-claim operation-target\n\"programs_package_command::load\" level=source-claim operation-target\n\"programs_package_command::run\" level=source-claim operation-target\n\"./src/programs_package_command.lkj\" level=source-claim file before=5ccba26428ddd7487c97c5926e767a333d1396af704b066717ca8f2bdb4e44d7 after=f31814516b36117808eb1e34b86c819d96edf9ecec14a61d091402078db19ca6\n\"./src/programs_package_tool.lkj\" level=source-claim file before=664eab20057f5c3ceac80ef54ed659aa6a953fdc340e64a6a0c18bc251945ad1 after=3b8bbe07ce203edf9a1ed990c4509f562363e2a4f64ef1c411b5a59ec40dd96a\ntransaction sites=3 files=2 identities=3\n\"main\" level=source-claim changed=signature,body\n\"main::param:store\" level=source-claim changed=added\n\"programs_package_command::load\" level=source-claim changed=signature,body\n\"programs_package_command::load::param:store\" level=source-claim changed=added\n\"programs_package_command::run\" level=source-claim changed=signature,body\n\"programs_package_command::run::param:store\" level=source-claim changed=added\n\"ir:main\" level=checked-ir authority-gained=\"grant:4:ReadDirectory,grant:5:Directory,grant:6:Stdout,grant:7:Stderr,grant:8:ExitStatus\" authority-lost=\"grant:4:Directory,grant:5:Stdout,grant:6:Stderr,grant:7:ExitStatus\" entry-before=true entry-after=true\nprogram level=checked-ir before=22dfcee96fc230e3b5c74b3d0e8f27a8e072a4cc941871a7e2f5a1a4053794b7 after=eebfca964bf71ad536adf9a2c4c1bdc918d85058d4246bed8f3cfc674f0e5d7a checked-instances=574 fresh-checked=574 proof-reused=0 frontend-resumed=0 library-validation=demanded\ntransaction source-before=5d4048189d8893e19ce7592248ade1c48fee1e5aa36699762f31e26cbe8f16c2 source-after=209bd35016470efdbb9eb9f4675affdd6d304dfb6ab1b33de1049e7f3d697cbc mode=apply\n",
+   "request_sha256": "1dcba459770164f22c224c5770929d0dd5785b1f079195611d6e83252f6ce909",
+   "source_snapshot": "5d4048189d8893e19ce7592248ade1c48fee1e5aa36699762f31e26cbe8f16c2",
+   "stderr": ""
+  },
+  {
+   "exit": 0,
+   "full_stdout_sha256": "275cbba69870699b1aa6f7418e25a79393b3ea9b5fad58409c2f5ff938b824bd",
+   "operations": [
+    {
+     "op": "add-item",
+     "id": "programs_package",
+     "source": "/// Authenticate the fixed header before its length can authorize payload reads.\n/// The regular file is read once; trailing bytes and truncated payloads refuse.\npub fn authenticate_file(secret: &[u8], expected: &Expected, file: &mut ReadFile) -> Result<Package, Error> {\n    if secret.len() != 32usize { return Err(Error::Key); }\n    let mut header = vec![0u8; reuse::header_size()];\n    let mut filled = 0usize;\n    while filled < header.len() {\n        let count = match file.read(&mut header[filled..]) {\n            Ok(count) => count, Err(_) => return Err(Error::Authentication),\n        };\n        if count == 0usize { return Err(Error::Authentication); }\n        filled += count;\n    }\n    let root = match reuse::AuthenticatedRoot::new(&producer(), secret, \"package-source-1\", \"manifest\", &header) {\n        Some(root) => root, None => return Err(Error::Authentication),\n    };\n    let mut bytes: Vec<u8> = Vec::new();\n    let mut buffer = [0u8; 8192];\n    while bytes.len() < root.length() {\n        let remaining = root.length() - bytes.len();\n        let wanted = if remaining < buffer.len() { remaining } else { buffer.len() };\n        let count = match file.read(&mut buffer[..wanted]) {\n            Ok(count) => count, Err(_) => return Err(Error::Authentication),\n        };\n        if count == 0usize { return Err(Error::Authentication); }\n        bytes.extend_from_slice(&buffer[..count]);\n    }\n    let extra = match file.read(&mut buffer[..1usize]) {\n        Ok(count) => count, Err(_) => return Err(Error::Authentication),\n    };\n    if extra != 0usize { return Err(Error::Authentication); }\n    let payload = match root.verify(bytes) {\n        Some(payload) => payload, None => return Err(Error::Authentication),\n    };\n    let package = manifest(payload.bytes())?;\n    matches(&package, expected)?;\n    Ok(package)\n}"
+    },
+    {
+     "op": "replace-item",
+     "id": "programs_package_command::load",
+     "expect": "198a63fa93840dff7ac80f5977634de80f36934c4b161e2681059dd3ecc209c7",
+     "source": "fn load(policy: &mut ReadDirectory, store: &mut ReadDirectory, secret: &[u8], name: &str) -> Result<Package, String> {\n    // The trusted catalog supplies expected pins; envelope storage cannot replace them.\n    let pin = checked(programs_package::expected(&read(policy, format!(\"{name}.pin.json\").as_str())?))?;\n    let mut envelope = match store.open(format!(\"{name}.package\").as_str()) {\n        Ok(file) => file, Err(_) => return Err(format!(\"cannot open {name}.package\")),\n    };\n    checked(programs_package::authenticate_file(secret, &pin, &mut envelope))\n}"
+    }
+   ],
+   "report": "\"programs_package\" level=source-claim operation-target\n\"programs_package_command::load\" level=source-claim operation-target\n\"./src/programs_package.lkj\" level=source-claim file before=26ab9e4d393a5baf44d267e9a3ae26064dbe90bf5082ed61e0bcbee1fd4cc945 after=544ed86197300543412d9918f11f068231128f0b1c27d5e9e592d46cd0005b0e\n\"./src/programs_package_command.lkj\" level=source-claim file before=f31814516b36117808eb1e34b86c819d96edf9ecec14a61d091402078db19ca6 after=d04668ffc96fa84d79a95bed5a6cfc66aa151f84f7e54a088e84dda87ee83641\ntransaction sites=2 files=2 identities=2\n\"programs_package::authenticate_file\" level=source-claim changed=added\n\"programs_package::authenticate_file::param:expected\" level=source-claim changed=added\n\"programs_package::authenticate_file::param:file\" level=source-claim changed=added\n\"programs_package::authenticate_file::param:secret\" level=source-claim changed=added\n\"programs_package_command::load\" level=source-claim changed=body\nprogram level=checked-ir authority-delta=none\nprogram level=checked-ir before=eebfca964bf71ad536adf9a2c4c1bdc918d85058d4246bed8f3cfc674f0e5d7a after=57b4288449f4e29339a478a0601c2df9580bacced21d1855501607fcb3a4f926 checked-instances=578 fresh-checked=578 proof-reused=0 frontend-resumed=0 library-validation=demanded\ntransaction source-before=209bd35016470efdbb9eb9f4675affdd6d304dfb6ab1b33de1049e7f3d697cbc source-after=c06f6eaf321cceeaeb118ee85a8c6cc19ad9769b1d7b17fc49be1a4e6533f25c mode=apply\n",
+   "request_sha256": "7d4651cdf6e225e3aaa4cc448c9edafd29b170c1d2073531635f0938c000df7d",
+   "source_snapshot": "209bd35016470efdbb9eb9f4675affdd6d304dfb6ab1b33de1049e7f3d697cbc",
+   "stderr": ""
+  }
+ ],
+ "recovery": {
+  "mutation_request": "programs-package-frame-edit-20261117-055",
+  "failed_poll": "programs-package-frame-edit-poll-20261117-056",
+  "recovered_poll": "programs-package-resume-edit-poll-20261117-r01",
+  "outcome": "Original two-operation edit completed successfully; recovered from its existing session without repeating mutation.",
+  "gate_scope": "Parent-owned integrated four-worker gate and updated-compiler checks are not claimed by this receipt."
+ },
+ "history_reconstruction": {
+  "version": 1,
+  "purpose": "Reconstruct the exact initial imported module bytes from this receipt and the committed final source, without retaining the temporary build/query tree.",
+  "input_assertions": "Require the complete files to match adoption.language_files before starting.",
+  "query_text": "For the named retained query, join the JSON-decoded value strings of fact=text records in ascending chunk order; perform no whitespace normalization.",
+  "inverse_steps": [
+   {
+    "path": "src/programs_package.lkj",
+    "action": "Remove the exact final suffix: one LF, transactions[4].operations[0].source, one LF. This reverses v6 add-item including its two separators."
+   },
+   {
+    "path": "src/programs_package_command.lkj",
+    "action": "Replace exactly once transactions[4].operations[1].source with decoded queries.frame_load text."
+   },
+   {
+    "path": "src/programs_package_command.lkj",
+    "action": "Replace exactly once transactions[3].operations[0].source with decoded queries.catalog_load text."
+   },
+   {
+    "path": "src/programs_package_command.lkj",
+    "action": "Replace exactly once transactions[3].operations[1].source with decoded queries.catalog_run text."
+   },
+   {
+    "path": "src/programs_package_tool.lkj",
+    "action": "Replace exactly once transactions[3].operations[2].source with decoded queries.catalog_main text."
+   },
+   {
+    "path": "src/programs_package.lkj",
+    "action": "Reverse v4 comment correction, exactly one occurrence.",
+    "from": "                // ReadDirectory.open admits regular files. Read at most the pinned\n                // length plus one probing byte before rejecting a substituted large file.\n",
+    "to": "                // ReadDirectory.open admits regular files. A substituted large file\n                // may not allocate beyond the pinned length before we reject it.\n",
+    "expected_after": {
+     "bytes": 11420,
+     "lines": 251,
+     "sha256": "8d73b35efaad5573ae2ec81da5bbf52d078a33eecc62679cc5f2a2dc78aa4a71"
+    }
+   },
+   {
+    "path": "src/programs_package_command.lkj",
+    "action": "Reverse v3 disposable snapshot-helper repair, exactly one occurrence.",
+    "from": "let mut file = match sink.create(path) {",
+    "to": "let mut file = match sink.open(path) {",
+    "expected_after": {
+     "bytes": 4805,
+     "lines": 90,
+     "sha256": "61ac88f5fe7be021f8f0b21dbadb900666832287073a722d0db690b8fd8c1b76"
+    }
+   }
+  ],
+  "final_assertions": [
+   {
+    "bytes": 11420,
+    "lines": 251,
+    "path": "src/programs_package.lkj",
+    "sha256": "8d73b35efaad5573ae2ec81da5bbf52d078a33eecc62679cc5f2a2dc78aa4a71"
+   },
+   {
+    "bytes": 4805,
+    "lines": 90,
+    "path": "src/programs_package_command.lkj",
+    "sha256": "61ac88f5fe7be021f8f0b21dbadb900666832287073a722d0db690b8fd8c1b76"
+   },
+   {
+    "bytes": 7420,
+    "lines": 127,
+    "path": "src/programs_package_cases.lkj",
+    "sha256": "f40192af179c2c2f936e3f95b7cedcc21f7d6dfb8e767c81154e36a07bf8a754"
+   },
+   {
+    "bytes": 697,
+    "lines": 28,
+    "path": "src/programs_package_tool.lkj",
+    "sha256": "664eab20057f5c3ceac80ef54ed659aa6a953fdc340e64a6a0c18bc251945ad1"
+   }
+  ],
+  "validation": "A local text-only inverse replay reproduced every recorded v2/v3/v4/v5/v6 core, command and main-file byte length, line count and SHA-256; case-module bytes were unchanged and remain separately asserted. This is reconstruction evidence, not a rerun or reauthentication of the historical executions.",
+  "preserved_historical_fixture_warning": "The original sink.open(path) helper and overstrong allocation comment are retained solely as inverse-history data; they are not current behavior."
+ }
+}

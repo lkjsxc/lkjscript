@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// cause: expected Rust form/support gap.
+// pending: Resolve the independently authored program barrier recorded in docs/real-programs.md.
+// Reduced from Sōzu 1.0.6 e2e/src/mock/https_client.rs.
+// This handwritten invalid input is uncredited; it does not add a whole-root site.
+pub fn probe() { let _future = async { 1usize }; }

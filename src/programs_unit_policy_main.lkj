@@ -1,0 +1,45 @@
+// Initial two-line bootstrap scaffold; not operation credit.
+fn main(mut world: World) {
+    let arguments = world.args();
+    assert_eq!(arguments.len(), 2usize);
+    let root = String::from_utf8(arguments[0usize].clone()).unwrap();
+    let compiler = String::from_utf8(arguments[1usize].clone()).unwrap();
+    let count = programs_unit_policy_cases::run(&mut world, root.as_str(), compiler.as_str());
+    world.stdout().write(format!("ok concrete computation {count} controls\n").as_bytes());
+}
+
+mod ast;
+
+mod diagnostic;
+
+mod facts;
+
+mod ir;
+
+mod ir_binary;
+
+mod ir_text;
+
+mod check;
+
+mod reuse;
+
+mod native;
+
+mod runtime;
+
+mod runtime_diagnostics;
+
+mod child_image;
+
+mod entry_grants;
+
+mod json;
+
+mod x86;
+
+pub use std::sha256;
+
+mod programs_unit_policy;
+
+mod programs_unit_policy_cases;
