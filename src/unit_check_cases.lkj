@@ -243,5 +243,32 @@ fn auth_mutations() -> usize {
 }
 pub fn run() -> usize {
     checked_imports_and_local_mutants() + destructor_and_return_contracts()
-        + private_changes_keep_public_identity() + inherited_effects_and_drop_layout() + auth_mutations()
+        + private_changes_keep_public_identity() + inherited_effects_and_drop_layout() + auth_mutations() + shared_destructor_imports()
+}
+
+fn shared_destructor_imports() -> usize {
+    let mut source = program(Vec::new());
+    source.types.push(ir::Type { name: "a::Owner".to_string(), kind: ir::TypeKind::Struct {
+        fields: vec![ir::Field { name: "value".to_string(), ty: ir::I64 }], copy: false } });
+    source.types.push(ir::Type { name: "a::OwnerRef".to_string(), kind: ir::TypeKind::Ref { inner: 7usize, mutable: true } });
+    source.functions.push(function("a::destroy", 1usize, ir::UNIT,
+        vec![local("owner", 8usize), local("unit", ir::UNIT)], vec![
+            ir::Op::Drop { place: ir::Place::local(0usize) }, ir::Op::Unit { dst: 1usize }, ir::Op::Return { src: 1usize },
+        ]));
+    source.destructors.push((7usize, 0usize));
+    let a = units::check_unit("a", "a-v1", source.clone(), &no_imports()).unwrap();
+    let mut b_source = a.interface().program().clone();
+    b_source.functions.push(function("b::forward", 1usize, 7usize, vec![local("owner", 7usize)],
+        vec![ir::Op::Return { src: 0usize }]));
+    let b = units::check_unit_with_exports("b", "b-v1", b_source,
+        &[all_imports(a.interface())], &[1usize], &[0usize; 0]).unwrap();
+    assert_eq!(b.interface().binding(0usize), a.interface().binding(0usize));
+    let c = units::check_unit("c", "c-v1", b.interface().program().clone(),
+        &[all_imports(a.interface()), all_imports(b.interface())]).unwrap();
+    assert_eq!(c.binding(0usize), a.interface().binding(0usize));
+    assert_eq!(c.binding(1usize), b.interface().binding(1usize));
+    let impostor = units::check_unit("impostor", "impostor-v1", source, &no_imports()).unwrap();
+    assert!(units::check_unit("c", "conflict", a.interface().program().clone(),
+        &[all_imports(a.interface()), all_imports(impostor.interface())]).is_err());
+    1usize
 }

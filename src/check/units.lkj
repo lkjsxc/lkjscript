@@ -237,9 +237,13 @@ fn check_unit_inner(
         known_effects.push(Vec::new());
     }
     let mut dependencies = BTreeMap::new();
+    let mut seen_interfaces: BTreeSet<String> = BTreeSet::new();
     let mut expected_drops: BTreeMap<usize, Option<usize>> = BTreeMap::new();
     for import in imports {
         let interface = &import.interface;
+        if !seen_interfaces.insert(interface.name.clone()) {
+            return Err(problem("one dependency interface occurs more than once"));
+        }
         if interface.name == name {
             return Err(problem("recursive unit import must be checked as one unit"));
         }
@@ -272,15 +276,19 @@ fn check_unit_inner(
             } else { expected_drops.insert(*target, expected); }
         }
         for (source, target) in &import.functions {
-            if imported[*target] {
-                return Err(problem("two imported function claims occupy one local identity"));
-            }
             if !same_signature(&interface.program.functions[*source], &program.functions[*target], &types)? {
                 return Err(problem("imported signature, returned-view contract or empty body differs"));
             }
-            imported[*target] = true;
-            origins[*target] = interface.binding(*source);
-            known_effects[*target] = interface.effects(*source).to_vec();
+            let binding = interface.binding(*source);
+            if imported[*target] {
+                if origins[*target] != binding || known_effects[*target].as_slice() != interface.effects(*source) {
+                    return Err(problem("repeated imported function has a different defining identity or authority summary"));
+                }
+            } else {
+                imported[*target] = true;
+                origins[*target] = binding;
+                known_effects[*target] = interface.effects(*source).to_vec();
+            }
         }
     }
     for (ty, expected) in expected_drops {
