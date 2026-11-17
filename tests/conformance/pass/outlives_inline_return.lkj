@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+fn shorten<'long: 'short, 'short>(value: &'long i64, _marker: &'short i64) -> &'short i64 { value }
+pub fn probe() -> i64 {
+    let value = 42i64;
+    let marker = 0i64;
+    *shorten(&value, &marker)
+}

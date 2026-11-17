@@ -1,0 +1,15 @@
+// expect: value 42
+// witness: {}
+trait Value { fn read(&self) -> i64; }
+struct Holder<'value> { value: &'value mut &'value i64 }
+impl<'value> Value for Holder<'value> {
+    fn read(&self) -> i64 { **self.value }
+}
+fn make<'long, 'short>(value: &'long mut &'long i64) -> impl Value + 'short
+where 'long: 'short { Holder { value } }
+pub fn probe() -> i64 {
+    let value = 42i64;
+    let mut reference = &value;
+    let holder = make(&mut reference);
+    holder.read()
+}

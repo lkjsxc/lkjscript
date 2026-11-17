@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {}
+fn combine<'first, 'second, 'last>(left: &'first i64, right: &'second i64) -> i64
+where 'first: 'second + 'last, 'second: 'last {
+    let a: &'last i64 = left;
+    let b: &'last i64 = right;
+    *a + *b
+}
+pub fn probe() -> i64 { let left = 20i64; let right = 22i64; combine(&left, &right) }

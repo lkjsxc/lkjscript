@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+fn unused<'long>(value: &'long i64) -> i64
+where 'long: 'missing { *value }
+pub fn probe() -> i64 { 42 }

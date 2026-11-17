@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+trait Value { fn get(&self) -> i64; }
+impl Value for i64 { fn get(&self) -> i64 { *self } }
+fn read<'long, 'short, T>(value: &'long T) -> i64
+where T: Value, 'long: 'short {
+    let shortened: &'short T = value;
+    shortened.get()
+}
+pub fn probe() -> i64 { let value = 42i64; read(&value) }

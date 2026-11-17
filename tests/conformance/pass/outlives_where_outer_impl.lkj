@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+struct Holder<'outer> { value: &'outer i64 }
+impl<'outer> Holder<'outer> {
+    fn read<'short>(&self, _marker: &'short i64) -> &'short i64
+    where 'outer: 'short { self.value }
+}
+pub fn probe() -> i64 {
+    let value = 42i64;
+    let marker = 0i64;
+    let holder = Holder { value: &value };
+    *holder.read(&marker)
+}

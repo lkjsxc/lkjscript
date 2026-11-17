@@ -258,37 +258,37 @@ These are observed frontier lower bounds, not all gaps that the complete depende
 graph will expose.
 
 The [current ordinary-form implementation](real-programs-current.json), producer
-`44aac5d3…512159e62`, adds bounded `?Sized` support to the earlier equality,
-qualified-path, impl-Trait and const forms within the [language limits](language.md).
-Named type parameters require builtin Sized by default; inline or where-clause
-`T: ?Sized` removes that requirement. Borrowed strings, slices, generic shared
-or mutable references, and nominal aggregates storing those views can use
-relaxed parameters. Rigid definition checking preserves the relaxed contract
-even when a later caller chooses a sized type. Private verifier layouts supply
-no sizedness evidence. Explicit Sized, Clone or Copy bounds can establish the
-requirement; trait Self has no implicit Sized bound, while associated types do.
+`59c7df4c…749a0836a`, adds named lifetime-outlives where predicates on free
+functions and inherent methods to the earlier forms, within the
+[language limits](language.md). A predicate such as `where 'long: 'short`
+feeds the existing directed region obligations. Both sides must resolve to
+declared names in the proper scope, including an enclosing inherent impl.
+The relationship applies during unused-body checking and at calls. Queries
+preserve the written edge and exact declaration references; checked body edits
+and function renames retain the contract and refused edits roll back.
 
-Executable storage, array/slice elements and tuple/nominal fields require proven
-sizedness, including unused declarations and abstract signature components.
-Associated equality does not grant an extra Sized assumption to a named relaxed
-parameter or fabricate a concrete implementation. An implementation method
-cannot strengthen a relaxed declaration. A const parameter carries no Sized
-obligation, but `[T; N]` still needs a sized element when N may later be zero.
-Owned unsized values/tails, Box/Vec elements without sizedness evidence,
-associated-type or anonymous impl-Trait relaxation, and relaxing anything other
-than resolved builtin Sized remain explicit boundaries. Existing heap-held view
-and const-function restrictions remain. The checked IR and independent checker
-are unchanged.
+Ordinary results retain mutable-storage invariance. An opaque result lifetime
+requires its hidden references to outlive that lifetime without equating their
+stored lifetimes to it. The controls combine these rules with const-qualified
+functions, const usize parameters and borrowed `T: ?Sized` referents.
+Trait return origins still require exact lifetime-label agreement. Paired
+trait methods must have identical directed inline edges after method-local
+binders are paired by position; adding or dropping an edge refuses. Edges
+involving an enclosing lifetime remain refused pending owner substitution.
+Trait-method and implementation-header where predicates, anonymous/static
+lifetime predicates, higher-ranked predicates and type-outlives where predicates
+such as `T: 'a` remain located boundaries. No checked-IR, independent-checker,
+library or runtime rule changes.
 
 All twelve observations repeat on unchanged upstream bytes. **All 146 original
 impl-Trait/qualified/equality target diagnostic identities remain absent**: 129
-nom sites and 17 DOM sites. The primary frontier is nom **149→15** and DOM
-**95→64**, for a combined **244→79**. Relative to published const generics,
-nom changes **18→15** and DOM stays **64**. Sōzu now has **448 classified
-sites and 34 prior-unclassified rows**: its newly parsed relaxed bound exposes
-an independent unsafe method. This replaces one unclassified row, keeping the
-total of 482 unique nonblocked Sōzu rows unchanged. No large root or real nom
-module tree has been admitted, and no nom own test has run under lkjscript.
+nom sites and 17 DOM sites. The primary frontier is nom **149→17** and DOM
+**95→63**, for a combined **244→80**. Relative to published Sized, nom changes
+**15→17** and DOM **64→63**. The net increase from 79 to 80 records two newly
+explicit type-outlives where refusals and one removed named-lifetime predicate.
+Sōzu remains at **448 classified sites and 34 prior-unclassified rows**.
+No large root or real nom module tree has been admitted, and no nom own test
+has run under lkjscript.
 
 | Stage | nom primary sites | DOM primary sites | Original target diagnostics absent | Semantic scope established |
 | --- | ---: | ---: | ---: | --- |
@@ -300,81 +300,79 @@ module tree has been admitted, and no nom own test has run under lkjscript.
 | Const functions | 24 | 64 | 146 | Bounded const-qualified declarations and runtime calls; CTFE remains separate |
 | Const generics | 18 | 64 | 146 | Function/receiver-impl const usize parameters; nominal const parameters and global constant array lengths remain separate |
 | Sized bounds | 15 | 64 | 146 | Named relaxed parameters and existing borrowed representations; owned unsized storage remains separate |
+| Lifetime where predicates | 17 | 63 | 146 | Named free/inherent lifetime edges; two type-outlives where boundaries newly explicit |
 
-The APIT/RPIT history remains explicit: APIT already consumed opaque result
-syntax while other parse errors masked its unsupported-result resolver.
-Dedicated semantic and query/edit controls later established RPIT support.
-Likewise, the three current nom `?Sized` diagnostics disappearing at
-`combinator/mod.rs:503:7`, `513:29` and `524:7` establish parser progress at
-those sites, not admission of verify/Verify or its original positional
-`Parser<I>`, Fn/Borrow and GAT contracts. The preceding six const-header
-removals retain their positional-trait and receiver-occurrence limitations.
-Sōzu’s global `MAX_FDS_OUT` array length still reaches an unsupported later
-validator, masked by surviving parser/macro errors. No CTFE is credited.
+The APIT/RPIT history remains explicit: APIT consumed opaque result syntax
+while other parse errors masked its unsupported-result resolver. Dedicated
+semantic and query/edit controls later established RPIT support. Const-header
+and relaxed-bound diagnostic removals likewise did not admit their original
+positional `Parser<I>`, Fn/Borrow or GAT contracts. The six nom const-header
+removals retain positional-trait and receiver-occurrence limits. Sōzu’s global
+`MAX_FDS_OUT` array length remains outside the literal/scoped-const validator,
+with its later refusal masked by surviving parser/macro errors. No CTFE is
+credited. Sized, const-function and opaque-result restrictions remain as documented.
 
 The summary pins durable raw receipts, exact re-ranking payloads and reviewed
 original-source hashes. Reproduce the results with the
-[nom review](real-programs-maybe-sized-nom-review.json),
-[DOM review](real-programs-maybe-sized-dom-review.json), and
-[Sōzu review](real-programs-maybe-sized-sozu-review.json) passed to
-`rerank.pl --review`. Ten complete exit/status/stdout/stderr identities remain
-byte-identical to published const generics; only nom and Sōzu command projections
-change. Original-suffix observations, source/projection hashes and the literal
-library inventory remain unchanged. The single new independent primary is
-Sōzu’s unsafe method at `access_logs.rs:39:5`; no new unclassified diagnostic
-or current recovery exclusion remains.
-All twelve complete observations are measured byte-identical to the unpublished
-first Sized candidate. The repair changes diagnostic precedence/advice and a
-separately verified fixture expectation; no frontier change is assumed.
+[nom review](real-programs-lifetime-where-nom-review.json),
+[DOM review](real-programs-lifetime-where-dom-review.json), and
+[Sōzu review](real-programs-lifetime-where-sozu-review.json) passed to
+`rerank.pl --review`. Ten complete exit/status/stdout/stderr identities are
+byte-identical to published Sized; only the nom and DOM projections change.
+Original-suffix observations, source/projection hashes and the literal library
+inventory remain unchanged. There are no new unclassified diagnostics or
+current recovery exclusions after exact source review.
 
-The focused suite passes **116 cases / 348 route checks**: 232 final-native
-engine checks and 116 separate Rust checks, comprising 44 values/output cases
-and 72 verdicts. The total contains 51 Sized-family cases and 65 const-generics
-regressions. The earlier 107-case const-generics/const-function proof is
-historical and is not added to this population. A passing intermediate
-105-case subset was rerun accidentally during proof orchestration; the canonical
-116 tracked files were then verified and rerun freshly. The intermediate subset
-is preserved as history, not added to the total or treated as a compiler failure.
-Source checking, four
-query/edit/cache suites and a separate five-case cycle-control rerun pass.
-The native self-build reaches a byte-identical fixed point with a refreshed seed.
-The full four-worker gate passes in 750.411 seconds with 6083 fresh case
+The DOM `Selection::select` predicate at `selection.rs:569:9` relates its
+enclosing impl lifetime to a method lifetime and now parses. Its disappearance
+establishes no surrounding-method or root admission. The nom predicates at
+`bytes/complete.rs:424:46` and `multi/mod.rs:964:29` instead constrain types
+`I` and `F` to outlive a lifetime. The parser now explicitly refuses those
+contracts before folding type-parameter bounds. Previously those generic
+lifetime entries were skipped; concrete type-target predicates already had a
+later refusal. These are independent type-outlives where primaries, not recovery
+from an earlier opaque return and not evidence of prior root admission.
+
+The focused suite passes **90 cases / 270 route checks**: 180 final-native
+engine checks and 90 separate Rust checks, comprising 37 values/output cases
+and 53 verdicts. The population is 46 lifetime-family cases plus 12 APIT and
+32 RPIT regressions. Source checking and all four query/edit/cache suites pass.
+The unchanged associated-equality refusal and option/result-view control each
+pass separately on two engine routes and their Rust oracle; both are outside
+the 90 cases. The owner-substitution refusal also has its exact located
+diagnostic and a direct Rust library-metadata acceptance oracle. This repeated
+boundary check is not an additional focused case. Prior and overlapping
+hosted populations are retained as history, without aggregation.
+
+The native self-build reaches a byte-identical fixed point and passes library
+checking with the refreshed seed. The first unpublished lifetime bootstrap
+failed on `prelude.lkj:148:9`: duplicate result-scope proof retained both
+exclusive enum alternatives despite the existing returned-view contract.
+The frontend repair skips only surface-result obligations already covered at
+the exact projection and region. Nested and invariant regions, and unrelated
+named/elided result leaves, still require their scoped proof. The library and
+independent checker are unchanged. The failed producer `ff6669ff…`, original
+logs, source patch and Rust-hosted repair proof remain in the validation record;
+the canonical proof above is fresh on final native `59c7df4c…`.
+The full four-worker gate passes in 721.195 seconds with 6175 fresh case
 requests and 128 IR mutants, zero findings. The standalone real-programs
 validation also passes. Publication CI is recorded with the landing report. [Proof records](real-programs-current.json)
-pin the completed checks and root-owned validation paths.
+pin completed checks and root-owned validation paths.
 
-The original fifteen foreign reductions now have **six checking and nine
-refusing**. The original `Holder<T: ?Sized>` view reduction checks on both
-engines with an unchanged body, and its exact source compiles directly as Rust
-library metadata. Its handwritten origin remains uncredited. The separately
-admitted session literal-repeat diagnostic from const generics stays outside
-this fifteen-member cohort and establishes no original upstream module result.
-The separately promoted Poll default-method diagnostic returns zero on two
-final-native engine routes and its Rust value witness. Its exact bytes from
-`trait Poll` through the original end of file remain unchanged; only expectation
-and status comments changed. This single case is outside both the original
-fifteen reductions and the canonical 116 focused cases.
+The original fifteen foreign reductions retain **six checking and nine
+refusing**, with no fixture changed or newly promoted in this stage. The
+handwritten Holder/opaque/qualified/equality reductions retain their recorded
+origin and do not count as upstream module admissions. The independently
+admitted session literal-repeat and Poll default-method diagnostics remain
+outside those fifteen; their earlier unchanged-body proofs are preserved.
 
-The first Sized gate failed after 792.129 seconds and remains an unpublished
-failure in the proof record. A broad Sized diagnostic displaced the existing
-concrete-unsized-local diagnostic in the semantic/foreign-empty-Vec checks,
-and its iterator span bypassed the existing vector advice recognizer.
-The repair restores the prior provenance-check ordering and recognizes the
-precise new diagnostic/span while retaining the narrow advice preconditions.
-Both Sized checks and rigid obligations remain. The gate also found the stale
-Poll refusal expectation, promoted only after the independent unchanged-body
-proof above. Repair-specific diagnostic/advice logs use the Rust-hosted compiler;
-the canonical engine, source, query and Poll proofs use the final native producer.
-The earlier failed producer, seed, source patch and complete logs are retained.
-
-Published const generics passed its full gate in 781.079 seconds with 5981
-fresh requests, zero reuse and 128 mutants, zero findings, plus standalone
-validation. Its failed first gate remains recorded: a stale usize-suffixed
-repeat expectation and receiver/method argument routing, including module-owned
-argument placement found by independent review. The repaired source preserves
-written argument ownership and lexical scope. The earlier const-function
-fingerprint failure and repair also remain in the [validation history](real-programs-current.json).
-Those historical failures and passes are separate from the current Sized gate.
+Published Sized passed its full gate in 750.411 seconds with 6083 fresh
+requests, zero reuse and 128 mutants, zero findings, plus standalone validation.
+Its first failed gate and diagnostic-precedence/vector-advice repair remain
+recorded, along with the separate Poll admission. The earlier const-generics
+expectation/argument-placement failure and const-function fingerprint failure
+also retain their repairs and later successful gates. These historical results
+are separate from the current lifetime gate.
 
 The tables give **observed unique sites** and physical lines in files containing
 those sites. File coverage overlaps between rows and includes inactive code;
@@ -386,39 +384,42 @@ transitive blocked-line count is used.
 #### nom: generic code
 
 [Original site table](real-programs-nom.json) and [current frontier](real-programs-current.json):
-the current producer emits 31 raw rows: 15 unique primary sites and 16 E_BLOCKED
-rows, with no current recovery exclusions. There are 11 upstream default-path
+the current producer emits 35 raw rows: 17 unique primary sites and 18 E_BLOCKED
+rows, with no current recovery exclusions. There are 13 upstream default-path
 candidates and four inactive sites. The original baseline had 149 primary sites;
-const generics had 18. All three current relaxed-bound diagnostics disappear at
-`src/combinator/mod.rs:503:7`, `513:29` and `524:7`: the verify function,
-Verify struct and Parser implementation headers. The exact source still needs
-positional generic-trait contracts and its core parser/GAT dependencies; no
-surrounding implementation or module admission follows from these removals.
+published Sized had 15. Two real type-outlives where bounds are now refused explicitly:
+`I: Clone + crate::traits::Offset + Input + 'a` in escaped at
+`src/bytes/complete.rs:424:46`, and `F: Parser<I, Error = E> + 'a` in fill
+at `src/multi/mod.rs:964:29`. These are type-to-lifetime requirements, distinct
+from the supported named lifetime-to-lifetime predicates. Both original functions
+also retain positional generic-trait and core parser dependencies.
 
-The earlier six const-header diagnostics remain absent. Two AsBytes array
-receivers fit that declaration subset; two Compare implementations place N only
-in a positional trait argument, and two FindToken implementations still need
-positional generic-trait support. Those limitations are unchanged.
+The three previous relaxed-bound diagnostics at `combinator/mod.rs:503:7`,
+`513:29` and `524:7` remain absent. The six const-header diagnostics remain
+absent too. Two AsBytes array receivers fit that declaration subset; two Compare
+implementations place N only in a positional trait argument, and two FindToken
+implementations still need positional generic-trait support. No surrounding
+implementation or module admission follows from those header removals.
 
 | Rank | Cause | Sites | Affected file lines | Owner / next route |
 | --- | --- | ---: | ---: | --- |
 | 1 | Macro $ tokenization | 8 | 6,418 | Compiler / checked expansion producer |
 | 2 | error_position! expansion | 2 | 365 | Compiler / checked source producer |
-| 3 | Documentation/doctest cfg predicates | 3 | 460 | Language/configuration; inactive candidates |
-| 4 | Unsafe blocks | 2 | 1,681 | Refused by design; checked indexing/ownership port |
+| 3 | Type-outlives where predicates | 2 | 2,436 | Programs; explicit boundary for generic type lifetime bounds |
+| 4 | Documentation/doctest cfg predicates | 3 | 460 | Language/configuration; inactive candidates |
+| 5 | Unsafe blocks | 2 | 1,681 | Refused by design; checked indexing/ownership port |
 
-All eight lexical errors are macro $ tokens. The two current reviewed macro
-calls remain the original `error_position!` error branches in
-`bits::complete::tag` at 100:24 and `bits::streaming::tag` at 76:24.
-At APIT, the verify predicate at 503:7 became a primary relaxed-bound refusal
-after its old RPIT recovery parent disappeared. Sized support now removes
-that actual bound diagnostic and the struct/impl sites at 513:29 and 524:7.
-The historical recovery classifications are not silently carried forward;
-there are no current recovery exclusions.
+All eight lexical errors are macro $ tokens. The two reviewed macro calls remain
+the original `error_position!` branches in `bits::complete::tag` at 100:24 and
+`bits::streaming::tag` at 76:24. The two new lifetime-bound diagnostics are also
+independent primaries: the parser now rejects the actual type-target bound at
+its exact span before generic-bound handling. No current recovery exclusion
+is inferred from an earlier failure elsewhere in the root. Historical recovery
+classifications and the original baseline are preserved unchanged.
 
 Generic associated types, heap-held views and raw offsets remain in source
 inventory behind this frontier; inventory is not an independently observed
-semantic refusal count. Unsafe get_unchecked paths need an explicit checked
+semantic-refusal count. Unsafe get_unchecked paths need an explicit checked
 implementation or an identified foreign boundary, with the port cost retained.
 
 The [read-only module feasibility review](real-programs-current.json) remains
@@ -427,38 +428,42 @@ Its smallest useful candidate is the bits tree: 539 physical local lines and
 13 literal upstream test attributes. Actual error_position! calls remain
 observed; positional Parser contracts, macro-generated tuple-parser tests,
 Mode::Output<T>/process GAT dependencies and unsafe input-trait code remain
-in the unchanged graph. Consuming the const-generic and relaxed-bound headers
-therefore does not establish unchanged module or own-test admission.
+in the unchanged graph. Consuming const-generic/relaxed-bound headers and the
+limited named-lifetime predicates does not establish module or own-test admission.
 
 #### DOM: parser, owned tree and selector views
 
 [Original site table](real-programs-dom.json) and [current frontier](real-programs-current.json):
-129 raw messages contain 64 primary sites and 65 E_BLOCKED rows, with no current
-recovery exclusions. There are 57 upstream default-path candidates and seven
+127 raw messages contain 63 primary sites and 64 E_BLOCKED rows, with no current
+recovery exclusions. There are 56 upstream default-path candidates and seven
 test-only inventory sites. The original baseline had 95 primary sites; equality
-had 92, qualified paths 83, and APIT/RPIT 78. All fourteen original const-function
-header identities disappear, and no new diagnostic identity is introduced.
-This does not admit the surrounding DOM functions: the existing atom-macro
-pattern refusal inside `elem_require_linebreak` survives at 127:19 after its
-const header at 124:7 disappears. The 22 macro sites and the more explicit
-lifetime-outlives diagnostic retain their exact source reviews. The original
-nine shared-mutation sites remain an ownership/representation port cost.
+had 92, qualified paths 83, APIT/RPIT 78 and Sized 64. The sole current named
+lifetime predicate disappears at `src/selection.rs:569:9`: `select<'b>` inside
+`impl<'a> Selection<'a>` declares `where 'a: 'b`. No new diagnostic replaces it
+in this observation, but surviving parser barriers still prevent root admission.
+The surrounding Selection operation is not claimed checked or executable.
+
+All fourteen original const-function header identities remain absent. The
+existing atom-macro pattern refusal inside `elem_require_linebreak` survives
+at 127:19 after its const header at 124:7 disappears. The 22 macro sites retain
+exact source accounting; only the atom-pattern site needs a current explicit
+review now that the lifetime predicate is absent. The original nine shared-
+mutation sites remain an ownership/representation port cost.
 
 | Rank | Cause | Sites | Affected file lines | Owner / next route |
 | --- | --- | ---: | ---: | --- |
 | 1 | ns! / local_name! expansion | 22 | 1,843 | Compiler / producer; 17 default candidates and five test-only |
 | 2 | Debug ? formatting | 24 | 207 | Compiler formatting producer |
 | 3 | Generic associated types | 2 | 844 | Language |
-| 4 | Lifetime-outlives where predicate | 1 | 917 | Programs |
-| 5 | Box with dyn Iterator | 1 | 917 | Language |
-| 6 | doc include_str! attribute | 1 | 45 | Language / producer |
-| 7 | Expression-statement cfg | 1 | 510 | Language/configuration |
-| 8 | rustfmt::skip; static CONTENTS | 1 + 1 | 692 each | Language; test-only |
-| 9 | std::io imported as io::Result | 1 | 115 | Library data facade; not an ambient-I/O proof |
-| 10 | Ref / RefCell / Cell | 9 | 4,073 | Refused by design; explicit ownership/tree port |
+| 4 | Box with dyn Iterator | 1 | 917 | Language |
+| 5 | doc include_str! attribute | 1 | 45 | Language / producer |
+| 6 | Expression-statement cfg | 1 | 510 | Language/configuration |
+| 7 | rustfmt::skip; static CONTENTS | 1 + 1 | 692 each | Language; test-only |
+| 8 | std::io imported as io::Result | 1 | 115 | Library data facade; not an ambient-I/O proof |
+| 9 | Ref / RefCell / Cell | 9 | 4,073 | Refused by design; explicit ownership/tree port |
 
 All 24 Debug-format refusals are direct producer refusals; the compiler formatting
-parser unconditionally rejects that syntax. RefCell supports upstream's shared
+parser unconditionally rejects that syntax. RefCell supports upstream’s shared
 mutable tree, and `Vec<NodeRef>` forms support heap-held views. The latter have
 20 lexical occurrences on 19 lines, but no additional heap-view semantic-refusal
 count is claimed before parsing succeeds. An eventual handle-based rewrite must

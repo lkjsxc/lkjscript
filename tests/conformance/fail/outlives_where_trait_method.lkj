@@ -1,0 +1,7 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Value {
+    fn read<'a, 'b>(value: &'a i64, marker: &'b i64) -> i64
+    where 'a: 'b;
+}
+pub fn probe() -> i64 { 42 }

@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+fn shorten<'outer, 'long: 'short, 'short>(value: &'outer &'long i64) -> &'outer &'short i64 { value }
+pub fn probe() -> i64 {
+    let value = 42i64;
+    let borrowed = &value;
+    **shorten(&borrowed)
+}

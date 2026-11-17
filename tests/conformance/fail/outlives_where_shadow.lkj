@@ -1,0 +1,8 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+struct Holder<'a> { value: &'a i64 }
+impl<'a> Holder<'a> {
+    fn read<'a, 'b>(&self, value: &'a i64) -> i64
+    where 'a: 'b { *value }
+}
+pub fn probe() -> i64 { 42 }

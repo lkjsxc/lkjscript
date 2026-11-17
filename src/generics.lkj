@@ -8,6 +8,7 @@ pub(crate) use const_functions::const_data_constructor;
 pub(crate) mod const_arguments;
 mod sized_bounds;
 pub(crate) use sized_bounds::parameter_requires_sized;
+mod lifetime_predicates;
 use crate::ast::*;
 use crate::names::qualified;
 pub(crate) use bound_solver::{BoundContext, BoundSolver, BoundStep};
@@ -1206,6 +1207,7 @@ pub fn validate(source: &Program) -> Result<(), Diagnostic> {
     alias_cycles(source)?;
     crate::generics::const_arguments::validate(source)?;
     associated_bindings::validate(source)?;
+    lifetime_predicates::validate(source)?;
     sized_bounds::validate(source)?;
     constant_cycles(source)?;
     finite_data(source)?;
@@ -2762,6 +2764,8 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
                 aenv.insert(a.name.clone(), value);
                 eenv.insert(e.name.clone(), value);
             }
+            lifetime_predicates::method_contract(source, actual, expected,
+                &implementation.generics, &declaration.generics)?;
             parameter_projection_terms(source, &actual.generics, &mut aenv, &mut terms);
             parameter_projection_terms(source, &expected.generics, &mut eenv, &mut terms);
             let mut pairs = vec![(actual.result, expected.result)];

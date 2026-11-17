@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {}
+fn reader<'long, 'short>(value: &'long i64) -> impl Fn() -> i64 + 'short
+where 'long: 'short { move || *value }
+pub fn probe() -> i64 {
+    let value = 42i64;
+    let read = reader(&value);
+    read()
+}

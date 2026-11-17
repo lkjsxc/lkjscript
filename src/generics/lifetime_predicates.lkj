@@ -1,0 +1,143 @@
+//! Lifetime where syntax feeds the existing definition and call region edges.
+//! These declarations add no IR operation or trusted proof rule.
+use super::*;
+
+fn declared(name: &NamedLifetime, names: &BTreeSet<String>) -> Result<(), Diagnostic> {
+    if name.name == "'static" || name.name == "'_" {
+        return Err(Diagnostic::new(name.span, "E_UNSUPPORTED",
+            "lifetime-outlives where predicates require named declaration lifetimes; static and anonymous predicates are not implemented"));
+    }
+    if !names.contains(&name.name) {
+        return Err(Diagnostic::new(name.span, "E_TYPE",
+            &format!("undeclared lifetime {} in where predicate", name.name)));
+    }
+    Ok(())
+}
+
+fn introduce(parameters: &[GenericParam], names: &mut BTreeSet<String>) -> Result<(), Diagnostic> {
+    for parameter in parameters {
+        if !parameter.lifetime { continue; }
+        if parameter.name == "'static" || parameter.name == "'_" {
+            return Err(Diagnostic::new(parameter.span, "E_TYPE",
+                "reserved lifetime cannot name a declaration"));
+        }
+        if !names.insert(parameter.name.clone()) {
+            return Err(Diagnostic::new(parameter.span, "E_TYPE",
+                &format!("lifetime {} duplicates or shadows an enclosing declaration", parameter.name)));
+        }
+    }
+    Ok(())
+}
+
+fn inline_bounds(source: &Program, parameters: &[GenericParam], names: &BTreeSet<String>)
+    -> Result<(), Diagnostic> {
+    for parameter in parameters {
+        if !parameter.lifetime { continue; }
+        for bound in &parameter.bounds {
+            let node = &source.types[*bound];
+            let Type::Path(path) = &node.kind else {
+                return Err(Diagnostic::new(node.span, "E_TYPE", "lifetime bound requires a lifetime"));
+            };
+            if !path.name.starts_with('\'') || path.name == "'_" || !path.args.is_empty()
+                || !path.bindings.is_empty() || path.qualification.is_some() {
+                return Err(Diagnostic::new(node.span, "E_TYPE", "lifetime bound requires a named lifetime"));
+            }
+            if path.name != "'static" && !names.contains(&path.name) {
+                return Err(Diagnostic::new(node.span, "E_TYPE",
+                    &format!("undeclared lifetime {} in inline bound", path.name)));
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
+    for (index, function) in source.functions.iter().enumerate() {
+        let mut names = BTreeSet::new();
+        match source.function_owner(FunctionId { index }) {
+            FunctionOwner::Free => {}
+            FunctionOwner::Trait(_) => {
+                if function.outlives.is_empty() { continue; }
+                return Err(Diagnostic::new(function.outlives[0].span, "E_UNSUPPORTED",
+                    "lifetime-outlives where predicates on trait methods require signature implication checking"));
+            }
+            FunctionOwner::Implementation(owner) => {
+                let implementation = &source.impls[owner.index];
+                if implementation.trait_ty.is_some() {
+                    if function.outlives.is_empty() { continue; }
+                    return Err(Diagnostic::new(function.outlives[0].span, "E_UNSUPPORTED",
+                        "lifetime-outlives where predicates on trait implementation methods require signature implication checking"));
+                }
+                introduce(&implementation.generics, &mut names)?;
+                // An impl header cannot borrow a lifetime declared only by one
+                // of its methods. Validate its edges before adding that scope.
+                inline_bounds(source, &implementation.generics, &names)?;
+            }
+        }
+        introduce(&function.generics, &mut names)?;
+        inline_bounds(source, &function.generics, &names)?;
+        for predicate in &function.outlives {
+            declared(&predicate.target, &names)?;
+            for bound in &predicate.bounds { declared(bound, &names)?; }
+        }
+    }
+    Ok(())
+}
+
+fn method_edges(source: &Program, function: &Function, outer: &[GenericParam])
+    -> Result<BTreeMap<(usize, usize), Span>, Diagnostic> {
+    let mut declared = BTreeSet::new();
+    introduce(outer, &mut declared)?;
+    introduce(&function.generics, &mut declared)?;
+    inline_bounds(source, &function.generics, &declared)?;
+    let mut names: BTreeMap<String, usize> = BTreeMap::new();
+    for (index, parameter) in function.generics.iter().enumerate() {
+        if parameter.lifetime { names.insert(parameter.name.clone(), index); }
+    }
+    // Every method-local declaration has an index below this distinct tag.
+    let static_lifetime = function.generics.len();
+    let mut edges: BTreeMap<(usize, usize), Span> = BTreeMap::new();
+    for (index, parameter) in function.generics.iter().enumerate() {
+        if !parameter.lifetime { continue; }
+        for bound in &parameter.bounds {
+            let node = &source.types[*bound];
+            let Type::Path(path) = &node.kind else {
+                return Err(Diagnostic::new(node.span, "E_TYPE", "lifetime bound requires a lifetime"));
+            };
+            let target = if path.name == "'static" { static_lifetime }
+                else if let Some(target) = names.get(&path.name) { *target }
+                else {
+                    return Err(Diagnostic::new(node.span, "E_UNSUPPORTED",
+                        "trait method inline lifetime bounds involving enclosing lifetimes require owner substitution"));
+                };
+            edges.insert((index, target), node.span);
+        }
+    }
+    Ok(edges)
+}
+
+pub(super) fn method_contract(
+    source: &Program, actual: &Function, expected: &Function,
+    actual_outer: &[GenericParam], expected_outer: &[GenericParam],
+) -> Result<(), Diagnostic> {
+    let bounded = actual.generics.iter().any(|parameter| parameter.lifetime && !parameter.bounds.is_empty())
+        || expected.generics.iter().any(|parameter| parameter.lifetime && !parameter.bounds.is_empty());
+    if !bounded { return Ok(()); }
+    // Generic arity and kinds are already paired by signatures(). Exact edges
+    // preserve early/late binding shape; general trait implication is not proved.
+    let actual_edges = method_edges(source, actual, actual_outer)?;
+    let expected_edges = method_edges(source, expected, expected_outer)?;
+    for (edge, span) in &actual_edges {
+        if !expected_edges.contains_key(edge) {
+            return Err(Diagnostic::new(*span, "E_TRAIT",
+                "implementation method lifetime bounds differ from trait signature"));
+        }
+    }
+    for (edge, _) in &expected_edges {
+        if !actual_edges.contains_key(edge) {
+            return Err(Diagnostic::new(actual.generics[edge.0].span, "E_TRAIT",
+                "implementation method lifetime bounds differ from trait signature"));
+        }
+    }
+    Ok(())
+}

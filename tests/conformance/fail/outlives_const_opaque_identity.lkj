@@ -1,0 +1,11 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+trait Value { fn value(&self) -> i64; }
+impl Value for i64 { fn value(&self) -> i64 { *self } }
+fn make<'long, 'short, const N: usize>(value: &'long i64) -> impl Value + 'short
+where 'long: 'short { *value }
+fn wrong<'long, 'short>(value: &'long i64, flag: bool) -> impl Value + 'short
+where 'long: 'short {
+    if flag { make::<3>(value) } else { make::<4>(value) }
+}
+pub fn probe() -> i64 { 0 }

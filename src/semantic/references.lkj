@@ -2,6 +2,38 @@
 use super::*;
 use crate::elaborate::semantic::{Evidence, LocalTarget, MethodTarget};
 
+fn lifetime_identity(program: &a::Program, catalog: &Catalog, function: usize, name: &str) -> Option<String> {
+    for parameter in &program.functions[function].generics {
+        if parameter.lifetime && parameter.name == name {
+            return Some(format!("{}::generic:{name}", catalog.function_ids[function]));
+        }
+    }
+    if let a::FunctionOwner::Implementation(owner) = program.function_owner(a::FunctionId { index: function }) {
+        for parameter in &program.impls[owner.index].generics {
+            if parameter.lifetime && parameter.name == name {
+                return Some(format!("{}::generic:{name}", implementation_identity(program, owner.index)));
+            }
+        }
+    }
+    None
+}
+
+pub(super) fn lifetime_predicate_references(result: &mut Catalog, files: &[SourceText], program: &a::Program) {
+    for (index, function) in program.functions.iter().enumerate() {
+        let owner = result.function_ids[index].clone();
+        for predicate in &function.outlives {
+            let mut names = vec![predicate.target.clone()];
+            names.extend_from_slice(&predicate.bounds);
+            for name in names {
+                let target = lifetime_identity(program, result, index, &name.name);
+                let known = target.as_ref().is_some_and(|target| result.by_identity.contains_key(target));
+                record_site(result, files, owner.clone(), target.unwrap_or(name.name), name.span,
+                    "lifetime-bound", known);
+            }
+        }
+    }
+}
+
 pub(super) fn self_trait_owners(program: &a::Program) -> BTreeMap<String, usize> {
     let mut owners = BTreeMap::new();
     for (index, declaration) in program.traits.iter().enumerate() {

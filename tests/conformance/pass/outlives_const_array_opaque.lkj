@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {}
+trait Count { fn count(&self) -> usize; }
+impl<'a, const N: usize> Count for &'a [i64; N] {
+    fn count(&self) -> usize { N }
+}
+fn borrowed<'long, 'short, const N: usize>(value: &'long [i64; N]) -> impl Count + 'short
+where 'long: 'short { value }
+pub fn probe() -> i64 {
+    let values = [0i64; 3];
+    borrowed::<3>(&values).count() as i64 + 39
+}

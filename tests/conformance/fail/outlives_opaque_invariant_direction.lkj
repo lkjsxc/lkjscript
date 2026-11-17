@@ -1,0 +1,10 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+trait Value { fn read(&self) -> i64; }
+struct Holder<'value> { value: &'value mut &'value i64 }
+impl<'value> Value for Holder<'value> {
+    fn read(&self) -> i64 { **self.value }
+}
+fn make<'long, 'short>(value: &'long mut &'long i64) -> impl Value + 'short
+where 'short: 'long { Holder { value } }
+pub fn probe() -> i64 { 42i64 }

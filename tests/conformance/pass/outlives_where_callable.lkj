@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+fn apply<'long, 'short>(value: &'long i64, callback: impl Fn(&'short i64) -> i64) -> i64
+where 'long: 'short {
+    callback(value)
+}
+pub fn probe() -> i64 {
+    let value = 42i64;
+    apply(&value, |input: &i64| *input)
+}

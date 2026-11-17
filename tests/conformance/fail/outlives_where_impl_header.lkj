@@ -1,0 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+struct Holder<'a> { value: &'a i64 }
+impl<'a, 'b> Holder<'a> where 'a: 'b {}
+pub fn probe() -> i64 { 42 }

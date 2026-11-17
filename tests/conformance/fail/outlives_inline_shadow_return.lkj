@@ -1,0 +1,9 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+struct Holder<'long> { value: &'long i64 }
+impl<'long> Holder<'long> {
+    fn bad<'long: 'short, 'short>(&self, _marker: &'short i64) -> &'short i64 {
+        self.value
+    }
+}
+pub fn probe() -> i64 { 42i64 }

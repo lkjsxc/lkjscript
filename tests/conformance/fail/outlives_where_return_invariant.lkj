@@ -1,0 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+fn wrong<'outer, 'long, 'short>(value: &'outer mut &'long i64) -> &'outer mut &'short i64
+where 'long: 'short { value }
+pub fn probe() -> i64 { 42 }

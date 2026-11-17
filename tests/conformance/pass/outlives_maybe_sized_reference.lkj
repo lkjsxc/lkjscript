@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+fn shorten<'long, 'short, T: ?Sized>(value: &'long T) -> &'short T
+where 'long: 'short { value }
+pub fn probe() -> i64 {
+    let values = [20i64, 20i64];
+    let numbers = shorten::<[i64]>(&values[..]);
+    let text = shorten::<str>("ab");
+    numbers[0] + numbers[1] + text.len() as i64
+}

@@ -1,0 +1,17 @@
+// expect: value 42
+// witness: {}
+trait Value {
+    fn read<'long: 'short, 'short>(value: &'long i64, marker: &'short i64) -> i64;
+}
+struct Number {}
+impl Value for Number {
+    fn read<'long: 'short, 'short>(value: &'long i64, _marker: &'short i64) -> i64 {
+        let shortened: &'short i64 = value;
+        *shortened
+    }
+}
+pub fn probe() -> i64 {
+    let value = 42i64;
+    let marker = 0i64;
+    <Number as Value>::read(&value, &marker)
+}

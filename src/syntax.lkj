@@ -1438,6 +1438,17 @@ impl Parser {
         Ok(params)
     }
     fn where_clause(&mut self, generics: &mut [GenericParam]) -> Result<Vec<WherePredicate>, Diagnostic> {
+        let mut outlives = Vec::new();
+        let predicates = self.function_where_clause(generics, &mut outlives)?;
+        if let Some(predicate) = outlives.first() {
+            return Err(Diagnostic::new(predicate.span, "E_UNSUPPORTED",
+                "lifetime-outlives where predicates are supported on free functions and inherent methods"));
+        }
+        Ok(predicates)
+    }
+    fn function_where_clause(
+        &mut self, generics: &mut [GenericParam], outlives: &mut Vec<LifetimePredicate>,
+    ) -> Result<Vec<WherePredicate>, Diagnostic> {
         let mut predicates = Vec::new();
         if !self.take("where") {
             return Ok(predicates);
@@ -1445,11 +1456,31 @@ impl Parser {
         while !self.is("{") && !self.is(";") && !self.is("=") {
             let span = self.token().span;
             if self.token().kind == TokenKind::Lifetime {
-                return Err(self.unsupported("lifetime-outlives where predicate"));
+                let target = NamedLifetime { name: self.token().text.clone(), span };
+                self.at += 1;
+                self.expect(":")?;
+                let mut bounds = Vec::new();
+                loop {
+                    if self.token().kind != TokenKind::Lifetime {
+                        return Err(self.unsupported("lifetime-outlives predicate with a non-lifetime bound"));
+                    }
+                    bounds.push(NamedLifetime { name: self.token().text.clone(), span: self.token().span });
+                    self.at += 1;
+                    if !self.take("+") { break; }
+                }
+                outlives.push(LifetimePredicate { target, bounds, span: self.finish_span(span) });
+                if !self.take(",") { break; }
+                continue;
             }
             let target = self.ty()?;
             self.expect(":")?;
             let bounds = self.bounds()?;
+            for bound in &bounds {
+                if matches!(&self.program.types[*bound].kind, Type::Path(path) if path.name.starts_with('\'')) {
+                    return Err(Diagnostic::new(self.program.types[*bound].span, "E_UNSUPPORTED",
+                        "type-outlives where predicates are not implemented"));
+                }
+            }
             let name = match &self.program.types[target].kind {
                 Type::Path(path) if path.qualification.is_none() && path.args.is_empty() && path.bindings.is_empty() => Some(path.name.clone()),
                 _ => None,
@@ -2042,7 +2073,8 @@ impl Parser {
         }
         self.expect(")")?;
         let result = if self.take("->") { self.ty()? } else { 1 };
-        let predicates = self.where_clause(&mut generics)?;
+        let mut outlives = Vec::new();
+        let predicates = self.function_where_clause(&mut generics, &mut outlives)?;
         let body = if self.take(";") {
             None
         } else {
@@ -2059,6 +2091,7 @@ impl Parser {
             module: self.module.clone(),
             generics,
             predicates,
+            outlives,
             params,
             result,
             body,

@@ -103,7 +103,69 @@ impl Compiler<'_> {
                 }
             }
         }
+        for predicate in &self.source.functions[index].outlives {
+            for bound in &predicate.bounds {
+                insert_outlives(&mut edges,
+                    region(index, &predicate.target.name), region(index, &bound.name));
+            }
+        }
         edges
+    }
+    pub(super) fn declared_outlives(&self, index: usize, long: &str, short: &str) -> bool {
+        if long == short { return true; }
+        let edges = self.region_edges(index);
+        let required = region(index, short);
+        let mut pending = vec![region(index, long)];
+        let mut seen: BTreeSet<Region> = BTreeSet::new();
+        while let Some(current) = pending.pop() {
+            if !seen.insert(current.clone()) { continue; }
+            if let Some(next) = edges.get(&current) {
+                if next.contains(&required) { return true; }
+                for region in next { pending.push(region.clone()); }
+            }
+        }
+        false
+    }
+    fn result_scope_required(&self, function: &ir::Function, scope: &Scope) -> bool {
+        // The ordinary returned-view contract already checks surface reference
+        // leaves. Repeating only those obligations can retain both exclusive
+        // alternatives of an enum at once. Nested or invariant regions still
+        // need the scoped proof, even when their outer reference is covered.
+        let surface = crate::check::reference_paths(&self.types, function.result);
+        for result in &scope.results {
+            if result.invariant
+                || !surface.iter().any(|(path, _)| path == &result.projections)
+            {
+                return true;
+            }
+            let covered = match &function.return_source {
+                Some(ir::ReturnSource::Leaves(leaves)) => leaves
+                    .iter()
+                    .any(|leaf| leaf.projections == result.projections),
+                Some(ir::ReturnSource::Static) => true,
+                Some(ir::ReturnSource::Parameter { index, projections }) => {
+                    let selected = ir::Place {
+                        local: *index,
+                        projections: projections.clone(),
+                    };
+                    let reference = crate::check::place_type(&self.types, function, &selected)
+                        .is_some_and(|ty| matches!(self.types[ty].kind, ir::TypeKind::Ref { .. }));
+                    let input = ir::InputLeaf {
+                        index: *index,
+                        projections: projections.clone(),
+                    };
+                    // A broad parameter contract may also carry unrelated
+                    // named and elided leaves. Only an exact reference region
+                    // (or static backing) proves this particular result region.
+                    reference && scope.parameters.get(&input).is_some_and(|source| {
+                        source == &result.region || source.name == "'static"
+                    })
+                }
+                None => false,
+            };
+            if !covered { return true; }
+        }
+        false
     }
     fn source_scope(&self, instance: &Instance, function: &ir::Function) -> Result<Scope> {
         let source = &self.source.functions[instance.source];
@@ -155,6 +217,9 @@ impl Compiler<'_> {
         let elided_result = self
             .return_elision(instance.source, &function.locals, function.result)?
             .and_then(|label| input_regions.get(&label).cloned());
+        // An opaque lifetime bounds the whole hidden value. It does not rename
+        // an invariant reference stored inside that value to the bound's name.
+        let opaque_result = super::opaque::result_lifetime(self.source, source.result).is_some();
         for leaf in self.region_leaves(instance.source, source.result, function.result) {
             let required = if matches!(leaf.label, Label::Elided { .. }) {
                 Some(elided_result.clone().ok_or_else(|| {
@@ -169,7 +234,7 @@ impl Compiler<'_> {
             };
             if let Some(region) = required {
                 scope.results.push(crate::check::scoped::ResultLeaf {
-                    invariant: crate::check::scoped::invariant_path(
+                    invariant: !opaque_result && crate::check::scoped::invariant_path(
                         &self.types,
                         function.result,
                         &leaf.path,
@@ -518,6 +583,7 @@ impl Compiler<'_> {
                 }
             }
             if !scope.calls.is_empty()
+                || self.result_scope_required(function, &scope)
                 || !scope.annotations.bindings.is_empty()
                 || !scope.annotations.checkpoints.is_empty()
                 || !scope.constructions.is_empty()

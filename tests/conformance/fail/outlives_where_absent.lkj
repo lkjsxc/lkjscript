@@ -1,0 +1,7 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+fn unused<'long, 'short>(value: &'long i64) -> i64 {
+    let invalid: &'short i64 = value;
+    *invalid
+}
+pub fn probe() -> i64 { 42 }

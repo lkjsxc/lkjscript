@@ -1,0 +1,9 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+fn shorten<'long, 'short>(value: &'long i64, _marker: &'short i64) -> &'short i64
+where 'long: 'short { value }
+fn unused<'outer>(marker: &'outer i64) -> &'outer i64 {
+    let local = 42i64;
+    shorten(&local, marker)
+}
+pub fn probe() -> i64 { 42 }

@@ -92,6 +92,19 @@ pub struct WherePredicate {
 }
 
 #[derive(Clone)]
+pub struct NamedLifetime {
+    pub name: String,
+    pub span: Span,
+}
+
+#[derive(Clone)]
+pub struct LifetimePredicate {
+    pub target: NamedLifetime,
+    pub bounds: Vec<NamedLifetime>,
+    pub span: Span,
+}
+
+#[derive(Clone)]
 pub struct GenericParam {
     pub name: String,
     pub bounds: Vec<TypeId>,
@@ -133,6 +146,7 @@ pub struct Function {
     pub module: String,
     pub generics: Vec<GenericParam>,
     pub predicates: Vec<WherePredicate>,
+    pub outlives: Vec<LifetimePredicate>,
     pub params: Vec<Param>,
     pub result: TypeId,
     pub body: Option<BlockId>,

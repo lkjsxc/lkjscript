@@ -1,0 +1,25 @@
+// expect: value 42
+// witness: {}
+enum Choice<T, E> { Good(T), Bad(E) }
+impl<T, E> Choice<T, E> {
+    fn views<'long, 'short>(&'long mut self) -> Choice<&'short mut T, &'short mut E>
+    where 'long: 'short {
+        match self {
+            Choice::Good(value) => Choice::Good(value),
+            Choice::Bad(error) => Choice::Bad(error),
+        }
+    }
+}
+pub fn probe() -> i64 {
+    let mut first = Choice::<i64, i64>::Good(20);
+    let mut second = Choice::<i64, i64>::Bad(20);
+    let left = match first.views() {
+        Choice::Good(value) => { *value = *value + 1; *value }
+        Choice::Bad(_) => 0,
+    };
+    let right = match second.views() {
+        Choice::Good(_) => 0,
+        Choice::Bad(error) => { *error = *error + 1; *error }
+    };
+    left + right
+}

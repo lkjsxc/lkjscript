@@ -1,0 +1,10 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Value<'outer> {
+    fn read<'local: 'outer>(value: &'local i64) -> i64;
+}
+struct Number {}
+impl<'outer> Value<'outer> for Number {
+    fn read<'local: 'outer>(value: &'local i64) -> i64 { *value }
+}
+pub fn probe() -> i64 { 0 }

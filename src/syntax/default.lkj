@@ -111,6 +111,7 @@ impl Parser {
             module: definition.module.clone(),
             generics: Vec::new(),
             predicates: Vec::new(),
+            outlives: Vec::new(),
             params: Vec::new(),
             result: target,
             body: Some(body),

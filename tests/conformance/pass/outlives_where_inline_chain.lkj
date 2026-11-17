@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+fn read<'first: 'middle, 'middle, 'last>(value: &'first i64) -> i64
+where 'middle: 'last {
+    let shortened: &'last i64 = value;
+    *shortened
+}
+pub fn probe() -> i64 { let value = 42i64; read(&value) }

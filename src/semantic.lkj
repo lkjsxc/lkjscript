@@ -289,7 +289,16 @@ fn function_signature(program: &a::Program, function: &a::Function) -> String {
         if index != 0usize { out.push_str(", "); }
         out.push_str(&type_name(program, parameter.ty));
     }
-    out.push_str(") -> "); out.push_str(&type_name(program, function.result)); out
+    out.push_str(") -> "); out.push_str(&type_name(program, function.result));
+    for (index, predicate) in function.outlives.iter().enumerate() {
+        out.push_str(if index == 0usize { " where " } else { ", " });
+        out.push_str(&predicate.target.name); out.push_str(": ");
+        for (index, bound) in predicate.bounds.iter().enumerate() {
+            if index != 0usize { out.push_str(" + "); }
+            out.push_str(&bound.name);
+        }
+    }
+    out
 }
 fn leaf_name(path: &str) -> &str {
     match path.rfind("::") { Some(at) => &path[at + 2usize..], None => path }
@@ -597,6 +606,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         let has_constant_parameters = crate::generics::const_arguments::has_parameters(program);
         let owners = Owners::new(&result);
         let self_traits = self_trait_owners(program);
+        lifetime_predicate_references(&mut result, &files, program);
         import_qualifications(&mut result, &files, program, &resolver);
         visibility_qualifications(&mut result, &files, &owners);
         // Every declaration-backed type path is a resolved reference, including aliases.

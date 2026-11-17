@@ -303,8 +303,7 @@ traits and implementations. A method implementation cannot strengthen its declar
 predicate. Invalid concrete predicates and missing trait/member evidence reject
 at the source form. Positional trait arguments, generic associated families,
 standalone qualified function values, builtin-trait qualification and recursive
-where assumptions requiring a lazy contract remain located refusals. Lifetime
-outlives predicates remain a separate boundary. These forms add no checked-IR
+where assumptions requiring a lazy contract remain located refusals. These forms add no checked-IR
 operation or trusted trait proof. Queries preserve the written qualified type and
 exact receiver/trait/member references; checked renames update the selected trait
 family, and checked body changes run through ordinary admission.
@@ -428,6 +427,32 @@ Reference leaves through aliases/tuples/nominal fields must outlive required reg
 using input facts and declared/implied outlives edges; local storage cannot prove a
 universal input region. Helper calls transport fixed type-family leaf requirements.
 A fixed closure input cannot satisfy a fresh higher-ranked input.
+
+Named lifetime predicates such as `where 'long: 'short + 'other` on free
+functions and inherent methods use the same region edges as inline lifetime
+bounds. A method may name a lifetime declared by its enclosing impl. Both sides
+must name declarations in that scope; the relationship retains its direction
+and applies during unused-body checking and at calls. Queries show the written
+relationship and exact lifetime declaration references; checked body edits and
+function renames retain it. Inline bounds use the same declared names, with
+enclosing impl bounds checked in their own scope. Directed return-origin
+selection is limited to free functions and inherent methods; trait methods
+retain exact lifetime-label agreement. Paired trait methods with inline
+lifetime bounds must declare identical directed edges after method-local names
+are paired by generic position; adding or dropping an edge rejects. Bounds
+involving an enclosing lifetime remain located refusals until owner substitution
+is implemented.
+Ordinary results preserve invariance through mutable storage. An opaque result
+lifetime instead requires its hidden references to outlive that lifetime,
+without equating their stored lifetimes to it. Trait-method and implementation-header lifetime
+predicates, anonymous or static lifetime predicates, type-outlives predicates
+and higher-ranked predicates remain located refusals. No IR, independent
+checker or runtime rule is added. These edges also apply to const-qualified
+functions with mixed lifetime, type and builtin-usize constant parameters, and
+to borrowed `T: ?Sized` referents. They preserve distinct opaque constant
+captures and mutable-storage invariance.
+[Lifetime where cases](../tests/conformance/pass/outlives_where_outer_impl.lkj)
+and [const-array opaque case](../tests/conformance/pass/outlives_const_array_opaque.lkj).
 
 Fixed callable inputs may retain loans independently of their result or callable
 destruction. Effects track source roots; descendant access requires checked

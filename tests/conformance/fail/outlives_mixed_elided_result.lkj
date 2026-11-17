@@ -1,0 +1,10 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+struct Pair<'left, 'right> { left: &'left i64, right: &'right i64 }
+struct Holder { value: i64 }
+impl Holder {
+    fn wrong<'owner, 'other>(&'owner self, other: &'other i64) -> Pair<'other, '_> {
+        Pair { left: other, right: other }
+    }
+}
+pub fn probe() -> i64 { 42 }

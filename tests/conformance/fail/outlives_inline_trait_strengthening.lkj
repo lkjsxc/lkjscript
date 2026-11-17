@@ -1,0 +1,12 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+trait Value {
+    fn read<'long, 'short>(value: &'long i64, marker: &'short i64) -> &'short i64;
+}
+struct Number {}
+impl Value for Number {
+    fn read<'long: 'short, 'short>(value: &'long i64, _marker: &'short i64) -> &'short i64 {
+        value
+    }
+}
+pub fn probe() -> i64 { 42i64 }

@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+trait Value { fn value(&self) -> i64; }
+struct Holder<'value, T: ?Sized> { value: &'value mut &'value T }
+impl<'value, T: ?Sized> Value for Holder<'value, T> {
+    fn value(&self) -> i64 { 42 }
+}
+fn borrowed<'long, 'short, T: ?Sized>(value: &'long mut &'long T) -> impl Value + 'short
+where 'long: 'short { Holder { value } }
+pub fn probe() -> i64 {
+    let mut text = "borrowed";
+    let value = borrowed::<str>(&mut text);
+    value.value()
+}
