@@ -27,7 +27,8 @@ Apply the two-way rule: add ordinary forms using existing IR/library rules, or
 rewrite a consumer when a rare form would enlarge trusted semantics.
 English everywhere; no Python. Other technical decisions are delegated.
 Work on main inside /home/coder/workspace/lkjscript. Preserve .generation-one,
-other projects, running services and their data. No GitHub releases or tags.
+other projects, running services and their data. No GitHub releases or tags by hand:
+`.github/workflows/release.yml` publishes the gated compiler from main daily.
 Never restore WebAssembly, a Node execution host, or backward compatibility.
 
 Run bash tools/check.sh with LKJSCRIPT_GATE_JOBS=4 after coherent changes and before

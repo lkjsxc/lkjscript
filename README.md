@@ -12,7 +12,15 @@ Rust form is not a goal. Modules use `child.lkj` or `child/mod.lkj`.
 
 ## Bootstrap and use
 
-On Linux x86-64, from this checkout:
+A built toolchain for Linux x86-64 is published from `main` about once a day,
+after the gate passes:
+
+```sh
+curl -fL -o lkjscript https://github.com/lkjsxc/lkjscript/releases/latest/download/lkjscript-x86_64-linux
+chmod +x lkjscript
+```
+
+Or build it, on Linux x86-64, from this checkout:
 
 ```sh
 sh tools/bootstrap.sh
