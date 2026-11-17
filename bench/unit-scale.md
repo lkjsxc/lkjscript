@@ -436,9 +436,9 @@ The output and oracle hash remains
 The completed 1M rung records 211,008,706 bytes of peak working disk,
 123,368 KiB peak RSS and 233.91 seconds cold build in `next-rung.tsv`.
 The fitted 10M continuation therefore uses 1,536 MiB and 3,600 seconds, with
-4,488,609,576 bytes of predicted pool space. The top-rung attempt has not yet
-run. Its invocation must preserve this exact producer, library, harness and unit
-width and use the retained continuation record.
+4,488,609,576 bytes of predicted pool space. At completion of the lower cohort the top-rung attempt had not yet run.
+Its later single continuation, below, preserved the exact producer, library,
+harness and unit width and used this retained record.
 
 The complete four-worker gate subsequently passed in 768.771 seconds
 (load 7.11 to 8.99), rerunning all 5,470 case requests and all host suites.
@@ -449,3 +449,60 @@ The continuation harness's [36 focused controls](compiler-fifth-data/unit-scale-
 cover exact input matching, malformed continuation refusal before producer use,
 integer overflow, envelope fitting and the disk refusal path; they use only
 small synthetic producers and do not spend a top-rung attempt.
+
+## The single 10M continuation
+
+[The 10M cold build](unit-scale-eb08fbaa-20261117-ten-million/measurements.tsv)
+succeeded on 17 November 2026, continuing from the completed matching lower cohort.
+The producer remains `eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f`;
+the harness remains `d9f2e0ae841ad9ab0f06f7d1150e7626ab818449a6dca69f83da21bb3782e763`.
+The continuation row is byte-identical to the lower cohort's saved inputs.
+All four retained harness hashes and every library hash matched after the run.
+
+| Lines | Phase | Exit | Wall s | User s | System s | Peak RSS KiB | Checked / reused / emitted | Address-space MiB / watchdog s | Load before → after |
+|---:|---|---:|---:|---:|---:|---:|---|---|---|
+| 10,000,000 | Cold build | 0 | 2,144.58 | 2,092.45 | 18.00 | 321,088 | 2,000 / 0 / 2,000 | 1,536 / 3,600 | 7.50 → 5.87 |
+
+The wrapper ran from 06:30:07 to 07:05:55 UTC; its wall time was 2,148.47 s.
+The sole attempt marker records the actual compiler invocation at 06:30:10 UTC.
+The workload has 716,000 source function definitions, at most two direct unit
+dependencies and dependency depth 11. It emitted 600,862,794 bytes and retained
+1,035,965,134 store bytes.
+
+The largest checking frontier remains exactly the lower cold-build/fresh-check
+frontier: 9,997 source lines, 2,223 definitions, 71 types, 1,434 IR functions,
+two imported interfaces, 76,172 projection bytes and 35 sources.
+
+| Top-rung stage | Seconds |
+|---|---:|
+| Producer identity | 0.383 |
+| Source loading | 404.389 |
+| Elaboration | 1,373.961 |
+| Independent checking | 229.498 |
+| Store admission and per-unit linking | 127.655 |
+| Final link, source validation and publication | 8.647 |
+
+This is a successful cold build only. The harness deliberately ends before
+executing the 10M image or running a separate fresh check, unchanged build or
+body edit. Those controls belong to the complete matching lower cohort.
+There was no refusal under the fitted limits, and no top-rung retry was made.
+
+**The strict total-memory condition remains open.** Cold-build peak RSS rises
+from 99,056 KiB at 100k to 123,368 KiB at 1M and 321,088 KiB at 10M: 2.603×
+from 1M for tenfold source. Source/IR checking storage has a bounded frontier;
+the driver and linker still retain metadata for the whole program. Source
+inspection identifies retained function-binding names and claims, but this
+cohort does not isolate their individual shares of peak memory. Grouping repeated
+strings could reduce a constant; keeping only the current unit's needed binding
+table would address the remaining global-symbol bound.
+
+The final measurements hash is
+`fba68eb3f2097de2ba792ad63ff0a2002039d8463392e4758fc7fcf24a8bc61d`.
+The exact command, fitted continuation, workload manifest, statistics and sole
+attempt marker remain beside it. The generated tree and image are reproducible
+from the recorded inputs.
+
+The published producer also passed [CI 44031513044](compiler-fifth-data/ci-unit-packets-44031513044.json):
+the seed-only gate completed in 883.243 s with all 5,470 requests freshly run,
+and the independent Rust witness passed. The earlier cross-filesystem fixture
+failure did not recur.

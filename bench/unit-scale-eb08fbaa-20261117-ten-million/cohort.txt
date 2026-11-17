@@ -1,0 +1,15 @@
+started_utc=2026-11-17T06:30:07Z
+repository=/home/coder/workspace/lkjscript
+compiler=/home/coder/workspace/lkjscript/target/lkjscript
+rungs=10000000
+compiler_sha256=eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f
+source_commit=6ef1a5a354effedfb5679ecc730f8a5a81762921
+memory_ceiling_mib=8192
+time_ceiling_s=3600
+maximum_unit_lines=10000
+workload=connected explicit-unit DAG; separate from the historical shape-sampled ladder
+generated_phases=cold-build,cold-check,unchanged-build,body-build
+ten_million=one cold-build invocation only; no fresh check, warm build or retry at that rung
+memory=per-process virtual-address envelope; GNU time reports largest process RSS
+continued_from=/home/coder/workspace/lkjscript/bench/unit-scale-eb08fbaa-20261117-lower
+finished_utc=2026-11-17T07:05:55Z

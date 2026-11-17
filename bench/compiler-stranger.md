@@ -34,8 +34,8 @@ actual calls, bytes, time, submitted source, checker and target comparison resul
 
 Both case 17 arms first submitted the unchanged parent. The files arm edited
 afterward. Twelve changed first proposals passed the checker, one failed, and two
-were submitted after the tool allowance so no checker ran. Full repository gates
-remain not-run: the seventeen submissions form sixteen distinct exact gate inputs.
+were submitted after the tool allowance so no checker ran. At the completed baseline checkpoint, full repository gates were not-run:
+the seventeen submissions formed sixteen distinct exact gate inputs.
 No complete implementation success is established by a static checker pass; exact
 historical equality is stricter than behavior, and case 1 files comparison was
 unavailable because of an early selector-path bug.
@@ -66,6 +66,66 @@ baseline. The fresh gpt-6-astra control uses the original baseline producer.
 Shorter time before giving up is not a successful-workflow speedup. The recorded
 847.343-second setup pause is separate; the original cohort lacks complete
 preparation timing, so its active setup-tail measurement is not end-to-end setup.
+
+## Same-family baseline control
+
+The complete gpt-6-astra control is bound in compiler-stranger-astra-initial.json.
+It uses the same frozen a92e81e2 producer and twenty historical changes, with fresh
+processes, medium reasoning and the same 900-second/24-call allowances.
+
+| Measurement | Files arm | Commands arm |
+| --- | ---: | ---: |
+| Adapter tool calls | 353 | 434 |
+| Attempted tool calls | 353 | 437 |
+| UTF-8 payload bytes returned | 2,834,306 | 2,188,516 |
+| Agent wall seconds | 3,871.779 | 4,848.504 |
+| Complete preparation seconds | 4.928 | 1,958.016 |
+| Changed first proposals | 20 | 13 |
+| Unchanged first submissions | 0 | 1 |
+| First checker pass / fail / not-run | 17 / 3 / 0 | 14 / 0 / 6 |
+| First canonical target equality | 1 | 2 |
+
+Case 18 commands first submitted the unchanged parent after three language-check
+refusals. Its checker pass does not establish implementation of the requested
+change. Commands cases 11, 13, 16, 17, 19 and 20 submitted no source. Files cases
+13, 19 and 20 failed their first checker; later corrections do not replace those
+first snapshots. Case 17 commands has a captured public final explanation but no
+finish-tool reason; the record retains both facts.
+
+The command arm made 87 request-bearing edit invocations. Eighty-six reached the
+binary and fifteen exited zero; one was refused by the adapter. An exit-zero
+request is separate from an implemented task, a first proposal or a repository
+gate pass. No missing command capability is established by these counts alone.
+
+The full traces also record infrastructure effects: case 7 commands had an
+automatic-review timeout and a rejection of replacing path_token with empty text;
+case 20 commands had a rejection of a literal "x" replacement. The review reasons
+identified those placeholder mutations as outside the intended implementation.
+The agents later tried implementation-specific alternatives without bypassing
+review. Case 8 files recorded a websocket idle-timeout reconnect. Raw wall times
+retain these events; their separate time costs are unavailable. The cohort has
+no process timeout, setup error, outside-tool call or explicit adapter allowance
+refusal. A model's self-reported budget limitation is kept separately.
+
+The coordinator completed in 13,332.427 seconds, including a separately recorded
+2,441.815799-second pause after case 18 files finished. That arm's 167.479560-second
+agent time excludes the pause. Complete preparation is available for all Astra
+arms; the earlier Luna cohort's setup-tail timing is still not complete preparation.
+
+The 34 Astra submissions form 33 exact historical gate inputs: case 4 files and
+commands share one candidate. Combined with Luna, there are 51 submissions,
+49 distinct inputs, 29 arms without submitted source and no unfinished arm.
+All actual repository gates were not-run at this baseline checkpoint. Shared
+input identity licenses one explicitly shared proof, not two claimed executions.
+
+compiler-stranger-data/baseline-first-proposals.tar.gz preserves the exact first
+snapshots, completed states, prompts, raw adapter calls, public explanations,
+recovery/pause records and the combined input plan from both baselines. It also
+retains observed trace events and hashes for the full traces kept in the cohort
+directories. The archive was checked against all 51 planned snapshot hashes and
+contains all 80 completed states. Its digest is bound in the Astra record. Both
+frozen help versions still require complete repeat cohorts and actual first-input
+gate evidence before a workflow improvement is claimed.
 
 ## Run the fixed population
 
@@ -199,6 +259,14 @@ runs the historical fixed point, mutants and suites. The frozen trial compiler i
 not used as the compiler under test. The command reserves four gate workers and
 must run while the campaign and other builds are paused.
 
+For these twenty fixed targets, inspection finds no added or changed test-only
+source under src/ or library/ and no changed embedded test definitions in their
+production-file deltas. Their changed regression scripts remain under tools/;
+case 13's diagnostic and case 17's fifteen conformance fixtures remain under
+tests/. Restoring parent source therefore omits none of those new regressions.
+An arbitrary future historical case needs the same source-test classification;
+this source restoration alone does not promise to preserve embedded tests.
+
 List distinct gate inputs before reserving a gate window:
 
 ~~~sh
@@ -211,6 +279,28 @@ The plan groups identical source deltas with the same source parent and historic
 test/tool/seed revision, and provides exact full-gate argument arrays. It records
 unsubmitted and unfinished trials separately. An input identity is bookkeeping;
 it makes no claim that a gate passed.
+
+Execute all unique inputs from a completed plan in one serial, four-worker
+window:
+
+~~~sh
+perl bench/compiler-stranger.pl full-gates \
+  /path/to/lkjscript /tmp/lkjscript-stranger-gate-plan.json \
+  /tmp/lkjscript-stranger-first-candidate-gates
+~~~
+
+This preflights every saved first snapshot and its historical source/test identity
+before running a gate. The output directory has one exclusive owner. Completed
+exact-input proofs may be reused across later plans; an existing incomplete
+attempt refuses and requires inspection instead of silently rerunning it.
+Identical proposals share the same evidence path and are explicitly marked as
+shared, with the actual executed trial retained. A failed repository gate remains
+failed. Association changes no agent byte, call or wall-time measurement.
+The summary records new executions and reused proofs separately. To release the
+shared host between gates, create OUTPUT/pause. The current gate finishes;
+the coordinator then returns at the next boundary. Remove that flag and repeat
+the same command to continue from completed proofs. It never interrupts a gate
+or restarts an uncertain attempt.
 
 Historical gates share REPOSITORY/target/stranger-history-store by default and use
 the private key returned by the normal tools/store-key.sh. Optional STORE and KEY
@@ -235,9 +325,13 @@ result does not turn this into an in-allowance workflow success.
 
 ~~~sh
 perl bench/compiler-stranger-adapter-test.pl
+perl bench/compiler-stranger-gate-test.pl
 ~~~
 
-This invokes no model or compiler. It verifies non-ASCII source survives the MCP
+These invoke no model or compiler. The gate orchestration fixture uses a tiny
+historical Git repository and shell comparisons to verify exact first-source
+restoration, target-revision tests, shared proof attribution, failed gates,
+resume and stale/incomplete refusal. The adapter control verifies non-ASCII source survives the MCP
 JSON transport with exact UTF-8 byte counts, distinguishes successful help from
 request acceptance, and pauses/resumes only its synthetic private coordinator.
 

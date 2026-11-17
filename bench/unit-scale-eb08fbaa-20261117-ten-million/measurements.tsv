@@ -1,0 +1,2 @@
+workload	source_lines	phase	exit	wall_s	user_s	system_s	peak_rss_kib	compiler_peak_rss_bytes	load_before	load_after	memory_limit_mib	watchdog_s	units_checked	units_reused	units_emitted	expected_units	largest_source_unit_lines	maximum_direct_dependencies	dependency_depth	max_definitions	max_types	max_ir_functions	max_import_interfaces	max_projection_bytes	max_sources	emitted_bytes	store_bytes
+generated	10000000	cold-build	0	2144.58	2092.45	18.00	321088	328794112	7.50	5.87	1536	3600	2000	0	2000	2000	9997	2	11	2223	71	1434	2	76172	35	600862794	1035965134

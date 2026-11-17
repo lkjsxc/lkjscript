@@ -422,6 +422,8 @@ sub report {
             checker_first=>$g->{checker_pass},target_first=>$target,
             attempted_tool_calls=>$s->{attempted_tool_calls},outside_tool_calls=>$s->{outside_tool_calls},setup_error=>$s->{setup_error},
             gate_called=>@{$s->{gates}}?JSON::PP::true:JSON::PP::false,full_repository_gate=>$s->{full_repository_gate},
+            full_gate_evidence=>$s->{full_gate_evidence},full_gate_shared=>$s->{full_gate_shared},
+            full_gate_executed_for=>$s->{full_gate_executed_for},full_gate_seconds=>$s->{full_gate_seconds},
             edit_metrics=>edit_metrics($run),submission=>submission_metadata($run),candidate_kind=>'first-explicit-gate-submission',
             reason=>$s->{reason}//'',timed_out=>($s->{timed_out} || $s->{pause_timeout})?JSON::PP::true:JSON::PP::false,
             path=>$path};
@@ -543,7 +545,7 @@ sub full_gate {
     my $started=time;
     my $result=capture($tree,undef,'env','LKJSCRIPT_GATE_JOBS=4',"LKJSCRIPT_STORE=$gate_store","LKJSCRIPT_STORE_KEY=$gate_key",'bash','tools/check.sh');
     my $evidence={version=>1,case=>$state->{case}{id},arm=>$state->{mode},candidate=>1,candidate_kind=>'first-explicit-gate-submission',
-        source_parent=>$state->{parent},test_revision=>$state->{case}{revision},gate_inputs_sha256=>$gate_inputs_sha256,
+        trial_run=>$run,source_parent=>$state->{parent},test_revision=>$state->{case}{revision},gate_inputs_sha256=>$gate_inputs_sha256,
         candidate_snapshot_sha256=>sha256_hex(read_bytes("$run/gate-01-files.json")),
         started=>$started,seconds=>time-$started,exit=>$result->{exit},
         stdout=>$result->{stdout},stderr=>$result->{stderr},store_directory=>$gate_store,store_key_path=>$gate_key,
@@ -557,6 +559,108 @@ sub full_gate {
     require_ok(capture($repository,undef,'git','worktree','remove','--force',$tree),'remove owned historical gate tree');
     print $json->encode({case=>$state->{case}{id},arm=>$state->{mode},candidate=>1,
         full_repository_gate=>$state->{full_repository_gate},seconds=>$evidence->{seconds},evidence=>"$out/gate.json"}),"\n";
+}
+
+
+# Execute a completed proposal population serially. Identical saved language
+# inputs and historical test/tool/seed revisions share one explicitly linked
+# result; no checker result is promoted into repository-gate evidence.
+sub full_gates {
+    my ($repository,$plan_path,$output,$gate_store,$gate_key)=@_;
+    die "full-gates needs a plan and output directory" unless defined $output;
+    my $plan_bytes=read_bytes($plan_path);
+    my $plan=$json->decode($plan_bytes);
+    die "invalid gate plan" unless ref($plan) eq 'HASH' && ($plan->{version}//0)==1
+        && ref($plan->{groups}) eq 'ARRAY' && ref($plan->{unfinished}) eq 'ARRAY';
+    die "gate plan contains unfinished agents" if @{$plan->{unfinished}};
+    die "gate output is a symlink" if -l $output;
+    make_path($output);$output=abs_path($output);
+    open my $lock,'>>',"$output/lock" or die "gate lock: $!";
+    flock($lock,2|4) or die "another gate population owns this output";
+    my %seen;my @selected;
+    for my $group (@{$plan->{groups}}) {
+        my $identity=$group->{gate_inputs_sha256}//'';
+        die "invalid or duplicate gate identity" unless $identity=~/^[0-9a-f]{64}$/ && !$seen{$identity}++;
+        die "gate input declaration changed" unless ref($group->{inputs}) eq 'HASH'
+            && sha256_hex($json->encode($group->{inputs})) eq $identity;
+        die "gate group has no proposals" unless ref($group->{proposals}) eq 'ARRAY' && @{$group->{proposals}};
+        for my $proposal (@{$group->{proposals}}) {
+            my $run=abs_path($proposal->{run})//die "proposal directory missing";
+            my $state=load_json("$run/state.json");
+            die "proposal agent is unfinished" unless exists $state->{wall_seconds};
+            my $snapshot=read_bytes("$run/gate-01-files.json");
+            die "first candidate snapshot changed" unless sha256_hex($snapshot) eq $proposal->{candidate_snapshot_sha256};
+            my ($actual)=gate_input_identity($repository,$state,$json->decode($snapshot));
+            die "proposal no longer matches planned gate input" unless $actual eq $identity;
+            die "proposal labels changed" unless $state->{case}{id}==$proposal->{case}
+                && $state->{mode} eq $proposal->{mode} && $state->{model} eq $proposal->{model};
+        }
+        my $directory="$output/$identity";
+        my $evidence;
+        if (-e $directory) {
+            die "incomplete gate output requires inspection: $directory"
+                unless -d $directory && !-l $directory && -f "$directory/gate.json" && !-e "$directory/worktree";
+            $evidence=load_json("$directory/gate.json");
+            die "stored gate evidence does not match the exact input"
+                unless ($evidence->{version}//0)==1 && ($evidence->{gate_inputs_sha256}//'') eq $identity
+                && ($evidence->{source_parent}//'') eq $group->{inputs}{source_parent}
+                && ($evidence->{test_revision}//'') eq $group->{inputs}{test_revision}
+                && ($evidence->{candidate_kind}//'') eq 'first-explicit-gate-submission'
+                && defined($evidence->{exit}) && $evidence->{exit}=~/^\d+$/ && $evidence->{exit}<=255
+                && defined($evidence->{seconds}) && $evidence->{seconds}>=0
+                && defined($evidence->{trial_run});
+        }
+        push @selected,[$group,$directory,$evidence];
+    }
+    my @results;my $new=0;my $reused=0;
+    $|=1;
+    my $summary="$output/summary-".sha256_hex($plan_bytes).".json";
+    for my $selected (@selected) {
+        if (-e "$output/pause") {
+            save_json($summary,{version=>1,plan=>$plan_path,plan_sha256=>sha256_hex($plan_bytes),
+                new_executions=>$new,reused_proofs=>$reused,complete=>JSON::PP::false,
+                paused_between_gates=>JSON::PP::true,results=>\@results});
+            print $json->encode({paused_between_gates=>JSON::PP::true,completed_groups=>scalar(@results),
+                total_groups=>scalar(@selected),summary=>$summary}),"\n";
+            return;
+        }
+        my ($group,$directory,$evidence)=@$selected;
+        my $was_reused=defined($evidence);
+        if (!$was_reused) {
+            full_gate($repository,abs_path($group->{proposals}[0]{run}),$directory,$gate_store,$gate_key);
+            $evidence=load_json("$directory/gate.json");$new++;
+            die "executed gate input differs from plan" unless $evidence->{gate_inputs_sha256} eq $group->{gate_inputs_sha256};
+        } else {$reused++;}
+        my $outcome=$evidence->{exit}?'failed':'passed';
+        my @proposals;
+        for my $proposal (@{$group->{proposals}}) {
+            my $run=abs_path($proposal->{run});my $state=load_json("$run/state.json");
+            my ($identity)=gate_input_identity($repository,$state,load_json("$run/gate-01-files.json"));
+            die "proposal changed before evidence association" unless $identity eq $group->{gate_inputs_sha256};
+            my $shared=$run ne $evidence->{trial_run}?JSON::PP::true:JSON::PP::false;
+            $state->{full_repository_gate}=$outcome;
+            $state->{full_gate_evidence}="$directory/gate.json";
+            $state->{full_gate_seconds}=$evidence->{seconds};
+            $state->{full_gate_shared}=$shared;
+            $state->{full_gate_executed_for}=$evidence->{trial_run};
+            save_json("$run/state.json",$state);
+            push @proposals,{run=>$run,case=>$state->{case}{id},mode=>$state->{mode},model=>$state->{model},shared=>$shared};
+        }
+        push @results,{gate_inputs_sha256=>$group->{gate_inputs_sha256},outcome=>$outcome,
+            evidence=>"$directory/gate.json",evidence_sha256=>sha256_hex(read_bytes("$directory/gate.json")),
+            gate_seconds=>$evidence->{seconds},reused_proof=>$was_reused?JSON::PP::true:JSON::PP::false,
+            changed_source_files=>scalar(@{$group->{inputs}{source_delta}}),proposals=>\@proposals};
+        save_json($summary,{version=>1,plan=>$plan_path,plan_sha256=>sha256_hex($plan_bytes),
+            new_executions=>$new,reused_proofs=>$reused,complete=>@results==@selected?JSON::PP::true:JSON::PP::false,
+            results=>\@results});
+        print $json->encode({gate_inputs_sha256=>$group->{gate_inputs_sha256},outcome=>$outcome,
+            completed_groups=>scalar(@results),total_groups=>scalar(@selected),summary=>$summary}),"\n";
+    }
+    if (!@selected) {
+        save_json($summary,{version=>1,plan=>$plan_path,plan_sha256=>sha256_hex($plan_bytes),
+            new_executions=>0,reused_proofs=>0,complete=>JSON::PP::true,results=>[]});
+        print $json->encode({completed_groups=>0,total_groups=>0,summary=>$summary}),"\n";
+    }
 }
 
 sub process_info {
@@ -678,6 +782,7 @@ sub resume_campaign {
 my $action=shift(@ARGV)//'help';
 if ($action eq 'gate-inputs') {my ($repository,$output,@cohorts)=@ARGV;gate_inputs(abs_path($repository),$output,map {abs_path($_)} @cohorts);exit;}
 if ($action eq 'full-gate') {full_gate(abs_path($ARGV[0]),abs_path($ARGV[1]),$ARGV[2],$ARGV[3],$ARGV[4]);exit;}
+if ($action eq 'full-gates') {full_gates(abs_path($ARGV[0]),abs_path($ARGV[1]),$ARGV[2],$ARGV[3],$ARGV[4]);exit;}
 if ($action eq 'recover-candidate') {my $s=load_json("$ARGV[1]/state.json");recover_first_candidate(abs_path($ARGV[0]),abs_path($ARGV[1]),$s);exit;}
 if ($action eq 'pause') {pause_campaign(abs_path($ARGV[0]));exit;}
 if ($action eq 'resume') {resume_campaign(abs_path($ARGV[0]));exit;}
@@ -726,4 +831,4 @@ if ($action eq 'campaign') {
     }
     report($out);exit;
 }
-die "usage: $0 campaign REPOSITORY BINARY OUTPUT MODEL CASES|all files,commands SECONDS CALLS\n       $0 report OUTPUT\n       $0 pause|resume OUTPUT\n       $0 gate-inputs REPOSITORY OUTPUT COHORT...\n       $0 full-gate REPOSITORY RUN OUTPUT [STORE [KEY]]\n       $0 recover-candidate REPOSITORY RUN\n";
+die "usage: $0 campaign REPOSITORY BINARY OUTPUT MODEL CASES|all files,commands SECONDS CALLS\n       $0 report OUTPUT\n       $0 pause|resume OUTPUT\n       $0 gate-inputs REPOSITORY OUTPUT COHORT...\n       $0 full-gate REPOSITORY RUN OUTPUT [STORE [KEY]]\n       $0 full-gates REPOSITORY PLAN OUTPUT [STORE [KEY]]\n       $0 recover-candidate REPOSITORY RUN\n";
