@@ -1,0 +1,745 @@
+diff --git a/src/driver.lkj b/src/driver.lkj
+index a4ab9323a..67aba19ac 100644
+--- a/src/driver.lkj
++++ b/src/driver.lkj
+@@ -29,6 +29,7 @@ struct Options {
+     query: crate::semantic_query::Options,
+     roundtrip: bool,
+     inline_limit: Option<usize>,
++    scalar_replace: bool,
+     jobs: usize,
+     witness: Option<String>,
+     tool_arguments: Vec<String>,
+@@ -47,7 +48,7 @@ struct Options {
+ }
+ 
+ fn usage() -> &'static str {
+-    "lkjscript check|build|check-units|build-units|build-entries|run|test|ir|authority|query|edit|compare <source.lkj|program.lkjir|directory> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  build-entries  Write multiple entry images and matched authority reports\n  check-units  Independently check source units through authenticated interfaces\n  build-units  Check units and stream a static executable from admitted objects\n  build-child  Write a transfer-only ELF and authenticated .admission\n  image-authority  Authenticate exact child bytes and canonical checked slots\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n  query  Ask a bounded question about an authenticated build snapshot\n  edit   Check and publish an identity-addressed transaction (--request JSON or --against SOURCE)\n  compare  Compare checked meaning with --against SOURCE\n  delta  Print frequent accepted forms that differ from Rust\n\n  --entry NAME                 Select an entry\n  --artifact NAME=ENTRY       Select an image for build-entries; -o names its directory\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  --profile-ir PATH           Write the exact selected native IR beside a profiled build\n  --copy-sites                Report profile sites with --profile-ir, --limit and --bytes\n  --index                     Publish a structural snapshot during a stored build\n  --kind QUESTION             Select a structural query (default outline)\n  --id ID                     Select an identity (default crate)\n  --snapshot HEX              Pin an immutable source snapshot\n  --cursor HEX                Continue the same authenticated question\n  --depth N --limit N --bytes N  Bound traversal, fact count and answer bytes\n  --inline-limit N            Recheck inlining of bodies with at most N IR operations\n  --no-opt                    Keep original checked IR for native emission\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --store DIR                 Reuse authenticated work beneath this Directory\n  --store-key PATH            Grant a private 32-byte key outside source roots\n  --image-key PATH            Private child-admission key outside all source grants\n  --admission PATH            Child admission record (default IMAGE.admission)\n  --store-bytes N             Bound disposable bytes (default 268435456)\n  --no-store                  Disable stored reuse\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nUnit manifests are literal .lkj declarations beneath --source-dir:\n  const UNITS: &[&str] = &[\"math=math.lkj\", \"app=app.lkj\"];\n  const DEPENDS: &[&str] = &[\"app=math\"];\n  const ENTRY: &str = \"app::main\";\nEach source is mounted as its named module; refer to dependencies as crate::math.\nPut mutually recursive modules in one unit. Unit commands require --store and a\nprivate --store-key outside all source roots. build-units accepts -o and --grant;\nENTRY selects the function. Nongeneric bodies link through checked interfaces.\nGeneric bodies remain checked templates; changes to them invalidate consumers.\nUnit builds currently emit the original checked IR; --inline-limit is not used.\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
++    "lkjscript check|build|check-units|build-units|build-entries|run|test|ir|authority|query|edit|compare <source.lkj|program.lkjir|directory> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  build-entries  Write multiple entry images and matched authority reports\n  check-units  Independently check source units through authenticated interfaces\n  build-units  Check units and stream a static executable from admitted objects\n  build-child  Write a transfer-only ELF and authenticated .admission\n  image-authority  Authenticate exact child bytes and canonical checked slots\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n  query  Ask a bounded question about an authenticated build snapshot\n  edit   Check and publish an identity-addressed transaction (--request JSON or --against SOURCE)\n  compare  Compare checked meaning with --against SOURCE\n  delta  Print frequent accepted forms that differ from Rust\n\n  --entry NAME                 Select an entry\n  --artifact NAME=ENTRY       Select an image for build-entries; -o names its directory\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  --profile-ir PATH           Write the exact selected native IR beside a profiled build\n  --copy-sites                Report profile sites with --profile-ir, --limit and --bytes\n  --index                     Publish a structural snapshot during a stored build\n  --kind QUESTION             Select a structural query (default outline)\n  --id ID                     Select an identity (default crate)\n  --snapshot HEX              Pin an immutable source snapshot\n  --cursor HEX                Continue the same authenticated question\n  --depth N --limit N --bytes N  Bound traversal, fact count and answer bytes\n  --inline-limit N            Recheck inlining of bodies with at most N IR operations\n  --scalar-replace            Recheck field decomposition of local aggregates\n  --no-opt                    Keep original checked IR for native emission\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --store DIR                 Reuse authenticated work beneath this Directory\n  --store-key PATH            Grant a private 32-byte key outside source roots\n  --image-key PATH            Private child-admission key outside all source grants\n  --admission PATH            Child admission record (default IMAGE.admission)\n  --store-bytes N             Bound disposable bytes (default 268435456)\n  --no-store                  Disable stored reuse\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nUnit manifests are literal .lkj declarations beneath --source-dir:\n  const UNITS: &[&str] = &[\"math=math.lkj\", \"app=app.lkj\"];\n  const DEPENDS: &[&str] = &[\"app=math\"];\n  const ENTRY: &str = \"app::main\";\nEach source is mounted as its named module; refer to dependencies as crate::math.\nPut mutually recursive modules in one unit. Unit commands require --store and a\nprivate --store-key outside all source roots. build-units accepts -o and --grant;\nENTRY selects the function. Nongeneric bodies link through checked interfaces.\nGeneric bodies remain checked templates; changes to them invalidate consumers.\nUnit builds currently emit the original checked IR; optimization flags are not used.\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
+ }
+ 
+ fn delta() -> &'static str {
+@@ -99,7 +100,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
+         index: false,
+         query: crate::semantic_query::Options::new(),
+         roundtrip: false,
+-        inline_limit: None,
++        inline_limit: None, scalar_replace: false,
+         jobs: 1,
+         witness: None,
+         tool_arguments: Vec::new(),
+@@ -128,7 +129,8 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
+             "--index" => out.index = true,
+             "--help" | "-h" => out.command = "--help".to_string(),
+             "--roundtrip" => out.roundtrip = true,
+-            "--no-opt" => out.inline_limit = Some(0),
++            "--no-opt" => { out.inline_limit = Some(0); out.scalar_replace = false; },
++            "--scalar-replace" => out.scalar_replace = true,
+             "--unchecked-ir" => out.unchecked = true,
+             "--observe" => out.observe = true,
+             "--no-library" => out.no_library = true,
+@@ -227,7 +229,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
+         if out.store_directory.is_none() || out.store_key.is_none() {
+             return Err("E_USAGE unit commands require --store DIRECTORY and --store-key PRIVATE_KEY".to_string());
+         }
+-        if out.entry.is_some() || out.inline_limit.is_some() || out.roundtrip || out.unchecked
++        if out.entry.is_some() || out.inline_limit.is_some() || out.scalar_replace || out.roundtrip || out.unchecked
+             || out.engine != "native" || out.jobs != 1usize {
+             return Err("E_USAGE unit commands use manifest ENTRY and original checked native IR; --entry, optimization, roundtrip and test-engine options do not apply".to_string());
+         }
+@@ -1729,7 +1731,7 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
+     }
+     if options.command == "test" && crate::test_runner::has_cases(world, &options.path)? {
+         return crate::test_runner::run_stored(world, &options.path, options.jobs, &options.engines,
+-            &options.library_directory, &options.store_directory, &options.store_key, options.stats, options.inline_limit, options.store_bytes);
++            &options.library_directory, &options.store_directory, &options.store_key, options.stats, options.inline_limit, options.scalar_replace, options.store_bytes);
+     }
+     if options.command == "batch" {
+         return batch(world, options, stats, memo);
+@@ -2020,6 +2022,11 @@ struct Memo {
+     inline_attempts: usize,
+     inline_accepted: usize,
+     inline_rejected: usize,
++    scalar_aggregates: usize,
++    scalar_functions: usize,
++    scalar_attempts: usize,
++    scalar_accepted: usize,
++    scalar_rejected: usize,
+     embedded_sources: Vec<String>,
+ }
+ impl Memo {
+@@ -2044,6 +2051,7 @@ impl Memo {
+             inputs: Vec::new(), source_inputs: Vec::new(), input_snapshot: BTreeMap::new(), front_reused: 0, front_definitions: 0, front_functions: 0, valid_inputs: true, runtime_input: None,
+             checked_reused: 0, checked_local_reused: 0, emitted_reused: 0, test_reused: 0, test_rerun: 0, build_reused: 0,
+             inline_calls: 0, inline_functions: 0, inline_attempts: 0, inline_accepted: 0, inline_rejected: 0,
++            scalar_aggregates: 0, scalar_functions: 0, scalar_attempts: 0, scalar_accepted: 0, scalar_rejected: 0,
+         }
+     }
+     fn stats(&self, stats: &mut Stats) {
+@@ -2061,6 +2069,11 @@ impl Memo {
+         stats.count("inline_attempts", self.inline_attempts);
+         stats.count("inline_accepted", self.inline_accepted);
+         stats.count("inline_rejected", self.inline_rejected);
++        stats.count("scalar_aggregates", self.scalar_aggregates);
++        stats.count("scalar_functions", self.scalar_functions);
++        stats.count("scalar_attempts", self.scalar_attempts);
++        stats.count("scalar_accepted", self.scalar_accepted);
++        stats.count("scalar_rejected", self.scalar_rejected);
+         if let Some(store) = &self.store {
+             if stats.enabled { stats.cache_io = store.io_report(); }
+             stats.count("store_hits", store.hits);
+@@ -2194,6 +2207,7 @@ fn request_key(options: &Options) -> String {
+         Some(limit) => { store::push_word(&mut out, 1); store::push_word(&mut out, limit); }
+         None => store::push_word(&mut out, 0),
+     }
++    store::push_word(&mut out, options.scalar_replace as usize);
+     if options.profile { optional_key(&mut out, &options.output); }
+     store::push_word(&mut out, options.grants.len());
+     for grant in &options.grants { store::push_bytes(&mut out, grant.as_bytes()); }
+@@ -2212,15 +2226,30 @@ fn select_checked(
+         return Ok(reuse::Selection::unchanged(original));
+     }
+     let limit = options.inline_limit.unwrap_or(optimizer::default_limit());
+-    if limit == 0 { return Ok(reuse::Selection::unchanged(original)); }
++    if limit == 0 && !options.scalar_replace { return Ok(reuse::Selection::unchanged(original)); }
+     let rewrite = optimizer::inline(original.program(), limit);
+     memo.inline_calls += rewrite.calls;
+     memo.inline_functions += rewrite.functions;
++    let inlined = rewrite.program.is_some();
++    let mut candidate = rewrite.program;
+     stats.mark("inline")?;
+-    let Some(candidate) = rewrite.program else {
++    let mut scalarized = false;
++    if options.scalar_replace {
++        let scalar = {
++            let input = match &candidate { Some(program) => program, None => original.program() };
++            optimizer::scalar::replace(input)
++        };
++        memo.scalar_aggregates += scalar.aggregates;
++        memo.scalar_functions += scalar.functions;
++        scalarized = scalar.program.is_some();
++        if scalarized { candidate = scalar.program; }
++        stats.mark("scalar_replace")?;
++    }
++    let Some(candidate) = candidate else {
+         return Ok(reuse::Selection::unchanged(original));
+     };
+-    memo.inline_attempts += 1;
++    if inlined { memo.inline_attempts += 1usize; }
++    if scalarized { memo.scalar_attempts += 1usize; }
+     let result = check_reusing_with_prior(candidate, memo, options.roundtrip, Some(original.checked()), stats);
+     stats.mark("check_optimized")?;
+     if let Err(problems) = &result {
+@@ -2231,8 +2260,13 @@ fn select_checked(
+         }
+     }
+     let selected = reuse::Selection::after_check(original, result);
+-    if selected.rejected() { memo.inline_rejected += 1; }
+-    else { memo.inline_accepted += 1; }
++    if selected.rejected() {
++        if inlined { memo.inline_rejected += 1usize; }
++        if scalarized { memo.scalar_rejected += 1usize; }
++    } else {
++        if inlined { memo.inline_accepted += 1usize; }
++        if scalarized { memo.scalar_accepted += 1usize; }
++    }
+     Ok(selected)
+ }
+ 
+diff --git a/src/optimizer.lkj b/src/optimizer.lkj
+index 16bd9d81c..1c8dde5a7 100644
+--- a/src/optimizer.lkj
++++ b/src/optimizer.lkj
+@@ -1,4 +1,5 @@
+-//! Untrusted IR-to-IR inlining. This module grants no checked-program authority.
++//! Untrusted IR-to-IR rewrites. This module grants no checked-program authority.
++pub mod scalar;
+ use crate::ir::{Function, Instruction, Op, Place, Program, Projection};
+ 
+ /// The measured default is selected separately from the transformation itself.
+diff --git a/src/semantic_main.lkj b/src/semantic_main.lkj
+index ded151656..2fc6d809a 100644
+--- a/src/semantic_main.lkj
++++ b/src/semantic_main.lkj
+@@ -40,7 +40,7 @@ pub fn main(mut world: World) {
+         return;
+     }
+     let count = semantic_tests::live(&mut world, !args.is_empty());
+-    assert_eq!(count, 25usize);
++    assert_eq!(count, 31usize);
+     world.stdout().write(format!("ok live semantics {count} native-observation contracts\n").as_bytes());
+ }
+ 
+diff --git a/src/semantic_tests/optimizer.lkj b/src/semantic_tests/optimizer.lkj
+index 999614e7d..ede2e2ffc 100644
+--- a/src/semantic_tests/optimizer.lkj
++++ b/src/semantic_tests/optimizer.lkj
+@@ -2,6 +2,7 @@
+ use crate::{check, frontend, interpreter, ir, ir_text, native, optimizer, reuse, runtime, source};
+ mod forwarding;
+ mod wrappers;
++mod scalar;
+ 
+ fn compiled_files(root: &str, files: Vec<source::SourceInput>) -> reuse::Checked {
+     let checked = frontend::check_bundle(&source::SourceBundle {
+@@ -349,5 +350,12 @@ pub fn run(world: &mut World, trace: bool) -> usize {
+     instruction_file_identity_and_rejection_location();
+     if trace { world.stdout().write(b"inline_trap_message_identity\n"); }
+     copied_trap_messages_keep_exact_codes(world, &runtime);
+-    11usize + forwarding::run(world, &runtime, trace) + wrappers::run(world, &runtime, trace)
++    11usize + forwarding::run(world, &runtime, trace) + wrappers::run(world, &runtime, trace) + scalar::run(world, &runtime)
++}
++
++/// Focused native entry for the independent scalar-replacement oracle.
++pub fn scalar_contracts(mut world: World) {
++    let runtime = prepared_runtime();
++    assert_eq!(scalar::run(&mut world, &runtime), 6usize);
++    world.stdout().write(b"ok scalar replacement 6 differential contracts\n");
+ }
+diff --git a/src/test_runner.lkj b/src/test_runner.lkj
+index efca54816..427e96f48 100644
+--- a/src/test_runner.lkj
++++ b/src/test_runner.lkj
+@@ -569,6 +569,7 @@ fn workers(
+     store_key: &Option<String>,
+     stats: bool,
+     inline_limit: Option<usize>,
++    scalar_replace: bool,
+     store_capacity: usize,
+ ) -> Result<Vec<Worker>, String> {
+     let executable = world.executable().map_err(|e: i64| io("compiler executable", e))?;
+@@ -619,6 +620,7 @@ fn workers(
+         if let Some(limit) = inline_limit {
+             args.push("--inline-limit".as_bytes().to_vec()); args.push(format!("{limit}").into_bytes());
+         }
++        if scalar_replace { args.push("--scalar-replace".as_bytes().to_vec()); }
+         result.push(Worker { process: start(world, &executable, &args)?, indices });
+     }
+     Ok(result)
+@@ -636,9 +638,10 @@ fn run_inner(
+     store_key: &Option<String>,
+     stats: bool,
+     inline_limit: Option<usize>,
++    scalar_replace: bool,
+     store_capacity: usize,
+ ) -> Result<(usize, usize, usize), String> {
+-    let active = workers(world, directory, temporary, cases, jobs, engines, library_directory, store_directory, store_key, stats, inline_limit, store_capacity)?;
++    let active = workers(world, directory, temporary, cases, jobs, engines, library_directory, store_directory, store_key, stats, inline_limit, scalar_replace, store_capacity)?;
+     let mut passed = 0usize;
+     let mut pending = 0usize;
+     let mut failed = 0usize;
+@@ -710,6 +713,7 @@ pub fn run_stored(
+     store_key: &Option<String>,
+     stats: bool,
+     inline_limit: Option<usize>,
++    scalar_replace: bool,
+     store_capacity: usize,
+ ) -> Result<u8, String> {
+     if jobs == 0 || jobs > 8 {
+@@ -728,7 +732,7 @@ pub fn run_stored(
+     let result = match parent.open_directory(&temporary) {
+         Err(errno) => Err(io("worker directory", errno)),
+         Ok(mut directory) => {
+-            let result = run_inner(world, &mut directory, &temporary, &cases, jobs, engines, library_directory, store_directory, store_key, stats, inline_limit, store_capacity);
++            let result = run_inner(world, &mut directory, &temporary, &cases, jobs, engines, library_directory, store_directory, store_key, stats, inline_limit, scalar_replace, store_capacity);
+             for worker in 0..jobs {
+                 let _ = directory.remove(&format!("worker-{worker}"));
+             }
+diff --git a/src/optimizer/scalar.lkj b/src/optimizer/scalar.lkj
+new file mode 100644
+index 000000000..50e3ba314
+--- /dev/null
++++ b/src/optimizer/scalar.lkj
+@@ -0,0 +1,298 @@
++//! Untrusted field decomposition. Function signatures, type declarations and
++//! destructor definitions are unchanged; the driver must recheck the result.
++use crate::ir::{self, Function, Instruction, Local, Op, Place, Program, Projection, TypeKind};
++
++pub struct Rewrite {
++    pub program: Option<Program>,
++    pub aggregates: usize,
++    pub functions: usize,
++}
++
++fn observe(place: &Place, address: bool, needed: &mut [bool], blocked: &mut [bool]) {
++    if place.projections.is_empty() {
++        if address { blocked[place.local] = true; }
++    } else if matches!(place.projections.first(), Some(Projection::Field(_))) {
++        needed[place.local] = true;
++    }
++}
++fn family(function: &Function, custom: &[bool], program: &Program) -> Vec<bool> {
++    let count = function.locals.len();
++    let mut eligible = vec![false; count];
++    for index in function.params..count {
++        let ty = function.locals[index].ty;
++        if let TypeKind::Struct { fields, .. } = &program.types[ty].kind {
++            eligible[index] = !fields.is_empty() && !custom[ty];
++        }
++    }
++    let mut needed = vec![false; count];
++    let mut blocked = vec![false; count];
++    for instruction in &function.body {
++        match &instruction.op {
++            Op::Borrow { place, .. } | Op::SliceBorrow { place, .. }
++                | Op::ViewRange { place, .. } => observe(place, true, &mut needed, &mut blocked),
++            Op::Read { dst, place, .. } => {
++                observe(place, false, &mut needed, &mut blocked);
++                if *dst == place.local { blocked[*dst] = true; }
++            }
++            Op::Assign { place, src } => {
++                observe(place, false, &mut needed, &mut blocked);
++                if *src == place.local { blocked[*src] = true; }
++            }
++            Op::Drop { place } | Op::DropIf { place } | Op::TagTest { place, .. } =>
++                observe(place, false, &mut needed, &mut blocked),
++            _ => {}
++        }
++    }
++    for index in 0usize..count { eligible[index] &= !blocked[index]; }
++    let mut edges: Vec<Vec<usize>> = vec![Vec::new(); count];
++    for instruction in &function.body {
++        let transfer = match &instruction.op {
++            Op::Read { dst, place, .. } if place.projections.is_empty() => Some((*dst, place.local)),
++            Op::Assign { place, src } if place.projections.is_empty() => Some((place.local, *src)),
++            _ => None,
++        };
++        if let Some((left, right)) = transfer {
++            if eligible[left] && eligible[right] {
++                edges[left].push(right);
++                edges[right].push(left);
++            }
++        }
++    }
++    let mut pending = Vec::new();
++    for index in 0usize..count { if eligible[index] && needed[index] { pending.push(index); } }
++    while let Some(index) = pending.pop() {
++        for next in &edges[index] {
++            if !needed[*next] { needed[*next] = true; pending.push(*next); }
++        }
++    }
++    for index in 0usize..count { eligible[index] &= needed[index]; }
++    eligible
++}
++
++struct Builder<'a> {
++    original: &'a Function,
++    fields: Vec<Vec<usize>>,
++    output: Function,
++}
++impl Builder<'_> {
++    fn expanded(&self, local: usize) -> bool {
++        local < self.fields.len() && !self.fields[local].is_empty()
++    }
++    fn emit(&mut self, site: &Instruction, op: Op) {
++        self.output.body.push(Instruction {
++            op, file: site.file, line: site.line, column: site.column,
++        });
++    }
++    fn temporary(&mut self, ty: usize) -> usize {
++        let index = self.output.locals.len();
++        self.output.locals.push(Local { name: format!("$scalar:{index}"), ty, mutable: true });
++        index
++    }
++    fn place(&self, original: &Place) -> Place {
++        if self.expanded(original.local) {
++            if let Some(Projection::Field(index)) = original.projections.first() {
++                return Place {
++                    local: self.fields[original.local][*index],
++                    projections: original.projections[1usize..].to_vec(),
++                };
++            }
++        }
++        original.clone()
++    }
++    fn field(&self, original: &Place, index: usize) -> Place {
++        let mut place = original.clone();
++        place.projections.push(Projection::Field(index));
++        self.place(&place)
++    }
++    fn materialize(&mut self, local: usize, site: &Instruction) -> usize {
++        if !self.expanded(local) { return local; }
++        let ty = self.original.locals[local].ty;
++        let destination = self.temporary(ty);
++        let fields = self.fields[local].clone();
++        self.emit(site, Op::Struct { dst: destination, fields });
++        destination
++    }
++    fn arguments(&mut self, args: &[usize], site: &Instruction) -> Vec<usize> {
++        let mut result = Vec::new();
++        for arg in args {
++            let value = self.materialize(*arg, site);
++            result.push(value);
++        }
++        result
++    }
++    fn read(&mut self, dst: usize, place: &Place, moving: bool, site: &Instruction) {
++        if self.expanded(dst) {
++            let fields = self.fields[dst].clone();
++            for (index, destination) in fields.iter().enumerate() {
++                let source = self.field(place, index);
++                self.emit(site, Op::Read { dst: *destination, place: source, moving });
++            }
++            if moving && !(place.projections.is_empty() && self.expanded(place.local)) {
++                let place = self.place(place);
++                // Retire the now-empty aggregate shell after all fields moved.
++                self.emit(site, Op::DropIf { place });
++            }
++        } else if place.projections.is_empty() && self.expanded(place.local) {
++            let sources = self.fields[place.local].clone();
++            let mut fields = Vec::new();
++            for source in sources {
++                let ty = self.output.locals[source].ty;
++                let destination = self.temporary(ty);
++                self.emit(site, Op::Read { dst: destination, place: Place::local(source), moving });
++                fields.push(destination);
++            }
++            self.emit(site, Op::Struct { dst, fields });
++        } else {
++            let place = self.place(place);
++            self.emit(site, Op::Read { dst, place, moving });
++        }
++    }
++    fn assign(&mut self, place: &Place, src: usize, site: &Instruction) {
++        if place.projections.is_empty() && self.expanded(place.local) {
++            let destinations = self.fields[place.local].clone();
++            if self.expanded(src) {
++                let sources = self.fields[src].clone();
++                for index in 0usize..destinations.len() {
++                    self.emit(site, Op::Assign { place: Place::local(destinations[index]), src: sources[index] });
++                }
++            } else {
++                for (index, destination) in destinations.iter().enumerate() {
++                    let ty = self.output.locals[*destination].ty;
++                    let value = self.temporary(ty);
++                    let source = self.field(&Place::local(src), index);
++                    self.emit(site, Op::Read { dst: value, place: source, moving: true });
++                    self.emit(site, Op::Assign { place: Place::local(*destination), src: value });
++                }
++                self.emit(site, Op::DropIf { place: Place::local(src) });
++            }
++        } else {
++            let src = self.materialize(src, site);
++            let place = self.place(place);
++            self.emit(site, Op::Assign { place, src });
++        }
++    }
++    fn construct(&mut self, dst: usize, args: &[usize], site: &Instruction) {
++        let fields = self.arguments(args, site);
++        if self.expanded(dst) {
++            let destinations = self.fields[dst].clone();
++            for index in 0usize..destinations.len() {
++                self.emit(site, Op::Assign { place: Place::local(destinations[index]), src: fields[index] });
++            }
++        } else {
++            self.emit(site, Op::Struct { dst, fields });
++        }
++    }
++    fn cleanup(&mut self, original: &Place, conditional: bool, site: &Instruction) {
++        if original.projections.is_empty() && self.expanded(original.local) {
++            // A structural drop skips already moved fields, in declaration
++            // order. Each field retains its own independent initialization.
++            let fields = self.fields[original.local].clone();
++            for field in fields { self.emit(site, Op::DropIf { place: Place::local(field) }); }
++        } else {
++            let place = self.place(original);
++            self.emit(site, if conditional { Op::DropIf { place } } else { Op::Drop { place } });
++        }
++    }
++    fn instruction(&mut self, site: &Instruction) {
++        match &site.op {
++            Op::Read { dst, place, moving } => self.read(*dst, place, *moving, site),
++            Op::Assign { place, src } => self.assign(place, *src, site),
++            Op::Struct { dst, fields } => self.construct(*dst, fields, site),
++            Op::Drop { place } => self.cleanup(place, false, site),
++            Op::DropIf { place } => self.cleanup(place, true, site),
++            Op::Borrow { dst, place, mutable } => {
++                let place = self.place(place);
++                self.emit(site, Op::Borrow { dst: *dst, place, mutable: *mutable });
++            }
++            Op::SliceBorrow { dst, place, mutable } => {
++                let place = self.place(place);
++                self.emit(site, Op::SliceBorrow { dst: *dst, place, mutable: *mutable });
++            }
++            Op::ViewRange { dst, place, start, end, inclusive, mutable } => {
++                let place = self.place(place);
++                self.emit(site, Op::ViewRange { dst: *dst, place, start: *start, end: *end, inclusive: *inclusive, mutable: *mutable });
++            }
++            Op::TagTest { dst, place, variant } => {
++                let place = self.place(place);
++                self.emit(site, Op::TagTest { dst: *dst, place, variant: *variant });
++            }
++            Op::Call { dst, function, args } => {
++                let args = self.arguments(args, site);
++                let ty = self.original.locals[*dst].ty;
++                let destination = if self.expanded(*dst) { self.temporary(ty) } else { *dst };
++                self.emit(site, Op::Call { dst: destination, function: *function, args });
++                if destination != *dst { self.read(*dst, &Place::local(destination), true, site); }
++            }
++            Op::Intrinsic { dst, name, args } => {
++                let args = self.arguments(args, site);
++                let ty = self.original.locals[*dst].ty;
++                let destination = if self.expanded(*dst) { self.temporary(ty) } else { *dst };
++                self.emit(site, Op::Intrinsic { dst: destination, name: *name, args });
++                if destination != *dst { self.read(*dst, &Place::local(destination), true, site); }
++            }
++            Op::Array { dst, elements } => {
++                let elements = self.arguments(elements, site);
++                self.emit(site, Op::Array { dst: *dst, elements });
++            }
++            Op::Variant { dst, variant, fields } => {
++                let fields = self.arguments(fields, site);
++                self.emit(site, Op::Variant { dst: *dst, variant: *variant, fields });
++            }
++            Op::Return { src } => {
++                let src = self.materialize(*src, site);
++                self.emit(site, Op::Return { src });
++            }
++            // These either have no local operand, or the original checker
++            // requires scalar/enum/reference types, so no selected Struct can
++            // occur. Keep this exhaustive when the IR gains an instruction.
++            Op::Text { .. } | Op::Int { .. } | Op::Float { .. } | Op::Unit { .. }
++                | Op::Unary { .. } | Op::Binary { .. } | Op::Discriminant { .. }
++                | Op::If { .. } | Op::Else | Op::End | Op::Loop
++                | Op::Break | Op::Continue | Op::BreakTo { .. }
++                | Op::ContinueTo { .. } | Op::Trap { .. } => self.emit(site, site.op.clone()),
++        }
++    }
++}
++fn rewrite(function: &Function, selected: &[bool], program: &Program) -> Option<(Function, usize)> {
++    if !selected.iter().any(|value| *value) { return None; }
++    let mut builder = Builder {
++        original: function, fields: vec![Vec::new(); function.locals.len()], output: function.clone(),
++    };
++    builder.output.body.clear();
++    let mut count = 0usize;
++    for index in 0usize..function.locals.len() {
++        if !selected[index] { continue; }
++        let TypeKind::Struct { fields, .. } = &program.types[function.locals[index].ty].kind
++        else { return None; };
++        for (field, definition) in fields.iter().enumerate() {
++            let local = builder.output.locals.len();
++            builder.output.locals.push(Local {
++                name: format!("$scalar:{index}:{field}"),
++                ty: definition.ty, mutable: function.locals[index].mutable,
++            });
++            builder.fields[index].push(local);
++        }
++        // Signature locals are never selected. The unused former root needs
++        // neither aggregate storage nor cleanup; every use is rewritten below.
++        builder.output.locals[index].ty = ir::UNIT;
++        count += 1usize;
++    }
++    for instruction in &function.body { builder.instruction(instruction); }
++    Some((builder.output, count))
++}
++
++pub fn replace(program: &Program) -> Rewrite {
++    let mut result = Rewrite { program: None, aggregates: 0usize, functions: 0usize };
++    let mut custom = vec![false; program.types.len()];
++    for (ty, _) in &program.destructors { custom[*ty] = true; }
++    for (index, function) in program.functions.iter().enumerate() {
++        let selected = family(function, &custom, program);
++        if let Some((function, count)) = rewrite(function, &selected, program) {
++            if result.program.is_none() { result.program = Some(program.clone()); }
++            result.program.as_mut().unwrap().functions[index] = function;
++            result.aggregates += count;
++            result.functions += 1usize;
++        }
++    }
++    result
++}
+diff --git a/src/semantic_tests/optimizer/scalar.lkj b/src/semantic_tests/optimizer/scalar.lkj
+new file mode 100644
+index 000000000..75c6adc9b
+--- /dev/null
++++ b/src/semantic_tests/optimizer/scalar.lkj
+@@ -0,0 +1,188 @@
++//! Observe the original interpreter, then independently admitted field IR and
++//! native execution. Cleanup order and complete private trap records are values.
++use super::*;
++
++fn native_observation(
++    world: &mut World, program: &reuse::Checked, runtime: &runtime::Runtime,
++) -> (u8, Vec<u8>, Vec<u8>) {
++    let entry = index(program.program(), "probe");
++    let grants = if program.program().functions[entry].params == 1usize {
++        vec![ir::EntryGrant::World]
++    } else { Vec::new() };
++    let image = native::encode_granted(program.checked(), runtime, entry, &grants, Some(3), None).unwrap();
++    let mut executable = world.temporary_file().unwrap();
++    executable.write_all(&image.bytes).unwrap();
++    executable.set_executable().unwrap();
++    let input = world.temporary_file().unwrap();
++    let mut output = world.temporary_file().unwrap();
++    let errors = world.temporary_file().unwrap();
++    let mut result = world.temporary_file().unwrap();
++    let mut process = world.process();
++    let arguments: Vec<Vec<u8>> = Vec::new();
++    let mut child = process.spawn_file(&executable, &arguments, &input, &output, &errors, &result).unwrap();
++    let status = child.wait().unwrap() as u8;
++    output.rewind().unwrap();
++    result.rewind().unwrap();
++    (status, output.read_to_end().unwrap(), result.read_to_end().unwrap())
++}
++
++fn selected(text: &str, inline: bool) -> (reuse::Checked, reuse::Checked) {
++    let original = compiled(text);
++    let before = ir_text::write(original.program());
++    let inlined = if inline { optimizer::inline(original.program(), 64usize).program } else { None };
++    let input = match &inlined { Some(program) => program, None => original.program() };
++    let rewrite = optimizer::scalar::replace(input);
++    assert!(rewrite.aggregates > 0usize, "scalar fixture was not transformed");
++    assert_eq!(before, ir_text::write(original.program()));
++    let candidate = admitted(rewrite.program.unwrap()).unwrap();
++    (original, candidate)
++}
++fn observe(
++    world: &mut World, runtime: &runtime::Runtime, text: &str,
++    expected_value: i64, expected_output: &[u8], trap: bool, inline: bool,
++) {
++    let (original, candidate) = selected(text, inline);
++    let mut output: Vec<u8> = Vec::new();
++    let model = interpreter::run(original.program(), index(original.program(), "probe"), &[0u64;0], &mut output);
++    assert_eq!(output.as_slice(), expected_output);
++    let expected_diagnostic = match model {
++        Ok(result) => {
++            assert!(!trap);
++            assert!(matches!(result.value, interpreter::Scalar::Int { value, .. } if value as i64 == expected_value));
++            String::new()
++        }
++        Err(error) => {
++            assert!(trap);
++            assert!(matches!(error.kind, interpreter::ErrorKind::Trap(_)));
++            crate::runtime_diagnostics::located(&original.program().sources[error.file], error.line, &error.code(), &error.message)
++        }
++    };
++    let before = native_observation(world, &original, runtime);
++    let after = native_observation(world, &candidate, runtime);
++    assert_eq!(before, after, "field rewrite changed complete native observation");
++    assert_eq!(after.1.as_slice(), expected_output);
++    if trap {
++        assert_eq!(after.0, 1u8);
++        let diagnostic = crate::runtime_diagnostics::decode("scalar.lkj", candidate.program(), runtime, &after.2).unwrap().1;
++        assert_eq!(diagnostic, expected_diagnostic);
++    } else {
++        assert_eq!(after.0, 0u8);
++        assert_eq!(after.2.len(), 8usize);
++        let mut bits = 0u64;
++        for at in 0usize..8usize { bits |= (after.2[at] as u64) << (at * 8usize); }
++        assert_eq!(bits as i64, expected_value);
++    }
++}
++
++fn affine_partial_cleanup_and_loops(world: &mut World, runtime: &runtime::Runtime) {
++    observe(world, runtime, r#"
++        struct Mark { output: Stdout, tag: u8 }
++        impl Drop for Mark { fn drop(&mut self) { self.output.write(&[self.tag]); } }
++        struct Bundle { first: Mark, number: i64, last: Mark }
++        pub fn probe(mut world: World) -> i64 {
++            let mut result = 0i64;
++            for turn in 0usize..2usize {
++                let bundle = Bundle {
++                    first: Mark { output: world.stdout(), tag: b'A' },
++                    number: 21i64,
++                    last: Mark { output: world.stdout(), tag: b'B' },
++                };
++                if turn == 0usize { let first = bundle.first; drop(first); }
++                world.stdout().write(b"x");
++                result += bundle.number;
++            }
++            result
++        }
++    "#, 42i64, b"AxBxAB", false, false);
++}
++fn whole_escapes_keep_snapshot_values(world: &mut World, runtime: &runtime::Runtime) {
++    let source = r#"
++        struct Pair { left: i64, right: Box<i64> }
++        fn make(value: i64) -> Pair { Pair { left: value, right: Box::new(value) } }
++        fn total(pair: Pair) -> i64 { pair.left + *pair.right }
++        pub fn probe() -> i64 {
++            let mut pair = make(20i64);
++            let saved = pair.left;
++            pair.left = 22i64;
++            assert_eq!(saved, 20i64);
++            total(pair)
++        }
++    "#;
++    observe(world, runtime, source, 42i64, b"", false, false);
++    observe(world, runtime, source, 42i64, b"", false, true);
++}
++fn projected_loans_and_returned_view_origins(world: &mut World, runtime: &runtime::Runtime) {
++    observe(world, runtime, r#"
++        struct Pair { left: i64, right: i64 }
++        struct View<'a> { first: &'a i64, checked: i64 }
++        fn view<'a>(value: &'a i64) -> View<'a> {
++            let result = View { first: value, checked: 1i64 };
++            assert_eq!(result.checked, 1i64);
++            result
++        }
++        fn increment(value: &mut i64) { *value += 1i64; }
++        pub fn probe() -> i64 {
++            let mut pair = Pair { left: 20i64, right: 21i64 };
++            { let first = &mut pair.left; increment(first); }
++            let result = view(&pair.right);
++            pair.left + *result.first
++        }
++    "#, 42i64, b"", false, false);
++}
++fn copied_fields_are_snapshots_before_mutation(world: &mut World, runtime: &runtime::Runtime) {
++    observe(world, runtime, r#"
++        #[derive(Clone, Copy)]
++        struct Pair { values: [i64; 2], tag: i64 }
++        pub fn probe() -> i64 {
++            let mut original = Pair { values: [20i64, 22i64], tag: 7i64 };
++            let saved = original;
++            original.values[0usize] = 99i64;
++            original.tag = 8i64;
++            assert_eq!(saved.tag, 7i64);
++            saved.values[0usize] + saved.values[1usize]
++        }
++    "#, 42i64, b"", false, false);
++}
++fn traps_preserve_source_message_and_private_record(world: &mut World, runtime: &runtime::Runtime) {
++    observe(world, runtime, r#"
++        struct Holder { values: [i64; 2], wanted: usize }
++        pub fn probe() -> i64 {
++            let value = Holder { values: [20i64, 22i64], wanted: 2usize };
++            value.values[value.wanted]
++        }
++    "#, 0i64, b"", true, false);
++    observe(world, runtime, r#"
++        struct Holder { value: i64, message: i64 }
++        pub fn probe() -> i64 {
++            let value = Holder { value: 42i64, message: 1i64 };
++            assert_eq!(value.message, 1i64);
++            if value.value == 42i64 { panic!("field replacement preserves this message"); }
++            0i64
++        }
++    "#, 0i64, b"", true, false);
++}
++fn custom_destructor_roots_stay_whole(world: &mut World, runtime: &runtime::Runtime) {
++    observe(world, runtime, r#"
++        struct Owner { output: Stdout, tag: u8 }
++        impl Drop for Owner { fn drop(&mut self) { self.output.write(&[self.tag]); } }
++        struct Plain { value: i64, other: i64 }
++        pub fn probe(mut world: World) -> i64 {
++            let mut owner = Owner { output: world.stdout(), tag: b'A' };
++            owner.tag = b'B';
++            let plain = Plain { value: 40i64, other: 2i64 };
++            let result = plain.value + plain.other;
++            drop(owner);
++            result
++        }
++    "#, 42i64, b"B", false, false);
++}
++
++pub fn run(world: &mut World, runtime: &runtime::Runtime) -> usize {
++    affine_partial_cleanup_and_loops(world, runtime);
++    whole_escapes_keep_snapshot_values(world, runtime);
++    projected_loans_and_returned_view_origins(world, runtime);
++    copied_fields_are_snapshots_before_mutation(world, runtime);
++    traps_preserve_source_message_and_private_record(world, runtime);
++    custom_destructor_roots_stay_whole(world, runtime);
++    6usize
++}

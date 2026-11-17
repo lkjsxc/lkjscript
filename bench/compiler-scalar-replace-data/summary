@@ -1,0 +1,8 @@
+baseline_mean_wall_s=18.733333
+candidate_mean_wall_s=18.223333
+wall_reduction_percent=2.722420
+baseline_mean_cpu_s=18.350000
+candidate_mean_cpu_s=17.886667
+native_rust_O_ratio=4.992694
+retain_pass=false
+within_twice_rust_O=false

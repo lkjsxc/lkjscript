@@ -1,0 +1,14 @@
+/home/coder/workspace/lkjscript-compiler-sra-20261117/target/compiler-sra.YaGy8M/producer-0
+build
+src/main.lkj
+--source-dir
+/home/coder/workspace/lkjscript-compiler-sra-20261117/target/compiler-sra.YaGy8M/source
+--library-dir
+/home/coder/workspace/lkjscript-compiler-sra-20261117/target/compiler-sra.YaGy8M/source/library
+--runtime-source
+/home/coder/workspace/lkjscript-compiler-sra-20261117/target/compiler-sra.YaGy8M/source/library/runtime.lkj
+--no-store
+--inline-limit
+0
+-o
+/home/coder/workspace/lkjscript-compiler-sra-20261117/target/compiler-sra.YaGy8M/output
