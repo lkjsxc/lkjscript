@@ -1,0 +1,2 @@
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":43252.260,"build_ir_ms":12846.328,"check_ms":0.014,"check_body_ms":12635.330,"check_verification_ms":0.022,"key_hash_ms":74.101,"load_parse_ms":1919.752,"resolve_ms":468.193,"semantic_catalog_ms":2012.284,"source_read_ms":38.854,"type_ms":12841.643,"ir_functions":13691,"ir_instructions":1326080,"peak_rss_bytes":1209716736}
+"/home/coder/workspace/lkjscript/library/runtime.lkj" E_REPLAY_FILES source file has no stable identity or unambiguous relative-path counterpart

@@ -31,7 +31,11 @@ cat > "$unit_root/base.lkj" <<'SOURCE'
 pub struct Pair { pub left: i64, pub right: i64 }
 fn adjustment() -> i64 { 0i64 }
 impl Pair { pub fn total(&self) -> i64 { self.left + self.right + adjustment() } }
-pub fn sum(value: Pair) -> i64 { value.total() }
+pub fn sum(value: Pair) -> i64 {
+    use crate::base::Pair as LocalPair;
+    let value: LocalPair = value;
+    value.total()
+}
 pub fn first<'a>(value: &'a Pair) -> &'a i64 { &value.left }
 pub fn identity<T: Copy>(value: T) -> T { value }
 pub fn included<T: Copy>(_: T) -> &'static str { include_str!("message.txt") }
@@ -62,6 +66,7 @@ rg -q 'checked=3 reused=0' "$unit_root/check.out"
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/warm" > "$unit_root/warm.out" 2> "$unit_root/warm.err"
 rg -q 'checked=0 reused=3 emitted=0' "$unit_root/warm.out"
 cmp "$unit_root/program" "$unit_root/warm"
+# The local use in sum belongs to the erased body; it creates no second range.
 # Private helpers and nongeneric methods cross the same authenticated boundary.
 perl -0pi -e 's/adjustment\(\) -> i64 \{ 0i64 \}/adjustment() -> i64 { 1i64 }/' "$unit_root/base.lkj"
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/helper" > "$unit_root/helper.out" 2> "$unit_root/helper.err"

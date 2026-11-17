@@ -1,4 +1,4 @@
-# Direction — 2026-11-16
+# Direction — 2026-11-17
 
 lkjscript is an AI-native general-purpose language in which agents directly
 understand, query and change a program's semantic structure, with a foundation
@@ -39,14 +39,12 @@ Stack/heap pressure shares the address space without moving live stack addresses
 Operations are enums with stable IR spellings. Preserve byte reproduction and
 hello under a 4 GiB address-space limit.
 
-## Profile first, then remove structural costs
+## Build optimizer passes, then measure
 
 build --profile embeds function, operation-kind and copy-site maps and opts into OUTPUT.samples.PID; --profile-ir PATH exports the exact checked native selection. Explicit --copy-sites detail requires that companion and positive --limit/--bytes bounds.
-A Linux CPU timer samples instruction pointers and real frame chains without a depth cap.
-Reports survive exit/signals; default summaries show self/inclusive functions and exclusive kinds
-in at most 37 lines, without DWARF or perf; the explicit option grants instrumentation.
-Measure self-built / witness opt=0 / witness -O and attribute transformations before optimizing; -O milestones are 4x, 3x and 2x, or a measured backend floor.
-Discard steps below 10%; the last coalescing trial gave under 1% CPU and was discarded. Structure queries, transactions and scale precede speed unless compiler speed is the measured scale wall.
+A Linux CPU timer samples instruction pointers and real frame chains without a depth cap. Reports survive exit/signals; default summaries show self/inclusive functions and exclusive kinds in at most 37 lines, without DWARF or perf; the explicit option grants instrumentation.
+No further sampling studies. Implement real untrusted passes, recheck their output, and measure the fixed source/output set against witness -O; the target is within twice -O.
+Keep only a pass gaining at least 10%. After three landed passes, if runtime remains above three times -O, explain the wall in ten status lines and stop this item until asked. Real-program language refusals precede this work.
 Scalar Clone lowers to Read. --inline-limit N copies small acyclic bodies and forwards dead temporaries.
 Recheck changed bodies; exact original bodies under unchanged shared graphs retain their proof.
 Keep the original interpreter/authority oracle and copied source locations; compare complete custom traps and reject the whole bad candidate.
@@ -111,7 +109,9 @@ Keep the key outside every source/library/program read grant, including include_
 Key readers and compiler replacers are equally trusted; HMAC binds exact compiler bytes, target, dependency identity and result bytes.
 Pinned queries may inspect authenticated historical snapshots without hashing the reader; snapshot identity binds producing compiler bytes, and provenance never supplies current admission or proof reuse.
 Only admitted originals or authenticated prior proofs skip body checks; revalidate shared structure.
-The scale ladder selects separately checked definition/instance bodies and checked dependency-interface identities; recursive type/destructor interfaces form components. The current global graph/pack remains a measured migration wall, not the chosen ten-million-line checking unit (bench/scale.md). Graph packs still bind types, destructors, signatures, contracts and exact bodies; native fragments retain relocations. Multi-entry builds share exact-namespace fragment snapshots and flush once; only ordinary builds retain whole images.
+Explicit source units are named module groups in a dependency DAG; put mutual recursion inside a unit. check-units/build-units read and check one unit plus needed declaration/template interfaces, then release its AST/IR. [Unit contracts](units.md) bind types, layout, returned views, destruction, authority, target, producer and defining linkage; a unit never becomes a fabricated CheckedProgram.
+Nongeneric bodies use authenticated linkage, including private helpers. Generic templates are checked at their use. Native code and relocations stream to files; unit/dependency/source metadata and compact symbol registries still grow with program size. The ladder must measure this residual cost rather than claim strict largest-unit memory from architecture alone.
+The historical whole-program path and graph packs remain available. They bind types, destructors, signatures, ownership contracts and exact bodies; multi-entry builds share exact-namespace fragment snapshots. The new unit ladder includes existing real programs as they arrive.
 Front checkpoints reuse only stable source/arena spans, declarations, expanded string/byte literals, type spellings, catalogs and IR storage/call skeletons.
 Freshly infer/construct changed free nongeneric bodies; other edits miss. Advance successful checkpoints and independently check all resulting IR. Select source-reference recording before inference: ordinary/declaration-only work omits only export vectors; full capture must re-infer or reuse a separately authenticated full snapshot, never promote an ordinary checkpoint.
 Compact binary IR preserves exact tags and raw bits; decoding gives no checker authority.
@@ -132,7 +132,7 @@ any external limit leaving room for actual use. Report located allocation/stack
 traps when requests cannot be satisfied. No default tool memory envelopes,
 output caps or stack overrides. Use a generous normal-program watchdog and a
 separate short allowance for generated/mutated nontermination, not a language rule.
-Keep one heap and one stack exhaustion test; do not compare route locations. Recursion is fine until a real program fails. Use four workers per stream and leave
+Keep one heap and one stack exhaustion test; do not compare route locations. Recursion is fine until a real program fails. Use at most four workers on the shared host and leave
 no background jobs or temporary files. Report --stats/bench timings, RSS, IR/code
 sizes in status and commits. Measurements do not gate. Measure remaining gaps.
 
@@ -146,5 +146,5 @@ Only compiler refreshes seed, in its own commit. Do not move/reformat whole file
 Preserve .generation-one, other projects, services and data. No Python, WebAssembly,
 Node execution host, releases, tags or backward compatibility. Delete replacements.
 Fetch/rebase, bootstrap, four-worker gate, push, inspect CI; retry refused pushes.
-No force pushes, ledgers or background jobs. Prefix gateway IDs with the stream.
-Keep status within 60 lines (Programs owns at most 28), direction within 150.
+No force pushes, ledgers or background jobs. Prefix gateway IDs with the stream. Publish source changes through checked operations wherever they fit; handwritten bootstrap work earns no operation credit.
+Keep status within 60 lines (Programs owns at most 28), direction within 150. At most six desk notes a day: one plain Japanese line about a new capability or a found wall; detailed evidence belongs in bench.

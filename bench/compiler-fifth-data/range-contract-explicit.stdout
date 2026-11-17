@@ -1,0 +1,14 @@
+"closed_core" level=source-claim operation-target
+"semantic_tests::resolver" level=source-claim operation-target
+"semantic_tests::resolver::run" level=source-claim operation-target
+"/home/coder/workspace/lkjscript/src/semantic_main.lkj" level=source-claim file before=61cacbbcefc9353d37770f84783780b5d516abaddddd89bf957272c21f70c0f3 after=3f6f7008f193c66e4fda5b3e5ce130f828b251e9a5a5ab7f2c01a2179384f661
+"/home/coder/workspace/lkjscript/src/semantic_tests/resolver.lkj" level=source-claim file before=7582746acdb71d3489cd5734ab472e2be935d416dc1d14221880f54535db27ac after=88e3731526175005ca2be6bb85a761535aee882f67fd4e93dbcc676bae96dbaa
+transaction sites=3 files=2 identities=3
+"closed_core" level=source-claim changed=body
+"semantic_tests::resolver::open_range_slices_need_no_iterator_library_and_local_names_cannot_supply_it" level=source-claim changed=added
+"semantic_tests::resolver::open_range_values_call_the_library_declaration_once" level=source-claim changed=added
+"semantic_tests::resolver::run" level=source-claim changed=body
+"ir:semantic_tests::resolver::open_range_slices_need_no_iterator_library_and_local_names_cannot_supply_it" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:semantic_tests::resolver::open_range_values_call_the_library_declaration_once" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+program level=checked-ir before=15146030bfebd3e50cb5a27b22ad362f6c22d03c42bf3aa2447c36db131970e1 after=55536e4b5ef016a30e31bb151c3a5a1758953e8086bd5eae07fa33e1bd00ebdf checked-instances=10803 fresh-checked=10803 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=25010dc2ee1cb9aabc869bf85b5abe296391e502e28ab132a5d6948124e597ea source-after=886280094b480da9038cb2f579245b7f44991c30933f82560997f9489f48b647 mode=apply

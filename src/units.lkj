@@ -235,6 +235,7 @@ fn require_path(path: &str, owner: &str, required: &mut BTreeSet<String>) {
 pub fn project(name: &str, program: &ast::Program, inputs: &[(String, Vec<u8>)], instances: &[Vec<String>]) -> Result<Projection, String> {
     let prefix = virtual_prefix(name);
     let mut replacements: BTreeMap<String, Vec<(usize, usize, String)>> = BTreeMap::new();
+    let mut bodies: BTreeMap<String, Vec<(usize, usize, usize)>> = BTreeMap::new();
     let mut text_by_path: BTreeMap<String, String> = BTreeMap::new();
     let mut source_paths: BTreeSet<String> = BTreeSet::new();
     for file in &program.files { if file.path.starts_with(&prefix) { source_paths.insert(file.path.clone()); } }
@@ -242,9 +243,9 @@ pub fn project(name: &str, program: &ast::Program, inputs: &[(String, Vec<u8>)],
         if source_paths.contains(path) {
             text_by_path.insert(path.clone(), String::from_utf8(bytes.clone()).map_err(|_| -> String { error("source projection is not UTF-8") })?);
             replacements.insert(path.clone(), Vec::new());
+            bodies.insert(path.clone(), Vec::new());
         }
     }
-    let mut opaque = Vec::new();
     for (index, function) in program.functions.iter().enumerate() {
         let ordinary = match program.function_owner(ast::FunctionId { index }) {
             ast::FunctionOwner::Free => true,
@@ -261,9 +262,26 @@ pub fn project(name: &str, program: &ast::Program, inputs: &[(String, Vec<u8>)],
             || text.as_bytes()[block.span.start] != b'{' || text.as_bytes()[block.span.end - 1usize] != b'}' {
             return Err(error("function projection does not enclose an authored body"));
         }
-        replacements.get_mut(path).unwrap().push((block.span.start, block.span.end, replacement(&text[block.span.start..block.span.end])));
-        if instances[index].is_empty() { return Err(error("nongeneric declaration has no independently lowered implementation")); }
-        for identity in &instances[index] { opaque.push(identity.clone()); }
+        bodies.get_mut(path).unwrap().push((block.span.start, block.span.end, index));
+    }
+    let mut opaque = Vec::new();
+    for (path, candidates) in bodies {
+        let mut candidates = candidates;
+        candidates.sort();
+        let text = text_by_path.get(&path).unwrap();
+        let mut through = 0usize;
+        for (start, end, index) in candidates {
+            // Removing an enclosing body also removes its local declarations.
+            // Only declarations retained in the projection need linkage names.
+            if start < through {
+                if end > through { return Err(error("function projection ranges overlap")); }
+                continue;
+            }
+            replacements.get_mut(&path).unwrap().push((start, end, replacement(&text[start..end])));
+            if instances[index].is_empty() { return Err(error("nongeneric declaration has no independently lowered implementation")); }
+            for identity in &instances[index] { opaque.push(identity.clone()); }
+            through = end;
+        }
     }
     sort_ranges(&mut replacements);
     // Include expansion is an input fact. Embed its exact literal now: an
@@ -300,6 +318,7 @@ pub fn project(name: &str, program: &ast::Program, inputs: &[(String, Vec<u8>)],
             while end < text.len() && text.as_bytes()[end] != b';' { end += 1usize; }
             if end == text.len() { return Err(error("import projection has no semicolon")); }
             end += 1usize;
+            if covered(replacements.get(path).unwrap(), start, end) { continue; }
             if !uses.contains_key(&start) { uses.insert(start, (end, Vec::new())); }
             uses.get_mut(&start).unwrap().1.push(index);
         }

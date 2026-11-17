@@ -1,0 +1,27 @@
+{
+   "operations" : [
+      {
+         "before" : "semantic_tests::resolver::run",
+         "id" : "semantic_tests::resolver",
+         "op" : "add-item",
+         "source" : "fn open_range_values_call_the_library_declaration_once() {\n    let parsed = crate::source::parse_bundle(&crate::source::SourceBundle {\n        root: \"range.lkj\".to_string(),\n        library: Some(\"library.lkj\".to_string()),\n        files: vec![\n            crate::source::SourceInput {\n                path: \"range.lkj\".to_string(),\n                text: \"fn range_from(_:usize)->usize{999usize} fn start(calls:&mut usize)->usize{*calls+=1usize;40usize} pub fn probe()->usize{let mut calls=0usize;let result=(start(&mut calls)..);result+calls}\".to_string(),\n            },\n            crate::source::SourceInput {\n                path: \"library.lkj\".to_string(),\n                text: \"pub mod iter {pub fn range_from(start:usize)->usize{start+1usize}}\".to_string(),\n            },\n        ],\n    }).unwrap();\n    let checked = crate::frontend::check_source(&parsed).unwrap();\n    let program = checked.program();\n    let entry = program.functions.iter().position(|function| function.name == \"probe\").unwrap();\n    let result = crate::interpreter::run(program, entry, &[0u64;0], &mut Vec::<u8>::new()).unwrap();\n    assert!(matches!(result.value, crate::interpreter::Scalar::Int { value: 42, .. }));\n}\n"
+      },
+      {
+         "before" : "semantic_tests::resolver::run",
+         "id" : "semantic_tests::resolver",
+         "op" : "add-item",
+         "source" : "fn open_range_slices_need_no_iterator_library_and_local_names_cannot_supply_it() {\n    let source = crate::syntax::parse(\n        \"pub fn probe()->i64{let values=[1i64,42i64];let tail=&values[1usize..];tail[0usize]}\"\n    ).unwrap();\n    assert!(crate::frontend::check_source(&source).is_ok());\n    let source = crate::syntax::parse(\n        \"mod iter{pub fn range_from(start:usize)->usize{start}} pub fn probe()->usize{(1usize..)}\"\n    ).unwrap();\n    let problem = crate::resolve::resolve(&source).err().unwrap();\n    assert_eq!(problem.code, \"E_UNSUPPORTED\");\n}\n"
+      },
+      {
+         "id" : "semantic_tests::resolver::run",
+         "op" : "replace-body",
+         "source" : "{\n    lookup_keeps_file_name_and_enclosing_span_boundaries();\n    nested_method_and_impl_ranges_both_supply_parameters();\n    open_range_values_call_the_library_declaration_once();\n    open_range_slices_need_no_iterator_library_and_local_names_cannot_supply_it();\n    4\n}"
+      },
+      {
+         "id" : "closed_core",
+         "op" : "replace-body",
+         "source" : "{ assert_eq!(semantic_tests::core(), 198usize); }"
+      }
+   ],
+   "version" : 1
+}

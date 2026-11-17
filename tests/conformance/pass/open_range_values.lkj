@@ -1,0 +1,30 @@
+// expect: value 42
+// witness: {}
+fn start(calls: &mut usize) -> usize { *calls += 1usize; 4usize }
+pub fn probe() -> i64 {
+    let mut calls = 0usize;
+    let mut values = (start(&mut calls)..).take(3usize);
+    assert_eq!(calls, 1usize);
+    assert_eq!(values.next(), Some(4usize));
+    assert_eq!(values.next(), Some(5usize));
+    assert_eq!(values.next(), Some(6usize));
+    assert_eq!(values.next(), None);
+    drop(values);
+    let collected: Vec<usize> = (7..).take(3usize).collect();
+    assert_eq!(collected, vec![7usize, 8usize, 9usize]);
+    let mut total = 0usize;
+    for value in 1usize.. {
+        total += value;
+        if value == 3usize { break; }
+    }
+    assert_eq!(total, 6usize);
+    let mut closed = 0usize;
+    for value in 1usize..=3usize { closed += value; }
+    assert_eq!(closed, total);
+    let mut bytes = [1u8, 2u8, 3u8, 4u8];
+    { let tail = &mut bytes[2usize..]; tail[0usize] = 9u8; }
+    assert_eq!(bytes, [1u8, 2u8, 9u8, 4u8]);
+    assert_eq!((18446744073709551615usize..).take(0usize).count(), 0usize);
+    assert_eq!(calls, 1usize);
+    42i64
+}

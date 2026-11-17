@@ -333,7 +333,7 @@ enumerate/skip/take/zip are source adapters; chain currently needs identical
 iterator types to prove Item equality. map/filter/filter_map/inspect store the
 iterator/callable. filter/inspect borrow fresh items; map/filter_map transfer them.
 Adapters follow next even after a previous None and do not silently fuse.
-fold/for_each/count stop at first None and consume in order; fold owns its accumulator. collect returns Vec<I::Item>, preserving ownership and order; general FromIterator destinations remain unsupported. iter::range_from(start: usize) is an ordinary usize iterator, advancing with checked arithmetic. It does not add range-value syntax. [Consumer cases](../tests/reference/iterator_consumers.lkj).
+fold/for_each/count stop at first None and consume in order; fold owns its accumulator. collect returns Vec<I::Item>, preserving ownership and order; general FromIterator destinations remain unsupported. An open-ended range value, start.., calls the ordinary std::iter::range_from(start: usize) declaration. Its start executes once; iterator methods and open-ended for loops use the same source Iterator/IntoIterator implementations. This value form accepts usize, advances with checked arithmetic, and needs the iter library module. Range indexing keeps its existing borrowed-view rules, and closed numeric for ranges keep their endpoint semantics. [Consumer cases](../tests/reference/iterator_consumers.lkj).
 any/all borrow the iterator mutably, pass items by value to FnMut and stop at a
 decisive result/None; empty answers are false/true. Iteration resumes after that
 consumed item; callbacks/captures drop on return and remaining items stay owned.

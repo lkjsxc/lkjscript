@@ -8,36 +8,58 @@ struct Helpers {
     next: Path,
     option: Path,
 }
+
+fn library_function_path(resolver: &Resolver<'_>, name: &str, span: Span) -> Result<Path> {
+    let function = resolver.library_function("iter", name, span)?;
+    let declaration = resolver
+        .declarations
+        .iter()
+        .position(|item| item.item == Item::Function(function))
+        .ok_or_else(|| {
+            Diagnostic::new(span, "E_NAME", "iteration helper has no declaration identity")
+        })?;
+    let function = &resolver.program.functions[function];
+    Ok(Path {
+        declaration: Some(declaration),
+        name: qualified(&function.module, &function.name),
+        args: Vec::new(),
+    })
+}
 impl Helpers {
     fn new(resolver: &Resolver<'_>, span: Span) -> Result<Self> {
-        let path = |name| -> Result<Path> {
-            let function = resolver.library_function("iter", name, span)?;
-            let declaration = resolver
-                .declarations
-                .iter()
-                .position(|item| item.item == Item::Function(function))
-                .ok_or_else(|| {
-                    Diagnostic::new(
-                        span,
-                        "E_NAME",
-                        "iteration helper has no declaration identity",
-                    )
-                })?;
-            let function = &resolver.program.functions[function];
-            Ok(Path {
-                declaration: Some(declaration),
-                name: qualified(&function.module, &function.name),
-                args: Vec::new(),
-            })
-        };
         Ok(Self {
-            into: path("__lkjscript_into_iter")?,
-            next: path("__lkjscript_next")?,
+            into: library_function_path(resolver, "__lkjscript_into_iter", span)?,
+            next: library_function_path(resolver, "__lkjscript_next", span)?,
             option: resolver.library_type("prelude", "Option", span)?,
         })
     }
 }
 
+
+fn range_values(program: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
+    let mut indexes: BTreeSet<usize> = BTreeSet::new();
+    for node in &program.exprs {
+        if let Expr::Index { index, .. } = &node.kind { indexes.insert(*index); }
+    }
+    let mut helper = None;
+    for id in 0usize..program.exprs.len() {
+        if indexes.contains(&id) { continue; }
+        let node = program.exprs[id].clone();
+        let Expr::Range { start: Some(start), end: None, inclusive: false } = node.kind
+        else { continue; };
+        if helper.is_none() {
+            helper = Some(library_function_path(resolver, "range_from", node.span)?);
+        }
+        let callee = program.exprs.len();
+        program.exprs.push(ExprNode {
+            kind: Expr::Path(helper.as_ref().unwrap().clone()),
+            scope: node.scope,
+            span: node.span,
+        });
+        program.exprs[id].kind = Expr::Call { callee, args: vec![start] };
+    }
+    Ok(())
+}
 struct Expansion<'a> {
     program: &'a mut Program,
     scope: ModuleId,
@@ -190,6 +212,7 @@ impl Expansion<'_> {
 }
 
 pub(super) fn expand(program: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
+    range_values(program, resolver)?;
     let mut helpers = None;
     // Appended source nodes contain no collection-for. Original ids and spans
     // remain stable for diagnostics, imports, and definition evidence.

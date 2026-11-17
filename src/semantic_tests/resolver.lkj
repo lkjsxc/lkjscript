@@ -70,8 +70,46 @@ fn nested_method_and_impl_ranges_both_supply_parameters() {
 fn generic(resolver: &Resolver<'_>, span: Span, name: &str) -> bool {
     resolver.generic(span, name)
 }
+
+fn open_range_values_call_the_library_declaration_once() {
+    let parsed = crate::source::parse_bundle(&crate::source::SourceBundle {
+        root: "range.lkj".to_string(),
+        library: Some("library.lkj".to_string()),
+        files: vec![
+            crate::source::SourceInput {
+                path: "range.lkj".to_string(),
+                text: "fn range_from(_:usize)->usize{999usize} fn start(calls:&mut usize)->usize{*calls+=1usize;40usize} pub fn probe()->usize{let mut calls=0usize;let result=(start(&mut calls)..);result+calls}".to_string(),
+            },
+            crate::source::SourceInput {
+                path: "library.lkj".to_string(),
+                text: "pub mod iter {pub fn range_from(start:usize)->usize{start+1usize}}".to_string(),
+            },
+        ],
+    }).unwrap();
+    let checked = crate::frontend::check_source(&parsed).unwrap();
+    let program = checked.program();
+    let entry = program.functions.iter().position(|function| function.name == "probe").unwrap();
+    let result = crate::interpreter::run(program, entry, &[0u64;0], &mut Vec::<u8>::new()).unwrap();
+    assert!(matches!(result.value, crate::interpreter::Scalar::Int { value: 42, .. }));
+}
+
+
+fn open_range_slices_need_no_iterator_library_and_local_names_cannot_supply_it() {
+    let source = crate::syntax::parse(
+        "pub fn probe()->i64{let values=[1i64,42i64];let tail=&values[1usize..];tail[0usize]}"
+    ).unwrap();
+    assert!(crate::frontend::check_source(&source).is_ok());
+    let source = crate::syntax::parse(
+        "mod iter{pub fn range_from(start:usize)->usize{start}} pub fn probe()->usize{(1usize..)}"
+    ).unwrap();
+    let problem = crate::resolve::resolve(&source).err().unwrap();
+    assert_eq!(problem.code, "E_UNSUPPORTED");
+}
+
 pub fn run() -> usize {
     lookup_keeps_file_name_and_enclosing_span_boundaries();
     nested_method_and_impl_ranges_both_supply_parameters();
-    2
+    open_range_values_call_the_library_declaration_once();
+    open_range_slices_need_no_iterator_library_and_local_names_cannot_supply_it();
+    4
 }

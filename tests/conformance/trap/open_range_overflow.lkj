@@ -1,0 +1,3 @@
+// expect: trap R0001
+// stdout:
+pub fn probe() -> usize { let mut values = (18446744073709551615usize..); values.next().unwrap() }

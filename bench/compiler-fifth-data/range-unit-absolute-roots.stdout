@@ -1,0 +1,22 @@
+"impl:resolve::iteration::Helpers#65eaba7bc83789e1" level=source-claim operation-target
+"resolve::iteration" level=source-claim operation-target
+"resolve::iteration::expand" level=source-claim operation-target
+"units::project" level=source-claim operation-target
+"/home/coder/workspace/lkjscript/src/resolve/iteration.lkj" level=source-claim file before=a21cc7bfa1c88ee181a3d2f946b26685c1bbab708b765364f90b5047d27f3acb after=e810345a52dcdcfcd12b8381e2d65ebdbb00ae284cabb4043e55f4a8912bc689
+"/home/coder/workspace/lkjscript/src/units.lkj" level=source-claim file before=8678221790a0ec23bd6db6f7cae71225958a1ce98e0b53943ff217fc0fd4329b after=ae786dd66d63ef97e9c70f641c8d4af3432749c4313beadd641cbefa34384969
+transaction sites=5 files=2 identities=4
+"impl:resolve::iteration::Helpers#65eaba7bc83789e1" level=source-claim changed=text-only
+"resolve::iteration::Helpers::new" level=source-claim changed=body
+"resolve::iteration::expand" level=source-claim changed=body
+"resolve::iteration::library_function_path" level=source-claim changed=added
+"resolve::iteration::library_function_path::param:name" level=source-claim changed=added
+"resolve::iteration::library_function_path::param:resolver" level=source-claim changed=added
+"resolve::iteration::library_function_path::param:span" level=source-claim changed=added
+"resolve::iteration::range_values" level=source-claim changed=added
+"resolve::iteration::range_values::param:program" level=source-claim changed=added
+"resolve::iteration::range_values::param:resolver" level=source-claim changed=added
+"units::project" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=f2d5b5e392baf732c47783fa55b3f38bdede7253546356847872328e97afab18 after=a65b85521ad86be5234d481bb192740c451d20127a448e4f16ce1c402d53aaa5 checked-instances=13691 fresh-checked=13691 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=2e63ec17a952e6797198792266237844fc91a2bf74bad6036d00dc2bce75dcd5 source-after=b97f7a5b40a4849e17a387122be15be88de85671da0a477c8b0358e3e433edf2 mode=apply
+replay desired=a65b85521ad86be5234d481bb192740c451d20127a448e4f16ce1c402d53aaa5 candidate=a65b85521ad86be5234d481bb192740c451d20127a448e4f16ce1c402d53aaa5 verified=true operations=5
