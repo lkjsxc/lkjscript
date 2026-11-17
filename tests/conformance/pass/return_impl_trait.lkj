@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+trait Value { fn get(&self) -> i64; }
+#[derive(Clone, Copy)]
+struct Number { value: i64 }
+impl Value for Number { fn get(&self) -> i64 { self.value } }
+fn make(value: i64) -> impl Value { Number { value } }
+fn generic<T: Value>(value: T) -> impl Value { value }
+fn forward() -> impl Value { make(20i64) }
+fn same<T: Value>(left: T, right: T) -> i64 { left.get() + right.get() }
+pub fn probe() -> i64 {
+    same(make(10i64), make(12i64)) + forward().get() + generic(Number { value: 0i64 }).get()
+}

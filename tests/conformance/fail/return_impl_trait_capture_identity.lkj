@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+fn make<T>(value: T) -> impl Copy { let _ = value; 42i64 }
+fn same<T>(left: T, right: T) { let _ = left; let _ = right; }
+pub fn probe() -> i64 { same(make(1i64), make(2u64)); 42i64 }

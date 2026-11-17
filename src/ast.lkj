@@ -106,6 +106,7 @@ pub struct GenericParam {
 pub struct ImplTrait {
     pub bounds: Vec<TypeId>,
     pub argument: bool,
+    pub result: Option<usize>,
 }
 
 #[derive(Clone)]

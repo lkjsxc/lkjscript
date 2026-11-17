@@ -1,0 +1,14 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+trait Source { type Item; fn get(&self) -> Self::Item; }
+struct Holder<T> { value: T }
+impl<T: Clone> Source for Holder<T> {
+    type Item = T;
+    fn get(&self) -> T { self.value.clone() }
+}
+#[derive(Clone)]
+struct Factory<T: Clone> { value: T }
+impl<T: Clone> Factory<T> {
+    fn unused(self) -> impl Source<Item = Self> { Holder { value: self.value } }
+}
+pub fn probe() -> i64 { 42i64 }

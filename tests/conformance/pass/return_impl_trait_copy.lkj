@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+trait Value { fn get(&self) -> i64; }
+impl Value for i64 { fn get(&self) -> i64 { *self } }
+fn make() -> impl Value + Copy { 21i64 }
+fn consume<T: Value>(value: T) -> i64 { value.get() }
+fn automatic<T: Send + Sync>(value: T) -> T { value }
+pub fn probe() -> i64 { let value = automatic(make()); consume(value) + consume(value) }

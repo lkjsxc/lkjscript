@@ -82,6 +82,13 @@ fn type_term(
             continue;
         }
         if !ready {
+            if source.impl_traits.get(&ty).is_some_and(|form| form.result.is_some()) {
+                let mut captures = Vec::new();
+                for value in env.values() { captures.push(*value); }
+                let value = push(terms, Term::Named(format!("$opaque:{ty}"), captures));
+                done.insert(ty, value);
+                continue;
+            }
             if let Type::Path(p) = &source.types[ty].kind {
                 if let Some(key) = self_projection_key(source, p) {
                     if let Some(value) = env.get(&key) {

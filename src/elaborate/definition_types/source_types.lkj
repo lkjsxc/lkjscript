@@ -70,6 +70,19 @@ impl Infer<'_, '_> {
                             pending.push(Work::Source { id: qualification.receiver, environment });
                             continue;
                         }
+                        let opaque = self.source.impl_traits.get(&id).is_some_and(|form| form.result.is_some());
+                        if opaque {
+                            let bindings = if environment == 0 { base_environment }
+                                else { &environments[environment - 1] };
+                            let mut names = Vec::new(); let mut captures = Vec::new();
+                            for name in super::super::opaque::capture_names(self.source, id) {
+                                if let Some(value) = bindings.get(&name) { names.push(name); captures.push(*value); }
+                            }
+                            let receiver = self.shaped(Shape::Opaque(id, names, captures));
+                            self.opaque_bound_equations(id, receiver, bindings)?;
+                            values.push(receiver);
+                            continue;
+                        }
                         if path.declaration.is_none() && path.args.is_empty() {
                             let bindings = if environment == 0 {
                                 base_environment

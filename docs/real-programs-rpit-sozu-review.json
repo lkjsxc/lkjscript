@@ -1,0 +1,35 @@
+{
+   "inputs" : {
+      "bank" : {
+         "path" : "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/review-bank-through-apit.json",
+         "sha256" : "919d8b0c313e0a87354bb444e7abe5f339109ca6fd8f3c32de8614b82914f8b0"
+      },
+      "projection" : {
+         "path" : "/home/coder/workspace/lkjscript-specimens/projections/sozu-1.0.6/projection.json",
+         "sha256" : "3ad1b9efdc73fb42f61aa3cb5d0dfaf1edea4d5fecf68e4b48e4cedd01db38b0",
+         "source" : {
+            "commit" : "c5ff06a12bd514e06ab28965052d0ad1e19c45b3",
+            "object_format" : "sha1",
+            "origin" : "https://github.com/sozu-proxy/sozu.git",
+            "root" : "/home/coder/workspace/lkjscript-specimens/sozu-1.0.6"
+         }
+      },
+      "receipt" : {
+         "compiler" : {
+            "path" : "/home/coder/workspace/lkjscript-programs-rpit-landing-20261118/target/lkjscript",
+            "sha256" : "7560e8c6ecd95da2943fc1c424a70ad0109af4fc54df82ebd1b417a755ea82cf"
+         },
+         "path" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-rpit-7560e8c6ecd95da2.json",
+         "sha256" : "c8e1d6fe3db82daf263fc1cb30a5a60554fa1c6ce8b441f2094d3b751c902d30"
+      },
+      "unreviewed_report" : {
+         "path" : "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/rpit-7560e8c6/sozu-unreviewed.json",
+         "sha256" : "37a4aec62fe1165e865f058314c027662f52be1345725d55e9e8a9ed333fd61c"
+      }
+   },
+   "interpretation" : "Previously reviewed exact diagnostic identities only; every recovery parent was revalidated earlier in every current root. Unmatched or parentless entries remain unclassified.",
+   "kind" : "explicit_foreign_diagnostic_site_review",
+   "package" : "sozu",
+   "schema" : 1,
+   "sites" : []
+}

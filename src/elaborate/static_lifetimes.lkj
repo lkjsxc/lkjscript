@@ -40,6 +40,13 @@ pub(super) fn annotations(source: &a::Program) -> Result<()> {
             continue;
         }
         outputs[id] = true;
+        if let Some(form) = source.impl_traits.get(&id) {
+            for bound in &form.bounds {
+                if matches!(&source.types[*bound].kind, a::Type::Path(path) if path.name.starts_with('\'')) {
+                    pending.push(*bound);
+                }
+            }
+        }
         children(&source.types[id].kind, &mut pending);
     }
     for (id, node) in source.types.iter().enumerate() {
@@ -57,6 +64,10 @@ pub(super) fn annotations(source: &a::Program) -> Result<()> {
 pub(super) fn has_static(source: &a::Program, result: usize) -> bool {
     let mut pending = vec![result];
     while let Some(id) = pending.pop() {
+        if let Some(lifetime) = super::opaque::result_lifetime(source, id) {
+            if lifetime == "'static" { return true; }
+            continue;
+        }
         let kind = &source.types[id].kind;
         if explicit_static(kind) {
             return true;
@@ -120,6 +131,10 @@ fn wholly_static(source: &a::Program, result: usize) -> bool {
     while let Some((id, environment)) = pending.pop() {
         let (id, environment) = substitution(source, &environments, id, environment);
         if !seen.insert((id, environment)) {
+            continue;
+        }
+        if let Some(lifetime) = super::opaque::result_lifetime(source, id) {
+            if lifetime != "'static" { return false; }
             continue;
         }
         match &source.types[id].kind {

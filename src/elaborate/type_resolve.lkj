@@ -137,6 +137,12 @@ impl Compiler<'_> {
                         continue;
                     }
                     work.pending.push(Work::Remember { id, environment });
+                    let opaque = self.source.impl_traits.get(&id).is_some_and(|form| form.result.is_some());
+                    if opaque {
+                        let ty = self.opaque_type(id, &work.environments[environment])?;
+                        work.values.push(ty);
+                        continue;
+                    }
                     let node = &self.source.types[id];
                     match &node.kind {
                         a::Type::Infer => {

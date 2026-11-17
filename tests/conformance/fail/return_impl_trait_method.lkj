@@ -1,0 +1,7 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
+#[derive(Clone)]
+struct Number { value: i64 }
+impl Number { fn hidden(&self) -> i64 { self.value } }
+fn make() -> impl Clone { Number { value: 42i64 } }
+pub fn probe() -> i64 { make().hidden() }

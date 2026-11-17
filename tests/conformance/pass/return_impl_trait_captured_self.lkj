@@ -1,0 +1,25 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; fn get(&self) -> Self::Item; }
+struct Holder<T> { value: T }
+impl<T: Clone> Source for Holder<T> {
+    type Item = T;
+    fn get(&self) -> T { self.value.clone() }
+}
+#[derive(Clone)]
+struct Factory<T> where T: Clone { value: T }
+trait Family { type Item; }
+impl<T> Family for Factory<T> where T: Clone { type Item = T; }
+impl<T> Factory<T> where T: Clone {
+    fn wrap(self) -> impl Source<Item = Self> { Holder { value: self } }
+    fn projection(self) -> impl Source<Item = <Self as Family>::Item> {
+        Holder { value: self.value }
+    }
+}
+fn reader<T>(factory: Factory<T>) -> impl Fn() -> T where T: Clone {
+    let ready = factory.wrap().get();
+    move || ready.value.clone()
+}
+pub fn probe() -> i64 {
+    reader(Factory { value: 20i64 })() + Factory { value: 22i64 }.projection().get()
+}

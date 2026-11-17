@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+trait Value { fn get(&self) -> i64; }
+struct Number { value: i64 }
+impl Number { fn get(&self) -> i64 { 0i64 } }
+impl Value for Number { fn get(&self) -> i64 { self.value } }
+fn make<T: Value>(value: T) -> impl Fn() -> i64 { move || value.get() }
+pub fn probe() -> i64 { make(Number { value: 42i64 })() }

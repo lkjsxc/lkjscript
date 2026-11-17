@@ -1,0 +1,248 @@
+//! Return-position impl Trait is opaque at the source contract and concrete in
+//! emitted IR. Abstract result IDs exist only in definition verification; the
+//! independent checker receives the same ordinary layouts and calls as before.
+use super::{Compiler, Instance, PendingFunction, Result, a, err, ir};
+use std::collections::{BTreeMap, BTreeSet};
+
+type Key = (a::TypeId, Vec<(String, usize)>);
+
+#[derive(Default)]
+pub(super) struct Catalog {
+    hidden: BTreeMap<Key, usize>,
+    abstract_types: BTreeMap<Key, usize>,
+    active: BTreeSet<Key>,
+    pub(super) names: BTreeMap<usize, a::TypeId>,
+    pub(super) compiled: BTreeSet<usize>,
+    pub(super) checked_functions: BTreeSet<usize>,
+    checked: BTreeMap<usize, usize>,
+    checking: BTreeSet<usize>,
+    verified_library: BTreeSet<usize>,
+}
+
+pub(super) fn capture_names(source: &a::Program, ty: a::TypeId) -> Vec<String> {
+    let owner = source.impl_traits.get(&ty).unwrap().result.unwrap();
+    let mut parameters = BTreeSet::new();
+    for parameter in &source.functions[owner].generics {
+        if !parameter.lifetime { parameters.insert(parameter.name.clone()); }
+    }
+    if let a::FunctionOwner::Implementation(implementation) =
+        source.function_owner(a::FunctionId { index: owner }) {
+        parameters.insert("Self".to_string());
+        for parameter in &source.impls[implementation.index].generics {
+            if !parameter.lifetime { parameters.insert(parameter.name.clone()); }
+        }
+    }
+    let mut names = Vec::new();
+    for name in parameters { names.push(name); }
+    names
+}
+
+pub(super) fn result_lifetime(source: &a::Program, ty: a::TypeId) -> Option<String> {
+    let form = source.impl_traits.get(&ty)?;
+    if form.result.is_none() { return None; }
+    let mut result = None;
+    for bound in &form.bounds {
+        if let a::Type::Path(path) = &source.types[*bound].kind {
+            if path.name == "'static" { return Some(path.name.clone()); }
+            if path.name.starts_with('\'') { result = Some(path.name.clone()); }
+        }
+    }
+    result
+}
+
+impl Compiler<'_> {
+    fn opaque_key(&self, ty: a::TypeId, substitutions: &BTreeMap<String, usize>) -> Key {
+        let mut bindings = Vec::new();
+        for name in capture_names(self.source, ty) {
+            if let Some(value) = substitutions.get(&name) { bindings.push((name, *value)); }
+        }
+        (ty, bindings)
+    }
+
+    pub(super) fn opaque_type(&mut self, ty: a::TypeId,
+        substitutions: &BTreeMap<String, usize>) -> Result<usize> {
+        if self.contracts.is_none() { return self.opaque_hidden_result(ty, substitutions); }
+        self.verify_opaque_definition(ty)?;
+        let key = self.opaque_key(ty, substitutions);
+        if self.opaque.active.contains(&key) {
+            return Err(err(self.source.types[ty].span, "E_UNSUPPORTED",
+                "recursive opaque result inference is not implemented yet"));
+        }
+        if let Some(value) = self.opaque.abstract_types.get(&key) { return Ok(*value); }
+        let form = self.source.impl_traits.get(&ty).unwrap().clone();
+        let value = self.rigid_type(&format!("opaque:{ty}"));
+        self.opaque.abstract_types.insert(key, value);
+        self.opaque.names.insert(value, ty);
+        let scope = self.contracts.as_ref().unwrap().active_scope;
+        self.contracts.as_mut().unwrap().active_scope = form.result.unwrap();
+        let name = format!("$result:{ty}");
+        let parameter = a::GenericParam { name: name.clone(), bounds: form.bounds,
+            lifetime: false, implicit: true, span: self.source.types[ty].span };
+        let mut environment = substitutions.clone();
+        environment.insert(name, value);
+        let result = self.assume_parameter_bounds(&[parameter], &environment);
+        self.contracts.as_mut().unwrap().active_scope = scope;
+        result?;
+        // Rust exposes automatic Send/Sync facts while ordinary traits, Copy,
+        // field layout, and inherent methods remain behind the result contract.
+        let hidden = self.opaque_hidden_result(ty, substitutions)?;
+        if self.has_view(hidden) {
+            // Keep lifetime-carrying storage in the disposable contract value.
+            // The field has no source spelling, so only advertised operations
+            // can observe it; the ordinary checker still sees every live loan.
+            let copy = super::is_copy(&self.types, value);
+            self.types[value].kind = ir::TypeKind::Struct {
+                fields: vec![ir::Field { name: "$opaque".to_string(), ty: hidden }], copy,
+            };
+        }
+        let automatic_bounds: Vec<String> = vec!["Send".to_string(), "Sync".to_string()];
+        for automatic in automatic_bounds {
+            if self.satisfies_identity(hidden,
+                &crate::generics::TraitIdentity::Builtin(automatic.clone())) {
+                self.assume_builtin(value, &automatic);
+            }
+        }
+        Ok(value)
+    }
+
+    fn verify_opaque_definition(&mut self, ty: a::TypeId) -> Result<usize> {
+        let source = self.source.impl_traits.get(&ty).unwrap().result.unwrap();
+        if let Some(index) = self.opaque.checked.get(&source) { return Ok(*index); }
+        if !self.opaque.checking.insert(source) {
+            return Err(err(self.source.types[ty].span, "E_UNSUPPORTED",
+                "recursive opaque result inference is not implemented yet"));
+        }
+        let scope = self.contracts.as_ref().unwrap().active_scope;
+        let result = self.verify_opaque_source(ty, source);
+        self.contracts.as_mut().unwrap().active_scope = scope;
+        self.opaque.checking.remove(&source);
+        let index = result?;
+        self.opaque.checked.insert(source, index);
+        self.opaque.checked_functions.insert(index);
+        Ok(index)
+    }
+
+    fn verify_opaque_source(&mut self, ty: a::TypeId, source: usize) -> Result<usize> {
+        // Exactly one rigid source proof records method and closure choices.
+        // Concrete caller substitutions must never overwrite that evidence.
+        let substitutions = self.definition_parameters(source)?;
+        let hidden = self.opaque_hidden_result(ty, &substitutions)?;
+        self.compile_opaque_definition(ty, &substitutions, hidden)
+    }
+
+    fn compile_opaque_definition(&mut self, ty: a::TypeId,
+        substitutions: &BTreeMap<String, usize>, hidden: usize) -> Result<usize> {
+        let source_index = self.source.impl_traits.get(&ty).unwrap().result.unwrap();
+        let source = self.source.functions[source_index].clone();
+        let mut substitutions = substitutions.clone();
+        self.prepare_associated(source_index, &mut substitutions)?;
+        self.bounds(&source.generics, &substitutions)?;
+        self.check_where_predicates(&source.predicates, &substitutions)?;
+        let mut locals = Vec::new();
+        for parameter in &source.params {
+            locals.push(ir::Local { name: parameter.name.clone(), mutable: parameter.mutable,
+                ty: self.resolve(parameter.ty, &substitutions)? });
+        }
+        let (return_source, infer_return) = self.return_source(source_index, &source, &locals, hidden, &substitutions)?;
+        let index = self.functions.len();
+        self.functions.push(ir::Function { file: source.span.file,
+            name: format!("$opaque-definition:{source_index}:{index}"), params: locals.len(),
+            locals, result: hidden, return_source, body: Vec::new(), test: false });
+        if infer_return { self.return_inference.insert(index); }
+        let instance = Instance { source: source_index, substitutions };
+        self.pending_functions.push((index, PendingFunction::Source(instance.clone())));
+        let body = self.compile_function(index, &instance)?;
+        self.functions[index] = body;
+        Ok(index)
+    }
+
+    pub(super) fn prepare_opaque_definition(&mut self, index: usize) -> Result<()> {
+        if !super::library_definition(self.source, index) || self.opaque.verified_library.contains(&index) {
+            return Ok(());
+        }
+        // A generic library producer can be demanded before the outer queue
+        // reaches its batch. Establish its source-bound choices before eager
+        // lowering prepares the returned closure's callable entry.
+        let definition = match self.definition_types.remove(&index) {
+            Some(definition) => definition,
+            None => super::definition_types::infer(self.source, &self.names,
+                &self.implementations, index, self.capture_references)?,
+        };
+        let mut definitions = BTreeMap::new(); definitions.insert(index, definition);
+        let mut verifier = Compiler::new_with_capture(self.source, self.capture_references)?;
+        let (evidence, problems) = super::generic_check::validate_demand(self.source, &mut verifier, definitions)?;
+        for (expression, selection) in evidence.methods { self.method_selections.insert(expression, selection); }
+        self.closures.evidence.extend(evidence.closures);
+        for (source, definition) in evidence.types { self.definition_types.insert(source, definition); }
+        if let Some(problem) = problems.first() { return Err(problem.clone()); }
+        self.opaque.verified_library.insert(index);
+        Ok(())
+    }
+
+    fn opaque_hidden_result(&mut self, ty: a::TypeId,
+        substitutions: &BTreeMap<String, usize>) -> Result<usize> {
+        let key = self.opaque_key(ty, substitutions);
+        if let Some(value) = self.opaque.hidden.get(&key) { return Ok(*value); }
+        let span = self.source.types[ty].span;
+        if !self.opaque.active.insert(key.clone()) {
+            return Err(err(span, "E_TYPE", "cyclic impl Trait result has no defining hidden type"));
+        }
+        let result = self.infer_opaque_hidden(ty, substitutions);
+        self.opaque.active.remove(&key);
+        let result = result?;
+        self.opaque.hidden.insert(key, result);
+        Ok(result)
+    }
+
+    fn infer_opaque_hidden(&mut self, ty: a::TypeId,
+        substitutions: &BTreeMap<String, usize>) -> Result<usize> {
+        let span = self.source.types[ty].span;
+        let index = self.source.impl_traits.get(&ty).unwrap().result.unwrap();
+        let mut substitutions = substitutions.clone();
+        self.prepare_associated(index, &mut substitutions)?;
+        let definition = match self.definition_types.remove(&index) {
+            Some(definition) => definition,
+            None => super::definition_types::infer(self.source, &self.names,
+                &self.implementations, index, self.capture_references)?,
+        };
+        let result = definition.result_type(self, &substitutions, span);
+        self.definition_types.insert(index, definition);
+        let result = result?;
+        Ok(result)
+    }
+
+    /// A producer's checked root exposes its own hidden result. Its ordinary
+    /// declaration keeps the opaque signature, including recursive source calls.
+    pub(super) fn opaque_definition(&mut self, declaration: usize, source_index: usize,
+        _substitutions: &BTreeMap<String, usize>) -> Result<usize> {
+        let source = self.source.functions[source_index].clone();
+        if !self.source.impl_traits.get(&source.result).is_some_and(|form| form.result.is_some()) {
+            return Ok(declaration);
+        }
+        self.verify_opaque_definition(source.result)
+    }
+
+    pub(super) fn check_opaque_result(&mut self, index: usize, result: usize,
+        substitutions: &BTreeMap<String, usize>) -> Result<()> {
+        let ty = self.source.functions[index].result;
+        let form = self.source.impl_traits.get(&ty).cloned();
+        let Some(form) = form else { return Ok(()); };
+        if form.result != Some(index) { return Ok(()); }
+        if self.has_view(result) && result_lifetime(self.source, ty).is_none() {
+            return Err(err(self.source.types[ty].span, "E_UNSUPPORTED",
+                "a view-bearing impl Trait result requires an explicit result lifetime bound"));
+        }
+        let mut bounds = Vec::new();
+        for bound in &form.bounds {
+            if !matches!(&self.source.types[*bound].kind, a::Type::Path(path) if path.name.starts_with('\'')) {
+                bounds.push(*bound);
+            }
+        }
+        let name = format!("$result:{ty}");
+        let parameter = a::GenericParam { name: name.clone(), bounds,
+            lifetime: false, implicit: true, span: self.source.types[ty].span };
+        let mut environment = substitutions.clone();
+        environment.insert(name, result);
+        self.bounds(&[parameter], &environment)
+    }
+}

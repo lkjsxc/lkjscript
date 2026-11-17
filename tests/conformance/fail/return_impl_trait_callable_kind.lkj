@@ -1,0 +1,7 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+fn unused() -> impl Fn() -> i64 {
+    let mut value = 0i64;
+    move || { value += 1i64; value }
+}
+pub fn probe() -> i64 { 42i64 }

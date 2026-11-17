@@ -176,6 +176,23 @@ impl Infer<'_, '_> {
                 Some((closure.arguments.clone(), closure.result))
             }
             Shape::Rigid(name) => self.callable_parameters.get(&name).cloned(),
+            Shape::Opaque(ty, names, values) => {
+                let environment = self.opaque_environment(ty, &names, &values)?;
+                let mut signature = None;
+                let bounds = self.source.impl_traits.get(&ty).unwrap().bounds.clone();
+                for bound in bounds {
+                    let a::Type::Path(path) = self.source.types[bound].kind.clone() else { continue; };
+                    if path.declaration.is_some() || path.args.len() != 2usize
+                        || !matches!(path.name.as_str(), "Fn" | "FnMut" | "FnOnce") { continue; }
+                    let a::Type::Tuple(parameters) = self.source.types[path.args[0]].kind.clone() else { continue; };
+                    let mut parameters_out = Vec::new();
+                    for parameter in parameters { parameters_out.push(self.source_type(parameter, &environment)?); }
+                    let output = self.source_type(path.args[1], &environment)?;
+                    signature = Some((parameters_out, output));
+                    break;
+                }
+                signature
+            }
             _ => None,
         };
         let Some((parameters, output)) = signature else {

@@ -25,58 +25,49 @@
          "total" : 146
       },
       "removed_old_target_sites" : {
-         "dom" : 14,
-         "nom" : 51,
-         "total" : 65
+         "dom" : 17,
+         "nom" : 129,
+         "total" : 146
       },
       "source_semantic_edits" : 0,
       "supported_original_target_sites" : {
-         "dom" : 14,
-         "nom" : 51,
-         "total" : 65
+         "dom" : 17,
+         "nom" : 129,
+         "total" : 146
       },
-      "target_site_interpretation" : "All 146 original target diagnostic identities are absent from these root observations. This APIT-only stage does not support RPIT: its parser consumes opaque result syntax, while earlier unrelated parse refusals prevent the later resolver from emitting its RPIT refusal. Source-form support credit is 65 sites: prior equality/qualified 63 plus two verified DOM argument occurrences. The 81 original result occurrences remain unsupported; whole-root admission remains zero.",
-      "unimplemented_original_result_position_sites" : {
-         "dom" : 3,
-         "nom" : 78,
-         "total" : 81
-      }
+      "target_implementation_scope" : "All three target source-form categories are implemented in the documented subset and independently exercised. These counts are the original diagnostic-site cohort, not 146 admitted surrounding functions or original parameterized trait contracts.",
+      "target_site_interpretation" : "All 146 original target diagnostic identities remain absent. Unlike APIT alone, dedicated semantic controls now validate result-position impl Trait as well as arguments, equality and qualified paths. The original nom Parser<I> positional trait contracts, generic associated types and other documented limits remain separate refusals; no surrounding function, module or crate admission is inferred."
    },
-   "argument_position_original_sites" : [
-      {
-         "column" : 31,
-         "function" : "update_nodes",
-         "line" : 821,
-         "package" : "dom",
-         "path" : "src/selection.rs",
-         "source_form" : "f: impl Fn(&mut TreeNode)"
-      },
-      {
-         "column" : 37,
-         "function" : "update_nodes_by_id",
-         "line" : 831,
-         "package" : "dom",
-         "path" : "src/selection.rs",
-         "source_form" : "f: impl Fn(&mut Vec<TreeNode>, &NodeId)"
-      }
-   ],
    "baseline_compiler_sha256" : "eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f",
-   "compiler_sha256" : "210181363677c5d877fd63b9b52f2591f402c907ff7e0a19d2c22ff1471178b3",
+   "compiler_sha256" : "7560e8c6ecd95da2943fc1c424a70ad0109af4fc54df82ebd1b417a755ea82cf",
    "form_support" : {
-      "argument_impl_trait" : "supported",
-      "associated_type_equality" : "supported",
-      "ordinary_impl_trait_form_complete" : false,
-      "qualified_associated_paths" : "supported",
-      "return_position_impl_trait" : "not_implemented_in_this_stage"
+      "argument_impl_trait" : "supported_in_documented_subset",
+      "associated_type_equality" : "supported_in_documented_subset",
+      "ordinary_impl_trait_form_complete" : true,
+      "qualified_associated_paths" : "supported_in_documented_subset",
+      "remaining_limits" : [
+         "Positional generic trait arguments, including original nom Parser<I> contracts",
+         "Generic associated types",
+         "Standalone qualified function values",
+         "Nested opaque return positions and trait-method opaque results",
+         "Recursive opaque hidden-type inference and unsupported lifetime capture combinations"
+      ],
+      "return_position_impl_trait" : "supported_in_documented_subset"
    },
    "interpretation" : [
-      "APIT-only stage: all 146 old target diagnostics are not observed, but the 81 original result-position occurrences remain unsupported. Support credit is 65 original source forms, including two verified argument occurrences; no whole function, module, or crate admission is inferred.",
+      "The RPIT stage supplies independently validated opaque-result semantics. Its twelve root diagnostic streams are byte-identical to APIT because the same earlier parser barriers remain; root observations alone do not establish that semantic support.",
       "Original source bytes, projection identities and the selected library inventory remain unchanged. Original-suffix refusals are compared byte-for-byte.",
       "A vanished diagnostic is not proof that the surrounding program admits. New independent sites, changed diagnostic identities at old coordinates, and recovery artifacts are reported separately.",
       "The three original classification JSON files remain the immutable baseline; this file records the current frontier and exact deltas.",
-      "Source/frontend edits receive no operation-adoption credit from these observations."
+      "Source/frontend edits receive no operation-adoption credit from these observations.",
+      "No large root or real nom module tree is admitted, and no nom own test has run under lkjscript. The existing Rust oracle and the reduced/handwritten semantic controls remain distinct from an upstream module port."
    ],
    "kind" : "current_foreign_program_refusal_frontier",
+   "observation_comparison_to_previous_stage" : {
+      "all_12_exit_stdout_stderr_streams" : "byte_identical",
+      "meaning" : "APIT already consumed opaque result syntax before a later unsupported-result resolver. The unchanged root observations do not measure the additional semantic RPIT support, which is established by its focused controls.",
+      "stage" : "argument_impl_trait"
+   },
    "rerank_payload_fingerprint" : "sha256(JSON::PP canonical ascii encode(rerank without inputs))",
    "schema" : 1,
    "specimens" : {
@@ -150,26 +141,26 @@
                "entry_sha256" : "81441eac6c5af9fe4aa7eea33f2f11ebad8a6d309a0f0fb80a17c9d2174f5779",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5612,
+               "peak_rss_kib" : 5344,
                "route" : "original_suffix",
                "stderr_sha256" : "1170c98833b245d8181dc2850bcfc1d36d34bc83792f33ec55fd3787b0b748e1",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.001912
+               "wall_seconds" : 0.001173
             },
             {
                "entry_sha256" : "81441eac6c5af9fe4aa7eea33f2f11ebad8a6d309a0f0fb80a17c9d2174f5779",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 40936,
+               "peak_rss_kib" : 36856,
                "route" : "suffix_projection",
                "stderr_sha256" : "61ed936d543e1c1d818d069274491481b42f1f6044c9424bce173ba20af67d5a",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.159815
+               "wall_seconds" : 0.117336
             }
          ],
-         "observed_at_utc" : "2026-11-17T19:35:51Z",
+         "observed_at_utc" : "2026-11-17T19:58:33Z",
          "old_site_counts" : [
             {
                "baseline_rank" : 6,
@@ -341,8 +332,8 @@
             "version" : "0.28.0"
          },
          "probe_receipt" : {
-            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-apit-210181363677c5d8.json",
-            "sha256" : "1fcff3b795b8dea08878c54f37645f3317855a28520fe9391f7c79f775064a6f"
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-rpit-7560e8c6ecd95da2.json",
+            "sha256" : "35306253b1e07454e000ef1aaaadc28e31adbba91e729bf5e90f692eb56fa7da"
          },
          "projection_manifest_sha256" : "7eef776218daecb22822d613a609a00039600c34cea05a6047216111148272c9",
          "ranked_causes" : [
@@ -503,9 +494,9 @@
             "changed_primary_diagnostics" : 1,
             "changed_recovery_rows" : 0,
             "new_independent_primary_sites" : 1,
-            "path" : "docs/real-programs-apit-dom-review.json",
+            "path" : "docs/real-programs-rpit-dom-review.json",
             "reviewed_primary_sites" : 2,
-            "sha256" : "a654532fa09bc26a1ae4612b951ca847b0c17e5ab9214cd7483f8b9a45017100",
+            "sha256" : "70fc63741fb5c7d78caacd83d0da1a828a655ce5f5082d23b3ce62df23e41506",
             "unchanged_recovery_rows" : 0
          }
       },
@@ -615,26 +606,26 @@
                "entry_sha256" : "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5612,
+               "peak_rss_kib" : 7436,
                "route" : "original_suffix",
                "stderr_sha256" : "1170c98833b245d8181dc2850bcfc1d36d34bc83792f33ec55fd3787b0b748e1",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.001292
+               "wall_seconds" : 0.001343
             },
             {
                "entry_sha256" : "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 39020,
+               "peak_rss_kib" : 38500,
                "route" : "suffix_projection",
                "stderr_sha256" : "aad5407b571b5a9266ef45e0271da9b4945b9dda65e6b45d3c296dae84814dee",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.136124
+               "wall_seconds" : 0.156686
             }
          ],
-         "observed_at_utc" : "2026-11-17T19:35:50Z",
+         "observed_at_utc" : "2026-11-17T19:58:32Z",
          "old_site_counts" : [
             {
                "baseline_rank" : 4,
@@ -726,8 +717,8 @@
             "version" : "8.0.0"
          },
          "probe_receipt" : {
-            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-apit-210181363677c5d8.json",
-            "sha256" : "a446f60ee3692e75573ba0db24f36ed3bbf73ec4b511f27e53a24abc83a31376"
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-rpit-7560e8c6ecd95da2.json",
+            "sha256" : "cca2adf56b9679115693d138c952e26dd1bbb56da01f6bb221fef3fef9e50375"
          },
          "projection_manifest_sha256" : "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
          "ranked_causes" : [
@@ -811,9 +802,9 @@
             "changed_primary_diagnostics" : 0,
             "changed_recovery_rows" : 0,
             "new_independent_primary_sites" : 4,
-            "path" : "docs/real-programs-apit-nom-review.json",
+            "path" : "docs/real-programs-rpit-nom-review.json",
             "reviewed_primary_sites" : 4,
-            "sha256" : "0c1b53ea495e74d83fba861f7626ec444be2c32749ceb3ab9781bcf9b41cf85c",
+            "sha256" : "797c8098dc88dbfcb5dcd50232d55571d53c393681c33362b2f08229b5aaea01",
             "unchanged_recovery_rows" : 0
          }
       },
@@ -850,92 +841,92 @@
                "entry_sha256" : "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5612,
+               "peak_rss_kib" : 5368,
                "route" : "original_suffix",
                "stderr_sha256" : "7b549de4db0927e5cfce74b5932bada29e9eb2d1f4453c00765287200f698e06",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "bin/src/main.rs",
-               "wall_seconds" : 0.001529
+               "wall_seconds" : 0.001975
             },
             {
                "entry_sha256" : "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 39164,
+               "peak_rss_kib" : 36904,
                "route" : "suffix_projection",
                "stderr_sha256" : "5a511b9ace6c5b6e56e3cb5266a12315b94102c4439f714268406eef6520fcda",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "bin/src/main.rs",
-               "wall_seconds" : 0.14856
+               "wall_seconds" : 0.125034
             },
             {
                "entry_sha256" : "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5612,
+               "peak_rss_kib" : 5368,
                "route" : "original_suffix",
                "stderr_sha256" : "6c077bd9d3f3ddf7b4272ee7183242c23fa8a77a2d0212dfba601bb1b82481f8",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "lib/src/lib.rs",
-               "wall_seconds" : 0.001768
+               "wall_seconds" : 0.000977
             },
             {
                "entry_sha256" : "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 37184,
+               "peak_rss_kib" : 33212,
                "route" : "suffix_projection",
                "stderr_sha256" : "4a94594ccc6f875d67e35105a6b479f997764d9fa831195a8ab1cce128447579",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "lib/src/lib.rs",
-               "wall_seconds" : 0.078407
+               "wall_seconds" : 0.07142
             },
             {
                "entry_sha256" : "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5612,
+               "peak_rss_kib" : 5368,
                "route" : "original_suffix",
                "stderr_sha256" : "a9f468a468db306f90ff1c8629d09a0a9e63bc215ad0f16255d5b664965a7b6c",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "command/src/lib.rs",
-               "wall_seconds" : 0.001788
+               "wall_seconds" : 0.000976
             },
             {
                "entry_sha256" : "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 42620,
+               "peak_rss_kib" : 39784,
                "route" : "suffix_projection",
                "stderr_sha256" : "066d558f87407ae23b0eb9a006440134dbe41154b6674f20bcb811b32a7a76b4",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "command/src/lib.rs",
-               "wall_seconds" : 0.205065
+               "wall_seconds" : 0.170557
             },
             {
                "entry_sha256" : "8a8900e43c1479621cabd4e27575bdc49624d5c43469a754dc2b6bd5272efa78",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5612,
+               "peak_rss_kib" : 5368,
                "route" : "original_suffix",
                "stderr_sha256" : "a00167481ac5fad74f5a5729cc5c94ae44f197d913df9a7a953f1767f9b210f3",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "e2e/src/lib.rs",
-               "wall_seconds" : 0.00136
+               "wall_seconds" : 0.001359
             },
             {
                "entry_sha256" : "8a8900e43c1479621cabd4e27575bdc49624d5c43469a754dc2b6bd5272efa78",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 38080,
+               "peak_rss_kib" : 34608,
                "route" : "suffix_projection",
                "stderr_sha256" : "146fbabe3156eed526d9105f8f0984bc3dcd5f6c62e120f5988aa6c13f99075e",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "e2e/src/lib.rs",
-               "wall_seconds" : 0.10212
+               "wall_seconds" : 0.08391
             }
          ],
-         "observed_at_utc" : "2026-11-17T19:35:52Z",
+         "observed_at_utc" : "2026-11-17T19:58:34Z",
          "old_site_counts" : [
             {
                "baseline_rank" : 14,
@@ -1127,8 +1118,8 @@
             "version" : "1.0.6"
          },
          "probe_receipt" : {
-            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-apit-210181363677c5d8.json",
-            "sha256" : "ab0128a839dd68f33e7fee325de3878794d249f13b55814bd1f0ebb68835b7db"
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-rpit-7560e8c6ecd95da2.json",
+            "sha256" : "c8e1d6fe3db82daf263fc1cb30a5a60554fa1c6ce8b441f2094d3b751c902d30"
          },
          "projection_manifest_sha256" : "3ad1b9efdc73fb42f61aa3cb5d0dfaf1edea4d5fecf68e4b48e4cedd01db38b0",
          "ranked_causes" : [
@@ -1423,73 +1414,108 @@
             "changed_primary_diagnostics" : 0,
             "changed_recovery_rows" : 0,
             "new_independent_primary_sites" : 0,
-            "path" : "docs/real-programs-apit-sozu-review.json",
+            "path" : "docs/real-programs-rpit-sozu-review.json",
             "reviewed_primary_sites" : 0,
-            "sha256" : "de911a5cc43941b7369f2546314f4d2a40d035cd0b12cd13d306a8ac2e9c2c25",
+            "sha256" : "c8e6c57849d0ad3f0b098b17d4b29d375533bf05564a60ef2a2cf298875a6e98",
             "unchanged_recovery_rows" : 0
          }
       }
    },
-   "stage" : "argument_impl_trait_gated",
+   "stage" : "argument_and_return_impl_trait_gated",
    "validation" : {
       "admitted_projected_roots" : 0,
+      "combined_engine_regression" : {
+         "cases" : 141,
+         "log" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/rpit-engines.log",
+            "sha256" : "c269465a2164c286318330ae6173364e2332a60db7408df25f72012c90557330"
+         },
+         "route_checks" : 282,
+         "scope" : "Equality, qualified paths, argument impl Trait and result impl Trait; this is not a claim of 141 fresh triple-route executions.",
+         "status" : "passed"
+      },
       "fixed_point" : {
          "bootstrap_log" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/bootstrap.log",
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/bootstrap.log",
             "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
          },
          "candidate_self_rebuild" : "byte_identical",
          "gate_bootstrap_log" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/bootstrap-gate.log",
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/bootstrap-gate.log",
             "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
          },
          "matching_seed" : "refreshed",
          "producer_and_seed" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/producer-and-seed.sha256",
-            "sha256" : "b23ac935fc81328055c131a2a13385eb5c7ec64c171c2ee4c250869d19a24d91"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/producer-and-seed.sha256",
+            "sha256" : "3b321eeab75397d1090478bee3c60ea7552e0e3482422c49072b9108788133f0"
          },
          "refreshed_seed_bootstrap" : "passed_byte_identical",
-         "seed_sha256" : "d0ef3e46d67ce1b3785cd0ab2ff705ae3937b38765d53d71f38519182bd29109",
+         "seed_sha256" : "1648cca464d942020674f8f744576c8105cf7305874444a9c8bf452e71f38dd4",
          "source_anchor" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/source-anchor.txt",
-            "sha256" : "5d2293b28411dd66fee010ad6d9b9b4167f1ad59dc34a2a5baab5cfa2f78b2de"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/source-anchor.txt",
+            "sha256" : "5f8cf26f671242f6b9686c469c86c85e39e22f6895b3609d9b8ced26944d2626"
          }
       },
-      "focused_cases" : 12,
-      "focused_engine_route_checks" : 24,
+      "focused_case_scope" : "44 argument/result impl-Trait cases: their 88 engine checks are part of the 141-case combined engine run; the 44 Rust witness checks are a separate invocation.",
+      "focused_cases" : 44,
+      "focused_engine_route_checks" : 88,
       "focused_logs" : {
          "engines" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/apit-engines.log",
-            "sha256" : "fc964b46ae88056498cf39970de2c619dcc9e7c4386e48759a843e84a932a503"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/rpit-engines.log",
+            "sha256" : "c269465a2164c286318330ae6173364e2332a60db7408df25f72012c90557330"
          },
          "rust" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/apit-rust.log",
-            "sha256" : "47c66a29f3df84732877bf9becd4e22e00200b9914f2a92baa06ced5fe705bc0"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/rpit-rust.log",
+            "sha256" : "ee655f83045f1057170ab010392da2eb6266623f4da87bf9c8a0c9960a1f301d"
          }
       },
       "focused_producer" : "Rust-hosted source build; final gate uses the fixed-point native producer",
       "focused_result" : "passed",
-      "focused_route_checks" : 36,
-      "focused_rust_route_checks" : 12,
+      "focused_route_checks" : 132,
+      "focused_rust_route_checks" : 44,
+      "foreign_opaque_return_reduction" : {
+         "compiler_cases" : 1,
+         "compiler_route_checks" : 2,
+         "logs" : [
+            {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/foreign-reduction-check.log",
+               "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/foreign-reduction-engines.log",
+               "sha256" : "fb69f9a94c46c2c28a8759d4724353a4a332272a57464bf3c2fab2b05d91685e"
+            },
+            {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/foreign-reduction-rust.log",
+               "sha256" : "ca7c6236dfe5eb8fac12718b34cd95fdca187b9166f96ef2ea95918b5c5d51be"
+            }
+         ],
+         "rust_oracle" : "direct rustc --crate-type lib --emit=metadata on the exact reduction; no executable wrapper",
+         "source" : {
+            "path" : "/home/coder/workspace/lkjscript-programs-rpit-landing-20261118/tests/diagnostics/programs_foreign_impl_trait.lkj",
+            "sha256" : "39dacacfaec6303505c809d77b55186d6f88497a54951445a6a6fd16abf64f91"
+         },
+         "status" : "passed"
+      },
       "full_gate" : {
          "command" : "LKJSCRIPT_GATE_JOBS=4 bash tools/check.sh",
-         "elapsed_seconds" : 807.474,
-         "fresh_case_requests" : 5703,
+         "elapsed_seconds" : 750.972,
+         "fresh_case_requests" : 5767,
          "ir_mutation" : {
             "findings" : 0,
             "log" : {
-               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/ir-mutation.log",
-               "sha256" : "7f81bd1ee46891b466567a84d0f41115bae83d9c8bafe36de38e25392ca83d3d"
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/ir-mutation.log",
+               "sha256" : "0809e9e14a9fe60a287c0a3721798106eeb47a7be0cb154ed1bca69f9d151fe1"
             },
             "mutants" : 128
          },
          "log" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/full-gate.log",
-            "sha256" : "f5160330a9d7264cf9c6893a93768250e9aca316bfabe243b18fe8ebe0cc4748"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/full-gate.log",
+            "sha256" : "9469b5a962a661760197c0d0f1df40e924880f8a20e0e5b2d15c58546880fdda"
          },
          "log_archive" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/gate-logs.tar.gz",
-            "sha256" : "a27731b2291a462d87767eba341d4165c958afd909755dd5429bde1f6d7da54a"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/gate-logs.tar.gz",
+            "sha256" : "0986183e9f71cf2f99a8557fdd373624384e796f61c78973b693751874529001"
          },
          "reused_case_requests" : 0,
          "status" : "passed",
@@ -1499,23 +1525,27 @@
       "observations" : 12,
       "projected_roots" : 6,
       "publication_ci" : {
-         "result_record" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/publication-ci.json",
+         "result_record" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/publication-ci.json",
          "status_at_commit" : "pending"
       },
       "query_edit_logs" : [
          {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/apit-query.log",
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/rpit-query.log",
+            "sha256" : "83535feb6752d9c36dd70442d1ce4fd9f5b72abfc5c7f9711f304c37b0b4a8d1"
+         },
+         {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/rpit-apit-query.log",
             "sha256" : "c960495dfcd11b6968818432f5ca8a318bbaff849696b0ce0e97d21e5384a118"
          }
       ],
       "source_check" : {
-         "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/apit-selfcheck.log",
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/rpit-selfcheck.log",
          "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
       },
       "standalone_real_programs_test" : {
          "command" : "bash tools/real-programs-test.sh target/lkjscript",
          "log" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/argument-impl-trait/standalone-real-programs.log",
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/standalone-real-programs.log",
             "sha256" : "bfe050316ba1664049ab530cb4ea400a72ef27a18a88620f0f19e8efe78c69bf"
          },
          "status" : "passed"

@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+struct Pair<T> { value: i64, unused: T }
+fn make<T>(pair: Pair<T>) -> impl Fn() -> i64 { move || pair.value }
+fn automatic<T: Send + Sync>(value: T) -> T { value }
+fn generic<T>(value: T) -> i64 {
+    let read = automatic(make(Pair { value: 42i64, unused: value }));
+    read()
+}
+pub fn probe() -> i64 { generic(String::from("unused")) }

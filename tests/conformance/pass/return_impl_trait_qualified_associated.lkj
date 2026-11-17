@@ -1,0 +1,28 @@
+// expect: value 42
+// witness: {}
+trait Answer { fn answer() -> i64; }
+trait Extra { fn extra() -> i64; }
+trait Family { type Item: Answer; fn item(&self) -> Self::Item; }
+struct Concrete {}
+impl Concrete { fn answer() -> i64 { 0i64 } }
+impl Answer for Concrete { fn answer() -> i64 { 42i64 } }
+impl Extra for Concrete { fn extra() -> i64 { 21i64 } }
+struct Maker {}
+impl Family for Maker {
+    type Item = Concrete;
+    fn item(&self) -> Concrete { Concrete {} }
+}
+fn make() -> impl Family { Maker {} }
+fn exposed() -> impl Family<Item = Concrete> { Maker {} }
+fn query<T: Family>(value: T) -> i64 {
+    let _ = value;
+    <T as Family>::Item::answer()
+}
+fn extra<T: Family>(value: T) -> i64 where <T as Family>::Item: Extra {
+    let _ = value;
+    <<T as Family>::Item as Extra>::extra()
+}
+pub fn probe() -> i64 {
+    assert_eq!(extra(exposed()), 21i64);
+    query(make())
+}

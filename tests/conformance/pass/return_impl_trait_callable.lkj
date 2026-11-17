@@ -1,0 +1,17 @@
+// expect: value 42
+// witness: {}
+fn adder(value: i64) -> impl Fn(i64) -> i64 { move |other| value + other }
+fn counter() -> impl FnMut() -> i64 {
+    let mut value = 0i64;
+    move || { value += 1i64; value }
+}
+fn owned() -> impl FnOnce() -> String {
+    let text = String::from("abc");
+    move || text
+}
+pub fn probe() -> i64 {
+    let add = adder(30i64);
+    let mut count = counter();
+    let take = owned();
+    add(6i64) + count() + count() + take().len() as i64
+}

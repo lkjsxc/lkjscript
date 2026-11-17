@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+fn make() -> impl Copy { 42i64 }
+pub fn probe() -> i64 { let value: i64 = make(); value }

@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {}
+fn repeat<T: Clone>(value: T) -> impl Fn() -> T { move || value.clone() }
+fn forward<T: Clone>(value: T) -> impl Fn() -> T { repeat(value) }
+fn identity<T>(value: T) -> T { value }
+pub fn probe() -> i64 {
+    let read = forward(21i64);
+    identity(read()) + identity(read())
+}

@@ -26,6 +26,7 @@ enum Shape {
     Projected(a::DeclarationId, String),
     Projection(a::DeclarationId, String, Variable),
     Source(a::TypeId),
+    Opaque(a::TypeId, Vec<String>, Vec<Variable>),
     Vec(Variable),
     Box(Variable),
     Ref(bool, Variable),
@@ -42,7 +43,7 @@ impl Shape {
             Self::Vec(v) | Self::Box(v) | Self::Ref(_, v) | Self::Slice(v) | Self::Array(v, _) => {
                 vec![*v]
             }
-            Self::Tuple(v) | Self::Nominal(_, v) | Self::Closure(_, v) => v.clone(),
+            Self::Tuple(v) | Self::Nominal(_, v) | Self::Closure(_, v) | Self::Opaque(_, _, v) => v.clone(),
             _ => Vec::new(),
         }
     }
@@ -135,6 +136,7 @@ struct Node {
 
 pub(super) struct DefinitionTypes {
     nodes: Vec<Node>,
+    result: Variable,
     expressions: BTreeMap<a::ExprId, Variable>,
     bindings: BTreeMap<a::PatternId, Variable>,
     closures: BTreeMap<a::ExprId, closures::Closure>,
@@ -147,6 +149,11 @@ pub(super) struct Types {
     pub(super) bindings: BTreeMap<a::PatternId, usize>,
 }
 impl DefinitionTypes {
+    pub(super) fn result_type(&self, compiler: &mut Compiler<'_>,
+        substitutions: &BTreeMap<String, usize>, span: a::Span) -> Result<usize> {
+        self.materialize(self.result, compiler, substitutions, &mut BTreeMap::new(), span)?
+            .ok_or_else(|| err(span, "E_TYPE", "cannot infer the hidden result type of impl Trait"))
+    }
     fn root(&self, mut v: Variable) -> Variable {
         while self.nodes[v].parent != v {
             v = self.nodes[v].parent;
@@ -249,14 +256,30 @@ impl DefinitionTypes {
                         )?)
                     }
                 }
-                Shape::Rigid(name) | Shape::Projected(_, name) => substitutions.get(&name).copied(),
                 Shape::Projection(declaration, member, _) => {
                     let a::Item::Trait(owner) = compiler.source.declarations[declaration].item else {
                         return Err(err(span, "E_TRAIT", "qualified projection requires a declared trait"));
                     };
                     Some(compiler.associated_type_for_trait(values[0], owner, &member, span)?)
                 }
+                Shape::Rigid(name) => substitutions.get(&name).copied(),
+                Shape::Projected(_, name) => {
+                    if let Some(value) = substitutions.get(&name) { Some(*value) }
+                    else {
+                        let first = name.find("::").unwrap_or(name.len());
+                        let known = substitutions.contains_key(&name[..first].to_string());
+                        if known {
+                            Some(compiler.named_type(&a::Path { qualification: None, bindings: Vec::new(), declaration: None, name, args: Vec::new() },
+                                substitutions, span)?)
+                        } else { None }
+                    }
+                }
                 Shape::Source(source) => compiler.resolve_if_known(source, substitutions)?,
+                Shape::Opaque(source, names, _) => {
+                    let mut captured = BTreeMap::new();
+                    for index in 0..names.len() { captured.insert(names[index].clone(), values[index]); }
+                    Some(compiler.opaque_type(source, &captured)?)
+                }
                 Shape::Vec(_) => {
                     Some(compiler.intern(String::new(), ir::TypeKind::Vec { inner: values[0] }))
                 }
@@ -566,6 +589,7 @@ impl Infer<'_, '_> {
                 }
             }
             Some(Shape::Projected(_, member)) | Some(Shape::Projection(_, member, _)) => format!("associated type {member}"),
+            Some(Shape::Opaque(id, _, _)) => super::semantic::source_type_name(self.source, id),
             Some(Shape::Source(id)) => match &self.source.types[id].kind {
                 a::Type::Path(path) => path.name.clone(),
                 _ => "declared type".to_string(),
@@ -716,6 +740,11 @@ impl Infer<'_, '_> {
                     }
                     true
                 }
+                (Some(Shape::Opaque(nx, names_x, xs)), Some(Shape::Opaque(ny, names_y, ys)))
+                    if nx == ny && names_x == names_y && xs.len() == ys.len() => {
+                    for index in 0..xs.len() { pending.push((xs[index], ys[index])); }
+                    true
+                }
                 (Some(Shape::Nominal(left, _)), Some(Shape::Nominal(right, _)))
                     if left != right =>
                 {
@@ -843,7 +872,7 @@ impl Infer<'_, '_> {
             if matches!(
                 self.shape(to),
                 None | Some(
-                    Shape::Box(_) | Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Source(_)
+                    Shape::Box(_) | Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Source(_) | Shape::Opaque(..)
                 )
             ) {
                 break;
@@ -2261,6 +2290,9 @@ impl Infer<'_, '_> {
                 let Some((base, shape)) = self.strip_references(receiver, id) else {
                     return Ok(false);
                 };
+                if self.opaque_header(base, &name, &types, &arguments, result, (scope, span))? {
+                    return Ok(true);
+                }
                 if self.inherent_header(base, &name, &types, &arguments, result, (scope, span))? {
                     return Ok(true);
                 }
@@ -2505,6 +2537,7 @@ pub(super) fn infer(
         implementations,
         definition: DefinitionTypes {
             nodes: Vec::new(),
+            result: 0,
             expressions: BTreeMap::new(),
             bindings: BTreeMap::new(),
             closures: BTreeMap::new(), local_paths: Vec::new(), semantic_bindings: Vec::new(),
@@ -2583,7 +2616,14 @@ pub(super) fn infer(
     inference.parameter_equations(&function.generics, &mut environment, true)?;
     inference.predicate_equations(&function.predicates, &mut environment, true)?;
     inference.environment = environment.clone();
-    inference.result = inference.source_type(function.result, &environment)?;
+    inference.result = if let Some(form) = source.impl_traits.get(&function.result) {
+        if form.result == Some(index) {
+            let result = inference.unknown();
+            for bound in &form.bounds { inference.callable_bound(result, *bound, &environment)?; }
+            result
+        } else { inference.source_type(function.result, &environment)? }
+    } else { inference.source_type(function.result, &environment)? };
+    inference.definition.result = inference.result;
     for (position, parameter) in function.params.iter().enumerate() {
         let ty = inference.source_type(parameter.ty, &environment)?;
         inference.bindings.push_origin((parameter.name.clone(), ty), super::semantic::LocalTarget::Parameter(position));
@@ -2641,6 +2681,7 @@ pub(super) fn assert_reference_capture_deferred(source: &a::Program, index: usiz
             implementations: &implementations,
             definition: DefinitionTypes {
                 nodes: Vec::new(),
+                result: 0,
                 expressions: BTreeMap::new(),
                 bindings: BTreeMap::new(),
                 closures: BTreeMap::new(),

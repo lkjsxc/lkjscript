@@ -2031,6 +2031,9 @@ impl Parser {
         };
         self.argument_impl_traits(&params, &mut generics);
         let id = self.program.functions.len();
+        if let Some(form) = self.program.impl_traits.get_mut(&result) {
+            form.result = Some(id);
+        }
         self.program.functions.push(Function {
             name,
             module: self.module.clone(),

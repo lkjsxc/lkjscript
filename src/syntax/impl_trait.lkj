@@ -9,7 +9,7 @@ impl Parser {
             qualification: None, bindings: Vec::new(),
             declaration: None, name, args: Vec::new(),
         }), span);
-        self.program.impl_traits.insert(ty, ImplTrait { bounds, argument: false });
+        self.program.impl_traits.insert(ty, ImplTrait { bounds, argument: false, result: None });
         ty
     }
 

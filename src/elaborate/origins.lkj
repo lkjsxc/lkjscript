@@ -192,6 +192,16 @@ impl Compiler<'_> {
             if !self.has_view(concrete) {
                 continue;
             }
+            if let Some(name) = super::opaque::result_lifetime(self.source, syntax) {
+                let label = lifetime(&environments, environment, &name, syntax, 0);
+                for (relative, mutable) in crate::check::reference_paths(&self.types, concrete) {
+                    if borrowed && mutable && purpose != LeafPurpose::Regions { continue; }
+                    let mut leaf_path = path.clone(); leaf_path.extend_from_slice(&relative);
+                    result.push(Leaf { borrowed, mutable_storage: access == BorrowAccess::Mutable,
+                        path: leaf_path, label: label.clone(), transport: false, mutable });
+                }
+                continue;
+            }
             match (&self.source.types[syntax].kind, &self.types[concrete].kind) {
                 (
                     a::Type::Ref {

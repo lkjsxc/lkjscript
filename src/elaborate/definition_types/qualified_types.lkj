@@ -19,7 +19,7 @@ impl Infer<'_, '_> {
             }
             return value;
         }
-        let value = if matches!(self.shape(receiver), Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _))) {
+        let value = if matches!(self.shape(receiver), Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Opaque(..))) {
             self.shaped(Shape::Projection(declaration, member.to_string(), receiver))
         } else {
             let value = self.operation_type();
@@ -100,7 +100,7 @@ impl Infer<'_, '_> {
         for associated in &self.source.traits[owner].associated {
             if associated.name == member { bounds = associated.bounds.clone(); break; }
         }
-        let rigid = matches!(self.shape(receiver), Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _)));
+        let rigid = matches!(self.shape(receiver), Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Opaque(..)));
         for bound in &bounds {
             self.trait_equations(receiver, alias, *bound, environment, rigid)?;
         }
@@ -124,7 +124,7 @@ impl Infer<'_, '_> {
             self.watch(receiver, id);
             return Ok(false);
         };
-        if matches!(shape, Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _)) {
+        if matches!(shape, Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Opaque(..)) {
             // These are declaration equations, not implementation evidence.
             // Definition checking still selects and proves the exact bound.
             let root = self.root(receiver);

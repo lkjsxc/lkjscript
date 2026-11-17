@@ -1,0 +1,15 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+trait Value { fn get(&self) -> i64; }
+#[derive(Clone)]
+struct View<'a> { value: &'a i64 }
+impl<'a> Value for View<'a> { fn get(&self) -> i64 { *self.value } }
+fn borrowed<'a>(value: &'a i64) -> impl Value + Clone + 'a { View { value } }
+fn unused() -> i64 {
+    let mut value = 21i64;
+    let first = borrowed(&value);
+    let second = first.clone();
+    value = 42i64;
+    second.get()
+}
+pub fn probe() -> i64 { 42i64 }

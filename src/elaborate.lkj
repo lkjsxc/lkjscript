@@ -20,6 +20,7 @@ pub mod incremental;
 mod integers;
 mod methods;
 mod operators;
+mod opaque;
 mod origins;
 mod output;
 mod pattern_choices;
@@ -122,6 +123,7 @@ struct Compiler<'a> {
     capture_references: bool,
     semantic_evidence: Option<semantic::Evidence>,
     closures: closures::Catalog,
+    opaque: opaque::Catalog,
     scoped_bodies: BTreeMap<usize, scoped_locals::Body>,
     trait_proofs: Option<trait_proofs::Session>,
     return_inference: BTreeSet<usize>,
@@ -575,6 +577,8 @@ fn elaborate_definitions(
             );
             let (index, pending) = c.pending_functions[next].clone();
             let compiled = match pending {
+                PendingFunction::Source(_) if c.opaque.compiled.contains(&index) =>
+                    Some(Ok(c.functions[index].clone())),
                 PendingFunction::Source(instance)
                     if !c.definition_types.contains_key(&instance.source) =>
                 {
@@ -701,6 +705,7 @@ impl<'a> Compiler<'a> {
             capture_references: true,
             semantic_evidence: None,
             closures: closures::Catalog::default(),
+            opaque: opaque::Catalog::default(),
             scoped_bodies: BTreeMap::new(),
             trait_proofs: None,
             return_inference: BTreeSet::new(),
@@ -964,6 +969,10 @@ impl Compiler<'_> {
         let mut found = Vec::new();
         let mut todo = vec![id];
         while let Some(t) = todo.pop() {
+            if let Some(lifetime) = opaque::result_lifetime(self.source, t) {
+                if lifetime != "'_" && !found.contains(&lifetime) { found.push(lifetime); }
+                continue;
+            }
             match &self.source.types[t].kind {
                 a::Type::Ref {
                     lifetime, inner, ..
@@ -1178,6 +1187,17 @@ impl Compiler<'_> {
             body: Vec::new(),
             test,
         });
+        let opaque = self.source.impl_traits.get(&source.result).is_some_and(|form| form.result.is_some());
+        if self.contracts.is_none() && opaque {
+            self.prepare_opaque_definition(index)?;
+            let instance = match &self.pending_functions[self.pending_functions.len() - 1usize].1 {
+                PendingFunction::Source(instance) => instance.clone(),
+                _ => unreachable!(),
+            };
+            let body = self.compile_function(id, &instance)?;
+            self.functions[id] = body;
+            self.opaque.compiled.insert(id);
+        }
         Ok(id)
     }
     fn bounds(
@@ -1304,10 +1324,10 @@ impl Compiler<'_> {
         Ok(())
     }
     fn compile_function(&mut self, index: usize, instance: &Instance) -> Result<ir::Function> {
-        let source = &self.source.functions[instance.source];
+        let source: a::Function = self.source.functions[instance.source].clone();
         let span = source.span;
         let name = qualified(&source.module, &source.name);
-        let function = self
+        let mut function = self
             .compile_function_body(index, instance)
             .map_err(|problem| {
                 if problem.line == 0 {
@@ -1322,6 +1342,15 @@ impl Compiler<'_> {
             })?;
         if let Some(problem) = unsized_local_problem(&self.types, &function, span) {
             return Err(problem);
+        }
+        self.check_opaque_result(instance.source, function.result, &instance.substitutions)?;
+        let opaque = self.source.impl_traits.get(&source.result)
+            .is_some_and(|form| form.result.is_some());
+        if opaque {
+            let (return_source, infer_return) = self.return_source(instance.source, &source,
+                &function.locals, function.result, &instance.substitutions)?;
+            function.return_source = return_source;
+            if infer_return { self.return_inference.insert(index); }
         }
         Ok(function)
     }

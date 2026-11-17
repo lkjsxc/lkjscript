@@ -162,7 +162,8 @@ fn validate_selected(
             }
         }
         if generic || !function.predicates.is_empty()
-            || source.function_owner(a::FunctionId { index }) != a::FunctionOwner::Free {
+            || source.function_owner(a::FunctionId { index }) != a::FunctionOwner::Free
+            || source.impl_traits.values().any(|form| form.result.is_some()) {
             roots.push(index);
         }
     }
@@ -198,12 +199,16 @@ fn validate_selected(
     let mut problems: Vec<a::Diagnostic> = Vec::new();
     for index in roots {
         let substitutions = compiler.definition_parameters(index)?;
-        let function = compiler.instantiate(index, substitutions.clone())?;
+        let declaration = compiler.instantiate(index, substitutions.clone())?;
+        let function = compiler.opaque_definition(declaration, index, &substitutions)?;
         let instance = Instance {
             source: index,
             substitutions,
         };
-        match compiler.compile_function(function, &instance) {
+        let checked = if compiler.opaque.checked_functions.contains(&function) {
+            Ok(compiler.functions[function].clone())
+        } else { compiler.compile_function(function, &instance) };
+        match checked {
             Ok(body) => {
                 compiler.functions[function] = body;
                 checked_roots.insert(function);
@@ -244,9 +249,16 @@ fn validate_selected(
     for function in compiler.instance_names.values() {
         declared.insert(*function);
     }
+    // Opaque producer roots have a separate hidden-result signature. If body
+    // checking reports an error, retain that diagnostic and give its unused
+    // verification declaration the same trap stub as an ordinary failed root.
+    for (function, pending) in &compiler.pending_functions {
+        if matches!(pending, super::PendingFunction::Source(_)) { declared.insert(*function); }
+    }
     for function in &compiler.closures.checked_functions {
         checked_roots.insert(*function);
     }
+    for function in &compiler.opaque.checked_functions { checked_roots.insert(*function); }
     let callable_functions = compiler.assumed_callable_functions();
     let builtin_methods = compiler.validate_builtin_methods()?;
     let contracts = compiler.contracts.as_ref().unwrap();
@@ -365,6 +377,7 @@ impl Compiler<'_> {
         self.method_selections = BTreeMap::new();
         self.definition_types = BTreeMap::new();
         self.closures = super::closures::Catalog::default();
+        self.opaque = super::opaque::Catalog::default();
         self.scoped_bodies = BTreeMap::new();
         self.trait_proofs = None;
         self.return_inference = BTreeSet::new();
@@ -373,7 +386,7 @@ impl Compiler<'_> {
         self.initialize_primitive_names();
     }
 
-    fn rigid_type(&mut self, name: &str) -> usize {
+    pub(super) fn rigid_type(&mut self, name: &str) -> usize {
         let id = self.types.len();
         self.types.push(ir::Type {
             name: format!("$rigid:{name}:{id}"),
@@ -1061,13 +1074,14 @@ impl Compiler<'_> {
                 mutable: false,
             });
         }
+        let return_source = self.builtin_method_return_source(receiver, method);
         let index = self.functions.len();
         self.functions.push(ir::Function {
             file: span.file,
             name: format!("$contract:{}:{receiver}", method.name()),
             params: locals.len(),
             result: method.result(receiver),
-            return_source: None,
+            return_source,
             locals,
             body: Vec::new(),
             test: false,
@@ -1080,16 +1094,23 @@ impl Compiler<'_> {
         Ok(index)
     }
 
+    fn builtin_method_return_source(&self, receiver: usize, method: BuiltinMethod) -> Option<ir::ReturnSource> {
+        if method == BuiltinMethod::Clone && self.has_view(receiver) {
+            Some(ir::ReturnSource::Parameter { index: 0, projections: vec![ir::Projection::Deref] })
+        } else { None }
+    }
+
     fn validate_builtin_methods(&mut self) -> Result<BTreeSet<usize>> {
         let methods = self.contracts.as_ref().unwrap().builtin_methods.clone();
         let mut checked = BTreeSet::<usize>::new();
         for ((receiver, method), index) in &methods {
+            let return_source = self.builtin_method_return_source(*receiver, *method);
             let (signature_matches, file) = {
                 let function = &self.functions[*index];
                 let mut signature_matches = function.params == method.arguments() + 1
                     && function.locals.len() == function.params
                     && function.result == method.result(*receiver)
-                    && function.return_source.is_none();
+                    && function.return_source == return_source;
                 if signature_matches {
                     for parameter in 0..function.locals.len() {
                         let local = &function.locals[parameter];

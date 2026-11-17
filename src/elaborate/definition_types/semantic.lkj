@@ -64,6 +64,7 @@ impl DefinitionTypes {
                 let receiver = self.semantic_type(source, receiver, known, active)?;
                 format!("<{} as {}>::{}", receiver, declaration_name(source, declaration), member)
             }
+            Shape::Opaque(ty, _, _) => super::super::semantic::source_type_name(source, ty),
             Shape::Projected(_, _) | Shape::Closure(_, _) => return None,
             Shape::Vec(_) => format!("Vec<{}>", values[0]),
             Shape::Box(_) => format!("Box<{}>", values[0]),

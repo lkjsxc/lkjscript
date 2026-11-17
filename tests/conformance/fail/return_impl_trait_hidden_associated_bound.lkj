@@ -1,0 +1,16 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+trait Answer { fn answer() -> i64; }
+trait Extra { fn extra() -> i64; }
+trait Family { type Item: Answer; }
+struct Concrete {}
+impl Answer for Concrete { fn answer() -> i64 { 42i64 } }
+impl Extra for Concrete { fn extra() -> i64 { 42i64 } }
+struct Maker {}
+impl Family for Maker { type Item = Concrete; }
+fn make() -> impl Family { Maker {} }
+fn extra<T: Family>(value: T) -> i64 where <T as Family>::Item: Extra {
+    let _ = value;
+    <<T as Family>::Item as Extra>::extra()
+}
+pub fn probe() -> i64 { extra(make()) }

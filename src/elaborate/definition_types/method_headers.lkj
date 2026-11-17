@@ -5,6 +5,96 @@ use super::*;
 use std::collections::BTreeSet;
 
 impl Infer<'_, '_> {
+    pub(super) fn opaque_environment(&mut self, ty: a::TypeId, names: &[String], values: &[Variable])
+        -> Result<BTreeMap<String, Variable>> {
+        let mut environment = BTreeMap::new();
+        for index in 0..names.len() { environment.insert(names[index].clone(), values[index]); }
+        let owner = self.source.impl_traits.get(&ty).unwrap().result.unwrap();
+        if let a::FunctionOwner::Implementation(implementation) = self.source.function_owner(a::FunctionId { index: owner }) {
+            let implementation = self.source.impls[implementation.index].clone();
+            self.parameter_equations(&implementation.generics, &mut environment, false)?;
+            self.predicate_equations(&implementation.predicates, &mut environment, false)?;
+        }
+        let function = self.source.functions[owner].clone();
+        self.parameter_equations(&function.generics, &mut environment, false)?;
+        self.predicate_equations(&function.predicates, &mut environment, false)?;
+        Ok(environment)
+    }
+
+    pub(super) fn opaque_bound_equations(&mut self, ty: a::TypeId, receiver: Variable,
+        producer: &BTreeMap<String, Variable>) -> Result<()> {
+        let mut environment = producer.clone();
+        let alias = format!("$opaque:{ty}");
+        let bounds = self.source.impl_traits.get(&ty).unwrap().bounds.clone();
+        for bound in &bounds {
+            self.trait_equations(receiver, &alias, *bound, &mut environment, true)?;
+        }
+        // Equality RHS names belong to the producing function. In an inherent
+        // method, `Item = Self` names its owner, not the opaque result receiver.
+        for bound in &bounds {
+            self.binding_equations(receiver, *bound, &environment, true)?;
+        }
+        let root = self.root(receiver);
+        let projections = self.projections[root].clone();
+        let span = self.source.types[ty].span;
+        for ((declaration, member), _) in projections {
+            self.qualified_projection(receiver, declaration, &member, span);
+        }
+        Ok(())
+    }
+
+    /// An opaque receiver contributes only its written trait declarations.
+    /// Concrete implementation heads must never determine its source interface.
+    pub(super) fn opaque_header(&mut self, receiver: Variable, name: &str,
+        type_args: &[a::TypeId], arguments: &[Variable], result: Variable,
+        location: (a::ModuleId, a::Span)) -> Result<bool> {
+        let Some(Shape::Opaque(ty, _, _)) = self.shape(receiver) else { return Ok(false); };
+        let (scope, span) = location;
+        let mut pending = self.source.impl_traits.get(&ty).unwrap().bounds.clone();
+        let mut seen = BTreeSet::new();
+        let mut method: Option<(usize, a::TypeId)> = None;
+        let mut clone = false;
+        while let Some(bound) = pending.pop() {
+            let a::Type::Path(path) = self.source.types[bound].kind.clone() else { continue; };
+            if path.declaration.is_none() {
+                if matches!(path.name.as_str(), "Clone" | "Copy") { clone = true; }
+                continue;
+            }
+            let declaration = path.declaration.unwrap();
+            if !seen.insert(declaration) { continue; }
+            let a::Item::Trait(index) = self.source.declarations[declaration].item else { continue; };
+            let definition = self.source.traits[index].clone();
+            pending.extend_from_slice(&definition.bounds);
+            if !self.names.trait_in_scope(scope, declaration, span) { continue; }
+            for candidate in &definition.methods {
+                let function = &self.source.functions[*candidate];
+                if function.name != name { continue; }
+                if function.params.first().is_none_or(|parameter| parameter.name != "self")
+                    || function.params.len() != arguments.len() + 1usize
+                    || (!type_args.is_empty() && type_args.len() != type_parameter_count(&function.generics)) {
+                    return Ok(false);
+                }
+                if method.is_some() { return Ok(false); }
+                method = Some((*candidate, bound));
+            }
+        }
+        if let Some((method, bound)) = method {
+            let mut environment = BTreeMap::new();
+            environment.insert("Self".to_string(), receiver);
+            // Reuse the advertised slots after binding method Self. Replaying
+            // their equalities here would change the meaning of a captured Self.
+            self.trait_equations(receiver, "Self", bound, &mut environment, true)?;
+            let output = self.header_signature(method, type_args, arguments, environment, 1, span)?;
+            self.unify(result, output, span)?;
+            return Ok(true);
+        }
+        if clone && name == "clone" && arguments.is_empty() && type_args.is_empty() {
+            self.unify(result, receiver, span)?;
+            return Ok(true);
+        }
+        Ok(false)
+    }
+
     pub(super) fn inherent_header(
         &mut self,
         receiver: Variable,
@@ -110,7 +200,7 @@ impl Infer<'_, '_> {
         location: (usize, a::ModuleId, a::Span),
     ) -> Result<bool> {
         let (id, scope, span) = location;
-        if matches!(self.shape(receiver), None | Some(Shape::Rigid(_))) {
+        if matches!(self.shape(receiver), None | Some(Shape::Rigid(_) | Shape::Opaque(..))) {
             self.watch(receiver, id);
             return Ok(false);
         }

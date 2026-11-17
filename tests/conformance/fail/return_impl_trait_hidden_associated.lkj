@@ -1,0 +1,12 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+trait Family { type Item; fn item(&self) -> Self::Item; }
+struct Concrete {}
+struct Maker {}
+impl Family for Maker {
+    type Item = Concrete;
+    fn item(&self) -> Concrete { Concrete {} }
+}
+fn make() -> impl Family { Maker {} }
+fn concrete(value: Concrete) { let _ = value; }
+pub fn probe() -> i64 { concrete(make().item()); 42i64 }

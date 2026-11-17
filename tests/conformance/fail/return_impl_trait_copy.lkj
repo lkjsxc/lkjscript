@@ -1,0 +1,7 @@
+// expect: reject E_MOVE
+// witness: {"rustAccept":false}
+trait Value { fn get(&self) -> i64; }
+impl Value for i64 { fn get(&self) -> i64 { *self } }
+fn make() -> impl Value { 21i64 }
+fn consume<T>(value: T) { let _ = value; }
+pub fn probe() -> i64 { let value = make(); consume(value); consume(value); 42i64 }

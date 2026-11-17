@@ -1,0 +1,9 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+fn borrowed<'a>(value: &'a i64) -> impl Fn() -> i64 + 'a { move || *value }
+pub fn probe() -> i64 {
+    let mut value = 20i64;
+    let read = borrowed(&value);
+    value = 42i64;
+    read()
+}

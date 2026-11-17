@@ -1,0 +1,8 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+fn unused<'a>() -> impl Fn() -> i64 + 'a {
+    let value = 42i64;
+    let view = &value;
+    move || *view
+}
+pub fn probe() -> i64 { 42i64 }

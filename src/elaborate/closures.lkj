@@ -213,7 +213,6 @@ impl Compiler<'_> {
         if let Some(ty) = self.closures.keys.get(&key) {
             return *ty;
         }
-        let ty = self.types.len();
         // The nominal ID exists during inference. Its fields are finalized from
         // the body before a value or callable contract using it is emitted.
         let mut fields = Vec::new();
@@ -223,11 +222,40 @@ impl Compiler<'_> {
                 ty: capture.ty,
             });
         }
+        let mut kind = Kind::Once;
+        let mut copy = false;
+        let proved = self.closures.evidence.plans.get(&expression).cloned();
+        if let Some((proved_kind, plans)) = proved {
+            // A canonical definition proof determines capture storage before a
+            // returned closure is constructed. This supplies auto-trait/layout
+            // facts without granting a callable body or changing its identity.
+            let mut locals = Vec::new();
+            for variable in &variables {
+                locals.push(ir::Local { name: variable.name.clone(), ty: variable.ty, mutable: true });
+            }
+            let source = ir::Function { file: self.source.exprs[expression].span.file,
+                name: String::new(), params: 0, locals, result: ir::UNIT,
+                return_source: None, body: Vec::new(), test: false };
+            fields.clear();
+            for (index, plan) in plans.iter().enumerate() {
+                let place = ir::Place { local: plan.source, projections: plan.projections.clone() };
+                let ty = place_type(&self.types, &source, &place).expect("proved closure capture projection");
+                let ty = match plan.mode {
+                    Kind::Shared => self.reference(ty, false),
+                    Kind::Mutable => self.reference(ty, true),
+                    Kind::Once => ty,
+                };
+                fields.push(ir::Field { name: format!("capture{index}"), ty });
+            }
+            copy = fields.iter().all(|field| is_copy(&self.types, field.ty));
+            kind = proved_kind;
+        }
+        let ty = self.types.len();
         self.types.push(ir::Type {
             name: format!("$closure:{expression}:{ty}"),
             kind: ir::TypeKind::Struct {
                 fields,
-                copy: false,
+                copy,
             },
         });
         self.closures.keys.insert(key, ty);
@@ -239,7 +267,7 @@ impl Compiler<'_> {
                 substitutions: substitutions.clone(),
                 variables,
                 signature: Signature {
-                    kind: Kind::Once,
+                    kind,
                     arguments,
                     result,
                 },

@@ -1,0 +1,4 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+fn unused<T>(value: T) -> impl Clone { value }
+pub fn probe() -> i64 { 42i64 }

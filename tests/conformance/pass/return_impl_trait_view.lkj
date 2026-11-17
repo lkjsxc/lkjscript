@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+fn borrowed<'a>(value: &'a i64) -> impl Fn() -> i64 + 'a { move || *value }
+fn static_value() -> impl Fn() -> i64 + 'static { move || 2i64 }
+fn static_text() -> impl Fn() -> usize + 'static { let text = "hi"; move || text.len() }
+pub fn probe() -> i64 {
+    assert_eq!(static_text()(), 2usize);
+    let value = 40i64;
+    let read = borrowed(&value);
+    read() + static_value()()
+}

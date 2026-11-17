@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+trait Value { fn get(&self) -> i64; }
+#[derive(Clone)]
+struct View<'a> { value: &'a i64 }
+impl<'a> Value for View<'a> { fn get(&self) -> i64 { *self.value } }
+fn borrowed<'a>(value: &'a i64) -> impl Value + Clone + 'a { View { value } }
+pub fn probe() -> i64 {
+    let value = 21i64;
+    let first = borrowed(&value);
+    let second = first.clone();
+    first.get() + second.get()
+}

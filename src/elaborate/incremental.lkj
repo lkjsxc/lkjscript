@@ -53,6 +53,10 @@ fn take_words(input: &mut Reader<'_>) -> Option<Vec<usize>> {
 /// only while their arena/source spans remain identical; source type spellings
 /// are bound even inside those slots. Other edits simply use normal compilation.
 pub fn fingerprint(source: &a::Program, inputs: &[(String, Vec<u8>)]) -> Option<Fingerprint> {
+    // A hidden result's body determines its ABI and every caller layout. The
+    // current delta catalog saves fixed signatures, so these inputs take the
+    // normal source-bound path until opaque dependencies have their own format.
+    if source.impl_traits.values().any(|form| form.result.is_some()) { return None; }
     let mut data = b"lkjscript-front-topology-2"[..].to_vec();
     let mut bodies = vec![String::new(); source.functions.len()];
     // Locate each path once without changing the first-match input contract.

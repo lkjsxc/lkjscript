@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; fn get(&self) -> Self::Item; }
+struct Holder<T> { value: T }
+impl<T: Clone> Source for Holder<T> {
+    type Item = T;
+    fn get(&self) -> T { self.value.clone() }
+}
+fn produce<T: Clone>(value: T) -> impl Source<Item = T> { Holder { value } }
+fn lifted<T: Clone>(value: T) -> impl Fn() -> T {
+    let source = produce(value);
+    move || source.get()
+}
+pub fn probe() -> i64 { let read = lifted(21i64); read() + read() }

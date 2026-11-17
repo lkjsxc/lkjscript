@@ -12,6 +12,9 @@ impl Compiler<'_> {
         Ok(())
     }
     pub(super) fn display_type(&self, ty: usize) -> String {
+        if let Some(source) = self.opaque.names.get(&ty) {
+            return super::semantic::source_type_name(self.source, *source);
+        }
         if let Some((name, args)) = self.applications.get(&ty) {
             let mut start = 0;
             while name[start..].starts_with("$std::") {

@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+trait Value { fn get(&self) -> i64; }
+impl Value for i64 { fn get(&self) -> i64 { *self } }
+fn make() -> impl Value { 42i64 }
+fn automatic<T: Send + Sync>(value: T) -> T { value }
+pub fn probe() -> i64 { automatic(make()).get() }

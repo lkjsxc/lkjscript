@@ -371,7 +371,7 @@ impl Infer<'_, '_> {
             self.watch(receiver, id);
             return Ok(false);
         };
-        if matches!(shape, Shape::Rigid(_)) {
+        if matches!(shape, Shape::Rigid(_) | Shape::Opaque(..)) {
             // Joining the receiver with a declared parameter has already joined
             // the corresponding projection slot; no concrete impl is guessed.
             return Ok(matches!(self.shape(result), Some(Shape::Projected(_, _) | Shape::Projection(_, _, _))));

@@ -989,9 +989,25 @@ pub fn resolve(source: &Program) -> Result<Program> {
 
 fn resolve_nodes(result: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
     for (ty, form) in &result.impl_traits {
-        if !form.argument {
+        if !form.argument && form.result.is_none() {
             return Err(Diagnostic::new(result.types[*ty].span, "E_UNSUPPORTED",
-                "impl Trait is only supported in function parameter types; result types and nested bounds are not implemented yet"));
+                "impl Trait requires a function parameter or a direct function result; nested bounds and nested results are not implemented yet"));
+        }
+        if let Some(index) = form.result {
+            if matches!(resolver.function_owner(FunctionId { index }), FunctionOwner::Trait(_)) {
+                return Err(Diagnostic::new(result.types[*ty].span, "E_UNSUPPORTED",
+                    "impl Trait in trait method results requires an associated opaque contract and is not implemented yet"));
+            }
+            let mut lifetimes = std::collections::BTreeSet::<String>::new();
+            for bound in &form.bounds {
+                if let Type::Path(path) = &result.types[*bound].kind {
+                    if path.name.starts_with('\'') { lifetimes.insert(path.name.clone()); }
+                }
+            }
+            if lifetimes.len() > 1usize && !lifetimes.contains(&"'static".to_string()) {
+                return Err(Diagnostic::new(result.types[*ty].span, "E_UNSUPPORTED",
+                    "impl Trait results with multiple independent lifetime bounds are not implemented yet"));
+            }
         }
         if form.bounds.iter().all(|bound|
             matches!(&result.types[*bound].kind, Type::Path(path) if path.name.starts_with('\'')))
@@ -1001,6 +1017,9 @@ fn resolve_nodes(result: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
         }
     }
     for id in 0..result.types.len() {
+        if result.impl_traits.get(&id).is_some_and(|form| form.result.is_some()) {
+            continue;
+        }
         let node = &mut result.types[id];
         let scope = node.scope;
         let span = node.span;

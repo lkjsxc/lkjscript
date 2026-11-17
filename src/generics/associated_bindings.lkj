@@ -51,6 +51,9 @@ fn predicate_bounds(predicates: &[WherePredicate], bounds: &mut BTreeSet<TypeId>
 
 pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
     let mut bounds = BTreeSet::<TypeId>::new();
+    for form in source.impl_traits.values() {
+        for bound in &form.bounds { bounds.insert(*bound); }
+    }
     for function in &source.functions {
         parameter_bounds(&function.generics, &mut bounds);
         predicate_bounds(&function.predicates, &mut bounds);

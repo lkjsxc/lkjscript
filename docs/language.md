@@ -253,8 +253,41 @@ Trait implementations preserve whether a method parameter was anonymous.
 Source queries retain the written `impl Trait` bounds and checked changes reparse
 that ordinary form. Anonymous parameters are not separate editable declarations.
 Nested `impl Trait` inside another bound, function-pointer signatures, local/type
-aliases and return-position `impl Trait` remain located unsupported forms.
+aliases remain located unsupported forms.
 [Argument cases](../tests/conformance/pass/argument_impl_trait.lkj).
+
+Direct return-position `impl Trait` on free and inherent functions exposes the
+written bounds while retaining one hidden concrete result type per definition
+and captured type arguments. Different producers and different captured type
+arguments retain distinct source identities even when their concrete layouts
+match. Every producer is checked under rigid parameters, including unused
+definitions; every caller is checked against the opaque contract, including
+nongeneric callers. Hidden fields, inherent methods and unadvertised `Copy` are
+unavailable. Automatic `Send` and `Sync` facts follow the checked hidden layout.
+Concrete execution uses ordinary layouts and functions through the unchanged IR
+checker. Returned `Fn`, `FnMut` and `FnOnce` closures preserve source-checked
+capture and method choices across specialization.
+
+Associated-type equalities in argument and result bounds use the ordinary
+declared constraint rules. In an inherent result such as `impl Source<Item =
+Self>`, the equality captures the producer's `Self`; a later method call binds
+its own receiver separately. Qualified associated paths may use advertised
+equalities and associated bounds. Unwritten associated types and additional
+traits of the hidden result remain abstract.
+
+View-bearing opaque results require one explicit result lifetime bound such as
+`+ 'a` or `+ 'static`; reference leaves preserve that contract through calls and
+unused-body checking. Lifetimes inside a callable argument signature do not
+become lifetime bounds on the returned value. Source queries retain `impl Trait`
+for declarations and local bindings. Checked body replacement may change the
+hidden layout; such programs use full source-bound frontend construction after
+an edit, while unchanged authenticated images remain reusable.
+Nested result positions, trait method results, recursive hidden-result inference,
+multiple independent result lifetime bounds, and implicit lifetime capture of
+view-bearing generic results remain located unsupported forms.
+[Result cases](../tests/conformance/pass/return_impl_trait.lkj),
+[returned closures](../tests/conformance/pass/return_impl_trait_callable.lkj),
+[opaque queries and edits](../tools/return-impl-trait-test.sh).
 
 Unused generic function/impl/default bodies and unreachable expressions check under
 rigid parameters through production elaboration and ownership checking, without
@@ -354,7 +387,7 @@ IR checking; they grant no authority. Disjoint mutable outputs stay disjoint, an
 shared results may outlive reference-only environments while owners live.
 Generic/associated result families can refine similarly: acyclic callees first,
 recursive groups conservatively. This does not prove unused generic hidden effects.
-Opaque generic reference outputs, impl Trait closure returns, lending closures and dynamic callables remain unfinished.
+Implicit lifetime capture in opaque generic reference outputs, lending closures and dynamic callables remain unfinished.
 Only borrowed_closure_escape remains pending; concurrency uses isolated processes and owned messages, not shared-address-space threads.
 
 ## Source library

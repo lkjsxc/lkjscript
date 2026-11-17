@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+fn unused(flag: bool) -> impl Copy { if flag { 1i64 } else { 2u64 } }
+pub fn probe() -> i64 { 42i64 }

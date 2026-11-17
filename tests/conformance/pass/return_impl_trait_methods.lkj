@@ -1,0 +1,15 @@
+// expect: value 42
+// witness: {}
+trait Value { fn get(&self) -> i64; }
+struct Number { value: i64 }
+impl Number { fn get(&self) -> i64 { 99i64 } }
+impl Value for Number { fn get(&self) -> i64 { self.value } }
+struct Factory<T> { stored: T }
+impl<T: Value> Factory<T> {
+    fn take(self) -> impl Value { self.stored }
+    fn make(value: i64) -> impl Value { Number { value } }
+}
+pub fn probe() -> i64 {
+    let factory = Factory { stored: Number { value: 20i64 } };
+    factory.take().get() + Factory::<Number>::make(22i64).get()
+}
