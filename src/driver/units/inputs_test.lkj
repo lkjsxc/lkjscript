@@ -1,0 +1,107 @@
+mod inputs;
+use inputs::{Expectation, Snapshot};
+
+fn claim(directory: &str, path: &str, digest: Option<&str>) -> Expectation {
+    Expectation { directory: directory.to_string(), path: path.to_string(),
+        digest: digest.map(|value: &str| value.to_string()) }
+}
+
+#[test]
+fn shared_input_is_read_once_before_publication_and_once_after() {
+    let inputs = vec![claim("root", "shared.lkj", Some("A")), claim("root", "shared.lkj", Some("A"))];
+    let mut snapshot = Snapshot::new();
+    let mut reads = 0usize;
+    assert!(snapshot.matches(&inputs, &mut |_: &str, _: &str| -> Option<Option<String>> {
+        reads += 1usize; Some(Some("A".to_string()))
+    }));
+    assert_eq!(reads, 1usize);
+    assert!(snapshot.require(&inputs));
+    assert!(snapshot.verify(&mut |_: &str, _: &str| -> Option<Option<String>> {
+        reads += 1usize; Some(Some("A".to_string()))
+    }));
+    assert_eq!(reads, 2usize);
+}
+
+#[test]
+fn changed_file_cannot_use_the_cached_hash_at_publication() {
+    let inputs = vec![claim("root", "shared.lkj", Some("A"))];
+    let mut snapshot = Snapshot::new();
+    assert!(snapshot.matches(&inputs, &mut |_: &str, _: &str| -> Option<Option<String>> {
+        Some(Some("A".to_string()))
+    }));
+    assert!(snapshot.require(&inputs));
+    assert!(!snapshot.verify(&mut |_: &str, _: &str| -> Option<Option<String>> {
+        Some(Some("B".to_string()))
+    }));
+}
+
+#[test]
+fn freshly_loaded_b_cannot_hide_under_cached_a_then_return_to_a() {
+    let old = vec![claim("root", "shared.lkj", Some("A"))];
+    let fresh = vec![claim("root", "shared.lkj", Some("B"))];
+    let mut snapshot = Snapshot::new();
+    assert!(snapshot.matches(&old, &mut |_: &str, _: &str| -> Option<Option<String>> {
+        Some(Some("A".to_string()))
+    }));
+    assert!(snapshot.require(&old));
+    assert!(!snapshot.require(&fresh));
+    assert!(!snapshot.verify(&mut |_: &str, _: &str| -> Option<Option<String>> {
+        Some(Some("A".to_string()))
+    }));
+}
+
+#[test]
+fn failed_cached_candidate_does_not_override_fresh_loaded_identity() {
+    let cached = vec![claim("root", "shared.lkj", Some("older"))];
+    let fresh = vec![claim("root", "shared.lkj", Some("B"))];
+    let mut snapshot = Snapshot::new();
+    assert!(!snapshot.matches(&cached, &mut |_: &str, _: &str| -> Option<Option<String>> {
+        Some(Some("A".to_string()))
+    }));
+    assert!(snapshot.require(&fresh));
+    assert!(snapshot.matches(&fresh, &mut |_: &str, _: &str| -> Option<Option<String>> { None }));
+    assert!(snapshot.verify(&mut |_: &str, _: &str| -> Option<Option<String>> {
+        Some(Some("B".to_string()))
+    }));
+}
+
+#[test]
+fn missing_and_empty_files_are_different_expectations() {
+    let missing = vec![claim("root", "maybe.lkj", None)];
+    let empty = vec![claim("root", "maybe.lkj", Some("empty-digest"))];
+    let mut snapshot = Snapshot::new();
+    assert!(snapshot.matches(&missing, &mut |_: &str, _: &str| -> Option<Option<String>> { Some(None) }));
+    assert!(snapshot.require(&missing));
+    assert!(!snapshot.require(&empty));
+    assert!(!snapshot.verify(&mut |_: &str, _: &str| -> Option<Option<String>> { Some(None) }));
+}
+
+#[test]
+fn directories_and_paths_form_distinct_keys() {
+    let inputs = vec![claim("a", "bc", Some("A")), claim("ab", "c", Some("B"))];
+    let mut snapshot = Snapshot::new();
+    assert!(snapshot.require(&inputs));
+    assert!(snapshot.verify(&mut |directory: &str, _: &str| -> Option<Option<String>> {
+        Some(Some(if directory == "a" { "A".to_string() } else { "B".to_string() }))
+    }));
+    assert_eq!(snapshot.required(), 2usize);
+}
+
+#[test]
+fn conflicting_claims_in_one_unit_also_refuse() {
+    let inputs = vec![claim("root", "same.lkj", Some("A")), claim("root", "same.lkj", Some("B"))];
+    let mut snapshot = Snapshot::new();
+    assert!(!snapshot.require(&inputs));
+    assert!(!snapshot.verify(&mut |_: &str, _: &str| -> Option<Option<String>> {
+        Some(Some("B".to_string()))
+    }));
+}
+
+#[test]
+fn unreadable_is_not_absent() {
+    let inputs = vec![claim("root", "maybe.lkj", None)];
+    let mut snapshot = Snapshot::new();
+    assert!(!snapshot.matches(&inputs, &mut |_: &str, _: &str| -> Option<Option<String>> { None }));
+    assert!(snapshot.require(&inputs));
+    assert!(!snapshot.verify(&mut |_: &str, _: &str| -> Option<Option<String>> { None }));
+}

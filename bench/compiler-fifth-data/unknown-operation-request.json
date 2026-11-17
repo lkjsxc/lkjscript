@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "operations": [
+    {
+      "op": "replace-body",
+      "id": "structure_edit::error",
+      "source": "{\n    let mut message = format!(\"{} E_EDIT_{} {}\", semantic::quote(identity), rule, detail);\n    if rule == \"REQUEST\" || rule == \"VERSION\" || rule == \"OPERATION\" {\n        message.push_str(\"\\nSee lkjscript edit --help for the JSON request schema and examples.\");\n    }\n    message\n}"
+    }
+  ]
+}

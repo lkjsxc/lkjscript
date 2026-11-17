@@ -44,6 +44,11 @@ printf '%s\n' '{' > "$fixture/request"
 if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/out" 2> "$fixture/error"; then exit 1; fi
 grep -q 'E_EDIT_REQUEST' "$fixture/error"
 grep -q 'lkjscript edit --help' "$fixture/error"
+# The real stranger's guessed operation name must lead to the supported schema.
+printf '%s\n' '{"version":1,"operations":[{"op":"replace","id":"math::increment"}]}' > "$fixture/request"
+if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/out" 2> "$fixture/error"; then exit 1; fi
+grep -q 'E_EDIT_OPERATION' "$fixture/error"
+grep -q 'lkjscript edit --help' "$fixture/error"
 if "$compiler" query "${common[@]}" --kind missing > "$fixture/out" 2> "$fixture/error"; then exit 1; fi
 grep -q 'E_QUERY_KIND' "$fixture/error"
 grep -q 'lkjscript query --help' "$fixture/error"

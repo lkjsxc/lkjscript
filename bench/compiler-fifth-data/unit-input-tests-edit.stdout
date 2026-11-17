@@ -1,0 +1,26 @@
+"crate" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-check-units-20261117/target/unit-reuse-proof/input-operation/before/inputs_test.lkj" level=source-claim file before=4707df1ace3243c5c31a2ea4b947388438f7438beeae5db2725ad6e30c4af474 after=c9065a1e621fbffc54ab5c1e0a3060b7dab45b91861c4c106ce0c0036793d90f
+transaction sites=1 files=1 identities=1
+"changed_file_cannot_use_the_cached_hash_at_publication" level=source-claim changed=added
+"claim" level=source-claim changed=added
+"claim::param:digest" level=source-claim changed=added
+"claim::param:directory" level=source-claim changed=added
+"claim::param:path" level=source-claim changed=added
+"conflicting_claims_in_one_unit_also_refuse" level=source-claim changed=added
+"directories_and_paths_form_distinct_keys" level=source-claim changed=added
+"failed_cached_candidate_does_not_override_fresh_loaded_identity" level=source-claim changed=added
+"freshly_loaded_b_cannot_hide_under_cached_a_then_return_to_a" level=source-claim changed=added
+"missing_and_empty_files_are_different_expectations" level=source-claim changed=added
+"shared_input_is_read_once_before_publication_and_once_after" level=source-claim changed=added
+"unreadable_is_not_absent" level=source-claim changed=added
+"ir:changed_file_cannot_use_the_cached_hash_at_publication" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:conflicting_claims_in_one_unit_also_refuse" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:directories_and_paths_form_distinct_keys" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:failed_cached_candidate_does_not_override_fresh_loaded_identity" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:freshly_loaded_b_cannot_hide_under_cached_a_then_return_to_a" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:missing_and_empty_files_are_different_expectations" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:shared_input_is_read_once_before_publication_and_once_after" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+"ir:unreadable_is_not_absent" level=checked-ir authority-gained="" authority-lost="" entry-before=false entry-after=true
+program level=checked-ir before=9373933639fe95a9e86c55fd43c1ced4c1646a73d08c9b74b203f0423092a954 after=629474ea173be81cf1864b78e41b2ad8bba0bec4b8f0b12ed0bee923d08d1038 checked-instances=113 fresh-checked=113 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=414414caf3c75839663d12ba32013ec9d595dc64e0275a194bec0e5effe7acb6 source-after=0109ba44e150e6329a18462a56ac896576b57f66f45ac6789239d826ca654f66 mode=apply
+replay desired=629474ea173be81cf1864b78e41b2ad8bba0bec4b8f0b12ed0bee923d08d1038 candidate=629474ea173be81cf1864b78e41b2ad8bba0bec4b8f0b12ed0bee923d08d1038 verified=true operations=9

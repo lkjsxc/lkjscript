@@ -171,8 +171,8 @@ pub fn load<F: FnMut(&str) -> Result<Option<Vec<u8>>, String>>(
         let problem = &report.diagnostics[0usize];
         return Err(format!("{}:{}:{} {} {}", problem.path, problem.line, problem.column, problem.code, problem.message));
     }
-    let resolved = crate::resolve::resolve(&report.program).map_err(|problem: ast::Diagnostic| -> String
-        format!("{}:{}:{} {} {}", problem.path, problem.line, problem.column, problem.code, problem.message))?;
+    let resolved = crate::resolve::resolve(&report.program).map_err(|problem: ast::Diagnostic| -> String {
+        format!("{}:{}:{} {} {}", problem.path, problem.line, problem.column, problem.code, problem.message) })?;
     let mut files = Vec::new();
     let prefix = virtual_prefix(&unit.name);
     for (path, value) in inputs {

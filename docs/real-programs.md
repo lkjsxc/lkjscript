@@ -32,7 +32,7 @@ Blocked line counts below overlap: each algorithm barrier blocks the same
 | 5 | Rust source suffix | 2 source paths | 125 | Intentional .lkj ecosystem naming; path projection only |
 
 The retained historical normalization is exactly `(1..)` to
-`std::iter::range_from(1)`. It records the original port cost. Source `b15de6d27`
+`std::iter::range_from(1)`. It records the original port cost. Source `83f793cb1`
 adds ordinary lowering for usize open-ended range values, evaluating the start
 once and binding the actual library declaration. The offline gate now reverses
 that normalization in fresh state, verifies the complete original 65-line library

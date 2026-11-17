@@ -1,0 +1,30 @@
+{
+  "schema": 1,
+  "name": "levenshtein",
+  "version": "1.0.5",
+  "origin": "https://github.com/wooorm/levenshtein-rs",
+  "commit": "9c4730b1973d4e61e187f8fe6d5f299ad5c991fc",
+  "license": "MIT",
+  "files": {
+    "src/lib.rs": "6f295e027783399df21c081465b2ebc2d3a499895635a839c1c00aae4455f267",
+    "tests/lib.rs": "88c8be4758d544673107a4b932e5c00cef6cd7972dc7f9293ccfaa4e5e672665",
+    "license": "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d"
+  },
+  "source_lines": 65,
+  "test_lines": 60,
+  "test_names": [
+    "empty_left",
+    "empty_right",
+    "empty_both",
+    "equal_long",
+    "case_sensitive",
+    "ordering",
+    "should_work",
+    "unicode"
+  ],
+  "adaptation": {
+    "range_expression": 1,
+    "integration_header_lines": 2
+  },
+  "publication": "checked add-item projection; initial root scaffold uncredited"
+}

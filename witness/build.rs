@@ -91,12 +91,24 @@ fn rust_bindings(input: &Path, text: String) -> String {
     if input.ends_with("src/lib.lkj") {
         out = out.replace("pub use std::sha256;", "#[path = \"../library/sha256.lkj\"]\npub mod sha256;");
     }
+    if input.ends_with("src/store.lkj") {
+        out = out.replace("reuse::ProofDomain::new(", "crate::proof_domain(");
+    }
     if input.ends_with("src/structure_write.lkj") {
         out = out.replace("use std::collections::BTreeSet;",
             "use std::collections::BTreeSet;\nuse crate::host::{Directory, Entropy, File, World};");
     }
+    if input.ends_with("src/native/units.lkj") {
+        out = out.replacen("use super::*;", "use super::*;\nuse crate::host::File;", 1);
+    }
     if input.ends_with("src/driver.lkj") {
-        out = out.replace("\nmod structure;\n", "\n#[path = \"driver/structure.rs\"]\nmod structure;\n");
+        for module in ["structure", "units", "help"] {
+            out = out.replace(&format!("\nmod {module};\n"),
+                &format!("\n#[path = \"driver/{module}.rs\"]\nmod {module};\n"));
+        }
+    }
+    if input.ends_with("src/driver/units.lkj") {
+        out = out.replace("\nmod inputs;\n", "\n#[path = \"units/inputs.rs\"]\nmod inputs;\n");
     }
     if input.ends_with("src/driver/structure.lkj") {
         out = out.replace("use super::{Options, Stats, Memo};",
@@ -138,7 +150,7 @@ fn main() -> io::Result<()> {
         mirror(&root.join(name), &source.join(name), name == "src")?;
     }
     for (file, module) in [("lib.rs", "language"), ("embedded.rs", "embedded"),
-        ("meaning.rs", "meaning"), ("semantic_store.rs", "semantic_store"), ("semantic_query.rs", "semantic_query")] {
+        ("meaning.rs", "meaning"), ("semantic_store.rs", "semantic_store"), ("semantic_query.rs", "semantic_query"), ("units.rs", "units")] {
         let path = source.join("src").join(file);
         fs::write(
             output.join(format!("{module}-module.rs")),

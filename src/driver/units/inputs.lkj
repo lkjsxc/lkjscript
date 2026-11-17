@@ -1,0 +1,75 @@
+//! One command's source expectations. Fresh admission supplies digests of its
+//! actual loaded bytes; these records never supply bytes or identities to it.
+use std::collections::BTreeMap;
+
+#[derive(Clone)]
+pub struct Expectation {
+    pub directory: String,
+    pub path: String,
+    pub digest: Option<String>,
+}
+pub struct Snapshot {
+    observed: BTreeMap<(String, String), Option<String>>,
+    required: BTreeMap<(String, String), Option<String>>,
+    conflicted: bool,
+    reads: usize,
+    reused: usize,
+}
+impl Snapshot {
+    pub fn new() -> Self {
+        Self { observed: BTreeMap::new(), required: BTreeMap::new(),
+            conflicted: false, reads: 0usize, reused: 0usize }
+    }
+    /// Only a candidate for unchanged authenticated reuse may use an earlier
+    /// observation. Publication independently reads every required path again.
+    pub fn matches<F: FnMut(&str, &str) -> Option<Option<String>>>(
+        &mut self, inputs: &[Expectation], read: &mut F,
+    ) -> bool {
+        if self.conflicted { return false; }
+        for input in inputs {
+            let key = (input.directory.clone(), input.path.clone());
+            let known = match self.observed.get(&key) {
+                Some(value) => Some(value.clone()), None => None,
+            };
+            let actual = match known {
+                Some(value) => { self.reused += 1usize; value }
+                None => {
+                    let Some(value) = read(&input.directory, &input.path) else { return false; };
+                    self.reads += 1usize;
+                    self.observed.insert(key, value.clone());
+                    value
+                }
+            };
+            if actual != input.digest { return false; }
+        }
+        true
+    }
+    /// Record the selected unit's exact input claim, including freshly loaded
+    /// bytes. Conflicting claims poison publication even if the file changes
+    /// back before the final sweep (A -> B -> A).
+    pub fn require(&mut self, inputs: &[Expectation]) -> bool {
+        if self.conflicted { return false; }
+        for input in inputs {
+            let key = (input.directory.clone(), input.path.clone());
+            if let Some(prior) = self.required.get(&key) {
+                if *prior != input.digest { self.conflicted = true; return false; }
+            }
+            self.required.insert(key.clone(), input.digest.clone());
+            self.observed.insert(key, input.digest.clone());
+        }
+        true
+    }
+    pub fn verify<F: FnMut(&str, &str) -> Option<Option<String>>>(
+        &self, read: &mut F,
+    ) -> bool {
+        if self.conflicted { return false; }
+        for ((directory, path), expected) in &self.required {
+            let Some(actual) = read(directory, path) else { return false; };
+            if actual != *expected { return false; }
+        }
+        true
+    }
+    pub fn reads(&self) -> usize { self.reads }
+    pub fn reused(&self) -> usize { self.reused }
+    pub fn required(&self) -> usize { self.required.len() }
+}

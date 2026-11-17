@@ -79,7 +79,7 @@ fn verified(namespace: &str, key: &str, bytes: &[u8], producer: &[u8], secret: &
     let root = reuse::AuthenticatedRoot::new(producer, secret, namespace, key, &encoded[..header]).unwrap();
     root.verify(encoded[header..].to_vec()).unwrap()
 }
-fn objects(world: &mut World, runtime: &runtime::Runtime) -> usize {
+fn objects(world: &mut World, runtime: &native::units::Context<'_>) -> usize {
     let first = provider(41i64, false);
     let second = consumer(first.interface(), false);
     let source_base = first.program().sources.len();
@@ -127,7 +127,7 @@ fn objects(world: &mut World, runtime: &runtime::Runtime) -> usize {
     let (status, bytes) = execute(world, file); assert_eq!(status, 0i64); assert_eq!(read_word(&bytes, 0usize), 42usize);
     13usize
 }
-fn refusals(world: &mut World, runtime: &runtime::Runtime) -> usize {
+fn refusals(world: &mut World, runtime: &native::units::Context<'_>) -> usize {
     let first = provider(41i64, false); let second = consumer(first.interface(), false);
     let all_sources = sources(&first, &second);
     let base = first.program().sources.len();
@@ -153,10 +153,18 @@ fn refusals(world: &mut World, runtime: &runtime::Runtime) -> usize {
     alias.seek(8i64, 0u8).unwrap(); alias.write_all(&[2u8,0u8,0u8,0u8,0u8,0u8,0u8,0u8]).unwrap();
     let refusal = changed_spool.finish(runtime, first.interface(), "numbers::value", &no_grants(), &first.program().sources, &no_messages(), None).err().unwrap();
     assert_eq!(refusal.message, "relocation spool changed after emission");
-    6usize
+    // Buffered prefetch must not swallow an appended extent. Leave a hole past
+    // all support records, which are appended during finish.
+    let mut spool = world.temporary_file().unwrap(); let mut alias = spool.duplicate().unwrap();
+    let mut trailing = native::units::Linker::new(world.temporary_file().unwrap(), spool).unwrap();
+    trailing.push(native::units::emit(&first, runtime, 0usize).unwrap()).unwrap();
+    alias.seek(1048576i64, 0u8).unwrap(); alias.write_all(&[0u8]).unwrap();
+    let refusal = trailing.finish(runtime, first.interface(), "numbers::value", &no_grants(), &first.program().sources, &no_messages(), None).err().unwrap();
+    assert_eq!(refusal.message, "relocation spool changed its extent");
+    7usize
 }
 fn traps
-(world: &mut World, runtime: &runtime::Runtime) -> usize {
+(world: &mut World, runtime: &native::units::Context<'_>) -> usize {
     let first = provider(41i64, true); let second = consumer(first.interface(), true);
     let all_sources = sources(&first, &second);
     let mut linker = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();
@@ -198,7 +206,54 @@ fn relocation_edges() -> usize {
     assert!(crate::x86::displacement(0usize, 2147483645usize, site).is_err());
     8usize
 }
+
+fn runtime_binding(world: &mut World, sealed: &runtime::Runtime) -> usize {
+    let runtime = native::units::Context::new(sealed);
+    let first = provider(41i64, false);
+    let object = native::units::emit(&first, &runtime, 0usize).unwrap();
+    let mut changed = sealed.checked_program().clone();
+    changed.sources[0] = "different-runtime-source.lkj".to_string();
+    let changed = runtime::seal(check::check(changed).unwrap()).unwrap();
+    let other = native::units::Context::new(&changed);
+    let producer = [7u8; 32]; let secret = [9u8; 32];
+    let domain = reuse::ProofDomain::new(&producer, &secret);
+    let token = verified(native::units::namespace(), object.key(), &object.encode(), &producer, &secret);
+    assert!(native::units::Object::open(&domain, first.interface(), &other, 0usize, &first.program().sources, token).is_none());
+    let mut linker = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();
+    linker.push(object).unwrap();
+    let refusal = linker.finish(&other, first.interface(), "numbers::value", &no_grants(), &first.program().sources, &no_messages(), None).err().unwrap();
+    assert_eq!(refusal.message, "linked runtime differs from unit object runtime");
+    2usize
+}
+
+fn buffered_extents(world: &mut World, runtime: &native::units::Context<'_>) -> usize {
+    let mut name = "numbers::value".to_string();
+    for _ in 0usize..65560usize { name.push('x'); }
+    let mut program = ir::Program { sources: vec!["numbers.lkj".to_string()], types: ir::primitives(),
+        functions: Vec::new(), destructors: Vec::new() };
+    program.functions.push(function(&name, vec![local("result", ir::I64)],
+        vec![ir::Op::Int { dst: 0usize, value: 41i64 }, ir::Op::Return { src: 0usize }]));
+    for index in 0usize..1600usize {
+        program.functions.push(function(&format!("numbers::private{index}"), vec![local("result", ir::I64)],
+            vec![ir::Op::Int { dst: 0usize, value: index as i64 }, ir::Op::Return { src: 0usize }]));
+    }
+    let imports: Vec<Import> = Vec::new();
+    let first = check::units::check_unit_with_exports("numbers", "buffered-extents", program,
+        &imports, &[0usize], &[0usize; 0]).unwrap();
+    let second = consumer(first.interface(), false);
+    let object = native::units::emit(&first, runtime, 0usize).unwrap();
+    assert!(object.bytes() > 65536usize);
+    let mut linker = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();
+    linker.push(object).unwrap();
+    linker.push(native::units::emit(&second, runtime, first.program().sources.len()).unwrap()).unwrap();
+    let (file, _) = linker.finish(runtime, second.interface(), "user::main", &no_grants(), &sources(&first, &second), &no_messages(), Some(3u32)).unwrap();
+    let (status, bytes) = execute(world, file);
+    assert_eq!(status, 0i64); assert_eq!(read_word(&bytes, 0usize), 42usize);
+    1usize
+}
 pub fn run(world: &mut World) -> usize {
-    let runtime = runtime(world);
+    let sealed = runtime(world);
+    let runtime = native::units::Context::new(&sealed);
     objects(world, &runtime) + refusals(world, &runtime) + traps(world, &runtime) + relocation_edges()
+        + runtime_binding(world, &sealed) + buffered_extents(world, &runtime)
 }

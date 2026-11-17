@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "operations": [
+    {
+      "op": "replace-body",
+      "id": "units::load",
+      "source": "{\n    let mut imported: BTreeMap<String, Vec<u8>> = BTreeMap::new();\n    for dependency in dependencies {\n        let prefix = virtual_prefix(&dependency.name);\n        for (path, bytes) in &dependency.files {\n            if !path.starts_with(&prefix) || imported.insert(path.clone(), bytes.clone()).is_some() {\n                return Err(error(\"duplicate or wrongly scoped imported projection file\"));\n            }\n        }\n    }\n    let root = root_source(unit, dependencies).into_bytes();\n    let mut inputs: BTreeMap<String, Option<Vec<u8>>> = BTreeMap::new();\n    let report = source::load_report(\"$units/root.lkj\", standard, &mut |path: &str| {\n        if path == \"$units/root.lkj\" { return Ok(Some(root.clone())); }\n        if let Some(bytes) = imported.get(&path.to_string()) { return Ok(Some(bytes.clone())); }\n        if path.starts_with(\"$units/\") && physical(unit, path).is_none() { return Ok(None); }\n        if let Some(bytes) = inputs.get(&path.to_string()) { return Ok(bytes.clone()); }\n        let actual = physical(unit, path).unwrap_or_else(|| path.to_string());\n        let bytes = read(&actual)?;\n        inputs.insert(path.to_string(), bytes.clone());\n        Ok(bytes)\n    });\n    if !report.diagnostics.is_empty() {\n        let problem = &report.diagnostics[0usize];\n        return Err(format!(\"{}:{}:{} {} {}\", problem.path, problem.line, problem.column, problem.code, problem.message));\n    }\n    let resolved = crate::resolve::resolve(&report.program).map_err(|problem: ast::Diagnostic| -> String {\n        format!(\"{}:{}:{} {} {}\", problem.path, problem.line, problem.column, problem.code, problem.message) })?;\n    let mut files = Vec::new();\n    let prefix = virtual_prefix(&unit.name);\n    for (path, value) in inputs {\n        if path.starts_with(&prefix) {\n            if let Some(bytes) = value { files.push((path, bytes)); }\n        }\n    }\n    Ok((resolved, files))\n}"
+    }
+  ]
+}

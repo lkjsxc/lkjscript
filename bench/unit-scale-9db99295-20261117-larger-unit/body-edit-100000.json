@@ -1,0 +1,8 @@
+{
+   "after_sha256" : "dcdc72589ddce1b90a078ab2884a6ebf105f522fa7729e7c0517c65a939956ac",
+   "before_sha256" : "58b6b3b3045d1c36747f0364a0ace613636115ab14f61f00aff2ce39a8abc13b",
+   "changed_bodies" : 1,
+   "changed_files" : 1,
+   "changed_lines" : 1,
+   "expected_stdout" : "346\n"
+}

@@ -1,12 +1,16 @@
 //! Rust witness entry over exactly the owned command-line implementation.
 #![allow(dead_code, unused_imports)]
-pub use lkjscript::host;
+pub use lkjscript::{host, proof_domain};
 pub use lkjscript::{
     ast, authority, child_image, entry_grants, backend, check, diagnostic, diagnostics, elaborate, frontend, generics, interpreter, ir,
-    ir_text, ir_binary, json, names, native, optimizer, resolve, reuse, runtime, runtime_memory, runtime_diagnostics, sha256, source, syntax, x86,
+    ir_text, ir_binary, json, names, optimizer, resolve, reuse, runtime, runtime_memory, runtime_diagnostics, sha256, source, syntax, x86,
     semantic, semantic_facts, structure_write, structure_replay, structure_refactor, source_json, trim_source_ascii,
 };
 // The source compiler is one crate; preserve its crate-local helper access here.
+mod native {
+    pub use lkjscript::native::*;
+    pub use lkjscript::native_messages as messages;
+}
 mod structure_edit {
     pub use lkjscript::structure_edit::*;
     pub use lkjscript::structural_error as error;
@@ -15,6 +19,7 @@ include!(concat!(env!("OUT_DIR"), "/embedded-module.rs"));
 include!(concat!(env!("OUT_DIR"), "/meaning-module.rs"));
 include!(concat!(env!("OUT_DIR"), "/semantic_store-module.rs"));
 include!(concat!(env!("OUT_DIR"), "/semantic_query-module.rs"));
+include!(concat!(env!("OUT_DIR"), "/units-module.rs"));
 mod host_network {
     use super::host::{Child, File, World};
     include!(concat!(env!("OUT_DIR"), "/source/src/host_network.rs"));

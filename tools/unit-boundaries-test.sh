@@ -57,12 +57,12 @@ unit_options=(units.lkj --source-dir "$unit_root" --store "$unit_root/store" --s
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/program" > "$unit_root/cold.out" 2> "$unit_root/cold.err"
 [[ $("$unit_root/program") == AB ]]
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/warm" > "$unit_root/warm.out" 2> "$unit_root/warm.err"
-rg -q 'checked=0 reused=3 emitted=0' "$unit_root/warm.out"
+grep -Fq -- 'checked=0 reused=3 emitted=0' "$unit_root/warm.out"
 cmp "$unit_root/program" "$unit_root/warm"
 # The same public interface must link the freshly checked implementation.
 perl -0pi -e "s/tag: b'B'/tag: b'C'/" "$unit_root/provider.lkj"
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/edited" > "$unit_root/edit.out" 2> "$unit_root/edit.err"
-rg -q 'checked=1 reused=2 emitted=1' "$unit_root/edit.out"
+grep -Fq -- 'checked=1 reused=2 emitted=1' "$unit_root/edit.out"
 [[ $("$unit_root/edited") == AC ]]
 # A narrow capability remains required when its only effect is an imported Drop.
 if "$unit_compiler" build-units "${unit_options[@]}" -o "$unit_root/edited" > "$unit_root/grant.out" 2> "$unit_root/grant.err"; then

@@ -59,12 +59,23 @@ fn context_key(runtime: &Runtime) -> String {
     blob(&mut bytes, &crate::ir_binary::write(runtime.checked_program()));
     crate::sha256::hex_digest(&bytes)
 }
+
+pub struct Context<'a> {
+    runtime: &'a Runtime,
+    identity: String,
+}
+
+impl<'a> Context<'a> {
+    pub fn new(runtime: &'a Runtime) -> Self {
+        Self { runtime, identity: context_key(runtime) }
+    }
+}
 pub fn namespace() -> &'static str { NAMESPACE }
-pub fn object_key(interface: &Interface, runtime: &Runtime, source_base: usize, sources: &[String]) -> String {
+pub fn object_key(interface: &Interface, context: &Context<'_>, source_base: usize, sources: &[String]) -> String {
     let mut bytes = b"lkjscript-unit-native-object-1\0"[..].to_vec();
     string(&mut bytes, interface.name()); string(&mut bytes, interface.identity());
     string(&mut bytes, interface.body_identity()); string(&mut bytes, interface.input_identity());
-    string(&mut bytes, &context_key(runtime)); word(&mut bytes, source_base);
+    string(&mut bytes, &context.identity); word(&mut bytes, source_base);
     word(&mut bytes, sources.len());
     for path in sources { string(&mut bytes, path); }
     crate::sha256::hex_digest(&bytes)
@@ -140,10 +151,19 @@ pub struct Object {
     sources: Vec<String>,
     messages: Vec<String>,
     code: Linkable,
+    payload: Vec<u8>,
+    code_start: usize,
+    code_length: usize,
 }
+
+
 impl Object {
     pub fn key(&self) -> &str { &self.key }
-    pub fn bytes(&self) -> usize { self.code.bytes.len() }
+    pub fn bytes(&self) -> usize { self.code_length }
+    fn code_bytes(&self) -> &[u8] {
+        if self.payload.is_empty() { return self.code.bytes.as_slice(); }
+        &self.payload[self.code_start..self.code_start + self.code_length]
+    }
     pub fn encode(&self) -> Vec<u8> {
         let mut bytes = b"LKJUNITOBJECT1\n"[..].to_vec();
         string(&mut bytes, &self.key); string(&mut bytes, &self.context);
@@ -154,7 +174,7 @@ impl Object {
         for message in &self.messages { string(&mut bytes, message); }
         word(&mut bytes, self.sites.len());
         for (name, value) in &self.sites { string(&mut bytes, name); site(&mut bytes, *value); }
-        blob(&mut bytes, &self.code.bytes);
+        blob(&mut bytes, self.code_bytes());
         word(&mut bytes, self.code.definitions.len());
         for (name, offset) in &self.code.definitions { string(&mut bytes, name); word(&mut bytes, *offset); }
         word(&mut bytes, self.code.references.len());
@@ -163,18 +183,18 @@ impl Object {
         for reference in &self.code.immediates { word(&mut bytes, reference.at); string(&mut bytes, &reference.message); site(&mut bytes, reference.site); }
         bytes
     }
-    pub fn open(domain: &ProofDomain, interface: &Interface, runtime: &Runtime,
+    pub fn open(domain: &ProofDomain, interface: &Interface, context: &Context<'_>,
         source_base: usize, sources: &[String], payload: VerifiedPayload,
     ) -> Option<Self> {
-        let key = object_key(interface, runtime, source_base, sources);
+        let key = object_key(interface, context, source_base, sources);
         if !payload.matches_domain(domain, NAMESPACE, &key) { return None; }
         let bytes = payload.into_bytes();
         let magic = b"LKJUNITOBJECT1\n";
         if !bytes.starts_with(magic) { return None; }
         let mut at = magic.len();
         if take_string(&bytes, &mut at)? != key { return None; }
-        let context = take_string(&bytes, &mut at)?;
-        if context != context_key(runtime) || take_word(&bytes, &mut at)? != source_base { return None; }
+        let stored_context = take_string(&bytes, &mut at)?;
+        if stored_context != context.identity || take_word(&bytes, &mut at)? != source_base { return None; }
         let flags = take_word(&bytes, &mut at)? as u64;
         if flags & !0x1ffffu64 != 0u64 { return None; }
         let count = take_word(&bytes, &mut at)?;
@@ -202,14 +222,19 @@ impl Object {
             if name != claim.definitions[index] || value.file < source_base || value.file - source_base >= sources.len() { return None; }
             sites.push((name, value));
         }
-        let code = take_blob(&bytes, &mut at)?;
+        // Keep the exact already-authenticated owned bytes. Cloning this span
+        // would copy every code byte again on every unchanged build.
+        let code_length = take_word(&bytes, &mut at)?;
+        if code_length > bytes.len() - at { return None; }
+        let code_start = at;
+        at += code_length;
         let count = take_word(&bytes, &mut at)?;
         if count != claim.definitions.len() || count > (bytes.len() - at) / 16usize { return None; }
         let mut definitions = Vec::new();
         for index in 0usize..count {
             let name = take_string(&bytes, &mut at)?;
             let offset = take_word(&bytes, &mut at)?;
-            if name != claim.definitions[index] || offset >= code.len() { return None; }
+            if name != claim.definitions[index] || offset >= code_length { return None; }
             definitions.push((name, offset));
         }
         let count = take_word(&bytes, &mut at)?;
@@ -220,7 +245,7 @@ impl Object {
             let position = take_word(&bytes, &mut at)?;
             let name = take_string(&bytes, &mut at)?;
             let value = take_site(&bytes, &mut at)?;
-            if position > code.len() || code.len() - position < 4usize || value.file < source_base || value.file - source_base >= sources.len()
+            if position > code_length || code_length - position < 4usize || value.file < source_base || value.file - source_base >= sources.len()
                 || previous.is_some_and(|last| last + 4usize > position) { return None; }
             previous = Some(position);
             references.push(SymbolReference { at: position, name, site: value });
@@ -232,17 +257,17 @@ impl Object {
             let position = take_word(&bytes, &mut at)?;
             let message = take_string(&bytes, &mut at)?;
             let value = take_site(&bytes, &mut at)?;
-            if position > code.len() || code.len() - position < 8usize || value.file < source_base
+            if position > code_length || code_length - position < 8usize || value.file < source_base
                 || value.file - source_base >= sources.len() || !own_messages.contains(&message) { return None; }
             immediates.push(ImmediateReference { at: position, message, site: value });
         }
         if at != bytes.len() { return None; }
-        Some(Self { claim, context, key, source_base, flags, sites, sources: own_sources, messages: own_messages,
-            code: Linkable { bytes: code, definitions, references, immediates } })
+        Some(Self { claim, context: stored_context, key, source_base, flags, sites, sources: own_sources, messages: own_messages,
+            code: Linkable { bytes: Vec::new(), definitions, references, immediates }, payload: bytes, code_start, code_length })
     }
 }
-
-pub fn emit(unit: &CheckedUnit, runtime: &Runtime, source_base: usize) -> Result<Object, Diagnostic> {
+pub fn emit(unit: &CheckedUnit, context: &Context<'_>, source_base: usize) -> Result<Object, Diagnostic> {
+    let runtime = context.runtime;
     let program = unit.program();
     if program.sources.len().max(1usize) > (!0usize) - source_base { return Err(error("unit source table extent overflow")); }
     let messages = super::messages(program);
@@ -314,9 +339,11 @@ pub fn emit(unit: &CheckedUnit, runtime: &Runtime, source_base: usize) -> Result
     for reference in &code.immediates {
         if !own_messages.contains(&reference.message) { own_messages.push(reference.message.clone()); }
     }
-    Ok(Object { claim, context: context_key(runtime),
-        key: object_key(unit.interface(), runtime, source_base, &own_sources), source_base,
-        flags: features(program), sites, sources: own_sources, messages: own_messages, code })
+    let code_length = code.bytes.len();
+    Ok(Object { claim, context: context.identity.clone(),
+        key: object_key(unit.interface(), context, source_base, &own_sources), source_base,
+        flags: features(program), sites, sources: own_sources, messages: own_messages, code,
+        payload: Vec::new(), code_start: 0usize, code_length })
 }
 
 struct Tables {
@@ -372,33 +399,33 @@ impl Linker {
         self.reference_count += count;
         Ok(())
     }
-    fn append(&mut self, code: Linkable) -> Result<(), Diagnostic> {
-        let next = self.position.checked_add(code.bytes.len()).ok_or_else(|| error("unit image extent overflow"))?;
+    fn append(&mut self, code: &Linkable, bytes: &[u8]) -> Result<(), Diagnostic> {
+        let next = self.position.checked_add(bytes.len()).ok_or_else(|| error("unit image extent overflow"))?;
         if next > 9223372036854775807usize - platform::CODE_OFFSET { return Err(error("unit image exceeds file seek representation")); }
         for (name, offset) in &code.definitions {
-            if *offset > code.bytes.len() || self.symbols.contains_key(name) {
+            if *offset > bytes.len() || self.symbols.contains_key(name) {
                 return Err(error(&format!("duplicate or out-of-range unit symbol {name}")));
             }
             self.symbols.insert(name.clone(), self.position + *offset);
         }
         let mut records = Vec::new();
         let mut count = 0usize;
-        for reference in code.references {
-            if reference.at > code.bytes.len() || code.bytes.len() - reference.at < 4usize {
+        for reference in &code.references {
+            if reference.at > bytes.len() || bytes.len() - reference.at < 4usize {
                 return Err(error("unit relocation is outside its object"));
             }
             word(&mut records, 0usize); word(&mut records, self.position + reference.at);
             string(&mut records, &reference.name); site(&mut records, reference.site); count += 1usize;
         }
-        for reference in code.immediates {
-            if reference.at > code.bytes.len() || code.bytes.len() - reference.at < 8usize { return Err(error("unit message relocation is outside its object")); }
+        for reference in &code.immediates {
+            if reference.at > bytes.len() || bytes.len() - reference.at < 8usize { return Err(error("unit message relocation is outside its object")); }
             word(&mut records, 1usize); word(&mut records, self.position + reference.at);
             string(&mut records, &reference.message); site(&mut records, reference.site); count += 1usize;
         }
         self.records(&records, count)?;
         let position = self.position + platform::CODE_OFFSET;
         self.output.seek(position as i64, 0u8).map_err(|errno: i64| io("seek unit object", errno))?;
-        self.output.write_all(&code.bytes).map_err(|errno: i64| io("write unit object", errno))?;
+        self.output.write_all(bytes).map_err(|errno: i64| io("write unit object", errno))?;
         self.position = next;
         Ok(())
     }
@@ -423,17 +450,19 @@ impl Linker {
         for (index, (name, _)) in object.code.definitions.iter().enumerate() {
             if *name != object.claim.definitions[index] { return Err(error("unit object export differs from checked interface")); }
         }
+        self.append(&object.code, object.code_bytes())?;
         self.flags |= object.flags;
         for (name, site) in object.sites { self.sites.insert(name, site); }
         self.tables.push(Tables { source_base: object.source_base, sources: object.sources, messages: object.messages });
         self.claims.insert(object.claim.name.clone(), object.claim);
-        self.append(object.code)
+        Ok(())
     }
-    pub fn finish(mut self, runtime: &Runtime, entry: &Interface, entry_name: &str,
+    pub fn finish(mut self, context: &Context<'_>, entry: &Interface, entry_name: &str,
         grants: &[ir::EntryGrant], sources: &[String], messages: &[String], result_fd: Option<u32>,
     ) -> Result<(File, usize), Diagnostic> {
+        let runtime = context.runtime;
         if self.failed { return Err(error("unit linker is poisoned by an earlier failure")); }
-        if self.context.as_ref() != Some(&context_key(runtime)) {
+        if self.context.as_ref() != Some(&context.identity) {
             return Err(error("linked runtime differs from unit object runtime"));
         }
         let entry_unit_name = entry.name().to_string();
@@ -477,33 +506,29 @@ impl Linker {
         let site = *self.sites.get(&binding).ok_or_else(|| error("entry site has no implementation"))?;
         let (support, data_offset) = support(runtime, program, selected, &binding, site, grants,
             sources, &message_names, result_fd, self.flags, self.position)?;
-        self.append(support)?;
+        self.append(&support, &support.bytes)?;
         self.relocations.seek(0i64, 0u8).map_err(|errno: i64| io("rewind relocation spool", errno))?;
-        let mut remaining = self.relocation_bytes;
         let expected_hash = std::mem::replace(&mut self.relocation_hash, crate::sha256::Sha256::new()).finish();
-        let mut actual_hash = crate::sha256::Sha256::new();
-        for _ in 0usize..self.reference_count {
-            let (kind, position, name, site) = relocation_record(&mut self.relocations, &mut remaining, &mut actual_hash)?;
-            let width = if kind == 0usize { 4usize } else if kind == 1usize { 8usize } else { return Err(error("unknown unit relocation kind")); };
-            if position > data_offset || width > data_offset - position { return Err(error("unit relocation is outside image code")); }
-            let bytes = if kind == 0usize {
-                let target = *self.symbols.get(&name)
-                    .ok_or_else(|| Diagnostic::new(site, "E_UNIT_LINK", &format!("unresolved unit symbol {name}")))?;
-                crate::x86::displacement(target, position, site)?[..].to_vec()
-            } else {
-                let code = *message_codes.get(&name).ok_or_else(|| error("unit message relocation is absent from final table"))?;
-                let mut bytes = Vec::new(); word(&mut bytes, code); bytes
-            };
-            let at = platform::CODE_OFFSET + position;
-            self.output.seek(at as i64, 0u8).map_err(|errno: i64| io("seek unit relocation", errno))?;
-            self.output.write_all(&bytes).map_err(|errno: i64| io("write unit relocation", errno))?;
+        {
+            let mut records = Relocations::new(&mut self.relocations, self.relocation_bytes);
+            let mut patches = PatchWindow::new(&mut self.output, platform::CODE_OFFSET + self.position);
+            for _ in 0usize..self.reference_count {
+                let (kind, position, name, site) = records.record()?;
+                let width = if kind == 0usize { 4usize } else if kind == 1usize { 8usize } else { return Err(error("unknown unit relocation kind")); };
+                if position > data_offset || width > data_offset - position { return Err(error("unit relocation is outside image code")); }
+                let bytes = if kind == 0usize {
+                    let target = *self.symbols.get(&name)
+                        .ok_or_else(|| Diagnostic::new(site, "E_UNIT_LINK", &format!("unresolved unit symbol {name}")))?;
+                    crate::x86::displacement(target, position, site)?[..].to_vec()
+                } else {
+                    let code = *message_codes.get(&name).ok_or_else(|| error("unit message relocation is absent from final table"))?;
+                    let mut bytes = Vec::new(); word(&mut bytes, code); bytes
+                };
+                patches.write(platform::CODE_OFFSET + position, &bytes)?;
+            }
+            records.finish(expected_hash)?;
+            patches.flush()?;
         }
-        if remaining != 0usize { return Err(error("relocation spool has trailing bytes")); }
-        let mut extra = [0u8; 1];
-        if self.relocations.read(&mut extra).map_err(|errno: i64| io("check relocation EOF", errno))? != 0usize {
-            return Err(error("relocation spool changed its extent"));
-        }
-        if actual_hash.finish() != expected_hash { return Err(error("relocation spool changed after emission")); }
         let header = platform::elf_header(self.position, data_offset)?;
         self.output.seek(0i64, 0u8).map_err(|errno: i64| io("seek ELF header", errno))?;
         self.output.write_all(&header).map_err(|errno: i64| io("write ELF header", errno))?;
@@ -513,32 +538,128 @@ impl Linker {
     }
 }
 
-fn exact(file: &mut File, bytes: &mut [u8]) -> Result<(), Diagnostic> {
-    let mut at = 0usize;
-    while at < bytes.len() {
-        let count = file.read(&mut bytes[at..]).map_err(|errno: i64| io("read relocation spool", errno))?;
-        if count == 0usize { return Err(error("truncated relocation spool")); }
-        at += count;
-    }
-    Ok(())
-}
-fn relocation_record(file: &mut File, remaining: &mut usize, hash: &mut crate::sha256::Sha256) -> Result<(usize, usize, String, Span), Diagnostic> {
-    if *remaining < 48usize { return Err(error("truncated relocation record")); }
-    let mut prefix = [0u8; 24]; exact(file, &mut prefix)?; hash.update(&prefix);
-    let mut at = 0usize;
-    let kind = take_word(&prefix, &mut at).unwrap();
-    let position = take_word(&prefix, &mut at).unwrap();
-    let length = take_word(&prefix, &mut at).unwrap();
-    if length > *remaining - 48usize { return Err(error("invalid relocation symbol extent")); }
-    let mut name = vec![0u8; length]; exact(file, &mut name)?; hash.update(&name);
-    let name = String::from_utf8(name).map_err(|_| error("relocation symbol is not UTF-8"))?;
-    let mut coordinates = [0u8; 24]; exact(file, &mut coordinates)?; hash.update(&coordinates);
-    let mut at = 0usize;
-    let site = take_site(&coordinates, &mut at).unwrap();
-    *remaining -= 48usize + length;
-    Ok((kind, position, name, site))
+
+
+const LINK_BUFFER: usize = 65536usize;
+
+struct Relocations<'a> {
+    file: &'a mut File,
+    buffer: Vec<u8>,
+    at: usize,
+    available: usize,
+    unread: usize,
+    remaining: usize,
+    hash: crate::sha256::Sha256,
 }
 
+impl<'a> Relocations<'a> {
+    fn new(file: &'a mut File, length: usize) -> Self {
+        Self { file, buffer: vec![0u8; LINK_BUFFER], at: 0usize, available: 0usize,
+            unread: length, remaining: length, hash: crate::sha256::Sha256::new() }
+    }
+    fn exact(&mut self, bytes: &mut [u8]) -> Result<(), Diagnostic> {
+        if bytes.len() > self.remaining { return Err(error("truncated relocation spool")); }
+        let mut written = 0usize;
+        while written < bytes.len() {
+            if self.at == self.available {
+                let wanted = self.unread.min(LINK_BUFFER);
+                if wanted == 0usize { return Err(error("truncated relocation spool")); }
+                let count = self.file.read(&mut self.buffer[..wanted]).map_err(|errno: i64| io("read relocation spool", errno))?;
+                if count == 0usize { return Err(error("truncated relocation spool")); }
+                self.hash.update(&self.buffer[..count]);
+                self.unread -= count;
+                self.at = 0usize;
+                self.available = count;
+            }
+            let count = (bytes.len() - written).min(self.available - self.at);
+            bytes[written..written + count].copy_from_slice(&self.buffer[self.at..self.at + count]);
+            self.at += count;
+            written += count;
+            self.remaining -= count;
+        }
+        Ok(())
+    }
+    fn record(&mut self) -> Result<(usize, usize, String, Span), Diagnostic> {
+        if self.remaining < 48usize { return Err(error("truncated relocation record")); }
+        let mut prefix = [0u8; 24]; self.exact(&mut prefix)?;
+        let mut at = 0usize;
+        let kind = take_word(&prefix, &mut at).unwrap();
+        let position = take_word(&prefix, &mut at).unwrap();
+        let length = take_word(&prefix, &mut at).unwrap();
+        if length > self.remaining - 24usize { return Err(error("invalid relocation symbol extent")); }
+        let mut name = vec![0u8; length]; self.exact(&mut name)?;
+        let name = String::from_utf8(name).map_err(|_| error("relocation symbol is not UTF-8"))?;
+        let mut coordinates = [0u8; 24]; self.exact(&mut coordinates)?;
+        let mut at = 0usize;
+        let site = take_site(&coordinates, &mut at).unwrap();
+        Ok((kind, position, name, site))
+    }
+    fn finish(mut self, expected: [u8; 32]) -> Result<(), Diagnostic> {
+        if self.remaining != 0usize || self.unread != 0usize || self.at != self.available {
+            return Err(error("relocation spool has trailing bytes"));
+        }
+        let mut extra = [0u8; 1];
+        if self.file.read(&mut extra).map_err(|errno: i64| io("check relocation EOF", errno))? != 0usize {
+            return Err(error("relocation spool changed its extent"));
+        }
+        if self.hash.finish() != expected { return Err(error("relocation spool changed after emission")); }
+        Ok(())
+    }
+}
+
+struct PatchWindow<'a> {
+    file: &'a mut File,
+    buffer: Vec<u8>,
+    start: usize,
+    length: usize,
+    image_length: usize,
+    dirty: bool,
+}
+
+impl<'a> PatchWindow<'a> {
+    fn new(file: &'a mut File, image_length: usize) -> Self {
+        Self { file, buffer: vec![0u8; LINK_BUFFER], start: 0usize, length: 0usize, image_length, dirty: false }
+    }
+    fn flush(&mut self) -> Result<(), Diagnostic> {
+        if self.dirty {
+            self.file.seek(self.start as i64, 0u8).map_err(|errno: i64| io("seek relocation window", errno))?;
+            self.file.write_all(&self.buffer[..self.length]).map_err(|errno: i64| io("write relocation window", errno))?;
+            self.dirty = false;
+        }
+        Ok(())
+    }
+    fn load(&mut self, start: usize) -> Result<(), Diagnostic> {
+        self.flush()?;
+        if start >= self.image_length { return Err(error("relocation window is outside image")); }
+        self.start = start;
+        self.length = (self.image_length - start).min(LINK_BUFFER);
+        self.file.seek(start as i64, 0u8).map_err(|errno: i64| io("seek relocation window", errno))?;
+        let mut at = 0usize;
+        while at < self.length {
+            let count = self.file.read(&mut self.buffer[at..self.length]).map_err(|errno: i64| io("read relocation window", errno))?;
+            if count == 0usize { return Err(error("linked image was truncated before relocation")); }
+            at += count;
+        }
+        Ok(())
+    }
+    fn write(&mut self, position: usize, bytes: &[u8]) -> Result<(), Diagnostic> {
+        if position > self.image_length || bytes.len() > self.image_length - position {
+            return Err(error("relocation patch is outside image"));
+        }
+        let mut written = 0usize;
+        while written < bytes.len() {
+            let at = position + written;
+            let start = at - at % LINK_BUFFER;
+            if self.length == 0usize || start != self.start { self.load(start)?; }
+            let offset = at - start;
+            let count = (bytes.len() - written).min(self.length - offset);
+            self.buffer[offset..offset + count].copy_from_slice(&bytes[written..written + count]);
+            self.dirty = true;
+            written += count;
+        }
+        Ok(())
+    }
+}
 fn support(runtime: &Runtime, program: &Program, selected: usize, binding: &str, site: Span,
     grants: &[ir::EntryGrant], sources: &[String], messages: &[String], result_fd: Option<u32>,
     mut flags: u64, base: usize,

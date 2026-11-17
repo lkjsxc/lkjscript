@@ -21,6 +21,13 @@ trap 'exit 130' HUP INT TERM
 mkdir "$unit_fixture/store"
 unit_key=$(XDG_STATE_HOME="$unit_key_root" sh tools/store-key.sh)
 unit_root=$(realpath "$unit_fixture")
+# Source-hash reuse must bind fresh loaded bytes and reject A -> B -> A races.
+for unit_engine in native interpreter; do
+    "$unit_compiler" test src/driver/units/inputs_test.lkj --library-dir library \
+        --engine "$unit_engine" --jobs 1 --no-store \
+        > "$unit_root/inputs-$unit_engine.out" 2> "$unit_root/inputs-$unit_engine.err"
+    grep -Fxq -- 'ok 8 tests' "$unit_root/inputs-$unit_engine.out"
+done
 cat > "$unit_root/units.lkj" <<'SOURCE'
 const UNITS: &[&str] = &["base=base.lkj", "geometry=geometry.lkj", "app=app.lkj"];
 const DEPENDS: &[&str] = &["geometry=base", "app=geometry"];
@@ -60,30 +67,30 @@ pub fn main(mut out: Stdout) {
 SOURCE
 unit_options=(units.lkj --source-dir "$unit_root" --store "$unit_root/store" --store-key "$unit_key" --stats)
 "$unit_compiler" check-units "${unit_options[@]}" > "$unit_root/check.out" 2> "$unit_root/check.err"
-rg -q 'checked=3 reused=0' "$unit_root/check.out"
+grep -Fq -- 'checked=3 reused=0' "$unit_root/check.out"
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/program" > "$unit_root/build.out" 2> "$unit_root/build.err"
 [[ $("$unit_root/program") == 42 ]]
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/warm" > "$unit_root/warm.out" 2> "$unit_root/warm.err"
-rg -q 'checked=0 reused=3 emitted=0' "$unit_root/warm.out"
+grep -Fq -- 'checked=0 reused=3 emitted=0' "$unit_root/warm.out"
 cmp "$unit_root/program" "$unit_root/warm"
 # The local use in sum belongs to the erased body; it creates no second range.
 # Private helpers and nongeneric methods cross the same authenticated boundary.
 perl -0pi -e 's/adjustment\(\) -> i64 \{ 0i64 \}/adjustment() -> i64 { 1i64 }/' "$unit_root/base.lkj"
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/helper" > "$unit_root/helper.out" 2> "$unit_root/helper.err"
-rg -q 'checked=1 reused=2 emitted=1' "$unit_root/helper.out"
+grep -Fq -- 'checked=1 reused=2 emitted=1' "$unit_root/helper.out"
 [[ $("$unit_root/helper") == 43 ]]
 perl -0pi -e 's/self.left \+ self.right \+ adjustment\(\)/self.left + self.right + adjustment() + 1i64/' "$unit_root/base.lkj"
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/method" > "$unit_root/method.out" 2> "$unit_root/method.err"
-rg -q 'checked=1 reused=2 emitted=1' "$unit_root/method.out"
+grep -Fq -- 'checked=1 reused=2 emitted=1' "$unit_root/method.out"
 [[ $("$unit_root/method") == 44 ]]
 perl -0pi -e 's/value.total\(\)/value.total() + 1i64/' "$unit_root/base.lkj"
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/edited" > "$unit_root/edit.out" 2> "$unit_root/edit.err"
-rg -q 'checked=1 reused=2 emitted=1' "$unit_root/edit.out"
+grep -Fq -- 'checked=1 reused=2 emitted=1' "$unit_root/edit.out"
 [[ $("$unit_root/edited") == 45 ]]
 # Generic templates are producer inputs, not proofs of future instantiations.
 perl -0pi -e 's/identity<T: Copy>\(value: T\) -> T \{ value \}/identity<T: Copy>(value: T) -> T { let result = value; result }/' "$unit_root/base.lkj"
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/template" > "$unit_root/template.out" 2> "$unit_root/template.err"
-rg -q 'checked=2 reused=1 emitted=2' "$unit_root/template.out"
+grep -Fq -- 'checked=2 reused=1 emitted=2' "$unit_root/template.out"
 [[ $("$unit_root/template") == 45 ]]
 # Including a source that is also projected must preserve its original bytes.
 perl -0pi -e 's/include_str!\("message.txt"\)/include_str!("base.lkj")/' "$unit_root/base.lkj"
@@ -91,11 +98,13 @@ perl -0pi -e 's/assert_eq!\(original, "unit include"\);/assert!(original.contain
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/include" > "$unit_root/include.out" 2> "$unit_root/include.err"
 [[ $("$unit_root/include") == 45 ]]
 # Corrupt every retained interface, including the currently selected versions.
-while IFS= read -r unit_interface; do
+unit_interfaces=("$unit_root/store"/lkjscript-unit-interface-1-*)
+[[ -f ${unit_interfaces[0]} ]] || { echo 'no retained interfaces to corrupt' >&2; exit 1; }
+for unit_interface in "${unit_interfaces[@]}"; do
     perl -e 'open my $f,"+<",$ARGV[0] or die $!; binmode $f; seek $f,-1,2 or die $!; read $f,my $b,1; seek $f,-1,2; print {$f} chr(ord($b)^1);' "$unit_interface"
-done < <(rg --files "$unit_root/store" | rg '/lkjscript-unit-interface-1-')
+done
 "$unit_compiler" check-units "${unit_options[@]}" > "$unit_root/corrupt.out" 2> "$unit_root/corrupt.err"
-rg -q 'checked=3 reused=0' "$unit_root/corrupt.out"
+grep -Fq -- 'checked=3 reused=0' "$unit_root/corrupt.out"
 # Rejection never overwrites the already published executable.
 cp "$unit_root/base.lkj" "$unit_root/base.saved"
 printf '\npub fn invalid() -> bool { 42i64 }\n' >> "$unit_root/base.lkj"
@@ -103,6 +112,9 @@ if "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/
     echo 'ill-typed unit was accepted' >&2; exit 1
 fi
 [[ $("$unit_root/edited") == 45 ]]
+if compgen -G "$unit_root/.lkjscript-unit-*.tmp" > /dev/null; then
+    echo 'refused unit build left an unpublished image' >&2; exit 1
+fi
 mv "$unit_root/base.saved" "$unit_root/base.lkj"
 # Even a hard link cannot turn the private store key into source/include data.
 ln "$unit_key" "$unit_root/private.key"
@@ -111,7 +123,7 @@ printf '\npub fn leaked() -> &'\''static [u8] { include_bytes!("private.key") }\
 if "$unit_compiler" check-units "${unit_options[@]}" > "$unit_root/key.out" 2> "$unit_root/key.err"; then
     echo 'private authentication key was readable as source' >&2; exit 1
 fi
-rg -q 'private unit authentication key' "$unit_root/key.err"
+grep -Fq -- 'private unit authentication key' "$unit_root/key.err"
 mv "$unit_root/base.saved" "$unit_root/base.lkj"
 rm "$unit_root/private.key"
 cp "$unit_root/units.lkj" "$unit_root/units.saved"
@@ -119,6 +131,6 @@ perl -0pi -e 's/"geometry=base"/"base=app", "geometry=base"/' "$unit_root/units.
 if "$unit_compiler" check-units "${unit_options[@]}" > "$unit_root/cycle.out" 2> "$unit_root/cycle.err"; then
     echo 'cyclic units were accepted' >&2; exit 1
 fi
-rg -q 'unit dependency cycle' "$unit_root/cycle.err"
+grep -Fq -- 'unit dependency cycle' "$unit_root/cycle.err"
 mv "$unit_root/units.saved" "$unit_root/units.lkj"
 printf 'ok source units: independent check, streamed link, unchanged/body/template reuse, authentication and atomic refusal\n'

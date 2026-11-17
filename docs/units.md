@@ -39,7 +39,12 @@ The second example assumes `app::main(out: Stdout)`. Normal exact entry
 grant checking applies. The manifest selects the entry; `--entry` does not.
 A missing or cyclic manifest, failed unit, missing grant or failed link leaves
 the previous executable intact. Publication uses a new temporary file and an
-atomic rename only after every source input and the manifest are rehashed.
+atomic rename only after linking finishes and every source input and the manifest
+are rehashed. A command records the selected units' input claims by directory and
+path. Conflicting claims refuse publication even if a file changes back before
+the final sweep. Repeated cache lookups may share an observation within that
+command; fresh admission hashes the bytes it actually loads, and the final sweep
+always reads again. Failed cache candidates cannot supply fresh input identities.
 
 ## What an interface proves
 
@@ -110,7 +115,12 @@ offsets. Custom trap messages are resolved against the final canonical table,
 including when a later unit adds an earlier-sorting message.
 
 The linker writes code and relocation spools incrementally and patches the
-output file; it does not assemble a whole-program IR or executable byte vector.
+unpublished output file through bounded buffers; it does not assemble a
+whole-program IR or executable byte vector. A borrowed immutable runtime context
+reuses its exact identity within the command. Authenticated object payloads keep
+their validated code spans without copying the code into a second allocation.
+Relocation consumption still verifies the complete recorded extent, physical EOF
+and digest before the output can be published.
 Source AST, elaboration and IR storage are released after each unit. The source
 frontier includes needed declarations/templates and the standard library.
 
@@ -134,12 +144,13 @@ The ordinary gate runs:
 - `tools/check-units.sh`: independently checked interfaces, authenticated
   decoding, structural and ownership attacks, including a three-unit destructor
   reexport. The current focused run refuses 954 deliberate mutants.
-- `tools/unit-native.sh`: 28 native contract cases covering cross-unit
+- `tools/unit-native.sh`: 32 native contract cases covering cross-unit
   execution, wrong domains, stale bodies, relocations, spool alteration and
   preserved custom traps.
 - `tools/unit-source-test.sh`: cold checking/building, byte-identical warm
   reuse, public/private/method body edits, generic invalidation, exact includes,
-  corrupted interfaces, key exclusion, cycles and atomic rejection.
+  corrupted interfaces, key exclusion, cycles and atomic rejection, plus eight
+  snapshot-consistency attacks on both engines and failed-publication cleanup.
 - `tools/unit-boundaries-test.sh`: returned field views, imported destruction,
   narrow authority, fresh implementation linkage and rejected caller mutation.
 

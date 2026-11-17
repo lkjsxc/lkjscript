@@ -1,0 +1,11 @@
+{
+   "corpus_rows" : 7239,
+   "empty_stderr" : true,
+   "exact_output" : true,
+   "expected_sha256" : "56b8303689ee15edb00f079b6dfe9d289dc5501e463f5fdf7310ede62f833771",
+   "image_sha256" : "e043666403fb5b462e3ecc58cec77f86a2c580ecfd04415e25af48c74d624e3f",
+   "observed_sha256" : "56b8303689ee15edb00f079b6dfe9d289dc5501e463f5fdf7310ede62f833771",
+   "output_bytes" : 49563,
+   "schema" : 1,
+   "specimen" : "levenshtein-original-units"
+}

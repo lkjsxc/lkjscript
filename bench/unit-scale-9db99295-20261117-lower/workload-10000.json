@@ -1,0 +1,41 @@
+{
+   "dependency_depth" : 1,
+   "edit_before_sha256" : "7eb06401c8d58481db6a64ff1dbbba912f1f6dc310e7d5bc36382a94e8721c62",
+   "edit_file" : "units/leaf00000.lkj",
+   "expected_baseline" : 37,
+   "expected_edited" : 43,
+   "files" : [
+      {
+         "bytes" : 323036,
+         "lines" : 9995,
+         "path" : "units/leaf00000.lkj",
+         "sha256" : "7eb06401c8d58481db6a64ff1dbbba912f1f6dc310e7d5bc36382a94e8721c62"
+      },
+      {
+         "bytes" : 165,
+         "lines" : 5,
+         "path" : "units/entry.lkj",
+         "sha256" : "1506366d5b791cb2377eed60521275d39d9f5b62bac7098d4a8f0e52afee79ff"
+      }
+   ],
+   "forms" : [
+      "ordinary cross-unit calls",
+      "generic Copy functions and aggregates",
+      "enums and matches",
+      "Box-indirected recursive nominal types",
+      "reference recursion",
+      "bounded arithmetic loops"
+   ],
+   "generator_version" : 2,
+   "largest_unit_lines" : 9995,
+   "leaf_units" : 1,
+   "linking_units" : 1,
+   "manifest_lines" : 8,
+   "maximum_direct_dependencies" : 1,
+   "maximum_unit_lines" : 10000,
+   "source_bytes" : 323201,
+   "source_function_definitions" : 716,
+   "source_lines" : 10000,
+   "units" : 2,
+   "workload" : "connected balanced source-unit DAG; explicit package-boundary workload"
+}

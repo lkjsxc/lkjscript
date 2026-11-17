@@ -5,6 +5,8 @@ use crate::check::units::{CheckedUnit, Dependency, Import, Interface};
 use crate::units::{Definition, Plan, Projection};
 use std::collections::{BTreeMap, BTreeSet};
 
+
+mod inputs;
 const RECORDS: &str = "unit-inputs";
 const PROJECTIONS: &str = "unit-source";
 
@@ -142,6 +144,60 @@ fn projection(store: &mut store::Store, record: &Record) -> Option<Projection> {
     let bytes = store.get(PROJECTIONS, &record.projection)?;
     if sha256::hex_digest(&bytes) != record.projection { return None; }
     Projection::decode(&bytes, &record.name)
+}
+
+fn input_expectations(bytes: &[u8]) -> Option<Vec<inputs::Expectation>> {
+    let mut reader = store::Reader::new(bytes);
+    let count = reader.word()?;
+    if count > bytes.len() / 24usize { return None; }
+    let mut result = Vec::new();
+    for _ in 0usize..count {
+        let directory = reader.text()?;
+        let path = reader.text()?;
+        let digest = reader.text()?;
+        if !digest.is_empty() {
+            if digest.len() != 64usize { return None; }
+            for byte in digest.as_str().bytes() {
+                if !byte.is_ascii_digit() && !(byte >= b'a' && byte <= b'f') { return None; }
+            }
+        }
+        result.push(inputs::Expectation { directory, path,
+            digest: if digest.is_empty() { None } else { Some(digest) } });
+    }
+    if !reader.done() { return None; }
+    Some(result)
+}
+
+fn current_input(
+    world: &mut World, root: &str, path: &str, secret: &Option<[u8; 32]>,
+) -> Option<Option<String>> {
+    let mut directory = world.directory(root).ok()?;
+    match directory.open(path) {
+        Ok(mut file) => {
+            let bytes = file.read_to_end().ok()?;
+            if bytes.len() == 32usize && secret.as_ref() == Some(&sha256::digest(&bytes)) { return None; }
+            Some(Some(sha256::hex_digest(&bytes)))
+        }
+        Err(errno) => { if errno == 2i64 || errno == 20i64 { Some(None) } else { None } }
+    }
+}
+
+fn reusable_inputs(
+    world: &mut World, snapshot: &mut inputs::Snapshot, bytes: &[u8],
+    secret: &Option<[u8; 32]>,
+) -> bool {
+    let Some(expected) = input_expectations(bytes) else { return false; };
+    snapshot.matches(&expected, &mut |root: &str, path: &str| -> Option<Option<String>> {
+        current_input(world, root, path, secret)
+    })
+}
+
+fn final_inputs_match(
+    world: &mut World, snapshot: &inputs::Snapshot, secret: &Option<[u8; 32]>,
+) -> bool {
+    snapshot.verify(&mut |root: &str, path: &str| -> Option<Option<String>> {
+        current_input(world, root, path, secret)
+    })
 }
 fn type_children(value: &ir::Type, pending: &mut Vec<usize>) {
     match &value.kind {
@@ -336,33 +392,44 @@ fn admit(
     }
     Ok((unit, record, projected))
 }
-fn write_file(world: &mut World, path: &str, mut source: File) -> Result<(), String> {
-    let (parent, name) = location(path);
-    let mut directory = world.directory(&parent).map_err(|errno: i64| io(&parent, "open output directory", errno))?;
-    let mut clock = world.clock();
-    let stamp = clock.nanoseconds().map_err(|errno: i64| io("clock", "read", errno))?;
-    let temporary = format!(".lkjscript-unit-{stamp}.tmp");
-    source.rewind().map_err(|errno: i64| io(path, "rewind linked image", errno))?;
-    let result = {
-        let mut output = directory.create_new(&temporary).map_err(|errno: i64| io(path, "create temporary output", errno))?;
-        let mut buffer = [0u8; 65536];
-        let mut result = Ok(());
-        loop {
-            let count = match source.read(&mut buffer) { Ok(count) => count, Err(errno) => { result = Err(io(path, "read linked image", errno)); break; } };
-            if count == 0usize { break; }
-            if let Err(errno) = output.write_all(&buffer[..count]) { result = Err(io(path, "publish linked image", errno)); break; }
-        }
-        if result.is_ok() { result = output.set_executable().map_err(|errno: i64| io(path, "set executable", errno)); }
-        result
-    };
-    if let Err(error) = result { let _ = directory.remove(&temporary); return Err(error); }
-    if let Err(errno) = directory.rename(&temporary, &name) { let _ = directory.remove(&temporary); return Err(io(path, "rename linked image", errno)); }
-    Ok(())
+
+struct Publication {
+    directory: Directory,
+    temporary: String,
+    name: String,
+    path: String,
+    complete: bool,
+}
+
+impl Publication {
+    fn new(world: &mut World, path: &str) -> Result<(Self, File), String> {
+        let (parent, name) = location(path);
+        let mut directory = world.directory(&parent).map_err(|errno: i64| io(&parent, "open output directory", errno))?;
+        let mut clock = world.clock();
+        let stamp = clock.nanoseconds().map_err(|errno: i64| io("clock", "read", errno))?;
+        let temporary = format!(".lkjscript-unit-{stamp}.tmp");
+        let image = directory.create_new(&temporary).map_err(|errno: i64| io(path, "create temporary output", errno))?;
+        Ok((Self { directory, temporary, name, path: path.to_string(), complete: false }, image))
+    }
+    fn finish(&mut self, mut image: File) -> Result<(), String> {
+        image.set_executable().map_err(|errno: i64| io(&self.path, "set executable", errno))?;
+        self.directory.rename(&self.temporary, &self.name)
+            .map_err(|errno: i64| io(&self.path, "rename linked image", errno))?;
+        self.complete = true;
+        Ok(())
+    }
+}
+
+impl Drop for Publication {
+    fn drop(&mut self) {
+        if !self.complete { let _ = self.directory.remove(&self.temporary); }
+    }
 }
 pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Memo) -> Result<u8, String> {
     if memo.store.is_none() { return Err(problem("unit commands require an available --store DIRECTORY and --store-key PRIVATE_KEY")); }
     let key = options.store_key.as_ref().ok_or_else(|| problem("missing private store key"))?;
     memo.private_source_digest = Some(sha256::digest(&read_path(world, key)?));
+    let private_source_digest = memo.private_source_digest.clone();
     let root = options.source_directory.as_ref().map_or(".", |value| value.as_str()).to_string();
     if !crate::units::beneath(&options.path) { return Err(problem("unit manifest must be a relative path beneath --source-dir")); }
     let manifest_path = if root == "." { options.path.clone() } else { format!("{root}/{}", options.path) };
@@ -372,8 +439,14 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
     let plan = crate::units::parse(&text(manifest_bytes, &manifest_path)?)?;
     let build = options.command == "build-units";
     let runtime: Option<runtime::Runtime> = if build { Some(load_runtime(world, &options.runtime_source)?) } else { None };
+    let context: Option<crate::native::units::Context<'_>> = match runtime.as_ref() {
+        Some(runtime) => Some(crate::native::units::Context::new(runtime)), None => None,
+    };
+    let output_path: String = match &options.output { Some(path) => path.clone(), None => format!("{}.elf", options.path) };
+    let mut publication: Option<Publication> = None;
     let mut linker: Option<crate::native::units::Linker> = if build {
-        let output = world.temporary_file().map_err(|errno: i64| io("unit image", "create", errno))?;
+        let (pending, output) = Publication::new(world, &output_path)?;
+        publication = Some(pending);
         let relocations = world.temporary_file().map_err(|errno: i64| io("unit relocations", "create", errno))?;
         let linked = match crate::native::units::Linker::new(output, relocations) {
             Ok(linked) => linked,
@@ -382,6 +455,7 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
         Some(linked)
     } else { None };
     let mut records: BTreeMap<String, Record> = BTreeMap::new();
+    let mut snapshot = inputs::Snapshot::new();
     let mut sources = Vec::new();
     let mut messages: BTreeSet<String> = BTreeSet::new();
     let mut reused = 0usize;
@@ -395,10 +469,12 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
             .and_then(|bytes: Vec<u8>| Record::decode(&bytes, &definition.name));
         let mut ready: Option<(Interface, Record)> = None;
         if let Some(record) = cached {
-            if record.dependencies == expected && record.dependency_sources == source_identity
-                && store::inputs_match(world, &record.inputs) {
-                if let Some(interface) = interface(memo.store.as_mut().unwrap(), &record) {
-                    if projection(memo.store.as_mut().unwrap(), &record).is_some() { ready = Some((interface, record)); }
+            if record.dependencies == expected && record.dependency_sources == source_identity {
+                let matches = reusable_inputs(world, &mut snapshot, &record.inputs, &private_source_digest);
+                if matches {
+                    if let Some(interface) = interface(memo.store.as_mut().unwrap(), &record) {
+                        if projection(memo.store.as_mut().unwrap(), &record).is_some() { ready = Some((interface, record)); }
+                    }
                 }
             }
         }
@@ -406,12 +482,12 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
         let mut object: Option<crate::native::units::Object> = None;
         if let Some((interface, record)) = &ready {
             if build {
-                let runtime = runtime.as_ref().unwrap();
-                let key = crate::native::units::object_key(interface, runtime, source_base, &record.sources);
+                let context = context.as_ref().unwrap();
+                let key = crate::native::units::object_key(interface, context, source_base, &record.sources);
                 let store = memo.store.as_mut().unwrap();
                 let domain = store.proof_domain();
                 if let Some(payload) = store.get_verified(crate::native::units::namespace(), &key) {
-                    object = crate::native::units::Object::open(&domain, interface, runtime, source_base, &record.sources, payload);
+                    object = crate::native::units::Object::open(&domain, interface, context, source_base, &record.sources, payload);
                 }
             }
         }
@@ -422,12 +498,12 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
                 let (unit, record, _) = admit(world, definition, &plan, &root, &manifest_path, &expected, &source_names, &source_identity, &records, options, stats, memo)?;
                 checked += 1usize;
                 if build {
-                    let runtime = runtime.as_ref().unwrap();
-                    let generated = match crate::native::units::emit(&unit, runtime, source_base) {
+                    let context = context.as_ref().unwrap();
+                    let generated = match crate::native::units::emit(&unit, context, source_base) {
                         Ok(generated) => generated,
                         Err(error) => return Err(report(&manifest_path, error)),
                     };
-                    let key = crate::native::units::object_key(unit.interface(), runtime, source_base, &record.sources);
+                    let key = crate::native::units::object_key(unit.interface(), context, source_base, &record.sources);
                     memo.store.as_mut().unwrap().put(crate::native::units::namespace(), &key, &generated.encode());
                     object = Some(generated);
                     emitted += 1usize;
@@ -436,6 +512,13 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
                 record
             }
         };
+        // Fresh records retain the digest of every byte actually loaded by
+        // admit; the cached observation never supplies a fresh input identity.
+        let required = input_expectations(&record.inputs)
+            .ok_or_else(|| problem("malformed selected unit input record"))?;
+        if !snapshot.require(&required) {
+            return Err(problem("conflicting source snapshots across units; linked output was not published"));
+        }
         for path in &record.sources { sources.push(path.clone()); }
         for message in &record.messages { messages.insert(message.clone()); }
         if let Some(object) = object {
@@ -444,17 +527,10 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
         records.insert(definition.name.clone(), record);
         stats.mark("unit_store_link")?;
     }
-    // Publication is bound to one coherent source snapshot. No stored interface
-    // can silently stand for a source file changed since its unit was visited.
-    for record in records.values() {
-        if !store::inputs_match(world, &record.inputs) { return Err(problem("source changed after unit checking; linked output was not published")); }
-    }
-    if sha256::hex_digest(&read_path(world, &manifest_path)?) != manifest_digest {
-        return Err(problem("unit manifest changed during checking"));
-    }
     stats.count("units_checked", checked);
     stats.count("units_reused", reused);
     stats.count("units_emitted", emitted);
+    let mut linked_image: Option<File> = None;
     if build {
         let owner = plan.entry.as_str().split("::").next().unwrap_or("").to_string();
         let record = records.get(&owner).ok_or_else(|| problem("entry unit was not checked"))?;
@@ -465,13 +541,24 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
         let grants = crate::entry_grants::prepare(interface.program(), selected, &options.grants)?;
         let mut message_list = Vec::new();
         for message in messages { message_list.push(message); }
-        let (output, bytes) = match linker.unwrap().finish(runtime.as_ref().unwrap(), &interface, &plan.entry, &grants, &sources, &message_list, None) {
+        let (output, bytes) = match linker.unwrap().finish(context.as_ref().unwrap(), &interface, &plan.entry, &grants, &sources, &message_list, None) {
             Ok(value) => value,
             Err(error) => return Err(report(&manifest_path, error)),
         };
-        let output_path: String = match &options.output { Some(path) => path.clone(), None => format!("{}.elf", options.path) };
-        write_file(world, &output_path, output)?;
+        linked_image = Some(output);
         stats.count("emitted_bytes", bytes);
+    }
+    // Publication is bound to one coherent source snapshot. No stored interface
+    // can silently stand for a source file changed since its unit was visited.
+    if !final_inputs_match(world, &snapshot, &private_source_digest) { return Err(problem("source changed after unit checking; linked output was not published")); }
+    stats.count("unit_input_reads", snapshot.reads());
+    stats.count("unit_input_reused", snapshot.reused());
+    stats.count("unit_input_final", snapshot.required());
+    if sha256::hex_digest(&read_path(world, &manifest_path)?) != manifest_digest {
+        return Err(problem("unit manifest changed during checking"));
+    }
+    if let Some(output) = linked_image {
+        publication.as_mut().unwrap().finish(output)?;
         stats.mark("unit_publish")?;
     }
     world.stdout().write(format!("LKJSCRIPT_UNITS checked={checked} reused={reused} emitted={emitted} total={}\n", records.len()).as_bytes());

@@ -1,0 +1,13 @@
+workload	source_lines	phase	exit	wall_s	user_s	system_s	peak_rss_kib	compiler_peak_rss_bytes	load_before	load_after	memory_limit_mib	watchdog_s	units_checked	units_reused	units_emitted	expected_units	largest_source_unit_lines	maximum_direct_dependencies	dependency_depth	max_definitions	max_types	max_ir_functions	max_import_interfaces	max_projection_bytes	max_sources	emitted_bytes	store_bytes
+compiler	NA	check	0	20.59	20.22	0.07	821168	840876032	5.43	5.48	8192	3600	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	0
+compiler	NA	build	0	37.07	36.41	0.12	1312112	1343602688	5.48	5.11	8192	3600	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	34446530	0
+levenshtein-original-units	129	cold-check	0	0.79	0.76	0.00	51696	52936704	5.11	5.11	8192	3600	3	0	0	3	65	1	2	796	70	30	1	333	34	0	34121
+levenshtein-original-units	129	cold-build	0	0.85	0.83	0.00	50276	51482624	5.11	5.27	8192	3600	3	0	3	3	65	1	2	796	70	30	1	333	34	70081	129653
+generated	100000	cold-build	0	21.66	21.32	0.09	114888	117645312	5.27	5.23	2048	300	20	0	20	20	9997	2	5	2223	71	1434	2	76172	35	6053536	12577309
+generated	100000	cold-check	0	19.80	19.42	0.10	111588	114266112	5.23	4.80	2048	300	20	0	0	20	9997	2	5	2223	71	1434	2	76172	35	0	14067084
+generated	100000	unchanged-build	0	1.07	1.04	0.00	42880	43909120	4.80	4.80	2048	300	0	20	0	20	9997	2	5	NA	NA	NA	NA	NA	NA	6053536	12577309
+generated	100000	body-build	0	2.62	2.57	0.01	104292	106795008	4.80	4.66	2048	300	1	19	1	20	9997	2	5	1507	57	720	NA	NA	33	6053536	13750763
+generated	1000000	cold-build	0	206.15	202.31	1.15	164712	168665088	4.66	4.45	1536	710	200	0	200	200	9997	2	8	2223	71	1434	2	76172	35	60128475	125726729
+generated	1000000	cold-check	0	193.59	189.76	0.84	116080	118865920	4.45	4.99	1536	710	200	0	0	200	9997	2	8	2223	71	1434	2	76172	35	0	140735055
+generated	1000000	unchanged-build	0	7.48	7.28	0.06	89560	91709440	4.99	4.75	1536	710	0	200	0	200	9997	2	8	NA	NA	NA	NA	NA	NA	60128475	125726729
+generated	1000000	body-build	0	8.91	8.69	0.09	128484	131567616	4.75	4.47	1536	710	1	199	1	200	9997	2	8	1507	57	720	NA	NA	33	60128475	126900186

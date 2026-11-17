@@ -73,3 +73,13 @@ pub fn trim_source_ascii(value: &str) -> &str {
 pub fn structural_error(identity: &str, rule: &str, detail: &str) -> String {
     language::structure_edit::error(identity, rule, detail)
 }
+
+/// Preserve source-crate access across the optional witness crate split.
+pub fn proof_domain(producer: &[u8], secret: &[u8]) -> reuse::ProofDomain {
+    reuse::ProofDomain::new(producer, secret)
+}
+
+/// Preserve the native source-location table helper at the witness boundary.
+pub fn native_messages(program: &ir::Program) -> Vec<String> {
+    native::messages(program)
+}

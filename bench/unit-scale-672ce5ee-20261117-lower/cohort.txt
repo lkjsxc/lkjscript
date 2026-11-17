@@ -1,0 +1,13 @@
+started_utc=2026-11-17T02:19:24Z
+repository=/home/coder/workspace/lkjscript
+compiler=/home/coder/workspace/lkjscript/target/unit-reuse-current
+rungs=100000,1000000
+compiler_sha256=672ce5ee1383e0edc115588ac27a865b610eac9ac4b9c244a1d8c03471e89b66
+source_commit=a6be3deed64ffde9a05ae8e655649dac67511336
+memory_ceiling_mib=8192
+time_ceiling_s=3600
+maximum_unit_lines=10000
+workload=connected explicit-unit DAG; separate from the historical shape-sampled ladder
+ten_million=one cold-build invocation only; no fresh check, warm build or retry at that rung
+memory=per-process virtual-address envelope; GNU time reports largest process RSS
+finished_utc=2026-11-17T02:28:06Z

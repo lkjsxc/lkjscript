@@ -1,0 +1,23 @@
+"driver" level=source-claim operation-target
+"driver::execute_source" level=source-claim operation-target
+"driver::options" level=source-claim operation-target
+"semantic_query::run" level=source-claim operation-target
+"structure_edit::error" level=source-claim operation-target
+"driver::help" level=source-claim operation-target
+"driver::help" level=source-claim projection parent="driver" path="src/driver/help.lkj" bytes=11062 source=fda5e9870ee464831973f42d0674647f46b99f7f7ffa2002f49ef099a2adc1b1
+"/home/coder/workspace/lkjscript-compiler-stranger-20261117/src/driver.lkj" level=source-claim file before=6fda860e13e67c7e95d283dcbaee2a83ba152a5ec7d53e01874690b4e6f0f858 after=5420185c1e100730e4e449dbba3282fbaed1879ecab159764e91a9eb1229cc6c
+"/home/coder/workspace/lkjscript-compiler-stranger-20261117/src/semantic_query.lkj" level=source-claim file before=6db89d85392bed48974928dc2949a0a184005f3cfe599dd443889d1b0d948908 after=af660f7ea3d64eaf8b1a0912c490c22dfec92bfaef4aa41b79716351c3d60a42
+"/home/coder/workspace/lkjscript-compiler-stranger-20261117/src/structure_edit.lkj" level=source-claim file before=8ff0523e958c4f71f4b0322eabd52ff89ad58c1690dac7c0bf177766a8dcd5e4 after=50a33d024a3d29ac963ef171fcc75f6b3aa6b8413b6a4e28c3199cc00086542b
+"/home/coder/workspace/lkjscript-compiler-stranger-20261117/src/driver/help.lkj" level=source-claim file before=absent after=fda5e9870ee464831973f42d0674647f46b99f7f7ffa2002f49ef099a2adc1b1
+transaction sites=5 files=4 identities=6
+"driver::execute_source" level=source-claim changed=body
+"driver::help" level=source-claim changed=added
+"driver::help::summary" level=source-claim changed=added
+"driver::help::topic" level=source-claim changed=added
+"driver::help::topic::param:command" level=source-claim changed=added
+"driver::options" level=source-claim changed=body
+"semantic_query::run" level=source-claim changed=body
+"structure_edit::error" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=4c3f04d207fe731b49c79474ed6dfb7a88b06921d08f92d15297000c04c4769c after=c1493feabc4c54e3d59055894e244ec854baa755177a3bad81896b162ab88ffc checked-instances=12918 fresh-checked=12918 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=04439ba7ead0103cd1f8a744a6b653b8d7f8b12f3ce25724cb8bbc28624760d8 source-after=6676875813d040f893e19d977bd02d8d08827cc7377aa63380f7dc8a823d66a2 mode=apply

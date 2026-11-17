@@ -56,7 +56,7 @@ pub struct Draft {
 }
 pub(crate) fn error(identity: &str, rule: &str, detail: &str) -> String {
     let mut message = format!("{} E_EDIT_{} {}", semantic::quote(identity), rule, detail);
-    if rule == "REQUEST" || rule == "VERSION" {
+    if rule == "REQUEST" || rule == "VERSION" || rule == "OPERATION" {
         message.push_str("\nSee lkjscript edit --help for the JSON request schema and examples.");
     }
     message
