@@ -1,0 +1,66 @@
+name: release
+# Publishes the compiler built from a main commit that passed the gate, at most
+# once in twenty hours. Nothing else creates releases or tags.
+on:
+  workflow_run:
+    workflows: [check]
+    branches: [main]
+    types: [completed]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: release
+jobs:
+  publish:
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.event == 'push')
+    runs-on: ubuntu-latest
+    env:
+      GH_TOKEN: ${{ github.token }}
+      RELEASE_COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
+      RELEASE_FORCED: ${{ github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Decide whether a release is due
+        id: due
+        run: |
+          newest=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=30" \
+            --jq '[.[] | select(.tag_name | test("^[0-9]{4}[.][0-9]{2}[.][0-9]{2}-"))] | sort_by(.published_at) | last | .published_at // empty')
+          due=yes
+          if [ "$RELEASE_FORCED" != true ] && [ -n "$newest" ]; then
+            age=$(( $(date -u +%s) - $(date -u -d "$newest" +%s) ))
+            [ "$age" -ge 72000 ] || due=no
+          fi
+          printf 'due=%s\n' "$due" >> "$GITHUB_OUTPUT"
+      - uses: actions/checkout@v4
+        if: steps.due.outputs.due == 'yes'
+        with:
+          ref: ${{ env.RELEASE_COMMIT }}
+      - name: Build from the seed and prove the fixed point
+        if: steps.due.outputs.due == 'yes'
+        run: sh tools/bootstrap.sh
+      - name: Run a program with the built compiler
+        if: steps.due.outputs.due == 'yes'
+        run: target/lkjscript run examples/hello.lkj
+      - name: Publish
+        if: steps.due.outputs.due == 'yes'
+        run: |
+          tag="$(date -u +%Y.%m.%d)-$(printf %s "$RELEASE_COMMIT" | cut -c1-9)"
+          mkdir release
+          cp target/lkjscript release/lkjscript-x86_64-linux
+          gzip -9 -c target/lkjscript > release/lkjscript-x86_64-linux.gz
+          (cd release && sha256sum lkjscript-x86_64-linux lkjscript-x86_64-linux.gz > SHA256SUMS)
+          {
+            printf 'The lkjscript toolchain as one static Linux x86-64 executable, built from commit %s after the gate passed.\n\n' "$RELEASE_COMMIT"
+            printf '```sh\ncurl -fL -o lkjscript https://github.com/%s/releases/latest/download/lkjscript-x86_64-linux\nchmod +x lkjscript\n./lkjscript run hello.lkj\n```\n\n' "$GITHUB_REPOSITORY"
+            printf 'It needs no adjacent compiler or library files. Releases named v0.1.x are the earlier, incompatible generation.\n'
+          } > notes.md
+          gh release create "$tag" --repo "$GITHUB_REPOSITORY" --target "$RELEASE_COMMIT" --title "lkjscript $tag" \
+            --notes-file notes.md --latest release/lkjscript-x86_64-linux release/lkjscript-x86_64-linux.gz release/SHA256SUMS
+      - name: Keep the newest fourteen dated releases
+        if: steps.due.outputs.due == 'yes'
+        run: |
+          gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+            --jq '[.[] | select(.tag_name | test("^[0-9]{4}[.][0-9]{2}[.][0-9]{2}-"))] | sort_by(.published_at) | reverse | .[14:] | .[].tag_name' |
+          while read -r old; do gh release delete "$old" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes; done
