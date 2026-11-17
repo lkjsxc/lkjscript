@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":true}
+const COUNT: usize = 3;
+fn make() -> [u8; COUNT] { [0u8; COUNT] }
+pub fn probe() -> i64 { 42 }

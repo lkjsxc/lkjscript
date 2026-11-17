@@ -1,0 +1,6 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+fn wrong<const N: usize, const M: usize>(input: [u8; N]) -> [u8; M] {
+    if N == M { input } else { [0u8; M] }
+}
+pub fn probe() -> i64 { 42 }

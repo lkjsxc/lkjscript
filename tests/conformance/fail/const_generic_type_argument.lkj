@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+fn normal<T>(value: T) -> T { value }
+pub fn probe() -> i64 { normal::<3>(42) }

@@ -1,0 +1,5 @@
+// expect: reject E_GENERIC
+// witness: {"rustAccept":false}
+trait Marker {}
+impl<const N: usize> Marker for i64 {}
+pub fn probe() -> i64 { 42 }

@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
+trait OnlyZero { fn value(&self) -> i64; }
+impl OnlyZero for [u8; 0] { fn value(&self) -> i64 { 42 } }
+fn wrong<const N: usize>(value: [u8; N]) -> i64 { value.value() }
+pub fn probe() -> i64 { 42 }

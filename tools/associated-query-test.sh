@@ -199,6 +199,18 @@ make=$(identity '::make')
 uses "$make" 0
 refuse_rename "$make"
 value 3
+"$compiler" build "${common[@]}" --index --stats -o "$fixture/image" > "$fixture/warm-index" 2> "$fixture/warm-stats"
+grep -Eq '"build_reused":1' "$fixture/warm-stats"
+query type generic > "$fixture/generic-type"
+grep -Fq 'Boxed<T>' "$fixture/generic-type"
+cp "$fixture/project/main.lkj" "$fixture/unchanged"
+printf '%s\n' '{"version":1,"operations":[{"op":"replace-body","id":"generic","source":"{ Boxed::make::<T>(value) }"}]}' > "$fixture/request"
+if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/plan" 2> "$fixture/error"; then
+    echo 'receiver arguments moved onto a nongeneric method were accepted' >&2; exit 1
+fi
+grep -Eq 'E_TYPE|E_EDIT_CHECK' "$fixture/error"
+cmp "$fixture/unchanged" "$fixture/project/main.lkj"
+[[ ! -e $fixture/project/.lkjscript-edit.pending ]]
 
 cat > "$fixture/project/main.lkj" <<'SOURCE'
 struct Fixed {}

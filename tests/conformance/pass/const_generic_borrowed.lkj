@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+trait Bytes { fn bytes(&self) -> &[u8]; }
+impl<const N: usize> Bytes for [u8; N] { fn bytes(&self) -> &[u8] { self.as_slice() } }
+impl<'a, const N: usize> Bytes for &'a [u8; N] { fn bytes(&self) -> &[u8] { self.as_slice() } }
+fn first<const N: usize>(value: &[u8; N]) -> u8 { value.bytes()[0] }
+pub fn probe() -> i64 { first(&[42u8; 7]) as i64 }

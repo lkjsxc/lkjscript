@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+fn same<const N: usize>(value: [i64; N]) -> bool { let copy = value.clone(); copy == value }
+pub fn probe() -> i64 { if same([]) && same([42i64; 3]) && !([0i64; 3] == [1i64; 3]) { 42 } else { 0 } }

@@ -419,7 +419,8 @@ impl Compiler<'_> {
                     "type parameter shadows an enclosing parameter",
                 ));
             }
-            let ty = self.rigid_type(&parameter.name);
+            let ty = if parameter.constant { self.rigid_constant(&parameter.name) }
+                else { self.rigid_type(&parameter.name) };
             substitutions.insert(parameter.name.clone(), ty);
         }
         Ok(())
@@ -953,7 +954,9 @@ impl Compiler<'_> {
             if !seen.insert(ty) {
                 continue;
             }
-            if contracts.rigid.contains_key(&ty) {
+            if contracts.rigid.contains_key(&ty)
+                || matches!(crate::generics::const_arguments::array_length(&self.types, ty),
+                    Some(crate::generics::const_arguments::Value::Rigid(_))) {
                 return true;
             }
             match &self.types[ty].kind {
@@ -1486,7 +1489,7 @@ impl super::Builder<'_, '_> {
                 return Err(err(span, "E_TYPE", "wrong generic method argument count"));
             }
             for index in 0..parameters.len() {
-                let ty = self.compiler.resolve(types[index], &self.sub)?;
+                let ty = self.compiler.generic_argument(types[index], definition.generics[parameters[index]].constant, &self.sub)?;
                 substitutions.insert(definition.generics[parameters[index]].name.clone(), ty);
             }
         }
@@ -1624,7 +1627,7 @@ impl super::Builder<'_, '_> {
                 return Err(err(span, "E_TYPE", "wrong generic method argument count"));
             }
             for index in 0..parameters.len() {
-                let ty = self.compiler.resolve(types[index], &self.sub)?;
+                let ty = self.compiler.generic_argument(types[index], function.generics[parameters[index]].constant, &self.sub)?;
                 substitutions.insert(function.generics[parameters[index]].name.clone(), ty);
             }
         }

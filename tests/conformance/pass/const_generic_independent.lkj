@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {}
+fn total<const N: usize, const M: usize>(left: [u8; N], right: [u8; M]) -> usize {
+    left.len() + right.len() + N + M
+}
+pub fn probe() -> i64 { total([0u8; 7], [0u8; 14]) as i64 }

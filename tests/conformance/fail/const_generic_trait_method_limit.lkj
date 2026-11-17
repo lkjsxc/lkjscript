@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Take { fn take<const N: usize>(&self); }
+pub fn probe() -> i64 { 42 }

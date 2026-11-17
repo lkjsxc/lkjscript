@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+mod m { pub struct Named<T> { pub value: T } }
+pub fn probe() -> i64 { let value = m::<i64>::Named { value: 42 }; value.value }

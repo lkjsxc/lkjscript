@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+struct Bag;
+impl Bag { fn size<const N: usize>() -> usize { N } }
+pub fn probe() -> i64 { Bag::<3>::size() as i64 }

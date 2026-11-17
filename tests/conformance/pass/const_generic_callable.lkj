@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+fn make<const N: usize>() -> impl Fn() -> usize { move || N }
+pub fn probe() -> i64 { make::<42>()() as i64 }

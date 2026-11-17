@@ -988,6 +988,26 @@ pub fn resolve(source: &Program) -> Result<Program> {
 }
 
 fn resolve_nodes(result: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
+    // Validate the written owner before paths are flattened or any constructor
+    // bypasses ordinary call selection. Modules never own generic arguments.
+    for (argument, (owner, terminal)) in &result.value_argument_lists {
+        let node = &result.types[*argument];
+        let namespace = if *terminal { Namespace::Value } else { Namespace::Type };
+        let mut resolved = resolver.path(node.scope, owner, namespace, node.span, true)?;
+        if resolved.is_none() && *terminal {
+            resolved = resolver.path(node.scope, owner, Namespace::Type, node.span, true)?;
+        }
+        let Some(resolved) = resolved else {
+            return Err(Diagnostic::new(node.span, "E_NAME",
+                &format!("unresolved generic argument owner {owner}")));
+        };
+        if let Some(binding) = resolved.binding {
+            if matches!(resolver.declarations[binding.declaration].item, Item::Module(_)) {
+                return Err(Diagnostic::new(node.span, "E_TYPE",
+                    "generic arguments cannot be applied to a module"));
+            }
+        }
+    }
     for (ty, form) in &result.impl_traits {
         if !form.argument && form.result.is_none() {
             return Err(Diagnostic::new(result.types[*ty].span, "E_UNSUPPORTED",
@@ -1017,6 +1037,7 @@ fn resolve_nodes(result: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
         }
     }
     for id in 0..result.types.len() {
+        if result.constant_arguments.contains_key(&id) { continue; }
         if result.impl_traits.get(&id).is_some_and(|form| form.result.is_some()) {
             continue;
         }

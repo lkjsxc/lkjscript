@@ -5,6 +5,7 @@ mod signature_bounds;
 mod associated_bindings;
 mod const_functions;
 pub(crate) use const_functions::const_data_constructor;
+pub(crate) mod const_arguments;
 use crate::ast::*;
 use crate::names::qualified;
 pub(crate) use bound_solver::{BoundContext, BoundSolver, BoundStep};
@@ -15,6 +16,8 @@ use std::collections::{BTreeMap, BTreeSet};
 enum Term {
     Unknown,
     Variable(usize),
+    ConstantVariable(usize),
+    Constant(usize),
     Named(String, Vec<usize>),
     DeclaredTrait(usize, Vec<usize>),
 }
@@ -84,6 +87,14 @@ fn type_term(
             continue;
         }
         if !ready {
+            if let Some(text) = source.constant_arguments.get(&ty) {
+                let value = match crate::generics::const_arguments::literal(text) {
+                    Some(value) => push(terms, Term::Constant(value)),
+                    None => 0usize,
+                };
+                done.insert(ty, value);
+                continue;
+            }
             if source.impl_traits.get(&ty).is_some_and(|form| form.result.is_some()) {
                 let mut captures = Vec::new();
                 for value in env.values() { captures.push(*value); }
@@ -168,7 +179,13 @@ fn type_term(
                 Term::Named(if *mutable { "&mut" } else { "&" }.to_string(), values)
             }
             Type::Slice(_) => Term::Named("[]".to_string(), values),
-            Type::Array { len, .. } => Term::Named(format!("[;{}]", len.replace('_', "")), values),
+            Type::Array { len, .. } => {
+                let length = if let Some(value) = crate::generics::const_arguments::literal(len) {
+                    push(terms, Term::Constant(value))
+                } else { env.get(len).copied().unwrap_or_else(|| push(terms, Term::Unknown)) };
+                values.push(length);
+                Term::Named("$array".to_string(), values)
+            }
             Type::Tuple(_) => Term::Named("tuple".to_string(), values),
             Type::Function { .. } => Term::Named("fn".to_string(), values),
         };
@@ -228,7 +245,8 @@ fn variables(
     let mut env = BTreeMap::new();
     for p in params {
         if !p.lifetime {
-            let term = push(terms, Term::Variable(*next));
+            let term = push(terms, if p.constant { Term::ConstantVariable(*next) }
+                else { Term::Variable(*next) });
             *next += 1;
             env.insert(p.name.clone(), term);
         }
@@ -239,7 +257,7 @@ fn variables(
 fn deref(terms: &[Term], bindings: &BTreeMap<usize, usize>, mut term: usize) -> usize {
     loop {
         match terms[term] {
-            Term::Variable(v) => match bindings.get(&v) {
+            Term::Variable(v) | Term::ConstantVariable(v) => match bindings.get(&v) {
                 Some(next) => term = *next,
                 None => return term,
             },
@@ -252,7 +270,7 @@ fn occurs(terms: &[Term], bindings: &BTreeMap<usize, usize>, variable: usize, te
     while let Some(t) = stack.pop() {
         let t = deref(terms, bindings, t);
         match &terms[t] {
-            Term::Variable(v) => {
+            Term::Variable(v) | Term::ConstantVariable(v) => {
                 if *v == variable {
                     return true;
                 }
@@ -262,7 +280,7 @@ fn occurs(terms: &[Term], bindings: &BTreeMap<usize, usize>, variable: usize, te
                     stack.push(*child);
                 }
             }
-            Term::Unknown => {}
+            Term::Unknown | Term::Constant(_) => {}
         }
     }
     false
@@ -278,6 +296,16 @@ fn unify(terms: &[Term], pairs: Vec<(usize, usize)>) -> bool {
         }
         match (&terms[a], &terms[b]) {
             (Term::Variable(x), Term::Variable(y)) if x == y => {}
+            (Term::Constant(x), Term::Constant(y)) if x == y => {}
+            (Term::ConstantVariable(x), Term::ConstantVariable(y)) if x == y => {}
+            (Term::ConstantVariable(v), Term::Constant(_) | Term::ConstantVariable(_)) => {
+                bindings.insert(*v, b);
+            }
+            (Term::Constant(_), Term::ConstantVariable(v)) => {
+                bindings.insert(*v, a);
+            }
+            (Term::Constant(_) | Term::ConstantVariable(_), _)
+                | (_, Term::Constant(_) | Term::ConstantVariable(_)) => return false,
             (Term::Variable(v), _) => {
                 if occurs(terms, &bindings, *v, b) {
                     return false;
@@ -351,7 +379,7 @@ fn term_head(terms: &[Term], term: usize) -> Option<String> {
     match &terms[term] {
         Term::Named(name, _) => Some(name.clone()),
         Term::DeclaredTrait(id, _) => Some(format!("trait#{id}")),
-        Term::Variable(_) | Term::Unknown => None,
+        Term::Variable(_) | Term::ConstantVariable(_) | Term::Constant(_) | Term::Unknown => None,
     }
 }
 
@@ -540,7 +568,7 @@ fn flow(terms: &[Term], term: usize, to: usize, span: Span, edges: &mut Vec<Edge
     let mut stack = vec![(term, false)];
     while let Some((t, expanding)) = stack.pop() {
         match &terms[t] {
-            Term::Variable(from) => edges.push(Edge {
+            Term::Variable(from) | Term::ConstantVariable(from) => edges.push(Edge {
                 from: *from,
                 to,
                 expanding,
@@ -552,7 +580,7 @@ fn flow(terms: &[Term], term: usize, to: usize, span: Span, edges: &mut Vec<Edge
                     stack.push((*child, true));
                 }
             }
-            Term::Unknown => {}
+            Term::Unknown | Term::Constant(_) => {}
         }
     }
 }
@@ -566,7 +594,7 @@ fn unknown(terms: &[Term], term: usize) -> bool {
                     stack.push(*ir);
                 }
             }
-            Term::Variable(_) => {}
+            Term::Variable(_) | Term::ConstantVariable(_) | Term::Constant(_) => {}
         }
     }
     false
@@ -598,6 +626,20 @@ fn infer(
                 }
             }
         }
+        if let Type::Array { inner, len } = &source.types[p].kind {
+            if let Term::Named(name, values) = &terms[a] {
+                if name == "$array" && values.len() == 2usize {
+                    if parameters.iter().any(|parameter| parameter.constant && parameter.name == *len) {
+                        env.insert(len.clone(), values[1]);
+                        stack.push((*inner, values[0]));
+                    } else if crate::generics::const_arguments::literal(len).is_some_and(|length|
+                        matches!(terms[values[1]], Term::Constant(value) if value == length)) {
+                        stack.push((*inner, values[0]));
+                    }
+                }
+            }
+            continue;
+        }
         let expected = match &source.types[p].kind {
             Type::Path(path) => {
                 if path.qualification.is_some() { projection_name(&path.name) }
@@ -606,7 +648,7 @@ fn infer(
             Type::Ref { mutable, .. } => if *mutable { "&mut" } else { "&" }.to_string(),
             Type::Tuple(_) => "tuple".to_string(),
             Type::Slice(_) => "[]".to_string(),
-            Type::Array { len, .. } => format!("[;{}]", len.replace('_', "")),
+            Type::Array { .. } => continue,
             Type::Function { .. } => "fn".to_string(),
             _ => continue,
         };
@@ -693,7 +735,7 @@ impl Analysis<'_> {
             }
             let target = match self.generics[callee].get(&g.name) {
                 Some(t) => match self.terms[*t] {
-                    Term::Variable(v) => v,
+                    Term::Variable(v) | Term::ConstantVariable(v) => v,
                     _ => continue,
                 },
                 None => continue,
@@ -993,12 +1035,22 @@ impl Analysis<'_> {
                             } else {
                                 *exprs.get(&items[0]).unwrap()
                             };
-                            self.term(Term::Named(format!("[;{}]", items.len()), vec![first]))
+                            let count = self.term(Term::Constant(items.len()));
+                            self.term(Term::Named("$array".to_string(), vec![first, count]))
                         }
-                        Expr::Repeat { value, .. } => self.term(Term::Named(
-                            "[]".to_string(),
-                            vec![*exprs.get(value).unwrap()],
-                        )),
+                        Expr::Repeat { value, count } => {
+                            let count_kind = self.source.exprs[*count].kind.clone();
+                            let length = match count_kind {
+                                Expr::Int(text) => match crate::generics::const_arguments::literal(&text) {
+                                    Some(value) => self.term(Term::Constant(value)),
+                                    None => 0usize,
+                                },
+                                Expr::Path(path) if path.qualification.is_none() && path.args.is_empty() =>
+                                    env.get(&path.name).copied().unwrap_or(0usize),
+                                _ => 0usize,
+                            };
+                            self.term(Term::Named("$array".to_string(), vec![*exprs.get(value).unwrap(), length]))
+                        }
                         Expr::Macro { name, args, .. } if name == "vec" => {
                             let first = if args.is_empty() {
                                 0
@@ -1060,7 +1112,7 @@ impl Analysis<'_> {
                                 Term::Named(name, kids)
                                     if (name == "Vec"
                                         || name == "[]"
-                                        || name.starts_with("[;"))
+                                        || name == "$array")
                                         && !kids.is_empty() =>
                                 {
                                     kids[0]
@@ -1109,7 +1161,7 @@ fn finite(source: &Program) -> Result<(), Diagnostic> {
         );
         let mut nodes = Vec::new();
         for t in env.values() {
-            if let Term::Variable(v) = analysis.terms[*t] {
+            if let Term::Variable(v) | Term::ConstantVariable(v) = analysis.terms[*t] {
                 nodes.push(v);
             }
         }
@@ -1150,6 +1202,7 @@ pub fn validate(source: &Program) -> Result<(), Diagnostic> {
     declarations(source)?;
     const_functions::validate(source)?;
     alias_cycles(source)?;
+    crate::generics::const_arguments::validate(source)?;
     associated_bindings::validate(source)?;
     constant_cycles(source)?;
     finite_data(source)?;
@@ -1277,24 +1330,17 @@ fn impl_arguments(
                 }
             }
             Type::Array { inner, len } => {
-                let text = len.replace('_', "");
-                let mut end = text.len();
-                while text[..end].ends_with("usize") {
-                    end -= 5;
-                }
-                let extent = text[..end].parse::<usize>().ok()?;
-                if let TypeKind::Array {
-                    inner: actual_inner,
-                    len: actual_len,
-                } = actual_type.kind
-                {
-                    if extent != actual_len {
-                        return None;
+                let TypeKind::Array { inner: actual_inner, .. } = actual_type.kind else { return None; };
+                let actual_length = crate::generics::const_arguments::array_length(types, actual)?;
+                if implementation.generics.iter().any(|parameter| parameter.constant && parameter.name == *len) {
+                    let argument = crate::generics::const_arguments::handle(types, actual_length)?;
+                    if let Some(previous) = env.insert(len.clone(), argument) {
+                        if previous != argument { return None; }
                     }
-                    work.push((*inner, actual_inner));
-                } else {
+                } else if Some(actual_length) != crate::generics::const_arguments::literal(len).map(|value| crate::generics::const_arguments::Value::Known(value)) {
                     return None;
                 }
+                work.push((*inner, actual_inner));
             }
             Type::Tuple(parts) => match &actual_type.kind {
                 TypeKind::Unit if parts.is_empty() => {}
@@ -1425,7 +1471,7 @@ pub(crate) fn derived_coherence(
         let overlaps = match &terms[target] {
             Term::Named(name, _) => *name == owner.name,
             Term::Variable(_) | Term::Unknown => true,
-            Term::DeclaredTrait(_, _) => false,
+            Term::DeclaredTrait(_, _) | Term::ConstantVariable(_) | Term::Constant(_) => false,
         };
         if overlaps {
             return Err(Diagnostic::new(
@@ -1531,7 +1577,7 @@ impl ImplementationIndex {
         let head = match &terms[target] {
             Term::Named(name, _)
                 if !matches!(name.as_str(), "&" | "&mut" | "[]" | "tuple" | "fn" | "!")
-                    && !name.starts_with("[;") =>
+                    && name != "$array" =>
             {
                 Some(name.clone())
             }
@@ -2188,6 +2234,8 @@ fn equivalent(terms: &[Term], a: usize, b: usize) -> bool {
     while let Some((a, b)) = stack.pop() {
         match (&terms[a], &terms[b]) {
             (Term::Variable(x), Term::Variable(y)) if x == y => {}
+            (Term::ConstantVariable(x), Term::ConstantVariable(y)) if x == y => {}
+            (Term::Constant(x), Term::Constant(y)) if x == y => {}
             (Term::DeclaredTrait(a, ak), Term::DeclaredTrait(b, bk))
                 if a == b && ak.len() == bk.len() =>
             {
@@ -2430,10 +2478,8 @@ fn symbolic_bound(
                     pending.push((child, bound));
                 }
             }
-            _ if type_name.starts_with("[;") => {
-                for child in children {
-                    pending.push((child, bound));
-                }
+            "$array" if children.len() == 2usize => {
+                pending.push((children[0], bound));
             }
             _ => return false,
         }
@@ -2655,7 +2701,7 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
             for i in 0..actual.generics.len() {
                 let a = &actual.generics[i];
                 let e = &expected.generics[i];
-                if a.lifetime != e.lifetime || a.implicit != e.implicit {
+                if a.lifetime != e.lifetime || a.constant != e.constant || a.implicit != e.implicit {
                     return Err(Diagnostic::new(
                         actual.span,
                         "E_TRAIT",
@@ -2672,7 +2718,7 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
                         "method type parameter shadows an enclosing type parameter",
                     ));
                 }
-                let value = push(&mut terms, Term::Variable(next));
+                let value = push(&mut terms, if a.constant { Term::ConstantVariable(next) } else { Term::Variable(next) });
                 next += 1;
                 aenv.insert(a.name.clone(), value);
                 eenv.insert(e.name.clone(), value);
@@ -2958,7 +3004,7 @@ fn finite_data(source: &Program) -> Result<(), Diagnostic> {
             if p.lifetime {
                 continue;
             }
-            if let Term::Variable(v) = terms[*env.get(&p.name).unwrap()] {
+            if let Term::Variable(v) | Term::ConstantVariable(v) = terms[*env.get(&p.name).unwrap()] {
                 nodes.push(v);
             }
         }

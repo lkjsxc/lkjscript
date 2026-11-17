@@ -1346,8 +1346,24 @@ impl Parser {
                     }),
                     span,
                 ));
+            } else if self.token().kind == TokenKind::Number {
+                let span = self.token().span;
+                let text = self.token().text.clone();
+                self.at += 1;
+                let argument = self.add_type(Type::Path(Path { qualification: None,
+                    declaration: None, name: text.clone(), args: Vec::new(), bindings: Vec::new() }), span);
+                self.program.constant_arguments.insert(argument, text);
+                args.push(argument);
             } else {
-                args.push(self.ty()?);
+                if self.is("{") { return Err(self.unsupported("braced const generic arguments")); }
+                let span = self.token().span;
+                let argument = self.ty()?;
+                // Generic argument provenance needs its own scope and span;
+                // the shared inference sentinel cannot key a source occurrence.
+                args.push(if argument == 0 { self.add_type(Type::Infer, span) } else { argument });
+            }
+            if self.is("+") || self.is("-") || self.is("*") || self.is("/") || self.is("%") {
+                return Err(self.unsupported("const generic arithmetic"));
             }
             if !self.take(",") {
                 break;
@@ -1389,17 +1405,19 @@ impl Parser {
         while !self.at_gt() {
             let span = self.token().span;
             let lifetime = self.token().kind == TokenKind::Lifetime;
+            let constant = self.take("const");
             let name: String;
             if lifetime {
                 name = self.token().text.clone();
                 self.at += 1;
             } else {
-                if self.is("const") {
-                    return Err(self.unsupported("const generic parameters"));
-                }
                 name = self.ident()?;
             }
-            let bounds = if self.take(":") {
+            let bounds = if constant {
+                self.expect(":")?;
+                if !self.take("usize") { return Err(self.unsupported("const generic parameters other than usize")); }
+                Vec::new()
+            } else if self.take(":") {
                 self.bounds()?
             } else {
                 Vec::new()
@@ -1411,6 +1429,7 @@ impl Parser {
                 name,
                 bounds,
                 lifetime,
+                constant,
                 implicit: false,
                 span: self.finish_span(span),
             });
@@ -1500,9 +1519,11 @@ impl Parser {
                     return Err(self.unsupported("multiple generic argument lists in one path"));
                 }
                 args = self.generic_args()?;
-                if !self.take("::") {
-                    break;
+                let terminal = !self.take("::");
+                if !args.is_empty() {
+                    self.program.value_argument_lists.insert(args[0], (name.clone(), terminal));
                 }
+                if terminal { break; }
             }
             let part = self.ident()?;
             name.push_str("::");
@@ -1728,13 +1749,16 @@ impl Parser {
                 }
                 TypeFrame::Array { span } => {
                     if self.take(";") {
-                        if self.token().kind != TokenKind::Number {
-                            return Err(self.unsupported("non-literal array length"));
+                        if self.token().kind != TokenKind::Number && self.token().kind != TokenKind::Ident {
+                            return Err(self.unsupported("array lengths other than literals or const usize parameters"));
                         }
                         let len = self.token().text.clone();
+                        let length_span = self.token().span;
                         self.at += 1;
+                        if !self.is("]") { return Err(self.unsupported("generic constant arithmetic in array lengths")); }
                         self.expect("]")?;
                         value = self.add_finished_type(Type::Array { inner: value, len }, span);
+                        self.program.array_length_spans.insert(value, length_span);
                     } else {
                         self.expect("]")?;
                         value = self.add_finished_type(Type::Slice(value), span);

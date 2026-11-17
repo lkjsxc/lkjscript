@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+mod m { pub enum Choice<T> { Value(T) } }
+pub fn probe() -> i64 { let value = m::<i64>::Choice::Value(42); match value { m::Choice::Value(inner) => inner } }

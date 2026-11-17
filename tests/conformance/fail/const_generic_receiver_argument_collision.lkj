@@ -1,0 +1,8 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+struct Holder<T> { value: T }
+impl<T> Holder<T> {
+    fn replace<U>(value: T, _marker: U) -> Self { Self { value } }
+}
+fn wrong<T>(value: T) -> Holder<T> { Holder::<i64>::replace(value, 0i64) }
+pub fn probe() -> i64 { 0 }

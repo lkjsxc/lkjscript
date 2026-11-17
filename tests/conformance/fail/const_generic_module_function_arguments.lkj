@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+mod m { pub fn count<const N: usize>() -> usize { N } }
+pub fn probe() -> i64 { m::<42>::count() as i64 }

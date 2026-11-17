@@ -1,0 +1,8 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+trait Mark {}
+impl Mark for [u8; 0] {}
+trait Source { type Item: Mark; }
+struct Wrapped<T> { value: T }
+impl<const N: usize> Source for Wrapped<[u8; N]> { type Item = [u8; N]; }
+pub fn probe() -> i64 { 42 }

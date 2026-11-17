@@ -1,0 +1,4 @@
+// expect: reject E_GENERIC
+// witness: {"rustAccept":false}
+impl<const N: usize> [u8; N] { fn size(&self) -> usize { N } }
+pub fn probe() -> i64 { 42 }

@@ -1,0 +1,9 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Tag { fn tag(&self) -> i64; }
+impl Tag for [u8; 21] { fn tag(&self) -> i64 { 42 } }
+trait Value { fn value(&self) -> i64; }
+impl<const N: usize> Value for [u8; N] where [u8; N]: Tag {
+    fn value(&self) -> i64 { self.tag() }
+}
+pub fn probe() -> i64 { [0u8; 21].value() }

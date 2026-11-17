@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+type Wrapped<T> = T;
+fn count<const N: usize>(value: Wrapped<[u8; N]>) -> usize { value.len() + N }
+pub fn probe() -> i64 { count([0u8; 21]) as i64 }

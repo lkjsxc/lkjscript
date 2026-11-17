@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+fn wrong<const N: usize>(value: String) -> [String; N] { [value; N] }
+pub fn probe() -> i64 { let empty = wrong::<0>(String::from("owned")); 42 }

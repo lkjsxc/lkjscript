@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {}
+struct Boxed<T> { value: T }
+impl<T> Boxed<T> { fn make(value: T) -> Self { Self { value } } }
+type Alias<T> = Boxed<T>;
+fn generic<T>(value: T) -> Boxed<T> { Boxed::<T>::make(value) }
+fn aliased<T>(value: T) -> Boxed<T> { Alias::<T>::make(value) }
+mod helpers { pub fn identity<T>(value: T) -> T { value } }
+struct Bag;
+impl Bag {
+    fn size<const N: usize>() -> usize { N }
+    fn through<const N: usize>() -> usize { Self::size::<N>() }
+}
+pub fn probe() -> i64 {
+    generic(helpers::identity::<i64>(10)).value + aliased(12).value + Bag::through::<20>() as i64
+}

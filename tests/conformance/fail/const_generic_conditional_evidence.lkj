@@ -1,0 +1,7 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+trait Tag { fn tag(&self) -> i64; }
+impl Tag for [u8; 0] { fn tag(&self) -> i64 { 42 } }
+fn require_tag<T: Tag>(value: &T) -> i64 { value.tag() }
+fn wrong<const N: usize>(value: [u8; N]) -> i64 { require_tag(&value) }
+pub fn probe() -> i64 { 42 }

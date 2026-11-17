@@ -264,7 +264,44 @@ family, and checked body changes run through ordinary admission.
 [chained calls](../tests/conformance/pass/qualified_chain_where.lkj),
 [qualified equality bounds](../tests/conformance/pass/qualified_equality_where.lkj).
 
+Const `usize` parameters are supported on free functions, inherent functions and
+implementation blocks whose receiver contains each const parameter. They can
+appear as standalone array lengths, repeat counts, ordinary `usize` expressions
+and explicit function/method arguments. Calls infer const values from array
+arguments or use decimal `usize` literals and in-scope const parameters. Mixed
+type/const parameters, borrowed array receivers, associated array results,
+recursive calls and opaque-result captures retain the same parameter identity.
+Static methods on non-generic receivers accept explicit method arguments.
+
+Definition checking keeps each symbolic count distinct from every literal and
+from sibling parameters, including unused definitions and conditional branches.
+An implementation for `[T; 0]` supplies no evidence for `[T; N]`; comparing `N`
+with zero does not establish type equality. A symbolic array repeat requires
+`Copy` even when a later call chooses zero or one. Overlap checking treats const
+variables independently from type variables. Specialization emits existing
+concrete arrays, repeats and integer values; there is no new checked-IR type,
+operation or proof rule. The private storage used during discarded definition
+checking never establishes an array length equality.
+
+Const parameter types must resolve to the builtin `usize`. Other const types,
+const defaults, arithmetic/braced const arguments and array lengths, const
+parameters on nominal types/aliases/trait declarations or trait methods, and
+module constants used as array lengths remain located source boundaries.
+Where predicates whose written target contains a symbolic array length also
+remain a located boundary: the current predicate engine introduces assumptions
+for direct rigid types, while compound targets require concrete trait evidence.
+Queries retain written const parameters and symbolic array lengths, report const
+parameters as `usize`, and identify references in both type and value positions.
+Checked const-parameter renames update those references when the replacement
+spelling is fresh in the complete enclosing item and all use sites are exact.
+Ambiguous or capturing renames retain a located refusal. Checked body edits
+revalidate symbolic identities before committing source changes.
+[Const array cases](../tests/conformance/pass/const_generic_arrays.lkj),
+[const receiver cases](../tests/conformance/pass/const_generic_borrowed.lkj),
+[distinct opaque captures](../tests/conformance/fail/const_generic_opaque_identity.lkj).
+
 Argument-position `impl Trait` introduces a distinct anonymous generic parameter
+
 for each occurrence, including through references, tuples and ordinary type
 arguments. Multiple bounds, callable bounds and inherent/trait method parameters
 use the same definition-site and concrete bound checks as named parameters.

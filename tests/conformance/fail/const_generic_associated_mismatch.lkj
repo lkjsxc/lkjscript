@@ -1,0 +1,8 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+trait Mark {}
+impl Mark for [u8; 0] {}
+trait Source { type Item: Mark; }
+struct Item;
+impl Source for Item { type Item = [u8; 2]; }
+pub fn probe() -> i64 { 42 }

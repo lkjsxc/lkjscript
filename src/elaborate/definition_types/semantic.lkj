@@ -45,7 +45,8 @@ impl DefinitionTypes {
         let mut values = Vec::new();
         for child in shape.children() { values.push(self.semantic_type(source, child, known, active)?); }
         let result = match shape {
-            Shape::Atom(name) => name,
+            Shape::Atom(name) | Shape::ConstantRigid(name) => name,
+            Shape::Constant(value) => format!("{value}"),
             Shape::Rigid(name) => {
                 let mut written = name.clone();
                 for ty in source.impl_traits.keys() {
@@ -70,7 +71,7 @@ impl DefinitionTypes {
             Shape::Box(_) => format!("Box<{}>", values[0]),
             Shape::Ref(mutable, _) => format!("&{}{}", if mutable { "mut " } else { "" }, values[0]),
             Shape::Slice(_) => format!("[{}]", values[0]),
-            Shape::Array(_, count) => format!("[{}; {}]", values[0], count),
+            Shape::Array(_, _) => format!("[{}; {}]", values[0], values[1]),
             Shape::Tuple(_) => {
                 let mut value = "(".to_string();
                 for (index, child) in values.iter().enumerate() {

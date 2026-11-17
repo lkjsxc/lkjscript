@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+fn identity<T, const N: usize>(input: [T; N]) -> [T; N] { input }
+fn one<T: Copy, const N: usize>(input: T) -> [T; N] { [input; N] }
+pub fn probe() -> i64 { identity::<i64, 3>(one::<i64, 3>(14))[0] * 3 }

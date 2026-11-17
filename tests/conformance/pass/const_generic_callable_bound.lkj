@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+fn apply<const N: usize>(call: impl Fn([u8; N]) -> usize, value: [u8; N]) -> usize { call(value) }
+pub fn probe() -> i64 { apply(|value: [u8; 21]| value.len() * 2usize, [0u8; 21]) as i64 }

@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+mod m { pub struct Tuple<T>(pub T); }
+pub fn probe() -> i64 { m::<i64>::Tuple(42).0 }

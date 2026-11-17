@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+fn count<const _0: usize>(value: [u8; _0]) -> usize { value.len() + _0 }
+pub fn probe() -> i64 { count([0u8; 21]) as i64 }

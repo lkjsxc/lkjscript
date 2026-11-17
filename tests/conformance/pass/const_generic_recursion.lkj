@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {}
+fn count<const N: usize>(left: u8, value: [u8; N]) -> usize {
+    if left == 0u8 { N } else { count::<N>(left - 1u8, value) }
+}
+pub fn probe() -> i64 { count(2u8, [0u8; 42]) as i64 }

@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+fn count<const N: usize>(values: [u8; N]) -> usize { values.len() + N }
+fn repeat<const N: usize>(value: u8) -> [u8; N] { [value; N] }
+pub fn probe() -> i64 { (count(repeat::<7>(1)) + count::<14>([0u8; 14])) as i64 }

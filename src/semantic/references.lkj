@@ -544,3 +544,19 @@ pub(super) fn typed_associated(result: &mut Catalog, files: &[SourceText], progr
         a::Span { end: node.span.start, ..node.span }, "implicit-source", false);
     true
 }
+
+pub(super) fn constant_reference(result: &mut Catalog, files: &[SourceText], owner: &str,
+    name: &str, span: a::Span) {
+    let mut current = owner.to_string();
+    loop {
+        let target = format!("{current}::generic:{name}");
+        if result.by_identity.contains_key(&target) {
+            add_reference(result, files, owner.to_string(), target, span, name, "const-parameter", true);
+            return;
+        }
+        let Some(index) = result.by_identity.get(&current).copied() else { return; };
+        let parent = result.items[index].parent.clone();
+        if parent.is_empty() || parent == current { return; }
+        current = parent;
+    }
+}

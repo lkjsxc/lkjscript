@@ -1,0 +1,4 @@
+// expect: reject E_GENERIC
+// witness: {"rustAccept":false}
+fn wrong<const N: usize>() -> usize { let N = 42usize; N }
+pub fn probe() -> i64 { 42 }

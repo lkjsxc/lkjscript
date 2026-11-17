@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+fn pair<const N: usize>(first: [u8; N], second: [u8; N]) -> usize { first.len() + second.len() }
+pub fn probe() -> i64 { pair([0u8; 2], [0u8; 3]) as i64 }

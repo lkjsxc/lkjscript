@@ -30,7 +30,11 @@ impl Infer<'_, '_> {
                 | (Some(Shape::Box(left)), Some(Shape::Box(right)))
                 | (Some(Shape::Slice(left)), Some(Shape::Slice(right))) => pending.push((left, right)),
                 (Some(Shape::Ref(lm, left)), Some(Shape::Ref(rm, right))) if lm == rm => pending.push((left, right)),
-                (Some(Shape::Array(left, ln)), Some(Shape::Array(right, rn))) if ln == rn => pending.push((left, right)),
+                (Some(Shape::Array(left, ln)), Some(Shape::Array(right, rn))) => {
+                    pending.push((left, right)); pending.push((ln, rn));
+                }
+                (Some(Shape::Constant(left)), Some(Shape::Constant(right))) if left == right => {}
+                (Some(Shape::ConstantRigid(left)), Some(Shape::ConstantRigid(right))) if left == right => {}
                 (Some(Shape::Tuple(left)), Some(Shape::Tuple(right))) if left.len() == right.len() => {
                     for index in 0..left.len() { pending.push((left[index], right[index])); }
                 }
@@ -321,8 +325,8 @@ impl Infer<'_, '_> {
                 (Some(Shape::Ref(am, a)), Some(Shape::Ref(bm, b))) if am == bm => {
                     pending.push((a, b))
                 }
-                (Some(Shape::Array(a, an)), Some(Shape::Array(b, bn))) if an == bn => {
-                    pending.push((a, b))
+                (Some(Shape::Array(a, an)), Some(Shape::Array(b, bn))) => {
+                    pending.push((a, b)); pending.push((an, bn));
                 }
                 (Some(Shape::Tuple(a)), Some(Shape::Tuple(b))) if a.len() == b.len() => {
                     for index in 0..a.len() {

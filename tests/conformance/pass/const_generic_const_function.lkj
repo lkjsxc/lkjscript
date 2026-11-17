@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+const fn add<const N: usize>(value: usize) -> usize { N + value }
+pub fn probe() -> i64 { add::<40>(2usize) as i64 }

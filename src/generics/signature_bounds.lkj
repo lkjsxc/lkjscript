@@ -71,8 +71,11 @@ fn match_terms(
 ) -> Option<BTreeMap<usize, usize>> {
     let mut pending = pairs;
     while let Some((pattern, actual)) = pending.pop() {
-        if let Term::Variable(variable) = terms[pattern] {
+        if let Term::Variable(variable) | Term::ConstantVariable(variable) = terms[pattern] {
             if flexible.contains(&variable) {
+                let constant_pattern = matches!(terms[pattern], Term::ConstantVariable(_));
+                let constant_actual = matches!(terms[actual], Term::Constant(_) | Term::ConstantVariable(_));
+                if constant_pattern != constant_actual { return None; }
                 let previous = substitutions.get(&variable).copied();
                 if let Some(previous) = previous {
                     if !equivalent(terms, previous, actual) {
@@ -86,6 +89,8 @@ fn match_terms(
         }
         match (&terms[pattern], &terms[actual]) {
             (Term::Variable(a), Term::Variable(b)) if a == b => {}
+            (Term::ConstantVariable(a), Term::ConstantVariable(b)) if a == b => {}
+            (Term::Constant(a), Term::Constant(b)) if a == b => {}
             (Term::Named(a, ac), Term::Named(b, bc)) if a == b && ac.len() == bc.len() => {
                 for index in 0..ac.len() {
                     pending.push((ac[index], bc[index]));
@@ -146,7 +151,7 @@ fn prerequisites(
         let environment = variables(source, &implementation.generics, terms, &mut next);
         let mut flexible = BTreeSet::new();
         for id in environment.values() {
-            if let Term::Variable(variable) = terms[*id] {
+            if let Term::Variable(variable) | Term::ConstantVariable(variable) = terms[*id] {
                 flexible.insert(variable);
             }
         }
@@ -168,7 +173,7 @@ fn prerequisites(
             let mut current = BTreeMap::new();
             for (name, id) in &environment {
                 let value = match terms[*id] {
-                    Term::Variable(variable) => {
+                    Term::Variable(variable) | Term::ConstantVariable(variable) => {
                         substitutions.get(&variable).copied().unwrap_or(*id)
                     }
                     _ => *id,
@@ -184,7 +189,7 @@ fn prerequisites(
                     continue;
                 }
                 let value = *current.get(&parameter.name).unwrap();
-                if matches!(terms[value], Term::Variable(variable) if flexible.contains(&variable))
+                if matches!(terms[value], Term::Variable(variable) | Term::ConstantVariable(variable) if flexible.contains(&variable))
                 {
                     continue;
                 }
@@ -237,7 +242,7 @@ fn prerequisites(
         let mut complete = true;
         for (name, id) in environment {
             let value = match terms[id] {
-                Term::Variable(variable) => substitutions.get(&variable).copied(),
+                Term::Variable(variable) | Term::ConstantVariable(variable) => substitutions.get(&variable).copied(),
                 _ => None,
             };
             if let Some(value) = value {
@@ -322,7 +327,8 @@ fn concrete_projection(terms: &[Term], ty: usize) -> Option<(Goal, String)> {
     let mut pending = vec![receiver];
     while let Some(ty) = pending.pop() {
         match &terms[ty] {
-            Term::Unknown | Term::Variable(_) => return None,
+            Term::Unknown | Term::Variable(_) | Term::ConstantVariable(_) => return None,
+            Term::Constant(_) => {}
             Term::Named(name, children) => {
                 if name.starts_with("$projection:") { return None; }
                 pending.extend_from_slice(children);

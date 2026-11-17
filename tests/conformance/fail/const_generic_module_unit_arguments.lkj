@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+mod m { pub enum Choice<T> { Unit, Value(T) } }
+pub fn probe() -> i64 { let value: m::Choice<i64> = m::<i64>::Choice::Unit; 0 }

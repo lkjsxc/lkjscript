@@ -1,0 +1,9 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+trait Marker {}
+impl Marker for i64 {}
+fn make<const N: usize>() -> impl Marker { 42i64 }
+fn wrong<const N: usize, const M: usize>(choose: bool) {
+    let held = if choose { make::<N>() } else { make::<M>() };
+}
+pub fn probe() -> i64 { 42 }

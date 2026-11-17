@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+trait Mark {}
+impl Mark for [u8; 2] {}
+trait Source { type Item: Mark; fn get(&self) -> Self::Item; }
+struct Item;
+impl Source for Item {
+    type Item = [u8; 2];
+    fn get(&self) -> [u8; 2] { [42u8; 2] }
+}
+pub fn probe() -> i64 { Item.get()[0] as i64 }

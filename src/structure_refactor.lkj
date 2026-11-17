@@ -1568,7 +1568,29 @@ pub mod relocation {
     fn rename(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], target: &semantic::Item,
         name: &str, patches: &mut Vec<edit::Patch>) -> Result<(), String> {
         if target.kind == "generic-parameter" {
-            return Err(fail(&target.identity, "GENERIC_REFERENCES", "generic parameter use sites need resolver-backed catalog evidence"));
+            let declaration = syntax::semantic_tokens(&target.text)
+                .map_err(|problem| fail(&target.identity, "GENERIC_REFERENCES", &problem.message))?;
+            if declaration.first().is_none_or(|token| token.text != "const") {
+                return Err(fail(&target.identity, "GENERIC_REFERENCES", "generic parameter use sites need resolver-backed catalog evidence"));
+            }
+            let owner = edit::item(catalog, &target.parent)?;
+            let tokens = syntax::semantic_tokens(&owner.text)
+                .map_err(|problem| fail(&target.identity, "GENERIC_REFERENCES", &problem.message))?;
+            // A fresh spelling cannot capture another value/type use anywhere
+            // in the declaration's complete lexical scope, including closures.
+            if name != target.name && tokens.iter().any(|token| token.text == name) {
+                return Err(fail(&target.identity, "CAPTURE", "const parameter rename requires a fresh spelling in its enclosing item"));
+            }
+            for site in &catalog.unresolved {
+                if site.owner == target.parent || descendant(catalog, &site.owner, &target.parent) {
+                    return Err(at_site(&target.identity, "GENERIC_REFERENCES", site, "const parameter rename requires complete enclosing reference evidence"));
+                }
+            }
+            for site in &catalog.references {
+                if site.target == target.identity && site.kind != "const-parameter" {
+                    return Err(at_site(&target.identity, "GENERIC_REFERENCES", site, "const parameter rename requires an exact const use site"));
+                }
+            }
         }
         if !edit::identifier(name) { return Err(fail(&target.identity, "NAME", "new member name must be one identifier")); }
         if target.kind == "module" { inline_module(catalog, inputs, target)?; }

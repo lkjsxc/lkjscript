@@ -22,6 +22,7 @@ mod integers;
 mod methods;
 mod operators;
 mod opaque;
+mod const_arguments;
 mod origins;
 mod output;
 mod pattern_choices;
@@ -58,6 +59,8 @@ enum TypeKey {
     Ref(usize, bool),
     Slice(usize, bool),
     Array(usize, usize),
+    Constant(usize),
+    ConstantArray(usize, usize),
     Tuple(Vec<usize>),
     Vec(usize),
     Box(usize),
@@ -869,6 +872,7 @@ impl Compiler<'_> {
     }
 
     fn intern(&mut self, _description: String, kind: ir::TypeKind) -> usize {
+        if let ir::TypeKind::Array { len, .. } = &kind { self.constant(*len); }
         let (key, name) = match &kind {
             ir::TypeKind::Ref { inner, mutable } => (
                 TypeKey::Ref(*inner, *mutable),
@@ -1241,6 +1245,10 @@ impl Compiler<'_> {
             let ty = *sub
                 .get(&parameter.name)
                 .ok_or_else(|| err(parameter.span, "E_TYPE", "cannot infer generic argument"))?;
+            let constant = crate::generics::const_arguments::value(&self.types, ty).is_some();
+            if parameter.constant != constant {
+                return Err(err(parameter.span, "E_TYPE", "generic type and const argument kinds differ"));
+            }
             for id in &parameter.bounds {
                 self.check_type_bound(ty, *id, sub, parameter.span)?;
             }
@@ -2799,6 +2807,18 @@ impl Builder<'_, '_> {
                     let place = self.place(id)?;
                     return self.read(place, line);
                 }
+                if path.declaration.is_none() && path.args.is_empty() {
+                    let constant = self.sub.get(&path.name).copied();
+                    if let Some(constant) = constant {
+                        if let Some(value) = crate::generics::const_arguments::value(&self.compiler.types, constant) {
+                            let count = match value { crate::generics::const_arguments::Value::Known(value) => value,
+                                crate::generics::const_arguments::Value::Rigid(_) => 0 };
+                            let dst = self.temp(ir::U64);
+                            self.emit(ir::Op::Int { dst, value: count as i64 }, line);
+                            return Ok((dst, ir::U64));
+                        }
+                    }
+                }
                 let path = self
                     .compiler
                     .names
@@ -2969,34 +2989,25 @@ impl Builder<'_, '_> {
             }
             a::Expr::Array(elements) => self.array_expr(&elements, expected, node.span),
             a::Expr::Repeat { value, count } => {
-                let length = match &self.compiler.source.exprs[count].kind {
-                    a::Expr::Int(text) => {
-                        let digits = text.replace('_', "");
-                        match digits.as_str().parse::<usize>().ok() {
-                            Some(length) => length,
-                            None => {
-                                return Err(err(
-                                    node.span,
-                                    "E_TYPE",
-                                    "array repeat length must be an integer literal",
-                                ));
-                            }
-                        }
-                    }
-                    _ => {
-                        return Err(err(
-                            node.span,
-                            "E_UNSUPPORTED",
-                            "array repeat length must be constant",
-                        ));
-                    }
+                let count_node = self.compiler.source.exprs[count].clone();
+                let marker = match &count_node.kind {
+                    a::Expr::Int(text) => self.compiler.constant_length(text, &self.sub, count_node.span)?,
+                    a::Expr::Path(path) if path.qualification.is_none() && path.declaration.is_none()
+                        && path.args.is_empty() => self.compiler.constant_length(&path.name, &self.sub, count_node.span)?,
+                    _ => return Err(err(count_node.span, "E_UNSUPPORTED", "array repeat count requires a literal or const usize parameter")),
+                };
+                let symbolic = matches!(crate::generics::const_arguments::value(&self.compiler.types, marker),
+                    Some(crate::generics::const_arguments::Value::Rigid(_)));
+                let length = match crate::generics::const_arguments::value(&self.compiler.types, marker).unwrap() {
+                    crate::generics::const_arguments::Value::Known(value) => value,
+                    crate::generics::const_arguments::Value::Rigid(_) => 0,
                 };
                 let inner = expected.and_then(|t| match self.compiler.types[t].kind {
                     ir::TypeKind::Array { inner, .. } => Some(inner),
                     _ => None,
                 });
                 let v = self.expr(value, inner)?;
-                if length > 1 && !is_copy(&self.compiler.types, v.1) {
+                if (length > 1 || symbolic) && !is_copy(&self.compiler.types, v.1) {
                     return Err(err(
                         node.span,
                         "E_TYPE",
@@ -3009,13 +3020,7 @@ impl Builder<'_, '_> {
                         elements.push(self.read(ir::Place::local(v.0), line)?.0);
                     }
                 }
-                let ty = self.compiler.intern(
-                    String::new(),
-                    ir::TypeKind::Array {
-                        inner: v.1,
-                        len: length,
-                    },
-                );
+                let ty = self.compiler.array_type(v.1, marker, node.span)?;
                 let dst = self.temp(ty);
                 if length > 1 {
                     self.emit(
@@ -3893,6 +3898,7 @@ impl Builder<'_, '_> {
         }
         let mut initial_sub = BTreeMap::new();
         let mut associated = None;
+        let mut associated_arguments = false;
         if let Some(qualification) = &path.qualification {
             let receiver = self.compiler.resolve(qualification.receiver, &self.sub)?;
             let instance = if qualification.trait_ty.is_some() {
@@ -3907,7 +3913,14 @@ impl Builder<'_, '_> {
         } else if let Some(at) = path.name.rfind("::") {
             let owner = &path.name[..at];
             let method = &path.name[at + 2..];
-            let target_type = if path.args.is_empty()
+            // The written segment owns its arguments. Resolving an omitted
+            // owner can borrow same-named caller substitutions and cannot
+            // distinguish Owner::<T>::make from Owner::make::<T>.
+            associated_arguments = !path.args.is_empty()
+                && self.compiler.source.value_argument_lists.get(&path.args[0])
+                    .is_some_and(|arguments| arguments.1);
+            let receiver_arguments = if associated_arguments { Vec::new() } else { path.args.clone() };
+            let target_type = if receiver_arguments.is_empty()
                 && expected.is_some_and(|t| {
                     self.compiler
                         .applications
@@ -3922,7 +3935,7 @@ impl Builder<'_, '_> {
                             qualification: None, bindings: Vec::new(),
                             declaration: path.declaration,
                             name: owner.to_string(),
-                            args: path.args.clone(),
+                            args: receiver_arguments,
                         },
                         &self.sub,
                         span,
@@ -3969,14 +3982,14 @@ impl Builder<'_, '_> {
                 generic.push(index);
             }
         }
-        if !path.args.is_empty() && (associated.is_none() || path.qualification.is_some()) {
+        if !path.args.is_empty() && (associated.is_none() || path.qualification.is_some() || associated_arguments) {
             if path.args.len() != generic.len() {
                 return Err(err(span, "E_TYPE", "wrong generic argument count"));
             }
             for i in 0..generic.len() {
                 sub.insert(
                     target.generics[generic[i]].name.clone(),
-                    self.compiler.resolve(path.args[i], &self.sub)?,
+                    self.compiler.generic_argument(path.args[i], target.generics[generic[i]].constant, &self.sub)?,
                 );
             }
         }

@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {}
+mod m {
+    pub struct Named<T> { pub value: T }
+    impl<T> Named<T> { pub fn make(value: T) -> Self { Self { value } } }
+    pub struct Tuple<T>(pub T);
+    pub enum Choice<T> { Value(T) }
+}
+pub fn probe() -> i64 {
+    let first = m::Named::<i64>::make(10);
+    let second = m::Named::<i64> { value: 10 };
+    let third = m::Tuple::<i64>(10);
+    let choice = m::Choice::<i64>::Value(12);
+    let fourth = match choice { m::Choice::Value(value) => value };
+    first.value + second.value + third.0 + fourth
+}

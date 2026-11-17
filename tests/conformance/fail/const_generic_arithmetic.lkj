@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
+fn wrong<const N: usize>(input: [u8; N + 1]) -> usize { input.len() }
+pub fn probe() -> i64 { 42 }

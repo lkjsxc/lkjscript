@@ -17,7 +17,7 @@ enum Work {
     Qualified { id: a::TypeId, qualification: a::QualifiedPath, name: String, environment: usize },
     Reference(bool),
     Slice,
-    Array(String),
+    Array(String, usize),
     Tuple(usize),
 }
 
@@ -51,7 +51,7 @@ impl Infer<'_, '_> {
                         });
                     }
                     a::Type::Array { inner, len } => {
-                        pending.push(Work::Array(len));
+                        pending.push(Work::Array(len, environment));
                         pending.push(Work::Source {
                             id: inner,
                             environment,
@@ -65,6 +65,13 @@ impl Infer<'_, '_> {
                         }
                     }
                     a::Type::Path(path) => {
+                        let argument = self.source.constant_arguments.get(&id).cloned();
+                        if let Some(text) = argument {
+                            let value = crate::generics::const_arguments::literal(&text).ok_or_else(||
+                                a::Diagnostic::new(self.source.types[id].span, "E_TYPE", "const argument exceeds usize"))?;
+                            values.push(self.shaped(Shape::Constant(value)));
+                            continue;
+                        }
                         if let Some(qualification) = &path.qualification {
                             pending.push(Work::Qualified { id, qualification: qualification.clone(), name: path.name, environment });
                             pending.push(Work::Source { id: qualification.receiver, environment });
@@ -176,13 +183,16 @@ impl Infer<'_, '_> {
                     let inner = values.pop().expect("slice inference child");
                     values.push(self.shaped(Shape::Slice(inner)));
                 }
-                Work::Array(len) => {
+                Work::Array(len, environment) => {
                     let inner = values.pop().expect("array inference child");
-                    let len = len.replace('_', "");
-                    values.push(match len.as_str().parse::<usize>().ok() {
-                        Some(len) => self.shaped(Shape::Array(inner, len)),
-                        None => self.blocked(),
-                    });
+                    let count = if let Some(len) = crate::generics::const_arguments::literal(&len) {
+                        self.shaped(Shape::Constant(len))
+                    } else {
+                        let bindings = if environment == 0 { base_environment }
+                            else { &environments[environment - 1usize] };
+                        bindings.get(&len).copied().unwrap_or_else(|| self.blocked())
+                    };
+                    values.push(self.shaped(Shape::Array(inner, count)));
                 }
                 Work::Tuple(count) => {
                     let fields = take_values(&mut values, count);

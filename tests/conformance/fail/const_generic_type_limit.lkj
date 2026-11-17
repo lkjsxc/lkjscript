@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+fn value<const N: u8>() -> u8 { N }
+pub fn probe() -> i64 { 42 }

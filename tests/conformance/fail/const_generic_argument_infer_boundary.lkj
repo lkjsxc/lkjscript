@@ -1,0 +1,11 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":true}
+mod left {
+    pub fn identity<T>(value: T) -> T { value }
+    pub fn value() -> i64 { identity::<_>(20) }
+}
+mod right {
+    pub fn identity<T>(value: T) -> T { value }
+    pub fn value() -> i64 { identity::<_>(22) }
+}
+pub fn probe() -> i64 { left::value() + right::value() }

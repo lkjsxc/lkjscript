@@ -151,6 +151,8 @@ fn key(out: &mut Vec<u8>, value: &TypeKey) {
         TypeKey::Ref(inner, flag) => { word(out, 0); word(out, *inner); word(out, *flag as usize); }
         TypeKey::Slice(inner, flag) => { word(out, 1); word(out, *inner); word(out, *flag as usize); }
         TypeKey::Array(inner, size) => { word(out, 2); word(out, *inner); word(out, *size); }
+        TypeKey::Constant(value) => { word(out, 34); word(out, *value); }
+        TypeKey::ConstantArray(inner, value) => { word(out, 35); word(out, *inner); word(out, *value); }
         TypeKey::Tuple(values) => { word(out, 3); words(out, values); }
         TypeKey::Vec(inner) => { word(out, 4); word(out, *inner); }
         TypeKey::Box(inner) => { word(out, 5); word(out, *inner); }
@@ -174,6 +176,8 @@ fn take_key(input: &mut Reader<'_>) -> Option<TypeKey> {
         0 => TypeKey::Ref(input.word()?, input.word()? != 0),
         1 => TypeKey::Slice(input.word()?, input.word()? != 0),
         2 => TypeKey::Array(input.word()?, input.word()?),
+        34 => TypeKey::Constant(input.word()?),
+        35 => TypeKey::ConstantArray(input.word()?, input.word()?),
         3 => TypeKey::Tuple(take_words(input)?), 4 => TypeKey::Vec(input.word()?),
         5 => TypeKey::Box(input.word()?), 6 => TypeKey::Nominal(input.word()?, take_words(input)?),
         7 => TypeKey::World, 8 => TypeKey::Stdout, 9 => TypeKey::Stdin, 10 => TypeKey::Stderr,

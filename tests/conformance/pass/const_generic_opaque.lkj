@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+trait Value { fn value(&self) -> usize; }
+struct Number { value: usize }
+impl Value for Number { fn value(&self) -> usize { self.value } }
+fn make<const N: usize>() -> impl Value { Number { value: N } }
+fn choose(flag: bool) -> impl Value { if flag { make::<21>() } else { make::<21>() } }
+pub fn probe() -> i64 { (choose(true).value() + make::<21>().value()) as i64 }

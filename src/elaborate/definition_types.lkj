@@ -23,6 +23,8 @@ fn context(mut problem: a::Diagnostic, message: &str) -> a::Diagnostic {
 enum Shape {
     Atom(String),
     Rigid(String),
+    Constant(usize),
+    ConstantRigid(String),
     Projected(a::DeclarationId, String),
     Projection(a::DeclarationId, String, Variable),
     Source(a::TypeId),
@@ -31,7 +33,7 @@ enum Shape {
     Box(Variable),
     Ref(bool, Variable),
     Slice(Variable),
-    Array(Variable, usize),
+    Array(Variable, Variable),
     Tuple(Vec<Variable>),
     Nominal(a::DeclarationId, Vec<Variable>),
     Closure(a::ExprId, Vec<Variable>),
@@ -40,9 +42,10 @@ enum Shape {
 impl Shape {
     fn children(&self) -> Vec<Variable> {
         match self {
-            Self::Vec(v) | Self::Box(v) | Self::Ref(_, v) | Self::Slice(v) | Self::Array(v, _) => {
+            Self::Vec(v) | Self::Box(v) | Self::Ref(_, v) | Self::Slice(v) => {
                 vec![*v]
             }
+            Self::Array(element, length) => vec![*element, *length],
             Self::Tuple(v) | Self::Nominal(_, v) | Self::Closure(_, v) | Self::Opaque(_, _, v) => v.clone(),
             _ => Vec::new(),
         }
@@ -262,7 +265,8 @@ impl DefinitionTypes {
                     };
                     Some(compiler.associated_type_for_trait(values[0], owner, &member, span)?)
                 }
-                Shape::Rigid(name) => substitutions.get(&name).copied(),
+                Shape::Rigid(name) | Shape::ConstantRigid(name) => substitutions.get(&name).copied(),
+                Shape::Constant(value) => Some(compiler.constant(value)),
                 Shape::Projected(_, name) => {
                     if let Some(value) = substitutions.get(&name) { Some(*value) }
                     else {
@@ -303,13 +307,7 @@ impl DefinitionTypes {
                         mutable: false,
                     },
                 )),
-                Shape::Array(_, len) => Some(compiler.intern(
-                    String::new(),
-                    ir::TypeKind::Array {
-                        inner: values[0],
-                        len,
-                    },
-                )),
+                Shape::Array(_, _) => Some(compiler.array_type(values[0], values[1], span)?),
                 Shape::Tuple(_) => {
                     if values.is_empty() {
                         Some(ir::UNIT)
@@ -564,7 +562,8 @@ impl Infer<'_, '_> {
     fn display_variable(&self, variable: Variable) -> String {
         match self.shape(variable) {
             None => "_".to_string(),
-            Some(Shape::Atom(name) | Shape::Rigid(name)) => name,
+            Some(Shape::Atom(name) | Shape::Rigid(name) | Shape::ConstantRigid(name)) => name,
+            Some(Shape::Constant(value)) => format!("{value}"),
             Some(Shape::Vec(inner)) => format!("Vec<{}>", self.display_variable(inner)),
             Some(Shape::Box(inner)) => format!("Box<{}>", self.display_variable(inner)),
             Some(Shape::Ref(mutable, inner)) => format!(
@@ -573,7 +572,7 @@ impl Infer<'_, '_> {
                 self.display_variable(inner)
             ),
             Some(Shape::Slice(inner)) => format!("[{}]", self.display_variable(inner)),
-            Some(Shape::Array(inner, len)) => format!("[{}; {len}]", self.display_variable(inner)),
+            Some(Shape::Array(inner, count)) => format!("[{}; {}]", self.display_variable(inner), self.display_variable(count)),
             Some(Shape::Tuple(fields)) => format!("({})", self.display_variables(&fields)),
             Some(Shape::Nominal(declaration, args)) => {
                 let full_name = self.source.declarations[declaration].name.as_str();
@@ -718,9 +717,16 @@ impl Infer<'_, '_> {
                     pending.push((*x, *y));
                     true
                 }
-                (Some(Shape::Array(x, nx)), Some(Shape::Array(y, ny))) if nx == ny => {
+                (Some(Shape::Array(x, nx)), Some(Shape::Array(y, ny))) => {
                     pending.push((*x, *y));
+                    pending.push((*nx, *ny));
                     true
+                }
+                (Some(Shape::Constant(x)), Some(Shape::Constant(y))) if x == y => true,
+                (Some(Shape::ConstantRigid(x)), Some(Shape::ConstantRigid(y))) if x == y => true,
+                (Some(Shape::Constant(_) | Shape::ConstantRigid(_)), _)
+                | (_, Some(Shape::Constant(_) | Shape::ConstantRigid(_))) => {
+                    return Err(err(span, "E_TYPE", "distinct symbolic or literal array lengths cannot be equated"));
                 }
                 (Some(Shape::Ref(mx, x)), Some(Shape::Ref(my, y))) if mx == my => {
                     pending.push((*x, *y));
@@ -1483,17 +1489,22 @@ impl Infer<'_, '_> {
             }
             a::Expr::Bytes(bytes) => {
                 let inner = self.atom("u8");
-                let array = self.shaped(Shape::Array(inner, bytes.len()));
+                let count = self.shaped(Shape::Constant(bytes.len()));
+                let array = self.shaped(Shape::Array(inner, count));
                 self.shaped(Shape::Ref(false, array))
             }
             a::Expr::Path(path) => {
                 if path.qualification.is_none() { self.capture_path(id, &path.name); }
                 let local = if path.qualification.is_none() { self.bindings.entry(&path.name) } else { None };
+                let constant_parameter = self.environment.get(&path.name).is_some_and(|value|
+                    matches!(self.shape(*value), Some(Shape::Constant(_) | Shape::ConstantRigid(_))));
                 if let Some((entry, value)) = local {
                     if self.capture_references {
                         self.definition.local_paths.push((id, self.bindings.origin_at(entry)));
                     }
                     value
+                } else if constant_parameter {
+                    self.atom("usize")
                 } else {
                     match self.names.value_path(node.scope, &path, span) {
                         Ok(path) => {
@@ -1535,7 +1546,8 @@ impl Infer<'_, '_> {
                     let value = self.expr(item)?;
                     self.coerce(value, element, span)?;
                 }
-                self.shaped(Shape::Array(element, len))
+                let count = self.shaped(Shape::Constant(len));
+                self.shaped(Shape::Array(element, count))
             }
             a::Expr::Repeat { value, count } => {
                 let value = self.expr(value)?;
@@ -1554,11 +1566,12 @@ impl Infer<'_, '_> {
                     }
                     _ => None,
                 };
-                if let Some(len) = length {
-                    self.shaped(Shape::Array(value, len))
-                } else {
-                    self.blocked()
-                }
+                let count = if let Some(len) = length { Some(self.shaped(Shape::Constant(len))) }
+                    else if let a::Expr::Path(path) = &self.source.exprs[count].kind {
+                        self.environment.get(&path.name).copied()
+                    } else { None };
+                if let Some(count) = count { self.shaped(Shape::Array(value, count)) }
+                    else { self.blocked() }
             }
             a::Expr::Unary { op, value } => {
                 let value = self.expr(value)?;
@@ -2559,7 +2572,8 @@ pub(super) fn infer(
             let implementation = &source.impls[owner.index];
             for parameter in &implementation.generics {
                 if !parameter.lifetime {
-                    let variable = inference.shaped(Shape::Rigid(parameter.name.clone()));
+                    let variable = inference.shaped(if parameter.constant { Shape::ConstantRigid(parameter.name.clone()) }
+                        else { Shape::Rigid(parameter.name.clone()) });
                     inference
                         .environment
                         .insert(parameter.name.clone(), variable);
@@ -2575,7 +2589,8 @@ pub(super) fn infer(
             inference.environment.insert("Self".to_string(), receiver);
             for parameter in &definition.generics {
                 if !parameter.lifetime {
-                    let variable = inference.shaped(Shape::Rigid(parameter.name.clone()));
+                    let variable = inference.shaped(if parameter.constant { Shape::ConstantRigid(parameter.name.clone()) }
+                        else { Shape::Rigid(parameter.name.clone()) });
                     inference
                         .environment
                         .insert(parameter.name.clone(), variable);
@@ -2586,7 +2601,8 @@ pub(super) fn infer(
     }
     for parameter in &function.generics {
         if !parameter.lifetime {
-            let variable = inference.shaped(Shape::Rigid(parameter.name.clone()));
+            let variable = inference.shaped(if parameter.constant { Shape::ConstantRigid(parameter.name.clone()) }
+                        else { Shape::Rigid(parameter.name.clone()) });
             inference
                 .environment
                 .insert(parameter.name.clone(), variable);

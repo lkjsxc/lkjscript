@@ -217,7 +217,8 @@ fn append_generics(result: &mut Catalog, files: &[SourceText], owner: &str, valu
     for parameter in values {
         if parameter.implicit { continue; }
         append(result, files, format!("{}::generic:{}", owner, parameter.name), owner.to_string(),
-            "generic-parameter", &parameter.name, parameter.span, None, parameter.name.clone(), false)?;
+            "generic-parameter", &parameter.name, parameter.span, None,
+                if parameter.constant { "usize".to_string() } else { parameter.name.clone() }, false)?;
     }
     Ok(())
 }
@@ -272,7 +273,18 @@ fn declaration_identity(program: &a::Program, index: usize, function_ids: &[Stri
     Some(item_identity(program, declaration.item, function_ids))
 }
 fn function_signature(program: &a::Program, function: &a::Function) -> String {
-    let mut out = if function.const_qualified { "const fn(".to_string() } else { "fn(".to_string() };
+    let mut out = if function.const_qualified { "const fn".to_string() } else { "fn".to_string() };
+    if function.generics.iter().any(|parameter| parameter.constant) {
+        out.push('<');
+        for (index, parameter) in function.generics.iter().enumerate() {
+            if index != 0usize { out.push_str(", "); }
+            if parameter.constant { out.push_str("const "); }
+            out.push_str(&parameter.name);
+            if parameter.constant { out.push_str(": usize"); }
+        }
+        out.push('>');
+    }
+    out.push('(');
     for (index, parameter) in function.params.iter().enumerate() {
         if index != 0usize { out.push_str(", "); }
         out.push_str(&type_name(program, parameter.ty));
@@ -504,7 +516,8 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         for parameter in &value.generics {
             if parameter.implicit { continue; }
             append(&mut result, &files, format!("{}::generic:{}", identity, parameter.name), identity.clone(),
-                "generic-parameter", &parameter.name, parameter.span, None, parameter.name.clone(), false)?;
+                "generic-parameter", &parameter.name, parameter.span, None,
+                if parameter.constant { "usize".to_string() } else { parameter.name.clone() }, false)?;
         }
     }
     for value in &program.structs {
@@ -581,13 +594,24 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         generated_expression(&mut result, &files, program, &resolver, *expression, *function, &mut generated_calls, evidence)?;
     }
     if include_references {
+        let has_constant_parameters = crate::generics::const_arguments::has_parameters(program);
         let owners = Owners::new(&result);
         let self_traits = self_trait_owners(program);
         import_qualifications(&mut result, &files, program, &resolver);
         visibility_qualifications(&mut result, &files, &owners);
         // Every declaration-backed type path is a resolved reference, including aliases.
         for (type_index, node) in program.types.iter().enumerate() {
-            if program.impl_traits.contains_key(&type_index) { continue; }
+            if program.impl_traits.contains_key(&type_index) || program.constant_arguments.contains_key(&type_index) { continue; }
+            if let a::Type::Array { len, .. } = &node.kind {
+                if has_constant_parameters && crate::generics::const_arguments::literal(len).is_none()
+                    && crate::generics::const_arguments::declared(program, node.span, len) {
+                    if let Some(span) = program.array_length_spans.get(&type_index) {
+                        if let Some(owner) = owners.get(&files[span.file].path, span.start, span.end) {
+                            constant_reference(&mut result, &files, &owner, len, *span);
+                        }
+                    }
+                }
+            }
             if let Some(function) = origins.types.get(&type_index) {
                 let owner = result.function_ids[*function].clone();
                 let target = match &node.kind {
@@ -608,6 +632,10 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             if let a::Type::Path(path) = &node.kind {
                 let file = &files[node.span.file];
                 let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) else { continue; };
+                if has_constant_parameters && crate::generics::const_arguments::declared(program, node.span, &path.name) {
+                    constant_reference(&mut result, &files, &owner, &path.name, node.span);
+                    continue;
+                }
                 if let Some(qualification) = &path.qualification {
                     let Some(trait_ty) = qualification.trait_ty else { continue; };
                     if let a::Type::Path(bound) = &program.types[trait_ty].kind {
@@ -733,6 +761,10 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             } else { result.expression_types.insert(key, ty); }
             match &node.kind {
                 a::Expr::Path(path) | a::Expr::Struct { path, .. } => {
+                    if has_constant_parameters && matches!(node.kind, a::Expr::Path(_)) && crate::generics::const_arguments::declared(program, node.span, &path.name) {
+                        constant_reference(&mut result, &files, &owner, &path.name, node.span);
+                        continue;
+                    }
                     if let Some(qualification) = &path.qualification {
                         let Some(trait_ty) = qualification.trait_ty else {
                             let closed = source_functions.get(&owner).is_some_and(|function|

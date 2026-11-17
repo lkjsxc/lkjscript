@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {}
+trait Mark {}
+impl<const N: usize> Mark for [u8; N] {}
+trait Source { type Item: Mark; fn get(&self) -> Self::Item; }
+struct Wrapped<T> { value: T }
+impl<const N: usize> Source for Wrapped<[u8; N]> {
+    type Item = [u8; N];
+    fn get(&self) -> [u8; N] { self.value }
+}
+fn get<const N: usize>(source: &Wrapped<[u8; N]>) -> [u8; N] { source.get() }
+pub fn probe() -> i64 { get(&Wrapped { value: [42u8; 3] })[0] as i64 }

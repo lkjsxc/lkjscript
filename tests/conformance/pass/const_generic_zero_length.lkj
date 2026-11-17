@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+fn repeated<const N: usize>(value: i64) -> [i64; N] { [value; N] }
+pub fn probe() -> i64 { repeated::<0>(99).len() as i64 + repeated::<1>(42)[0] }

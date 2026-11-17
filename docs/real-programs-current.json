@@ -6,10 +6,11 @@
          "sozu" : 0
       },
       "const_function_header_interpretation" : "Fifteen old const-function header diagnostics are absent. Dedicated semantic controls establish the bounded runtime-call qualification contract. Neither original surrounding bodies nor constant-initializer evaluation is inferred from disappearance.",
+      "const_generic_header_interpretation" : "Six exact original nom header diagnostics are absent. Dedicated controls establish the documented function/receiver-impl const-usize contract; these six removals do not establish admission of the original implementations. Two Compare receivers omit N and four implementations require positional generic-trait contracts.",
       "current_stage_primary_sites" : {
          "dom" : 64,
-         "nom" : 24,
-         "sozu" : 448
+         "nom" : 18,
+         "sozu" : 447
       },
       "new_independent_primary_sites" : {
          "dom" : 1,
@@ -22,7 +23,7 @@
          "sozu" : 0
       },
       "nom_dom_primary_sites" : {
-         "after" : 88,
+         "after" : 82,
          "before" : 244
       },
       "observed_const_function_header_sites_not_reproduced" : {
@@ -30,15 +31,25 @@
          "sozu" : 1,
          "total" : 15
       },
+      "observed_const_generic_header_sites_not_reproduced" : {
+         "nom" : 6,
+         "total" : 6
+      },
+      "observed_global_constant_array_length_diagnostics_not_reproduced" : {
+         "interpretation" : "MAX_FDS_OUT now parses as an identifier. Global/module constant array lengths remain outside the validator contract, and earlier parser/macro refusals mask the later located E_TYPE in these roots.",
+         "sozu" : 1,
+         "supported_source_sites" : 0,
+         "total" : 1
+      },
       "observed_old_target_diagnostic_sites_not_reproduced" : {
          "dom" : 17,
          "nom" : 129,
          "total" : 146
       },
       "previous_stage_primary_sites" : {
-         "dom" : 78,
+         "dom" : 64,
          "nom" : 24,
-         "sozu" : 449
+         "sozu" : 448
       },
       "removed_old_target_diagnostic_identities" : {
          "dom" : 17,
@@ -60,7 +71,7 @@
       "target_site_interpretation" : "All 146 original target diagnostic identities remain absent. Unlike APIT alone, dedicated semantic controls now validate result-position impl Trait as well as arguments, equality and qualified paths. The original nom Parser<I> positional trait contracts, generic associated types and other documented limits remain separate refusals; no surrounding function, module or crate admission is inferred."
    },
    "baseline_compiler_sha256" : "eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f",
-   "compiler_sha256" : "ef0da37e0c7b7df55dc63d75b440097ae45773cbea8699384894523a14a1f58f",
+   "compiler_sha256" : "8a2ccb3776838d39bb86a5e4c690ab5fc759a7e45f0408f69ba3e3934d5b191e",
    "form_support" : {
       "argument_impl_trait" : "supported_in_documented_subset",
       "associated_type_equality" : "supported_in_documented_subset",
@@ -83,6 +94,32 @@
          "destruction" : "Each emitted Drop/DropIf needs structurally trivial destruction. Shared views do not destroy their referents; unknown rigid T requires Copy.",
          "qualification" : "The frontend checks lowered operations using exact ExprId and selected source declaration metadata; the checked IR and independent checker are unchanged.",
          "status" : "supported_in_documented_runtime_call_subset"
+      },
+      "const_generics" : {
+         "accepted" : [
+            "Standalone array lengths, repeat counts and ordinary usize value expressions",
+            "Array-argument inference and explicit decimal usize literals or in-scope const parameters",
+            "Mixed type/const parameters, borrowed array receivers and associated array results",
+            "Recursive calls, static methods with explicit method arguments, and opaque-result captures that preserve const identity"
+         ],
+         "conservative_refusals" : [
+            "Const parameter types other than builtin usize",
+            "Const defaults and arithmetic/braced constant arguments or array lengths",
+            "Const parameters on nominal types, aliases, trait declarations or trait methods",
+            "Implementation const parameters absent from the receiver",
+            "Module/global constants used as array lengths",
+            "Where predicates whose written target contains a symbolic array length"
+         ],
+         "declarations" : "Free functions, inherent functions, and implementation blocks whose receiver contains each const parameter.",
+         "definition_checking" : "Each symbolic count remains distinct from literals and sibling parameters, even in unused definitions and branches. An impl for [T; 0] is not evidence for [T; N]; testing N == 0 does not add type equality. A symbolic repeat requires Copy before specialization.",
+         "generic_argument_placement" : "The source frontend records the written generic-argument owner and final-segment flag, validates that owner in its original lexical scope before constructor/call selection, and routes receiver versus method arguments using syntax provenance. Modules cannot own generic arguments. Explicit inference occurrences have distinct identities and exact locations while retaining their refusal boundary.",
+         "global_array_length_admission" : false,
+         "original_nom_limits" : "Compare at traits.rs:1099/1111 has N only in a positional trait argument, not its slice receiver. FindToken at 1123/1129 has const-bearing array receivers but still requires positional generic-trait support. The two AsBytes array receivers do not establish their original bodies or module admission.",
+         "overlap_and_lowering" : "Const variables are independent of type variables in overlap checking. Specialization emits the existing concrete arrays, repeats and integer values; the checked IR and independent checker are unchanged.",
+         "parameter_type" : "builtin usize",
+         "retained_argument_boundaries" : "Explicit generic-argument inference placeholders and multiple generic-argument lists in one path retain their existing located refusal boundaries.",
+         "source_commands" : "Queries preserve symbolic lengths and const-parameter meaning; references cover type/value uses. Checked renames require a fresh spelling throughout the enclosing item and exact use sites; body edits revalidate symbolic identities.",
+         "status" : "supported_in_documented_function_and_receiver_impl_subset"
       },
       "ordinary_impl_trait_form_complete" : true,
       "qualified_associated_paths" : "supported_in_documented_subset",
@@ -175,26 +212,26 @@
                "entry_sha256" : "81441eac6c5af9fe4aa7eea33f2f11ebad8a6d309a0f0fb80a17c9d2174f5779",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5540,
+               "peak_rss_kib" : 5544,
                "route" : "original_suffix",
                "stderr_sha256" : "1170c98833b245d8181dc2850bcfc1d36d34bc83792f33ec55fd3787b0b748e1",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.001532
+               "wall_seconds" : 0.001198
             },
             {
                "entry_sha256" : "81441eac6c5af9fe4aa7eea33f2f11ebad8a6d309a0f0fb80a17c9d2174f5779",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 37944,
+               "peak_rss_kib" : 40504,
                "route" : "suffix_projection",
                "stderr_sha256" : "5331dc685de940a4da7b9796ed08dcee8b6b4c8663f9f14548466ea6416cc4d1",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.11586
+               "wall_seconds" : 0.133263
             }
          ],
-         "observed_at_utc" : "2026-11-17T21:05:10Z",
+         "observed_at_utc" : "2026-11-17T22:28:12Z",
          "old_site_counts" : [
             {
                "baseline_rank" : 6,
@@ -366,8 +403,8 @@
             "version" : "0.28.0"
          },
          "probe_receipt" : {
-            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-const-fn-ef0da37e0c7b7df5.json",
-            "sha256" : "189fa2bf3ba865640548188af9988f8c1b47a61a763d74fe059e53755608a752"
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-const-generics-8a2ccb3776838d39.json",
+            "sha256" : "0023f9f5942db892a2fa01bd1623c9741bde872db1d5fab717b18b0970a78f5b"
          },
          "projection_manifest_sha256" : "7eef776218daecb22822d613a609a00039600c34cea05a6047216111148272c9",
          "ranked_causes" : [
@@ -512,28 +549,28 @@
             "changed_primary_diagnostics" : 1,
             "changed_recovery_rows" : 0,
             "new_independent_primary_sites" : 1,
-            "path" : "docs/real-programs-const-fn-dom-review.json",
+            "path" : "docs/real-programs-const-generics-dom-review.json",
             "reviewed_primary_sites" : 2,
-            "sha256" : "37d9feac8408c5eba697d7ed9c5edfd8c53e7ceaebb7a812affbdde9fe7ec6bb",
+            "sha256" : "79870a947ed5f1d8644aad8a222bfbdffd8ca6fc1535732a61303ac58bc42f1e",
             "unchanged_recovery_rows" : 0
          }
       },
       "nom" : {
          "accounting" : {
             "baseline_primary_sites" : 149,
-            "current_primary_sites" : 24,
+            "current_primary_sites" : 18,
             "new_unclassified_rows" : 0,
             "prior_unclassified_rows" : 0,
             "raw_by_code" : {
-               "E_BLOCKED" : 25,
+               "E_BLOCKED" : 19,
                "E_LEX" : 8,
                "E_PARSE" : 3,
-               "E_UNSUPPORTED" : 11,
+               "E_UNSUPPORTED" : 5,
                "E_UNSUPPORTED_MACRO" : 2
             },
-            "raw_projected_diagnostic_rows" : 49,
+            "raw_projected_diagnostic_rows" : 37,
             "recovery_rows_excluded" : 0,
-            "upstream_default_candidate_sites" : 20,
+            "upstream_default_candidate_sites" : 14,
             "upstream_default_inactive_sites" : 4
          },
          "baseline_classification" : {
@@ -624,26 +661,26 @@
                "entry_sha256" : "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5540,
+               "peak_rss_kib" : 5544,
                "route" : "original_suffix",
                "stderr_sha256" : "1170c98833b245d8181dc2850bcfc1d36d34bc83792f33ec55fd3787b0b748e1",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.001611
+               "wall_seconds" : 0.001701
             },
             {
                "entry_sha256" : "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 37364,
+               "peak_rss_kib" : 39512,
                "route" : "suffix_projection",
-               "stderr_sha256" : "aad5407b571b5a9266ef45e0271da9b4945b9dda65e6b45d3c296dae84814dee",
+               "stderr_sha256" : "310446319a0f43b1f02312313b678cd8824bb1aa05e534f592d6da3e181d4c5a",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.123828
+               "wall_seconds" : 0.118985
             }
          ],
-         "observed_at_utc" : "2026-11-17T21:05:09Z",
+         "observed_at_utc" : "2026-11-17T22:28:11Z",
          "old_site_counts" : [
             {
                "baseline_rank" : 4,
@@ -659,9 +696,9 @@
                "baseline_rank" : 5,
                "baseline_sites" : 6,
                "changed_diagnostic_sites" : 0,
-               "exact_surviving_sites" : 6,
+               "exact_surviving_sites" : 0,
                "id" : "const_generics",
-               "not_observed_sites" : 0,
+               "not_observed_sites" : 6,
                "owner" : "Language / compiler generic parameters",
                "title" : "Const generic parameters"
             },
@@ -735,8 +772,8 @@
             "version" : "8.0.0"
          },
          "probe_receipt" : {
-            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-const-fn-ef0da37e0c7b7df5.json",
-            "sha256" : "f6d7bd0c0ee8583f2a33ab9df451e6564b44a76045b8ae611ffe821b414d933e"
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-const-generics-8a2ccb3776838d39.json",
+            "sha256" : "e7115429d74164a8b437915bb0d04232ec6b7a90a36627a10816b90386a4125f"
          },
          "projection_manifest_sha256" : "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
          "ranked_causes" : [
@@ -757,17 +794,6 @@
                "owner" : "Language / checked source-producer route",
                "site_count" : 8,
                "title" : "Rust declarative macro input stops at dollar tokens"
-            },
-            {
-               "affected_files" : [
-                  "src/traits.rs"
-               ],
-               "baseline_rank" : 5,
-               "id" : "const_generics",
-               "overlapping_file_physical_lines" : 1681,
-               "owner" : "Language / compiler generic parameters",
-               "site_count" : 6,
-               "title" : "Const generic parameters"
             },
             {
                "affected_files" : [
@@ -815,33 +841,33 @@
             }
          ],
          "removed_previously_unclassified_sites" : [],
-         "rerank_payload_sha256" : "62d68217c5e7c4893cbe68464c6ff388ac5f2c8859e92042537548a16dba7b2a",
+         "rerank_payload_sha256" : "2392c9f3f5ca06675a28bdba56d291e573d85ca6d71aff1a0f13d10667b7008c",
          "review" : {
             "changed_primary_diagnostics" : 0,
             "changed_recovery_rows" : 0,
             "new_independent_primary_sites" : 4,
-            "path" : "docs/real-programs-const-fn-nom-review.json",
+            "path" : "docs/real-programs-const-generics-nom-review.json",
             "reviewed_primary_sites" : 4,
-            "sha256" : "fc973470dff2e6e794f9b66921f100b84927c232016f147f8620435ad1afcd4d",
+            "sha256" : "536026f45c057fb2ca57dbac6b881d13fd277eb85c6fdb9a13cdb3fa75e7913e",
             "unchanged_recovery_rows" : 0
          }
       },
       "sozu" : {
          "accounting" : {
             "baseline_primary_sites" : 449,
-            "current_primary_sites" : 448,
+            "current_primary_sites" : 447,
             "new_unclassified_rows" : 0,
             "prior_unclassified_rows" : 35,
             "raw_by_code" : {
-               "E_BLOCKED" : 487,
+               "E_BLOCKED" : 486,
                "E_CAPABILITY" : 117,
                "E_LEX" : 3,
                "E_MODULE_MISSING" : 1,
                "E_PARSE" : 35,
-               "E_UNSUPPORTED" : 92,
+               "E_UNSUPPORTED" : 91,
                "E_UNSUPPORTED_MACRO" : 235
             },
-            "raw_projected_diagnostic_rows" : 970,
+            "raw_projected_diagnostic_rows" : 968,
             "recovery_rows_excluded" : 0
          },
          "baseline_classification" : {
@@ -859,92 +885,92 @@
                "entry_sha256" : "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5540,
+               "peak_rss_kib" : 5544,
                "route" : "original_suffix",
                "stderr_sha256" : "7b549de4db0927e5cfce74b5932bada29e9eb2d1f4453c00765287200f698e06",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "bin/src/main.rs",
-               "wall_seconds" : 0.001371
+               "wall_seconds" : 0.002103
             },
             {
                "entry_sha256" : "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 38864,
+               "peak_rss_kib" : 38880,
                "route" : "suffix_projection",
                "stderr_sha256" : "5a511b9ace6c5b6e56e3cb5266a12315b94102c4439f714268406eef6520fcda",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "bin/src/main.rs",
-               "wall_seconds" : 0.131641
+               "wall_seconds" : 0.133306
             },
             {
                "entry_sha256" : "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5540,
+               "peak_rss_kib" : 5544,
                "route" : "original_suffix",
                "stderr_sha256" : "6c077bd9d3f3ddf7b4272ee7183242c23fa8a77a2d0212dfba601bb1b82481f8",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "lib/src/lib.rs",
-               "wall_seconds" : 0.001633
+               "wall_seconds" : 0.001401
             },
             {
                "entry_sha256" : "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 35840,
+               "peak_rss_kib" : 36264,
                "route" : "suffix_projection",
                "stderr_sha256" : "4a94594ccc6f875d67e35105a6b479f997764d9fa831195a8ab1cce128447579",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "lib/src/lib.rs",
-               "wall_seconds" : 0.075628
+               "wall_seconds" : 0.07621
             },
             {
                "entry_sha256" : "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5540,
+               "peak_rss_kib" : 5544,
                "route" : "original_suffix",
                "stderr_sha256" : "a9f468a468db306f90ff1c8629d09a0a9e63bc215ad0f16255d5b664965a7b6c",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "command/src/lib.rs",
-               "wall_seconds" : 0.002545
+               "wall_seconds" : 0.00173
             },
             {
                "entry_sha256" : "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 40300,
+               "peak_rss_kib" : 40724,
                "route" : "suffix_projection",
-               "stderr_sha256" : "00e28742768ca05d67e1137952c8b360c10e4ed76b356fa42a4f85c55e17a311",
+               "stderr_sha256" : "cd5e4bef608e1e72cb950d0eb30bc4c3d4be181ff9ac0f0ecfae0b7c3a8804c3",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "command/src/lib.rs",
-               "wall_seconds" : 0.179557
+               "wall_seconds" : 0.179301
             },
             {
                "entry_sha256" : "8a8900e43c1479621cabd4e27575bdc49624d5c43469a754dc2b6bd5272efa78",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5540,
+               "peak_rss_kib" : 5544,
                "route" : "original_suffix",
                "stderr_sha256" : "a00167481ac5fad74f5a5729cc5c94ae44f197d913df9a7a953f1767f9b210f3",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "e2e/src/lib.rs",
-               "wall_seconds" : 0.001421
+               "wall_seconds" : 0.002159
             },
             {
                "entry_sha256" : "8a8900e43c1479621cabd4e27575bdc49624d5c43469a754dc2b6bd5272efa78",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 33632,
+               "peak_rss_kib" : 36212,
                "route" : "suffix_projection",
                "stderr_sha256" : "146fbabe3156eed526d9105f8f0984bc3dcd5f6c62e120f5988aa6c13f99075e",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "e2e/src/lib.rs",
-               "wall_seconds" : 0.089881
+               "wall_seconds" : 0.086053
             }
          ],
-         "observed_at_utc" : "2026-11-17T21:05:11Z",
+         "observed_at_utc" : "2026-11-17T22:28:13Z",
          "old_site_counts" : [
             {
                "baseline_rank" : 14,
@@ -1000,9 +1026,9 @@
                "baseline_rank" : 6,
                "baseline_sites" : 2,
                "changed_diagnostic_sites" : 0,
-               "exact_surviving_sites" : 1,
+               "exact_surviving_sites" : 0,
                "id" : "compile_time_evaluation",
-               "not_observed_sites" : 1,
+               "not_observed_sites" : 2,
                "owner" : "language",
                "title" : "compile_time_evaluation"
             },
@@ -1136,8 +1162,8 @@
             "version" : "1.0.6"
          },
          "probe_receipt" : {
-            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-const-fn-ef0da37e0c7b7df5.json",
-            "sha256" : "ee6ac466ca5d7f2dc4c86cb9fddd790bb7bb4072ebf40107cc1b5aef2a63c513"
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-const-generics-8a2ccb3776838d39.json",
+            "sha256" : "31dc54ae20c34168567b076776bd1d3b4e07d6c43cb0ee973484383b8549ec03"
          },
          "projection_manifest_sha256" : "3ad1b9efdc73fb42f61aa3cb5d0dfaf1edea4d5fecf68e4b48e4cedd01db38b0",
          "ranked_causes" : [
@@ -1387,17 +1413,6 @@
             },
             {
                "affected_files" : [
-                  "command/src/scm_socket.rs"
-               ],
-               "baseline_rank" : 6,
-               "id" : "compile_time_evaluation",
-               "overlapping_file_physical_lines" : 402,
-               "owner" : "language",
-               "site_count" : 1,
-               "title" : "compile_time_evaluation"
-            },
-            {
-               "affected_files" : [
                   "e2e/src/mock/https_client.rs"
                ],
                "baseline_rank" : 16,
@@ -1426,418 +1441,146 @@
                "line_text" : "        I1: Iterator<Item = (K, &'a V)>,"
             }
          ],
-         "rerank_payload_sha256" : "17570ab76593d7fc4054ebfadf4b77627c6f5b655720a250a52ba566778cb03d",
+         "rerank_payload_sha256" : "d57fd2ec281e7637b04a806a74401a1d5ee7cd3a406ee7cba34337f6534228a0",
          "review" : {
             "changed_primary_diagnostics" : 0,
             "changed_recovery_rows" : 0,
             "new_independent_primary_sites" : 0,
-            "path" : "docs/real-programs-const-fn-sozu-review.json",
+            "path" : "docs/real-programs-const-generics-sozu-review.json",
             "reviewed_primary_sites" : 0,
-            "sha256" : "c604e968a509bd57dbb6e278da2e5af3135632becd941f563600f34cc4d4acfe",
+            "sha256" : "8eb7d5634901e374411fc2a6cf73afca0f141e6afe1373341541a8cea87d4e02",
             "unchanged_recovery_rows" : 0
          }
       }
    },
-   "stage" : "bounded_const_fn_gated",
+   "stage" : "const_generics_gated",
    "stage_source_review" : {
-      "interpretation" : "All new and retained identities were compared against unchanged source bytes. No new diagnostics or recovery exclusions arose; missing header diagnostics are observational, not whole-function admission.",
-      "remaining_sozu_compile_time_site" : {
-         "code" : "E_UNSUPPORTED",
-         "column" : 39,
-         "line" : 111,
-         "message" : "unsupported construct: non-literal array length",
-         "path" : "command/src/scm_socket.rs",
-         "source" : "let mut received_fds: [RawFd; MAX_FDS_OUT] = [0; MAX_FDS_OUT];"
-      },
-      "removed_const_header_sites" : [
-         {
-            "baseline_cause" : "const_functions",
-            "column" : 9,
-            "current_diagnostic_keys_at_coordinate" : [],
-            "current_state" : "not_observed",
-            "file_sha256" : "45d039636ca7089903cba492baf370592fdec3a6fea1b2f8d574984f45c0aa4d",
-            "line" : 126,
-            "line_text" : "    pub const fn root_id(&self) -> NodeId {",
-            "old_diagnostic_keys" : [
-               "[\"src/dom_tree/tree.rs\",126,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
+      "compiler_sha256" : "8a2ccb3776838d39bb86a5e4c690ab5fc759a7e45f0408f69ba3e3934d5b191e",
+      "first_gate_repair" : {
+         "argument_ownership" : "The source frontend records the written generic-argument owner and final-segment flag, validates that owner in its original lexical scope before constructor/call selection, and routes receiver versus method arguments using syntax provenance. Modules cannot own generic arguments. Explicit inference occurrences have distinct identities and exact locations while retaining their refusal boundary.",
+         "failed_compiler_sha256" : "0b8833f626792d06adccd96626f72e1492b6e5a70333213f5ca2570502c47dd6",
+         "failed_gate_status" : "failed",
+         "failed_source_anchor" : "3331ad7bba08dab2f0d69ea1d2d2bec15aae9bca",
+         "independent_session_repeat" : {
+            "after" : {
+               "path" : "/home/coder/workspace/lkjscript-programs-const-generics-landing-20261118/tests/diagnostics/programs_foreign_session_array_len.lkj",
+               "sha256" : "65c0eb84c078fc14286799ce9ee49785ffbc5d988455a9ecc91b2df1e4b2b56b",
+               "text" : "// expect: check\n// usize-suffixed literal repeat lengths use the ordinary fixed-array contract.\npub fn probe() -> [u8; 4] { [19u8; 4usize] }\n"
+            },
+            "before" : {
+               "sha256" : "63c8791cadadd31e03aaa82153c0b110a8ae67120d4e9c507a4cdc557608caa0",
+               "source_anchor" : "3331ad7bba08dab2f0d69ea1d2d2bec15aae9bca",
+               "text" : "// expect: reject E_TYPE\n// cause: bad message.\n// pending: The repeat length is an integer literal; say that its usize suffix is rejected and suggest an unsuffixed literal.\npub fn probe() -> [u8; 4] { [19u8; 4usize] }\n"
+            },
+            "body_byte_identical" : true,
+            "body_sha256" : "f9562be3763cfca1585182aad1e9580d2ba02f298555ecf3a7f9ecface8915d8",
+            "cohort" : "Independent session diagnostic fixture, outside the original 15 foreign reductions and outside large-root census admission.",
+            "engine_checks" : {
+               "cases" : 1,
+               "log" : {
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/repaired-repeat-engines.log",
+                  "sha256" : "67f90f3e5ef99c4bd6881007424005bdb6c8ca8198a2d1c5a6403935a1c78f51"
+               },
+               "routes" : 2
+            },
+            "failed_gate_lines" : [
+               "FAIL tests/diagnostics/programs_foreign_session_array_len.lkj native: expected E_TYPE, checker accepted",
+               "FAIL tests/diagnostics/programs_foreign_session_array_len.lkj interpreter: expected E_TYPE, checker accepted"
             ],
-            "package" : "dom",
-            "path" : "src/dom_tree/tree.rs",
-            "previous_state" : "exact_diagnostic_survives"
+            "fixture" : "tests/diagnostics/programs_foreign_session_array_len.lkj",
+            "id" : "suffixed_literal_repeat_expectation",
+            "included_in_original_15_reduction_cohort" : false,
+            "large_root_admission_credit" : false,
+            "producer_sha256" : "8a2ccb3776838d39bb86a5e4c690ab5fc759a7e45f0408f69ba3e3934d5b191e",
+            "reason" : "The usize-suffixed literal repeat [19u8; 4usize] now uses the ordinary fixed-array contract; the stale expected E_TYPE refusal and pending diagnostic marker are replaced by expect: check.",
+            "rust_library_metadata" : {
+               "log" : {
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/repaired-repeat-rust.log",
+                  "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+               },
+               "status" : "passed"
+            },
+            "status" : "passed_on_repaired_native_and_as_rust_library_metadata"
          },
-         {
-            "baseline_cause" : "const_functions",
-            "column" : 16,
-            "current_diagnostic_keys_at_coordinate" : [],
-            "current_state" : "not_observed",
-            "file_sha256" : "a629710b53af233a04d3a4264f6a4d35208f41d4e5b631a9a4df5538d3cf3f50",
-            "line" : 30,
-            "line_text" : "    pub(crate) const fn new(value: usize) -> Self {",
-            "old_diagnostic_keys" : [
-               "[\"src/node.rs\",30,16,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
-            ],
-            "package" : "dom",
-            "path" : "src/node.rs",
-            "previous_state" : "exact_diagnostic_survives"
+         "repair_readme" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/argument-placement-repair/README.md",
+            "sha256" : "cf9af95cc97efade9415642c230c81e4e4b64e84aae5d2cd3e537d8e687ce858"
          },
-         {
-            "baseline_cause" : "const_functions",
-            "column" : 9,
-            "current_diagnostic_keys_at_coordinate" : [],
-            "current_state" : "not_observed",
-            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
-            "line" : 101,
-            "line_text" : "    pub const fn as_element(&self) -> Option<&Element> {",
-            "old_diagnostic_keys" : [
-               "[\"src/node/inner.rs\",101,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
-            ],
-            "package" : "dom",
-            "path" : "src/node/inner.rs",
-            "previous_state" : "exact_diagnostic_survives"
-         },
-         {
-            "baseline_cause" : "const_functions",
-            "column" : 16,
-            "current_diagnostic_keys_at_coordinate" : [],
-            "current_state" : "not_observed",
-            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
-            "line" : 27,
-            "line_text" : "    pub(crate) const fn new(id: NodeId, data: NodeData) -> Self {",
-            "old_diagnostic_keys" : [
-               "[\"src/node/inner.rs\",27,16,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
-            ],
-            "package" : "dom",
-            "path" : "src/node/inner.rs",
-            "previous_state" : "exact_diagnostic_survives"
-         },
-         {
-            "baseline_cause" : "const_functions",
-            "column" : 9,
-            "current_diagnostic_keys_at_coordinate" : [],
-            "current_state" : "not_observed",
-            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
-            "line" : 60,
-            "line_text" : "    pub const fn is_document(&self) -> bool {",
-            "old_diagnostic_keys" : [
-               "[\"src/node/inner.rs\",60,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
-            ],
-            "package" : "dom",
-            "path" : "src/node/inner.rs",
-            "previous_state" : "exact_diagnostic_survives"
-         },
-         {
-            "baseline_cause" : "const_functions",
-            "column" : 9,
-            "current_diagnostic_keys_at_coordinate" : [],
-            "current_state" : "not_observed",
-            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
-            "line" : 65,
-            "line_text" : "    pub const fn is_element(&self) -> bool {",
-            "old_diagnostic_keys" : [
-               "[\"src/node/inner.rs\",65,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
-            ],
-            "package" : "dom",
-            "path" : "src/node/inner.rs",
-            "previous_state" : "exact_diagnostic_survives"
-         },
-         {
-            "baseline_cause" : "const_functions",
-            "column" : 9,
-            "current_diagnostic_keys_at_coordinate" : [],
-            "current_state" : "not_observed",
-            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
-            "line" : 70,
-            "line_text" : "    pub const fn is_text(&self) -> bool {",
-            "old_diagnostic_keys" : [
-               "[\"src/node/inner.rs\",70,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
-            ],
-            "package" : "dom",
-            "path" : "src/node/inner.rs",
-            "previous_state" : "exact_diagnostic_survives"
-         },
-         {
-            "baseline_cause" : "const_functions",
-            "column" : 9,
-            "current_diagnostic_keys_at_coordinate" : [],
-            "current_state" : "not_observed",
-            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
-            "line" : 75,
-            "line_text" : "    pub const fn is_comment(&self) -> bool {",
-            "old_diagnostic_keys" : [
-               "[\"src/node/inner.rs\",75,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
-            ],
-            "package" : "dom",
-            "path" : "src/node/inner.rs",
-            "previous_state" : "exact_diagnostic_survives"
-         },
-         {
-            "baseline_cause" : "const_functions",
-            "column" : 9,
-            "current_diagnostic_keys_at_coordinate" : [],
-            "current_state" : "not_observed",
-            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
-            "line" : 80,
-            "line_text" : "    pub const fn is_fragment(&self) -> bool {",
-            "old_diagnostic_keys" : [
-               "[\"src/node/inner.rs\",80,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
-            ],
-            "package" : "dom",
-            "path" : "src/node/inner.rs",
-            "previous_state" : "exact_diagnostic_survives"
-         },
-         {
-            "baseline_cause" : "const_functions",
-            "column" : 9,
-            "current_diagnostic_keys_at_coordinate" : [],
-            "current_state" : "not_observed",
-            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
-            "line" : 85,
-            "line_text" : "    pub const fn is_doctype(&self) -> bool {",
-            "old_diagnostic_keys" : [
-               "[\"src/node/inner.rs\",85,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
-            ],
-            "package" : "dom",
-            "path" : "src/node/inner.rs",
-            "previous_state" : "exact_diagnostic_survives"
-         },
-         {
-            "baseline_cause" : "const_functions",
-            "column" : 9,
-            "current_diagnostic_keys_at_coordinate" : [],
-            "current_state" : "not_observed",
-            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
-            "line" : 90,
-            "line_text" : "    pub const fn may_have_children(&self) -> bool {",
-            "old_diagnostic_keys" : [
-               "[\"src/node/inner.rs\",90,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
-            ],
-            "package" : "dom",
-            "path" : "src/node/inner.rs",
-            "previous_state" : "exact_diagnostic_survives"
-         },
-         {
-            "baseline_cause" : "const_functions",
-            "column" : 9,
-            "current_diagnostic_keys_at_coordinate" : [],
-            "current_state" : "not_observed",
-            "file_sha256" : "74462c1319fd372fb98867e396adcdb89e85b04dd0efb1122582390a55aa1a84",
-            "line" : 44,
-            "line_text" : "    pub const fn new(id: NodeId, tree: &'a Tree) -> Self {",
-            "old_diagnostic_keys" : [
-               "[\"src/node/node_ref.rs\",44,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
-            ],
-            "package" : "dom",
-            "path" : "src/node/node_ref.rs",
-            "previous_state" : "exact_diagnostic_survives"
-         },
-         {
-            "baseline_cause" : "const_functions",
-            "column" : 7,
-            "current_diagnostic_keys_at_coordinate" : [],
-            "current_state" : "not_observed",
-            "file_sha256" : "3decd34d73e7a8ed7e09edc24823370baeb328cc006e83c99fed978281e319e7",
-            "line" : 124,
-            "line_text" : "const fn elem_require_linebreak(name: &QualName) -> bool {",
-            "old_diagnostic_keys" : [
-               "[\"src/node/text_formatting.rs\",124,7,\"E_UNSUPPORTED\",\"unsupported construct: const fn\"]"
-            ],
-            "package" : "dom",
-            "path" : "src/node/text_formatting.rs",
-            "previous_state" : "exact_diagnostic_survives"
-         },
-         {
-            "baseline_cause" : "const_functions",
-            "column" : 5,
-            "current_diagnostic_keys_at_coordinate" : [],
-            "current_state" : "not_observed",
-            "file_sha256" : "6c8c45408ccb02f813709f93b118bdf4e174640968a41a2d0d531b53ad60027a",
-            "line" : 900,
-            "line_text" : "    const fn new(iter: IntoIter<I>) -> Self {",
-            "old_diagnostic_keys" : [
-               "[\"src/selection.rs\",900,5,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
-            ],
-            "package" : "dom",
-            "path" : "src/selection.rs",
-            "previous_state" : "exact_diagnostic_survives"
-         },
-         {
-            "baseline_cause" : "compile_time_evaluation",
-            "column" : 11,
-            "current_diagnostic_keys_at_coordinate" : [],
-            "current_state" : "not_observed",
-            "file_sha256" : "985f5e84ff8cb0db7268ac1ce13a7f9e99f26d31ebbc3fd94c8b6b3cf0edaeb8",
-            "line" : 461,
-            "line_text" : "pub const fn delimiter_size() -> usize {",
-            "old_diagnostic_keys" : [
-               "[\"command/src/channel.rs\",461,11,\"E_UNSUPPORTED\",\"unsupported construct: const fn\"]"
-            ],
-            "package" : "sozu",
-            "path" : "command/src/channel.rs",
-            "previous_state" : "exact_diagnostic_survives"
+         "source_patch" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/argument-placement-repair/source.patch",
+            "sha256" : "ecf5bbe475f68fdc9e6e7935a2cd3246e45e4478fff59e1b4706a4069e40a269"
          }
+      },
+      "masked_global_constant_boundary" : {
+         "admission_credit" : false,
+         "expected_later_diagnostic" : {
+            "code" : "E_TYPE",
+            "message" : "array length requires a declared const usize parameter or usize literal",
+            "observed_in_current_roots" : false
+         },
+         "language_contract" : {
+            "first_line" : 267,
+            "last_line" : 300,
+            "path" : "/home/coder/workspace/lkjscript-programs-const-generics-landing-20261118/docs/language.md",
+            "sha256" : "150745a576775093cebb95dc656a73f12573c252f8e97ec17d4907e09ed50840",
+            "text" : "Const `usize` parameters are supported on free functions, inherent functions and\nimplementation blocks whose receiver contains each const parameter. They can\nappear as standalone array lengths, repeat counts, ordinary `usize` expressions\nand explicit function/method arguments. Calls infer const values from array\narguments or use decimal `usize` literals and in-scope const parameters. Mixed\ntype/const parameters, borrowed array receivers, associated array results,\nrecursive calls and opaque-result captures retain the same parameter identity.\nStatic methods on non-generic receivers accept explicit method arguments.\n\nDefinition checking keeps each symbolic count distinct from every literal and\nfrom sibling parameters, including unused definitions and conditional branches.\nAn implementation for `[T; 0]` supplies no evidence for `[T; N]`; comparing `N`\nwith zero does not establish type equality. A symbolic array repeat requires\n`Copy` even when a later call chooses zero or one. Overlap checking treats const\nvariables independently from type variables. Specialization emits existing\nconcrete arrays, repeats and integer values; there is no new checked-IR type,\noperation or proof rule. The private storage used during discarded definition\nchecking never establishes an array length equality.\n\nConst parameter types must resolve to the builtin `usize`. Other const types,\nconst defaults, arithmetic/braced const arguments and array lengths, const\nparameters on nominal types/aliases/trait declarations or trait methods, and\nmodule constants used as array lengths remain located source boundaries.\nWhere predicates whose written target contains a symbolic array length also\nremain a located boundary: the current predicate engine introduces assumptions\nfor direct rigid types, while compound targets require concrete trait evidence.\nQueries retain written const parameters and symbolic array lengths, report const\nparameters as `usize`, and identify references in both type and value positions.\nChecked const-parameter renames update those references when the replacement\nspelling is fresh in the complete enclosing item and all use sites are exact.\nAmbiguous or capturing renames retain a located refusal. Checked body edits\nrevalidate symbolic identities before committing source changes.\n[Const array cases](../tests/conformance/pass/const_generic_arrays.lkj),\n[const receiver cases](../tests/conformance/pass/const_generic_borrowed.lkj),"
+         },
+         "observed_site" : {
+            "column" : 39,
+            "line" : 111,
+            "path" : "command/src/scm_socket.rs"
+         },
+         "scope_lookup" : {
+            "first_line" : 98,
+            "last_line" : 113,
+            "path" : "/home/coder/workspace/lkjscript-programs-const-generics-landing-20261118/src/generics/const_arguments.lkj",
+            "sha256" : "9925c2ad7c0f581cf2c0bd1bf11c0c92afc6c51038492ed467bd0d008922ee1b",
+            "text" : "pub(crate) fn declared(source: &a::Program, span: a::Span, name: &str) -> bool {\n    for function in &source.functions {\n        if contains(function.span, span) && function.generics.iter().any(|parameter|\n            parameter.constant && parameter.name == name) { return true; }\n    }\n    for implementation in &source.impls {\n        if contains(implementation.span, span) && implementation.generics.iter().any(|parameter|\n            parameter.constant && parameter.name == name) { return true; }\n    }\n    false\n}\n\nfn target_uses(source: &a::Program, target: a::TypeId, name: &str) -> bool {\n    let mut pending = vec![target];\n    while let Some(id) = pending.pop() {\n        match &source.types[id].kind {"
+         },
+         "source" : {
+            "first_line" : 14,
+            "last_line" : 17,
+            "path" : "/home/coder/workspace/lkjscript-specimens/sozu-1.0.6/command/src/scm_socket.rs",
+            "sha256" : "755d34e38d30f4e26f764cb7498cacc3fcee207137e3878d91f205da70ee78f5",
+            "text" : "use crate::proto::command::ListenersCount;\n\npub const MAX_FDS_OUT: usize = 200;\npub const MAX_BYTES_OUT: usize = 4096;"
+         },
+         "validation" : {
+            "first_line" : 141,
+            "last_line" : 149,
+            "path" : "/home/coder/workspace/lkjscript-programs-const-generics-landing-20261118/src/generics/const_arguments.lkj",
+            "sha256" : "9925c2ad7c0f581cf2c0bd1bf11c0c92afc6c51038492ed467bd0d008922ee1b",
+            "text" : "fn validate_uses(source: &a::Program) -> Result<(), a::Diagnostic> {\n\n    for (id, node) in source.types.iter().enumerate() {\n        if let a::Type::Array { len, .. } = &node.kind {\n            if literal(len).is_none() && !declared(source, node.span, len) {\n                let span = source.array_length_spans.get(&id).copied().unwrap_or(node.span);\n                return Err(a::Diagnostic::new(span, \"E_TYPE\", \"array length requires a declared const usize parameter or usize literal\"));\n            }\n        }"
+         }
+      },
+      "new_primary_sites" : [],
+      "nom_module_feasibility" : {
+         "evidence" : {
+            "path" : "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/nom-module-feasibility-evidence.json",
+            "sha256" : "34506db0f277f6729a2ff333d5a635eca5abea44e2c2b6a717d9a73613dc46a6"
+         },
+         "path" : "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/nom-module-feasibility.md",
+         "scope" : "Read-only source-dependency analysis anchored to the published const-fn stage; no module admission or own-test execution was attempted.",
+         "sha256" : "43c737fab885db0486e705286de6e1dcebc26d97daff53735bd9c53b40963a9d"
+      },
+      "notes" : [
+         "All six nom removals are exact const-generic header diagnostics in unchanged src/traits.rs. Their disappearance does not establish admission of any surrounding implementation or module.",
+         "AsBytes at 646 and 653 has a const-bearing array receiver. Compare at 1099 and 1111 instead has N only in the positional trait argument; the current contract requires every implementation const parameter in its receiver and does not support these positional trait contracts. FindToken at 1123 and 1129 has an array receiver but still needs positional generic-trait support.",
+         "Sozu MAX_FDS_OUT is declared as a module constant at command/src/scm_socket.rs:16. Its old nonliteral array-length parser diagnostic at 111:39 disappears. Parsing the identifier is progress only: global/module constant array lengths remain unsupported by the later const-argument validator, whose located E_TYPE is masked by surviving earlier parser/macro barriers in these root observations.",
+         "No current recovery rows or new diagnostic identities arise. The 187-entry historical review bank is pruned to exact current primary identities (nom 4, DOM 2); its historical recovery rows are not current exclusions.",
+         "No large root or real nom module tree was admitted or attempted separately. No nom own test has run under lkjscript. The separate feasibility note is source-dependency analysis only.",
+         "All twelve repaired observations were measured byte-identical to the failed const-generics candidate. The unchanged foreign frontier is separate from the source repair and its focused admission/refusal controls."
       ],
-      "retained_body_refusal" : {
-         "cause" : "foreign_atom_macros",
-         "code" : "E_PARSE",
-         "column" : 19,
-         "interpretation" : "This exact macro-pattern primary already existed in the frozen baseline and survives after the const header disappears.",
-         "line" : 127,
-         "message" : "expected `)`, found `!`",
-         "package" : "dom",
-         "path" : "src/node/text_formatting.rs",
-         "source" : "local_name!(\"article\")"
-      },
-      "review_bank" : {
-         "input" : "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/review-bank-through-const-fn.json",
-         "new_review_identities" : 0,
-         "recovery_rows_carried" : 0,
-         "retained_primary_reviews" : {
-            "dom" : 2,
-            "nom" : 4,
-            "sozu" : 0
-         },
-         "sha256" : "81749ef22970a29d29260a87e63c8eedba9b0c5a1c34e37a135fb73e7849bdf3"
-      },
-      "sozu_removed_header" : {
-         "body" : "std::mem::size_of::<usize>()",
-         "column" : 11,
-         "interpretation" : "Only the old const-fn header refusal disappears. The surrounding original function and its size_of call are not claimed admitted.",
-         "line" : 461,
-         "path" : "command/src/channel.rs"
-      }
-   },
-   "validation" : {
-      "admitted_projected_roots" : 0,
-      "cache_fingerprint_repair" : {
-         "change" : "Remove only the redundant const_qualified topology word; raw header source bytes continue to distinguish const qualification.",
-         "foreign_observations" : "All12 complete observation identities are byte-identical to the previous candidate.",
-         "golden_vectors_changed" : false,
-         "qualifier_only_control" : {
-            "checks" : [
-               "The checked edit adds exactly one const qualifier and leaves all other source bytes unchanged",
-               "Source meaning changes from fn(i64) -> i64 to const fn(i64) -> i64",
-               "The first qualified nonindexed build has build_reused=0 and front_reused=0",
-               "A repeated qualified build reuses its result; both engines preserve the expected value"
-            ],
-            "proof" : {
-               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/focused-query.log",
-               "sha256" : "1e34a6bce35a9a955503ff6efa3ee9c826e1508d2225e310df4f23eca6676379"
-            },
-            "status" : "passed"
-         },
-         "source_anchor" : "bf27336098ce10ad6125df2cdb441661592e8ed0",
-         "source_diff" : {
-            "path" : "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/const-fn-ef0da37e/cache-repair.patch",
-            "sha256" : "353d2496a33a0433ddb352416118d3e09bd3ba466d01a0b533f7e8ebc10e019c"
-         },
-         "standalone_fixed_vector_regression" : {
-            "build_log" : {
-               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/repaired-semantic-build.log",
-               "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-            },
-            "closed_entries" : 5,
-            "command" : "LKJSCRIPT_GATE_JOBS=1 bash tools/closed-semantics.sh target/lkjscript structure",
-            "fresh_case_requests" : 734,
-            "log" : {
-               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/repaired-semantic-structure.log",
-               "sha256" : "bcbfdc065f31723505ede3783fbd5872e452b084cc8f8e894c68b9fdad5f4c96"
-            },
-            "status" : "passed"
-         }
-      },
-      "fixed_point" : {
-         "bootstrap_log" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/bootstrap-repaired.log",
-            "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
-         },
-         "candidate_self_rebuild" : "byte_identical",
-         "gate_bootstrap_log" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/bootstrap-gate.log",
-            "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
-         },
-         "matching_seed" : "refreshed",
-         "producer_and_seed" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/producer-and-seed.sha256",
-            "sha256" : "891f7c49ce70d6b972b4e542f5129b67ec68f55b35989e968b6adcd6f9dc6ebd"
-         },
-         "refreshed_seed_bootstrap" : "passed_byte_identical",
-         "seed_sha256" : "c32cc5f2fcea52eef09fcad651aaf627b419d507b354509cdd0e96db08c274e4",
-         "source_anchor" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/source-anchor.txt",
-            "sha256" : "3a488c9006cc4141eee509e11cab9f743d6854c24a8ed6f8d8dc5f4872b6fbe7"
-         }
-      },
-      "focused_case_scope" : "42 const-function cases: two compiler engines and a separate Rust witness invocation; 14 Rust value/output cases and 28 Rust verdicts.",
-      "focused_cases" : 42,
-      "focused_engine_route_checks" : 84,
-      "focused_logs" : {
-         "engines" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/focused-engines.log",
-            "sha256" : "45e0fb6f6cd2bf7894cc6178360e58b1407590d32be440cc4e7bbc5ac71a496a"
-         },
-         "rust" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/focused-rust.log",
-            "sha256" : "32fb6fea6db4283f7f07990352de42f631d4d0444cade89ebe476d227a540c7a"
-         }
-      },
-      "focused_producer" : "Native fixed-point producer ef0da37e0c7b7df55dc63d75b440097ae45773cbea8699384894523a14a1f58f; the separate historical Rust-hosted build is not a fresh build proof for this repaired source.",
-      "focused_result" : "passed",
-      "focused_route_checks" : 126,
-      "focused_rust_route_checks" : 42,
-      "foreign_reduction_cohort" : {
-         "cases" : 15,
-         "change_in_this_stage" : false,
-         "checking" : 5,
-         "refusing" : 10,
-         "scope" : "The original cohort has no const-fn reduction. Const-generic nominal and associated-constant reductions are unchanged; the 42 focused const-function cases are a separate cohort."
-      },
-      "full_gate" : {
-         "command" : "LKJSCRIPT_GATE_JOBS=4 bash tools/check.sh",
-         "elapsed_seconds" : 741.616,
-         "fresh_case_requests" : 5851,
-         "ir_mutation" : {
-            "findings" : 0,
-            "log" : {
-               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/ir-mutation.log",
-               "sha256" : "d66cc7f6db08e5f4840f484afe120806a5972c14eefbb7852cd843617869cb50"
-            },
-            "mutants" : 128
-         },
-         "log" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/full-gate.log",
-            "sha256" : "521a9248f18ba92e077a00143a50850aa48d8a29771eb09b7cd56d8b2ae4d095"
-         },
-         "log_archive" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/gate-logs.tar.gz",
-            "sha256" : "ecbf1495ec083096f4225fce86f65e5fbc9a534d900906c63cb18893d4eaee8e"
-         },
-         "reused_case_requests" : 0,
-         "status" : "passed",
-         "workers" : 4
-      },
-      "nom_own_tests_run_under_lkjscript" : 0,
-      "observations" : 12,
-      "predecessor_diagnostic_comparison" : {
-         "changed" : [
-            {
-               "package" : "dom",
-               "route" : "suffix_projection",
-               "upstream_entry" : "src/lib.rs"
-            },
-            {
-               "package" : "sozu",
-               "route" : "suffix_projection",
-               "upstream_entry" : "command/src/lib.rs"
-            }
-         ],
-         "current_compiler_sha256" : "ef0da37e0c7b7df55dc63d75b440097ae45773cbea8699384894523a14a1f58f",
+      "predecessor_commit" : "36dc6f8c3dd09d47f6fce8af0abe04d9b5c742ff",
+      "previous_candidate_diagnostic_comparison" : {
+         "changed" : [],
+         "current_compiler_sha256" : "8a2ccb3776838d39bb86a5e4c690ab5fc759a7e45f0408f69ba3e3934d5b191e",
          "identity_fields" : [
             "exit_status",
             "launcher_signal",
             "stdout.sha256",
             "stderr.sha256"
          ],
-         "previous_compiler_sha256" : "7560e8c6ecd95da2943fc1c424a70ad0109af4fc54df82ebd1b417a755ea82cf",
+         "previous_compiler_sha256" : "0b8833f626792d06adccd96626f72e1492b6e5a70333213f5ca2570502c47dd6",
          "unchanged" : [
             {
                "package" : "nom",
@@ -1852,6 +1595,457 @@
             {
                "package" : "dom",
                "route" : "original_suffix",
+               "upstream_entry" : "src/lib.rs"
+            },
+            {
+               "package" : "dom",
+               "route" : "suffix_projection",
+               "upstream_entry" : "src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "original_suffix",
+               "upstream_entry" : "bin/src/main.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "suffix_projection",
+               "upstream_entry" : "bin/src/main.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "original_suffix",
+               "upstream_entry" : "lib/src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "suffix_projection",
+               "upstream_entry" : "lib/src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "original_suffix",
+               "upstream_entry" : "command/src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "suffix_projection",
+               "upstream_entry" : "command/src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "original_suffix",
+               "upstream_entry" : "e2e/src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "suffix_projection",
+               "upstream_entry" : "e2e/src/lib.rs"
+            }
+         ]
+      },
+      "removed_primary_sites" : [
+         {
+            "cause" : "const_generics",
+            "code" : "E_UNSUPPORTED",
+            "column" : 10,
+            "current_diagnostics_at_coordinate" : [],
+            "diagnostic_index" : 12,
+            "line" : 1099,
+            "message" : "unsupported construct: const generic parameters",
+            "observed_roots" : [
+               "src/lib.rs"
+            ],
+            "package" : "nom",
+            "partition" : "default_candidate",
+            "path" : "src/traits.rs",
+            "raw" : "src/traits.lkj:1099:10: E_UNSUPPORTED unsupported construct: const generic parameters",
+            "root" : "src/lib.rs",
+            "site_id" : "const_generics:src/traits.rs:1099:10",
+            "source" : {
+               "byte_offset" : 27624,
+               "file_bytes" : 40731,
+               "file_physical_lines" : 1681,
+               "file_sha256" : "3bcc85e2272c75dfcd915d1be5e68243c3ac3282f36530021b31ce6f02ddca65",
+               "line_sha256" : "f751a44bbf050d076ec0616ac31d42beae393dfde5ae4ec815eb03dcf925bd9c",
+               "line_text" : "impl<'a, const N: usize> Compare<[u8; N]> for &'a [u8] {"
+            }
+         },
+         {
+            "cause" : "const_generics",
+            "code" : "E_UNSUPPORTED",
+            "column" : 14,
+            "current_diagnostics_at_coordinate" : [],
+            "diagnostic_index" : 13,
+            "line" : 1111,
+            "message" : "unsupported construct: const generic parameters",
+            "observed_roots" : [
+               "src/lib.rs"
+            ],
+            "package" : "nom",
+            "partition" : "default_candidate",
+            "path" : "src/traits.rs",
+            "raw" : "src/traits.lkj:1111:14: E_UNSUPPORTED unsupported construct: const generic parameters",
+            "root" : "src/lib.rs",
+            "site_id" : "const_generics:src/traits.rs:1111:14",
+            "source" : {
+               "byte_offset" : 27905,
+               "file_bytes" : 40731,
+               "file_physical_lines" : 1681,
+               "file_sha256" : "3bcc85e2272c75dfcd915d1be5e68243c3ac3282f36530021b31ce6f02ddca65",
+               "line_sha256" : "ce4c2945ab7f71c0c2c4fd1927da6211c94c143c0866e54adb07cacceb23756e",
+               "line_text" : "impl<'a, 'b, const N: usize> Compare<&'b [u8; N]> for &'a [u8] {"
+            }
+         },
+         {
+            "cause" : "const_generics",
+            "code" : "E_UNSUPPORTED",
+            "column" : 6,
+            "current_diagnostics_at_coordinate" : [],
+            "diagnostic_index" : 14,
+            "line" : 1123,
+            "message" : "unsupported construct: const generic parameters",
+            "observed_roots" : [
+               "src/lib.rs"
+            ],
+            "package" : "nom",
+            "partition" : "default_candidate",
+            "path" : "src/traits.rs",
+            "raw" : "src/traits.lkj:1123:6: E_UNSUPPORTED unsupported construct: const generic parameters",
+            "root" : "src/lib.rs",
+            "site_id" : "const_generics:src/traits.rs:1123:6",
+            "source" : {
+               "byte_offset" : 28190,
+               "file_bytes" : 40731,
+               "file_physical_lines" : 1681,
+               "file_sha256" : "3bcc85e2272c75dfcd915d1be5e68243c3ac3282f36530021b31ce6f02ddca65",
+               "line_sha256" : "60ff4f06954adabbac333f55fdd86f65d0386254f89bf62be601d6de3be55123",
+               "line_text" : "impl<const N: usize> FindToken<u8> for [u8; N] {"
+            }
+         },
+         {
+            "cause" : "const_generics",
+            "code" : "E_UNSUPPORTED",
+            "column" : 10,
+            "current_diagnostics_at_coordinate" : [],
+            "diagnostic_index" : 15,
+            "line" : 1129,
+            "message" : "unsupported construct: const generic parameters",
+            "observed_roots" : [
+               "src/lib.rs"
+            ],
+            "package" : "nom",
+            "partition" : "default_candidate",
+            "path" : "src/traits.rs",
+            "raw" : "src/traits.lkj:1129:10: E_UNSUPPORTED unsupported construct: const generic parameters",
+            "root" : "src/lib.rs",
+            "site_id" : "const_generics:src/traits.rs:1129:10",
+            "source" : {
+               "byte_offset" : 28341,
+               "file_bytes" : 40731,
+               "file_physical_lines" : 1681,
+               "file_sha256" : "3bcc85e2272c75dfcd915d1be5e68243c3ac3282f36530021b31ce6f02ddca65",
+               "line_sha256" : "4c4e140f605ca2e1e0c8325b422a4b8e4b4ba4d6051bfb324873f02ceec51424",
+               "line_text" : "impl<'a, const N: usize> FindToken<&'a u8> for [u8; N] {"
+            }
+         },
+         {
+            "cause" : "const_generics",
+            "code" : "E_UNSUPPORTED",
+            "column" : 10,
+            "current_diagnostics_at_coordinate" : [],
+            "diagnostic_index" : 10,
+            "line" : 646,
+            "message" : "unsupported construct: const generic parameters",
+            "observed_roots" : [
+               "src/lib.rs"
+            ],
+            "package" : "nom",
+            "partition" : "default_candidate",
+            "path" : "src/traits.rs",
+            "raw" : "src/traits.lkj:646:10: E_UNSUPPORTED unsupported construct: const generic parameters",
+            "root" : "src/lib.rs",
+            "site_id" : "const_generics:src/traits.rs:646:10",
+            "source" : {
+               "byte_offset" : 17351,
+               "file_bytes" : 40731,
+               "file_physical_lines" : 1681,
+               "file_sha256" : "3bcc85e2272c75dfcd915d1be5e68243c3ac3282f36530021b31ce6f02ddca65",
+               "line_sha256" : "e22ef9e9e753146a6d9ddc57d8009d2f760041d5c13a60df72a759255cde4aa1",
+               "line_text" : "impl<'a, const N: usize> AsBytes for &'a [u8; N] {"
+            }
+         },
+         {
+            "cause" : "const_generics",
+            "code" : "E_UNSUPPORTED",
+            "column" : 6,
+            "current_diagnostics_at_coordinate" : [],
+            "diagnostic_index" : 11,
+            "line" : 653,
+            "message" : "unsupported construct: const generic parameters",
+            "observed_roots" : [
+               "src/lib.rs"
+            ],
+            "package" : "nom",
+            "partition" : "default_candidate",
+            "path" : "src/traits.rs",
+            "raw" : "src/traits.lkj:653:6: E_UNSUPPORTED unsupported construct: const generic parameters",
+            "root" : "src/lib.rs",
+            "site_id" : "const_generics:src/traits.rs:653:6",
+            "source" : {
+               "byte_offset" : 17477,
+               "file_bytes" : 40731,
+               "file_physical_lines" : 1681,
+               "file_sha256" : "3bcc85e2272c75dfcd915d1be5e68243c3ac3282f36530021b31ce6f02ddca65",
+               "line_sha256" : "082644f2cebef26f349e24c47ca23674e2a2540672d1a4227fb2829f4f5606f9",
+               "line_text" : "impl<const N: usize> AsBytes for [u8; N] {"
+            }
+         },
+         {
+            "cause" : "compile_time_evaluation",
+            "code" : "E_UNSUPPORTED",
+            "column" : 39,
+            "current_diagnostics_at_coordinate" : [],
+            "diagnostic_index" : 14,
+            "line" : 111,
+            "message" : "unsupported construct: non-literal array length",
+            "observed_roots" : [
+               "command/src/lib.rs"
+            ],
+            "package" : "sozu",
+            "partition" : "observed_cause",
+            "path" : "command/src/scm_socket.rs",
+            "raw" : "command/src/scm_socket.lkj:111:39: E_UNSUPPORTED unsupported construct: non-literal array length",
+            "root" : "command/src/lib.rs",
+            "site_id" : "compile_time_evaluation:command/src/scm_socket.rs:111:39:E_UNSUPPORTED: unsupported construct: non-literal array length",
+            "source" : {
+               "byte_offset" : 3750,
+               "file_bytes" : 13460,
+               "file_physical_lines" : 402,
+               "file_sha256" : "755d34e38d30f4e26f764cb7498cacc3fcee207137e3878d91f205da70ee78f5",
+               "line_sha256" : "7ddf501ed9f68507d6dfa811eab3dc487ad9d695ced8aeeea8eb312786ef559e",
+               "line_text" : "        let mut received_fds: [RawFd; MAX_FDS_OUT] = [0; MAX_FDS_OUT];"
+            }
+         }
+      ],
+      "review_bank" : {
+         "historical_entries" : 187,
+         "input" : "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/review-bank-through-const-generics.json",
+         "new_review_identities" : 0,
+         "recovery_rows_carried" : 0,
+         "retained_primary_reviews" : {
+            "dom" : 2,
+            "nom" : 4,
+            "sozu" : 0
+         },
+         "sha256" : "0f712f59713e64e97a092c418ce1c73c7de958eb2244ab48709c8fcd9c1031c0"
+      },
+      "schema" : 1,
+      "source_anchor" : "626ced493dbb278c0719d05a7cb45267e98cb97e",
+      "source_semantic_edits" : 0,
+      "stage" : "const-generics"
+   },
+   "validation" : {
+      "admitted_projected_roots" : 0,
+      "argument_placement_repair" : {
+         "contract" : "The source frontend records the written generic-argument owner and final-segment flag, validates that owner in its original lexical scope before constructor/call selection, and routes receiver versus method arguments using syntax provenance. Modules cannot own generic arguments. Explicit inference occurrences have distinct identities and exact locations while retaining their refusal boundary.",
+         "focused_subset" : {
+            "cases" : 11,
+            "engine_routes" : 22,
+            "part_of_107" : true,
+            "rust_value_cases" : 2,
+            "rust_verdict_cases" : 9,
+            "scope" : "Eight Rust-negative placement/collision controls and one explicitly retained Rust-accepted inference boundary, plus two value cases. These are already included in the 107-case final proof."
+         },
+         "query_log" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/associated-query.log",
+            "sha256" : "5c960d3481dd07fe17c3af5c3b406e69d2c9b06852533796668255bf9fe4b292"
+         },
+         "readme" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/argument-placement-repair/README.md",
+            "sha256" : "cf9af95cc97efade9415642c230c81e4e4b64e84aae5d2cd3e537d8e687ce858"
+         },
+         "source_patch" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/argument-placement-repair/source.patch",
+            "sha256" : "ecf5bbe475f68fdc9e6e7935a2cd3246e45e4478fff59e1b4706a4069e40a269"
+         },
+         "status" : "passed_final_native_controls"
+      },
+      "fixed_point" : {
+         "bootstrap_elapsed_seconds" : 92.602,
+         "bootstrap_log" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/bootstrap.log",
+            "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
+         },
+         "candidate_self_rebuild" : "byte_identical",
+         "gate_bootstrap_log" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/bootstrap-gate.log",
+            "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
+         },
+         "matching_seed" : "refreshed",
+         "producer_and_seed" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/producer-and-seed.sha256",
+            "sha256" : "4c873f422adcb4fec0eee8494e981089b5e896c7cf5d953426198763a10c17e3"
+         },
+         "refreshed_seed_bootstrap" : "passed_byte_identical",
+         "seed_sha256" : "37137d2a8cf1f000fbc484f68a3f119cf4eee55e82618eeade9a6cf068e872e3",
+         "source_anchor" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/source-anchor.txt",
+            "sha256" : "6127b3b157d67236d4db52991f8374069311aac5afe0a30becfbd07881c0d103"
+         }
+      },
+      "focused_case_scope" : "107 total cases: 65 const-generics-family cases including argument-placement repairs, plus 42 const-function regressions. The 65-case population is contained in 107 and is not added again. Separate Rust witnesses cover 35 value/output cases and 72 verdicts.",
+      "focused_cases" : 107,
+      "focused_engine_route_checks" : 214,
+      "focused_logs" : {
+         "engines" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/focused-engines.log",
+            "sha256" : "7fbcfd5f3a3e890ae4c01f7017c890a2f1e15d16a2506767c2058cc32feb4749"
+         },
+         "rust" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/focused-rust.log",
+            "sha256" : "86c45f77caf0d0ea89b32326c40ba4996a89f3b9bb0ab2d905fd8a090f458d06"
+         }
+      },
+      "focused_producer" : "Final native fixed-point producer 8a2ccb3776838d39bb86a5e4c690ab5fc759a7e45f0408f69ba3e3934d5b191e for all 214 engine routes, source check, const-generics/associated/const-function query scripts and independent repeat/foreign-reduction engine checks. Separate Rust witnesses use the same merged source. Historical Rust-hosted repair logs are not substituted for these final-native proofs.",
+      "focused_proof_completed" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/repaired-proof-finished.txt",
+         "sha256" : "10a0264f9b2d9dd98eb6b42c954817d29bbdc0619232013d156c7e7dc495d8ae"
+      },
+      "focused_result" : "passed",
+      "focused_route_checks" : 321,
+      "focused_rust_route_checks" : 107,
+      "foreign_reduction_cohort" : {
+         "cases" : 15,
+         "change_in_this_stage" : false,
+         "checking" : 5,
+         "const_generic_reduction" : {
+            "cases" : 1,
+            "engine_checks" : 2,
+            "engines" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/foreign-engines.log",
+               "sha256" : "970bb9d87447a267a7b3a76fa658392685abc0618658892181d1acc170e80ff7"
+            },
+            "rust_library_metadata" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/foreign-rust.log",
+               "sha256" : "571dcf0edfa7f507ccd8ff8055b64a02f1e0466623c84cf14bc67ede9fd9ef22"
+            },
+            "verdict" : "refuse"
+         },
+         "refusing" : 10,
+         "scope" : "The original const-generic reduction declares a nominal type with a const parameter, outside the documented function/receiver-impl subset. It still refuses on both engines and compiles directly as Rust library metadata. The independently admitted session-repeat fixture is outside these 15 reductions."
+      },
+      "full_gate" : {
+         "command" : "LKJSCRIPT_GATE_JOBS=4 bash tools/check.sh",
+         "elapsed_seconds" : 781.079,
+         "fresh_case_requests" : 5981,
+         "ir_mutation" : {
+            "findings" : 0,
+            "log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/ir-mutation.log",
+               "sha256" : "d8092dda1cf0c2810bf3d489e5f9bec39705040377fcac9026993ae3256d7ac3"
+            },
+            "mutants" : 128
+         },
+         "log" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/full-gate.log",
+            "sha256" : "abda7d7a10230168df139109f90f8c5353322cadbce799c892754e957ba9c8c9"
+         },
+         "log_archive" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/gate-logs.tar.gz",
+            "sha256" : "f50c5fd24d97ea69923208b002512e3287eaa8a793927093200801d4094acc9b"
+         },
+         "reused_case_requests" : 0,
+         "status" : "passed",
+         "workers" : 4
+      },
+      "independent_diagnostic_admission" : {
+         "after" : {
+            "path" : "/home/coder/workspace/lkjscript-programs-const-generics-landing-20261118/tests/diagnostics/programs_foreign_session_array_len.lkj",
+            "sha256" : "65c0eb84c078fc14286799ce9ee49785ffbc5d988455a9ecc91b2df1e4b2b56b",
+            "text" : "// expect: check\n// usize-suffixed literal repeat lengths use the ordinary fixed-array contract.\npub fn probe() -> [u8; 4] { [19u8; 4usize] }\n"
+         },
+         "before" : {
+            "sha256" : "63c8791cadadd31e03aaa82153c0b110a8ae67120d4e9c507a4cdc557608caa0",
+            "source_anchor" : "3331ad7bba08dab2f0d69ea1d2d2bec15aae9bca",
+            "text" : "// expect: reject E_TYPE\n// cause: bad message.\n// pending: The repeat length is an integer literal; say that its usize suffix is rejected and suggest an unsuffixed literal.\npub fn probe() -> [u8; 4] { [19u8; 4usize] }\n"
+         },
+         "body_byte_identical" : true,
+         "body_sha256" : "f9562be3763cfca1585182aad1e9580d2ba02f298555ecf3a7f9ecface8915d8",
+         "cohort" : "Independent session diagnostic fixture, outside the original 15 foreign reductions and outside large-root census admission.",
+         "engine_checks" : {
+            "cases" : 1,
+            "log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/repaired-repeat-engines.log",
+               "sha256" : "67f90f3e5ef99c4bd6881007424005bdb6c8ca8198a2d1c5a6403935a1c78f51"
+            },
+            "routes" : 2
+         },
+         "failed_gate_lines" : [
+            "FAIL tests/diagnostics/programs_foreign_session_array_len.lkj native: expected E_TYPE, checker accepted",
+            "FAIL tests/diagnostics/programs_foreign_session_array_len.lkj interpreter: expected E_TYPE, checker accepted"
+         ],
+         "fixture" : "tests/diagnostics/programs_foreign_session_array_len.lkj",
+         "id" : "suffixed_literal_repeat_expectation",
+         "included_in_original_15_reduction_cohort" : false,
+         "large_root_admission_credit" : false,
+         "producer_sha256" : "8a2ccb3776838d39bb86a5e4c690ab5fc759a7e45f0408f69ba3e3934d5b191e",
+         "reason" : "The usize-suffixed literal repeat [19u8; 4usize] now uses the ordinary fixed-array contract; the stale expected E_TYPE refusal and pending diagnostic marker are replaced by expect: check.",
+         "rust_library_metadata" : {
+            "log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/repaired-repeat-rust.log",
+               "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "status" : "passed"
+         },
+         "status" : "passed_on_repaired_native_and_as_rust_library_metadata"
+      },
+      "nom_module_feasibility" : {
+         "evidence" : {
+            "path" : "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/nom-module-feasibility-evidence.json",
+            "sha256" : "34506db0f277f6729a2ff333d5a635eca5abea44e2c2b6a717d9a73613dc46a6"
+         },
+         "path" : "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/nom-module-feasibility.md",
+         "scope" : "Read-only source-dependency analysis anchored to the published const-fn stage; no module admission or own-test execution was attempted.",
+         "sha256" : "43c737fab885db0486e705286de6e1dcebc26d97daff53735bd9c53b40963a9d"
+      },
+      "nom_own_tests_run_under_lkjscript" : 0,
+      "observations" : 12,
+      "predecessor_diagnostic_comparison" : {
+         "changed" : [
+            {
+               "package" : "nom",
+               "route" : "suffix_projection",
+               "upstream_entry" : "src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "suffix_projection",
+               "upstream_entry" : "command/src/lib.rs"
+            }
+         ],
+         "current_compiler_sha256" : "8a2ccb3776838d39bb86a5e4c690ab5fc759a7e45f0408f69ba3e3934d5b191e",
+         "identity_fields" : [
+            "exit_status",
+            "launcher_signal",
+            "stdout.sha256",
+            "stderr.sha256"
+         ],
+         "previous_compiler_sha256" : "ef0da37e0c7b7df55dc63d75b440097ae45773cbea8699384894523a14a1f58f",
+         "unchanged" : [
+            {
+               "package" : "nom",
+               "route" : "original_suffix",
+               "upstream_entry" : "src/lib.rs"
+            },
+            {
+               "package" : "dom",
+               "route" : "original_suffix",
+               "upstream_entry" : "src/lib.rs"
+            },
+            {
+               "package" : "dom",
+               "route" : "suffix_projection",
                "upstream_entry" : "src/lib.rs"
             },
             {
@@ -1893,8 +2087,14 @@
       },
       "previous_candidate_diagnostic_comparison" : {
          "changed" : [],
-         "new_compiler_sha256" : "ef0da37e0c7b7df55dc63d75b440097ae45773cbea8699384894523a14a1f58f",
-         "old_compiler_sha256" : "8caef2412925f4aff23df3b7a46771abf2eeb1a3cdb12eade13fb8bfad71bf98",
+         "current_compiler_sha256" : "8a2ccb3776838d39bb86a5e4c690ab5fc759a7e45f0408f69ba3e3934d5b191e",
+         "identity_fields" : [
+            "exit_status",
+            "launcher_signal",
+            "stdout.sha256",
+            "stderr.sha256"
+         ],
+         "previous_compiler_sha256" : "0b8833f626792d06adccd96626f72e1492b6e5a70333213f5ca2570502c47dd6",
          "unchanged" : [
             {
                "package" : "nom",
@@ -1958,57 +2158,229 @@
             }
          ]
       },
-      "prior_failed_gate" : {
-         "compiler_sha256" : "8caef2412925f4aff23df3b7a46771abf2eeb1a3cdb12eade13fb8bfad71bf98",
-         "diagnostic" : "src/semantic_tests/incremental_fingerprint.lkj:272: R0005 assertion failed",
-         "failure_suite" : "semantic-structure",
-         "interpretation" : "The failed attempt is retained as a failure and is not counted as a completed gate pass.",
-         "logs" : {
-            "archive" : {
-               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/failed-first-gate/gate-logs.tar.gz",
-               "sha256" : "900ddba35d8d00fba5277c9ff911132cf1d9e683634be18fb82f46cfdfdcee02"
+      "previous_stage_validation" : {
+         "cache_fingerprint_repair" : {
+            "change" : "Remove only the redundant const_qualified topology word; raw header source bytes continue to distinguish const qualification.",
+            "foreign_observations" : "All12 complete observation identities are byte-identical to the previous candidate.",
+            "golden_vectors_changed" : false,
+            "qualifier_only_control" : {
+               "checks" : [
+                  "The checked edit adds exactly one const qualifier and leaves all other source bytes unchanged",
+                  "Source meaning changes from fn(i64) -> i64 to const fn(i64) -> i64",
+                  "The first qualified nonindexed build has build_reused=0 and front_reused=0",
+                  "A repeated qualified build reuses its result; both engines preserve the expected value"
+               ],
+               "proof" : {
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/focused-query.log",
+                  "sha256" : "1e34a6bce35a9a955503ff6efa3ee9c826e1508d2225e310df4f23eca6676379"
+               },
+               "status" : "passed"
             },
-            "full_gate" : {
-               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/failed-first-gate/full-gate.log",
-               "sha256" : "5a9c1cead9f7e09ed823e3e8d51e128c555bf1dc37fd685c0876b18997b94b2c"
+            "source_anchor" : "bf27336098ce10ad6125df2cdb441661592e8ed0",
+            "source_diff" : {
+               "path" : "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/const-fn-ef0da37e/cache-repair.patch",
+               "sha256" : "353d2496a33a0433ddb352416118d3e09bd3ba466d01a0b533f7e8ebc10e019c"
             },
-            "producer_and_seed" : {
-               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/failed-first-gate/producer-and-seed.sha256",
-               "sha256" : "82d9d2dd2c17a65cde115936f16e5642a62a41d4cadf6c84779d1b81df02029a"
-            },
-            "semantic_structure" : {
-               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/failed-first-gate/semantic-structure.log",
-               "sha256" : "37e78890cabdf25523132191669a83eaa9aea63184ed9aaf5f92776d1625a48b"
-            },
-            "source_anchor" : {
-               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/failed-first-gate/original-source-anchor.txt",
-               "sha256" : "3b78db05f3300c182d65f23e75fe536ac14cf3480a1432e460703a8a8de87856"
+            "standalone_fixed_vector_regression" : {
+               "build_log" : {
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/repaired-semantic-build.log",
+                  "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+               },
+               "closed_entries" : 5,
+               "command" : "LKJSCRIPT_GATE_JOBS=1 bash tools/closed-semantics.sh target/lkjscript structure",
+               "fresh_case_requests" : 734,
+               "log" : {
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/repaired-semantic-structure.log",
+                  "sha256" : "bcbfdc065f31723505ede3783fbd5872e452b084cc8f8e894c68b9fdad5f4c96"
+               },
+               "status" : "passed"
             }
          },
-         "reason" : "An additional const_qualified word changed the fixed topology-fingerprint vectors, although raw source headers already encoded the qualifier.",
-         "source_anchor" : "de20455cc884a13d682be650bb2b125d79598d9d",
+         "full_gate" : {
+            "command" : "LKJSCRIPT_GATE_JOBS=4 bash tools/check.sh",
+            "elapsed_seconds" : 741.616,
+            "fresh_case_requests" : 5851,
+            "ir_mutation" : {
+               "findings" : 0,
+               "log" : {
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/ir-mutation.log",
+                  "sha256" : "d66cc7f6db08e5f4840f484afe120806a5972c14eefbb7852cd843617869cb50"
+               },
+               "mutants" : 128
+            },
+            "log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/full-gate.log",
+               "sha256" : "521a9248f18ba92e077a00143a50850aa48d8a29771eb09b7cd56d8b2ae4d095"
+            },
+            "log_archive" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/gate-logs.tar.gz",
+               "sha256" : "ecbf1495ec083096f4225fce86f65e5fbc9a534d900906c63cb18893d4eaee8e"
+            },
+            "reused_case_requests" : 0,
+            "status" : "passed",
+            "workers" : 4
+         },
+         "interpretation" : "Historical predecessor proofs and its failed first attempt remain separate; none is substituted for this const-generics gate.",
+         "prior_failed_gate" : {
+            "compiler_sha256" : "8caef2412925f4aff23df3b7a46771abf2eeb1a3cdb12eade13fb8bfad71bf98",
+            "diagnostic" : "src/semantic_tests/incremental_fingerprint.lkj:272: R0005 assertion failed",
+            "failure_suite" : "semantic-structure",
+            "interpretation" : "The failed attempt is retained as a failure and is not counted as a completed gate pass.",
+            "logs" : {
+               "archive" : {
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/failed-first-gate/gate-logs.tar.gz",
+                  "sha256" : "900ddba35d8d00fba5277c9ff911132cf1d9e683634be18fb82f46cfdfdcee02"
+               },
+               "full_gate" : {
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/failed-first-gate/full-gate.log",
+                  "sha256" : "5a9c1cead9f7e09ed823e3e8d51e128c555bf1dc37fd685c0876b18997b94b2c"
+               },
+               "producer_and_seed" : {
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/failed-first-gate/producer-and-seed.sha256",
+                  "sha256" : "82d9d2dd2c17a65cde115936f16e5642a62a41d4cadf6c84779d1b81df02029a"
+               },
+               "semantic_structure" : {
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/failed-first-gate/semantic-structure.log",
+                  "sha256" : "37e78890cabdf25523132191669a83eaa9aea63184ed9aaf5f92776d1625a48b"
+               },
+               "source_anchor" : {
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/failed-first-gate/original-source-anchor.txt",
+                  "sha256" : "3b78db05f3300c182d65f23e75fe536ac14cf3480a1432e460703a8a8de87856"
+               }
+            },
+            "reason" : "An additional const_qualified word changed the fixed topology-fingerprint vectors, although raw source headers already encoded the qualifier.",
+            "source_anchor" : "de20455cc884a13d682be650bb2b125d79598d9d",
+            "status" : "failed"
+         },
+         "published_commit" : "36dc6f8c3dd09d47f6fce8af0abe04d9b5c742ff",
+         "stage" : "bounded_const_fn",
+         "standalone_real_programs_test" : {
+            "command" : "bash tools/real-programs-test.sh target/lkjscript",
+            "log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/standalone-real-programs.log",
+               "sha256" : "bfe050316ba1664049ab530cb4ea400a72ef27a18a88620f0f19e8efe78c69bf"
+            },
+            "status" : "passed"
+         },
+         "summary" : {
+            "path" : "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/after-const-fn-real-programs-current.json",
+            "sha256" : "85ed6a28e56d7650883eec557b94ff2e590a44073942422b300df90d34614b5d"
+         }
+      },
+      "prior_failed_gate" : {
+         "compiler_sha256" : "0b8833f626792d06adccd96626f72e1492b6e5a70333213f5ca2570502c47dd6",
+         "failures" : [
+            {
+               "cause" : "Stale expected E_TYPE refusal for the now-supported usize-suffixed literal repeat [19u8; 4usize]. The source body is unchanged; independent engine and Rust library proofs establish acceptance.",
+               "suite" : "diagnostic-cases"
+            },
+            {
+               "cause" : "The receiver-argument heuristic borrowed a same-named caller substitution and treated Boxed::<T>::make receiver arguments as method arguments. Independent review also found generic arguments on modules flattened onto later functions and constructors.",
+               "suite" : "associated-query"
+            }
+         ],
+         "interpretation" : "This failed attempt was not published and is not counted as a complete gate pass.",
+         "logs" : {
+            "associated-query.log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/failed-first-gate/associated-query.log",
+               "sha256" : "c3ee0c3009796b8102bc66f218cca5eaab61fc1ac8e98e3494b49bf7beb16d74"
+            },
+            "before-repair-bootstrap.log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/failed-first-gate/before-repair-bootstrap.log",
+               "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
+            },
+            "before-repair-const-function-query.log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/failed-first-gate/before-repair-const-function-query.log",
+               "sha256" : "1e34a6bce35a9a955503ff6efa3ee9c826e1508d2225e310df4f23eca6676379"
+            },
+            "before-repair-focused-build.log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/failed-first-gate/before-repair-focused-build.log",
+               "sha256" : "2ea58d0645671cfffad9ae1c154f1830b7288b48bc56600c1f922fe205d84682"
+            },
+            "before-repair-focused-engines.log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/failed-first-gate/before-repair-focused-engines.log",
+               "sha256" : "7d001639d8189b9f593cb3bdfb3e7b7a0456b7641c4dc1999d786fc4a21eee9e"
+            },
+            "before-repair-focused-query.log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/failed-first-gate/before-repair-focused-query.log",
+               "sha256" : "11b50044bb6c7dc2bb9d08be631a33ab4e70fd2165cb96ca0253b72079024177"
+            },
+            "before-repair-focused-rust.log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/failed-first-gate/before-repair-focused-rust.log",
+               "sha256" : "1609213490d0aa7fd9d567b966ec5822b6bb3a3ea4d47e778dde777589f76398"
+            },
+            "before-repair-focused-source.log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/failed-first-gate/before-repair-focused-source.log",
+               "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "before-repair-foreign-engines.log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/failed-first-gate/before-repair-foreign-engines.log",
+               "sha256" : "bf95b5fd42137ce4da4909c57ed14ed3b5be566789ce40a648cb54ae0e7907d5"
+            },
+            "before-repair-foreign-rust.log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/failed-first-gate/before-repair-foreign-rust.log",
+               "sha256" : "571dcf0edfa7f507ccd8ff8055b64a02f1e0466623c84cf14bc67ede9fd9ef22"
+            },
+            "diagnostic-cases.log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/failed-first-gate/diagnostic-cases.log",
+               "sha256" : "86b86c6db078e8a770c02e5c55278b8bd9972d0043017afac77924dcca06e6b0"
+            },
+            "full-gate.log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/failed-first-gate/full-gate.log",
+               "sha256" : "6fa9da5e699a5a30055684feedafd062ef66fce957054955d583eeefd81fe6f5"
+            },
+            "gate-logs.tar.gz" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/failed-first-gate/gate-logs.tar.gz",
+               "sha256" : "e78965d61fe3d3d86af372aab6c4bc959885bb271401cc8b481079cc131efaa2"
+            },
+            "gate-started.txt" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/failed-first-gate/gate-started.txt",
+               "sha256" : "21900c8cb09a6b9734c59ca11a720740865392ed59632c208cabeacec49259c2"
+            },
+            "lkjscript.gz" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/failed-first-gate/lkjscript.gz",
+               "sha256" : "22dd9b37b6e12737de951eda5a737604cb7d9aae8e3819d11fdfc629ee449f8e"
+            },
+            "producer.sha256" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/failed-first-gate/producer.sha256",
+               "sha256" : "b20af5a0f71a9e947f4e784faaf109f9eb2669f28ebe2edebb88c7e7cb84fadd"
+            },
+            "source-anchor.txt" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/failed-first-gate/source-anchor.txt",
+               "sha256" : "893d12af5361c3fbee805a002b968df41c304eb0cff93ce3824dfc15255b262b"
+            }
+         },
+         "source_anchor" : "3331ad7bba08dab2f0d69ea1d2d2bec15aae9bca",
          "status" : "failed"
       },
       "projected_roots" : 6,
       "publication_ci" : {
-         "result_record" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/publication-ci.json",
+         "result_record" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/publication-ci.json",
          "status_at_commit" : "pending"
       },
       "query_edit_logs" : [
          {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/focused-query.log",
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/focused-query.log",
+            "sha256" : "11b50044bb6c7dc2bb9d08be631a33ab4e70fd2165cb96ca0253b72079024177"
+         },
+         {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/associated-query.log",
+            "sha256" : "5c960d3481dd07fe17c3af5c3b406e69d2c9b06852533796668255bf9fe4b292"
+         },
+         {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/const-function-query.log",
             "sha256" : "1e34a6bce35a9a955503ff6efa3ee9c826e1508d2225e310df4f23eca6676379"
          }
       ],
-      "source_anchor" : "bf27336098ce10ad6125df2cdb441661592e8ed0",
+      "source_anchor" : "626ced493dbb278c0719d05a7cb45267e98cb97e",
       "source_check" : {
-         "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/focused-source.log",
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/focused-source.log",
          "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
       },
       "standalone_real_programs_test" : {
          "command" : "bash tools/real-programs-test.sh target/lkjscript",
          "log" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/standalone-real-programs.log",
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-generics/standalone-real-programs.log",
             "sha256" : "bfe050316ba1664049ab530cb4ea400a72ef27a18a88620f0f19e8efe78c69bf"
          },
          "status" : "passed"

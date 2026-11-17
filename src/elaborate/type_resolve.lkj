@@ -39,6 +39,7 @@ enum Work {
     Array {
         len: String,
         span: a::Span,
+        environment: usize,
     },
     Tuple {
         fields: usize,
@@ -136,6 +137,9 @@ impl Compiler<'_> {
                         work.values.push(*ty);
                         continue;
                     }
+                    if self.source.constant_arguments.contains_key(&id) {
+                        return Err(err(self.source.types[id].span, "E_TYPE", "a constant argument cannot occupy a type position"));
+                    }
                     work.pending.push(Work::Remember { id, environment });
                     let opaque = self.source.impl_traits.get(&id).is_some_and(|form| form.result.is_some());
                     if opaque {
@@ -174,6 +178,7 @@ impl Compiler<'_> {
                             work.pending.push(Work::Array {
                                 len: len.clone(),
                                 span: node.span,
+                                environment,
                             });
                             work.pending.push(Work::Source {
                                 id: *inner,
@@ -212,6 +217,11 @@ impl Compiler<'_> {
                     environment,
                     span,
                 } => {
+                    if let Some(value) = work.environments[environment].get(&path.name) {
+                        if crate::generics::const_arguments::value(&self.types, *value).is_some() {
+                            return Err(err(span, "E_TYPE", "a const parameter cannot occupy a type position"));
+                        }
+                    }
                     if !path.bindings.is_empty() {
                         return Err(err(path.bindings[0].span, "E_TRAIT",
                             "associated-type equality bindings are only accepted in trait bounds"));
@@ -325,29 +335,11 @@ impl Compiler<'_> {
                     );
                     work.values.push(id);
                 }
-                Work::Array { len, span } => {
+                Work::Array { len, span, environment } => {
                     let inner = work.values.pop().expect("array child");
-                    let digits = len.replace('_', "");
-                    let magnitude: u64 = match super::integers::magnitude(&digits, 10) {
-                        Some(value) => value,
-                        None => {
-                            return Err(err(
-                                span,
-                                "E_TYPE",
-                                "array length must be an integer literal",
-                            ));
-                        }
-                    };
-                    let len = magnitude as usize;
-                    if len as u64 != magnitude {
-                        return Err(err(
-                            span,
-                            "E_TYPE",
-                            "array length must be an integer literal",
-                        ));
-                    }
+                    let constant = self.constant_length(&len, &work.environments[environment], span)?;
                     self.check_owned_element(inner, span)?;
-                    let id = self.intern(String::new(), ir::TypeKind::Array { inner, len });
+                    let id = self.array_type(inner, constant, span)?;
                     work.values.push(id);
                 }
                 Work::Tuple { fields } => {

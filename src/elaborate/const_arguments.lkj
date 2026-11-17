@@ -1,0 +1,74 @@
+//! Const usize source arguments and disposable rigid array identities.
+use super::{a, err, ir, Compiler, Result, TypeKey};
+use crate::generics::const_arguments::{self as const_generics, Value};
+use std::collections::BTreeMap;
+
+impl Compiler<'_> {
+    pub(super) fn constant(&mut self, count: usize) -> usize {
+        let key = TypeKey::Constant(count);
+        if let Some(id) = self.type_keys.get(&key) { return *id; }
+        let id = self.types.len();
+        self.types.push(ir::Type { name: format!("$const-value:{count}"),
+            kind: ir::TypeKind::Struct { fields: Vec::new(), copy: true } });
+        self.type_keys.insert(key, id);
+        id
+    }
+
+    pub(super) fn rigid_constant(&mut self, name: &str) -> usize {
+        let id = self.types.len();
+        self.types.push(ir::Type { name: format!("$const-rigid:{name}:{id}"),
+            kind: ir::TypeKind::Struct { fields: Vec::new(), copy: true } });
+        id
+    }
+
+    pub(super) fn array_type(&mut self, inner: usize, constant: usize, span: a::Span) -> Result<usize> {
+        match const_generics::value(&self.types, constant) {
+            Some(Value::Known(len)) => Ok(self.intern(String::new(), ir::TypeKind::Array { inner, len })),
+            Some(Value::Rigid(_)) => {
+                if self.contracts.is_none() {
+                    return Err(err(span, "E_GENERIC", "a symbolic array length cannot enter concrete execution"));
+                }
+                let key = TypeKey::ConstantArray(inner, constant);
+                if let Some(id) = self.type_keys.get(&key) { return Ok(*id); }
+                let id = self.types.len();
+                // Zero is only storage for a discarded verifier artifact. The
+                // distinct ID and symbolic source length govern all type facts.
+                self.types.push(ir::Type { name: format!("$const-array:{constant}"),
+                    kind: ir::TypeKind::Array { inner, len: 0 } });
+                self.type_keys.insert(key, id);
+                Ok(id)
+            }
+            None => Err(err(span, "E_TYPE", "array length requires a const usize argument")),
+        }
+    }
+
+    pub(super) fn constant_length(&mut self, text: &str, substitutions: &BTreeMap<String, usize>, span: a::Span) -> Result<usize> {
+        if let Some(count) = const_generics::literal(text) { return Ok(self.constant(count)); }
+        if let Some(value) = substitutions.get(&text.to_string()) {
+            if const_generics::value(&self.types, *value).is_some() { return Ok(*value); }
+            return Err(err(span, "E_TYPE", "array length names a type parameter rather than a const usize parameter"));
+        }
+        Err(err(span, "E_TYPE", "array length requires a literal or a declared const usize parameter"))
+    }
+
+    pub(super) fn generic_argument(&mut self, source: a::TypeId, constant: bool,
+        substitutions: &BTreeMap<String, usize>) -> Result<usize> {
+        let node = self.source.types[source].clone();
+        if constant {
+            let argument = self.source.constant_arguments.get(&source).cloned();
+            if let Some(text) = argument {
+                return self.constant_length(&text, substitutions, node.span);
+            }
+            if let a::Type::Path(path) = &node.kind {
+                if path.qualification.is_none() && path.declaration.is_none() && path.args.is_empty() && path.bindings.is_empty() {
+                    return self.constant_length(&path.name, substitutions, node.span);
+                }
+            }
+            return Err(err(node.span, "E_TYPE", "const argument requires a usize literal or const parameter"));
+        }
+        if self.source.constant_arguments.contains_key(&source) {
+            return Err(err(node.span, "E_TYPE", "a constant argument cannot occupy a type parameter"));
+        }
+        self.resolve(source, substitutions)
+    }
+}

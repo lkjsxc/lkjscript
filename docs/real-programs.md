@@ -258,27 +258,35 @@ These are observed frontier lower bounds, not all gaps that the complete depende
 graph will expose.
 
 The [current ordinary-form implementation](real-programs-current.json), producer
-`ef0da37e…14a1f58f`, adds bounded `const fn` declarations to associated-type
-equality, fully qualified associated paths, and argument/result-position
-`impl Trait` within the documented [language limits](language.md). A const
-qualifier is retained and checked on every definition, including unused and
-unreachable definitions. Runtime calls can use scalar/control-flow bodies,
-shared field/enum views, direct const-qualified source calls, and constructors
-that transfer owned values without destruction. Each emitted destruction needs
-a structurally trivial type; an unknown rigid type requires Copy. Nonconst,
-trait or dynamic calls, allocation/intrinsics, closures/try, mutable borrowing
-and mutation through a reference remain conservative refusals. Every function
-or method call in a module constant initializer still requires unsupported
-compile-time evaluation (CTFE). The checked IR and independent checker are unchanged.
+`8a2ccb37…34d5b191e`, adds bounded const `usize` parameters to associated-type
+equality, qualified paths, argument/result-position `impl Trait`, and bounded
+const-qualified functions within the documented [language limits](language.md).
+Const parameters belong to functions and implementation blocks whose receiver
+contains every such parameter. Array arguments can infer them; explicit calls
+can use decimal literals or in-scope const parameters. Array lengths, repeats,
+borrowed array receivers, associated results and opaque captures preserve their
+identity. Definition checking keeps symbolic counts distinct from literals and
+sibling parameters, even in unused definitions or branches. A zero comparison
+does not establish type equality, and symbolic repeats require Copy.
+Specialization uses existing checked-IR arrays and integers; the independent
+checker and checked IR are unchanged.
+
+Const parameter defaults, other parameter types, arithmetic/braced constant
+arguments or lengths, const parameters on nominal types/aliases/traits or trait
+methods, and module constants used as array lengths remain located boundaries.
+Compound where targets containing a symbolic array length also remain outside
+the current predicate contract. Const-qualified runtime calls retain their
+separate qualification rules: nonconst/trait/dynamic calls, allocation, mutable
+borrows/reference mutation and nontrivial destruction still refuse. Every call
+in a module constant initializer continues to require unsupported CTFE.
 
 All twelve observations repeat on unchanged upstream bytes. **All 146 original
 impl-Trait/qualified/equality target diagnostic identities remain absent**: 129
-nom sites and 17 DOM sites. The observed primary frontier is nom **149→24** and
-DOM **95→64**, for a combined **244→88**. Relative to RPIT, fourteen DOM const
-headers and one Sōzu const header stop refusing. Sōzu now has **448 classified
-sites and 35 previously unclassified rows**, compared with the original 449+37.
-No large root or real nom module tree has been admitted, and no nom own test has
-run under lkjscript.
+nom sites and 17 DOM sites. The observed primary frontier is nom **149→18** and
+DOM **95→64**, for a combined **244→82**. Relative to const functions, nom
+changes **24→18**, DOM stays **64**, and Sōzu changes **448→447 classified
+sites plus 35 previously unclassified rows**. No large root or real nom module
+tree has been admitted, and no nom own test has run under lkjscript.
 
 | Stage | nom primary sites | DOM primary sites | Original target diagnostics absent | Semantic scope established |
 | --- | ---: | ---: | ---: | --- |
@@ -288,59 +296,83 @@ run under lkjscript.
 | Argument impl Trait | 24 | 78 | 146 | Arguments; only 65 original target source forms supported, results still refused |
 | Result impl Trait | 24 | 78 | 146 | All three form categories, in their documented subset |
 | Const functions | 24 | 64 | 146 | Bounded const-qualified declarations and runtime calls; CTFE remains separate |
+| Const generics | 18 | 64 | 146 | Function/receiver-impl const usize parameters; nominal const parameters and global constant array lengths remain separate |
 
-The RPIT stage's exit statuses and complete output/diagnostic streams were
-byte-identical to APIT for all twelve observations. APIT already consumed opaque
-result syntax; other parse refusals hid its later unsupported-result resolver.
-Dedicated semantic and query/edit controls established the additional RPIT
-support. The original nom `Parser<I>` positional trait contracts, generic
-associated types, and other stated limits remain separate requirements.
-Similarly, disappearance of a const header does not prove that its original
-body admits. DOM's `elem_require_linebreak` still has the exact
-`local_name!("article")` pattern refusal at `text_formatting.rs:127:19`.
-Sōzu's removed `delimiter_size` header has a `std::mem::size_of::<usize>()`
-body whose admission is not established by these observations.
+The RPIT stage had the same complete diagnostic streams as APIT: the APIT parser
+already consumed opaque result syntax, while other parse refusals hid its later
+unsupported-result resolver. Dedicated semantic and query/edit controls
+established RPIT support. The original nom `Parser<I>` positional trait
+contracts, GATs and other stated limits remain separate. The same distinction
+applies here: six nom const-header diagnostics disappear, but four of those
+implementations still need positional generic-trait contracts; two also lack
+a const-bearing receiver. Sōzu now parses `MAX_FDS_OUT` as an array length,
+but global constant lengths still require a later located E_TYPE that surviving
+parser/macro refusals mask in these observations. Neither removal establishes
+admission of the original surrounding body.
 
-The current summary pins the three retained raw receipts, exact re-ranking
-payloads and reviewed original-source hashes. Reproduce each comparison with the
-[nom review](real-programs-const-fn-nom-review.json),
-[DOM review](real-programs-const-fn-dom-review.json), or
-[empty Sōzu review](real-programs-const-fn-sozu-review.json) passed to
+The summary pins the three retained raw receipts, exact re-ranking payloads
+and reviewed original-source hashes. Reproduce each comparison with the
+[nom review](real-programs-const-generics-nom-review.json),
+[DOM review](real-programs-const-generics-dom-review.json), or
+[empty Sōzu review](real-programs-const-generics-sozu-review.json) passed to
 `rerank.pl --review`. Ten observations retain byte-identical exit/stdout/stderr
-identities from RPIT; only the DOM projection and Sōzu command projection change.
-All six original-suffix observations, projection identities and the literal
-library inventory remain unchanged. No new primary diagnostic identities or
-recovery exclusions arise. The nom `verify` predicate retains its independent
-`?Sized` classification.
+identities from published const functions; only the nom projection and Sōzu
+command projection change. All six original-suffix observations, projection
+identities and the literal library inventory remain unchanged. No new primary
+diagnostic identities or recovery exclusions arise. The nom `verify` predicate
+retains its independent `?Sized` classification. All twelve new diagnostic and
+exit/status/output identities are also byte-identical to the failed first
+const-generics candidate; equality was measured again with the repaired native.
 
-The 42 focused const-function cases pass **126 route checks**: 84 compiler-engine
-checks and 42 separate Rust checks, consisting of 14 values/output cases and 28
-verdicts. Qualified meaning, call references, checked rename/body edits,
-rejected nonconst edits and warm-cache controls pass. The native self-build
-reaches a byte-identical fixed point and its seed is refreshed. The full
-four-worker gate passes in 741.616 seconds with 5851 fresh case requests and
-128 IR mutants, zero findings. The standalone real-programs test also passes.
-Publication CI is recorded with the landing report. [Proof records](real-programs-current.json)
-pin the completed focused checks and the root-owned final validation paths.
+The focused suite covers **107 cases / 321 route checks**: 214 checks on the
+final native compiler’s two engines and 107 separate Rust witnesses, comprising
+35 values/output cases and 72 verdicts. These 107 cases contain 65 const-generics
+family cases, including argument-placement repairs and const-function
+controls, and 42 const-function regressions; the 65-case subset is not added
+again. Source meaning, exact references, checked rename/body edits, refused
+capturing changes, layout changes and warm-cache controls pass. The native
+self-build reaches a byte-identical fixed point and its seed is refreshed.
+The full four-worker gate passes in 781.079 seconds with 5981 fresh case
+requests and 128 IR mutants, zero findings. The standalone real-programs
+validation also passes. Publication CI is recorded with the landing report. [Proof records](real-programs-current.json)
+pin the completed checks and root-owned validation paths.
+
 The original fifteen foreign reductions remain **five checking and ten
-refusing**; none is a const-function reduction.
+refusing**. Their const-generic reduction declares a nominal `Bytes<const N>`
+type, which remains outside this function/receiver-impl subset. It still refuses
+on both engines and compiles directly as Rust library metadata. The reduction
+cohort is separate from the focused 107 cases.
 
-The first const-function full gate failed the fixed incremental fingerprint
-vectors. The implementation had added a redundant const-qualification word to
-the topology fingerprint even though raw source headers already encode that
-qualifier. The repair removes the redundant word and leaves the existing golden
-vectors unchanged. A checked edit now proves that adding only the qualifier
-changes the reported function meaning, invalidates both build and frontend
-reuse, and permits subsequent warm reuse. All twelve foreign observations are
-byte-identical to the failed candidate. The failed attempt is retained in the
-[validation history](real-programs-current.json) and is not counted as a complete pass.
+The first const-generics full gate failed two regressions and is retained as a
+failure. An obsolete diagnostic expected E_TYPE for the unchanged literal repeat
+`[19u8; 4usize]`; its expectation now says check. The repaired native accepts
+that independent session fixture on both engines, and its exact source compiles
+as Rust library metadata. This fixture is outside the original fifteen foreign
+reductions and the 107-case focused population; it establishes no upstream
+module or own-test admission.
 
-The preceding RPIT proof remains separate: 44 argument/result impl-Trait cases
-passed 132 route checks (88 engine checks within the 141-case/282-check combined
-regression plus 44 Rust checks). The exact foreign opaque-return reduction
-checked on both engines and compiled directly as Rust library metadata. Its
-full gate passed in 750.972 seconds with 5767 fresh requests and 128 IR mutants,
-zero findings; that historical gate is not substituted for the current one.
+The associated-call regression misrouted `Boxed::<T>::make` receiver arguments
+when a caller had a same-named T. Independent review also found module arguments
+flattened onto later functions and constructors. The repair records each written
+generic-argument owner and whether it is the final path segment, validates the
+owner in its original lexical scope, and routes receiver/method arguments from
+that source provenance. Modules cannot own generic arguments. Explicit inference
+occurrences retain distinct locations and their existing refusal boundary.
+Eleven added controls are included in the 107 cases, and an associated-query
+edit moving arguments onto the wrong segment is rejected with rollback after
+warm reuse. The archived failed gate and exact repair are retained in the
+[validation history](real-programs-current.json); no failed attempt counts as
+a completed pass.
+
+The published const-function predecessor passed its full gate in 741.616 seconds
+with 5851 fresh requests and 128 IR mutants, zero findings; standalone validation
+also passed. Its first gate had failed the fixed fingerprint vectors because
+of a redundant const-qualification topology word, although raw source headers
+already encode the qualifier. The repair kept all existing golden vectors and
+added exact qualifier-only meaning/cache invalidation controls. The failed
+attempt and the repair remain in the [validation history](real-programs-current.json);
+neither that historical pass nor the earlier RPIT pass substitutes for the
+current const-generics gate.
 
 The tables give **observed unique sites** and physical lines in files containing
 those sites. File coverage overlaps between rows and includes inactive code;
@@ -352,23 +384,26 @@ transitive blocked-line count is used.
 #### nom: generic code
 
 [Original site table](real-programs-nom.json) and [current frontier](real-programs-current.json):
-the current producer emits 49 raw rows: 24 unique primary sites and 25 E_BLOCKED
-rows, with no current recovery exclusions. There are 20 upstream default-path
+the current producer emits 37 raw rows: 18 unique primary sites and 19 E_BLOCKED
+rows, with no current recovery exclusions. There are 14 upstream default-path
 candidates and four inactive sites. The original baseline had 149 primary sites;
-equality, qualified paths, APIT and RPIT had 143, 100, 24 and 24. The const-function
-stage leaves both nom observations byte-identical to RPIT. Macro, generic-bound
-and other parser barriers remain. Parameterized trait contracts such as the
-original `Parser<I>` are a separate documented limit, not an admitted consequence
-of recognizing its opaque result form.
+equality, qualified paths, APIT/RPIT and const functions had 143, 100, 24 and 24.
+Six exact const-parameter header diagnostics disappear at `src/traits.rs:646:10`,
+`653:6`, `1099:10`, `1111:14`, `1123:6` and `1129:10`. The two AsBytes
+implementations have const-bearing array receivers. The two Compare
+implementations instead place N only in their positional trait argument,
+outside both the receiver-occurrence rule and the positional generic-trait
+contract. The two FindToken implementations have array receivers but still need
+positional generic-trait support. No original surrounding implementation or
+module admission follows from these six absent header diagnostics.
 
 | Rank | Cause | Sites | Affected file lines | Owner / next route |
 | --- | --- | ---: | ---: | --- |
 | 1 | Macro $ tokenization | 8 | 6,418 | Compiler / checked expansion producer |
 | 2 | error_position! expansion | 2 | 365 | Compiler / checked source producer |
-| 3 | Const generics | 6 | 1,681 | Programs / next ordinary forms |
-| 4 | ?Sized bound syntax | 3 | 1,044 | Programs; function, struct and implementation headers |
-| 5 | Documentation/doctest cfg predicates | 3 | 460 | Language/configuration; inactive candidates |
-| 6 | Unsafe blocks | 2 | 1,681 | Refused by design; checked indexing/ownership port |
+| 3 | ?Sized bound syntax | 3 | 1,044 | Programs; function, struct and implementation headers |
+| 4 | Documentation/doctest cfg predicates | 3 | 460 | Language/configuration; inactive candidates |
+| 5 | Unsafe blocks | 2 | 1,681 | Refused by design; checked indexing/ownership port |
 
 All eight lexical errors are macro $ tokens. The [new source review](real-programs-apit-nom-review.json)
 adds real `error_position!` calls in the error branches of `bits::complete::tag`
@@ -385,6 +420,18 @@ occur in source inventory behind this frontier; inventory does not establish an
 independently observed semantic refusal. The unsafe get_unchecked paths need
 an explicit checked implementation or an identified foreign boundary; a hand
 rewrite still costs the original gap.
+
+A [read-only module feasibility review](real-programs-current.json) follows the
+unchanged source dependency graph; it does not attempt a separate module check
+or introduce a port/harness. The smallest useful candidate is the bits tree:
+539 physical local lines and 13 literal upstream test attributes. Its complete
+and streaming tag paths still call `error_position!`; the parent uses positional
+`Parser<I>` contracts, and its tuple-parser tests depend on macro-generated core
+implementations. Core `Mode::Output<T>` and `process` require generic associated
+types; shared input traits also contain the observed unsafe indexing paths.
+Removing const-header and `?Sized` barriers alone therefore does not establish
+a credible unchanged module/own-test admission. Source dependencies identify
+the next compiler work; they do not add invented observed refusal counts.
 
 #### DOM: parser, owned tree and selector views
 
@@ -423,20 +470,27 @@ count both representation and API/test adaptation.
 #### Sōzu: concurrent network service
 
 [Original site table](real-programs-sozu.json) and [current frontier](real-programs-current.json):
-four roots produce 483 unique located nonblocked rows: 448 have a classified
-cause and 35 prior parse/recovery rows remain unclassified. Another 487 E_BLOCKED
-rows are excluded, giving 970 raw projected rows. RPIT had 449+35 nonblocked rows
-and 488 E_BLOCKED rows. The original baseline had 486 nonblocked rows, including 37
-unclassified, and 490 E_BLOCKED rows. The two removed original unclassified rows
-point to `Iterator<Item = (K, &'a V)>` at `command/src/state.rs:1409:23` and
-`1435:27`; they are not retroactively added to the original equality-site count.
+four roots produce 482 unique located nonblocked rows: 447 have a classified
+cause and 35 prior parse/recovery rows remain unclassified. Another 486 E_BLOCKED
+rows are excluded, giving 968 raw projected rows. Const functions had 448+35
+nonblocked rows and 487 E_BLOCKED rows. The original baseline had 486 nonblocked
+rows, including 37 unclassified, and 490 E_BLOCKED rows. The two removed original
+unclassified rows point to `Iterator<Item = (K, &'a V)>` at
+`command/src/state.rs:1409:23` and `1435:27`; they are not retroactively added
+to the original equality-site count.
 
-The single new removal is the const header of `delimiter_size` at
-`command/src/channel.rs:461:11`, formerly grouped under compile-time evaluation.
-Its body calls `std::mem::size_of::<usize>()`; neither that body nor general CTFE
-is claimed supported by its absent header diagnostic. The exact remaining
-non-literal array-length refusal is `MAX_FDS_OUT` at
-`command/src/scm_socket.rs:111:39`. All six associated-constant sites survive.
+The single new removal is the old non-literal array-length parser refusal at
+`command/src/scm_socket.rs:111:39`, where both the array type and repeat use
+`MAX_FDS_OUT`. That name is a module constant declared at line 16. The parser
+now consumes the identifier, but the later validator only accepts a literal
+or a declared scoped const `usize` parameter as an array length. It still
+rejects module constants with located E_TYPE; earlier parser/macro barriers
+mask that later diagnostic in these roots. The observed compile-time-evaluation
+row therefore falls to zero while global constant array lengths remain an
+unsupported source requirement. No CTFE or surrounding-function admission is
+credited. The prior `delimiter_size` const-header removal likewise did not
+establish its `std::mem::size_of::<usize>()` body. All six associated-constant
+sites survive.
 
 | Rank | Cause | Sites | Affected file lines | Owner / next route |
 | --- | --- | ---: | ---: | --- |
@@ -445,18 +499,17 @@ non-literal array-length refusal is `MAX_FDS_OUT` at
 | 3 | Debug formatting | 21 | 7,344 | Language formatting producer |
 | 4 | dyn traits | 15 | 2,622 | Language |
 | 5 | Associated constants | 6 | 148 | Language |
-| 6 | Non-literal array length / compile-time evaluation | 1 | 402 | Language; separate from const-qualified runtime calls |
-| 7 | @ pattern | 1 | 167 | Language |
-| 8 | async block | 1 | 68 | Language producer/runtime-future route |
-| 9 | extern crate bindings | 4 | 320 | Package/language binding; not FFI |
-| 10 | Generated source absent from original checkout | 1 | 257 | Package/build producer |
-| 11 | Pure standard types/namespaces | 14 | 5,106 | Library and namespace routing |
-| 12 | std::io Read/Write/self imports | 6 | 1,802 | Library facade; imports alone do not prove ambient calls |
-| 13 | OS imports | 8 | 6,175 | Library adapters and explicit capabilities |
-| 14 | Actual ambient calls | 86 | 7,562 | Refused by design; explicit authority |
-| 15 | Unsafe/raw-pointer forms | 44 | 4,399 | Refused by design; ownership or foreign-process port |
-| 16 | Arc | 1 | 68 | Refused by design |
-| 17 | Same-process thread API | 2 | 209 | Refused by design / missing concurrency IR |
+| 6 | @ pattern | 1 | 167 | Language |
+| 7 | async block | 1 | 68 | Language producer/runtime-future route |
+| 8 | extern crate bindings | 4 | 320 | Package/language binding; not FFI |
+| 9 | Generated source absent from original checkout | 1 | 257 | Package/build producer |
+| 10 | Pure standard types/namespaces | 14 | 5,106 | Library and namespace routing |
+| 11 | std::io Read/Write/self imports | 6 | 1,802 | Library facade; imports alone do not prove ambient calls |
+| 12 | OS imports | 8 | 6,175 | Library adapters and explicit capabilities |
+| 13 | Actual ambient calls | 86 | 7,562 | Refused by design; explicit authority |
+| 14 | Unsafe/raw-pointer forms | 44 | 4,399 | Refused by design; ownership or foreign-process port |
+| 15 | Arc | 1 | 68 | Refused by design |
+| 16 | Same-process thread API | 2 | 209 | Refused by design / missing concurrency IR |
 | — | Parse/recovery, not independently classified | 35 | 9,351 | No new gap assigned |
 
 The 86 ambient calls are 82 print-family uses and one each of exit, read,

@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+struct Wrapped<T> { value: T }
+impl<const N: usize> Wrapped<[u8; N]> {
+    fn size(&self) -> usize { N + self.value.len() }
+}
+pub fn probe() -> i64 { Wrapped { value: [0u8; 21] }.size() as i64 }

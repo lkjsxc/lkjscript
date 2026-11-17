@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+struct Buffer<const N: usize> { data: [u8; N] }
+pub fn probe() -> i64 { 42 }

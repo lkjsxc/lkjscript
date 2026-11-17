@@ -1,0 +1,7 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+mod m {
+    pub struct Named<T> { pub value: T }
+    impl<T> Named<T> { pub fn make(value: T) -> Self { Self { value } } }
+}
+pub fn probe() -> i64 { m::<i64>::Named::make(42).value }

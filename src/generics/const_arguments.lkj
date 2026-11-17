@@ -1,0 +1,245 @@
+//! Source constant identities. These are untrusted frontend bookkeeping, never
+//! a new checked-IR value, operation, or proof authority.
+use crate::{ast as a, ir};
+
+#[derive(Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+pub(crate) enum Value {
+    Known(usize),
+    Rigid(usize),
+}
+
+pub(crate) fn literal(text: &str) -> Option<usize> {
+    if text.is_empty() || !text.as_bytes()[0].is_ascii_digit() { return None; }
+    let text = text.replace('_', "");
+    let end = if text.ends_with("usize") { text.len() - 5usize } else { text.len() };
+    text[..end].parse::<usize>().ok()
+}
+
+/// Constant handles are disjoint from source type arguments. The arena is shared
+/// only to retain stable specialization/capture keys across existing machinery.
+pub(crate) fn value(types: &[ir::Type], id: usize) -> Option<Value> {
+    let name = &types.get(id)?.name;
+    if name.starts_with("$const-value:") {
+        return Some(Value::Known(literal(&name[13usize..])?));
+    }
+    if name.starts_with("$const-rigid:") { return Some(Value::Rigid(id)); }
+    None
+}
+
+pub(crate) fn handle(types: &[ir::Type], constant: Value) -> Option<usize> {
+    match constant {
+        Value::Rigid(id) => Some(id),
+        Value::Known(count) => {
+            let name = format!("$const-value:{count}");
+            for (id, ty) in types.iter().enumerate() {
+                if ty.name == name { return Some(id); }
+            }
+            None
+
+        }
+    }
+}
+
+pub(crate) fn array_length(types: &[ir::Type], id: usize) -> Option<Value> {
+    let ty = types.get(id)?;
+    let ir::TypeKind::Array { len, .. } = ty.kind else { return None; };
+    if ty.name.starts_with("$const-array:") {
+        let constant = ty.name[13usize..].parse::<usize>().ok()?;
+        value(types, constant)
+    } else { Some(Value::Known(len)) }
+}
+
+pub(crate) fn validate(source: &a::Program) -> Result<(), a::Diagnostic> {
+    let mut forbidden = Vec::new();
+    for item in &source.structs { forbidden.extend_from_slice(&item.generics); }
+    for item in &source.enums { forbidden.extend_from_slice(&item.generics); }
+    for item in &source.aliases { forbidden.extend_from_slice(&item.generics); }
+    for item in &source.traits { forbidden.extend_from_slice(&item.generics); }
+    for declaration in &source.traits {
+        for function in &declaration.methods {
+            forbidden.extend_from_slice(&source.functions[*function].generics);
+        }
+    }
+    for (id, text) in &source.constant_arguments {
+        if literal(text).is_none() {
+            return Err(a::Diagnostic::new(source.types[*id].span, "E_TYPE", "const argument must be a usize literal"));
+        }
+    }
+    for parameter in forbidden {
+        if parameter.constant {
+            return Err(a::Diagnostic::new(parameter.span, "E_UNSUPPORTED",
+                "const parameters on nominal types, aliases, or trait declarations require an additional source contract"));
+        }
+    }
+    validate_uses(source)?;
+    validate_usize(source)?;
+    validate_predicates(source)?;
+    for implementation in &source.impls {
+        for parameter in &implementation.generics {
+            if parameter.constant && !parameter.bounds.is_empty() {
+                return Err(a::Diagnostic::new(parameter.span, "E_TYPE", "const parameters cannot have trait bounds"));
+            }
+        }
+    }
+    for function in &source.functions {
+        for parameter in &function.generics {
+            if parameter.constant && !parameter.bounds.is_empty() {
+                return Err(a::Diagnostic::new(parameter.span, "E_TYPE", "const parameters cannot have trait bounds"));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn contains(outer: a::Span, inner: a::Span) -> bool {
+    outer.file == inner.file && outer.start <= inner.start && inner.end <= outer.end
+}
+
+pub(crate) fn declared(source: &a::Program, span: a::Span, name: &str) -> bool {
+    for function in &source.functions {
+        if contains(function.span, span) && function.generics.iter().any(|parameter|
+            parameter.constant && parameter.name == name) { return true; }
+    }
+    for implementation in &source.impls {
+        if contains(implementation.span, span) && implementation.generics.iter().any(|parameter|
+            parameter.constant && parameter.name == name) { return true; }
+    }
+    false
+}
+
+fn target_uses(source: &a::Program, target: a::TypeId, name: &str) -> bool {
+    let mut pending = vec![target];
+    while let Some(id) = pending.pop() {
+        match &source.types[id].kind {
+            a::Type::Array { inner, len } => {
+                if len == name { return true; }
+                pending.push(*inner);
+            }
+            a::Type::Ref { inner, .. } | a::Type::Slice(inner) => pending.push(*inner),
+            a::Type::Tuple(items) => pending.extend_from_slice(items),
+            a::Type::Path(path) => pending.extend_from_slice(&path.args),
+            _ => {}
+        }
+    }
+    false
+}
+
+fn nominal_target(source: &a::Program, mut id: a::TypeId) -> bool {
+    let mut seen = std::collections::BTreeSet::new();
+    while seen.insert(id) {
+        let a::Type::Path(path) = &source.types[id].kind else { return false; };
+        let Some(declaration) = path.declaration else { return false; };
+        match source.declarations[declaration].item {
+            a::Item::Struct(_) | a::Item::Enum(_) => return true,
+            a::Item::Alias(alias) => id = source.aliases[alias].ty,
+            _ => return false,
+        }
+    }
+    false
+}
+
+fn validate_uses(source: &a::Program) -> Result<(), a::Diagnostic> {
+
+    for (id, node) in source.types.iter().enumerate() {
+        if let a::Type::Array { len, .. } = &node.kind {
+            if literal(len).is_none() && !declared(source, node.span, len) {
+                let span = source.array_length_spans.get(&id).copied().unwrap_or(node.span);
+                return Err(a::Diagnostic::new(span, "E_TYPE", "array length requires a declared const usize parameter or usize literal"));
+            }
+        }
+    }
+    if !has_parameters(source) { return Ok(()); }
+    for node in &source.patterns {
+        let shadowed = match &node.kind {
+            a::Pattern::Bind { name, .. } => declared(source, node.span, name),
+            a::Pattern::Path(path) if path.qualification.is_none() && path.args.is_empty() =>
+                declared(source, node.span, &path.name),
+            _ => false,
+        };
+        if shadowed {
+            return Err(a::Diagnostic::new(node.span, "E_GENERIC", "a const parameter cannot be used as a pattern or shadowed by a local binding"));
+        }
+    }
+    for function in &source.functions {
+        for parameter in &function.params {
+            if declared(source, parameter.span, &parameter.name) {
+                return Err(a::Diagnostic::new(parameter.span, "E_GENERIC", "a value parameter cannot shadow a const parameter"));
+            }
+        }
+    }
+    for implementation in &source.impls {
+        if implementation.trait_ty.is_none() && implementation.generics.iter().any(|parameter| parameter.constant)
+            && !nominal_target(source, implementation.target) {
+            return Err(a::Diagnostic::new(implementation.span, "E_GENERIC", "an inherent const implementation requires a nominal receiver"));
+        }
+        for parameter in &implementation.generics {
+            if parameter.constant && !target_uses(source, implementation.target, &parameter.name) {
+                return Err(a::Diagnostic::new(parameter.span, "E_GENERIC", "const implementation parameter is not constrained by its receiver"));
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn has_parameters(source: &a::Program) -> bool {
+    source.functions.iter().any(|function| function.generics.iter().any(|parameter| parameter.constant))
+        || source.impls.iter().any(|implementation| implementation.generics.iter().any(|parameter| parameter.constant))
+}
+
+fn validate_usize(source: &a::Program) -> Result<(), a::Diagnostic> {
+    if !has_parameters(source) { return Ok(()); }
+    let resolver = crate::resolve::Resolver::new(source)?;
+    let mut parameters = Vec::new();
+    for function in &source.functions {
+        for parameter in &function.generics {
+            if parameter.constant { parameters.push((resolver.scope(&function.module), parameter.span)); }
+        }
+    }
+    for implementation in &source.impls {
+        for parameter in &implementation.generics {
+            if parameter.constant { parameters.push((resolver.scope(&implementation.module), parameter.span)); }
+        }
+    }
+    for (scope, span) in parameters {
+        let path = crate::resolve::semantic_type_path(&resolver, scope, "usize", span)?;
+        let mut shadowed = path.declaration.is_some() || path.name != "usize";
+        for function in &source.functions {
+            if contains(function.span, span) && function.generics.iter().any(|parameter|
+                !parameter.lifetime && !parameter.constant && parameter.name == "usize") { shadowed = true; }
+        }
+        for implementation in &source.impls {
+            if contains(implementation.span, span) && implementation.generics.iter().any(|parameter|
+                !parameter.lifetime && !parameter.constant && parameter.name == "usize") { shadowed = true; }
+        }
+        if shadowed {
+            return Err(a::Diagnostic::new(span, "E_TYPE", "const parameter type must resolve to the builtin usize type"));
+        }
+    }
+    Ok(())
+}
+
+fn validate_predicates(source: &a::Program) -> Result<(), a::Diagnostic> {
+    if !has_parameters(source) { return Ok(()); }
+    let mut predicates = Vec::new();
+    for function in &source.functions { predicates.extend_from_slice(&function.predicates); }
+    for implementation in &source.impls { predicates.extend_from_slice(&implementation.predicates); }
+    for predicate in predicates {
+        let mut pending = vec![predicate.target];
+        while let Some(id) = pending.pop() {
+            match &source.types[id].kind {
+                a::Type::Array { inner, len } => {
+                    if literal(len).is_none() {
+                        return Err(a::Diagnostic::new(predicate.span, "E_UNSUPPORTED",
+                            "where predicates on composite const-dependent targets require an additional source contract"));
+                    }
+                    pending.push(*inner);
+                }
+                a::Type::Ref { inner, .. } | a::Type::Slice(inner) => pending.push(*inner),
+                a::Type::Tuple(items) => pending.extend_from_slice(items),
+                a::Type::Path(path) => pending.extend_from_slice(&path.args),
+                _ => {}
+            }
+        }
+    }
+    Ok(())
+}

@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+struct Bag;
+impl Bag {
+    fn count<const N: usize>(&self, value: &[u8; N]) -> usize { N + value.len() }
+    fn size<const N: usize>(value: &[u8; N]) -> usize { value.len() }
+}
+pub fn probe() -> i64 { (Bag.count::<14>(&[0u8; 14]) + Bag::size::<14>(&[0u8; 14])) as i64 }

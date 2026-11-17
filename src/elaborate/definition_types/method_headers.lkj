@@ -297,12 +297,12 @@ impl Infer<'_, '_> {
         let Some(declaration) = path.declaration else {
             return Ok(None);
         };
-        if !path.args.is_empty()
-            || !matches!(
-                self.source.declarations[declaration].item,
-                a::Item::Struct(_) | a::Item::Enum(_)
-            )
-        {
+        let receiver_parameters = match self.source.declarations[declaration].item {
+            a::Item::Struct(index) => &self.source.structs[index].generics,
+            a::Item::Enum(index) => &self.source.enums[index].generics,
+            _ => return Ok(None),
+        };
+        if !path.args.is_empty() && receiver_parameters.iter().any(|parameter| !parameter.lifetime) {
             return Ok(None);
         }
         let mut candidates = Vec::new();
@@ -348,10 +348,9 @@ impl Infer<'_, '_> {
         environment.insert("Self".to_string(), target);
         self.parameter_equations(&implementation.generics, &mut environment, false)?;
         self.predicate_equations(&implementation.predicates, &mut environment, false)?;
-        let no_type_args: Vec<a::TypeId> = Vec::new();
         Ok(Some(self.header_signature(
             method,
-            &no_type_args,
+            &path.args,
             arguments,
             environment,
             0,

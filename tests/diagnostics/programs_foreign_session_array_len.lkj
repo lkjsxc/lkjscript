@@ -1,4 +1,3 @@
-// expect: reject E_TYPE
-// cause: bad message.
-// pending: The repeat length is an integer literal; say that its usize suffix is rejected and suggest an unsuffixed literal.
+// expect: check
+// usize-suffixed literal repeat lengths use the ordinary fixed-array contract.
 pub fn probe() -> [u8; 4] { [19u8; 4usize] }

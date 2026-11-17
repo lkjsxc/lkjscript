@@ -48,9 +48,13 @@ impl Compiler<'_> {
                     }
                     pending.extend_from_slice(&path.args);
                 }
-                a::Type::Ref { inner, .. }
-                | a::Type::Slice(inner)
-                | a::Type::Array { inner, .. } => pending.push(*inner),
+                a::Type::Ref { inner, .. } | a::Type::Slice(inner) => pending.push(*inner),
+                a::Type::Array { inner, len } => {
+                    if crate::generics::const_arguments::literal(len).is_none() && !substitutions.contains_key(len) {
+                        return Ok(None);
+                    }
+                    pending.push(*inner);
+                }
                 a::Type::Tuple(elements) => pending.extend_from_slice(elements),
                 a::Type::Function { params, result } => {
                     pending.push(*result);
@@ -295,16 +299,22 @@ impl Compiler<'_> {
                                 });
                             }
                         }
-                        a::Type::Array { inner, .. } => {
-                            if let ir::TypeKind::Array { inner: actual, .. } =
-                                self.types[actual].kind
-                            {
-                                pending.push(Work::Match {
-                                    pattern: inner,
-                                    actual,
-                                    environment,
-                                    mode: MatchMode::Exact,
-                                });
+                        a::Type::Array { inner, len } => {
+                            if let ir::TypeKind::Array { inner: actual_inner, .. } = self.types[actual].kind {
+                                let length = crate::generics::const_arguments::array_length(&self.types, actual).unwrap();
+                                if let Some(literal) = crate::generics::const_arguments::literal(&len) {
+                                    if length != crate::generics::const_arguments::Value::Known(literal) { return Ok(false); }
+                                } else {
+                                    let constant = match length {
+                                        crate::generics::const_arguments::Value::Known(count) => self.constant(count),
+                                        crate::generics::const_arguments::Value::Rigid(id) => id,
+                                    };
+                                    if let Some(previous) = environments[environment].insert(len, constant) {
+                                        if previous != constant { return Ok(false); }
+                                    }
+                                }
+                                pending.push(Work::Match { pattern: inner, actual: actual_inner,
+                                    environment, mode: MatchMode::Exact });
                             }
                         }
                         a::Type::Tuple(elements) => {

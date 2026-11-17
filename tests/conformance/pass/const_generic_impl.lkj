@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {}
+trait Size { fn size(&self) -> usize; }
+impl<const N: usize> Size for [u8; N] { fn size(&self) -> usize { N } }
+fn use_size<T: Size>(value: &T) -> usize { value.size() }
+pub fn probe() -> i64 { (use_size(&[1u8; 12]) + [0u8; 30].size()) as i64 }

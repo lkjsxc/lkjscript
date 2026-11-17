@@ -46,7 +46,18 @@ impl Compiler<'_> {
             ir::TypeKind::Vec { inner } => format!("Vec<{}>", self.display_type(*inner)),
             ir::TypeKind::Box { inner } => format!("Box<{}>", self.display_type(*inner)),
             ir::TypeKind::Slice { inner, .. } => format!("[{}]", self.display_type(*inner)),
-            ir::TypeKind::Array { inner, len } => format!("[{}; {len}]", self.display_type(*inner)),
+            ir::TypeKind::Array { inner, len } => {
+                let count = match crate::generics::const_arguments::array_length(&self.types, ty) {
+                    Some(crate::generics::const_arguments::Value::Rigid(parameter)) => {
+                        let name = &self.types[parameter].name;
+                        let end = name.rfind(':').unwrap_or(name.len());
+                        name[13usize..end].to_string()
+                    }
+                    _ => format!("{len}"),
+                };
+                format!("[{}; {count}]", self.display_type(*inner))
+            }
+
             ir::TypeKind::Struct { fields, .. } if !self.types[ty].name.starts_with('$') => {
                 let mut display = "(".to_string();
                 let mut index = 0;
