@@ -348,7 +348,11 @@ making named bindings or shared references mutable.
 IR has explicit types, signatures, locals, places, copy/move/borrow/drop and
 structured control. Every type/signature/operation shape checks, including dead
 code; source inference/trait search never occurs below admission.
-Only CheckedProgram can reach emission; optimizer output must be rechecked.
+Native emission accepts only private CheckedProgram or CheckedUnit proofs;
+optimizer output must be rechecked. [Explicit source units](units.md) check one
+unit against authenticated dependency interfaces and stream their native linkage.
+Their manifest names define source namespaces; ordinary builds retain their
+existing single-root behavior.
 See [IR rules](ir.md) for exact provenance, tag, join, destruction and loop contracts,
 and [executable scalar IR](../tests/reference/scalar.lkjir) for the primitive prefix.
 

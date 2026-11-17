@@ -25,17 +25,21 @@ Blocked line counts below overlap: each algorithm barrier blocks the same
 
 | Priority | Cause and evidence | Sites | Lines behind it | Owner / disposition |
 | --- | --- | ---: | ---: | --- |
-| 1 | Open-ended range as a value: located E_UNSUPPORTED at library line 32 after iterator support | 1 | 65 | Language; pending ordinary lowering, one explicitly counted producer normalization |
+| 1 | Open-ended range as a value: original E_UNSUPPORTED at library line 32 after iterator support | 1 | 65 | Language; usize value ranges now lower through the ordinary library, and the gate executes the exact original algorithm |
 | 2 | Iterator count: located E_UNSUPPORTED at line 17 in the initial byte-identical check | 2 | 65 | Library; ordinary-source count now implemented |
 | 3 | Vec collection: absent IteratorExt method in the baseline library, inventoried rather than independently exposed as the first refusal | 1 | 65 | Library; Vec-only collect now implemented; general FromIterator remains absent |
 | 4 | Rust-2015 integration-crate header and crate binding | 2 header lines | 60 | Package/test adapter; both original test bodies and attributes stay exact |
 | 5 | Rust source suffix | 2 source paths | 125 | Intentional .lkj ecosystem naming; path projection only |
 
-The normalization is exactly `(1..)` to `std::iter::range_from(1)`.
-It is an untrusted producer workaround for a language gap, not unmodified Rust
-acceptance. The usize-only iterator, count and Vec collector use ordinary source,
-existing ownership checking and existing checked arithmetic; no IR, interpreter,
-backend or runtime primitive was added.
+The retained historical normalization is exactly `(1..)` to
+`std::iter::range_from(1)`. It records the original port cost. Source `b15de6d27`
+adds ordinary lowering for usize open-ended range values, evaluating the start
+once and binding the actual library declaration. The offline gate now reverses
+that normalization in fresh state, verifies the complete original 65-line library
+and original test-section hashes, then executes the original algorithm. The
+retained import and operation receipt are unchanged. The usize iterator, count
+and Vec collector still use ordinary source, ownership checking and checked
+arithmetic; no IR, interpreter, backend or runtime primitive was added.
 
 The importer verifies the original hashes, proposes one `add-item` external-module
 projection, and the real `edit` command checks and publishes it. A separate
@@ -116,6 +120,39 @@ licence. Direct code, generated code and dependency-closure sizes will be report
 separately. Initial extension-only projections precede any port. Actual checker
 refusals and source inventories will remain distinguishable in the ranked table;
 blocked line estimates are overlapping upper bounds, not additive totals.
+
+## Routes for intentional refusals
+
+These are porting rules for the forthcoming cohort, not additional observed
+refusals in Levenshtein. Each actual occurrence belongs in the ranked table with
+its source sites and blocked scope.
+
+**Unsafe code.** An unsafe block cannot waive admission. Express ownership with
+Box, Vec and ordinary records, use checked arithmetic and checked views, and
+perform effects through explicitly granted capabilities. Existing OS operations
+belong to the sealed runtime contract; ordinary code cannot add an unchecked
+intrinsic or a same-address-space FFI call. When an implementation must remain
+foreign, place it behind the existing explicit ForeignCommand/process boundary
+and validate its returned data. This preserves a port route without treating the
+foreign implementation as checked lkjscript.
+
+**Raw pointers.** Replace address arithmetic with bounds-checked slices and
+temporary shared or exclusive views. Represent persistent graphs with owned
+nodes and integer handles into a Vec or map; an ordinary slot-generation field
+can reject a stale handle before borrowing its node. Owners remain explicit and
+views remain in locals, parameters, results or view aggregates rather than heap
+containers. A design that requires stable externally visible machine addresses
+must change its data interface or retain that part behind the foreign-process
+boundary; integer-to-pointer casts do not provide an escape.
+
+**Macros that execute arbitrary code.** General procedural macro expansion is
+not implemented, and a generator is never admitted as part of the checker.
+Run generation as an untrusted producer with explicit input and effect grants,
+then check its complete ordinary source or IR output through the same admission
+path as handwritten code. Existing fixed syntax such as vec!, formatting and
+assertions remains available; reusable logic can also be ordinary generic code.
+Generation may use semantic queries and checked edit operations, but neither a
+macro name nor a generation receipt substitutes for checking the result.
 
 ## Dependency and runtime handoffs
 
