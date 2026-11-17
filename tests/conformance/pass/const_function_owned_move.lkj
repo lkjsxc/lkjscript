@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+struct Guard { value: i64 }
+impl Drop for Guard { fn drop(&mut self) { self.value = 0i64; } }
+struct Held { guard: Guard }
+const fn wrap(guard: Guard) -> Held { Held { guard } }
+pub fn probe() -> i64 { let held = wrap(Guard { value: 42i64 }); held.guard.value }

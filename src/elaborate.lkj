@@ -5,6 +5,7 @@ mod borrow_cleanup;
 mod capabilities;
 mod closures;
 mod constructors;
+mod const_functions;
 mod definition_types;
 mod derive_check;
 mod derive_methods;
@@ -1391,6 +1392,9 @@ impl Compiler<'_> {
             capture_aliases: BTreeMap::new(),
             capture_locals: std::collections::BTreeSet::new(),
             active_span: source.span,
+            active_expression: None,
+            const_calls: BTreeMap::new(),
+            const_constructors: BTreeSet::new(),
             reference_updates: references.clone(),
             reference_schedules: BTreeMap::new(),
             references,
@@ -1419,7 +1423,10 @@ impl Compiler<'_> {
             builder.emit(ir::Op::Return { src: result.0 }, source.span.line);
         }
         let body = std::mem::replace(&mut builder.scoped_body, scoped_locals::Body::default());
+        let const_calls = std::mem::replace(&mut builder.const_calls, BTreeMap::new());
+        let const_constructors = std::mem::replace(&mut builder.const_constructors, BTreeSet::new());
         drop(builder);
+        self.check_const_function(instance.source, &function, &const_calls, &const_constructors)?;
         if !body.is_empty() {
             self.scoped_bodies.insert(index, body);
         }
@@ -1527,6 +1534,9 @@ struct Builder<'a, 'b> {
     capture_aliases: BTreeMap<a::ExprId, ir::Place>,
     capture_locals: std::collections::BTreeSet<usize>,
     active_span: a::Span,
+    active_expression: Option<a::ExprId>,
+    const_calls: BTreeMap<a::ExprId, usize>,
+    const_constructors: BTreeSet<a::ExprId>,
     references: Facts,
     reference_updates: Facts,
     reference_schedules: BTreeMap<(usize, usize), borrow_cleanup::ReferenceSchedule>,
@@ -1678,6 +1688,22 @@ impl Builder<'_, '_> {
         }
     }
     fn emit(&mut self, op: ir::Op, line: usize) {
+        let const_expression = if self.compiler.source.functions[self.source_function].const_qualified {
+            self.active_expression
+        } else { None };
+        if let Some(expression) = const_expression {
+            match &op {
+                ir::Op::Call { function, .. } => {
+                    if let Some(source) = self.compiler.const_source_declaration(*function) {
+                        self.const_calls.insert(expression, source);
+                    }
+                }
+                ir::Op::Struct { .. } | ir::Op::Variant { .. } => {
+                    self.const_constructors.insert(expression);
+                }
+                _ => {}
+            }
+        }
         if let ir::Op::Assign { place, src } = &op {
             if self.live.at(place.local) && place.local != *src {
                 if let Some(t) = place_type(&self.compiler.types, self.function, place) {
@@ -2471,9 +2497,12 @@ impl Builder<'_, '_> {
         inferred: Option<usize>,
     ) -> Result<(usize, usize)> {
         let previous = self.active_span;
+        let previous_expression = self.active_expression;
         self.active_span = self.compiler.source.exprs[id].span;
+        self.active_expression = Some(id);
         let result = self.expr_with_inference_inner(id, expected, inferred);
         self.active_span = previous;
+        self.active_expression = previous_expression;
         result
     }
     fn expr_with_inference_inner(

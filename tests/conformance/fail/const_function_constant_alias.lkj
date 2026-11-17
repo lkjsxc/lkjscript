@@ -1,0 +1,7 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+struct Holder;
+impl Holder { const fn new() -> i64 { 42i64 } }
+type Alias = Holder;
+const VALUE: i64 = Alias::new();
+pub fn probe() -> i64 { VALUE }

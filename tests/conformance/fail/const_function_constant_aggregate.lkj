@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+struct Number { value: i64 }
+const fn value() -> Number { Number { value: 42i64 } }
+const VALUE: Number = value();
+pub fn probe() -> i64 { VALUE.value }

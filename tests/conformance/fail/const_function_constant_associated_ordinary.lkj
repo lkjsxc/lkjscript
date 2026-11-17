@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
+struct Holder;
+impl Holder { fn ordinary() -> i64 { 42i64 } }
+const VALUE: i64 = Holder::ordinary();
+pub fn probe() -> i64 { VALUE }

@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+struct Element { value: i64 }
+enum Node { Empty, Element(Element) }
+impl Node {
+    const fn is_element(&self) -> bool { matches!(self, Node::Element(_)) }
+    const fn element(&self) -> Option<&Element> {
+        match self { Node::Element(value) => Some(value), _ => None }
+    }
+}
+pub fn probe() -> i64 {
+    let node = Node::Element(Element { value: 42i64 });
+    if node.is_element() { node.element().unwrap().value } else { 0i64 }
+}

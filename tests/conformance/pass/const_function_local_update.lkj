@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+struct Number { value: i64 }
+impl Number { const fn update(mut self, value: i64) -> Self { self.value = value; self } }
+pub fn probe() -> i64 { Number { value: 0i64 }.update(42i64).value }

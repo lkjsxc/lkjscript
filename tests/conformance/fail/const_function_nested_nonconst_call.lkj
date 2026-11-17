@@ -1,0 +1,7 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
+#[derive(Clone, Copy)]
+struct Held { value: i64 }
+impl Held { const fn get(&self) -> i64 { self.value } }
+const fn invalid(value: &Held) -> i64 { value.clone().get() }
+pub fn probe() -> i64 { 42i64 }

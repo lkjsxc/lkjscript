@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
+struct Number { value: i64 }
+impl Number { fn get(&self) -> i64 { self.value } }
+const fn invalid(value: &Number) -> i64 { value.get() }
+pub fn probe() -> i64 { 42i64 }

@@ -1,0 +1,83 @@
+//! Source const qualification is separate from constant evaluation.
+//! Runtime calls use ordinary IR. Unsupported constant calls never run at compile time.
+use super::*;
+
+// A nominal namespace is not itself a constructor: Holder::new and
+// Alias::ordinary are functions. Retain the exact selected member identity.
+pub(crate) fn const_data_constructor(source: &Program, path: &Path) -> bool {
+    let Some(mut declaration) = path.declaration else { return false; };
+    let owner = source.declarations[declaration].name.clone();
+    let prefix = format!("{owner}::");
+    let member = if path.name == owner { String::new() }
+        else if path.name.starts_with(&prefix) { path.name[prefix.len()..].to_string() }
+        else { return false; };
+    if member.contains("::") { return false; }
+    let mut aliases = BTreeSet::new();
+    let mut aliased = false;
+    loop {
+        match source.declarations[declaration].item {
+            Item::Struct(index) => return !aliased && member.is_empty() && source.structs[index].tuple,
+            Item::Enum(index) => {
+                if member.is_empty() { return false; }
+                for variant in &source.enums[index].variants {
+                    if variant.name == member && matches!(variant.style, VariantStyle::Tuple) {
+                        return true;
+                    }
+                }
+                return false;
+            }
+            Item::Alias(index) => {
+                if !aliases.insert(declaration) { return false; }
+                aliased = true;
+                let Type::Path(target) = &source.types[source.aliases[index].ty].kind
+                    else { return false; };
+                let Some(next) = target.declaration else { return false; };
+                declaration = next;
+            }
+            _ => return false,
+        }
+    }
+}
+
+pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
+    for (index, function) in source.functions.iter().enumerate() {
+        if !function.const_qualified { continue; }
+        match source.function_owner(FunctionId { index }) {
+            FunctionOwner::Free => {}
+            FunctionOwner::Implementation(owner) if source.impls[owner.index].trait_ty.is_none() => {}
+            _ => return Err(Diagnostic::new(function.span, "E_UNSUPPORTED",
+                "const fn is supported on free functions and inherent methods, not trait methods")),
+        }
+        if function.body.is_none() {
+            return Err(Diagnostic::new(function.span, "E_TYPE", "const fn requires a body"));
+        }
+    }
+    // Initializers are currently projected into ordinary execution. Do not
+    // silently turn an apparent compile-time const call into a runtime call.
+    let names = crate::resolve::Resolver::new(source)?;
+    for constant in &source.constants {
+        let span = source.exprs[constant.value].span;
+        for expression in &source.exprs {
+            if expression.span.file != span.file || expression.span.start < span.start
+                || expression.span.end > span.end { continue; }
+            let call = match &expression.kind {
+                Expr::Call { callee, .. } => {
+                    match &source.exprs[*callee].kind {
+                        Expr::Path(path) => {
+                            let resolved = names.value_path(source.exprs[*callee].scope, path, expression.span)?;
+                            !const_data_constructor(source, &resolved)
+                        }
+                        _ => true,
+                    }
+                }
+                Expr::Method { .. } => true,
+                _ => false,
+            };
+            if call {
+                return Err(Diagnostic::new(expression.span, "E_UNSUPPORTED",
+                    "function calls in constant initializers require compile-time evaluation; const fn runtime calls are supported"));
+            }
+        }
+    }
+    Ok(())
+}

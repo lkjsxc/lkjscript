@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {}
+struct Id { value: i64 }
+impl Id { const fn new(value: i64) -> Self { Self { value } } }
+const fn answer() -> Id { Id::new(42i64) }
+pub fn probe() -> i64 { answer().value }

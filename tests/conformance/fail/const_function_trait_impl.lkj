@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
+trait Value { fn get(&self) -> i64; }
+struct Number { value: i64 }
+impl Value for Number { const fn get(&self) -> i64 { self.value } }
+pub fn probe() -> i64 { 42i64 }

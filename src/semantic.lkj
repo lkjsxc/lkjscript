@@ -272,7 +272,7 @@ fn declaration_identity(program: &a::Program, index: usize, function_ids: &[Stri
     Some(item_identity(program, declaration.item, function_ids))
 }
 fn function_signature(program: &a::Program, function: &a::Function) -> String {
-    let mut out = "fn(".to_string();
+    let mut out = if function.const_qualified { "const fn(".to_string() } else { "fn(".to_string() };
     for (index, parameter) in function.params.iter().enumerate() {
         if index != 0usize { out.push_str(", "); }
         out.push_str(&type_name(program, parameter.ty));

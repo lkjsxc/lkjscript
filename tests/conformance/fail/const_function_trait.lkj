@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
+trait Value { const fn get(&self) -> i64; }
+pub fn probe() -> i64 { 42i64 }

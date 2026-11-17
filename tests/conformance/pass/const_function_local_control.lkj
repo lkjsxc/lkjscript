@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {}
+const fn total(count: i64) -> i64 {
+    let mut result = 0i64;
+    let mut at = 0i64;
+    while at < count { result += 7i64; at += 1i64; }
+    if result > 0i64 { result } else { 42i64 }
+}
+pub fn probe() -> i64 { total(6i64) }

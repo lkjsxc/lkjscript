@@ -1,0 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
+fn ordinary() -> i64 { 42i64 }
+const fn invalid() -> i64 { ordinary() }
+pub fn probe() -> i64 { 42i64 }

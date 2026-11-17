@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+const fn sum(value: i64) -> i64 { if value == 0i64 { 0i64 } else { 7i64 + sum(value - 1i64) } }
+pub fn probe() -> i64 { sum(6i64) }

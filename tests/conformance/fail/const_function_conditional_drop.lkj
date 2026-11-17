@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
+const fn invalid<T>(first: T, second: T, choose: bool) -> T { if choose { first } else { second } }
+pub fn probe() -> i64 { 42i64 }

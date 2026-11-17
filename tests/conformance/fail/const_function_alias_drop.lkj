@@ -1,0 +1,7 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
+struct Guard { value: i64 }
+impl Drop for Guard { fn drop(&mut self) { self.value = 0i64; } }
+type Alias = Guard;
+const fn invalid(_value: Alias) -> i64 { 42i64 }
+pub fn probe() -> i64 { 42i64 }

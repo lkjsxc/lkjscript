@@ -1202,7 +1202,7 @@ impl Parser {
         Ok(items)
     }
     fn item(&mut self, attrs: Vec<Attribute>, public: Visibility) -> Result<Item, Diagnostic> {
-        if self.is("fn") {
+        if self.is("fn") || (self.is("const") && self.tokens[self.at + 1].text == "fn") {
             return Ok(Item::Function(self.function(attrs, public)?));
         }
         if self.is("struct") {
@@ -1281,9 +1281,6 @@ impl Parser {
         }
         if self.take("const") {
             let span = self.tokens[self.at - 1].span;
-            if self.is("fn") {
-                return Err(self.unsupported("const fn"));
-            }
             let name = self.ident()?;
             self.expect(":")?;
             let ty = self.ty()?;
@@ -1966,6 +1963,7 @@ impl Parser {
     }
     fn function(&mut self, attrs: Vec<Attribute>, public: Visibility) -> Result<usize, Diagnostic> {
         let span = self.token().span;
+        let const_qualified = self.take("const");
         self.expect("fn")?;
         let name = self.ident()?;
         let mut generics = self.generics()?;
@@ -2035,6 +2033,7 @@ impl Parser {
             form.result = Some(id);
         }
         self.program.functions.push(Function {
+            const_qualified,
             name,
             module: self.module.clone(),
             generics,
@@ -2219,7 +2218,7 @@ impl Parser {
             self.skip_disabled()?;
             return Ok(());
         }
-        if self.is("fn") {
+        if self.is("fn") || (self.is("const") && self.tokens[self.at + 1].text == "fn") {
             methods.push(self.function(attrs, Visibility::Private)?);
         } else if self.is("type") {
             associated.push(self.associated_type()?);
@@ -2278,7 +2277,7 @@ impl Parser {
             return Ok(());
         }
         let public = self.visibility()?;
-        if self.is("fn") {
+        if self.is("fn") || (self.is("const") && self.tokens[self.at + 1].text == "fn") {
             methods.push(self.function(attrs, public)?);
         } else if self.is("type") {
             associated.push(self.associated_type()?);

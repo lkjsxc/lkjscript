@@ -1,7 +1,7 @@
 //! Assignment has a different operand order from ordinary binary expressions:
 //! first compute the incoming value, then the destination, then replace it.
 use super::{Bindings, Builder, Facts, LoopScope, Result, a, err, ir, place_type};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 
 enum HintStep {
     Deref,
@@ -155,6 +155,9 @@ impl Builder<'_, '_> {
                 capture_aliases: self.capture_aliases.clone(),
                 capture_locals: self.capture_locals.clone(),
                 active_span: self.active_span,
+                active_expression: self.active_expression,
+                const_calls: BTreeMap::new(),
+                const_constructors: BTreeSet::new(),
                 reference_updates: references.clone(),
                 reference_schedules: BTreeMap::new(),
                 references,

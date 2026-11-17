@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+const fn invalid(value: &[i64]) -> usize { value.len() }
+pub fn probe() -> i64 { 42i64 }

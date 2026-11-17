@@ -126,6 +126,7 @@ pub struct Param {
 
 #[derive(Clone)]
 pub struct Function {
+    pub const_qualified: bool,
     pub name: String,
     pub module: String,
     pub generics: Vec<GenericParam>,

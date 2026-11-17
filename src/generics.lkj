@@ -3,6 +3,8 @@
 mod bound_solver;
 mod signature_bounds;
 mod associated_bindings;
+mod const_functions;
+pub(crate) use const_functions::const_data_constructor;
 use crate::ast::*;
 use crate::names::qualified;
 pub(crate) use bound_solver::{BoundContext, BoundSolver, BoundStep};
@@ -1146,6 +1148,7 @@ pub fn validate(source: &Program) -> Result<(), Diagnostic> {
         return validate(&crate::resolve::resolve(source)?);
     }
     declarations(source)?;
+    const_functions::validate(source)?;
     alias_cycles(source)?;
     associated_bindings::validate(source)?;
     constant_cycles(source)?;

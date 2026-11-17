@@ -1,0 +1,124 @@
+//! Conservative source const-function qualification over ordinary lowering.
+//! This untrusted producer check grants no IR authority and does not evaluate constants.
+use super::{Compiler, PendingFunction, Result, a, err, ir, is_copy, place_type};
+use crate::generics::TraitIdentity;
+use std::collections::{BTreeMap, BTreeSet};
+
+impl Compiler<'_> {
+    pub(super) fn const_source_declaration(&self, function: usize) -> Option<usize> {
+        for (index, pending) in &self.pending_functions {
+            if *index != function { continue; }
+            return match pending {
+                PendingFunction::Source(instance) if self.source.functions[instance.source].const_qualified => Some(instance.source),
+                _ => None,
+            };
+        }
+        None
+    }
+
+    fn const_drop_trivial(&mut self, ty: usize) -> bool {
+        let mut pending = vec![ty];
+        let mut seen = BTreeSet::new();
+        while let Some(ty) = pending.pop() {
+            if !seen.insert(ty) { continue; }
+            // A rigid stand-in's empty layout is not evidence that T has no Drop.
+            let rigid = { self.contracts.as_ref().is_some_and(|contracts| contracts.rigid.contains_key(&ty)) };
+            if rigid {
+                if !self.satisfies_bound(ty, "Copy") { return false; }
+                continue;
+            }
+            if !self.implementations.candidates(&self.types, &self.applications, ty,
+                &TraitIdentity::Builtin("Drop".to_string())).is_empty() { return false; }
+            if is_copy(&self.types, ty) { continue; }
+            match &self.types[ty].kind {
+                ir::TypeKind::Unit | ir::TypeKind::Bool | ir::TypeKind::Char
+                | ir::TypeKind::Int { .. } | ir::TypeKind::F64 | ir::TypeKind::Ref { .. } => {}
+                ir::TypeKind::Array { inner, .. } => pending.push(*inner),
+                ir::TypeKind::Struct { fields, .. } => {
+                    for field in fields { pending.push(field.ty); }
+                }
+                ir::TypeKind::Enum { variants, .. } => {
+                    for variant in variants {
+                        for field in &variant.fields { pending.push(field.ty); }
+                    }
+                }
+                _ => return false,
+            }
+        }
+        true
+    }
+
+    pub(super) fn check_const_function(&mut self, source: usize, function: &ir::Function,
+        calls: &BTreeMap<a::ExprId, usize>, constructors: &BTreeSet<a::ExprId>) -> Result<()> {
+        let declaration = self.source.functions[source].clone();
+        if !declaration.const_qualified { return Ok(()); }
+        let span = declaration.span;
+        for instruction in &function.body {
+            let reason = match &instruction.op {
+                ir::Op::Call { function, .. } if self.const_source_declaration(*function).is_none() =>
+                    Some("const fn cannot call a non-const function, trait method or dynamic callable"),
+                ir::Op::Intrinsic { .. } =>
+                    Some("intrinsic calls, allocation and external effects in const fn require a separate const contract"),
+                ir::Op::Borrow { mutable: true, .. }
+                | ir::Op::SliceBorrow { mutable: true, .. }
+                | ir::Op::ViewRange { mutable: true, .. } =>
+                    Some("mutable borrowing in const fn is not implemented"),
+                ir::Op::Assign { place, .. } if place.projections.iter()
+                    .any(|projection| matches!(projection, ir::Projection::Deref)) =>
+                    Some("mutation through a reference in const fn is not implemented"),
+                ir::Op::Drop { place } | ir::Op::DropIf { place } => {
+                    let trivial = place_type(&self.types, function, place)
+                        .is_some_and(|ty| self.const_drop_trivial(ty));
+                    if trivial { None } else {
+                        Some("const fn cannot implicitly destroy a value with non-const or unknown Drop")
+                    }
+                }
+                _ => None,
+            };
+            if let Some(reason) = reason {
+                let mut problem = err(span, "E_UNSUPPORTED", reason);
+                problem.line = instruction.line;
+                problem.column = instruction.column;
+                return Err(problem);
+            }
+        }
+        let body = match declaration.body {
+            Some(body) => self.source.blocks[body].span,
+            None => return Err(err(span, "E_TYPE", "const fn requires a body")),
+        };
+        for (expression_id, expression) in self.source.exprs.iter().enumerate() {
+            let site = expression.span;
+            if site.file != body.file || site.start < body.start || site.end > body.end { continue; }
+            if matches!(expression.kind, a::Expr::Closure { .. } | a::Expr::Try(_)) {
+                return Err(err(site, "E_UNSUPPORTED",
+                    "closures and try expressions in const fn require a separate const contract"));
+            }
+            if !matches!(expression.kind, a::Expr::Call { .. } | a::Expr::Method { .. }) { continue; }
+            // ExprId, not source coordinates, ties each call to its selected
+            // declaration. Chained calls may start at the same line and column.
+            let selected = calls.get(&expression_id).copied();
+            let source_call = selected.is_some_and(|index| self.source.functions[index].const_qualified);
+            let constructor = if constructors.contains(&expression_id) {
+                match &expression.kind {
+                    a::Expr::Call { callee, .. } => {
+                        match &self.source.exprs[*callee].kind {
+                            a::Expr::Path(path) => {
+                                let resolved = self.names.value_path(self.source.exprs[*callee].scope, path, site)?;
+                                crate::generics::const_data_constructor(self.source, &resolved)
+                                    || resolved.name == "Self" || resolved.name.starts_with("Self::")
+                            }
+                            _ => false,
+                        }
+                    }
+                    _ => false,
+                }
+            } else { false };
+            let qualified = source_call || constructor;
+            if !qualified {
+                return Err(err(site, "E_UNSUPPORTED",
+                    "const fn calls require a declared const source function or a data constructor"));
+            }
+        }
+        Ok(())
+    }
+}

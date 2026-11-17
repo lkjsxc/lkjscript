@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+const fn ignore<T: Copy>(value: T) -> i64 { let _ = value; 42i64 }
+pub fn probe() -> i64 { ignore(7i64) }

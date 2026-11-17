@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+struct Count(i64);
+enum Number { Value(i64) }
+const COUNT: Count = Count(20i64);
+const NUMBER: Number = Number::Value(22i64);
+type Alias = Number;
+const ALIASED: Alias = Alias::Value(22i64);
+const fn identity(value: i64) -> i64 { value }
+pub fn probe() -> i64 {
+    let tail = match ALIASED { Number::Value(value) => value };
+    identity(COUNT.0 + tail)
+}

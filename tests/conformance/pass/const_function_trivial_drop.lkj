@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+struct Plain { value: i64 }
+const fn answer() -> i64 { let plain = Plain { value: 7i64 }; let _ = plain.value; 42i64 }
+pub fn probe() -> i64 { answer() }

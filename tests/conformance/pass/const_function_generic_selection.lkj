@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+struct Held<T> { value: T }
+impl<T: Copy> Held<T> {
+    const fn new(value: T) -> Self { Self { value } }
+    const fn get(&self) -> T { self.value }
+}
+const fn read<T: Copy>(value: &Held<T>) -> T { value.get() }
+pub fn probe() -> i64 {
+    let first = Held::new(20i64);
+    let second = Held::new(22i64);
+    let other = Held::new(true);
+    if read(&other) { read(&first) + read(&second) } else { 0i64 }
+}

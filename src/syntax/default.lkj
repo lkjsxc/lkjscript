@@ -106,6 +106,7 @@ impl Parser {
         });
         let method = self.program.functions.len();
         self.program.functions.push(Function {
+            const_qualified: false,
             name: "default".to_string(),
             module: definition.module.clone(),
             generics: Vec::new(),

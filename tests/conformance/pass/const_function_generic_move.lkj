@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+struct Held<T> { value: T }
+const fn wrap<T>(value: T) -> Held<T> { Held { value } }
+const fn identity<T>(value: T) -> T { value }
+pub fn probe() -> i64 {
+    let mut values = Vec::<i64>::new();
+    values.push(42i64);
+    let held = wrap(identity(values));
+    held.value[0usize]
+}

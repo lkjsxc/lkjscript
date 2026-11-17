@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {}
+const fn add(left: i64, right: i64) -> i64 { left + right }
+struct Number { value: i64 }
+impl Number {
+    const fn get(&self) -> i64 { self.value }
+    const fn doubled(&self) -> i64 { add(self.get(), self.get()) }
+}
+pub fn probe() -> i64 { Number { value: 21i64 }.doubled() }

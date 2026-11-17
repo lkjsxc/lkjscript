@@ -5,19 +5,40 @@
          "nom" : 0,
          "sozu" : 0
       },
+      "const_function_header_interpretation" : "Fifteen old const-function header diagnostics are absent. Dedicated semantic controls establish the bounded runtime-call qualification contract. Neither original surrounding bodies nor constant-initializer evaluation is inferred from disappearance.",
+      "current_stage_primary_sites" : {
+         "dom" : 64,
+         "nom" : 24,
+         "sozu" : 448
+      },
       "new_independent_primary_sites" : {
          "dom" : 1,
          "nom" : 4,
          "sozu" : 0
       },
+      "new_primary_sites_since_previous_stage" : {
+         "dom" : 0,
+         "nom" : 0,
+         "sozu" : 0
+      },
       "nom_dom_primary_sites" : {
-         "after" : 102,
+         "after" : 88,
          "before" : 244
+      },
+      "observed_const_function_header_sites_not_reproduced" : {
+         "dom" : 14,
+         "sozu" : 1,
+         "total" : 15
       },
       "observed_old_target_diagnostic_sites_not_reproduced" : {
          "dom" : 17,
          "nom" : 129,
          "total" : 146
+      },
+      "previous_stage_primary_sites" : {
+         "dom" : 78,
+         "nom" : 24,
+         "sozu" : 449
       },
       "removed_old_target_diagnostic_identities" : {
          "dom" : 17,
@@ -39,10 +60,30 @@
       "target_site_interpretation" : "All 146 original target diagnostic identities remain absent. Unlike APIT alone, dedicated semantic controls now validate result-position impl Trait as well as arguments, equality and qualified paths. The original nom Parser<I> positional trait contracts, generic associated types and other documented limits remain separate refusals; no surrounding function, module or crate admission is inferred."
    },
    "baseline_compiler_sha256" : "eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f",
-   "compiler_sha256" : "7560e8c6ecd95da2943fc1c424a70ad0109af4fc54df82ebd1b417a755ea82cf",
+   "compiler_sha256" : "ef0da37e0c7b7df55dc63d75b440097ae45773cbea8699384894523a14a1f58f",
    "form_support" : {
       "argument_impl_trait" : "supported_in_documented_subset",
       "associated_type_equality" : "supported_in_documented_subset",
+      "const_functions" : {
+         "accepted" : [
+            "Scalar values, locals and ordinary control flow",
+            "Direct calls and methods selected by exact source declaration identity to another const-qualified free/inherent function",
+            "Shared field and enum projections",
+            "Constructors and identity transfers of generic, non-Copy or custom-Drop values when no destruction is emitted"
+         ],
+         "conservative_refusals" : [
+            "Nonconst, trait or dynamic calls",
+            "Allocation and effect/heap intrinsics",
+            "Closure and try expressions",
+            "Mutable borrowing or mutation through a reference",
+            "Destruction that is not structurally trivial"
+         ],
+         "constant_initializers" : "Every function or method call in a module constant initializer still receives a located CTFE refusal, including a const-qualified call. Aggregate/reference compile-time evaluation is not claimed.",
+         "declarations" : "const-qualified free and inherent functions; every definition is checked rigidly, including unused/unreachable definitions",
+         "destruction" : "Each emitted Drop/DropIf needs structurally trivial destruction. Shared views do not destroy their referents; unknown rigid T requires Copy.",
+         "qualification" : "The frontend checks lowered operations using exact ExprId and selected source declaration metadata; the checked IR and independent checker are unchanged.",
+         "status" : "supported_in_documented_runtime_call_subset"
+      },
       "ordinary_impl_trait_form_complete" : true,
       "qualified_associated_paths" : "supported_in_documented_subset",
       "remaining_limits" : [
@@ -55,38 +96,31 @@
       "return_position_impl_trait" : "supported_in_documented_subset"
    },
    "interpretation" : [
-      "The RPIT stage supplies independently validated opaque-result semantics. Its twelve root diagnostic streams are byte-identical to APIT because the same earlier parser barriers remain; root observations alone do not establish that semantic support.",
       "Original source bytes, projection identities and the selected library inventory remain unchanged. Original-suffix refusals are compared byte-for-byte.",
       "A vanished diagnostic is not proof that the surrounding program admits. New independent sites, changed diagnostic identities at old coordinates, and recovery artifacts are reported separately.",
       "The three original classification JSON files remain the immutable baseline; this file records the current frontier and exact deltas.",
-      "Source/frontend edits receive no operation-adoption credit from these observations.",
-      "No large root or real nom module tree is admitted, and no nom own test has run under lkjscript. The existing Rust oracle and the reduced/handwritten semantic controls remain distinct from an upstream module port."
+      "Source/frontend edits receive no operation-adoption credit from these observations."
    ],
    "kind" : "current_foreign_program_refusal_frontier",
-   "observation_comparison_to_previous_stage" : {
-      "all_12_exit_stdout_stderr_streams" : "byte_identical",
-      "meaning" : "APIT already consumed opaque result syntax before a later unsupported-result resolver. The unchanged root observations do not measure the additional semantic RPIT support, which is established by its focused controls.",
-      "stage" : "argument_impl_trait"
-   },
    "rerank_payload_fingerprint" : "sha256(JSON::PP canonical ascii encode(rerank without inputs))",
    "schema" : 1,
    "specimens" : {
       "dom" : {
          "accounting" : {
             "baseline_primary_sites" : 95,
-            "current_primary_sites" : 78,
+            "current_primary_sites" : 64,
             "new_unclassified_rows" : 0,
             "prior_unclassified_rows" : 0,
             "raw_by_code" : {
-               "E_BLOCKED" : 79,
+               "E_BLOCKED" : 65,
                "E_CAPABILITY" : 10,
                "E_PARSE" : 8,
-               "E_UNSUPPORTED" : 42,
+               "E_UNSUPPORTED" : 28,
                "E_UNSUPPORTED_MACRO" : 18
             },
-            "raw_projected_diagnostic_rows" : 157,
+            "raw_projected_diagnostic_rows" : 129,
             "recovery_rows_excluded" : 0,
-            "upstream_default_candidate_sites" : 71,
+            "upstream_default_candidate_sites" : 57,
             "upstream_test_only_sites" : 7
          },
          "baseline_classification" : {
@@ -141,26 +175,26 @@
                "entry_sha256" : "81441eac6c5af9fe4aa7eea33f2f11ebad8a6d309a0f0fb80a17c9d2174f5779",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5344,
+               "peak_rss_kib" : 5540,
                "route" : "original_suffix",
                "stderr_sha256" : "1170c98833b245d8181dc2850bcfc1d36d34bc83792f33ec55fd3787b0b748e1",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.001173
+               "wall_seconds" : 0.001532
             },
             {
                "entry_sha256" : "81441eac6c5af9fe4aa7eea33f2f11ebad8a6d309a0f0fb80a17c9d2174f5779",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 36856,
+               "peak_rss_kib" : 37944,
                "route" : "suffix_projection",
-               "stderr_sha256" : "61ed936d543e1c1d818d069274491481b42f1f6044c9424bce173ba20af67d5a",
+               "stderr_sha256" : "5331dc685de940a4da7b9796ed08dcee8b6b4c8663f9f14548466ea6416cc4d1",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.117336
+               "wall_seconds" : 0.11586
             }
          ],
-         "observed_at_utc" : "2026-11-17T19:58:33Z",
+         "observed_at_utc" : "2026-11-17T21:05:10Z",
          "old_site_counts" : [
             {
                "baseline_rank" : 6,
@@ -176,9 +210,9 @@
                "baseline_rank" : 3,
                "baseline_sites" : 14,
                "changed_diagnostic_sites" : 0,
-               "exact_surviving_sites" : 14,
+               "exact_surviving_sites" : 0,
                "id" : "const_functions",
-               "not_observed_sites" : 0,
+               "not_observed_sites" : 14,
                "owner" : "language",
                "title" : "const fn declarations"
             },
@@ -332,8 +366,8 @@
             "version" : "0.28.0"
          },
          "probe_receipt" : {
-            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-rpit-7560e8c6ecd95da2.json",
-            "sha256" : "35306253b1e07454e000ef1aaaadc28e31adbba91e729bf5e90f692eb56fa7da"
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-const-fn-ef0da37e0c7b7df5.json",
+            "sha256" : "189fa2bf3ba865640548188af9988f8c1b47a61a763d74fe059e53755608a752"
          },
          "projection_manifest_sha256" : "7eef776218daecb22822d613a609a00039600c34cea05a6047216111148272c9",
          "ranked_causes" : [
@@ -362,22 +396,6 @@
                "owner" : "language",
                "site_count" : 22,
                "title" : "Dependency-provided atom macros in expressions and patterns"
-            },
-            {
-               "affected_files" : [
-                  "src/dom_tree/tree.rs",
-                  "src/node.rs",
-                  "src/node/inner.rs",
-                  "src/node/node_ref.rs",
-                  "src/node/text_formatting.rs",
-                  "src/selection.rs"
-               ],
-               "baseline_rank" : 3,
-               "id" : "const_functions",
-               "overlapping_file_physical_lines" : 2839,
-               "owner" : "language",
-               "site_count" : 14,
-               "title" : "const fn declarations"
             },
             {
                "affected_files" : [
@@ -489,14 +507,14 @@
             }
          ],
          "removed_previously_unclassified_sites" : [],
-         "rerank_payload_sha256" : "a510ece0915b3be9c082d143537e391bc1d23db5c705e03639afdda89a7210e8",
+         "rerank_payload_sha256" : "7cb17757e1b52e9c7e0e6f407a197cc21ce97f4492112d0c457b5e8e9f32bd5e",
          "review" : {
             "changed_primary_diagnostics" : 1,
             "changed_recovery_rows" : 0,
             "new_independent_primary_sites" : 1,
-            "path" : "docs/real-programs-rpit-dom-review.json",
+            "path" : "docs/real-programs-const-fn-dom-review.json",
             "reviewed_primary_sites" : 2,
-            "sha256" : "70fc63741fb5c7d78caacd83d0da1a828a655ce5f5082d23b3ce62df23e41506",
+            "sha256" : "37d9feac8408c5eba697d7ed9c5edfd8c53e7ceaebb7a812affbdde9fe7ec6bb",
             "unchanged_recovery_rows" : 0
          }
       },
@@ -606,26 +624,26 @@
                "entry_sha256" : "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 7436,
+               "peak_rss_kib" : 5540,
                "route" : "original_suffix",
                "stderr_sha256" : "1170c98833b245d8181dc2850bcfc1d36d34bc83792f33ec55fd3787b0b748e1",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.001343
+               "wall_seconds" : 0.001611
             },
             {
                "entry_sha256" : "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 38500,
+               "peak_rss_kib" : 37364,
                "route" : "suffix_projection",
                "stderr_sha256" : "aad5407b571b5a9266ef45e0271da9b4945b9dda65e6b45d3c296dae84814dee",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.156686
+               "wall_seconds" : 0.123828
             }
          ],
-         "observed_at_utc" : "2026-11-17T19:58:32Z",
+         "observed_at_utc" : "2026-11-17T21:05:09Z",
          "old_site_counts" : [
             {
                "baseline_rank" : 4,
@@ -717,8 +735,8 @@
             "version" : "8.0.0"
          },
          "probe_receipt" : {
-            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-rpit-7560e8c6ecd95da2.json",
-            "sha256" : "cca2adf56b9679115693d138c952e26dd1bbb56da01f6bb221fef3fef9e50375"
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-const-fn-ef0da37e0c7b7df5.json",
+            "sha256" : "f6d7bd0c0ee8583f2a33ab9df451e6564b44a76045b8ae611ffe821b414d933e"
          },
          "projection_manifest_sha256" : "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
          "ranked_causes" : [
@@ -802,28 +820,28 @@
             "changed_primary_diagnostics" : 0,
             "changed_recovery_rows" : 0,
             "new_independent_primary_sites" : 4,
-            "path" : "docs/real-programs-rpit-nom-review.json",
+            "path" : "docs/real-programs-const-fn-nom-review.json",
             "reviewed_primary_sites" : 4,
-            "sha256" : "797c8098dc88dbfcb5dcd50232d55571d53c393681c33362b2f08229b5aaea01",
+            "sha256" : "fc973470dff2e6e794f9b66921f100b84927c232016f147f8620435ad1afcd4d",
             "unchanged_recovery_rows" : 0
          }
       },
       "sozu" : {
          "accounting" : {
             "baseline_primary_sites" : 449,
-            "current_primary_sites" : 449,
+            "current_primary_sites" : 448,
             "new_unclassified_rows" : 0,
             "prior_unclassified_rows" : 35,
             "raw_by_code" : {
-               "E_BLOCKED" : 488,
+               "E_BLOCKED" : 487,
                "E_CAPABILITY" : 117,
                "E_LEX" : 3,
                "E_MODULE_MISSING" : 1,
                "E_PARSE" : 35,
-               "E_UNSUPPORTED" : 93,
+               "E_UNSUPPORTED" : 92,
                "E_UNSUPPORTED_MACRO" : 235
             },
-            "raw_projected_diagnostic_rows" : 972,
+            "raw_projected_diagnostic_rows" : 970,
             "recovery_rows_excluded" : 0
          },
          "baseline_classification" : {
@@ -841,92 +859,92 @@
                "entry_sha256" : "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5368,
+               "peak_rss_kib" : 5540,
                "route" : "original_suffix",
                "stderr_sha256" : "7b549de4db0927e5cfce74b5932bada29e9eb2d1f4453c00765287200f698e06",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "bin/src/main.rs",
-               "wall_seconds" : 0.001975
+               "wall_seconds" : 0.001371
             },
             {
                "entry_sha256" : "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 36904,
+               "peak_rss_kib" : 38864,
                "route" : "suffix_projection",
                "stderr_sha256" : "5a511b9ace6c5b6e56e3cb5266a12315b94102c4439f714268406eef6520fcda",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "bin/src/main.rs",
-               "wall_seconds" : 0.125034
+               "wall_seconds" : 0.131641
             },
             {
                "entry_sha256" : "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5368,
+               "peak_rss_kib" : 5540,
                "route" : "original_suffix",
                "stderr_sha256" : "6c077bd9d3f3ddf7b4272ee7183242c23fa8a77a2d0212dfba601bb1b82481f8",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "lib/src/lib.rs",
-               "wall_seconds" : 0.000977
+               "wall_seconds" : 0.001633
             },
             {
                "entry_sha256" : "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 33212,
+               "peak_rss_kib" : 35840,
                "route" : "suffix_projection",
                "stderr_sha256" : "4a94594ccc6f875d67e35105a6b479f997764d9fa831195a8ab1cce128447579",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "lib/src/lib.rs",
-               "wall_seconds" : 0.07142
+               "wall_seconds" : 0.075628
             },
             {
                "entry_sha256" : "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5368,
+               "peak_rss_kib" : 5540,
                "route" : "original_suffix",
                "stderr_sha256" : "a9f468a468db306f90ff1c8629d09a0a9e63bc215ad0f16255d5b664965a7b6c",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "command/src/lib.rs",
-               "wall_seconds" : 0.000976
+               "wall_seconds" : 0.002545
             },
             {
                "entry_sha256" : "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 39784,
+               "peak_rss_kib" : 40300,
                "route" : "suffix_projection",
-               "stderr_sha256" : "066d558f87407ae23b0eb9a006440134dbe41154b6674f20bcb811b32a7a76b4",
+               "stderr_sha256" : "00e28742768ca05d67e1137952c8b360c10e4ed76b356fa42a4f85c55e17a311",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "command/src/lib.rs",
-               "wall_seconds" : 0.170557
+               "wall_seconds" : 0.179557
             },
             {
                "entry_sha256" : "8a8900e43c1479621cabd4e27575bdc49624d5c43469a754dc2b6bd5272efa78",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5368,
+               "peak_rss_kib" : 5540,
                "route" : "original_suffix",
                "stderr_sha256" : "a00167481ac5fad74f5a5729cc5c94ae44f197d913df9a7a953f1767f9b210f3",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "e2e/src/lib.rs",
-               "wall_seconds" : 0.001359
+               "wall_seconds" : 0.001421
             },
             {
                "entry_sha256" : "8a8900e43c1479621cabd4e27575bdc49624d5c43469a754dc2b6bd5272efa78",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 34608,
+               "peak_rss_kib" : 33632,
                "route" : "suffix_projection",
                "stderr_sha256" : "146fbabe3156eed526d9105f8f0984bc3dcd5f6c62e120f5988aa6c13f99075e",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "e2e/src/lib.rs",
-               "wall_seconds" : 0.08391
+               "wall_seconds" : 0.089881
             }
          ],
-         "observed_at_utc" : "2026-11-17T19:58:34Z",
+         "observed_at_utc" : "2026-11-17T21:05:11Z",
          "old_site_counts" : [
             {
                "baseline_rank" : 14,
@@ -982,9 +1000,9 @@
                "baseline_rank" : 6,
                "baseline_sites" : 2,
                "changed_diagnostic_sites" : 0,
-               "exact_surviving_sites" : 2,
+               "exact_surviving_sites" : 1,
                "id" : "compile_time_evaluation",
-               "not_observed_sites" : 0,
+               "not_observed_sites" : 1,
                "owner" : "language",
                "title" : "compile_time_evaluation"
             },
@@ -1118,8 +1136,8 @@
             "version" : "1.0.6"
          },
          "probe_receipt" : {
-            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-rpit-7560e8c6ecd95da2.json",
-            "sha256" : "c8e1d6fe3db82daf263fc1cb30a5a60554fa1c6ce8b441f2094d3b751c902d30"
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-const-fn-ef0da37e0c7b7df5.json",
+            "sha256" : "ee6ac466ca5d7f2dc4c86cb9fddd790bb7bb4072ebf40107cc1b5aef2a63c513"
          },
          "projection_manifest_sha256" : "3ad1b9efdc73fb42f61aa3cb5d0dfaf1edea4d5fecf68e4b48e4cedd01db38b0",
          "ranked_causes" : [
@@ -1313,18 +1331,6 @@
             },
             {
                "affected_files" : [
-                  "command/src/channel.rs",
-                  "command/src/scm_socket.rs"
-               ],
-               "baseline_rank" : 6,
-               "id" : "compile_time_evaluation",
-               "overlapping_file_physical_lines" : 1092,
-               "owner" : "language",
-               "site_count" : 2,
-               "title" : "compile_time_evaluation"
-            },
-            {
-               "affected_files" : [
                   "command/src/logging/logs.rs",
                   "lib/src/lib.rs"
                ],
@@ -1381,6 +1387,17 @@
             },
             {
                "affected_files" : [
+                  "command/src/scm_socket.rs"
+               ],
+               "baseline_rank" : 6,
+               "id" : "compile_time_evaluation",
+               "overlapping_file_physical_lines" : 402,
+               "owner" : "language",
+               "site_count" : 1,
+               "title" : "compile_time_evaluation"
+            },
+            {
+               "affected_files" : [
                   "e2e/src/mock/https_client.rs"
                ],
                "baseline_rank" : 16,
@@ -1409,113 +1426,390 @@
                "line_text" : "        I1: Iterator<Item = (K, &'a V)>,"
             }
          ],
-         "rerank_payload_sha256" : "139f56ef5982db2ef50f4bdf463137f31695f1824ce828cd3f190a84888db696",
+         "rerank_payload_sha256" : "17570ab76593d7fc4054ebfadf4b77627c6f5b655720a250a52ba566778cb03d",
          "review" : {
             "changed_primary_diagnostics" : 0,
             "changed_recovery_rows" : 0,
             "new_independent_primary_sites" : 0,
-            "path" : "docs/real-programs-rpit-sozu-review.json",
+            "path" : "docs/real-programs-const-fn-sozu-review.json",
             "reviewed_primary_sites" : 0,
-            "sha256" : "c8e6c57849d0ad3f0b098b17d4b29d375533bf05564a60ef2a2cf298875a6e98",
+            "sha256" : "c604e968a509bd57dbb6e278da2e5af3135632becd941f563600f34cc4d4acfe",
             "unchanged_recovery_rows" : 0
          }
       }
    },
-   "stage" : "argument_and_return_impl_trait_gated",
+   "stage" : "bounded_const_fn_gated",
+   "stage_source_review" : {
+      "interpretation" : "All new and retained identities were compared against unchanged source bytes. No new diagnostics or recovery exclusions arose; missing header diagnostics are observational, not whole-function admission.",
+      "remaining_sozu_compile_time_site" : {
+         "code" : "E_UNSUPPORTED",
+         "column" : 39,
+         "line" : 111,
+         "message" : "unsupported construct: non-literal array length",
+         "path" : "command/src/scm_socket.rs",
+         "source" : "let mut received_fds: [RawFd; MAX_FDS_OUT] = [0; MAX_FDS_OUT];"
+      },
+      "removed_const_header_sites" : [
+         {
+            "baseline_cause" : "const_functions",
+            "column" : 9,
+            "current_diagnostic_keys_at_coordinate" : [],
+            "current_state" : "not_observed",
+            "file_sha256" : "45d039636ca7089903cba492baf370592fdec3a6fea1b2f8d574984f45c0aa4d",
+            "line" : 126,
+            "line_text" : "    pub const fn root_id(&self) -> NodeId {",
+            "old_diagnostic_keys" : [
+               "[\"src/dom_tree/tree.rs\",126,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
+            ],
+            "package" : "dom",
+            "path" : "src/dom_tree/tree.rs",
+            "previous_state" : "exact_diagnostic_survives"
+         },
+         {
+            "baseline_cause" : "const_functions",
+            "column" : 16,
+            "current_diagnostic_keys_at_coordinate" : [],
+            "current_state" : "not_observed",
+            "file_sha256" : "a629710b53af233a04d3a4264f6a4d35208f41d4e5b631a9a4df5538d3cf3f50",
+            "line" : 30,
+            "line_text" : "    pub(crate) const fn new(value: usize) -> Self {",
+            "old_diagnostic_keys" : [
+               "[\"src/node.rs\",30,16,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
+            ],
+            "package" : "dom",
+            "path" : "src/node.rs",
+            "previous_state" : "exact_diagnostic_survives"
+         },
+         {
+            "baseline_cause" : "const_functions",
+            "column" : 9,
+            "current_diagnostic_keys_at_coordinate" : [],
+            "current_state" : "not_observed",
+            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
+            "line" : 101,
+            "line_text" : "    pub const fn as_element(&self) -> Option<&Element> {",
+            "old_diagnostic_keys" : [
+               "[\"src/node/inner.rs\",101,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
+            ],
+            "package" : "dom",
+            "path" : "src/node/inner.rs",
+            "previous_state" : "exact_diagnostic_survives"
+         },
+         {
+            "baseline_cause" : "const_functions",
+            "column" : 16,
+            "current_diagnostic_keys_at_coordinate" : [],
+            "current_state" : "not_observed",
+            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
+            "line" : 27,
+            "line_text" : "    pub(crate) const fn new(id: NodeId, data: NodeData) -> Self {",
+            "old_diagnostic_keys" : [
+               "[\"src/node/inner.rs\",27,16,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
+            ],
+            "package" : "dom",
+            "path" : "src/node/inner.rs",
+            "previous_state" : "exact_diagnostic_survives"
+         },
+         {
+            "baseline_cause" : "const_functions",
+            "column" : 9,
+            "current_diagnostic_keys_at_coordinate" : [],
+            "current_state" : "not_observed",
+            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
+            "line" : 60,
+            "line_text" : "    pub const fn is_document(&self) -> bool {",
+            "old_diagnostic_keys" : [
+               "[\"src/node/inner.rs\",60,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
+            ],
+            "package" : "dom",
+            "path" : "src/node/inner.rs",
+            "previous_state" : "exact_diagnostic_survives"
+         },
+         {
+            "baseline_cause" : "const_functions",
+            "column" : 9,
+            "current_diagnostic_keys_at_coordinate" : [],
+            "current_state" : "not_observed",
+            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
+            "line" : 65,
+            "line_text" : "    pub const fn is_element(&self) -> bool {",
+            "old_diagnostic_keys" : [
+               "[\"src/node/inner.rs\",65,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
+            ],
+            "package" : "dom",
+            "path" : "src/node/inner.rs",
+            "previous_state" : "exact_diagnostic_survives"
+         },
+         {
+            "baseline_cause" : "const_functions",
+            "column" : 9,
+            "current_diagnostic_keys_at_coordinate" : [],
+            "current_state" : "not_observed",
+            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
+            "line" : 70,
+            "line_text" : "    pub const fn is_text(&self) -> bool {",
+            "old_diagnostic_keys" : [
+               "[\"src/node/inner.rs\",70,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
+            ],
+            "package" : "dom",
+            "path" : "src/node/inner.rs",
+            "previous_state" : "exact_diagnostic_survives"
+         },
+         {
+            "baseline_cause" : "const_functions",
+            "column" : 9,
+            "current_diagnostic_keys_at_coordinate" : [],
+            "current_state" : "not_observed",
+            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
+            "line" : 75,
+            "line_text" : "    pub const fn is_comment(&self) -> bool {",
+            "old_diagnostic_keys" : [
+               "[\"src/node/inner.rs\",75,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
+            ],
+            "package" : "dom",
+            "path" : "src/node/inner.rs",
+            "previous_state" : "exact_diagnostic_survives"
+         },
+         {
+            "baseline_cause" : "const_functions",
+            "column" : 9,
+            "current_diagnostic_keys_at_coordinate" : [],
+            "current_state" : "not_observed",
+            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
+            "line" : 80,
+            "line_text" : "    pub const fn is_fragment(&self) -> bool {",
+            "old_diagnostic_keys" : [
+               "[\"src/node/inner.rs\",80,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
+            ],
+            "package" : "dom",
+            "path" : "src/node/inner.rs",
+            "previous_state" : "exact_diagnostic_survives"
+         },
+         {
+            "baseline_cause" : "const_functions",
+            "column" : 9,
+            "current_diagnostic_keys_at_coordinate" : [],
+            "current_state" : "not_observed",
+            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
+            "line" : 85,
+            "line_text" : "    pub const fn is_doctype(&self) -> bool {",
+            "old_diagnostic_keys" : [
+               "[\"src/node/inner.rs\",85,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
+            ],
+            "package" : "dom",
+            "path" : "src/node/inner.rs",
+            "previous_state" : "exact_diagnostic_survives"
+         },
+         {
+            "baseline_cause" : "const_functions",
+            "column" : 9,
+            "current_diagnostic_keys_at_coordinate" : [],
+            "current_state" : "not_observed",
+            "file_sha256" : "a013175e2dbf400c4e2bcefa2b855001b8fb8343f4e210423b25cc8740a80a88",
+            "line" : 90,
+            "line_text" : "    pub const fn may_have_children(&self) -> bool {",
+            "old_diagnostic_keys" : [
+               "[\"src/node/inner.rs\",90,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
+            ],
+            "package" : "dom",
+            "path" : "src/node/inner.rs",
+            "previous_state" : "exact_diagnostic_survives"
+         },
+         {
+            "baseline_cause" : "const_functions",
+            "column" : 9,
+            "current_diagnostic_keys_at_coordinate" : [],
+            "current_state" : "not_observed",
+            "file_sha256" : "74462c1319fd372fb98867e396adcdb89e85b04dd0efb1122582390a55aa1a84",
+            "line" : 44,
+            "line_text" : "    pub const fn new(id: NodeId, tree: &'a Tree) -> Self {",
+            "old_diagnostic_keys" : [
+               "[\"src/node/node_ref.rs\",44,9,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
+            ],
+            "package" : "dom",
+            "path" : "src/node/node_ref.rs",
+            "previous_state" : "exact_diagnostic_survives"
+         },
+         {
+            "baseline_cause" : "const_functions",
+            "column" : 7,
+            "current_diagnostic_keys_at_coordinate" : [],
+            "current_state" : "not_observed",
+            "file_sha256" : "3decd34d73e7a8ed7e09edc24823370baeb328cc006e83c99fed978281e319e7",
+            "line" : 124,
+            "line_text" : "const fn elem_require_linebreak(name: &QualName) -> bool {",
+            "old_diagnostic_keys" : [
+               "[\"src/node/text_formatting.rs\",124,7,\"E_UNSUPPORTED\",\"unsupported construct: const fn\"]"
+            ],
+            "package" : "dom",
+            "path" : "src/node/text_formatting.rs",
+            "previous_state" : "exact_diagnostic_survives"
+         },
+         {
+            "baseline_cause" : "const_functions",
+            "column" : 5,
+            "current_diagnostic_keys_at_coordinate" : [],
+            "current_state" : "not_observed",
+            "file_sha256" : "6c8c45408ccb02f813709f93b118bdf4e174640968a41a2d0d531b53ad60027a",
+            "line" : 900,
+            "line_text" : "    const fn new(iter: IntoIter<I>) -> Self {",
+            "old_diagnostic_keys" : [
+               "[\"src/selection.rs\",900,5,\"E_UNSUPPORTED\",\"unsupported construct: impl item\"]"
+            ],
+            "package" : "dom",
+            "path" : "src/selection.rs",
+            "previous_state" : "exact_diagnostic_survives"
+         },
+         {
+            "baseline_cause" : "compile_time_evaluation",
+            "column" : 11,
+            "current_diagnostic_keys_at_coordinate" : [],
+            "current_state" : "not_observed",
+            "file_sha256" : "985f5e84ff8cb0db7268ac1ce13a7f9e99f26d31ebbc3fd94c8b6b3cf0edaeb8",
+            "line" : 461,
+            "line_text" : "pub const fn delimiter_size() -> usize {",
+            "old_diagnostic_keys" : [
+               "[\"command/src/channel.rs\",461,11,\"E_UNSUPPORTED\",\"unsupported construct: const fn\"]"
+            ],
+            "package" : "sozu",
+            "path" : "command/src/channel.rs",
+            "previous_state" : "exact_diagnostic_survives"
+         }
+      ],
+      "retained_body_refusal" : {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_PARSE",
+         "column" : 19,
+         "interpretation" : "This exact macro-pattern primary already existed in the frozen baseline and survives after the const header disappears.",
+         "line" : 127,
+         "message" : "expected `)`, found `!`",
+         "package" : "dom",
+         "path" : "src/node/text_formatting.rs",
+         "source" : "local_name!(\"article\")"
+      },
+      "review_bank" : {
+         "input" : "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/review-bank-through-const-fn.json",
+         "new_review_identities" : 0,
+         "recovery_rows_carried" : 0,
+         "retained_primary_reviews" : {
+            "dom" : 2,
+            "nom" : 4,
+            "sozu" : 0
+         },
+         "sha256" : "81749ef22970a29d29260a87e63c8eedba9b0c5a1c34e37a135fb73e7849bdf3"
+      },
+      "sozu_removed_header" : {
+         "body" : "std::mem::size_of::<usize>()",
+         "column" : 11,
+         "interpretation" : "Only the old const-fn header refusal disappears. The surrounding original function and its size_of call are not claimed admitted.",
+         "line" : 461,
+         "path" : "command/src/channel.rs"
+      }
+   },
    "validation" : {
       "admitted_projected_roots" : 0,
-      "combined_engine_regression" : {
-         "cases" : 141,
-         "log" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/rpit-engines.log",
-            "sha256" : "c269465a2164c286318330ae6173364e2332a60db7408df25f72012c90557330"
+      "cache_fingerprint_repair" : {
+         "change" : "Remove only the redundant const_qualified topology word; raw header source bytes continue to distinguish const qualification.",
+         "foreign_observations" : "All12 complete observation identities are byte-identical to the previous candidate.",
+         "golden_vectors_changed" : false,
+         "qualifier_only_control" : {
+            "checks" : [
+               "The checked edit adds exactly one const qualifier and leaves all other source bytes unchanged",
+               "Source meaning changes from fn(i64) -> i64 to const fn(i64) -> i64",
+               "The first qualified nonindexed build has build_reused=0 and front_reused=0",
+               "A repeated qualified build reuses its result; both engines preserve the expected value"
+            ],
+            "proof" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/focused-query.log",
+               "sha256" : "1e34a6bce35a9a955503ff6efa3ee9c826e1508d2225e310df4f23eca6676379"
+            },
+            "status" : "passed"
          },
-         "route_checks" : 282,
-         "scope" : "Equality, qualified paths, argument impl Trait and result impl Trait; this is not a claim of 141 fresh triple-route executions.",
-         "status" : "passed"
+         "source_anchor" : "bf27336098ce10ad6125df2cdb441661592e8ed0",
+         "source_diff" : {
+            "path" : "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/const-fn-ef0da37e/cache-repair.patch",
+            "sha256" : "353d2496a33a0433ddb352416118d3e09bd3ba466d01a0b533f7e8ebc10e019c"
+         },
+         "standalone_fixed_vector_regression" : {
+            "build_log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/repaired-semantic-build.log",
+               "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "closed_entries" : 5,
+            "command" : "LKJSCRIPT_GATE_JOBS=1 bash tools/closed-semantics.sh target/lkjscript structure",
+            "fresh_case_requests" : 734,
+            "log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/repaired-semantic-structure.log",
+               "sha256" : "bcbfdc065f31723505ede3783fbd5872e452b084cc8f8e894c68b9fdad5f4c96"
+            },
+            "status" : "passed"
+         }
       },
       "fixed_point" : {
          "bootstrap_log" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/bootstrap.log",
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/bootstrap-repaired.log",
             "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
          },
          "candidate_self_rebuild" : "byte_identical",
          "gate_bootstrap_log" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/bootstrap-gate.log",
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/bootstrap-gate.log",
             "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
          },
          "matching_seed" : "refreshed",
          "producer_and_seed" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/producer-and-seed.sha256",
-            "sha256" : "3b321eeab75397d1090478bee3c60ea7552e0e3482422c49072b9108788133f0"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/producer-and-seed.sha256",
+            "sha256" : "891f7c49ce70d6b972b4e542f5129b67ec68f55b35989e968b6adcd6f9dc6ebd"
          },
          "refreshed_seed_bootstrap" : "passed_byte_identical",
-         "seed_sha256" : "1648cca464d942020674f8f744576c8105cf7305874444a9c8bf452e71f38dd4",
+         "seed_sha256" : "c32cc5f2fcea52eef09fcad651aaf627b419d507b354509cdd0e96db08c274e4",
          "source_anchor" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/source-anchor.txt",
-            "sha256" : "5f8cf26f671242f6b9686c469c86c85e39e22f6895b3609d9b8ced26944d2626"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/source-anchor.txt",
+            "sha256" : "3a488c9006cc4141eee509e11cab9f743d6854c24a8ed6f8d8dc5f4872b6fbe7"
          }
       },
-      "focused_case_scope" : "44 argument/result impl-Trait cases: their 88 engine checks are part of the 141-case combined engine run; the 44 Rust witness checks are a separate invocation.",
-      "focused_cases" : 44,
-      "focused_engine_route_checks" : 88,
+      "focused_case_scope" : "42 const-function cases: two compiler engines and a separate Rust witness invocation; 14 Rust value/output cases and 28 Rust verdicts.",
+      "focused_cases" : 42,
+      "focused_engine_route_checks" : 84,
       "focused_logs" : {
          "engines" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/rpit-engines.log",
-            "sha256" : "c269465a2164c286318330ae6173364e2332a60db7408df25f72012c90557330"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/focused-engines.log",
+            "sha256" : "45e0fb6f6cd2bf7894cc6178360e58b1407590d32be440cc4e7bbc5ac71a496a"
          },
          "rust" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/rpit-rust.log",
-            "sha256" : "ee655f83045f1057170ab010392da2eb6266623f4da87bf9c8a0c9960a1f301d"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/focused-rust.log",
+            "sha256" : "32fb6fea6db4283f7f07990352de42f631d4d0444cade89ebe476d227a540c7a"
          }
       },
-      "focused_producer" : "Rust-hosted source build; final gate uses the fixed-point native producer",
+      "focused_producer" : "Native fixed-point producer ef0da37e0c7b7df55dc63d75b440097ae45773cbea8699384894523a14a1f58f; the separate historical Rust-hosted build is not a fresh build proof for this repaired source.",
       "focused_result" : "passed",
-      "focused_route_checks" : 132,
-      "focused_rust_route_checks" : 44,
-      "foreign_opaque_return_reduction" : {
-         "compiler_cases" : 1,
-         "compiler_route_checks" : 2,
-         "logs" : [
-            {
-               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/foreign-reduction-check.log",
-               "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
-            },
-            {
-               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/foreign-reduction-engines.log",
-               "sha256" : "fb69f9a94c46c2c28a8759d4724353a4a332272a57464bf3c2fab2b05d91685e"
-            },
-            {
-               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/foreign-reduction-rust.log",
-               "sha256" : "ca7c6236dfe5eb8fac12718b34cd95fdca187b9166f96ef2ea95918b5c5d51be"
-            }
-         ],
-         "rust_oracle" : "direct rustc --crate-type lib --emit=metadata on the exact reduction; no executable wrapper",
-         "source" : {
-            "path" : "/home/coder/workspace/lkjscript-programs-rpit-landing-20261118/tests/diagnostics/programs_foreign_impl_trait.lkj",
-            "sha256" : "39dacacfaec6303505c809d77b55186d6f88497a54951445a6a6fd16abf64f91"
-         },
-         "status" : "passed"
+      "focused_route_checks" : 126,
+      "focused_rust_route_checks" : 42,
+      "foreign_reduction_cohort" : {
+         "cases" : 15,
+         "change_in_this_stage" : false,
+         "checking" : 5,
+         "refusing" : 10,
+         "scope" : "The original cohort has no const-fn reduction. Const-generic nominal and associated-constant reductions are unchanged; the 42 focused const-function cases are a separate cohort."
       },
       "full_gate" : {
          "command" : "LKJSCRIPT_GATE_JOBS=4 bash tools/check.sh",
-         "elapsed_seconds" : 750.972,
-         "fresh_case_requests" : 5767,
+         "elapsed_seconds" : 741.616,
+         "fresh_case_requests" : 5851,
          "ir_mutation" : {
             "findings" : 0,
             "log" : {
-               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/ir-mutation.log",
-               "sha256" : "0809e9e14a9fe60a287c0a3721798106eeb47a7be0cb154ed1bca69f9d151fe1"
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/ir-mutation.log",
+               "sha256" : "d66cc7f6db08e5f4840f484afe120806a5972c14eefbb7852cd843617869cb50"
             },
             "mutants" : 128
          },
          "log" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/full-gate.log",
-            "sha256" : "9469b5a962a661760197c0d0f1df40e924880f8a20e0e5b2d15c58546880fdda"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/full-gate.log",
+            "sha256" : "521a9248f18ba92e077a00143a50850aa48d8a29771eb09b7cd56d8b2ae4d095"
          },
          "log_archive" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/gate-logs.tar.gz",
-            "sha256" : "0986183e9f71cf2f99a8557fdd373624384e796f61c78973b693751874529001"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/gate-logs.tar.gz",
+            "sha256" : "ecbf1495ec083096f4225fce86f65e5fbc9a534d900906c63cb18893d4eaee8e"
          },
          "reused_case_requests" : 0,
          "status" : "passed",
@@ -1523,29 +1817,198 @@
       },
       "nom_own_tests_run_under_lkjscript" : 0,
       "observations" : 12,
+      "predecessor_diagnostic_comparison" : {
+         "changed" : [
+            {
+               "package" : "dom",
+               "route" : "suffix_projection",
+               "upstream_entry" : "src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "suffix_projection",
+               "upstream_entry" : "command/src/lib.rs"
+            }
+         ],
+         "current_compiler_sha256" : "ef0da37e0c7b7df55dc63d75b440097ae45773cbea8699384894523a14a1f58f",
+         "identity_fields" : [
+            "exit_status",
+            "launcher_signal",
+            "stdout.sha256",
+            "stderr.sha256"
+         ],
+         "previous_compiler_sha256" : "7560e8c6ecd95da2943fc1c424a70ad0109af4fc54df82ebd1b417a755ea82cf",
+         "unchanged" : [
+            {
+               "package" : "nom",
+               "route" : "original_suffix",
+               "upstream_entry" : "src/lib.rs"
+            },
+            {
+               "package" : "nom",
+               "route" : "suffix_projection",
+               "upstream_entry" : "src/lib.rs"
+            },
+            {
+               "package" : "dom",
+               "route" : "original_suffix",
+               "upstream_entry" : "src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "original_suffix",
+               "upstream_entry" : "bin/src/main.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "suffix_projection",
+               "upstream_entry" : "bin/src/main.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "original_suffix",
+               "upstream_entry" : "lib/src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "suffix_projection",
+               "upstream_entry" : "lib/src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "original_suffix",
+               "upstream_entry" : "command/src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "original_suffix",
+               "upstream_entry" : "e2e/src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "suffix_projection",
+               "upstream_entry" : "e2e/src/lib.rs"
+            }
+         ]
+      },
+      "previous_candidate_diagnostic_comparison" : {
+         "changed" : [],
+         "new_compiler_sha256" : "ef0da37e0c7b7df55dc63d75b440097ae45773cbea8699384894523a14a1f58f",
+         "old_compiler_sha256" : "8caef2412925f4aff23df3b7a46771abf2eeb1a3cdb12eade13fb8bfad71bf98",
+         "unchanged" : [
+            {
+               "package" : "nom",
+               "route" : "original_suffix",
+               "upstream_entry" : "src/lib.rs"
+            },
+            {
+               "package" : "nom",
+               "route" : "suffix_projection",
+               "upstream_entry" : "src/lib.rs"
+            },
+            {
+               "package" : "dom",
+               "route" : "original_suffix",
+               "upstream_entry" : "src/lib.rs"
+            },
+            {
+               "package" : "dom",
+               "route" : "suffix_projection",
+               "upstream_entry" : "src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "original_suffix",
+               "upstream_entry" : "bin/src/main.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "suffix_projection",
+               "upstream_entry" : "bin/src/main.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "original_suffix",
+               "upstream_entry" : "lib/src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "suffix_projection",
+               "upstream_entry" : "lib/src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "original_suffix",
+               "upstream_entry" : "command/src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "suffix_projection",
+               "upstream_entry" : "command/src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "original_suffix",
+               "upstream_entry" : "e2e/src/lib.rs"
+            },
+            {
+               "package" : "sozu",
+               "route" : "suffix_projection",
+               "upstream_entry" : "e2e/src/lib.rs"
+            }
+         ]
+      },
+      "prior_failed_gate" : {
+         "compiler_sha256" : "8caef2412925f4aff23df3b7a46771abf2eeb1a3cdb12eade13fb8bfad71bf98",
+         "diagnostic" : "src/semantic_tests/incremental_fingerprint.lkj:272: R0005 assertion failed",
+         "failure_suite" : "semantic-structure",
+         "interpretation" : "The failed attempt is retained as a failure and is not counted as a completed gate pass.",
+         "logs" : {
+            "archive" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/failed-first-gate/gate-logs.tar.gz",
+               "sha256" : "900ddba35d8d00fba5277c9ff911132cf1d9e683634be18fb82f46cfdfdcee02"
+            },
+            "full_gate" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/failed-first-gate/full-gate.log",
+               "sha256" : "5a9c1cead9f7e09ed823e3e8d51e128c555bf1dc37fd685c0876b18997b94b2c"
+            },
+            "producer_and_seed" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/failed-first-gate/producer-and-seed.sha256",
+               "sha256" : "82d9d2dd2c17a65cde115936f16e5642a62a41d4cadf6c84779d1b81df02029a"
+            },
+            "semantic_structure" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/failed-first-gate/semantic-structure.log",
+               "sha256" : "37e78890cabdf25523132191669a83eaa9aea63184ed9aaf5f92776d1625a48b"
+            },
+            "source_anchor" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/failed-first-gate/original-source-anchor.txt",
+               "sha256" : "3b78db05f3300c182d65f23e75fe536ac14cf3480a1432e460703a8a8de87856"
+            }
+         },
+         "reason" : "An additional const_qualified word changed the fixed topology-fingerprint vectors, although raw source headers already encoded the qualifier.",
+         "source_anchor" : "de20455cc884a13d682be650bb2b125d79598d9d",
+         "status" : "failed"
+      },
       "projected_roots" : 6,
       "publication_ci" : {
-         "result_record" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/publication-ci.json",
+         "result_record" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/publication-ci.json",
          "status_at_commit" : "pending"
       },
       "query_edit_logs" : [
          {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/rpit-query.log",
-            "sha256" : "83535feb6752d9c36dd70442d1ce4fd9f5b72abfc5c7f9711f304c37b0b4a8d1"
-         },
-         {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/rpit-apit-query.log",
-            "sha256" : "c960495dfcd11b6968818432f5ca8a318bbaff849696b0ce0e97d21e5384a118"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/focused-query.log",
+            "sha256" : "1e34a6bce35a9a955503ff6efa3ee9c826e1508d2225e310df4f23eca6676379"
          }
       ],
+      "source_anchor" : "bf27336098ce10ad6125df2cdb441661592e8ed0",
       "source_check" : {
-         "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/rpit-selfcheck.log",
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/focused-source.log",
          "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
       },
       "standalone_real_programs_test" : {
          "command" : "bash tools/real-programs-test.sh target/lkjscript",
          "log" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/result-impl-trait/standalone-real-programs.log",
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-programs2/const-functions/standalone-real-programs.log",
             "sha256" : "bfe050316ba1664049ab530cb4ea400a72ef27a18a88620f0f19e8efe78c69bf"
          },
          "status" : "passed"

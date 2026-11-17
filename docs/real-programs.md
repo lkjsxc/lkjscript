@@ -258,19 +258,27 @@ These are observed frontier lower bounds, not all gaps that the complete depende
 graph will expose.
 
 The [current ordinary-form implementation](real-programs-current.json), producer
-`7560e8c6…55ea82cf`, supports associated-type equality, fully qualified associated
-paths, and argument/result-position `impl Trait` within the documented
-[language limits](language.md). Opaque results now have a producer identity and a
-caller-visible declared contract; focused semantic controls check hidden-type
-consistency, trait dispatch and abstraction, including their interactions with the
-other forms. The checked IR and independent checker are unchanged.
+`ef0da37e…14a1f58f`, adds bounded `const fn` declarations to associated-type
+equality, fully qualified associated paths, and argument/result-position
+`impl Trait` within the documented [language limits](language.md). A const
+qualifier is retained and checked on every definition, including unused and
+unreachable definitions. Runtime calls can use scalar/control-flow bodies,
+shared field/enum views, direct const-qualified source calls, and constructors
+that transfer owned values without destruction. Each emitted destruction needs
+a structurally trivial type; an unknown rigid type requires Copy. Nonconst,
+trait or dynamic calls, allocation/intrinsics, closures/try, mutable borrowing
+and mutation through a reference remain conservative refusals. Every function
+or method call in a module constant initializer still requires unsupported
+compile-time evaluation (CTFE). The checked IR and independent checker are unchanged.
 
 All twelve observations repeat on unchanged upstream bytes. **All 146 original
-target diagnostic identities are no longer observed**: 129 nom sites and 17 DOM
-sites. The observed primary frontier is nom **149→24** and DOM **95→78**, for a
-combined **244→102**. Sōzu retains 449 classified sites and 35 previously
-unclassified rows, compared with 37 originally. No large root or real nom module
-tree has been admitted, and no nom own test has run under lkjscript.
+impl-Trait/qualified/equality target diagnostic identities remain absent**: 129
+nom sites and 17 DOM sites. The observed primary frontier is nom **149→24** and
+DOM **95→64**, for a combined **244→88**. Relative to RPIT, fourteen DOM const
+headers and one Sōzu const header stop refusing. Sōzu now has **448 classified
+sites and 35 previously unclassified rows**, compared with the original 449+37.
+No large root or real nom module tree has been admitted, and no nom own test has
+run under lkjscript.
 
 | Stage | nom primary sites | DOM primary sites | Original target diagnostics absent | Semantic scope established |
 | --- | ---: | ---: | ---: | --- |
@@ -279,35 +287,60 @@ tree has been admitted, and no nom own test has run under lkjscript.
 | Qualified paths | 100 | 83 | 63 | Equality and qualified type/value paths |
 | Argument impl Trait | 24 | 78 | 146 | Arguments; only 65 original target source forms supported, results still refused |
 | Result impl Trait | 24 | 78 | 146 | All three form categories, in their documented subset |
+| Const functions | 24 | 64 | 146 | Bounded const-qualified declarations and runtime calls; CTFE remains separate |
 
-The RPIT stage's exit statuses and complete output/diagnostic streams are
+The RPIT stage's exit statuses and complete output/diagnostic streams were
 byte-identical to APIT for all twelve observations. APIT already consumed opaque
 result syntax; other parse refusals hid its later unsupported-result resolver.
-**Dedicated semantic and query/edit controls establish the additional RPIT
-support; unchanged root diagnostics do not.** The original nom `Parser<I>`
-positional trait contracts, generic associated types, and other stated limits
-remain separate requirements. These counts do not prove that the surrounding
-original functions or dependency graphs are admitted.
+Dedicated semantic and query/edit controls established the additional RPIT
+support. The original nom `Parser<I>` positional trait contracts, generic
+associated types, and other stated limits remain separate requirements.
+Similarly, disappearance of a const header does not prove that its original
+body admits. DOM's `elem_require_linebreak` still has the exact
+`local_name!("article")` pattern refusal at `text_formatting.rs:127:19`.
+Sōzu's removed `delimiter_size` header has a `std::mem::size_of::<usize>()`
+body whose admission is not established by these observations.
 
 The current summary pins the three retained raw receipts, exact re-ranking
 payloads and reviewed original-source hashes. Reproduce each comparison with the
-[nom review](real-programs-rpit-nom-review.json),
-[DOM review](real-programs-rpit-dom-review.json), or
-[empty Sōzu review](real-programs-rpit-sozu-review.json) passed to `rerank.pl --review`.
-The nom `verify` predicate retains its new independent `?Sized` classification;
-none of the old impl-Trait recovery cascades is carried into the current count.
+[nom review](real-programs-const-fn-nom-review.json),
+[DOM review](real-programs-const-fn-dom-review.json), or
+[empty Sōzu review](real-programs-const-fn-sozu-review.json) passed to
+`rerank.pl --review`. Ten observations retain byte-identical exit/stdout/stderr
+identities from RPIT; only the DOM projection and Sōzu command projection change.
+All six original-suffix observations, projection identities and the literal
+library inventory remain unchanged. No new primary diagnostic identities or
+recovery exclusions arise. The nom `verify` predicate retains its independent
+`?Sized` classification.
 
-All 44 argument/result impl-Trait cases pass 132 route checks: 88 compiler-engine
-checks within the 141-case/282-check combined regression run, plus 44 separate
-Rust-witness checks. The larger run also covers equality and qualified paths; it
-is not described as 141 fresh triple-route tests. Opaque meaning/reference queries,
-checked bound renames, hidden-layout edits and warm-cache controls pass. The exact
-foreign opaque-return reduction also checks on both engines and compiles directly
-with rustc as library metadata. The native self-build reaches a byte-identical
-fixed point and the seed is refreshed. The full four-worker gate passes in 750.972 seconds with 5767 fresh case
-requests and 128 IR mutants, zero findings. The standalone real-programs test
-also passes. [Proof records](real-programs-current.json) identify the completed
-local validation; publication CI is recorded with the landing report.
+The 42 focused const-function cases pass **126 route checks**: 84 compiler-engine
+checks and 42 separate Rust checks, consisting of 14 values/output cases and 28
+verdicts. Qualified meaning, call references, checked rename/body edits,
+rejected nonconst edits and warm-cache controls pass. The native self-build
+reaches a byte-identical fixed point and its seed is refreshed. The full
+four-worker gate passes in 741.616 seconds with 5851 fresh case requests and
+128 IR mutants, zero findings. The standalone real-programs test also passes.
+Publication CI is recorded with the landing report. [Proof records](real-programs-current.json)
+pin the completed focused checks and the root-owned final validation paths.
+The original fifteen foreign reductions remain **five checking and ten
+refusing**; none is a const-function reduction.
+
+The first const-function full gate failed the fixed incremental fingerprint
+vectors. The implementation had added a redundant const-qualification word to
+the topology fingerprint even though raw source headers already encode that
+qualifier. The repair removes the redundant word and leaves the existing golden
+vectors unchanged. A checked edit now proves that adding only the qualifier
+changes the reported function meaning, invalidates both build and frontend
+reuse, and permits subsequent warm reuse. All twelve foreign observations are
+byte-identical to the failed candidate. The failed attempt is retained in the
+[validation history](real-programs-current.json) and is not counted as a complete pass.
+
+The preceding RPIT proof remains separate: 44 argument/result impl-Trait cases
+passed 132 route checks (88 engine checks within the 141-case/282-check combined
+regression plus 44 Rust checks). The exact foreign opaque-return reduction
+checked on both engines and compiled directly as Rust library metadata. Its
+full gate passed in 750.972 seconds with 5767 fresh requests and 128 IR mutants,
+zero findings; that historical gate is not substituted for the current one.
 
 The tables give **observed unique sites** and physical lines in files containing
 those sites. File coverage overlaps between rows and includes inactive code;
@@ -322,11 +355,11 @@ transitive blocked-line count is used.
 the current producer emits 49 raw rows: 24 unique primary sites and 25 E_BLOCKED
 rows, with no current recovery exclusions. There are 20 upstream default-path
 candidates and four inactive sites. The original baseline had 149 primary sites;
-the equality, qualified and APIT stages had 143, 100 and 24. RPIT semantic support
-now passes its own controls, while the observed root frontier stays at 24 because
-the same macro, generic-bound and other parser barriers remain. Parameterized
-trait contracts such as the original `Parser<I>` are a separate documented limit,
-not an admitted consequence of recognizing its opaque result form.
+equality, qualified paths, APIT and RPIT had 143, 100, 24 and 24. The const-function
+stage leaves both nom observations byte-identical to RPIT. Macro, generic-bound
+and other parser barriers remain. Parameterized trait contracts such as the
+original `Parser<I>` are a separate documented limit, not an admitted consequence
+of recognizing its opaque result form.
 
 | Rank | Cause | Sites | Affected file lines | Owner / next route |
 | --- | --- | ---: | ---: | --- |
@@ -356,29 +389,29 @@ rewrite still costs the original gap.
 #### DOM: parser, owned tree and selector views
 
 [Original site table](real-programs-dom.json) and [current frontier](real-programs-current.json):
-157 raw messages contain 78 primary sites and 79 E_BLOCKED rows, with no current
-recovery exclusions. There are 71 upstream default-path candidates and seven
+129 raw messages contain 64 primary sites and 65 E_BLOCKED rows, with no current
+recovery exclusions. There are 57 upstream default-path candidates and seven
 test-only inventory sites. The original baseline had 95 primary sites; equality
-had 92, qualified paths 83, and APIT 78. The general argument and opaque-result
-forms are now implemented within their documented bounds, but these unchanged
-observations do not prove the original DOM iterator functions or tree code admit.
-The 22 macro sites and the more explicit lifetime-outlives diagnostic retain
-their exact source reviews. The original nine shared-mutation sites remain an
-explicit ownership/representation port cost.
+had 92, qualified paths 83, and APIT/RPIT 78. All fourteen original const-function
+header identities disappear, and no new diagnostic identity is introduced.
+This does not admit the surrounding DOM functions: the existing atom-macro
+pattern refusal inside `elem_require_linebreak` survives at 127:19 after its
+const header at 124:7 disappears. The 22 macro sites and the more explicit
+lifetime-outlives diagnostic retain their exact source reviews. The original
+nine shared-mutation sites remain an ownership/representation port cost.
 
 | Rank | Cause | Sites | Affected file lines | Owner / next route |
 | --- | --- | ---: | ---: | --- |
 | 1 | ns! / local_name! expansion | 22 | 1,843 | Compiler / producer; 17 default candidates and five test-only |
 | 2 | Debug ? formatting | 24 | 207 | Compiler formatting producer |
-| 3 | const fn | 14 | 2,839 | Programs / next ordinary forms |
-| 4 | Generic associated types | 2 | 844 | Language |
-| 5 | Lifetime-outlives where predicate | 1 | 917 | Programs |
-| 6 | Box with dyn Iterator | 1 | 917 | Language |
-| 7 | doc include_str! attribute | 1 | 45 | Language / producer |
-| 8 | Expression-statement cfg | 1 | 510 | Language/configuration |
-| 9 | rustfmt::skip; static CONTENTS | 1 + 1 | 692 each | Language; test-only |
-| 10 | std::io imported as io::Result | 1 | 115 | Library data facade; not an ambient-I/O proof |
-| 11 | Ref / RefCell / Cell | 9 | 4,073 | Refused by design; explicit ownership/tree port |
+| 3 | Generic associated types | 2 | 844 | Language |
+| 4 | Lifetime-outlives where predicate | 1 | 917 | Programs |
+| 5 | Box with dyn Iterator | 1 | 917 | Language |
+| 6 | doc include_str! attribute | 1 | 45 | Language / producer |
+| 7 | Expression-statement cfg | 1 | 510 | Language/configuration |
+| 8 | rustfmt::skip; static CONTENTS | 1 + 1 | 692 each | Language; test-only |
+| 9 | std::io imported as io::Result | 1 | 115 | Library data facade; not an ambient-I/O proof |
+| 10 | Ref / RefCell / Cell | 9 | 4,073 | Refused by design; explicit ownership/tree port |
 
 All 24 Debug-format refusals are direct producer refusals; the compiler formatting
 parser unconditionally rejects that syntax. RefCell supports upstream's shared
@@ -390,13 +423,20 @@ count both representation and API/test adaptation.
 #### Sōzu: concurrent network service
 
 [Original site table](real-programs-sozu.json) and [current frontier](real-programs-current.json):
-four roots produce 484 unique located nonblocked rows in the current ordinary-form producer.
-Of these, the same 449 have a classified cause; 35 parse/recovery rows stay
-unclassified. Another 488 E_BLOCKED rows are excluded. The baseline had 486
-nonblocked rows, including 37 unclassified, and 490 E_BLOCKED rows. The two removed
-unclassified rows point to `Iterator<Item = (K, &'a V)>` at
-`command/src/state.rs:1409:23` and `1435:27`; they are not retroactively added to
-the original ranked equality-site count.
+four roots produce 483 unique located nonblocked rows: 448 have a classified
+cause and 35 prior parse/recovery rows remain unclassified. Another 487 E_BLOCKED
+rows are excluded, giving 970 raw projected rows. RPIT had 449+35 nonblocked rows
+and 488 E_BLOCKED rows. The original baseline had 486 nonblocked rows, including 37
+unclassified, and 490 E_BLOCKED rows. The two removed original unclassified rows
+point to `Iterator<Item = (K, &'a V)>` at `command/src/state.rs:1409:23` and
+`1435:27`; they are not retroactively added to the original equality-site count.
+
+The single new removal is the const header of `delimiter_size` at
+`command/src/channel.rs:461:11`, formerly grouped under compile-time evaluation.
+Its body calls `std::mem::size_of::<usize>()`; neither that body nor general CTFE
+is claimed supported by its absent header diagnostic. The exact remaining
+non-literal array-length refusal is `MAX_FDS_OUT` at
+`command/src/scm_socket.rs:111:39`. All six associated-constant sites survive.
 
 | Rank | Cause | Sites | Affected file lines | Owner / next route |
 | --- | --- | ---: | ---: | --- |
@@ -405,7 +445,7 @@ the original ranked equality-site count.
 | 3 | Debug formatting | 21 | 7,344 | Language formatting producer |
 | 4 | dyn traits | 15 | 2,622 | Language |
 | 5 | Associated constants | 6 | 148 | Language |
-| 6 | Compile-time evaluation | 2 | 1,092 | Language |
+| 6 | Non-literal array length / compile-time evaluation | 1 | 402 | Language; separate from const-qualified runtime calls |
 | 7 | @ pattern | 1 | 167 | Language |
 | 8 | async block | 1 | 68 | Language producer/runtime-future route |
 | 9 | extern crate bindings | 4 | 320 | Package/language binding; not FFI |

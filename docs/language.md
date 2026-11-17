@@ -29,6 +29,27 @@ Functions, structs, enums, module constants, aliases, generics, trait implementa
 match, if, while, loop and for are implemented. Assertions, panic and vec forms
 are fixed syntax. Literal panic messages and plain named captures of unique immutable outer-block literal bindings become static trap text. Other panic payloads are not evaluated: write format!(...) bytes through an already granted output capability before panic!(). Local const declarations reject; move the declaration to its containing module.
 
+Free functions and inherent methods may be declared `const fn`. Ordinary runtime
+calls use the same concrete functions and checked IR as other calls. Every
+const-qualified body is verified, including unused definitions and unreachable
+expressions, under its declared generic assumptions. Data constructors, moved
+inputs, field access, shared views, matches, scalar operations and local control
+flow are supported. Calls must select another declared const function or a data
+constructor; a pure implementation of an ordinary method does not make it const.
+Implicit destruction must be structurally trivial. Moving a non-Copy or generic
+input into the result is allowed; discarding an unconstrained generic input,
+heap owner or value with a user destructor is refused. References do not destroy
+their referents, and a Copy bound can establish trivial generic destruction.
+Trait const methods, generic trait calls, callable/closure invocation, try,
+intrinsic calls, allocation, mutable borrowing and mutation through references
+remain located limits. Source queries retain const qualification, and checked
+renames/body edits preserve it; changing a callee to non-const is rejected when
+a const caller depends on it. Function calls in module constant initializers
+remain a located compile-time-evaluation limit, including scalar calls; general
+constant aggregate/reference evaluation is not claimed.
+[Const-function cases](../tests/conformance/pass/const_function_construct.lkj),
+[queries and edits](../tools/const-functions-test.sh).
+
 Unparenthesized block forms in statement position end before a binary operator,
 call or index that can start another expression; dot and ? continue the expression.
 Parentheses, initializers, arguments, returns and operator RHS use value parsing.

@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
+const fn invalid() -> Box<i64> { Box::new(42i64) }
+pub fn probe() -> i64 { 42i64 }

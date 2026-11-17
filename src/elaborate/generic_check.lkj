@@ -161,7 +161,7 @@ fn validate_selected(
                 break;
             }
         }
-        if generic || !function.predicates.is_empty()
+        if function.const_qualified || generic || !function.predicates.is_empty()
             || source.function_owner(a::FunctionId { index }) != a::FunctionOwner::Free
             || source.impl_traits.values().any(|form| form.result.is_some()) {
             roots.push(index);
