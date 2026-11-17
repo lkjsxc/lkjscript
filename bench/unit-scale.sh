@@ -67,7 +67,7 @@ unset LKJSCRIPT_STORE LKJSCRIPT_STORE_KEY
     printf 'memory=per-process virtual-address envelope; GNU time reports largest process RSS\n'
 } > "$results/cohort.txt"
 (cd "$repository" && rg --files library -g '*.lkj' -0 | sort -z | xargs -0 sha256sum) > "$results/library.sha256"
-sha256sum "$script_root/unit-scale.sh" "$script_root/unit-scale-generate.pl" "$script_root/unit-scale-record.pl" > "$results/harness.sha256"
+sha256sum "$script_root/unit-scale.sh" "$script_root/unit-scale-generate.pl" "$script_root/unit-scale-record.pl" "$script_root/unit-scale-real.pl" > "$results/harness.sha256"
 git -C "$repository" status --short -- src library > "$results/source-status.txt"
 current_memory=2048
 ((current_memory <= memory_ceiling)) || current_memory=$memory_ceiling
@@ -136,20 +136,39 @@ if [[ "$real" == yes ]]; then
             printf 'compiler specimen refused; generated cohort continues\n' >> "$results/walls.txt"
         fi
     done
-    real_source=examples/real_programs/levenshtein/main.lkj
-    if [[ -f "$real_source" ]]; then
-        cp examples/real_programs/levenshtein/upstream.json "$results/levenshtein-provenance.json"
-        for phase in check build; do
-            command=("$producer" "$phase" "$real_source" --source-dir "$repository" --library-dir "$repository/library" --no-store --stats)
-            artifact=-
-            if [[ "$phase" == build ]]; then
-                artifact="$run/levenshtein"
-                command+=(--runtime-source "$repository/library/runtime.lkj" --grant output -o "$artifact")
-            fi
-            if ! run_phase levenshtein-normalized "$phase" NA - "$artifact" "${command[@]}"; then
-                printf 'levenshtein specimen refused; inspect its exact diagnostic\n' >> "$results/walls.txt"
-            fi
-        done
+    real_source=examples/real_programs/levenshtein
+    if [[ -f "$real_source/upstream.lkj" ]]; then
+        cp "$real_source/upstream.json" "$results/levenshtein-historical-provenance.json"
+        rung="$run/levenshtein-units"
+        mkdir "$rung"
+        perl "$script_root/unit-scale-real.pl" prepare "$repository" "$rung/source" \
+            > "$results/workload-levenshtein-original-units.json"
+        metadata="$results/workload-levenshtein-original-units.json"
+        real_lines=$(perl -MJSON::PP -0777 -ne 'print decode_json($_)->{source_lines}' "$metadata")
+        mkdir "$rung/store-build" "$rung/store-check"
+        real_common=(units.lkj --source-dir "$rung/source" --library-dir "$repository/library" \
+            --store-key "$key_root/key" --store-bytes 8589934592 --stats)
+        if ! run_phase levenshtein-original-units cold-check "$real_lines" "$metadata" - \
+            "$producer" check-units "${real_common[@]}" --store "$rung/store-check"; then
+            printf 'original levenshtein unit check refused; see the exact diagnostic\n' >> "$results/walls.txt"
+        fi
+        artifact="$rung/program"
+        if run_phase levenshtein-original-units cold-build "$real_lines" "$metadata" "$artifact" \
+            "$producer" build-units "${real_common[@]}" --store "$rung/store-build" \
+            --runtime-source "$repository/library/runtime.lkj" --grant output -o "$artifact"; then
+            gzip -dc "$repository/tests/fixtures/real_programs_levenshtein.output.gz" > "$rung/expected.out"
+            prefix="$results/levenshtein-original-units-native"
+            printf '%q\n' "$artifact" > "$prefix.command"
+            /usr/bin/time -o "$prefix.time" -f '%e\t%U\t%S\t%M\t%x' \
+                timeout --signal=TERM --kill-after=10s 120s "$artifact" > "$prefix.stdout" 2> "$prefix.stderr"
+            perl "$script_root/unit-scale-real.pl" verify-output "$rung/expected.out" \
+                "$prefix.stdout" "$prefix.stderr" "$artifact" > "$prefix.control.json"
+            rm "$prefix.stdout" "$prefix.stderr"
+        else
+            printf 'original levenshtein unit build refused; see the exact diagnostic\n' >> "$results/walls.txt"
+        fi
+        rm -rf -- "$rung"
+        rung=
     else
         printf 'levenshtein specimen is not present in the selected repository revision\n' >> "$results/walls.txt"
     fi

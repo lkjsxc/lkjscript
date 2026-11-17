@@ -110,10 +110,38 @@ still retains compact manifest, dependency, source-snapshot and linker metadata
 for the whole program, and linked output size grows with the program. A flat
 largest-unit size alone cannot prove flat memory or flat edit cost.
 
-The runner also checks/builds the compiler through its ordinary source path and,
-when available, the provenance-backed levenshtein specimen. These rows remain
-separately labelled; they are not evidence of partitioning the compiler itself.
-The levenshtein row is labelled `levenshtein-normalized` because its currently
-accepted source normalizes the open range and Rust 2015 integration header.
-The exact upstream provenance is copied with the row. Revisit that label when
-the unmodified upstream form is admitted.
+## Real program units
+
+The runner also checks/builds the compiler through its ordinary source path.
+Those rows remain separately labelled and do not claim to partition the compiler.
+
+The `levenshtein-original-units` specimen has three explicit units:
+
+| Unit | Source and adaptation | Dependency |
+|---|---|---|
+| `upstream` | Exact original 65-line `src/lib.rs`, stored as `upstream.lkj`; no algorithm adaptation | None |
+| `corpus` | Existing `corpus.lkj`, unchanged byte for byte | `upstream` |
+| `app` | Four-line public Stdout entry calling `crate::corpus::output` | `corpus` |
+
+The helper reads the historical normalized projection, reverses its one range
+replacement, and requires the complete library bytes to match SHA-256
+`6f295e027783399df21c081465b2ebc2d3a499895635a839c1c00aae4455f267`.
+It also authenticates the reconstructed complete upstream test section and
+license against the pinned original hashes and receipt. The historical source
+and normalization receipt are never changed. This cohort compiles the restored
+library; the previous normalized ordinary-path specimen is not relabelled as
+unmodified.
+
+Real `check-units` and `build-units` rows use separate empty authenticated stores.
+Their source-line column counts all three units; metadata separately records
+the 65 original algorithm lines, each adapter's hash, manifest shape and the
+exact original upstream identity. This tests the original algorithm across a
+real interface boundary, including a final caller whose direct dependency is
+only the corpus unit.
+
+After a successful unit build, its native output must match every one of the
+committed 7,239 oracle rows. The successful control retains image/output/oracle
+hashes, the row count, empty-stderr result, command and timing. Duplicate output
+bytes are removed after comparison; a mismatch preserves its output and stops
+the runner. The upstream eight-test suite is covered by the separate real-program
+gate, rather than counted as executed by this scale harness.
