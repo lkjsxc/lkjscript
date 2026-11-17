@@ -15,21 +15,57 @@ process. The process uses an empty temporary working directory and an ephemeral
 conversation. Existing normal project trust and automatic approval review stay
 enabled. A setup approval refusal is infrastructure failure, not language evidence.
 
-## Initial discovery
+## Baseline discovery
 
-The first six completed pairs in compiler-stranger-initial.json use the frozen
-b4594275-era producer and gpt-6-luna. Four files-arm first submissions passed the
-independent checker, one failed, and one made no submission. All six command arms
-made no submission; their recorded reasons repeatedly identify missing request
-schema and difficulty discovering authored bodies. These are partial baseline
-results, not the completed twenty-change comparison or full-gate outcomes.
+The complete gpt-6-luna baseline in compiler-stranger-initial.json contains twenty
+fresh attempts per arm with the frozen b4594275-era producer. Every row keeps its
+actual calls, bytes, time, submitted source, checker and target comparison results.
 
-The resulting command change adds query/edit/compare topic help, including exact
-JSON operation objects, identity discovery, body/text continuations, explicit
-source/library pairing, and diagnostic pointers back to help. The focused gate
-test executes the first complete JSON request printed by the binary and checks
-native/interpreter agreement. The complete frozen baseline continues separately;
-the same twenty cases must be rerun with the final changed producer.
+| Measurement | Files arm | Commands arm |
+| --- | ---: | ---: |
+| Tool calls | 410 | 304 |
+| UTF-8 payload bytes returned | 3,699,592 | 954,192 |
+| Agent wall seconds | 3,306.150 | 1,824.132 |
+| Active setup-tail seconds | 0.076 | 2,079.338 |
+| Changed first proposals | 15 | 0 |
+| Unchanged first submissions | 1 | 1 |
+| First checker pass / fail / not-run | 13 / 1 / 6 | 1 / 0 / 19 |
+| First canonical target equality | 0 | 0 |
+
+Both case 17 arms first submitted the unchanged parent. The files arm edited
+afterward. Twelve changed first proposals passed the checker, one failed, and two
+were submitted after the tool allowance so no checker ran. Full repository gates
+remain not-run: the seventeen submissions form sixteen distinct exact gate inputs.
+No complete implementation success is established by a static checker pass; exact
+historical equality is stricter than behavior, and case 1 files comparison was
+unavailable because of an early selector-path bug.
+
+The command agents made 58 request-bearing invocations. Fifty reached the binary
+and all were refused: 12 VERSION, 33 REQUEST and 5 OPERATION diagnostics. Eight
+were wrapper-option refusals across cases 1, 3, 6, 11 and 13. The adapter documents
+raw JSON in its request field; literal --request/--against options are refused.
+That wrapper friction is a separate experimental limitation.
+
+Manual overlapping coding of final explanations finds operation/request discovery
+or construction in 16 cases, followed by body, identity or dependent-context
+discovery in 14. Their companion files arms produced changed checker-passing first
+proposals in eleven and seven cases respectively. These contrasts motivate help
+work but do not establish completed-task or full-gate success. Eleven files arms
+encountered the explicit tool allowance; none of the commands arms exhausted it.
+
+The first six pairs already established missing request schema and body discovery,
+so query/edit/compare help was implemented while the frozen baseline continued.
+It prints exact operation objects, identity lookup, body/text continuation,
+source/library pairing, and diagnostic recovery pointers. A later unsupported-op
+observation added the OPERATION recovery pointer. Focused tests execute the first
+complete printed request and check native/interpreter agreement.
+
+The intermediate 9db99295 producer and later 2a761133 producer are frozen separately;
+their complete twenty-case repeats are still pending and are not claimed by this
+baseline. The fresh gpt-6-astra control uses the original baseline producer.
+Shorter time before giving up is not a successful-workflow speedup. The recorded
+847.343-second setup pause is separate; the original cohort lacks complete
+preparation timing, so its active setup-tail measurement is not end-to-end setup.
 
 ## Run the fixed population
 
@@ -107,6 +143,10 @@ solution.
   separately recorded idle setup pauses; preparation_active_seconds does the same
   when a complete preparation measurement exists. Commands need a prebuilt index;
   the frozen compiler publishes one only through build --index.
+* submission records the saved first proposal, including an empty source delta,
+  explicit tool-allowance refusals and the final finish request even if the
+  allowance refused it. An unchanged parent can pass the checker without
+  implementing the requested change; keep those outcomes distinct.
 * checker_first says whether the first explicit gate candidate passed the existing
   independent checker. A missing submission is not-run, not a failed check.
 * edit_metrics separates help/usage discovery from request-bearing invocations,

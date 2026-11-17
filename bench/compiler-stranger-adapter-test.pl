@@ -63,15 +63,17 @@ for my $i (0..2) {
 my $cohort="$fixture/report";my $arm="$cohort/01-commands";
 make_path("$arm/logs");
 put("$arm/state.json",{case=>{id=>1},mode=>'commands',model=>'synthetic-adapter-test',
-    calls=>4,gates=>[],wall_seconds=>1,setup_seconds=>2,payload_bytes=>0,response_bytes=>0,
+    calls=>5,max_calls=>3,gates=>[],wall_seconds=>1,setup_seconds=>2,payload_bytes=>0,response_bytes=>0,
     timed_out=>JSON::PP::false,pause_timeout=>JSON::PP::true,full_repository_gate=>'not-run'});
 my @events=(
     {number=>1,tool=>'compiler',arguments=>{argv=>['edit','--help']},result=>{exit=>0,stdout=>'help'}},
     {number=>2,tool=>'compiler',arguments=>{argv=>['edit'],request=>'{}'},result=>{exit=>1,stderr=>'E_EDIT_VERSION expected version 1'}},
     {number=>3,tool=>'compiler',arguments=>{argv=>['edit','--dry-run'],request=>'{"version":1,"operations":[{"op":"replace-body","id":"f","source":"{ 1 }"}]}'},result=>{exit=>0}},
-    {number=>4,tool=>'gate',arguments=>{},result=>{error=>'experiment allowance exhausted'}},
+    {number=>4,tool=>'gate',arguments=>{},result=>{error=>'experiment tool-call allowance exhausted (3)'}},
+    {number=>5,tool=>'finish',arguments=>{reason=>'Could not complete the task.'},result=>{error=>'experiment tool-call allowance exhausted (3)'}},
 );
 for my $event (@events) {put(sprintf("$arm/logs/tool-%03d.json",$event->{number}),$event);}
+put("$arm/gate-01-files.json",{});
 put("$arm/coordinator-pauses.json",[{stage=>'setup',seconds=>0.25}]);
 my $rows=$json->decode(run('',$^X,$harness,'report',$cohort));
 my $metrics=$rows->[0]{edit_metrics};
@@ -82,6 +84,10 @@ require_true($metrics->{gate_invocation_count}==1 && !$rows->[0]{gate_called},'r
 require_true($rows->[0]{timed_out},'pause timeout lost from report');
 require_true($rows->[0]{setup_seconds}==2 && $rows->[0]{setup_pause_seconds}==0.25 && $rows->[0]{setup_active_seconds}==1.75,'raw setup and idle pause were conflated');
 require_true(!defined($rows->[0]{preparation_active_seconds}),'missing complete preparation became a measured value');
+my $submission=$rows->[0]{submission};
+require_true($submission->{first_proposal}{empty} && !@{$submission->{first_proposal}{paths}},'unchanged submission became an implementation');
+require_true(@{$submission->{allowance_refusals}}==2,'allowance refusals missing');
+require_true(!$submission->{last_finish_request}{accepted} && $submission->{last_finish_request}{reason} eq 'Could not complete the task.','refused finish explanation lost');
 
 # Pause synthetic coordinators during an agent and an index setup. No real
 # compiler, agent or campaign is signalled. Preserve agent exit time and record
