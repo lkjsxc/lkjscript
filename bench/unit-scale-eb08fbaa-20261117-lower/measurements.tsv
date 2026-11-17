@@ -1,0 +1,13 @@
+workload	source_lines	phase	exit	wall_s	user_s	system_s	peak_rss_kib	compiler_peak_rss_bytes	load_before	load_after	memory_limit_mib	watchdog_s	units_checked	units_reused	units_emitted	expected_units	largest_source_unit_lines	maximum_direct_dependencies	dependency_depth	max_definitions	max_types	max_ir_functions	max_import_interfaces	max_projection_bytes	max_sources	emitted_bytes	store_bytes
+compiler	NA	check	0	21.83	20.77	0.22	718504	735748096	1.95	2.42	8192	3600	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	0
+compiler	NA	build	0	40.32	38.48	0.40	1139568	1166917632	2.42	3.70	8192	3600	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	34582163	0
+levenshtein-original-units	129	cold-check	0	0.84	0.80	0.01	47184	48316416	3.70	3.65	8192	3600	3	0	0	3	65	1	2	796	70	30	1	333	34	0	34121
+levenshtein-original-units	129	cold-build	0	0.86	0.83	0.01	47232	48365568	3.65	3.65	8192	3600	3	0	3	3	65	1	2	796	70	30	1	333	34	70081	124462
+generated	100000	cold-build	0	23.52	22.69	0.20	99056	101433344	3.65	6.15	2048	300	20	0	20	20	9997	2	5	2223	71	1434	2	76172	35	6053536	10353270
+generated	100000	cold-check	0	22.83	21.91	0.21	97436	99774464	6.15	7.17	2048	300	20	0	0	20	9997	2	5	2223	71	1434	2	76172	35	0	11843045
+generated	100000	unchanged-build	0	0.93	0.88	0.01	27568	29483008	7.17	7.17	2048	300	0	20	0	20	9997	2	5	NA	NA	NA	NA	NA	NA	6053536	10353270
+generated	100000	body-build	0	3.36	3.20	0.06	86140	88207360	7.17	10.12	2048	300	1	19	1	20	9997	2	5	1507	57	720	NA	NA	33	6053536	11304855
+generated	1000000	cold-build	0	233.91	225.35	1.65	123368	126328832	10.12	8.06	1536	766	200	0	200	200	9997	2	8	2223	71	1434	2	76172	35	60128475	103499560
+generated	1000000	cold-check	0	208.05	200.78	1.43	106652	109211648	8.06	7.38	1536	766	200	0	0	200	9997	2	8	2223	71	1434	2	76172	35	0	118507886
+generated	1000000	unchanged-build	0	4.46	4.07	0.10	45024	49856512	7.38	7.35	1536	766	0	200	0	200	9997	2	8	NA	NA	NA	NA	NA	NA	60128475	103499560
+generated	1000000	body-build	0	6.02	5.72	0.13	86332	89034752	7.35	7.32	1536	766	1	199	1	200	9997	2	8	1507	57	720	NA	NA	33	60128475	104451148

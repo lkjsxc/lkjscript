@@ -249,11 +249,343 @@ fn buffered_extents(world: &mut World, runtime: &native::units::Context<'_>) -> 
     let (file, _) = linker.finish(runtime, second.interface(), "user::main", &no_grants(), &sources(&first, &second), &no_messages(), Some(3u32)).unwrap();
     let (status, bytes) = execute(world, file);
     assert_eq!(status, 0i64); assert_eq!(read_word(&bytes, 0usize), 42usize);
-    1usize
+    // Selecting the long name directly exercises ordinary support records too.
+    let mut direct = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();
+    direct.push(native::units::emit(&first, runtime, 0usize).unwrap()).unwrap();
+    let (file, _) = direct.finish(runtime, first.interface(), name.as_str(), &no_grants(),
+        &first.program().sources, &no_messages(), Some(3u32)).unwrap();
+    let (status, bytes) = execute(world, file);
+    assert_eq!(status, 0i64); assert_eq!(read_word(&bytes, 0usize), 41usize);
+    2usize
+}
+
+fn put_word(bytes: &mut Vec<u8>, at: usize, value: usize) {
+    for index in 0usize..8usize { bytes[at + index] = (value >> (index * 8usize)) as u8; }
+}
+
+fn skip_blob(bytes: &[u8], at: usize) -> usize { at + 8usize + read_word(bytes, at) }
+
+struct ObjectFields {
+    exports: usize,
+    export_count: usize,
+    code_length: usize,
+    symbols: Vec<(usize, usize, usize)>,
+    references: usize,
+    reference_count: usize,
+    immediates: usize,
+    immediate_count: usize,
+}
+
+fn object_fields(bytes: &[u8]) -> ObjectFields {
+    assert!(bytes.starts_with(b"LKJUNITOBJECT2\n"));
+    let mut at = b"LKJUNITOBJECT2\n".len();
+    at = skip_blob(bytes, at); at = skip_blob(bytes, at);
+    at += 16usize;
+    let count = read_word(bytes, at); at += 8usize;
+    for _ in 0usize..count { at = skip_blob(bytes, at); }
+    let count = read_word(bytes, at); at += 8usize;
+    for _ in 0usize..count { at = skip_blob(bytes, at); }
+    let exports = at;
+    let export_count = read_word(bytes, at); at += 8usize + export_count * 32usize;
+    let code_length = read_word(bytes, at); at += 8usize + code_length;
+    let count = read_word(bytes, at); at += 8usize;
+    let mut symbols = Vec::new();
+    for _ in 0usize..count {
+        let length = read_word(bytes, at);
+        symbols.push((at, at + 8usize, length));
+        at += 8usize + length;
+    }
+    let reference_count = read_word(bytes, at);
+    let references = at + 8usize;
+    at = references + reference_count * 40usize;
+    let immediate_count = read_word(bytes, at);
+    let immediates = at + 8usize;
+    assert_eq!(immediates + immediate_count * 40usize, bytes.len());
+    ObjectFields { exports, export_count, code_length, symbols, references,
+        reference_count, immediates, immediate_count }
+}
+
+fn open_object(unit: &CheckedUnit, runtime: &native::units::Context<'_>, base: usize, bytes: &[u8])
+    -> Option<native::units::Object> {
+    let producer = [7u8; 32]; let secret = [9u8; 32];
+    let domain = reuse::ProofDomain::new(&producer, &secret);
+    let key = native::units::object_key(unit.interface(), runtime, base, &unit.program().sources);
+    let token = verified(native::units::namespace(), &key, bytes, &producer, &secret);
+    native::units::Object::open(&domain, unit.interface(), runtime, base, &unit.program().sources, token)
+}
+
+fn replace_symbol(bytes: &[u8], location: (usize, usize, usize), replacement: &str) -> Vec<u8> {
+    let mut result = bytes[..location.0].to_vec();
+    let size_at = result.len();
+    result.extend_from_slice(&[0u8; 8]);
+    put_word(&mut result, size_at, replacement.len());
+    result.extend_from_slice(replacement.as_bytes());
+    result.extend_from_slice(&bytes[location.1 + location.2..]);
+    result
+}
+
+fn compact_objects(world: &mut World, runtime: &native::units::Context<'_>) -> usize {
+    let first = provider(41i64, false);
+    let second = consumer(first.interface(), false);
+    let base = first.program().sources.len();
+    let encoded = native::units::emit(&second, runtime, base).unwrap().encode();
+    let fields = object_fields(&encoded);
+    assert_eq!(fields.export_count, 1usize);
+    assert!(fields.reference_count > 0usize);
+    // A valid authenticated compact object still links in reverse arrival order.
+    let mut linker = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();
+    linker.push(open_object(&second, runtime, base, &encoded).unwrap()).unwrap();
+    linker.push(native::units::emit(&first, runtime, 0usize).unwrap()).unwrap();
+    let (file, _) = linker.finish(runtime, second.interface(), "user::main",
+        &no_grants(), &sources(&first, &second), &no_messages(), Some(3u32)).unwrap();
+    let (status, bytes) = execute(world, file);
+    assert_eq!(status, 0i64); assert_eq!(read_word(&bytes, 0usize), 42usize);
+    for variant in 0usize..6usize {
+        let mut malformed = encoded.clone();
+        match variant {
+            0usize => put_word(&mut malformed, fields.exports, 2usize),
+            1usize => put_word(&mut malformed, fields.exports + 8usize, fields.code_length),
+            2usize => put_word(&mut malformed, fields.exports + 16usize, base + second.program().sources.len()),
+            3usize => put_word(&mut malformed, fields.references + 8usize, fields.symbols.len()),
+            4usize => put_word(&mut malformed, fields.references, fields.code_length),
+            _ => malformed[b"LKJUNITOBJECT".len()] = b'1',
+        }
+        assert!(open_object(&second, runtime, base, &malformed).is_none());
+    }
+    let producer = [7u8; 32]; let secret = [9u8; 32];
+    let domain = reuse::ProofDomain::new(&producer, &secret);
+    let key = native::units::object_key(second.interface(), runtime, base, &second.program().sources);
+    let old = verified("unit-native-1", &key, &encoded, &producer, &secret);
+    assert!(native::units::Object::open(&domain, second.interface(), runtime, base, &second.program().sources, old).is_none());
+    let trapped = provider(41i64, true);
+    let mut malformed = native::units::emit(&trapped, runtime, 0usize).unwrap().encode();
+    let fields = object_fields(&malformed);
+    assert!(fields.immediate_count > 0usize);
+    put_word(&mut malformed, fields.immediates + 8usize, 1usize);
+    assert!(open_object(&trapped, runtime, 0usize, &malformed).is_none());
+    9usize
+}
+
+fn compact_bindings(world: &mut World, runtime: &native::units::Context<'_>) -> usize {
+    let first = provider(41i64, false);
+    let second = consumer(first.interface(), false);
+    let base = first.program().sources.len();
+    let encoded = native::units::emit(&second, runtime, base).unwrap().encode();
+    let fields = object_fields(&encoded);
+    let mut selected = None;
+    for location in &fields.symbols {
+        let name = String::from_utf8(encoded[location.1..location.1 + location.2].to_vec()).unwrap();
+        if name.as_str().starts_with("unit:") { selected = Some(*location); break; }
+    }
+    let location = selected.unwrap();
+    let identity = first.interface().identity().to_string();
+    let wrong_identity = format!("{}{}", if identity.as_bytes()[0] == b'0' { "1" } else { "0" }, &identity[1usize..]);
+    let replacements: Vec<String> = vec![
+        format!("unit:8:numbers:64:{identity}:numbers::value"),
+        format!("unit:07:numbers:64:{identity}:numbers::value"),
+        format!("unit:7:numbers:65:{identity}:numbers::value"),
+        format!("unit:7:numbers:64:g{}:numbers::value", &identity[1usize..]),
+        format!("unit:184467440737095516160:numbers:64:{identity}:numbers::value"),
+        format!("unit:1:é:64:{identity}:numbers::value"),
+        format!("unit:7:xumbers:64:{identity}:numbers::value"),
+        format!("unit:7:numbers:64:{wrong_identity}:numbers::value"),
+        format!("unit:7:numbers:64:{identity}:numbers::absent"),
+    ];
+    for (index, replacement) in replacements.iter().enumerate() {
+        let malformed = replace_symbol(&encoded, location, replacement.as_str());
+        let object = open_object(&second, runtime, base, &malformed);
+        if index < 6usize {
+            assert!(object.is_none());
+        } else {
+            let mut linker = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();
+            linker.push(native::units::emit(&first, runtime, 0usize).unwrap()).unwrap();
+            linker.push(object.unwrap()).unwrap();
+            let failure = linker.finish(runtime, second.interface(), "user::main",
+                &no_grants(), &sources(&first, &second), &no_messages(), None).err().unwrap();
+            assert_eq!(failure.message, format!("unresolved unit symbol {replacement}"));
+            assert_eq!(failure.file, base + second.program().functions[1usize].file);
+            assert_eq!(failure.line, 7usize); assert_eq!(failure.column, 3usize);
+        }
+    }
+    9usize
+}
+
+fn same_name_unit(name: &str, value: i64) -> CheckedUnit {
+    let program = ir::Program { sources: vec![format!("{name}.lkj")], types: ir::primitives(),
+        functions: vec![function("shared::value", vec![local("result", ir::I64)],
+            vec![ir::Op::Int { dst: 0usize, value }, ir::Op::Return { src: 0usize }])],
+        destructors: Vec::new() };
+    let imports: Vec<Import> = Vec::new();
+    check::units::check_unit(name, name, program, &imports).unwrap()
+}
+
+fn grouped_exports(world: &mut World, runtime: &native::units::Context<'_>) -> usize {
+    let first = same_name_unit("first", 41i64);
+    let second = same_name_unit("second", 99i64);
+    let mut linker = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();
+    linker.push(native::units::emit(&first, runtime, 0usize).unwrap()).unwrap();
+    let object = native::units::emit(&second, runtime, 1usize).unwrap();
+    linker.push(open_object(&second, runtime, 1usize, &object.encode()).unwrap()).unwrap();
+    let (file, _) = linker.finish(runtime, second.interface(), "shared::value",
+        &no_grants(), &sources(&first, &second), &no_messages(), Some(3u32)).unwrap();
+    let (status, bytes) = execute(world, file);
+    assert_eq!(status, 0i64); assert_eq!(read_word(&bytes, 0usize), 99usize);
+    let mut program = first.program().clone();
+    program.functions[0].name = "shared::z".to_string();
+    program.functions.push(function("shared::a", vec![local("result", ir::I64)],
+        vec![ir::Op::Int { dst: 0usize, value: 99i64 }, ir::Op::Return { src: 0usize }]));
+    let imports: Vec<Import> = Vec::new();
+    let multiple = check::units::check_unit("multiple", "multiple", program, &imports).unwrap();
+    let encoded = native::units::emit(&multiple, runtime, 0usize).unwrap().encode();
+    for (entry, expected) in vec![("shared::z".to_string(), 41usize), ("shared::a".to_string(), 99usize)] {
+        let mut linker = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();
+        linker.push(open_object(&multiple, runtime, 0usize, &encoded).unwrap()).unwrap();
+        let (file, _) = linker.finish(runtime, multiple.interface(), entry.as_str(), &no_grants(),
+            &multiple.program().sources, &no_messages(), Some(3u32)).unwrap();
+        let (status, bytes) = execute(world, file);
+        assert_eq!(status, 0i64); assert_eq!(read_word(&bytes, 0usize), expected);
+    }
+    3usize
+}
+
+struct PacketFields {
+    packet: usize,
+    length: usize,
+    symbols: Vec<(usize, usize, usize)>,
+    messages: Vec<(usize, usize, usize)>,
+    message_count: usize,
+    row_count: usize,
+    rows: usize,
+}
+
+fn packet_fields(bytes: &[u8]) -> PacketFields {
+    // The initial entry record keeps its ordinary name framing.
+    assert_eq!(read_word(bytes, 0usize), 0usize);
+    let packet = 48usize + read_word(bytes, 16usize);
+    assert_eq!(read_word(bytes, packet), 2usize);
+    let length = read_word(bytes, packet + 8usize);
+    let mut at = packet + 16usize;
+    let count = read_word(bytes, at); at += 8usize;
+    let mut symbols = Vec::new();
+    for _ in 0usize..count {
+        let size = read_word(bytes, at);
+        symbols.push((at, at + 8usize, size)); at += 8usize + size;
+    }
+    let message_count = at;
+    let count = read_word(bytes, at); at += 8usize;
+    let mut messages = Vec::new();
+    for _ in 0usize..count {
+        let size = read_word(bytes, at);
+        messages.push((at, at + 8usize, size)); at += 8usize + size;
+    }
+    let row_count = read_word(bytes, at);
+    let rows = at + 8usize;
+    assert_eq!(rows + row_count * 48usize, packet + 16usize + length);
+    PacketFields { packet, length, symbols, messages, message_count, row_count, rows }
+}
+
+fn append_word(bytes: &mut Vec<u8>, value: usize) {
+    let at = bytes.len(); bytes.extend_from_slice(&[0u8; 8]); put_word(bytes, at, value);
+}
+
+fn append_string(bytes: &mut Vec<u8>, value: &str) {
+    append_word(bytes, value.len()); bytes.extend_from_slice(value.as_bytes());
+}
+
+fn packet_refusals(world: &mut World, runtime: &native::units::Context<'_>) -> usize {
+    let first = provider(41i64, true);
+    let messages = vec!["zeta custom failure".to_string()];
+    for variant in 0usize..22usize {
+        let mut spool = world.temporary_file().unwrap(); let mut alias = spool.duplicate().unwrap();
+        let mut output = world.temporary_file().unwrap(); let mut unpublished = output.duplicate().unwrap();
+        let mut linker = native::units::Linker::new(output, spool).unwrap();
+        linker.push(native::units::emit(&first, runtime, 0usize).unwrap()).unwrap();
+        alias.rewind().unwrap();
+        let mut bytes = alias.read_to_end().unwrap();
+        let fields = packet_fields(&bytes);
+        assert!(!fields.symbols.is_empty()); assert!(!fields.messages.is_empty()); assert!(fields.row_count > 0usize);
+        let mut immediate = None;
+        for index in 0usize..fields.row_count {
+            let row = fields.rows + index * 48usize;
+            if read_word(&bytes, row) == 1usize { immediate = Some(row); break; }
+        }
+        match variant {
+            0usize => put_word(&mut bytes, fields.packet, 3usize),
+            1usize => put_word(&mut bytes, fields.packet + 8usize, !0usize),
+            2usize => put_word(&mut bytes, fields.packet + 8usize, 23usize),
+            3usize => put_word(&mut bytes, fields.packet + 16usize, !0usize),
+            4usize => put_word(&mut bytes, fields.symbols[0].0, !0usize),
+            5usize => bytes[fields.symbols[0].1] = 255u8,
+            6usize => put_word(&mut bytes, fields.message_count, !0usize),
+            7usize => put_word(&mut bytes, fields.rows - 8usize, !0usize),
+            8usize => put_word(&mut bytes, fields.rows, 2usize),
+            9usize => put_word(&mut bytes, fields.rows + 16usize, !0usize),
+            10usize => put_word(&mut bytes, fields.rows + 8usize, !0usize),
+            11usize => put_word(&mut bytes, fields.rows + 24usize, !0usize),
+            12usize => {
+                let line = read_word(&bytes, fields.rows + 32usize);
+                put_word(&mut bytes, fields.rows + 32usize, line + 1usize);
+            },
+            13usize => put_word(&mut bytes, 16usize, !0usize),
+            14usize => put_word(&mut bytes, 0usize, 2usize),
+            15usize => {
+                put_word(&mut bytes, fields.packet, 0usize);
+                put_word(&mut bytes, fields.packet + 16usize, !0usize);
+            },
+            16usize => put_word(&mut bytes, fields.packet + 8usize, fields.length - 1usize),
+            17usize => put_word(&mut bytes, immediate.unwrap() + 16usize, !0usize),
+            _ => {
+                // Unused table entries must also be parsed and validated.
+                let mut payload = Vec::new();
+                if variant == 18usize {
+                    append_word(&mut payload, 2usize);
+                    append_string(&mut payload, "same"); append_string(&mut payload, "same");
+                } else if variant == 19usize {
+                    append_word(&mut payload, 1usize); append_string(&mut payload, "unit:x");
+                } else if variant == 20usize {
+                    append_word(&mut payload, 1usize); append_string(&mut payload, "");
+                } else { append_word(&mut payload, 0usize); }
+                if variant == 21usize {
+                    append_word(&mut payload, 2usize);
+                    append_string(&mut payload, ""); append_string(&mut payload, "");
+                } else { append_word(&mut payload, 0usize); }
+                append_word(&mut payload, 0usize);
+                assert!(payload.len() <= fields.length);
+                put_word(&mut bytes, fields.packet + 8usize, payload.len());
+                bytes[fields.packet + 16usize..fields.packet + 16usize + payload.len()].copy_from_slice(&payload);
+            },
+        }
+        let expected = match variant {
+            0usize | 8usize => "unknown unit relocation kind",
+            1usize | 2usize | 14usize => "invalid relocation packet extent",
+            3usize | 6usize => "invalid relocation table count",
+            4usize | 13usize | 15usize => "invalid relocation symbol extent",
+            5usize => "relocation symbol is not UTF-8",
+            7usize | 16usize => "invalid relocation packet rows",
+            9usize => "invalid relocation symbol ordinal",
+            10usize => "unit relocation is outside image code",
+            11usize => "invalid relocation reference site",
+            12usize => "relocation spool changed after emission",
+            17usize => "invalid relocation message ordinal",
+            18usize | 21usize => "duplicate relocation table name",
+            19usize => "invalid unit relocation symbol",
+            _ => "empty relocation symbol",
+        };
+        alias.rewind().unwrap(); alias.write_all(&bytes).unwrap();
+        let failure = linker.finish(runtime, first.interface(), "numbers::value", &no_grants(),
+            &first.program().sources, &messages, None).err().unwrap();
+        assert_eq!(failure.message, expected);
+        unpublished.rewind().unwrap();
+        let image = unpublished.read_to_end().unwrap();
+        assert_eq!(&image[..4usize], &[0u8; 4]);
+    }
+    22usize
 }
 pub fn run(world: &mut World) -> usize {
     let sealed = runtime(world);
     let runtime = native::units::Context::new(&sealed);
     objects(world, &runtime) + refusals(world, &runtime) + traps(world, &runtime) + relocation_edges()
         + runtime_binding(world, &sealed) + buffered_extents(world, &runtime)
+        + compact_objects(world, &runtime) + compact_bindings(world, &runtime) + grouped_exports(world, &runtime)
+        + packet_refusals(world, &runtime)
 }

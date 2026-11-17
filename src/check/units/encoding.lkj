@@ -56,6 +56,7 @@ pub(super) fn encode(interface: &Interface, semantic: bool) -> Vec<u8> {
     out
 }
 struct Reader<'a> { data: &'a [u8], at: usize }
+
 impl<'a> Reader<'a> {
     fn wide(&mut self) -> Option<u64> {
         if self.data.len() - self.at < 8usize { return None; }
@@ -77,10 +78,15 @@ impl<'a> Reader<'a> {
         if count > (self.data.len() - self.at) / width { return None; }
         Some(count)
     }
-    fn bytes(&mut self) -> Option<Vec<u8>> {
+    fn span(&mut self) -> Option<(usize, usize)> {
         let count = self.count(1usize)?;
-        let value = self.data[self.at..self.at + count].to_vec();
-        self.at += count; Some(value)
+        let start = self.at;
+        self.at += count;
+        Some((start, self.at))
+    }
+    fn bytes(&mut self) -> Option<Vec<u8>> {
+        let (start, end) = self.span()?;
+        Some(self.data[start..end].to_vec())
     }
     fn text(&mut self) -> Option<String> { String::from_utf8(self.bytes()?).ok() }
     fn offsets(&mut self) -> Option<Vec<u64>> {
@@ -104,12 +110,15 @@ pub(super) fn decode(
     let mut reader = Reader { data, at: 8usize };
     if reader.text()? != TARGET_ABI { return None; }
     let name = reader.text()?;
+    let provenance_begin = reader.at;
     let input = reader.text()?;
     let body = reader.text()?;
+    let provenance_end = reader.at;
     if name != expected_name || input != expected_input || name.is_empty() || input.is_empty() || !digest(&body) {
         return None;
     }
-    let program = ir_binary::read(&reader.bytes()?)?;
+    let (program_begin, program_end) = reader.span()?;
+    let program = ir_binary::read(&data[program_begin..program_end])?;
     if super::super::check_structure(&program).is_err() { return None; }
     for function in &program.functions {
         if function.locals.len() != function.params || !function.body.is_empty() { return None; }
@@ -121,6 +130,7 @@ pub(super) fn decode(
         defined.push(reader.boolean()?);
         origins.push(Binding { unit: reader.text()?, interface_identity: reader.text()?, name: reader.text()? });
     }
+    let dependencies_begin = reader.at;
     let count = reader.count(16usize)?;
     let mut dependencies: Vec<Dependency> = Vec::new();
     for _ in 0usize..count {
@@ -131,6 +141,7 @@ pub(super) fn decode(
         }
         dependencies.push(dependency);
     }
+    let dependencies_end = reader.at;
     if dependencies.as_slice() != expected_dependencies { return None; }
     for index in 0usize..origins.len() {
         let origin = &origins[index];
@@ -177,8 +188,21 @@ pub(super) fn decode(
     if reader.at != data.len() { return None; }
     let mut result = Interface { name, input, body, identity: String::new(), program,
         defined, origins, dependencies, layouts, effects };
-    result.identity = sha256::hex_digest(&encode(&result, true));
-    // Reject alternate framings as well as trailing bytes.
+    // Reject alternate framings and trailing bytes before hashing semantic spans.
     if encode(&result, false).as_slice() != data { return None; }
+    // The canonical semantic encoding replaces the two provenance texts and
+    // dependency vector with encoded empty values. All other bytes are exact.
+    let mut semantic = sha256::Sha256::new();
+    semantic.update(&data[..provenance_begin]);
+    semantic.update(&[0u8; 16]);
+    semantic.update(&data[provenance_end..dependencies_begin]);
+    semantic.update(&[0u8; 8]);
+    semantic.update(&data[dependencies_end..]);
+    let digest = semantic.finish();
+    let alphabet = b"0123456789abcdef";
+    for byte in &digest[..] {
+        result.identity.push(alphabet[(*byte >> 4u8) as usize] as char);
+        result.identity.push(alphabet[(*byte & 15u8) as usize] as char);
+    }
     Some(result)
 }

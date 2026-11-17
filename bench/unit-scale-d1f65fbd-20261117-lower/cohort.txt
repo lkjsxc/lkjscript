@@ -1,0 +1,15 @@
+started_utc=2026-11-17T03:07:03Z
+repository=/home/coder/workspace/lkjscript
+compiler=/home/coder/workspace/lkjscript/target/unit-ordinal-current
+rungs=100000,1000000
+compiler_sha256=d1f65fbd3b08de2496694ad3bda013b7c337cd203b58d98183db7a27060154b8
+source_commit=6b02dd1dddfd7a9dd1fced1337249a46b6c33f44
+memory_ceiling_mib=8192
+time_ceiling_s=3600
+maximum_unit_lines=10000
+workload=connected explicit-unit DAG; separate from the historical shape-sampled ladder
+generated_phases=cold-build,unchanged-build,body-build
+generated_cold_check=explicitly omitted; cold build independently checks every unit
+ten_million=one cold-build invocation only; no fresh check, warm build or retry at that rung
+memory=per-process virtual-address envelope; GNU time reports largest process RSS
+finished_utc=2026-11-17T03:13:18Z

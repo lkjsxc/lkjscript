@@ -1,0 +1,8 @@
+"unit_native_cases::buffered_extents" level=source-claim operation-target
+"/home/coder/workspace/lkjscript-compiler-unit-native-20261117/src/unit_native_cases.lkj" level=source-claim file before=427a2f683f02360fa3fcbe1a4697b113598dca022b487d825416217f94920618 after=6ec2f39a096b84c9a4b72df8f7c124400173d529dca5511fc3174a8a937b7d09
+transaction sites=1 files=1 identities=1
+"unit_native_cases::buffered_extents" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=8fce02d67422c5fb6295b89d556876e014a08e18ce7d4963cec0206e4bf717d2 after=d94d9d1e579ea9fd4606c612276f6e6970d47dc2b024394bff02da4d2a51ccf2 checked-instances=4445 fresh-checked=4445 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=82a188bd66dc9a1bd79cf00275e50f11843efaf48ff997fde804a4272fa59443 source-after=a5cc0d7d6f2f97caecbf565bcc82769f2479379520dbffebbf679574a2d5fa05 mode=apply
+replay desired=d94d9d1e579ea9fd4606c612276f6e6970d47dc2b024394bff02da4d2a51ccf2 candidate=d94d9d1e579ea9fd4606c612276f6e6970d47dc2b024394bff02da4d2a51ccf2 verified=true operations=1

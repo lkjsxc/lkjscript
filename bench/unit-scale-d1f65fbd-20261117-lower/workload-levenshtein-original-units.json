@@ -1,0 +1,66 @@
+{
+   "adapters" : {
+      "corpus" : "byte-for-byte existing corpus.lkj; same crate::upstream::levenshtein import",
+      "corpus_sha256" : "b8a47d104a63d7a0d4ecf2e27da8111d0cb97cd0026733b9b0dc7a13b386e889",
+      "entry" : "four-line public Stdout entry calling crate::corpus::output",
+      "unit_manifest" : "three named units and two dependency edges",
+      "upstream_tests" : "complete upstream hash verified; executed by the separate real-program gate"
+   },
+   "dependency_depth" : 2,
+   "files" : [
+      {
+         "bytes" : 1476,
+         "lines" : 65,
+         "path" : "upstream.lkj",
+         "sha256" : "6f295e027783399df21c081465b2ebc2d3a499895635a839c1c00aae4455f267"
+      },
+      {
+         "bytes" : 2018,
+         "lines" : 60,
+         "path" : "corpus.lkj",
+         "sha256" : "b8a47d104a63d7a0d4ecf2e27da8111d0cb97cd0026733b9b0dc7a13b386e889"
+      },
+      {
+         "bytes" : 115,
+         "lines" : 4,
+         "path" : "app.lkj",
+         "sha256" : "952716223f6f2ff3c0416713dd248798a769620d806979fb61bf98baca725415"
+      }
+   ],
+   "generator_version" : 1,
+   "historical_projection" : {
+      "normalized_range_expressions" : 1,
+      "path" : "examples/real_programs/levenshtein/upstream.lkj",
+      "receipt_sha256" : "3a1b46ae88949473a2f10ac38a565ce6048ade9198275f2e6e8ffc7030285a5e",
+      "removed_integration_header_lines" : 2,
+      "sha256" : "e118333ead31f962a23f2d6e1439b192bc007af3f5b58bffc400bff694d9ad0a",
+      "usage" : "read-only provenance input; not compiled in this unit cohort"
+   },
+   "largest_unit_lines" : 65,
+   "leaf_units" : 1,
+   "linking_units" : 2,
+   "manifest_lines" : 10,
+   "maximum_direct_dependencies" : 1,
+   "oracle" : {
+      "archive_sha256" : "372bb7554c39e10f6692d28e0514000bdb24209f7135acf283aff5e1c77c22a5",
+      "path" : "tests/fixtures/real_programs_levenshtein.output.gz",
+      "rows" : 7239
+   },
+   "source_bytes" : 3609,
+   "source_function_definitions" : 5,
+   "source_lines" : 129,
+   "units" : 3,
+   "upstream" : {
+      "algorithm_adaptations" : 0,
+      "commit" : "9c4730b1973d4e61e187f8fe6d5f299ad5c991fc",
+      "license_sha256" : "ca4662cb5d1b738fbe5350c0d5485ba11773b4b7208974082ae6e129a52d631d",
+      "name" : "levenshtein",
+      "origin" : "https://github.com/wooorm/levenshtein-rs",
+      "original_library_lines" : 65,
+      "original_library_sha256" : "6f295e027783399df21c081465b2ebc2d3a499895635a839c1c00aae4455f267",
+      "original_tests_sha256" : "88c8be4758d544673107a4b932e5c00cef6cd7972dc7f9293ccfaa4e5e672665",
+      "source_projection" : "exact src/lib.rs bytes in upstream.lkj; only extension and module boundary differ",
+      "version" : "1.0.5"
+   },
+   "workload" : "original upstream algorithm with separate corpus and entry units"
+}

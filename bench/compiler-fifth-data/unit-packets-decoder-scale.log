@@ -1,0 +1,13 @@
+compiler NA check: exit=0 wall=21.83s RSS=718504KiB checked=NA reused=NA
+compiler NA build: exit=0 wall=40.32s RSS=1139568KiB checked=NA reused=NA
+levenshtein-original-units 129 cold-check: exit=0 wall=0.84s RSS=47184KiB checked=3 reused=0
+levenshtein-original-units 129 cold-build: exit=0 wall=0.86s RSS=47232KiB checked=3 reused=0
+generated 100000 cold-build: exit=0 wall=23.52s RSS=99056KiB checked=20 reused=0
+generated 100000 cold-check: exit=0 wall=22.83s RSS=97436KiB checked=20 reused=0
+generated 100000 unchanged-build: exit=0 wall=0.93s RSS=27568KiB checked=0 reused=20
+generated 100000 body-build: exit=0 wall=3.36s RSS=86140KiB checked=1 reused=19
+generated 1000000 cold-build: exit=0 wall=233.91s RSS=123368KiB checked=200 reused=0
+generated 1000000 cold-check: exit=0 wall=208.05s RSS=106652KiB checked=200 reused=0
+generated 1000000 unchanged-build: exit=0 wall=4.46s RSS=45024KiB checked=0 reused=200
+generated 1000000 body-build: exit=0 wall=6.02s RSS=86332KiB checked=1 reused=199
+unit scale evidence: /home/coder/workspace/lkjscript/bench/unit-scale-eb08fbaa-20261117-lower

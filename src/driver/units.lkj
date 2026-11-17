@@ -21,6 +21,9 @@ struct Record {
     inputs: Vec<u8>,
     sources: Vec<String>,
     messages: Vec<String>,
+    // Never decoded from a persisted input record. Populated only from the
+    // selected unit's authenticated projection or its fresh projected bytes.
+    requires: Option<Vec<String>>,
 }
 fn problem(detail: &str) -> String { format!("E_UNIT_SOURCE {detail}") }
 fn maximum(stats: &mut Stats, name: &str, value: usize) {
@@ -78,7 +81,7 @@ impl Record {
         let sources = read_strings(&mut reader, bytes.len())?;
         let messages = read_strings(&mut reader, bytes.len())?;
         if !reader.done() { return None; }
-        Some(Self { name, input, interface, projection, dependency_sources, dependencies, inputs, sources, messages })
+        Some(Self { name, input, interface, projection, dependency_sources, dependencies, inputs, sources, messages, requires: None })
     }
 }
 fn request_key(unit: &Definition, root: &str, options: &Options) -> String {
@@ -107,7 +110,7 @@ fn dependencies(unit: &Definition, records: &BTreeMap<String, Record>) -> Result
     Ok(result)
 }
 fn source_dependencies(
-    unit: &Definition, expected: &[Dependency], records: &BTreeMap<String, Record>, store: &mut store::Store,
+    unit: &Definition, expected: &[Dependency], records: &BTreeMap<String, Record>,
 ) -> Result<(Vec<String>, String), String> {
     let mut allowed: BTreeSet<String> = BTreeSet::new();
     for dependency in expected { allowed.insert(dependency.name.clone()); }
@@ -116,9 +119,9 @@ fn source_dependencies(
     while let Some(name) = pending.pop() {
         if !selected.insert(name.clone()) { continue; }
         let record = records.get(&name).ok_or_else(|| problem("missing dependency source projection"))?;
-        let projected = projection(store, record).ok_or_else(|| problem("dependency projection was evicted or failed authentication; increase --store-bytes or retry"))?;
-        for needed in projected.requires {
-            if allowed.contains(&needed) && !selected.contains(&needed) { pending.push(needed); }
+        let required = record.requires.as_ref().ok_or_else(|| problem("dependency projection has not been admitted"))?;
+        for needed in required {
+            if allowed.contains(needed) && !selected.contains(needed) { pending.push(needed.clone()); }
         }
     }
     let mut names = Vec::new();
@@ -382,6 +385,7 @@ fn admit(
         projection: projection_key, dependency_sources: source_identity.to_string(),
         dependencies: expected.to_vec(), inputs: input_bytes, sources,
         messages: crate::native::messages(unit.program()),
+        requires: Some(projected.requires.clone()),
     };
     if !store::inputs_match(world, &record.inputs) { return Err(problem("unit sources changed during checking")); }
     {
@@ -463,17 +467,21 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
     let mut emitted = 0usize;
     for definition in &plan.units {
         let expected = dependencies(definition, &records)?;
-        let (source_names, source_identity) = source_dependencies(definition, &expected, &records, memo.store.as_mut().unwrap())?;
+        let (source_names, source_identity) = source_dependencies(definition, &expected, &records)?;
         let request = request_key(definition, &root, options);
         let cached = memo.store.as_mut().unwrap().get(RECORDS, &request)
             .and_then(|bytes: Vec<u8>| Record::decode(&bytes, &definition.name));
         let mut ready: Option<(Interface, Record)> = None;
         if let Some(record) = cached {
+            let mut record = record;
             if record.dependencies == expected && record.dependency_sources == source_identity {
                 let matches = reusable_inputs(world, &mut snapshot, &record.inputs, &private_source_digest);
                 if matches {
                     if let Some(interface) = interface(memo.store.as_mut().unwrap(), &record) {
-                        if projection(memo.store.as_mut().unwrap(), &record).is_some() { ready = Some((interface, record)); }
+                        if let Some(projected) = projection(memo.store.as_mut().unwrap(), &record) {
+                            record.requires = Some(projected.requires);
+                            ready = Some((interface, record));
+                        }
                     }
                 }
             }

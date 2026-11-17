@@ -1,0 +1,33 @@
+Measured ordinal producer: exact source reconstruction
+verified_utc=2026-11-17T06:27:11Z
+base_commit=6b02dd1dddfd7a9dd1fced1337249a46b6c33f44
+source_patch=unit-ordinal-from-6b02.patch
+source_patch_sha256=e35d03bc7641c31038dc62116312c4d72c2e7464022d3f94fc32e3747b2b2b74
+native_source_sha256=6159eb379ebcd72d87f0ec85c95c06117061f95192dd726d1fa53d20ba36c456
+driver_source_sha256=6bbe3180b660797e651fe7b706e5f5a8474d48ebd4942ccc4451cb6202b90c18
+seed_gzip_sha256=55dc82a4f501d29b2b100179686b1cdae3d5c9bcb1ce972027bb1378806a1412
+seed_executable_sha256=2a76113394bb40ea5612965ed4567ca69f3f43555334bb6874b88588975cee3b
+rebuilt_producer_sha256=d1f65fbd3b08de2496694ad3bda013b7c337cd203b58d98183db7a27060154b8
+measured_reference_sha256=d1f65fbd3b08de2496694ad3bda013b7c337cd203b58d98183db7a27060154b8
+executable_bytes=34510178
+byte_equal=true
+compiler_invocations=1
+compiler_workers=1
+scope=exact producer reconstruction; no new unit-scale run
+
+Preparation: archive src/, library/, tools/ and seed/ from the base commit;
+apply the retained two-file patch; unpack that revision's seed to
+target/published-seed. Run from the reconstructed root with relative paths.
+LKJSCRIPT_STORE and LKJSCRIPT_STORE_KEY were unset.
+Command:
+target/published-seed build src/main.lkj --library-dir library --runtime-source library/runtime.lkj --inline-limit 64 --no-store --stats -o target/reproduced
+
+GNU time:
+wall_seconds=38.71 max_rss_kib=1141020 exit=0
+
+Comparison:
+cmp target/reproduced /home/coder/workspace/lkjscript/target/unit-ordinal-current
+comparison_exit=0
+
+Raw compiler statistics:
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"done","total_ms":38690.212,"assemble_ms":83.422,"build_ir_ms":6585.641,"check_ms":0.010,"check_body_ms":21208.418,"check_optimized_ms":0.007,"check_verification_ms":0.021,"emit_ms":1644.877,"inline_ms":828.318,"key_hash_ms":0.007,"load_parse_ms":1106.697,"native_encode_ms":0.010,"other_ms":142.053,"producer_hash_ms":0.003,"resolve_ms":293.611,"runtime_ms":37.873,"store_io_ms":0.016,"type_ms":6749.995,"write_ms":9.211,"build_reused":0,"checked_local_reused":5880,"checked_reused":0,"emitted_bytes":34510178,"emitted_reused":0,"front_definitions":3871,"front_functions":13795,"front_reused":0,"inline_accepted":1,"inline_attempts":1,"inline_calls":49378,"inline_functions":7915,"inline_rejected":0,"ir_functions":13795,"ir_instructions":1333043,"test_rerun":0,"test_reused":0,"peak_rss_bytes":1168404480}
