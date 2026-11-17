@@ -7,6 +7,10 @@ on:
     branches: [main]
     types: [completed]
   workflow_dispatch:
+    inputs:
+      commit:
+        description: A main commit that passed the gate; empty means the branch head
+        required: false
 permissions:
   contents: write
 concurrency:
@@ -19,7 +23,7 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      RELEASE_COMMIT: ${{ github.event.workflow_run.head_sha || github.sha }}
+      RELEASE_COMMIT: ${{ inputs.commit || github.event.workflow_run.head_sha || github.sha }}
       RELEASE_FORCED: ${{ github.event_name == 'workflow_dispatch' }}
     steps:
       - name: Decide whether a release is due
