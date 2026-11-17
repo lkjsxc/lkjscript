@@ -15,10 +15,16 @@ use Symbol qw(gensym);
 use POSIX qw(setsid WNOHANG);
 
 my $json = JSON::PP->new->canonical->utf8;
+my $text_json = JSON::PP->new->canonical;
 my $script = abs_path($0);
 (my $root = $script) =~ s{/bench/[^/]+$}{};
 sub load_json { my ($path)=@_; open my $f,'<:raw',$path or die "$path: $!"; local $/; return $json->decode(<$f>); }
-sub save_json { my ($path,$value)=@_; open my $f,'>:raw',$path or die "$path: $!"; print $f $json->encode($value),"\n"; close $f or die $!; }
+sub save_json {
+    my ($path,$value)=@_;my $temporary="$path.tmp.$$";
+    open my $f,'>:raw',$temporary or die "$temporary: $!";
+    print $f $json->encode($value),"\n";close $f or die "$temporary: $!";
+    rename $temporary,$path or die "$path: $!";
+}
 sub read_bytes { my ($path)=@_; open my $f,'<:raw',$path or die "$path: $!"; local $/; return <$f>; }
 sub read_text { return decode('UTF-8',read_bytes($_[0]),FB_CROAK); }
 sub write_text { write_bytes($_[0],encode('UTF-8',$_[1])); }
@@ -84,6 +90,7 @@ sub compiler_run {
 }
 sub prepare {
     my ($repository,$binary,$run,$case,$mode,$model,$max_calls)=@_;
+    my $preparation_started=time;
     die "existing run $run" if -e $run;
     make_path("$run/agent","$run/store","$run/logs");
     my $parent=require_ok(capture($repository,undef,'git','rev-parse',"$case->{revision}^"),'parent'); chomp $parent;
@@ -93,7 +100,7 @@ sub prepare {
     my $count=read($random,my $key,32); die "short entropy read" unless $count==32; close $random;
     write_bytes("$run/key",$key); chmod 0600,"$run/key";
     my %baseline=map {$_=>sha256_hex(read_bytes("$run/source/$_"))} @{source_files("$run/source")};
-    my $state={version=>1,case=>$case,mode=>$mode,model=>$model,parent=>$parent,
+    my $state={version=>1,case=>$case,mode=>$mode,model=>$model,reasoning_effort=>'medium',parent=>$parent,
         binary=>$binary,binary_sha256=>sha256_hex(read_bytes($binary)),harness_sha256=>sha256_hex(read_bytes($script)),
         calls=>0,payload_bytes=>0,response_bytes=>0,gates=>[],max_calls=>$max_calls,
         setup_started=>time,baseline=>\%baseline,full_repository_gate=>"not-run"};
@@ -105,6 +112,7 @@ sub prepare {
         else {$state->{setup_error}="index failed";$state->{setup_result}=$r;}
     }
     $state->{setup_seconds}=time-$state->{setup_started};
+    $state->{preparation_seconds}=time-$preparation_started;
     $state->{started}=time;
     save_json("$run/state.json",$state);
     return $state;
@@ -157,7 +165,7 @@ sub perform {
         }
         if (exists $a->{request}) {
             die "request only applies to edit" unless $command eq 'edit';
-            my $raw=ref($a->{request})?$json->encode($a->{request}):$a->{request};
+            my $raw=ref($a->{request})?$text_json->encode($a->{request}):$a->{request};
             write_text("$run/request.json",$raw);
             push @args,'--request',"$run/request.json";
         }
@@ -200,7 +208,7 @@ sub perform {
         die "old text is ambiguous" if index($text,$old,$at+length($old))>=0;
         substr($text,$at,length($old),$new);
         write_text($path,$text);
-        return {path=>$a->{path},written_bytes=>length($text)};
+        return {path=>$a->{path},written_bytes=>length(encode('UTF-8',$text))};
     }
     if ($tool eq 'write') {
         my $path=source_path($run,$a->{path});
@@ -208,7 +216,7 @@ sub perform {
         die "parent directory absent" unless -d $parent;
         my $text=$a->{text}//'';
         write_text($path,$text);
-        return {path=>$a->{path},written_bytes=>length($text)};
+        return {path=>$a->{path},written_bytes=>length(encode('UTF-8',$text))};
     }
     die "unknown experiment tool";
 }
@@ -237,6 +245,7 @@ sub tool_definitions {
 }
 sub serve {
     my ($run)=@_;
+    my $adapter_sha256=sha256_hex(read_bytes($script));
     $|=1;
     while (my $line=<STDIN>) {
         my $request=eval {$json->decode($line)};next unless $request && exists $request->{id};
@@ -253,13 +262,14 @@ sub serve {
             my $result=eval {perform($run,$state,$tool,$args)};
             my $error=$@;
             $result={error=>$error} if $error;
-            my $payload=$json->encode($result);
+            my $payload=$text_json->encode($result);
+            my $payload_bytes=length(encode('UTF-8',$payload));
             $response={content=>[{type=>'text',text=>$payload}],isError=>$error?JSON::PP::true:JSON::PP::false};
             my $response_bytes=length($json->encode($response));
-            $state->{payload_bytes}+=length($payload);
+            $state->{payload_bytes}+=$payload_bytes;
             $state->{response_bytes}+=$response_bytes;
             my $record={number=>$state->{calls},tool=>$tool,arguments=>$args,result=>$result,seconds=>time-$t0,
-                payload_bytes=>length($payload),response_bytes=>$response_bytes};
+                payload_bytes=>$payload_bytes,response_bytes=>$response_bytes,adapter_sha256=>$adapter_sha256};
             save_json(sprintf("$run/logs/tool-%03d.json",$state->{calls}),$record);
             save_json("$run/state.json",$state);
         } else {
@@ -292,6 +302,9 @@ sub finish_run {
         if (!$state->{calls} && $raw =~ /MCP tool call requires approval/) {
             $state->{setup_error}='CLI rejected fixture tool approval before execution';
         }
+        if (!$state->{calls} && ($state->{agent_exit}//0) && !$state->{timed_out} && !$state->{pause_timeout}) {
+            $state->{setup_error}//='CLI exited before any experiment tool call; see its trace and stderr';
+        }
     }
     delete $state->{baseline};
     save_json("$run/state.json",$state);
@@ -309,7 +322,7 @@ sub run_agent {
     my ($run,$state,$seconds)=@_;
     my $text=prompt($state);write_text("$run/prompt.txt",$text);
     $state->{agent_allowance_seconds}=$seconds;
-    $state->{task_bytes}=length($text);save_json("$run/state.json",$state);
+    $state->{task_bytes}=length(encode('UTF-8',$text));save_json("$run/state.json",$state);
     my $pid=fork();die "fork: $!" unless defined $pid;
     if (!$pid) {
         setsid()>=0 or die "setsid: $!";
@@ -335,9 +348,34 @@ sub run_agent {
     }
     my $exit=$?&127 ? 128+($?&127) : $?>>8;
     $state=load_json("$run/state.json");
-    $state->{agent_exit}=$exit;$state->{timed_out}=$timed_out?JSON::PP::true:JSON::PP::false;
+    $state->{agent_exit}=$exit;$state->{timed_out}=($timed_out || $state->{pause_timeout})?JSON::PP::true:JSON::PP::false;
     save_json("$run/state.json",$state);
     return finish_run($run);
+}
+sub edit_metrics {
+    my ($run)=@_;my @invocations;my @requests;my $gate_requests;my $gate_calls=0;
+    for my $path (sort glob("$run/logs/tool-*.json")) {
+        my $r=load_json($path);
+        if ($r->{tool} eq 'gate') {$gate_calls++;$gate_requests//=scalar @requests;next;}
+        next unless $r->{tool} eq 'compiler';
+        my $a=$r->{arguments};my @argv=@{$a->{argv}//[]};
+        next unless @argv && $argv[0] eq 'edit';
+        my $help=grep {$_ eq '--help' || $_ eq '-h'} @argv;
+        my $dry=grep {$_ eq '--dry-run'} @argv;
+        my $recovery=grep {$_ eq '--recover'} @argv;
+        my $diagnostic=($r->{result}{stderr}//'')=~/\b(E_[A-Z0-9_]+)\b/?$1:undef;
+        my $kind=$help?'help':$recovery?'recovery':exists($a->{request})?($dry?'request-dry-run':'request'):'usage';
+        my $event={tool_record=>$r->{number},kind=>$kind,exit=>$r->{result}{exit},diagnostic=>$diagnostic};
+        push @invocations,$event;
+        next unless exists($a->{request}) && !$help && !$recovery;
+        my $request=ref($a->{request}) eq 'HASH'?$a->{request}:eval {$text_json->decode($a->{request})};
+        $event->{operations}=[map {ref($_) eq 'HASH'?$_->{op}:undef} @{$request->{operations}}]
+            if ref($request) eq 'HASH' && ref($request->{operations}) eq 'ARRAY';
+        push @requests,$event;
+    }
+    return {first_edit_invocation=>$invocations[0],first_edit_request=>$requests[0],
+        edit_invocation_count=>scalar(@invocations),edit_request_count=>scalar(@requests),
+        requests_before_first_gate=>$gate_requests,gate_invocation_count=>$gate_calls};
 }
 sub report {
     my ($out)=@_;
@@ -345,13 +383,14 @@ sub report {
     for my $path (sort glob("$out/*/state.json")) {
         my $s=load_json($path);my $g=$s->{gates}[0]//{};
         my $target=$g->{comparison} && $g->{comparison}{exit} ? undef : $g->{canonical_target_pass};
-        push @rows,{case=>$s->{case}{id},mode=>$s->{mode},model=>$s->{model},calls=>$s->{calls},
+        push @rows,{case=>$s->{case}{id},mode=>$s->{mode},model=>$s->{model},reasoning_effort=>'medium',calls=>$s->{calls},agent_exit=>$s->{agent_exit},
             task_bytes=>$s->{task_bytes}//0,payload_bytes=>$s->{payload_bytes},response_bytes=>$s->{response_bytes},
-            wall_seconds=>$s->{wall_seconds}//0,setup_seconds=>$s->{setup_seconds},
+            wall_seconds=>$s->{wall_seconds}//0,setup_seconds=>$s->{setup_seconds},preparation_seconds=>$s->{preparation_seconds},
             checker_first=>$g->{checker_pass},target_first=>$target,
             attempted_tool_calls=>$s->{attempted_tool_calls},outside_tool_calls=>$s->{outside_tool_calls},setup_error=>$s->{setup_error},
             gate_called=>@{$s->{gates}}?JSON::PP::true:JSON::PP::false,full_repository_gate=>$s->{full_repository_gate},
-            first_edit_exit=>$s->{edit_exits}[0],reason=>$s->{reason}//'',timed_out=>$s->{timed_out}//JSON::PP::false,
+            edit_metrics=>edit_metrics($path =~ s{/state\.json$}{}r),candidate_kind=>'first-explicit-gate-submission',
+            reason=>$s->{reason}//'',timed_out=>($s->{timed_out} || $s->{pause_timeout})?JSON::PP::true:JSON::PP::false,
             path=>$path};
     }
     save_json("$out/results.json",\@rows);
@@ -408,7 +447,7 @@ sub full_gate {
     }
     my $started=time;
     my $result=capture($tree,undef,'env','LKJSCRIPT_GATE_JOBS=4','bash','tools/check.sh');
-    my $evidence={version=>1,case=>$state->{case}{id},arm=>$state->{mode},candidate=>1,
+    my $evidence={version=>1,case=>$state->{case}{id},arm=>$state->{mode},candidate=>1,candidate_kind=>'first-explicit-gate-submission',
         source_parent=>$state->{parent},test_revision=>$state->{case}{revision},
         candidate_snapshot_sha256=>sha256_hex(read_bytes("$run/gate-01-files.json")),
         started=>$started,seconds=>time-$started,exit=>$result->{exit},
@@ -485,13 +524,28 @@ sub pause_campaign {
             next unless $known{$child}{name} eq 'codex';
             my @states=sort {(-M $a)<=> (-M $b)} glob("$out/*/state.json");
             my $s=@states?load_json($states[0]):{};
-            if ($s->{started} && !$s->{finished} && $seconds=~/^\d+$/ && time-$s->{started}>$seconds) {
+            if ($s->{started} && $seconds=~/^\d+$/ && time-$s->{started}>$seconds) {
                 kill 'TERM',-$child;sleep 1;kill 'KILL',-$child;
                 $s->{pause_timeout}=JSON::PP::true;$s->{finished}=time;
                 save_json($states[0],$s);
             }
         }
         sleep 0.25;
+    }
+    # A CLI that exhausted its allowance may exit without a successful finish.
+    # Persist the observed exit now, before the coordinator waits for resume.
+    my $saw_agent=grep {$known{$_} && $known{$_}{name} eq 'codex'} keys %known;
+    my @unfinished;
+    for my $path (glob("$out/*/state.json")) {
+        my $s=load_json($path);
+        push @unfinished,[$path,$s] if $s->{started} && !exists($s->{wall_seconds}) && !$s->{finished}
+            && ($saw_agent || exists($s->{agent_exit}));
+    }
+    die "more than one unfinished agent after drain" if @unfinished>1;
+    if (@unfinished) {
+        my ($path,$s)=@{$unfinished[0]};
+        $s->{finished}=time;$s->{finish_observation}='pause observed drained agent exit';
+        save_json($path,$s);
     }
     save_json("$out/pause-state.json",{coordinator=>$pid,paused=>JSON::PP::true,drained=>JSON::PP::true,at=>time});
     print $json->encode({paused=>JSON::PP::true,drained=>JSON::PP::true,flag=>"$out/pause",coordinator=>$pid}),"\n";
@@ -515,7 +569,7 @@ if ($action eq 'probe') {
     die "probe path exists" if -e $run;
     make_path("$run/agent","$run/source","$run/desired","$run/store","$run/logs");
     my $state={version=>1,case=>{id=>0,paths=>[],task=>'Read the compiler help once and then finish. Do not edit or run the gate.'},
-        mode=>'commands',model=>$model,binary=>abs_path($binary),calls=>0,payload_bytes=>0,response_bytes=>0,
+        mode=>'commands',model=>$model,reasoning_effort=>'medium',binary=>abs_path($binary),calls=>0,payload_bytes=>0,response_bytes=>0,
         gates=>[],max_calls=>2,baseline=>{},started=>time,setup_seconds=>0,full_repository_gate=>'not-run'};
     save_json("$run/state.json",$state);
     print $json->encode(run_agent($run,$state,120)),"\n";exit;

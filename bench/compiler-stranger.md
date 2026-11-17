@@ -57,9 +57,13 @@ perl bench/compiler-stranger.pl campaign \
   /tmp/lkjscript-stranger-after gpt-6-luna all files,commands 900 24
 ~~~
 
-Use another fresh cohort and the same cases to measure a second model. Completed
-arms are retained and skipped on resume. An unfinished arm requires inspection;
-the command does not silently start another agent on an uncertain edit.
+Run all twenty changes in both arms for gpt-6-luna and gpt-6-astra, with separate
+before/after output directories for each model. Both use the same fixed medium
+reasoning effort, normal automatic approval review, and the same explicit
+allowances. Check the normal advertised model configuration before starting; a
+CLI/model setup failure is not language evidence. Completed arms are retained
+and skipped on resume. An unfinished arm requires inspection; the command does
+not silently start another agent on an uncertain edit.
 
 ## Pause for the shared host
 
@@ -86,16 +90,25 @@ solution.
 
 * payload_bytes counts the exact UTF-8 text returned in MCP results, including
   help, diagnostics and refusal messages. response_bytes additionally counts
-  the MCP response envelope. task_bytes is separate.
+  the MCP result envelope, excluding the JSON-RPC transport wrapper. task_bytes
+  is separate. Text is encoded once; byte counts use UTF-8, not character counts.
 * calls counts requests that reached the adapter, including refusals.
   attempted_tool_calls also counts model calls that failed before execution.
   Any tool call outside the experiment is recorded as outside_tool_calls.
 * wall_seconds runs from preparation completion to the agent's finish.
-  setup_seconds is separate. Commands need a prebuilt authenticated index;
-  the frozen compiler publishes one only through build --index. Setup is not
-  presented as free work.
-* checker_first says whether the first submitted candidate passed the existing
+  setup_seconds is separate: the original metric starts after archive/key/hash
+  preparation and covers index setup and its bookkeeping. New preparations also
+  record preparation_seconds from entry, including those earlier operations;
+  historical missing values remain unavailable. Commands need a prebuilt index;
+  the frozen compiler publishes one only through build --index.
+* checker_first says whether the first explicit gate candidate passed the existing
   independent checker. A missing submission is not-run, not a failed check.
+* edit_metrics separates help/usage discovery from request-bearing invocations,
+  retaining the first request exit, diagnostic, operation names and dry-run kind.
+  An edit transaction checks its candidate before publication. A later explicit
+  gate pass does not mean that the first edit request was accepted. Rejected edit
+  requests and their exact refusals remain in the raw tool log; they have no
+  published source candidate to submit to the full repository gate.
 * target_first reports exact canonical checked-meaning equality to the historical
   target. This is stricter than behavioral equivalence: a different valid
   algorithm or diagnostic text can differ. An oracle setup failure is unavailable.
@@ -120,7 +133,7 @@ not evidence of a faster successful workflow. Rank command-only blockers against
 files-arm successes, retaining unavailable and ambiguous outcomes rather than
 silently scoring them as success or failure.
 
-## Run the actual first-candidate repository gate
+## Run the repository gate on the first submitted candidate
 
 The agent's first gate submission is saved before its checker runs. Use that
 snapshot, not the agent's corrected final files, for the separate full-gate metric:
@@ -145,3 +158,21 @@ counted as an agent regression. No submitted candidate means not-run. The first
 two text-arm snapshots predated direct capture and are recoverable by replaying
 the exact recorded successful text writes up to their first gate; the recovery
 record identifies those tool calls.
+
+## Adapter regressions
+
+~~~sh
+perl bench/compiler-stranger-adapter-test.pl
+~~~
+
+This invokes no model or compiler. It verifies non-ASCII source survives the MCP
+JSON transport with exact UTF-8 byte counts, distinguishes successful help from
+request acceptance, and pauses/resumes only its synthetic private coordinator.
+
+The first 202 actual baseline tool replies (cases 1--6 and drained 7-files) were
+inspected after discovering a double-encoding bug: all were ASCII, so none was
+corrupted or undercounted. The adapter was corrected before the next arm. The
+recorded first edit invocation in the initial evidence is help or usage discovery,
+not candidate acceptance. The drained seventh files arm had a successful finish
+timestamp, so its measurement did not acquire idle pause time. Later adapters
+record their loaded script hash on every tool result.

@@ -7,7 +7,7 @@
   "compiler_sha256": "a92e81e2d2c18fe1bd645a9b5e287c3a1a2af5eaffa1be16e400289590e7625a",
   "max_seconds_per_arm": 900,
   "max_adapter_calls_per_arm": 24,
-  "source_revision": "b4594275e",
+  "source_revision": "b4594275e1523b95f20e44f0fee0f9e8b57a0233",
   "full_repository_gates": "not run; first candidates saved separately",
   "results": [
     {
@@ -15,7 +15,6 @@
       "calls": 19,
       "case": 1,
       "checker_first": null,
-      "first_edit_exit": 1,
       "full_repository_gate": "not-run",
       "gate_called": false,
       "mode": "commands",
@@ -29,14 +28,14 @@
       "target_first": null,
       "task_bytes": 1655,
       "timed_out": false,
-      "wall_seconds": 93.7574801445007
+      "wall_seconds": 93.7574801445007,
+      "first_edit_invocation_exit": 1
     },
     {
       "attempted_tool_calls": 11,
       "calls": 11,
       "case": 1,
       "checker_first": true,
-      "first_edit_exit": null,
       "full_repository_gate": "not-run",
       "gate_called": true,
       "mode": "files",
@@ -50,14 +49,14 @@
       "target_first": null,
       "task_bytes": 1536,
       "timed_out": false,
-      "wall_seconds": 74.4804599285126
+      "wall_seconds": 74.4804599285126,
+      "first_edit_invocation_exit": null
     },
     {
       "attempted_tool_calls": 8,
       "calls": 8,
       "case": 2,
       "checker_first": null,
-      "first_edit_exit": 1,
       "full_repository_gate": "not-run",
       "gate_called": false,
       "mode": "commands",
@@ -71,14 +70,14 @@
       "target_first": null,
       "task_bytes": 1722,
       "timed_out": false,
-      "wall_seconds": 49.1790599822998
+      "wall_seconds": 49.1790599822998,
+      "first_edit_invocation_exit": 1
     },
     {
       "attempted_tool_calls": 26,
       "calls": 26,
       "case": 2,
       "checker_first": true,
-      "first_edit_exit": null,
       "full_repository_gate": "not-run",
       "gate_called": true,
       "mode": "files",
@@ -92,14 +91,14 @@
       "target_first": false,
       "task_bytes": 1603,
       "timed_out": false,
-      "wall_seconds": 245.779481172562
+      "wall_seconds": 245.779481172562,
+      "first_edit_invocation_exit": null
     },
     {
       "attempted_tool_calls": 18,
       "calls": 18,
       "case": 3,
       "checker_first": null,
-      "first_edit_exit": 1,
       "full_repository_gate": "not-run",
       "gate_called": false,
       "mode": "commands",
@@ -113,14 +112,14 @@
       "target_first": null,
       "task_bytes": 1752,
       "timed_out": false,
-      "wall_seconds": 101.619110107422
+      "wall_seconds": 101.619110107422,
+      "first_edit_invocation_exit": 1
     },
     {
       "attempted_tool_calls": 26,
       "calls": 26,
       "case": 3,
       "checker_first": null,
-      "first_edit_exit": null,
       "full_repository_gate": "not-run",
       "gate_called": false,
       "mode": "files",
@@ -134,14 +133,14 @@
       "target_first": null,
       "task_bytes": 1633,
       "timed_out": false,
-      "wall_seconds": 87.2156589031219
+      "wall_seconds": 87.2156589031219,
+      "first_edit_invocation_exit": null
     },
     {
       "attempted_tool_calls": 15,
       "calls": 15,
       "case": 4,
       "checker_first": null,
-      "first_edit_exit": 1,
       "full_repository_gate": "not-run",
       "gate_called": false,
       "mode": "commands",
@@ -155,14 +154,14 @@
       "target_first": null,
       "task_bytes": 1709,
       "timed_out": false,
-      "wall_seconds": 68.3553199768066
+      "wall_seconds": 68.3553199768066,
+      "first_edit_invocation_exit": 1
     },
     {
       "attempted_tool_calls": 14,
       "calls": 14,
       "case": 4,
       "checker_first": false,
-      "first_edit_exit": null,
       "full_repository_gate": "not-run",
       "gate_called": true,
       "mode": "files",
@@ -176,14 +175,14 @@
       "target_first": null,
       "task_bytes": 1590,
       "timed_out": false,
-      "wall_seconds": 224.41247010231
+      "wall_seconds": 224.41247010231,
+      "first_edit_invocation_exit": null
     },
     {
       "attempted_tool_calls": 12,
       "calls": 12,
       "case": 5,
       "checker_first": null,
-      "first_edit_exit": 1,
       "full_repository_gate": "not-run",
       "gate_called": false,
       "mode": "commands",
@@ -197,14 +196,14 @@
       "target_first": null,
       "task_bytes": 1641,
       "timed_out": false,
-      "wall_seconds": 63.7525599002838
+      "wall_seconds": 63.7525599002838,
+      "first_edit_invocation_exit": 1
     },
     {
       "attempted_tool_calls": 15,
       "calls": 15,
       "case": 5,
       "checker_first": true,
-      "first_edit_exit": null,
       "full_repository_gate": "not-run",
       "gate_called": true,
       "mode": "files",
@@ -218,14 +217,14 @@
       "target_first": false,
       "task_bytes": 1522,
       "timed_out": false,
-      "wall_seconds": 154.952500104904
+      "wall_seconds": 154.952500104904,
+      "first_edit_invocation_exit": null
     },
     {
       "attempted_tool_calls": 15,
       "calls": 15,
       "case": 6,
       "checker_first": null,
-      "first_edit_exit": 1,
       "full_repository_gate": "not-run",
       "gate_called": false,
       "mode": "commands",
@@ -239,14 +238,14 @@
       "target_first": null,
       "task_bytes": 1684,
       "timed_out": false,
-      "wall_seconds": 73.4683899879456
+      "wall_seconds": 73.4683899879456,
+      "first_edit_invocation_exit": 1
     },
     {
       "attempted_tool_calls": 9,
       "calls": 9,
       "case": 6,
       "checker_first": true,
-      "first_edit_exit": null,
       "full_repository_gate": "not-run",
       "gate_called": true,
       "mode": "files",
@@ -260,7 +259,10 @@
       "target_first": false,
       "task_bytes": 1565,
       "timed_out": false,
-      "wall_seconds": 130.264209985733
+      "wall_seconds": 130.264209985733,
+      "first_edit_invocation_exit": null
     }
-  ]
+  ],
+  "first_edit_invocation_definition": "Literal first edit invocation, including help or missing-request usage; not first candidate acceptance.",
+  "setup_seconds_definition": "Index setup and bookkeeping after archive/key/hash preparation; complete preparation time is unavailable for this initial cohort."
 }
