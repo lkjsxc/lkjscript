@@ -158,6 +158,10 @@ parallel_step 1 type-identity timeout --kill-after=10s 600s bash tools/type-iden
 parallel_step 1 history-replay timeout --kill-after=10s 600s bash tools/replay-test.sh "$check_binary"
 parallel_step 1 profiler timeout --kill-after=10s 600s sh tools/profile-test.sh "$check_binary"
 parallel_step 1 optimizer timeout --kill-after=10s 600s bash tools/optimizer-test.sh "$check_binary"
+parallel_step 1 checked-units timeout --kill-after=10s 600s env LKJSCRIPT_BINARY="$check_binary" sh tools/check-units.sh
+parallel_step 1 unit-native timeout --kill-after=10s 600s env LKJSCRIPT_COMPILER="$check_binary" bash tools/unit-native.sh
+parallel_step 1 source-units timeout --kill-after=10s 600s env LKJSCRIPT_BINARY="$check_binary" bash tools/unit-source-test.sh
+parallel_step 1 unit-boundaries timeout --kill-after=10s 600s env LKJSCRIPT_BINARY="$check_binary" bash tools/unit-boundaries-test.sh
 parallel_step 1 resources timeout --kill-after=10s 600s bash tools/resource-test.sh "$check_binary"
 parallel_step 1 diagnostic-cases diagnostic_cases
 parallel_step 1 cache-io timeout --kill-after=10s 600s bash tools/cache-io-test.sh "$check_binary"

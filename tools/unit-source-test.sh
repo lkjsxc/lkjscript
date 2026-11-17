@@ -1,0 +1,119 @@
+#!/usr/bin/env bash
+# Source-unit cache/link integration, kept small; scale and agent trials are separate.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+unit_compiler=$(realpath "${LKJSCRIPT_BINARY:-target/lkjscript}")
+unit_fixture=$(mktemp -d target/unit-source.XXXXXX)
+unit_key_root=$(mktemp -d /tmp/lkjscript-unit-key.XXXXXX)
+unit_cleanup() {
+    local result=$?
+    if (( result != 0 )); then
+        for diagnostic in "$unit_fixture"/*.err; do
+            [[ -f $diagnostic ]] || continue
+            printf '%s\n' "$diagnostic" >&2
+            cat "$diagnostic" >&2
+        done
+    fi
+    rm -rf "$unit_fixture" "$unit_key_root"
+}
+trap unit_cleanup EXIT
+trap 'exit 130' HUP INT TERM
+mkdir "$unit_fixture/store"
+unit_key=$(XDG_STATE_HOME="$unit_key_root" sh tools/store-key.sh)
+unit_root=$(realpath "$unit_fixture")
+cat > "$unit_root/units.lkj" <<'SOURCE'
+const UNITS: &[&str] = &["base=base.lkj", "geometry=geometry.lkj", "app=app.lkj"];
+const DEPENDS: &[&str] = &["geometry=base", "app=geometry"];
+const ENTRY: &str = "app::main";
+SOURCE
+cat > "$unit_root/base.lkj" <<'SOURCE'
+#[derive(Clone, Copy)]
+pub struct Pair { pub left: i64, pub right: i64 }
+fn adjustment() -> i64 { 0i64 }
+impl Pair { pub fn total(&self) -> i64 { self.left + self.right + adjustment() } }
+pub fn sum(value: Pair) -> i64 { value.total() }
+pub fn first<'a>(value: &'a Pair) -> &'a i64 { &value.left }
+pub fn identity<T: Copy>(value: T) -> T { value }
+pub fn included<T: Copy>(_: T) -> &'static str { include_str!("message.txt") }
+SOURCE
+printf 'unit include' > "$unit_root/message.txt"
+cat > "$unit_root/geometry.lkj" <<'SOURCE'
+use crate::base::Pair;
+pub fn answer() -> i64 {
+    let value = Pair { left: 17i64, right: 25i64 };
+    let first = crate::base::first(&value);
+    assert_eq!(*first, 17i64);
+    let original = crate::base::included(0usize);
+    assert_eq!(original, "unit include");
+    crate::base::identity(crate::base::sum(value))
+}
+SOURCE
+cat > "$unit_root/app.lkj" <<'SOURCE'
+pub fn main(mut out: Stdout) {
+    let answer = crate::geometry::answer();
+    out.write(format!("{answer}\n").as_bytes());
+}
+SOURCE
+unit_options=(units.lkj --source-dir "$unit_root" --store "$unit_root/store" --store-key "$unit_key" --stats)
+"$unit_compiler" check-units "${unit_options[@]}" > "$unit_root/check.out" 2> "$unit_root/check.err"
+rg -q 'checked=3 reused=0' "$unit_root/check.out"
+"$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/program" > "$unit_root/build.out" 2> "$unit_root/build.err"
+[[ $("$unit_root/program") == 42 ]]
+"$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/warm" > "$unit_root/warm.out" 2> "$unit_root/warm.err"
+rg -q 'checked=0 reused=3 emitted=0' "$unit_root/warm.out"
+cmp "$unit_root/program" "$unit_root/warm"
+# Private helpers and nongeneric methods cross the same authenticated boundary.
+perl -0pi -e 's/adjustment\(\) -> i64 \{ 0i64 \}/adjustment() -> i64 { 1i64 }/' "$unit_root/base.lkj"
+"$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/helper" > "$unit_root/helper.out" 2> "$unit_root/helper.err"
+rg -q 'checked=1 reused=2 emitted=1' "$unit_root/helper.out"
+[[ $("$unit_root/helper") == 43 ]]
+perl -0pi -e 's/self.left \+ self.right \+ adjustment\(\)/self.left + self.right + adjustment() + 1i64/' "$unit_root/base.lkj"
+"$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/method" > "$unit_root/method.out" 2> "$unit_root/method.err"
+rg -q 'checked=1 reused=2 emitted=1' "$unit_root/method.out"
+[[ $("$unit_root/method") == 44 ]]
+perl -0pi -e 's/value.total\(\)/value.total() + 1i64/' "$unit_root/base.lkj"
+"$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/edited" > "$unit_root/edit.out" 2> "$unit_root/edit.err"
+rg -q 'checked=1 reused=2 emitted=1' "$unit_root/edit.out"
+[[ $("$unit_root/edited") == 45 ]]
+# Generic templates are producer inputs, not proofs of future instantiations.
+perl -0pi -e 's/identity<T: Copy>\(value: T\) -> T \{ value \}/identity<T: Copy>(value: T) -> T { let result = value; result }/' "$unit_root/base.lkj"
+"$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/template" > "$unit_root/template.out" 2> "$unit_root/template.err"
+rg -q 'checked=2 reused=1 emitted=2' "$unit_root/template.out"
+[[ $("$unit_root/template") == 45 ]]
+# Including a source that is also projected must preserve its original bytes.
+perl -0pi -e 's/include_str!\("message.txt"\)/include_str!("base.lkj")/' "$unit_root/base.lkj"
+perl -0pi -e 's/assert_eq!\(original, "unit include"\);/assert!(original.contains("value.total() + 1i64"));/' "$unit_root/geometry.lkj"
+"$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/include" > "$unit_root/include.out" 2> "$unit_root/include.err"
+[[ $("$unit_root/include") == 45 ]]
+# Corrupt every retained interface, including the currently selected versions.
+while IFS= read -r unit_interface; do
+    perl -e 'open my $f,"+<",$ARGV[0] or die $!; binmode $f; seek $f,-1,2 or die $!; read $f,my $b,1; seek $f,-1,2; print {$f} chr(ord($b)^1);' "$unit_interface"
+done < <(rg --files "$unit_root/store" | rg '/lkjscript-unit-interface-1-')
+"$unit_compiler" check-units "${unit_options[@]}" > "$unit_root/corrupt.out" 2> "$unit_root/corrupt.err"
+rg -q 'checked=3 reused=0' "$unit_root/corrupt.out"
+# Rejection never overwrites the already published executable.
+cp "$unit_root/base.lkj" "$unit_root/base.saved"
+printf '\npub fn invalid() -> bool { 42i64 }\n' >> "$unit_root/base.lkj"
+if "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/edited" > "$unit_root/reject.out" 2> "$unit_root/reject.err"; then
+    echo 'ill-typed unit was accepted' >&2; exit 1
+fi
+[[ $("$unit_root/edited") == 45 ]]
+mv "$unit_root/base.saved" "$unit_root/base.lkj"
+# Even a hard link cannot turn the private store key into source/include data.
+ln "$unit_key" "$unit_root/private.key"
+cp "$unit_root/base.lkj" "$unit_root/base.saved"
+printf '\npub fn leaked() -> &'\''static [u8] { include_bytes!("private.key") }\n' >> "$unit_root/base.lkj"
+if "$unit_compiler" check-units "${unit_options[@]}" > "$unit_root/key.out" 2> "$unit_root/key.err"; then
+    echo 'private authentication key was readable as source' >&2; exit 1
+fi
+rg -q 'private unit authentication key' "$unit_root/key.err"
+mv "$unit_root/base.saved" "$unit_root/base.lkj"
+rm "$unit_root/private.key"
+cp "$unit_root/units.lkj" "$unit_root/units.saved"
+perl -0pi -e 's/"geometry=base"/"base=app", "geometry=base"/' "$unit_root/units.lkj"
+if "$unit_compiler" check-units "${unit_options[@]}" > "$unit_root/cycle.out" 2> "$unit_root/cycle.err"; then
+    echo 'cyclic units were accepted' >&2; exit 1
+fi
+rg -q 'unit dependency cycle' "$unit_root/cycle.err"
+mv "$unit_root/units.saved" "$unit_root/units.lkj"
+printf 'ok source units: independent check, streamed link, unchanged/body/template reuse, authentication and atomic refusal\n'

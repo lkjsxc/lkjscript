@@ -1,0 +1,501 @@
+//! Explicit source units. Projections are untrusted producer inputs; only the
+//! independently checked interface authenticates an imported signature.
+use crate::{ast, ir, names, semantic, source, store, syntax};
+use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(Clone)]
+pub struct Definition {
+    pub name: String,
+    pub source: String,
+    pub dependencies: Vec<String>,
+}
+pub struct Plan {
+    pub units: Vec<Definition>,
+    pub entry: String,
+}
+#[derive(Clone)]
+pub struct Projection {
+    pub name: String,
+    pub files: Vec<(String, Vec<u8>)>,
+    pub opaque: Vec<String>,
+    pub requires: Vec<String>,
+}
+fn error(message: &str) -> String { format!("E_UNIT_SOURCE {message}") }
+fn identifier(value: &str) -> bool {
+    if value.is_empty() || matches!(value, "crate" | "self" | "super" | "std") { return false; }
+    for (index, byte) in value.bytes().enumerate() {
+        if !(byte.is_ascii_alphabetic() || byte == b'_' || (index != 0usize && byte.is_ascii_digit())) { return false; }
+    }
+    true
+}
+pub fn beneath(path: &str) -> bool {
+    if path.is_empty() || path.starts_with('/') || path.as_bytes().contains(&0u8) { return false; }
+    for component in path.split('/') { if component == ".." || component.is_empty() { return false; } }
+    true
+}
+fn literal(program: &ast::Program, expression: usize) -> Option<String> {
+    match &program.exprs[expression].kind {
+        ast::Expr::String(value) => Some(value.clone()), _ => None,
+    }
+}
+fn list(program: &ast::Program, expression: usize) -> Option<Vec<String>> {
+    let ast::Expr::Borrow { mutable: false, value } = &program.exprs[expression].kind else { return None; };
+    let ast::Expr::Array(values) = &program.exprs[*value].kind else { return None; };
+    let mut result = Vec::new();
+    for value in values { result.push(literal(program, *value)?); }
+    Some(result)
+}
+fn string_type(program: &ast::Program, ty: usize, array: bool) -> bool {
+    let ast::Type::Ref { mutable: false, inner, .. } = &program.types[ty].kind else { return false; };
+    if array {
+        let ast::Type::Slice(value) = &program.types[*inner].kind else { return false; };
+        string_type(program, *value, false)
+    } else {
+        match &program.types[*inner].kind { ast::Type::Path(path) => path.name == "str" && path.args.is_empty(), _ => false }
+    }
+}
+pub fn parse(text: &str) -> Result<Plan, String> {
+    let program = syntax::parse(text).map_err(|problem: ast::Diagnostic| error(&problem.message))?;
+    let mut units: Option<Vec<String>> = None;
+    let mut dependencies: Option<Vec<String>> = None;
+    let mut entry: Option<String> = None;
+    for item in &program.items {
+        let ast::Item::Constant(index) = item else { return Err(error("manifest accepts only UNITS, DEPENDS and ENTRY literal constants")); };
+        let constant = &program.constants[*index];
+        match constant.name.as_str() {
+            "UNITS" | "DEPENDS" => {
+                if !string_type(&program, constant.ty, true) { return Err(error("UNITS and DEPENDS must have type &[&str]")); }
+                let values = list(&program, constant.value).ok_or_else(|| error("UNITS and DEPENDS must be arrays of string literals"))?;
+                if constant.name == "UNITS" {
+                    if units.is_some() { return Err(error("duplicate UNITS")); }
+                    units = Some(values);
+                } else {
+                    if dependencies.is_some() { return Err(error("duplicate DEPENDS")); }
+                    dependencies = Some(values);
+                }
+            }
+            "ENTRY" => {
+                if entry.is_some() || !string_type(&program, constant.ty, false) { return Err(error("ENTRY must occur once with type &str")); }
+                entry = Some(literal(&program, constant.value).ok_or_else(|| error("ENTRY must be a string literal"))?);
+            }
+            _ => return Err(error(&format!("unknown manifest constant {}", constant.name))),
+        }
+    }
+    let values = units.ok_or_else(|| error("missing UNITS: &[&str]"))?;
+    let dependencies = dependencies.ok_or_else(|| error("missing DEPENDS: &[&str]"))?;
+    let entry = entry.ok_or_else(|| error("missing ENTRY: &str"))?;
+    let mut defined: BTreeMap<String, Definition> = BTreeMap::new();
+    let mut paths: BTreeSet<String> = BTreeSet::new();
+    for value in values {
+        let at = value.find('=').ok_or_else(|| error("each UNITS entry is name=relative/source.lkj"))?;
+        let name = value[..at].to_string();
+        let path = value[at + 1usize..].to_string();
+        if !identifier(&name) || !beneath(&path) || !path.ends_with(".lkj") { return Err(error("unit names are identifiers and sources are relative .lkj paths without ..")); }
+        if defined.contains_key(&name) || !paths.insert(path.clone()) { return Err(error("duplicate unit name or source")); }
+        defined.insert(name.clone(), Definition { name, source: path, dependencies: Vec::new() });
+    }
+    if defined.is_empty() { return Err(error("UNITS must contain at least one unit")); }
+    for value in dependencies {
+        let at = value.find('=').ok_or_else(|| error("each DEPENDS entry is owner=dependency"))?;
+        let owner = value[..at].to_string();
+        let dependency = value[at + 1usize..].to_string();
+        if !defined.contains_key(&owner) || !defined.contains_key(&dependency) { return Err(error("dependency names must occur in UNITS")); }
+        let target = defined.get_mut(&owner).unwrap();
+        if target.dependencies.contains(&dependency) { return Err(error("duplicate dependency edge")); }
+        target.dependencies.push(dependency);
+    }
+    let mut pending = defined;
+    let mut completed: BTreeSet<String> = BTreeSet::new();
+    let mut ordered = Vec::new();
+    while !pending.is_empty() {
+        let selected = pending.iter().find(|(_, value)| value.dependencies.iter().all(|dependency| completed.contains(dependency)))
+            .map(|(name, _)| name.clone());
+        let Some(name) = selected else { return Err(error("unit dependency cycle; put mutually dependent modules in one unit")); };
+        let mut unit = pending.remove(&name).unwrap();
+        unit.dependencies.sort();
+        completed.insert(name);
+        ordered.push(unit);
+    }
+    let root = entry.as_str().split("::").next().unwrap_or("");
+    if !completed.contains(&root.to_string()) || !entry.contains("::") || entry.as_str().bytes().any(|byte| byte <= 32u8 || byte == 127u8) {
+        return Err(error("ENTRY must name unit::function"));
+    }
+    Ok(Plan { units: ordered, entry })
+}
+pub fn virtual_prefix(name: &str) -> String { format!("$units/{name}/") }
+pub fn virtual_root(name: &str) -> String { format!("$units/{name}/mod.lkj") }
+pub fn physical(unit: &Definition, path: &str) -> Option<String> {
+    let prefix = virtual_prefix(&unit.name);
+    if !path.starts_with(&prefix) { return None; }
+    let suffix = &path[prefix.len()..];
+    if suffix == "mod.lkj" { return Some(unit.source.clone()); }
+    if !beneath(suffix) { return None; }
+    match unit.source.rfind('/') {
+        Some(at) => Some(format!("{}/{}", &unit.source[..at], suffix)),
+        None => Some(suffix.to_string()),
+    }
+}
+pub fn root_source(unit: &Definition, dependencies: &[Projection]) -> String {
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    names.insert(unit.name.clone());
+    for dependency in dependencies { names.insert(dependency.name.clone()); }
+    let mut result = String::new();
+    for name in names { result.push_str(&format!("pub mod {name};\n")); }
+    result
+}
+pub fn load<F: FnMut(&str) -> Result<Option<Vec<u8>>, String>>(
+    unit: &Definition, dependencies: &[Projection], standard: Option<&str>, read: &mut F,
+) -> Result<(ast::Program, Vec<(String, Vec<u8>)>), String> {
+    let mut imported: BTreeMap<String, Vec<u8>> = BTreeMap::new();
+    for dependency in dependencies {
+        let prefix = virtual_prefix(&dependency.name);
+        for (path, bytes) in &dependency.files {
+            if !path.starts_with(&prefix) || imported.insert(path.clone(), bytes.clone()).is_some() {
+                return Err(error("duplicate or wrongly scoped imported projection file"));
+            }
+        }
+    }
+    let root = root_source(unit, dependencies).into_bytes();
+    let mut inputs: BTreeMap<String, Option<Vec<u8>>> = BTreeMap::new();
+    let report = source::load_report("$units/root.lkj", standard, &mut |path: &str| {
+        if path == "$units/root.lkj" { return Ok(Some(root.clone())); }
+        if let Some(bytes) = imported.get(&path.to_string()) { return Ok(Some(bytes.clone())); }
+        if path.starts_with("$units/") && physical(unit, path).is_none() { return Ok(None); }
+        if let Some(bytes) = inputs.get(&path.to_string()) { return Ok(bytes.clone()); }
+        let actual = physical(unit, path).unwrap_or_else(|| path.to_string());
+        let bytes = read(&actual)?;
+        inputs.insert(path.to_string(), bytes.clone());
+        Ok(bytes)
+    });
+    if !report.diagnostics.is_empty() {
+        let problem = &report.diagnostics[0usize];
+        return Err(format!("{}:{}:{} {} {}", problem.path, problem.line, problem.column, problem.code, problem.message));
+    }
+    let resolved = crate::resolve::resolve(&report.program).map_err(|problem: ast::Diagnostic| -> String
+        format!("{}:{}:{} {} {}", problem.path, problem.line, problem.column, problem.code, problem.message))?;
+    let mut files = Vec::new();
+    let prefix = virtual_prefix(&unit.name);
+    for (path, value) in inputs {
+        if path.starts_with(&prefix) {
+            if let Some(bytes) = value { files.push((path, bytes)); }
+        }
+    }
+    Ok((resolved, files))
+}
+fn replacement(text: &str) -> String {
+    let mut count = 0usize;
+    for byte in text.bytes() { if byte == b'\n' { count += 1usize; } }
+    let mut result = "{ loop {}".to_string();
+    for _ in 0usize..count { result.push('\n'); }
+    result.push('}');
+    result
+}
+fn sort_ranges(values: &mut BTreeMap<String, Vec<(usize, usize, String)>>) {
+    let mut keys = Vec::new();
+    for (key, _) in values.iter() { keys.push(key.clone()); }
+    for key in keys { values.get_mut(&key).unwrap().sort(); }
+}
+fn covered(ranges: &[(usize, usize, String)], start: usize, end: usize) -> bool {
+    let mut left = 0usize;
+    let mut right = ranges.len();
+    while left < right {
+        let middle = left + (right - left) / 2usize;
+        if ranges[middle].0 <= start { left = middle + 1usize; } else { right = middle; }
+    }
+    left > 0usize && ranges[left - 1usize].0 <= start && end <= ranges[left - 1usize].1
+}
+fn source_literal(bytes: &[u8], binary: bool) -> String {
+    let mut out = Vec::new();
+    if binary { out.push(b'b'); }
+    out.push(b'"');
+    let hex = b"0123456789abcdef";
+    for byte in bytes {
+        match *byte {
+            b'"' => out.extend_from_slice(b"\\\""),
+            b'\\' => out.extend_from_slice(b"\\\\"),
+            b'\n' => out.extend_from_slice(b"\\n"),
+            b'\r' => out.extend_from_slice(b"\\r"),
+            b'\t' => out.extend_from_slice(b"\\t"),
+            value if value < 32u8 || value == 127u8 || (binary && value >= 128u8) => {
+                out.extend_from_slice(b"\\x");
+                out.push(hex[(value / 16u8) as usize]);
+                out.push(hex[(value % 16u8) as usize]);
+            }
+            value => out.push(value),
+        }
+    }
+    out.push(b'"');
+    String::from_utf8(out).unwrap()
+}
+fn require_path(path: &str, owner: &str, required: &mut BTreeSet<String>) {
+    let trimmed = if path.starts_with("crate::") { &path[7usize..] } else { path };
+    let first = trimmed.split("::").next().unwrap_or("");
+    if first != owner && identifier(first) { required.insert(first.to_string()); }
+}
+pub fn project(name: &str, program: &ast::Program, inputs: &[(String, Vec<u8>)], instances: &[Vec<String>]) -> Result<Projection, String> {
+    let prefix = virtual_prefix(name);
+    let mut replacements: BTreeMap<String, Vec<(usize, usize, String)>> = BTreeMap::new();
+    let mut text_by_path: BTreeMap<String, String> = BTreeMap::new();
+    let mut source_paths: BTreeSet<String> = BTreeSet::new();
+    for file in &program.files { if file.path.starts_with(&prefix) { source_paths.insert(file.path.clone()); } }
+    for (path, bytes) in inputs {
+        if source_paths.contains(path) {
+            text_by_path.insert(path.clone(), String::from_utf8(bytes.clone()).map_err(|_| -> String { error("source projection is not UTF-8") })?);
+            replacements.insert(path.clone(), Vec::new());
+        }
+    }
+    let mut opaque = Vec::new();
+    for (index, function) in program.functions.iter().enumerate() {
+        let ordinary = match program.function_owner(ast::FunctionId { index }) {
+            ast::FunctionOwner::Free => true,
+            ast::FunctionOwner::Implementation(owner) => program.impls[owner.index].generics.iter().all(|parameter| parameter.lifetime),
+            _ => false,
+        };
+        if !ordinary || function.generics.iter().any(|parameter| !parameter.lifetime) { continue; }
+        let Some(body) = function.body else { continue; };
+        let path = &program.files[function.span.file].path;
+        if !path.starts_with(&prefix) { continue; }
+        let block = &program.blocks[body];
+        let text = text_by_path.get(path).ok_or_else(|| error("missing defining unit source"))?;
+        if block.span.end > text.len() || block.span.start >= block.span.end
+            || text.as_bytes()[block.span.start] != b'{' || text.as_bytes()[block.span.end - 1usize] != b'}' {
+            return Err(error("function projection does not enclose an authored body"));
+        }
+        replacements.get_mut(path).unwrap().push((block.span.start, block.span.end, replacement(&text[block.span.start..block.span.end])));
+        if instances[index].is_empty() { return Err(error("nongeneric declaration has no independently lowered implementation")); }
+        for identity in &instances[index] { opaque.push(identity.clone()); }
+    }
+    sort_ranges(&mut replacements);
+    // Include expansion is an input fact. Embed its exact literal now: an
+    // imported template must not reread a projected source file as include data.
+    for expression in &program.exprs {
+        let path = &program.files[expression.span.file].path;
+        let Some(text) = text_by_path.get(path) else { continue; };
+        let start = expression.span.start;
+        let end = expression.span.end;
+        if end > text.len() || start >= end || covered(replacements.get(path).unwrap(), start, end) { continue; }
+        let literal = match &expression.kind {
+            ast::Expr::String(value) if text[start..end].starts_with("include_str") => Some(source_literal(value.as_bytes(), false)),
+            ast::Expr::Bytes(value) if text[start..end].starts_with("include_bytes") => Some(source_literal(value, true)),
+            _ => None,
+        };
+        if let Some(literal) = literal {
+            let ranges = replacements.get_mut(path).unwrap();
+            ranges.push((start, end, literal));
+            ranges.sort();
+        }
+    }
+    sort_ranges(&mut replacements);
+    let mut required: BTreeSet<String> = BTreeSet::new();
+    // One use tree may have many aliases with overlapping AST spans. Remove
+    // its complete statement only when every alias is private and unused in
+    // retained declarations/templates. Public reexports and globs stay.
+    for (path, text) in &text_by_path {
+        let tokens = syntax::semantic_tokens(text).map_err(|problem: ast::Diagnostic| -> String { error(&problem.message) })?;
+        let mut uses: BTreeMap<usize, (usize, Vec<usize>)> = BTreeMap::new();
+        for (index, imported) in program.uses.iter().enumerate() {
+            if program.files[imported.span.file].path != *path { continue; }
+            let start = imported.span.start;
+            let mut end = imported.span.end;
+            while end < text.len() && text.as_bytes()[end] != b';' { end += 1usize; }
+            if end == text.len() { return Err(error("import projection has no semicolon")); }
+            end += 1usize;
+            if !uses.contains_key(&start) { uses.insert(start, (end, Vec::new())); }
+            uses.get_mut(&start).unwrap().1.push(index);
+        }
+        let mut use_ranges = Vec::new();
+        for (start, (end, _)) in &uses { use_ranges.push((*start, *end, String::new())); }
+        let mut retained_names: BTreeSet<String> = BTreeSet::new();
+        for token in &tokens {
+            if token.kind == 0u8 && !covered(replacements.get(path).unwrap(), token.span.start, token.span.end)
+                && !covered(&use_ranges, token.span.start, token.span.end) { retained_names.insert(token.text.clone()); }
+        }
+        for (start, (end, members)) in uses {
+            let mut keep = false;
+            for index in &members {
+                let imported = &program.uses[*index];
+                if imported.public != ast::Visibility::Private || imported.glob || retained_names.contains(&imported.alias) { keep = true; }
+            }
+            if keep {
+                for index in members { require_path(&program.uses[index].path, name, &mut required); }
+            } else {
+                let mut blank = String::new();
+                for byte in text[start..end].bytes() { if byte == b'\n' { blank.push('\n'); } }
+                replacements.get_mut(path).unwrap().push((start, end, blank));
+            }
+        }
+    }
+    let mut files = Vec::new();
+    for (path, original) in inputs {
+        if !path.starts_with(&prefix) { return Err(error("projection contains a file outside its unit")); }
+        let bytes = if let Some(ranges) = replacements.get_mut(path) {
+            ranges.sort();
+            let text = text_by_path.get(path).unwrap();
+            let mut out = String::new();
+            let mut at = 0usize;
+            for (start, end, value) in ranges.iter() {
+                if *start < at || *end < *start || *end > text.len() { return Err(error("source projection ranges overlap")); }
+                out.push_str(&text[at..*start]); out.push_str(value); at = *end;
+            }
+            out.push_str(&text[at..]);
+            let tokens = syntax::semantic_tokens(&out).map_err(|problem: ast::Diagnostic| -> String { error(&problem.message) })?;
+            for index in 0usize..tokens.len() {
+                if tokens[index].kind == 0u8 && index + 1usize < tokens.len() && tokens[index + 1usize].text == "::" {
+                    require_path(&tokens[index].text, name, &mut required);
+                }
+            }
+            out.into_bytes()
+        } else { original.clone() };
+        files.push((path.clone(), bytes));
+    }
+    opaque.sort();
+    let mut requires = Vec::new();
+    for name in required { requires.push(name); }
+    Ok(Projection { name: name.to_string(), files, opaque, requires })
+}
+impl Projection {
+    pub fn encode(&self) -> Vec<u8> {
+        let mut bytes = b"lkjscript-unit-source-2\n"[..].to_vec();
+        store::push_bytes(&mut bytes, self.name.as_bytes());
+        store::push_word(&mut bytes, self.files.len());
+        for (path, value) in &self.files {
+            store::push_bytes(&mut bytes, path.as_bytes());
+            store::push_bytes(&mut bytes, value);
+        }
+        store::push_word(&mut bytes, self.opaque.len());
+        for name in &self.opaque { store::push_bytes(&mut bytes, name.as_bytes()); }
+        store::push_word(&mut bytes, self.requires.len());
+        for name in &self.requires { store::push_bytes(&mut bytes, name.as_bytes()); }
+        bytes
+    }
+    pub fn decode(bytes: &[u8], expected: &str) -> Option<Self> {
+        let magic = b"lkjscript-unit-source-2\n";
+        if !bytes.starts_with(magic) { return None; }
+        let mut reader = store::Reader::new(&bytes[magic.len()..]);
+        let name = reader.text()?;
+        if name != expected || !identifier(&name) { return None; }
+        let prefix = virtual_prefix(&name);
+        let count = reader.word()?;
+        if count > bytes.len() / 16usize { return None; }
+        let mut paths: BTreeSet<String> = BTreeSet::new();
+        let mut files = Vec::new();
+        for _ in 0usize..count {
+            let path = reader.text()?;
+            let value = reader.bytes()?;
+            if !path.starts_with(&prefix) || !beneath(&path[prefix.len()..]) || !paths.insert(path.clone()) { return None; }
+            files.push((path, value));
+        }
+        if !paths.contains(&virtual_root(&name)) { return None; }
+        let count = reader.word()?;
+        if count > bytes.len() / 8usize { return None; }
+        let mut opaque = Vec::new();
+        let mut names: BTreeSet<String> = BTreeSet::new();
+        for _ in 0usize..count {
+            let value = reader.text()?;
+            // Method identities may begin with their owner type or a trait impl.
+            // The authenticated interface supplies the exact defining binding;
+            // admission compares its full signature, without suffix matching.
+            if value.is_empty() || value.as_str().bytes().any(|byte| byte < 32u8 || byte == 127u8)
+                || !names.insert(value.clone()) { return None; }
+            opaque.push(value);
+        }
+        let count = reader.word()?;
+        if count > bytes.len() / 8usize { return None; }
+        let mut requires = Vec::new();
+        for _ in 0usize..count {
+            let value = reader.text()?;
+            if !identifier(&value) || value == name || requires.contains(&value) { return None; }
+            requires.push(value);
+        }
+        if !reader.done() { return None; }
+        Some(Self { name, files, opaque, requires })
+    }
+}
+fn number(value: &str) -> Option<usize> {
+    if value.is_empty() { return None; }
+    let mut result = 0usize;
+    for byte in value.bytes() {
+        if !byte.is_ascii_digit() { return None; }
+        result = result.checked_mul(10usize)?.checked_add((byte - b'0') as usize)?;
+    }
+    Some(result)
+}
+fn function_identity(program: &ast::Program, index: usize) -> String {
+    let function = &program.functions[index];
+    match program.function_owner(ast::FunctionId { index }) {
+        ast::FunctionOwner::Free => semantic::module_name(&names::qualified(&function.module, &function.name)),
+        ast::FunctionOwner::Trait(owner) => {
+            let value = &program.traits[owner.index];
+            format!("{}::{}", semantic::module_name(&names::qualified(&value.module, &value.name)), function.name)
+        }
+        ast::FunctionOwner::Implementation(owner) => {
+            let value = &program.impls[owner.index];
+            let target = semantic::type_name(program, value.target);
+            match value.trait_ty {
+                Some(ty) => format!("<{target} as {}>::{}", semantic::type_name(program, ty), function.name),
+                None => format!("{target}::{}", function.name),
+            }
+        }
+    }
+}
+fn function_name(source: &ast::Program, program: &ir::Program, raw: &str) -> String {
+    let end = raw.find('<').unwrap_or(raw.len());
+    let base = &raw[..end];
+    let mut result = match base.rfind("$f") {
+        Some(at) => match number(&base[at + 2usize..]) {
+            Some(index) if index < source.functions.len() => function_identity(source, index),
+            _ => semantic::module_name(base),
+        },
+        None => semantic::module_name(base),
+    };
+    if end == raw.len() { return result; }
+    let suffix = &raw[end..];
+    if !suffix.ends_with('>') { return raw.to_string(); }
+    result.push('<');
+    let mut first = true;
+    for pair in suffix[1usize..suffix.len() - 1usize].split(';') {
+        if pair.is_empty() { continue; }
+        let Some(at) = pair.find("=t") else { return raw.to_string(); };
+        let Some(ty) = number(&pair[at + 2usize..]) else { return raw.to_string(); };
+        if ty >= program.types.len() { return raw.to_string(); }
+        if !first { result.push(','); } first = false;
+        result.push_str(&pair[..at]); result.push('=');
+        result.push_str(&semantic::ir_type_name(program, ty));
+    }
+    result.push('>');
+    result
+}
+pub fn normalize(source: &ast::Program, program: &mut ir::Program) -> Result<Vec<Vec<String>>, String> {
+    let mut types = Vec::new();
+    for index in 0usize..program.types.len() { types.push(semantic::ir_type_name(program, index)); }
+    let mut functions = Vec::new();
+    let mut instances: Vec<Vec<String>> = vec![Vec::new(); source.functions.len()];
+    let mut free: BTreeMap<String, usize> = BTreeMap::new();
+    for (index, function) in source.functions.iter().enumerate() {
+        if source.function_owner(ast::FunctionId { index }) == ast::FunctionOwner::Free {
+            free.insert(names::qualified(&function.module, &function.name), index);
+        }
+    }
+    for function in &program.functions {
+        let name = function_name(source, program, &function.name);
+        let end = function.name.find('<').unwrap_or(function.name.len());
+        let base = &function.name[..end];
+        let owner = match base.rfind("$f") {
+            Some(at) => match number(&base[at + 2usize..]) {
+                Some(index) if index < source.functions.len()
+                    && names::qualified(&source.functions[index].module, &source.functions[index].name).as_str() == &base[..at] => Some(index),
+                _ => None,
+            },
+            None => free.get(&base.to_string()).copied(),
+        };
+        if let Some(index) = owner { instances[index].push(name.clone()); }
+        functions.push(name);
+    }
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for name in &functions {
+        if !seen.insert(name.clone()) { return Err(error(&format!("ambiguous normalized function identity {name}"))); }
+    }
+    for (index, name) in types.into_iter().enumerate() { program.types[index].name = name; }
+    for (index, name) in functions.into_iter().enumerate() { program.functions[index].name = name; }
+    Ok(instances)
+}

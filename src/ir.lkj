@@ -1,4 +1,4 @@
-//! Explicit, monomorphic meaning. Only CheckedProgram reaches a backend.
+//! Explicit, monomorphic meaning. Backends accept only independently checked programs or units.
 #[derive(Clone, PartialEq)]
 pub enum TypeKind {
     Unit,

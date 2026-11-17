@@ -2,7 +2,9 @@
 
 The lkjscript IR is an explicit, monomorphic program of types, functions, local
 slots, places and structured instructions. Producers may construct arbitrary IR.
-Only the checker can produce the `CheckedProgram` accepted by a backend.
+Only the checker can produce the `CheckedProgram` or `CheckedUnit` accepted by a backend.
+[Authenticated units](units.md) independently verify imported interface contracts;
+a unit never fabricates a whole-program admission.
 Parsing text, producing transformed IR and loading store bytes grant no authority.
 
 ## Text and identity

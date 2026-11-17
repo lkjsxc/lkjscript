@@ -43,6 +43,7 @@ pub mod semantic_facts;
 pub mod semantic_store;
 pub mod semantic_query;
 pub mod source;
+pub mod units;
 pub mod store;
 pub mod syntax;
 pub mod test_runner;

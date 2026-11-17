@@ -1,0 +1,479 @@
+//! Sequential source-unit admission and streamed linking. Only one source/IR
+//! unit is retained; completed units retain authenticated interface locators.
+use super::*;
+use crate::check::units::{CheckedUnit, Dependency, Import, Interface};
+use crate::units::{Definition, Plan, Projection};
+use std::collections::{BTreeMap, BTreeSet};
+
+const RECORDS: &str = "unit-inputs";
+const PROJECTIONS: &str = "unit-source";
+
+#[derive(Clone)]
+struct Record {
+    name: String,
+    input: String,
+    interface: String,
+    projection: String,
+    dependency_sources: String,
+    dependencies: Vec<Dependency>,
+    inputs: Vec<u8>,
+    sources: Vec<String>,
+    messages: Vec<String>,
+}
+fn problem(detail: &str) -> String { format!("E_UNIT_SOURCE {detail}") }
+fn maximum(stats: &mut Stats, name: &str, value: usize) {
+    let prior = stats.counts.get(&name.to_string()).copied().unwrap_or(0usize);
+    if value > prior { stats.count(name, value); }
+}
+fn strings(out: &mut Vec<u8>, values: &[String]) {
+    store::push_word(out, values.len());
+    for value in values { store::push_bytes(out, value.as_bytes()); }
+}
+fn read_strings(reader: &mut store::Reader<'_>, limit: usize) -> Option<Vec<String>> {
+    let count = reader.word()?;
+    if count > limit / 8usize { return None; }
+    let mut result = Vec::new();
+    for _ in 0usize..count { result.push(reader.text()?); }
+    Some(result)
+}
+impl Record {
+    fn encode(&self) -> Vec<u8> {
+        let mut result = b"lkjscript-unit-inputs-1\n"[..].to_vec();
+        for value in vec![self.name.clone(), self.input.clone(), self.interface.clone(), self.projection.clone(), self.dependency_sources.clone()] {
+            store::push_bytes(&mut result, value.as_bytes());
+        }
+        store::push_word(&mut result, self.dependencies.len());
+        for dependency in &self.dependencies {
+            store::push_bytes(&mut result, dependency.name.as_bytes());
+            store::push_bytes(&mut result, dependency.identity.as_bytes());
+        }
+        store::push_bytes(&mut result, &self.inputs);
+        strings(&mut result, &self.sources);
+        strings(&mut result, &self.messages);
+        result
+    }
+    fn decode(bytes: &[u8], expected: &str) -> Option<Self> {
+        let magic = b"lkjscript-unit-inputs-1\n";
+        if !bytes.starts_with(magic) { return None; }
+        let mut reader = store::Reader::new(&bytes[magic.len()..]);
+        let name = reader.text()?;
+        if name != expected { return None; }
+        let input = reader.text()?;
+        let interface = reader.text()?;
+        let projection = reader.text()?;
+        let dependency_sources = reader.text()?;
+        let count = reader.word()?;
+        if count > bytes.len() / 16usize { return None; }
+        let mut dependencies = Vec::new();
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        for _ in 0usize..count {
+            let name = reader.text()?;
+            let identity = reader.text()?;
+            if !seen.insert(name.clone()) { return None; }
+            dependencies.push(Dependency { name, identity });
+        }
+        let inputs = reader.bytes()?;
+        let sources = read_strings(&mut reader, bytes.len())?;
+        let messages = read_strings(&mut reader, bytes.len())?;
+        if !reader.done() { return None; }
+        Some(Self { name, input, interface, projection, dependency_sources, dependencies, inputs, sources, messages })
+    }
+}
+fn request_key(unit: &Definition, root: &str, options: &Options) -> String {
+    let mut result = b"lkjscript-source-unit-request-1\n"[..].to_vec();
+    for value in vec![unit.name.clone(), unit.source.clone(), root.to_string()] {
+        store::push_bytes(&mut result, value.as_bytes());
+    }
+    strings(&mut result, &unit.dependencies);
+    optional_key(&mut result, &options.library_directory);
+    store::push_word(&mut result, options.no_library as usize);
+    sha256::hex_digest(&result)
+}
+fn dependencies(unit: &Definition, records: &BTreeMap<String, Record>) -> Result<Vec<Dependency>, String> {
+    let mut identities: BTreeMap<String, String> = BTreeMap::new();
+    for name in &unit.dependencies {
+        let record = records.get(name).ok_or_else(|| problem("dependency has not been admitted"))?;
+        identities.insert(name.clone(), record.interface.clone());
+        for dependency in &record.dependencies {
+            if let Some(prior) = identities.insert(dependency.name.clone(), dependency.identity.clone()) {
+                if prior != dependency.identity { return Err(problem("conflicting dependency interface identities")); }
+            }
+        }
+    }
+    let mut result = Vec::new();
+    for (name, identity) in identities { result.push(Dependency { name, identity }); }
+    Ok(result)
+}
+fn source_dependencies(
+    unit: &Definition, expected: &[Dependency], records: &BTreeMap<String, Record>, store: &mut store::Store,
+) -> Result<(Vec<String>, String), String> {
+    let mut allowed: BTreeSet<String> = BTreeSet::new();
+    for dependency in expected { allowed.insert(dependency.name.clone()); }
+    let mut selected: BTreeSet<String> = BTreeSet::new();
+    let mut pending = unit.dependencies.clone();
+    while let Some(name) = pending.pop() {
+        if !selected.insert(name.clone()) { continue; }
+        let record = records.get(&name).ok_or_else(|| problem("missing dependency source projection"))?;
+        let projected = projection(store, record).ok_or_else(|| problem("dependency projection was evicted or failed authentication; increase --store-bytes or retry"))?;
+        for needed in projected.requires {
+            if allowed.contains(&needed) && !selected.contains(&needed) { pending.push(needed); }
+        }
+    }
+    let mut names = Vec::new();
+    let mut bytes = Vec::new();
+    for name in selected {
+        let record = records.get(&name).unwrap();
+        store::push_bytes(&mut bytes, name.as_bytes());
+        store::push_bytes(&mut bytes, record.interface.as_bytes());
+        store::push_bytes(&mut bytes, record.projection.as_bytes());
+        names.push(name);
+    }
+    Ok((names, sha256::hex_digest(&bytes)))
+}
+fn interface(store: &mut store::Store, record: &Record) -> Option<Interface> {
+    let key = Interface::store_key(&record.name, &record.input, &record.dependencies);
+    let domain = store.proof_domain();
+    let payload = store.get_verified(crate::check::units::STORE_NAMESPACE, &key)?;
+    let interface = Interface::from_verified(&domain, &record.name, &record.input, &record.dependencies, payload)?;
+    if interface.identity() != record.interface.as_str() { return None; }
+    Some(interface)
+}
+fn projection(store: &mut store::Store, record: &Record) -> Option<Projection> {
+    let bytes = store.get(PROJECTIONS, &record.projection)?;
+    if sha256::hex_digest(&bytes) != record.projection { return None; }
+    Projection::decode(&bytes, &record.name)
+}
+fn type_children(value: &ir::Type, pending: &mut Vec<usize>) {
+    match &value.kind {
+        ir::TypeKind::Struct { fields, .. } => { for field in fields { pending.push(field.ty); } }
+        ir::TypeKind::Enum { variants, .. } => { for variant in variants { for field in &variant.fields { pending.push(field.ty); } } }
+        ir::TypeKind::Ref { inner, .. } | ir::TypeKind::Slice { inner, .. }
+        | ir::TypeKind::Array { inner, .. } | ir::TypeKind::Vec { inner } | ir::TypeKind::Box { inner } => pending.push(*inner),
+        _ => {}
+    }
+}
+fn imports(
+    program: &mut ir::Program, interfaces: Vec<Interface>, projections: &[Projection],
+) -> Result<Vec<Import>, String> {
+    let mut types: BTreeMap<String, usize> = BTreeMap::new();
+    let mut functions: BTreeMap<String, usize> = BTreeMap::new();
+    for (index, value) in program.types.iter().enumerate() {
+        if types.insert(value.name.clone(), index).is_some() { return Err(problem("duplicate normalized type identity")); }
+    }
+    for (index, value) in program.functions.iter().enumerate() { functions.insert(value.name.clone(), index); }
+    let mut result = Vec::new();
+    for interface in interfaces {
+        let header = interface.program();
+        let projection = projections.iter().find(|value| value.name.as_str() == interface.name())
+            .ok_or_else(|| problem("missing authenticated declaration projection"))?;
+        let mut pending = Vec::new();
+        let mut wanted_functions: BTreeSet<usize> = BTreeSet::new();
+        for (index, function) in header.functions.iter().enumerate() {
+            if projection.opaque.contains(&function.name) && functions.contains_key(&function.name) { wanted_functions.insert(index); }
+        }
+        let prefix = format!("{}::", interface.name());
+        for (index, value) in header.types.iter().enumerate() {
+            if value.name.starts_with(&prefix) && types.contains_key(&value.name) { pending.push(index); }
+        }
+        let mut mapped_types: BTreeMap<usize, usize> = BTreeMap::new();
+        let mut mapped_functions: BTreeMap<usize, usize> = BTreeMap::new();
+        loop {
+            while let Some(index) = pending.pop() {
+                if mapped_types.contains_key(&index) { continue; }
+                let value = &header.types[index];
+                let target = types.get(&value.name).copied().ok_or_else(|| problem(&format!("imported type {} was not instantiated", value.name)))?;
+                mapped_types.insert(index, target);
+                type_children(value, &mut pending);
+                for (ty, function) in &header.destructors { if *ty == index { wanted_functions.insert(*function); } }
+            }
+            let mut next = None;
+            for index in &wanted_functions { if !mapped_functions.contains_key(index) { next = Some(*index); break; } }
+            let Some(index) = next else { break; };
+            let function = &header.functions[index];
+            let target = functions.get(&function.name).copied().ok_or_else(|| problem(&format!("imported destructor or function {} is absent", function.name)))?;
+            mapped_functions.insert(index, target);
+            pending.push(function.result);
+            for local in &function.locals[..function.params] { pending.push(local.ty); }
+        }
+        let mut type_pairs = Vec::new();
+        for (source, target) in mapped_types { type_pairs.push((source, target)); }
+        let mut function_pairs = Vec::new();
+        for (source, target) in mapped_functions {
+            // A declaration-only producer cannot infer the returned-view
+            // relation from its nonexecuting placeholder. The callee's admitted
+            // contract is the input to the independent caller body check.
+            program.functions[target].return_source = header.functions[source].return_source.clone();
+            program.functions[target].body.clear();
+            let count = program.functions[target].params;
+            while program.functions[target].locals.len() > count { program.functions[target].locals.pop(); }
+            function_pairs.push((source, target));
+        }
+        result.push(Import { interface, types: type_pairs, functions: function_pairs });
+    }
+    Ok(result)
+}
+fn exported_types(source: &ast::Program, program: &ir::Program, name: &str) -> Vec<usize> {
+    let mut names: BTreeSet<String> = BTreeSet::new();
+    let prefix = format!("{name}::");
+    for value in &source.structs {
+        let identity = crate::names::qualified(&value.module, &value.name);
+        if value.public != ast::Visibility::Private && identity.starts_with(&prefix) && value.generics.iter().all(|parameter| parameter.lifetime) { names.insert(identity); }
+    }
+    for value in &source.enums {
+        let identity = crate::names::qualified(&value.module, &value.name);
+        if value.public != ast::Visibility::Private && identity.starts_with(&prefix) && value.generics.iter().all(|parameter| parameter.lifetime) { names.insert(identity); }
+    }
+    let mut result = Vec::new();
+    for (index, value) in program.types.iter().enumerate() { if names.contains(&value.name) { result.push(index); } }
+    result
+}
+fn display_path(plan: &Plan, root: &str, path: &str, manifest: &str) -> String {
+    if path == "$units/root.lkj" { return manifest.to_string(); }
+    for unit in &plan.units {
+        if let Some(path) = crate::units::physical(unit, path) {
+            return if root == "." { path } else { format!("{root}/{path}") };
+        }
+    }
+    path.to_string()
+}
+fn admit(
+    world: &mut World, unit: &Definition, plan: &Plan, root: &str, manifest: &str,
+    expected: &[Dependency], source_names: &[String], source_identity: &str, records: &BTreeMap<String, Record>,
+    options: &Options, stats: &mut Stats, memo: &mut Memo,
+) -> Result<(CheckedUnit, Record, Projection), String> {
+    let mut interfaces = Vec::new();
+    let mut projections = Vec::new();
+    {
+        let store = memo.store.as_mut().ok_or_else(|| problem("unit checking requires --store and --store-key"))?;
+        for name in source_names {
+            let record = records.get(name).ok_or_else(|| problem("missing dependency record"))?;
+            let interface = interface(store, record).ok_or_else(|| problem("dependency interface was evicted or failed authentication; increase --store-bytes or retry"))?;
+            if interface.identity() != record.interface.as_str() { return Err(problem("dependency interface changed during checking")); }
+            interfaces.push(interface);
+            projections.push(projection(store, record).ok_or_else(|| problem("dependency projection was evicted or failed authentication; increase --store-bytes or retry"))?);
+        }
+    }
+    let mut directory = world.directory(root).map_err(|errno: i64| io(root, "open unit source root", errno))?;
+    let mut library = match &options.library_directory {
+        Some(path) => Some(world.directory(path).map_err(|errno: i64| io(path, "open unit library root", errno))?),
+        None => None,
+    };
+    let standard = if options.no_library { None } else { Some("$std/lib.lkj") };
+    let mut inputs = Vec::new();
+    let (source, files) = crate::units::load(unit, &projections, standard, &mut |path: &str| -> Result<Option<Vec<u8>>, String> {
+        let value = if path.starts_with("$std/") {
+            match library.as_mut() {
+                Some(directory) => {
+                    let value = read(directory, &path[5usize..])?;
+                    inputs.push(store::input(options.library_directory.as_ref().unwrap(), &path[5usize..], &value));
+                    value
+                }
+                None => embedded::library(path),
+            }
+        } else {
+            if !crate::units::beneath(path) { return Err(problem("unit source read must stay beneath its granted root")); }
+            let value = read(&mut directory, path)?;
+            inputs.push(store::input(root, path, &value));
+            value
+        };
+        if let Some(bytes) = &value {
+            if bytes.len() == 32usize && memo.private_source_digest.as_ref() == Some(&sha256::digest(bytes)) {
+                return Err(problem("source or include attempted to read the private unit authentication key"));
+            }
+        }
+        Ok(value)
+    })?;
+    stats.mark("unit_load")?;
+    let definitions = elaborate::infer_resolved_report_with_capture(&source, false, false)
+        .map_err(|problems: Vec<ast::Diagnostic>| -> String { ir_failure(manifest, problems) })?;
+    let mut program = elaborate::lower_definitions(definitions)
+        .map_err(|problems: Vec<ast::Diagnostic>| -> String { ir_failure(manifest, problems) })?;
+    let instances = crate::units::normalize(&source, &mut program)?;
+    let projected = crate::units::project(&unit.name, &source, &files, &instances)?;
+    let projection_bytes = projected.encode();
+    let projection_key = sha256::hex_digest(&projection_bytes);
+    let input_bytes = store::encode_inputs(&inputs);
+    let mut identity = request_key(unit, root, options).into_bytes();
+    store::push_bytes(&mut identity, &input_bytes);
+    store::push_bytes(&mut identity, source_identity.as_bytes());
+    store::push_bytes(&mut identity, projection_key.as_bytes());
+    let input = sha256::hex_digest(&identity);
+    maximum(stats, "units_max_definitions", source.functions.len());
+    maximum(stats, "units_max_types", program.types.len());
+    maximum(stats, "units_max_ir_functions", program.functions.len());
+    maximum(stats, "units_max_import_interfaces", interfaces.len());
+    maximum(stats, "units_max_sources", program.sources.len());
+    let mut projection_bytes_count = 0usize;
+    for dependency in &projections { for (_, bytes) in &dependency.files { projection_bytes_count += bytes.len(); } }
+    maximum(stats, "units_max_projection_bytes", projection_bytes_count);
+    stats.mark("unit_elaborate")?;
+    let mut exports = Vec::new();
+    for (index, function) in program.functions.iter().enumerate() {
+        if projected.opaque.contains(&function.name) { exports.push(index); }
+    }
+    let types = exported_types(&source, &program, &unit.name);
+    let imported = imports(&mut program, interfaces, &projections)?;
+    for index in 0usize..program.sources.len() {
+        program.sources[index] = display_path(plan, root, &program.sources[index], manifest);
+    }
+    let unit = crate::check::units::check_unit_with_exports(&unit.name, &input, program, &imported, &exports, &types)
+        .map_err(|problems: Vec<ast::Diagnostic>| -> String { ir_failure(manifest, problems) })?;
+    stats.mark("unit_check")?;
+    if unit.interface().dependencies() != expected { return Err(problem("checked import closure differs from the manifest")); }
+    let sources = if unit.program().sources.is_empty() { vec!["<ir>".to_string()] } else { unit.program().sources.clone() };
+    let record = Record {
+        name: unit.interface().name().to_string(), input, interface: unit.interface().identity().to_string(),
+        projection: projection_key, dependency_sources: source_identity.to_string(),
+        dependencies: expected.to_vec(), inputs: input_bytes, sources,
+        messages: crate::native::messages(unit.program()),
+    };
+    if !store::inputs_match(world, &record.inputs) { return Err(problem("unit sources changed during checking")); }
+    {
+        let store = memo.store.as_mut().unwrap();
+        let key = Interface::store_key(&record.name, &record.input, &record.dependencies);
+        store.put(PROJECTIONS, &record.projection, &projection_bytes);
+        store.put(crate::check::units::STORE_NAMESPACE, &key, &unit.interface().encode());
+    }
+    Ok((unit, record, projected))
+}
+fn write_file(world: &mut World, path: &str, mut source: File) -> Result<(), String> {
+    let (parent, name) = location(path);
+    let mut directory = world.directory(&parent).map_err(|errno: i64| io(&parent, "open output directory", errno))?;
+    let mut clock = world.clock();
+    let stamp = clock.nanoseconds().map_err(|errno: i64| io("clock", "read", errno))?;
+    let temporary = format!(".lkjscript-unit-{stamp}.tmp");
+    source.rewind().map_err(|errno: i64| io(path, "rewind linked image", errno))?;
+    let result = {
+        let mut output = directory.create_new(&temporary).map_err(|errno: i64| io(path, "create temporary output", errno))?;
+        let mut buffer = [0u8; 65536];
+        let mut result = Ok(());
+        loop {
+            let count = match source.read(&mut buffer) { Ok(count) => count, Err(errno) => { result = Err(io(path, "read linked image", errno)); break; } };
+            if count == 0usize { break; }
+            if let Err(errno) = output.write_all(&buffer[..count]) { result = Err(io(path, "publish linked image", errno)); break; }
+        }
+        if result.is_ok() { result = output.set_executable().map_err(|errno: i64| io(path, "set executable", errno)); }
+        result
+    };
+    if let Err(error) = result { let _ = directory.remove(&temporary); return Err(error); }
+    if let Err(errno) = directory.rename(&temporary, &name) { let _ = directory.remove(&temporary); return Err(io(path, "rename linked image", errno)); }
+    Ok(())
+}
+pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Memo) -> Result<u8, String> {
+    if memo.store.is_none() { return Err(problem("unit commands require an available --store DIRECTORY and --store-key PRIVATE_KEY")); }
+    let key = options.store_key.as_ref().ok_or_else(|| problem("missing private store key"))?;
+    memo.private_source_digest = Some(sha256::digest(&read_path(world, key)?));
+    let root = options.source_directory.as_ref().map_or(".", |value| value.as_str()).to_string();
+    if !crate::units::beneath(&options.path) { return Err(problem("unit manifest must be a relative path beneath --source-dir")); }
+    let manifest_path = if root == "." { options.path.clone() } else { format!("{root}/{}", options.path) };
+    let manifest_bytes = read_path(world, &manifest_path)?;
+    memo.protect_source(&manifest_bytes)?;
+    let manifest_digest = sha256::hex_digest(&manifest_bytes);
+    let plan = crate::units::parse(&text(manifest_bytes, &manifest_path)?)?;
+    let build = options.command == "build-units";
+    let runtime: Option<runtime::Runtime> = if build { Some(load_runtime(world, &options.runtime_source)?) } else { None };
+    let mut linker: Option<crate::native::units::Linker> = if build {
+        let output = world.temporary_file().map_err(|errno: i64| io("unit image", "create", errno))?;
+        let relocations = world.temporary_file().map_err(|errno: i64| io("unit relocations", "create", errno))?;
+        let linked = match crate::native::units::Linker::new(output, relocations) {
+            Ok(linked) => linked,
+            Err(error) => return Err(report(&manifest_path, error)),
+        };
+        Some(linked)
+    } else { None };
+    let mut records: BTreeMap<String, Record> = BTreeMap::new();
+    let mut sources = Vec::new();
+    let mut messages: BTreeSet<String> = BTreeSet::new();
+    let mut reused = 0usize;
+    let mut checked = 0usize;
+    let mut emitted = 0usize;
+    for definition in &plan.units {
+        let expected = dependencies(definition, &records)?;
+        let (source_names, source_identity) = source_dependencies(definition, &expected, &records, memo.store.as_mut().unwrap())?;
+        let request = request_key(definition, &root, options);
+        let cached = memo.store.as_mut().unwrap().get(RECORDS, &request)
+            .and_then(|bytes: Vec<u8>| Record::decode(&bytes, &definition.name));
+        let mut ready: Option<(Interface, Record)> = None;
+        if let Some(record) = cached {
+            if record.dependencies == expected && record.dependency_sources == source_identity
+                && store::inputs_match(world, &record.inputs) {
+                if let Some(interface) = interface(memo.store.as_mut().unwrap(), &record) {
+                    if projection(memo.store.as_mut().unwrap(), &record).is_some() { ready = Some((interface, record)); }
+                }
+            }
+        }
+        let source_base = sources.len();
+        let mut object: Option<crate::native::units::Object> = None;
+        if let Some((interface, record)) = &ready {
+            if build {
+                let runtime = runtime.as_ref().unwrap();
+                let key = crate::native::units::object_key(interface, runtime, source_base, &record.sources);
+                let store = memo.store.as_mut().unwrap();
+                let domain = store.proof_domain();
+                if let Some(payload) = store.get_verified(crate::native::units::namespace(), &key) {
+                    object = crate::native::units::Object::open(&domain, interface, runtime, source_base, &record.sources, payload);
+                }
+            }
+        }
+        if build && object.is_none() { ready = None; }
+        let record = match ready {
+            Some((_, record)) => { reused += 1usize; record }
+            None => {
+                let (unit, record, _) = admit(world, definition, &plan, &root, &manifest_path, &expected, &source_names, &source_identity, &records, options, stats, memo)?;
+                checked += 1usize;
+                if build {
+                    let runtime = runtime.as_ref().unwrap();
+                    let generated = match crate::native::units::emit(&unit, runtime, source_base) {
+                        Ok(generated) => generated,
+                        Err(error) => return Err(report(&manifest_path, error)),
+                    };
+                    let key = crate::native::units::object_key(unit.interface(), runtime, source_base, &record.sources);
+                    memo.store.as_mut().unwrap().put(crate::native::units::namespace(), &key, &generated.encode());
+                    object = Some(generated);
+                    emitted += 1usize;
+                }
+                memo.store.as_mut().unwrap().put(RECORDS, &request, &record.encode());
+                record
+            }
+        };
+        for path in &record.sources { sources.push(path.clone()); }
+        for message in &record.messages { messages.insert(message.clone()); }
+        if let Some(object) = object {
+            if let Err(error) = linker.as_mut().unwrap().push(object) { return Err(report(&manifest_path, error)); }
+        }
+        records.insert(definition.name.clone(), record);
+        stats.mark("unit_store_link")?;
+    }
+    // Publication is bound to one coherent source snapshot. No stored interface
+    // can silently stand for a source file changed since its unit was visited.
+    for record in records.values() {
+        if !store::inputs_match(world, &record.inputs) { return Err(problem("source changed after unit checking; linked output was not published")); }
+    }
+    if sha256::hex_digest(&read_path(world, &manifest_path)?) != manifest_digest {
+        return Err(problem("unit manifest changed during checking"));
+    }
+    stats.count("units_checked", checked);
+    stats.count("units_reused", reused);
+    stats.count("units_emitted", emitted);
+    if build {
+        let owner = plan.entry.as_str().split("::").next().unwrap_or("").to_string();
+        let record = records.get(&owner).ok_or_else(|| problem("entry unit was not checked"))?;
+        let interface = interface(memo.store.as_mut().unwrap(), record)
+            .ok_or_else(|| problem("entry interface was evicted before linking; increase --store-bytes"))?;
+        let selected = interface.program().functions.iter().position(|function| function.name == plan.entry)
+            .ok_or_else(|| problem("ENTRY must name an exported nongeneric free function"))?;
+        let grants = crate::entry_grants::prepare(interface.program(), selected, &options.grants)?;
+        let mut message_list = Vec::new();
+        for message in messages { message_list.push(message); }
+        let (output, bytes) = match linker.unwrap().finish(runtime.as_ref().unwrap(), &interface, &plan.entry, &grants, &sources, &message_list, None) {
+            Ok(value) => value,
+            Err(error) => return Err(report(&manifest_path, error)),
+        };
+        let output_path: String = match &options.output { Some(path) => path.clone(), None => format!("{}.elf", options.path) };
+        write_file(world, &output_path, output)?;
+        stats.count("emitted_bytes", bytes);
+        stats.mark("unit_publish")?;
+    }
+    world.stdout().write(format!("LKJSCRIPT_UNITS checked={checked} reused={reused} emitted={emitted} total={}\n", records.len()).as_bytes());
+    Ok(0u8)
+}
