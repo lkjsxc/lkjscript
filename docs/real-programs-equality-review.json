@@ -1,0 +1,1079 @@
+{
+  "schema": 1,
+  "kind": "explicit_foreign_diagnostic_site_review",
+  "package": "nom 8.0.0",
+  "original_commit": "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
+  "reviewed_compiler_sha256": "19beba5052e9782a8a1df493bb02437d462b72d68f61148fe852a34cfc8d8984",
+  "reviewed_receipt_sha256": "b9249e3d9cb4cce21a161724a0c944e367b59bf0ee61a157b11bf753d786a64e",
+  "interpretation": "Exact diagnostic/source-site classification for the equality checkpoint. No source was edited. Four new qualified projection/call sites are independent primary refusals; 51 changed rows are linked to their earlier signature failures as parser recovery. This is not a complete nom admission or upstream-test result.",
+  "sites": [
+    {
+      "path": "src/bits/complete.rs",
+      "line": 37,
+      "column": 22,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "467122d4056c0e2655fd4ba087f1ee5042fb86453b662ae7ebe2e42c0066a09a",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bits/complete.rs",
+        "line": 35,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/bits/complete.rs",
+      "line": 88,
+      "column": 30,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "467122d4056c0e2655fd4ba087f1ee5042fb86453b662ae7ebe2e42c0066a09a",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bits/complete.rs",
+        "line": 86,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/bits/streaming.rs",
+      "line": 14,
+      "column": 22,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "dfba58d569c1ab89f6cb9e33153775ed19d45385e39d5047eb717c44b07e3cc0",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bits/streaming.rs",
+        "line": 12,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/bits/streaming.rs",
+      "line": 64,
+      "column": 30,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "dfba58d569c1ab89f6cb9e33153775ed19d45385e39d5047eb717c44b07e3cc0",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bits/streaming.rs",
+        "line": 62,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/bytes/mod.rs",
+      "line": 116,
+      "column": 24,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 114,
+        "column": 59,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/bytes/mod.rs",
+      "line": 230,
+      "column": 11,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 228,
+        "column": 54,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/bytes/mod.rs",
+      "line": 263,
+      "column": 11,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 261,
+        "column": 52,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/bytes/mod.rs",
+      "line": 294,
+      "column": 11,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 292,
+        "column": 59,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/bytes/mod.rs",
+      "line": 329,
+      "column": 11,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 327,
+        "column": 60,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/bytes/mod.rs",
+      "line": 370,
+      "column": 11,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 368,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/bytes/mod.rs",
+      "line": 467,
+      "column": 11,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 465,
+        "column": 58,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/bytes/mod.rs",
+      "line": 47,
+      "column": 24,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 45,
+        "column": 51,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/bytes/mod.rs",
+      "line": 501,
+      "column": 11,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 499,
+        "column": 59,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/bytes/mod.rs",
+      "line": 536,
+      "column": 11,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 534,
+        "column": 54,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/bytes/mod.rs",
+      "line": 598,
+      "column": 30,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 596,
+        "column": 58,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/bytes/mod.rs",
+      "line": 662,
+      "column": 30,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 660,
+        "column": 59,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/bytes/mod.rs",
+      "line": 732,
+      "column": 43,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/bytes/mod.rs",
+        "line": 730,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/bytes/mod.rs",
+      "line": 941,
+      "column": 3,
+      "code": "E_PARSE",
+      "message": "expected an identifier",
+      "file_sha256": "219f031a11dab2ae1d2a08b37a1c1a7fc641c7e1338a42826f9809dc7c309510",
+      "cause": "qualified_associated_paths",
+      "title": "Qualified associated type and value paths",
+      "owner": "Language / Programs parser and resolution",
+      "reason": "This qualified associated projection is a separately parsed impl where predicate or associated-type definition, reached after an earlier equality binding is consumed; no rejected impl-Trait return shares its item."
+    },
+    {
+      "path": "src/character/mod.rs",
+      "line": 100,
+      "column": 11,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/character/mod.rs",
+        "line": 98,
+        "column": 50,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/character/mod.rs",
+      "line": 159,
+      "column": 11,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/character/mod.rs",
+        "line": 157,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/character/mod.rs",
+      "line": 221,
+      "column": 11,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/character/mod.rs",
+        "line": 219,
+        "column": 55,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/character/mod.rs",
+      "line": 244,
+      "column": 11,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/character/mod.rs",
+        "line": 242,
+        "column": 56,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/character/mod.rs",
+      "line": 327,
+      "column": 11,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/character/mod.rs",
+        "line": 325,
+        "column": 41,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/character/mod.rs",
+      "line": 370,
+      "column": 11,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "e713c9a56e5c3e2757b4685048139509fe58e18985c06be9192fbb8bbae3213e",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/character/mod.rs",
+        "line": 368,
+        "column": 46,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 1020,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 1019,
+        "column": 42,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_constructor",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The rejected return-position impl Trait is reparsed as an impl item; this diagnostic points to the ordinary Success or Fail constructor in the original function body, not to an independent impl member."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 107,
+      "column": 26,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 105,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 138,
+      "column": 26,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 136,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 165,
+      "column": 26,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 163,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 191,
+      "column": 26,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 189,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 218,
+      "column": 36,
+      "code": "E_PARSE",
+      "message": "expected `>`",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 218,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_qualified_type",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "This qualified projection is inside the same return signature whose impl Trait already produced the immediately preceding primary refusal. Recovery reparses that return as an impl header; it does not establish an additional independently reached item or primary site."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 274,
+      "column": 36,
+      "code": "E_PARSE",
+      "message": "expected `>`",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 274,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_qualified_type",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "This qualified projection is inside the same return signature whose impl Trait already produced the immediately preceding primary refusal. Recovery reparses that return as an impl header; it does not establish an additional independently reached item or primary site."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 321,
+      "column": 30,
+      "code": "E_PARSE",
+      "message": "expected an identifier",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 321,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_qualified_type",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "This qualified projection is inside the same return signature whose impl Trait already produced the immediately preceding primary refusal. Recovery reparses that return as an impl header; it does not establish an additional independently reached item or primary site."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 393,
+      "column": 38,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 391,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 444,
+      "column": 30,
+      "code": "E_PARSE",
+      "message": "expected an identifier",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 444,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_qualified_type",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "This qualified projection is inside the same return signature whose impl Trait already produced the immediately preceding primary refusal. Recovery reparses that return as an impl header; it does not establish an additional independently reached item or primary site."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 498,
+      "column": 30,
+      "code": "E_PARSE",
+      "message": "expected an identifier",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 498,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_qualified_type",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "This qualified projection is inside the same return signature whose impl Trait already produced the immediately preceding primary refusal. Recovery reparses that return as an impl header; it does not establish an additional independently reached item or primary site."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 565,
+      "column": 26,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 563,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 586,
+      "column": 26,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 584,
+        "column": 57,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 635,
+      "column": 26,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 633,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 708,
+      "column": 34,
+      "code": "E_PARSE",
+      "message": "expected an identifier",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 708,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_qualified_type",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "This qualified projection is inside the same return signature whose impl Trait already produced the immediately preceding primary refusal. Recovery reparses that return as an impl header; it does not establish an additional independently reached item or primary site."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 76,
+      "column": 26,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 74,
+        "column": 62,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 803,
+      "column": 30,
+      "code": "E_PARSE",
+      "message": "expected an identifier",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 803,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_qualified_type",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "This qualified projection is inside the same return signature whose impl Trait already produced the immediately preceding primary refusal. Recovery reparses that return as an impl header; it does not establish an additional independently reached item or primary site."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 861,
+      "column": 15,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 859,
+        "column": 49,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/combinator/mod.rs",
+      "line": 985,
+      "column": 3,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: impl item",
+      "file_sha256": "a75359d9f86a2494c850d64e7b4dcc4550509ec1fae2dfb49aba5edc9c62e2ab",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/combinator/mod.rs",
+        "line": 984,
+        "column": 58,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_constructor",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The rejected return-position impl Trait is reparsed as an impl item; this diagnostic points to the ordinary Success or Fail constructor in the original function body, not to an independent impl member."
+    },
+    {
+      "path": "src/multi/mod.rs",
+      "line": 1050,
+      "column": 19,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 1048,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/multi/mod.rs",
+      "line": 1154,
+      "column": 19,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 1152,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/multi/mod.rs",
+      "line": 1276,
+      "column": 19,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 1274,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/multi/mod.rs",
+      "line": 1375,
+      "column": 11,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 1373,
+        "column": 38,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/multi/mod.rs",
+      "line": 1408,
+      "column": 30,
+      "code": "E_PARSE",
+      "message": "expected an identifier",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 1408,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_qualified_type",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "This qualified projection is inside the same return signature whose impl Trait already produced the immediately preceding primary refusal. Recovery reparses that return as an impl header; it does not establish an additional independently reached item or primary site."
+    },
+    {
+      "path": "src/multi/mod.rs",
+      "line": 1440,
+      "column": 3,
+      "code": "E_PARSE",
+      "message": "expected an identifier",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "cause": "qualified_associated_paths",
+      "title": "Qualified associated type and value paths",
+      "owner": "Language / Programs parser and resolution",
+      "reason": "This qualified associated projection is a separately parsed impl where predicate or associated-type definition, reached after an earlier equality binding is consumed; no rejected impl-Trait return shares its item."
+    },
+    {
+      "path": "src/multi/mod.rs",
+      "line": 1794,
+      "column": 19,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 1792,
+        "column": 6,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/multi/mod.rs",
+      "line": 704,
+      "column": 19,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 702,
+        "column": 43,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/multi/mod.rs",
+      "line": 785,
+      "column": 19,
+      "code": "E_UNSUPPORTED",
+      "message": "unsupported construct: where predicate on a non-parameter type",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 783,
+        "column": 43,
+        "code": "E_UNSUPPORTED",
+        "message": "unsupported construct: impl"
+      },
+      "cause": "reparsed_opaque_return_where_clause",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The left-hand type parameter is declared in this function. Its return-position impl Trait was rejected immediately before this row; item recovery restarts at that impl token and parses its where clause without the original function generic parameters. This is a recovery consequence, not a separate concrete-type predicate refusal."
+    },
+    {
+      "path": "src/multi/mod.rs",
+      "line": 961,
+      "column": 45,
+      "code": "E_PARSE",
+      "message": "expected `{`, found `+`",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "disposition": "recovery",
+      "parent": {
+        "path": "src/multi/mod.rs",
+        "line": 960,
+        "column": 17,
+        "code": "E_PARSE",
+        "message": "expected an identifier"
+      },
+      "cause": "reparsed_return_after_qualified_parameter",
+      "title": "Recovery after a rejected function signature",
+      "owner": "Recovery; no independent language cause",
+      "reason": "The function parameter at line 960 already failed on its qualified associated type. Recovery restarts at the impl return token and treats its lifetime suffix as an implementation header. The missing-brace message is consequent recovery, not a new source defect."
+    },
+    {
+      "path": "src/multi/mod.rs",
+      "line": 982,
+      "column": 16,
+      "code": "E_PARSE",
+      "message": "expected an identifier",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "cause": "qualified_associated_paths",
+      "title": "Qualified associated type and value paths",
+      "owner": "Language / Programs parser and resolution",
+      "reason": "This qualified associated projection is a separately parsed impl where predicate or associated-type definition, reached after an earlier equality binding is consumed; no rejected impl-Trait return shares its item."
+    },
+    {
+      "path": "src/multi/mod.rs",
+      "line": 996,
+      "column": 13,
+      "code": "E_PARSE",
+      "message": "expected an expression",
+      "file_sha256": "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+      "cause": "qualified_associated_paths",
+      "title": "Qualified associated type and value paths",
+      "owner": "Language / Programs parser and resolution",
+      "reason": "A qualified associated value call is reached in the independently parsed Fill::process body after its impl bound equality is consumed. The source uses <F as Parser<I>>::Error::append(...)."
+    }
+  ]
+}

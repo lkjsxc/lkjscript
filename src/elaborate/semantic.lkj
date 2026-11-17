@@ -67,11 +67,17 @@ pub fn source_type_name(program: &a::Program, ty: usize) -> String {
         a::Type::Never => "!".to_string(),
         a::Type::Path(path) => {
             let mut out = source_module_name(&path.name);
-            if !path.args.is_empty() {
+            if !path.args.is_empty() || !path.bindings.is_empty() {
                 out.push('<');
                 for (index, argument) in path.args.iter().enumerate() {
                     if index != 0 { out.push_str(", "); }
                     out.push_str(&source_type_name(program, *argument));
+                }
+                for (index, binding) in path.bindings.iter().enumerate() {
+                    if index != 0 || !path.args.is_empty() { out.push_str(", "); }
+                    out.push_str(&binding.name);
+                    out.push_str(" = ");
+                    out.push_str(&source_type_name(program, binding.value));
                 }
                 out.push('>');
             }

@@ -1,5 +1,6 @@
 //! Rust-compatible syntax to explicit IR. Inference lives here; IR trusts none of it.
 mod assignment;
+mod associated_bindings;
 mod borrow_cleanup;
 mod capabilities;
 mod closures;
@@ -489,7 +490,7 @@ fn instantiate_type_headers(
                 .copied();
             let _ = c.named_type(
                 &a::Path {
-                    declaration,
+                    bindings: Vec::new(), declaration,
                     name: qualified(&s.module, &s.name),
                     args: Vec::new(),
                 },
@@ -506,7 +507,7 @@ fn instantiate_type_headers(
                 .copied();
             let _ = c.named_type(
                 &a::Path {
-                    declaration,
+                    bindings: Vec::new(), declaration,
                     name: qualified(&e.module, &e.name),
                     args: Vec::new(),
                 },
@@ -1182,7 +1183,8 @@ impl Compiler<'_> {
         let mut callable = false;
         for parameter in parameters {
             for bound in &parameter.bounds {
-                if self.is_callable_bound(*bound) {
+                if self.is_callable_bound(*bound) || matches!(&self.source.types[*bound].kind,
+                    a::Type::Path(path) if !path.bindings.is_empty()) {
                     callable = true;
                     break;
                 }
@@ -1211,31 +1213,7 @@ impl Compiler<'_> {
                 .get(&parameter.name)
                 .ok_or_else(|| err(parameter.span, "E_TYPE", "cannot infer generic argument"))?;
             for id in &parameter.bounds {
-                if let a::Type::Path(path) = self.source.types[*id].kind.clone() {
-                    if self.callable_bound(ty, &path, sub, parameter.span)? {
-                        continue;
-                    }
-                }
-                let (bound, identity) = match &self.source.types[*id].kind {
-                    a::Type::Path(p) if p.args.is_empty() => (
-                        p.name.clone(),
-                        crate::generics::bound_identity(self.source, p),
-                    ),
-                    _ => {
-                        return Err(err(
-                            parameter.span,
-                            "E_UNSUPPORTED",
-                            "parameterized trait bounds are not implemented yet",
-                        ));
-                    }
-                };
-                if !self.satisfies_identity(ty, &identity) {
-                    return Err(err(
-                        parameter.span,
-                        "E_TRAIT",
-                        &format!("{} does not implement {}", self.display_type(ty), bound),
-                    ));
-                }
+                self.check_type_bound(ty, *id, sub, parameter.span)?;
             }
         }
         Ok(())
@@ -3764,7 +3742,7 @@ impl Builder<'_, '_> {
             } else if !path.args.is_empty() {
                 self.compiler.named_type(
                     &a::Path {
-                        declaration: None,
+                        bindings: Vec::new(), declaration: None,
                         name: if boxed { "Box" } else { "Vec" }.to_string(),
                         args: path.args.clone(),
                     },
@@ -3859,7 +3837,7 @@ impl Builder<'_, '_> {
                 self.compiler
                     .named_type(
                         &a::Path {
-                            declaration: path.declaration,
+                            bindings: Vec::new(), declaration: path.declaration,
                             name: owner.to_string(),
                             args: path.args.clone(),
                         },
@@ -4466,7 +4444,7 @@ impl Builder<'_, '_> {
                 let option_name = self.compiler.names.prelude_type("Option", span)?;
                 let ty = self.compiler.named_type(
                     &a::Path {
-                        declaration: None,
+                        bindings: Vec::new(), declaration: None,
                         name: option_name,
                         args: Vec::new(),
                     },

@@ -266,7 +266,7 @@ pub(super) fn import_qualifications(result: &mut Catalog, files: &[SourceText], 
                 let token = &files[imported.span.file].tokens[at];
                 if inherited && token.text == leaf_name(&imported.path)
                     && resolve::semantic_type_path(resolver, scope, &imported.path, imported.span).is_err() {
-                    let path = a::Path { declaration: None, name: imported.path.clone(), args: Vec::new() };
+                    let path = a::Path { bindings: Vec::new(), declaration: None, name: imported.path.clone(), args: Vec::new() };
                     if let Ok(resolved) = resolver.value_path(scope, &path, imported.span) {
                         if let Some(target) = value_identity(program, &resolved, &result.function_ids) {
                             if result.by_identity.contains_key(&target) {

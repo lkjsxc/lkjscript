@@ -1,0 +1,17 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; fn get(self) -> Self::Item; }
+struct Number {}
+struct MaybeNumber {}
+impl Source for Number {
+    type Item = i64;
+    fn get(self) -> i64 { 42 }
+}
+impl Source for MaybeNumber {
+    type Item = Option<i64>;
+    fn get(self) -> Option<i64> { Some(42) }
+}
+fn chain<S: Source<Item = Option<T::Item>>, T: Source<Item = i64>>(
+    source: S, _other: T,
+) -> i64 { source.get().unwrap() }
+pub fn probe() -> i64 { chain(MaybeNumber {}, Number {}) }

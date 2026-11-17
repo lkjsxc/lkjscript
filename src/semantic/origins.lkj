@@ -73,7 +73,7 @@ fn field_value(program: &a::Program, resolver: &crate::resolve::Resolver<'_>, fi
         Ok(path) => path,
         Err(_) => return Err(failure("source", "generated field helper does not resolve")),
     };
-    let expected_path = a::Path { declaration: None,
+    let expected_path = a::Path { bindings: Vec::new(), declaration: None,
         name: "std::default::__lkjscript_default".to_string(), args: Vec::new() };
     let expected = match resolver.value_path(called.scope, &expected_path, called.span) {
         Ok(path) => path,

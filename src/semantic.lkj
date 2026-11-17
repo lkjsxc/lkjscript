@@ -605,6 +605,18 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                 let file = &files[node.span.file];
                 let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) else { continue; };
                 path_qualifications(&mut result, &files, program, &resolver, &owner, node.scope, node.span);
+                for binding in &path.bindings {
+                    match crate::generics::associated_binding_owner(program, path, binding) {
+                        Ok(index) => {
+                            let declaration = &program.traits[index];
+                            let target = format!("{}::type:{}", qualified(&declaration.module, &declaration.name), binding.name);
+                            add_reference(&mut result, &files, owner.clone(), target, binding.span,
+                                &binding.name, "associated-type-binding", true);
+                        }
+                        Err(_) => add_reference(&mut result, &files, owner.clone(), binding.name.clone(),
+                            binding.span, &binding.name, "associated-type-binding", false),
+                    }
+                }
                 if let Some(declaration) = path.declaration {
                     if let Some(target) = declaration_identity(program, declaration, &result.function_ids) {
                         if module_name(&path.name) == target {
@@ -620,7 +632,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         for imported in &program.uses {
             if imported.glob { continue; }
             let scope = resolve::module(program, &imported.module);
-            let path = a::Path { declaration: None, name: imported.path.clone(), args: Vec::new() };
+            let path = a::Path { bindings: Vec::new(), declaration: None, name: imported.path.clone(), args: Vec::new() };
             let mut target: Option<String> = None;
             let mut alias = false;
             if let Ok(resolved) = resolver.value_path(scope, &path, imported.span) {

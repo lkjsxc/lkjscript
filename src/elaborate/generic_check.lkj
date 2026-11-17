@@ -105,7 +105,11 @@ pub(super) struct Contracts {
     pub(super) active_scope: usize,
     pub(super) rigid: BTreeMap<usize, BTreeSet<TraitIdentity>>,
     // (rigid receiver, resolved trait declaration) -> associated-type identities.
-    traits: BTreeMap<(usize, usize), BTreeMap<String, usize>>,
+    pub(super) traits: BTreeMap<(usize, usize), BTreeMap<String, usize>>,
+    pub(super) equalities: BTreeMap<(usize, usize, String), usize>,
+    pub(super) equality_sources: BTreeMap<(usize, usize, String), Vec<(a::TypeId, BTreeMap<String, usize>, a::Span)>>,
+    pub(super) equality_active: BTreeSet<(usize, usize, String)>,
+    pub(super) equality_collecting: bool,
     methods: BTreeMap<usize, MethodWitness>,
     comparisons: BTreeMap<(usize, String), usize>,
     builtin_methods: BTreeMap<(usize, BuiltinMethod), usize>,
@@ -404,8 +408,11 @@ impl Compiler<'_> {
         // Associated identities come from declared trait bounds. Establish all
         // of them before a callable signature resolves a sibling's I::Item,
         // regardless of the source order of generic parameter declarations.
-        for phase in 0..2usize {
-            let callable = phase != 0;
+        for phase in 0..3usize {
+            // Register every sibling equation before resolving any of them.
+            // A projection on the right may be defined by a later parameter.
+            self.contracts.as_mut().unwrap().equality_collecting = phase == 1;
+            let callable = phase == 2;
             for parameter in parameters {
                 if parameter.lifetime {
                     continue;
@@ -413,9 +420,13 @@ impl Compiler<'_> {
                 let ty = *substitutions.get(&parameter.name).unwrap();
                 for bound in &parameter.bounds {
                     if self.is_callable_bound(*bound) == callable {
-                        self.assume_bound(ty, *bound, substitutions)?;
+                        self.assume_bound_with_equalities(ty, *bound, substitutions, phase != 0)?;
                     }
                 }
+            }
+            if phase == 1 {
+                self.contracts.as_mut().unwrap().equality_collecting = false;
+                self.finish_associated_equalities()?;
             }
         }
         Ok(())
@@ -435,17 +446,32 @@ impl Compiler<'_> {
         }
     }
 
-    fn assume_bound(
+    pub(super) fn assume_bound(
         &mut self,
         ty: usize,
         first: a::TypeId,
         substitutions: &BTreeMap<String, usize>,
     ) -> Result<()> {
-        let mut pending = vec![first];
-        while let Some(id) = pending.pop() {
+        self.assume_bound_with_equalities(ty, first, substitutions, true)
+    }
+
+    fn assume_bound_with_equalities(
+        &mut self,
+        ty: usize,
+        first: a::TypeId,
+        substitutions: &BTreeMap<String, usize>,
+        equalities: bool,
+    ) -> Result<()> {
+        let mut pending = vec![(first, false)];
+        let mut seen = BTreeSet::<a::TypeId>::new();
+        let mut bindings: Vec<(a::Path, BTreeMap<String, usize>)> = Vec::new();
+        while let Some((id, inherited)) = pending.pop() {
+            if !seen.insert(id) { continue; }
             let node = self.source.types[id].clone();
+            let mut inherited_substitutions = substitutions.clone();
+            if inherited { inherited_substitutions.insert("Self".to_string(), ty); }
             if let a::Type::Path(path) = &node.kind {
-                if self.assume_callable(ty, path, substitutions, node.span)? {
+                if self.assume_callable(ty, path, &inherited_substitutions, node.span)? {
                     continue;
                 }
             }
@@ -472,7 +498,7 @@ impl Compiler<'_> {
                 .get_mut(&ty)
                 .unwrap()
                 .insert(identity.clone());
-            if !inserted {
+            if !inserted && !equalities {
                 continue;
             }
             let builtin = match &identity {
@@ -498,7 +524,7 @@ impl Compiler<'_> {
                     }
                 }
                 for bound in &declaration.bounds {
-                    pending.push(*bound);
+                    pending.push((*bound, true));
                 }
                 // Associated projections are introduced lazily. A valid bound
                 // such as A::Next: A must not eagerly create an infinite family.
@@ -507,6 +533,7 @@ impl Compiler<'_> {
                 if !traits.contains_key(&key) {
                     traits.insert(key, BTreeMap::new());
                 }
+                if equalities && !path.bindings.is_empty() { bindings.push((path.clone(), inherited_substitutions)); }
             } else if !matches!(
                 builtin,
                 "Copy"
@@ -526,6 +553,7 @@ impl Compiler<'_> {
                 ));
             }
         }
+        for (path, environment) in bindings { self.assume_associated_bindings(ty, &path, &environment)?; }
         Ok(())
     }
 
@@ -608,7 +636,7 @@ impl Compiler<'_> {
         Ok(substitutions)
     }
 
-    fn implementation_associated(
+    pub(super) fn implementation_associated(
         &mut self,
         index: usize,
         mut environment: BTreeMap<String, usize>,
@@ -689,8 +717,11 @@ impl Compiler<'_> {
             {
                 continue;
             }
-            for bound in &parameter.bounds {
-                let path = match &self.source.types[*bound].kind {
+            let mut pending = parameter.bounds.clone();
+            let mut seen = BTreeSet::<usize>::new();
+            let mut members: BTreeMap<String, Option<usize>> = BTreeMap::new();
+            while let Some(bound) = pending.pop() {
+                let path = match &self.source.types[bound].kind {
                     a::Type::Path(path) if path.args.is_empty() => path,
                     _ => continue,
                 };
@@ -698,6 +729,8 @@ impl Compiler<'_> {
                 let TraitIdentity::Declared(trait_index) = identity else {
                     continue;
                 };
+                if !seen.insert(trait_index) { continue; }
+                for parent in &self.source.traits[trait_index].bounds { pending.push(*parent); }
                 if self.source.traits[trait_index].associated.is_empty() {
                     continue;
                 }
@@ -712,8 +745,14 @@ impl Compiler<'_> {
                 let associated =
                     self.implementation_associated(witness.implementation, witness.substitutions)?;
                 for (name, ty) in associated {
-                    substitutions.insert(format!("{}::{name}", parameter.name), ty);
+                    if members.contains_key(&name) { members.insert(name, None); }
+                    else { members.insert(name, Some(ty)); }
                 }
+            }
+            for (name, ty) in members {
+                let key = format!("{}::{name}", parameter.name);
+                if let Some(ty) = ty { substitutions.insert(key, ty); }
+                else { substitutions.remove(&key); }
             }
         }
         Ok(())
@@ -752,12 +791,17 @@ impl Compiler<'_> {
         Ok(())
     }
 
-    fn associated_identity(
+    pub(super) fn associated_identity(
         &mut self,
         receiver: usize,
         trait_index: usize,
         name: &str,
     ) -> Result<usize> {
+        let key = (receiver, trait_index, name.to_string());
+        let pending = self.contracts.as_ref().unwrap().equality_sources.contains_key(&key);
+        if pending {
+            return self.resolve_associated_equality(key);
+        }
         if let Some(ty) = self
             .contracts
             .as_ref()

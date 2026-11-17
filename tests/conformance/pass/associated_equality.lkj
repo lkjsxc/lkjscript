@@ -1,0 +1,17 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; fn get(self) -> Self::Item; }
+struct Number {}
+impl Source for Number {
+    type Item = i64;
+    fn get(self) -> i64 { 20 }
+}
+fn concrete<S: Source<Item = i64>>(source: S) -> i64 { source.get() }
+fn before<T, S: Source<Item = T>>(source: S) -> T { source.get() }
+fn after<S: Source<Item = T>, T>(source: S) -> T { source.get() }
+fn clause<S>(source: S) -> i64 where S: Source<Item = i64> { source.get() }
+pub fn probe() -> i64 {
+    assert!(before(Number {}) == 20i64);
+    assert!(after(Number {}) == 20i64);
+    concrete(Number {}) + clause(Number {}) + 2
+}

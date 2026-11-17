@@ -43,7 +43,9 @@ impl Compiler<'_> {
                     "invalid parameterized trait prerequisite",
                 ));
             };
-            if !self.callable_bound(*ty, &path, &witness.substitutions, node.span)? {
+            if !path.bindings.is_empty() && path.args.is_empty() {
+                self.check_associated_bindings(*ty, &path, &witness.substitutions, node.span)?;
+            } else if !self.callable_bound(*ty, &path, &witness.substitutions, node.span)? {
                 return Err(err(
                     node.span,
                     "E_UNSUPPORTED",

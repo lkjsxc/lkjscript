@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustCode":"E0391"}
+trait Source { type Item; }
+fn cycle<S: Source<Item = Option<S::Item>>>(_source: S) -> i64 { 42 }
+pub fn probe() -> i64 { 42 }

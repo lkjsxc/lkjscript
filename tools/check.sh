@@ -155,6 +155,7 @@ parallel_step 1 structure-help timeout --kill-after=10s 600s bash tools/structur
 parallel_step 1 structure-embedded timeout --kill-after=10s 600s bash tools/structure-embedded-test.sh "$check_binary"
 parallel_step 1 structure-refactor timeout --kill-after=10s 600s bash tools/structure-refactor-test.sh "$check_binary"
 parallel_step 1 checked-meaning timeout --kill-after=10s 600s bash tools/meaning-test.sh "$check_binary"
+parallel_step 1 associated-bindings timeout --kill-after=10s 600s bash tools/associated-bindings-test.sh "$check_binary"
 parallel_step 1 type-identity timeout --kill-after=10s 600s bash tools/type-identity-test.sh "$check_binary"
 parallel_step 1 history-replay timeout --kill-after=10s 600s bash tools/replay-test.sh "$check_binary"
 parallel_step 1 profiler timeout --kill-after=10s 600s sh tools/profile-test.sh "$check_binary"

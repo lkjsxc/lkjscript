@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; fn get(self) -> Self::Item; }
+struct Number {}
+impl Source for Number { type Item = i64; fn get(self) -> i64 { 42 } }
+trait Consumer { fn consume<S: Source<Item = i64>>(value: S) -> i64; }
+struct Concrete {}
+impl Consumer for Concrete {
+    fn consume<S: Source<Item = i64>>(value: S) -> i64 { value.get() }
+}
+pub fn probe() -> i64 { Concrete::consume(Number {}) }

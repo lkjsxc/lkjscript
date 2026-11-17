@@ -54,7 +54,7 @@ impl Builder<'_, '_> {
             let a::Expr::String(value) = &self.compiler.source.exprs[receiver].kind else { return Some(problem); };
             for byte in value.as_bytes() { if *byte >= 128u8 { return Some(problem); } }
             let Ok(helper) = self.compiler.names.library_function("str", "trim_ascii", span) else { return Some(problem); };
-            let path = a::Path { declaration: None, name: "std::str::trim_ascii".to_string(), args: Vec::new() };
+            let path = a::Path { bindings: Vec::new(), declaration: None, name: "std::str::trim_ascii".to_string(), args: Vec::new() };
             let scope = self.compiler.source.exprs[expression].scope;
             let Ok(path) = self.compiler.names.value_path(scope, &path, span) else { return Some(problem); };
             let Some(declaration) = path.declaration else { return Some(problem); };

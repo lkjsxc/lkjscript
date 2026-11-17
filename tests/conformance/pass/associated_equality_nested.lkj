@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; fn get(self) -> Self::Item; }
+struct Pair {}
+impl Source for Pair {
+    type Item = Option<(i64, bool)>;
+    fn get(self) -> Option<(i64, bool)> { Some((42i64, true)) }
+}
+fn nested<S: Source<Item = Option<(i64, bool)>>>(source: S) -> i64 {
+    let value = source.get().unwrap();
+    if value.1 { value.0 } else { 0 }
+}
+pub fn probe() -> i64 { nested(Pair {}) }

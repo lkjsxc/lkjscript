@@ -31,10 +31,18 @@ pub enum FunctionOwner {
 pub use crate::diagnostic::{Diagnostic, Span};
 
 #[derive(Clone)]
+pub struct AssociatedBinding {
+    pub name: String,
+    pub value: TypeId,
+    pub span: Span,
+}
+
+#[derive(Clone)]
 pub struct Path {
     pub declaration: Option<DeclarationId>,
     pub name: String,
     pub args: Vec<TypeId>,
+    pub bindings: Vec<AssociatedBinding>,
 }
 
 #[derive(Clone)]

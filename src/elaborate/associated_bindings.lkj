@@ -1,0 +1,164 @@
+//! Associated equalities consume ordinary declared trait witnesses. Definition
+//! assumptions and concrete checks use the same resolved member identity.
+use super::{Compiler, Result, a, err};
+use crate::generics::{TraitIdentity, associated_binding_owner};
+use std::collections::BTreeMap;
+
+impl Compiler<'_> {
+    pub(super) fn check_type_bound(
+        &mut self,
+        ty: usize,
+        bound: a::TypeId,
+        substitutions: &BTreeMap<String, usize>,
+        span: a::Span,
+    ) -> Result<()> {
+        let node = self.source.types[bound].clone();
+        let a::Type::Path(path) = node.kind else {
+            return Err(err(span, "E_UNSUPPORTED", "trait bound needs a declared trait path"));
+        };
+        if path.name.starts_with('\'') { return Ok(()); }
+        if self.callable_bound(ty, &path, substitutions, span)? { return Ok(()); }
+        if !path.args.is_empty() {
+            return Err(err(node.span, "E_UNSUPPORTED", "parameterized trait bounds are not implemented yet"));
+        }
+        let identity = crate::generics::bound_identity(self.source, &path);
+        if !self.satisfies_identity(ty, &identity) {
+            return Err(err(span, "E_TRAIT", &format!("{} does not implement {}",
+                self.display_type(ty), path.name)));
+        }
+        self.check_associated_bindings(ty, &path, substitutions, span)
+    }
+
+    pub(super) fn check_associated_bindings(
+        &mut self,
+        ty: usize,
+        path: &a::Path,
+        substitutions: &BTreeMap<String, usize>,
+        _span: a::Span,
+    ) -> Result<()> {
+        for binding in &path.bindings {
+            let owner = associated_binding_owner(self.source, path, binding)?;
+            let assumed = self.contracts.as_ref()
+                .is_some_and(|contracts| contracts.traits.contains_key(&(ty, owner)));
+            let actual = if assumed {
+                self.associated_identity(ty, owner, &binding.name)?
+            } else {
+                let identity = TraitIdentity::Declared(owner);
+                let mut witness = self.implementation_witness(ty, &identity).ok_or_else(||
+                    err(binding.span, "E_TRAIT", "associated-type equality binding needs its declared implementation witness"))?;
+                witness.substitutions.insert("Self".to_string(), ty);
+                let associated = self.implementation_associated(witness.implementation, witness.substitutions)?;
+                *associated.get(&binding.name).ok_or_else(||
+                    err(binding.span, "E_TRAIT", "associated-type equality binding has no implementation definition"))?
+            };
+            let expected = self.resolve(binding.value, substitutions)?;
+            if actual != expected {
+                return Err(err(binding.span, "E_TRAIT", &format!(
+                    "associated-type equality binding {} requires {}, found {}", binding.name,
+                    self.display_type(expected), self.display_type(actual))));
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn assume_associated_bindings(
+        &mut self,
+        receiver: usize,
+        path: &a::Path,
+        substitutions: &BTreeMap<String, usize>,
+    ) -> Result<()> {
+        for binding in &path.bindings {
+            let owner = associated_binding_owner(self.source, path, binding)?;
+            let key = (receiver, owner, binding.name.clone());
+            let contracts = self.contracts.as_mut().unwrap();
+            if !contracts.equality_sources.contains_key(&key) {
+                contracts.equality_sources.insert(key.clone(), Vec::new());
+            }
+            contracts.equality_sources.get_mut(&key).unwrap()
+                .push((binding.value, substitutions.clone(), binding.span));
+        }
+        let finish = {
+            let contracts = self.contracts.as_ref().unwrap();
+            !contracts.equality_collecting && contracts.equality_active.is_empty()
+        };
+        if finish {
+            self.finish_associated_equalities()?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn finish_associated_equalities(&mut self) -> Result<()> {
+        loop {
+            let next = self.contracts.as_ref().unwrap().equality_sources.keys().next().cloned();
+            let Some(key) = next else { break; };
+            self.resolve_associated_equality(key)?;
+        }
+        Ok(())
+    }
+
+    pub(super) fn resolve_associated_equality(
+        &mut self,
+        key: (usize, usize, String),
+    ) -> Result<usize> {
+        let sources = self.contracts.as_ref().unwrap().equality_sources.get(&key).unwrap().clone();
+        let inserted = self.contracts.as_mut().unwrap().equality_active.insert(key.clone());
+        if !inserted {
+            if let Some(known) = self.contracts.as_ref().unwrap().equalities.get(&key) {
+                return Ok(*known);
+            }
+            return Err(err(sources[0].2, "E_TYPE", "cyclic associated-type equality dependency"));
+        }
+        let result = self.resolve_associated_equality_sources(&key, sources);
+        self.contracts.as_mut().unwrap().equality_active.remove(&key);
+        result
+    }
+
+    fn resolve_associated_equality_sources(
+        &mut self,
+        key: &(usize, usize, String),
+        sources: Vec<(a::TypeId, BTreeMap<String, usize>, a::Span)>,
+    ) -> Result<usize> {
+        let (receiver, owner, name) = key;
+        let mut value = self.contracts.as_ref().unwrap().equalities.get(key).copied();
+        let existing = value.is_some();
+        let mut declared_environment = BTreeMap::new();
+        for (source, substitutions, span) in &sources {
+            let expected = self.resolve(*source, substitutions)?;
+            if let Some(previous) = value {
+                if previous != expected {
+                    return Err(err(*span, "E_TRAIT", "conflicting associated-type equality bindings"));
+                }
+            }
+            value = Some(expected);
+            declared_environment = substitutions.clone();
+        }
+        let expected = value.unwrap();
+        let contracts = self.contracts.as_mut().unwrap();
+        let pending = contracts.equality_sources.remove(key).unwrap();
+        // Resolving a dependency can discover an additional equation for this
+        // member. Retain it for comparison with the completed canonical value.
+        if pending.len() > sources.len() {
+            contracts.equality_sources.insert(key.clone(), pending[sources.len()..].to_vec());
+        }
+        contracts.equalities.insert(key.clone(), expected);
+        let members = contracts.traits.get_mut(&(*receiver, *owner)).ok_or_else(||
+            err(sources[0].2, "E_TRAIT", "associated-type equality binding lacks its declared bound"))?;
+        members.insert(name.clone(), expected);
+        // Replaying an identical equation contributes no new assumptions. In
+        // particular Next: Loop<Next = Self::Next> closes on this exact fact.
+        if existing { return Ok(expected); }
+        let declaration = self.source.traits[*owner].associated.iter()
+            .find(|item| item.name == *name).unwrap().clone();
+        declared_environment.insert("Self".to_string(), *receiver);
+        declared_environment.insert(format!("Self::{name}"), expected);
+        for bound in &declaration.bounds {
+            let rigid = self.contracts.as_ref().unwrap().rigid.contains_key(&expected);
+            if rigid {
+                self.assume_bound(expected, *bound, &declared_environment)?;
+            } else {
+                self.check_type_bound(expected, *bound, &declared_environment, sources[0].2)?;
+            }
+        }
+        Ok(expected)
+    }
+}

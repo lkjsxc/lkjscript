@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {}
+trait Loop {
+    type Next: Loop<Next = Self::Next>;
+}
+struct End {}
+impl Loop for End { type Next = End; }
+fn holds<T: Loop<Next = U>, U>(_first: T, _next: U) -> i64 { 42 }
+pub fn probe() -> i64 { holds(End {}, End {}) }

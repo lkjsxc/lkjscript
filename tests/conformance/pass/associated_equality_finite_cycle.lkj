@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {}
+trait Node { type Next: Node; }
+struct Left {}
+struct Right {}
+impl Node for Left { type Next = Right; }
+impl Node for Right { type Next = Left; }
+fn close<A: Node<Next = B>, B: Node<Next = A>>(_left: A, _right: B) -> i64 { 42 }
+pub fn probe() -> i64 { close(Left {}, Right {}) }

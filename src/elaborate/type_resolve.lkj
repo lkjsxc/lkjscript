@@ -190,6 +190,10 @@ impl Compiler<'_> {
                     environment,
                     span,
                 } => {
+                    if !path.bindings.is_empty() {
+                        return Err(err(path.bindings[0].span, "E_TRAIT",
+                            "associated-type equality bindings are only accepted in trait bounds"));
+                    }
                     if self.diagnostic_functions.is_some()
                         && path.declaration.is_some_and(|id| {
                             matches!(

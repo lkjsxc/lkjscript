@@ -112,7 +112,21 @@ fn prerequisites(
     known: &[Goal],
 ) -> Result<Option<Vec<Goal>>, Diagnostic> {
     let (ty, bound) = goal;
-    let declaration = match &terms[bound] {
+    let mut equality = None;
+    let mut selected_bound = bound;
+    if let Term::Named(name, constraints) = &terms[bound] {
+        if name == "$associated-bound" {
+            return Ok(Some(constraints.iter().map(|constraint| (ty, *constraint)).collect()));
+        }
+        if name == "$associated-equality" && constraints.len() == 3 {
+            selected_bound = constraints[0];
+            let Term::Named(member, arguments) = &terms[constraints[1]] else { return Ok(None); };
+            if !arguments.is_empty() { return Ok(None); }
+            let Some(member) = member.as_str().strip_prefix("$associated-member:") else { return Ok(None); };
+            equality = Some((member.to_string(), constraints[2]));
+        }
+    }
+    let declaration = match &terms[selected_bound] {
         Term::DeclaredTrait(declaration, args) if args.is_empty() => *declaration,
         _ => return Ok(None),
     };
@@ -139,7 +153,7 @@ fn prerequisites(
         let implemented = signature_type(source, trait_ty, &environment, terms)?;
         let Some(mut substitutions) = match_terms(
             terms,
-            vec![(target, ty), (implemented, bound)],
+            vec![(target, ty), (implemented, selected_bound)],
             &flexible,
             BTreeMap::new(),
         ) else {
@@ -233,6 +247,15 @@ fn prerequisites(
         }
         let mut environment = resolved;
         environment.insert("Self".to_string(), ty);
+        if let Some((member, expected)) = &equality {
+            let definition = implementation.associated.iter().find(|item| item.name == *member)
+                .and_then(|item| item.value)
+                .or_else(|| source.traits[declaration].associated.iter()
+                    .find(|item| item.name == *member).and_then(|item| item.value));
+            let Some(definition) = definition else { continue; };
+            let actual = signature_type(source, definition, &environment, terms)?;
+            if !equivalent(terms, actual, *expected) { continue; }
+        }
         let mut children = Vec::new();
         for parameter in &implementation.generics {
             if parameter.lifetime {

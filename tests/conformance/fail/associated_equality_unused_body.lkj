@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustCode":"E0308"}
+trait Source { type Item; fn get(self) -> Self::Item; }
+fn invalid<S: Source<Item = i64>>(source: S) -> bool { source.get() }
+pub fn probe() -> i64 { 42 }

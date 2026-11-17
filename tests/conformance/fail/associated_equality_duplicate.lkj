@@ -1,0 +1,7 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Source { type Item; }
+struct Number {}
+impl Source for Number { type Item = i64; }
+fn invalid<S: Source<Item = i64, Item = bool>>(_source: S) -> i64 { 42 }
+pub fn probe() -> i64 { invalid(Number {}) }

@@ -112,7 +112,7 @@ pub(super) fn validate(compiler: &mut Compiler<'_>) -> Result<()> {
                 }
                 let ty = compiler.named_type(
                     &a::Path {
-                        declaration: Some(declaration),
+                        bindings: Vec::new(), declaration: Some(declaration),
                         name: item.name.clone(),
                         args: Vec::new(),
                     },

@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; fn get(self) -> Self::Item; }
+trait IntSource: Source<Item = i64> {}
+struct Number {}
+impl Source for Number { type Item = i64; fn get(self) -> i64 { 42 } }
+impl IntSource for Number {}
+fn take<S: IntSource>(source: S) -> S::Item { source.get() }
+pub fn probe() -> i64 { take(Number {}) }

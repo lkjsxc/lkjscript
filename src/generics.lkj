@@ -2,9 +2,11 @@
 //! The executable IR checker still checks concrete function and witness types.
 mod bound_solver;
 mod signature_bounds;
+mod associated_bindings;
 use crate::ast::*;
 use crate::names::qualified;
 pub(crate) use bound_solver::{BoundContext, BoundSolver, BoundStep};
+pub(crate) use associated_bindings::associated_binding_owner;
 use std::collections::{BTreeMap, BTreeSet};
 
 #[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
@@ -22,7 +24,11 @@ fn push(terms: &mut Vec<Term>, term: Term) -> usize {
 }
 fn type_children(source: &Program, id: TypeId) -> Vec<TypeId> {
     match &source.types[id].kind {
-        Type::Path(p) => p.args.clone(),
+        Type::Path(p) => {
+            let mut children = p.args.clone();
+            for binding in &p.bindings { children.push(binding.value); }
+            children
+        }
         Type::Ref { inner, .. } | Type::Slice(inner) => vec![*inner],
         Type::Array { inner, .. } => vec![*inner],
         Type::Tuple(v) => v.clone(),
@@ -48,7 +54,7 @@ fn type_term(
         }
         if !ready {
             if let Type::Path(p) = &source.types[ty].kind {
-                if p.declaration.is_none() && p.args.is_empty() {
+                if p.declaration.is_none() && p.args.is_empty() && p.bindings.is_empty() {
                     if let Some(value) = env.get(&p.name) {
                         done.insert(ty, *value);
                         continue;
@@ -73,7 +79,22 @@ fn type_term(
             Type::Infer => Term::Unknown,
             Type::Never => Term::Named("!".to_string(), values),
             Type::Path(p) => {
-                if p.name.starts_with('\'') {
+                if !p.bindings.is_empty() {
+                    let args = values[..p.args.len()].to_vec();
+                    let base = match bound_identity(source, p) {
+                        TraitIdentity::Declared(index) => Term::DeclaredTrait(index, args),
+                        _ => Term::Named(p.name.clone(), args),
+                    };
+                    let mut constraints = vec![push(terms, base)];
+                    for (index, binding) in p.bindings.iter().enumerate() {
+                        let owner = associated_binding_owner(source, p, binding).unwrap_or(source.traits.len());
+                        let trait_term = push(terms, Term::DeclaredTrait(owner, Vec::new()));
+                        let member = push(terms, Term::Named(format!("$associated-member:{}", binding.name), Vec::new()));
+                        constraints.push(push(terms, Term::Named("$associated-equality".to_string(),
+                            vec![trait_term, member, values[p.args.len() + index]])));
+                    }
+                    Term::Named("$associated-bound".to_string(), constraints)
+                } else if p.name.starts_with('\'') {
                     Term::Named("lifetime".to_string(), values)
                 } else if let TraitIdentity::Declared(declaration) = bound_identity(source, p) {
                     Term::DeclaredTrait(declaration, values)
@@ -1021,6 +1042,7 @@ pub fn validate(source: &Program) -> Result<(), Diagnostic> {
     }
     declarations(source)?;
     alias_cycles(source)?;
+    associated_bindings::validate(source)?;
     constant_cycles(source)?;
     finite_data(source)?;
     coherence(source)?;
@@ -1317,7 +1339,7 @@ fn add_bound(source: &Program, id: TypeId, ty: usize, children: &mut Vec<Goal>) 
             ty,
             bound: bound_identity(source, path),
         });
-        true
+        path.bindings.is_empty()
     } else {
         false
     }
@@ -2044,6 +2066,10 @@ fn bound_closure(
         result.push(bound);
         match terms[bound].clone() {
             Term::Named(name, args) => {
+                if name == "$associated-bound" {
+                    for constraint in args { pending.push(constraint); }
+                    continue;
+                }
                 let parents = match name.as_str() {
                     "Fn" => vec!["FnMut".to_string()],
                     "FnMut" => vec!["FnOnce".to_string()],
@@ -2114,6 +2140,12 @@ fn symbolic_bound(
         }
         if found {
             continue;
+        }
+        if let Term::Named(name, constraints) = terms[bound].clone() {
+            if name == "$associated-bound" {
+                for constraint in constraints { pending.push((ty, constraint)); }
+                continue;
+            }
         }
         let (name, args) = match terms[bound].clone() {
             Term::Named(n, a) => (n, a),
@@ -2312,6 +2344,13 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
                     "E_TRAIT",
                     "associated type definitions are cyclic or unresolved",
                 ));
+            }
+        }
+        for bound in &declaration.bounds {
+            let constraint = signature_type(source, *bound, &expected_env, &mut terms)?;
+            if !signature_bounds::prove(source, &implementations, &mut terms, target, constraint, &known)? {
+                return Err(Diagnostic::new(implementation.span, "E_TRAIT",
+                    "implementation does not establish its declared supertrait bound"));
             }
         }
         for associated in &declaration.associated {

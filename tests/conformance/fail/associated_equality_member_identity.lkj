@@ -1,0 +1,11 @@
+// expect: reject E_TRAIT
+// witness: {"rustCode":"E0271"}
+type X = i64;
+type Y = i64;
+trait Pair { type X; type Y; }
+trait Consumer { fn consume<T: Pair<X = bool>>(value: T) -> i64; }
+struct Concrete {}
+impl Consumer for Concrete {
+    fn consume<T: Pair<Y = bool>>(_value: T) -> i64 { 42 }
+}
+pub fn probe() -> i64 { 42 }

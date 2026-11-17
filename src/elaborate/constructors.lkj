@@ -329,7 +329,7 @@ impl Builder<'_, '_> {
             .clone();
         let ty = self.compiler.named_type(
             &a::Path {
-                declaration: Some(target.declaration),
+                bindings: Vec::new(), declaration: Some(target.declaration),
                 name,
                 args: Vec::new(),
             },

@@ -1,0 +1,7 @@
+// expect: reject E_TRAIT
+// witness: {"rustCode":"E0271"}
+trait Source { type Item; }
+struct Boolean {}
+impl Source for Boolean { type Item = bool; }
+fn required<S: Source<Item = i64>>(_source: S) -> i64 { 42 }
+pub fn probe() -> i64 { required(Boolean {}) }

@@ -26,7 +26,7 @@ impl Parser {
         let span = definition.span;
         let bound = self.add_type(
             Type::Path(Path {
-                declaration: None,
+                bindings: Vec::new(), declaration: None,
                 name: "std::default::Default".to_string(),
                 args: Vec::new(),
             }),
@@ -42,7 +42,7 @@ impl Parser {
             }
             arguments.push(self.add_type(
                 Type::Path(Path {
-                    declaration: None,
+                    bindings: Vec::new(), declaration: None,
                     name: parameter.name.clone(),
                     args: Vec::new(),
                 }),
@@ -51,7 +51,7 @@ impl Parser {
             parameter_index += 1;
         }
         let target_path = Path {
-            declaration: None,
+            bindings: Vec::new(), declaration: None,
             name: definition.name.clone(),
             args: arguments,
         };
@@ -60,7 +60,7 @@ impl Parser {
         for field in &definition.fields {
             let callee = self.add_expr(
                 Expr::Path(Path {
-                    declaration: None,
+                    bindings: Vec::new(), declaration: None,
                     name: "std::default::__lkjscript_default".to_string(),
                     args: vec![field.ty],
                 }),

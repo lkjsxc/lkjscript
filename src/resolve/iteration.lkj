@@ -20,7 +20,7 @@ fn library_function_path(resolver: &Resolver<'_>, name: &str, span: Span) -> Res
         })?;
     let function = &resolver.program.functions[function];
     Ok(Path {
-        declaration: Some(declaration),
+        bindings: Vec::new(), declaration: Some(declaration),
         name: qualified(&function.module, &function.name),
         args: Vec::new(),
     })
@@ -94,7 +94,7 @@ impl Expansion<'_> {
     }
     fn local(&mut self, name: &str) -> ExprId {
         self.expression(Expr::Path(Path {
-            declaration: None,
+            bindings: Vec::new(), declaration: None,
             name: name.to_string(),
             args: Vec::new(),
         }))

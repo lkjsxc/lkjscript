@@ -688,6 +688,7 @@ enum TypeFrame {
         path: Path,
         turbofish: bool,
         pending: bool,
+        binding: Option<(String, Span)>,
     },
 }
 
@@ -1318,7 +1319,7 @@ impl Parser {
                 self.at += 1;
                 args.push(self.add_type(
                     Type::Path(Path {
-                        declaration: None,
+                        bindings: Vec::new(), declaration: None,
                         name,
                         args: Vec::new(),
                     }),
@@ -1343,7 +1344,7 @@ impl Parser {
                 self.at += 1;
                 bounds.push(self.add_type(
                     Type::Path(Path {
-                        declaration: None,
+                        bindings: Vec::new(), declaration: None,
                         name,
                         args: Vec::new(),
                     }),
@@ -1449,6 +1450,7 @@ impl Parser {
         }
         self.capability_path(&name)?;
         Ok(Path {
+            bindings: Vec::new(),
             name,
             args,
             declaration: None,
@@ -1590,7 +1592,7 @@ impl Parser {
                         frames.push(TypeFrame::Path {
                             span,
                             path: Path {
-                                declaration: None,
+                                bindings: Vec::new(), declaration: None,
                                 name,
                                 args: Vec::new(),
                             },
@@ -1704,7 +1706,7 @@ impl Parser {
                         }
                     };
                     if allow_arguments && self.is("<") {
-                        if !path.args.is_empty() {
+                        if !path.args.is_empty() || !path.bindings.is_empty() {
                             return Err(
                                 self.unsupported("multiple generic argument lists in one path")
                             );
@@ -1715,12 +1717,13 @@ impl Parser {
                             path,
                             turbofish: false,
                             pending: false,
+                            binding: None,
                         });
                         continue;
                     }
                     if !complete && self.take("::") {
                         if self.is("<") {
-                            if !path.args.is_empty() {
+                            if !path.args.is_empty() || !path.bindings.is_empty() {
                                 return Err(
                                     self.unsupported("multiple generic argument lists in one path")
                                 );
@@ -1731,6 +1734,7 @@ impl Parser {
                                 path,
                                 turbofish: true,
                                 pending: false,
+                                binding: None,
                             });
                         } else {
                             path.name.push_str("::");
@@ -1763,17 +1767,26 @@ impl Parser {
                     mut path,
                     turbofish,
                     pending,
+                    binding,
                 } => {
                     let mut parsed = pending;
                     if pending {
-                        path.args.push(value);
+                        if let Some((name, binding_span)) = binding {
+                            path.bindings.push(AssociatedBinding {
+                                name,
+                                value,
+                                span: self.finish_span(binding_span),
+                            });
+                        } else {
+                            path.args.push(value);
+                        }
                     } else if self.token().kind == TokenKind::Lifetime {
                         let lifetime_span = self.token().span;
                         let name = self.token().text.clone();
                         self.at += 1;
                         path.args.push(self.add_type(
                             Type::Path(Path {
-                                declaration: None,
+                                bindings: Vec::new(), declaration: None,
                                 name,
                                 args: Vec::new(),
                             }),
@@ -1781,11 +1794,25 @@ impl Parser {
                         ));
                         parsed = true;
                     } else if !self.at_gt() {
+                        let equality = self.tokens.get(self.at + 1)
+                            .is_some_and(|token| token.text == "=");
+                        let binding = if equality {
+                            let binding_span = self.token().span;
+                            let name = self.ident()?;
+                            self.expect("=")?;
+                            Some((name, binding_span))
+                        } else {
+                            if !path.bindings.is_empty() {
+                                return Err(self.err("positional type arguments must precede associated-type equality bindings"));
+                            }
+                            None
+                        };
                         frames.push(TypeFrame::Arguments {
                             span,
                             path,
                             turbofish,
                             pending: true,
+                            binding,
                         });
                         frames.push(TypeFrame::Parse);
                         continue;
@@ -1796,6 +1823,7 @@ impl Parser {
                             path,
                             turbofish,
                             pending: false,
+                            binding: None,
                         });
                         continue;
                     }
@@ -1837,7 +1865,7 @@ impl Parser {
             if param_name == "self" && !self.is(":") {
                 ty = self.add_type(
                     Type::Path(Path {
-                        declaration: None,
+                        bindings: Vec::new(), declaration: None,
                         name: "Self".to_string(),
                         args: Vec::new(),
                     }),
@@ -2336,7 +2364,7 @@ impl Parser {
                 for (name, mutable) in bindings {
                     result.push(self.add_expr(
                         Expr::Path(Path {
-                            declaration: None,
+                            bindings: Vec::new(), declaration: None,
                             name: name.clone(),
                             args: Vec::new(),
                         }),
@@ -2381,7 +2409,7 @@ impl Parser {
                     );
                     let path = self.add_expr(
                         Expr::Path(Path {
-                            declaration: None,
+                            bindings: Vec::new(), declaration: None,
                             name,
                             args: Vec::new(),
                         }),
@@ -3197,7 +3225,7 @@ impl Parser {
                 } else {
                     self.add_expr(
                         Expr::Path(Path {
-                            declaration: None,
+                            bindings: Vec::new(), declaration: None,
                             name: name.clone(),
                             args: Vec::new(),
                         }),
@@ -3329,7 +3357,7 @@ impl Parser {
                             let index = args.len() - offset;
                             let value = self.add_expr(
                                 Expr::Path(Path {
-                                    declaration: None,
+                                    bindings: Vec::new(), declaration: None,
                                     name: argument.clone(),
                                     args: Vec::new(),
                                 }),

@@ -1,0 +1,9 @@
+// expect: reject E_TRAIT
+// witness: {"rustCode":"E0271"}
+trait Source { type Item; }
+trait Consumer { fn consume<S: Source>(value: S) -> i64; }
+struct Concrete {}
+impl Consumer for Concrete {
+    fn consume<S: Source<Item = i64>>(_value: S) -> i64 { 42 }
+}
+pub fn probe() -> i64 { 42 }

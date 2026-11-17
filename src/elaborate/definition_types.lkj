@@ -234,7 +234,7 @@ impl DefinitionTypes {
                     } else {
                         Some(compiler.named_type(
                             &a::Path {
-                                declaration: None,
+                                bindings: Vec::new(), declaration: None,
                                 name,
                                 args: Vec::new(),
                             },
@@ -309,7 +309,7 @@ impl DefinitionTypes {
                     let name = compiler.source.declarations[declaration].name.clone();
                     Some(compiler.named_type(
                         &a::Path {
-                            declaration: Some(declaration),
+                            bindings: Vec::new(), declaration: Some(declaration),
                             name,
                             args: Vec::new(),
                         },
@@ -437,6 +437,7 @@ struct Infer<'a, 'b> {
     capture_frames: Vec<closures::Frame>,
     callable_parameters: BTreeMap<String, (Vec<Variable>, Variable)>,
     projections: Vec<BTreeMap<(a::DeclarationId, String), Variable>>,
+    projection_bindings: BTreeMap<Variable, a::Span>,
     source: &'a a::Program,
     names: &'b crate::resolve::Resolver<'a>,
     implementations: &'b crate::generics::ImplementationIndex,
@@ -2452,6 +2453,7 @@ pub(super) fn infer(
         capture_frames: Vec::new(),
         callable_parameters: BTreeMap::new(),
         projections: Vec::new(),
+        projection_bindings: BTreeMap::new(),
         source,
         names,
         implementations,
@@ -2580,6 +2582,7 @@ pub(super) fn assert_reference_capture_deferred(source: &a::Program, index: usiz
             capture_frames: Vec::new(),
             callable_parameters: BTreeMap::new(),
             projections: Vec::new(),
+            projection_bindings: BTreeMap::new(),
             source,
             names: &names,
             implementations: &implementations,

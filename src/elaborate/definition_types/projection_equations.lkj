@@ -39,9 +39,74 @@ impl Infer<'_, '_> {
             };
             if let Some(receiver) = receiver {
                 for bound in &parameter.bounds {
+                    self.binding_equations(receiver, *bound, environment, rigid)?;
+                }
+            }
+        }
+        for parameter in parameters {
+            let receiver = match environment.get(&parameter.name) {
+                Some(receiver) => Some(*receiver),
+                None => None,
+            };
+            if let Some(receiver) = receiver {
+                for bound in &parameter.bounds {
                     self.callable_bound(receiver, *bound, environment)?;
                 }
             }
+        }
+        Ok(())
+    }
+
+    pub(super) fn binding_equations(
+        &mut self,
+        receiver: Variable,
+        first: a::TypeId,
+        environment: &BTreeMap<String, Variable>,
+        rigid: bool,
+    ) -> Result<()> {
+        let mut pending = vec![(first, false)];
+        let mut seen = BTreeSet::<a::TypeId>::new();
+        while let Some((bound, inherited)) = pending.pop() {
+            if !seen.insert(bound) { continue; }
+            let a::Type::Path(path) = self.source.types[bound].kind.clone() else { continue; };
+            let crate::generics::TraitIdentity::Declared(index) =
+                crate::generics::bound_identity(self.source, &path) else { continue; };
+            let mut substitutions = environment.clone();
+            if inherited { substitutions.insert("Self".to_string(), receiver); }
+            for binding in &path.bindings {
+                let owner = crate::generics::associated_binding_owner(self.source, &path, binding)?;
+                let mut declaration: Option<usize> = None;
+                for (index, candidate) in self.source.declarations.iter().enumerate() {
+                    if candidate.item == a::Item::Trait(owner) { declaration = Some(index); break; }
+                }
+                let Some(declaration) = declaration else {
+                    return Err(err(binding.span, "E_TRAIT", "associated-type equality binding has no trait identity"));
+                };
+                let root = self.root(receiver);
+                let key = (declaration, binding.name.clone());
+                let value = self.source_type(binding.value, &substitutions)?;
+                let previous = self.projections[root].get(&key).copied();
+                if let Some(previous) = previous {
+                    self.projection_bindings.insert(previous, binding.span);
+                    let previous = self.root(previous);
+                    let value = self.root(value);
+                    if previous != value && rigid && matches!(self.shape(previous), Some(Shape::Projected(_, _))) {
+                        if self.occurs(previous, value) {
+                            return Err(err(binding.span, "E_TYPE", "cyclic associated-type equality binding"));
+                        }
+                        let shape = self.shape(value);
+                        let equations = self.join_roots(previous, value, shape);
+                        for (left, right) in equations { self.unify(left, right, binding.span)?; }
+                    } else {
+                        if self.unify(previous, value, binding.span).is_err() {
+                            return Err(err(binding.span, "E_TRAIT", "conflicting associated-type equality bindings"));
+                        }
+                    }
+                } else {
+                    self.projections[root].insert(key, value);
+                }
+            }
+            for parent in &self.source.traits[index].bounds { pending.push((*parent, true)); }
         }
         Ok(())
     }
@@ -309,7 +374,13 @@ impl Infer<'_, '_> {
             return Ok(false);
         };
         let value = self.source_type(associated, &environment)?;
-        self.unify(result, value, span)?;
+        if let Err(problem) = self.unify(result, value, span) {
+            if let Some(binding) = self.projection_bindings.get(&result) {
+                return Err(err(*binding, "E_TRAIT",
+                    "associated-type equality binding does not match the selected implementation"));
+            }
+            return Err(problem);
+        }
         Ok(true)
     }
 }

@@ -1,0 +1,11 @@
+// expect: reject E_TRAIT
+// witness: {"rustCode":"E0271"}
+trait Source { type Item; }
+struct Number {}
+struct Truth {}
+impl Source for Number { type Item = i64; }
+impl Source for Truth { type Item = bool; }
+fn chain<S: Source<Item = T::Item>, T: Source<Item = i64>>(
+    _source: S, _other: T,
+) -> i64 { 42 }
+pub fn probe() -> i64 { chain(Truth {}, Number {}) }

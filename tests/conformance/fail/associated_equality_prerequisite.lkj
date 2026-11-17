@@ -1,0 +1,12 @@
+// expect: reject E_TRAIT
+// witness: {"rustCode":"E0271"}
+trait Source { type Item; }
+struct Boolean {}
+impl Source for Boolean { type Item = bool; }
+trait Compute { fn compute(self) -> i64; }
+struct Wrap<S> { source: S }
+impl<S: Source<Item = i64>> Compute for Wrap<S> {
+    fn compute(self) -> i64 { 42 }
+}
+fn execute<C: Compute>(value: C) -> i64 { value.compute() }
+pub fn probe() -> i64 { execute(Wrap { source: Boolean {} }) }

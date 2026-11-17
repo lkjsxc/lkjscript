@@ -1079,7 +1079,7 @@ impl Resolver<'_> {
             }
         };
         let mut path = Path {
-            declaration: None,
+            bindings: Vec::new(), declaration: None,
             name: name.to_string(),
             args: Vec::new(),
         };
@@ -1101,7 +1101,7 @@ impl Resolver<'_> {
         let path = self.value_path(
             scope,
             &Path {
-                declaration: None,
+                bindings: Vec::new(), declaration: None,
                 name: name.to_string(),
                 args: Vec::new(),
             },
@@ -1176,7 +1176,7 @@ impl Resolver<'_> {
 
 /// Resolve one written type/module prefix with its declaration identity.
 pub fn semantic_type_path(resolver: &Resolver<'_>, scope: ModuleId, name: &str, span: Span) -> Result<Path> {
-    let mut path = Path { declaration: None, name: name.to_string(), args: Vec::new() };
+    let mut path = Path { bindings: Vec::new(), declaration: None, name: name.to_string(), args: Vec::new() };
     resolver.resolve_path(scope, &mut path, Namespace::Type, span)?;
     Ok(path)
 }

@@ -166,41 +166,35 @@ Direct IR can express mixed per-leaf maps. [Static view](../tests/reference/stat
 
 ## Inference, generics and traits
 
-Definition checking solves structural constraints over lexical bindings/expression
-identities using rigid generic parameters and declared assumptions. Constraints
-cover assignment/return, signatures, composite literals, fields, aliases, projections
-and scalar patterns; expected types flow inward. Byte-string branches of unequal lengths need slice views when passed to &[u8]: write &b"..."[..] in each branch.
-Unsuffixed integers default only after known constraints propagate. Concrete specialization uses that checked plan.
-Insufficient generic/receiver context may require annotations: BTreeSet::new needs its element type before later insert calls, so write BTreeSet::<String>::new() for owned text. Complete Rust inference is not promised. [Inference case](../tests/reference/inference.lkj).
+Definition checking solves structural constraints over lexical binding/expression identities using rigid generic parameters and declared assumptions; specialization uses the checked plan.
+Assignments/returns, signatures, composite literals, fields, aliases, projections and scalar patterns check. Expected types flow inward; unsuffixed integers default after known constraints propagate.
+Unequal byte-string branches passed to &[u8] need &b"..."[..] views. Generic/receiver context may require annotations: use BTreeSet::<String>::new() for owned text before later insert calls.
+Complete Rust inference is not promised. [Inference case](../tests/reference/inference.lkj).
 
-A solved type is not a coercion site. Some(r), an inferred generic field and
-identity(r) move an unconstrained mutable r; later use is E_MOVE. Explicit
-Option<&mut T>, view-field or result expectations can authorize a reborrow; for repeated generic mutable arguments, pass &mut *argument explicitly.
-Aliases and nesting preserve this distinction.
+A solved type is not a coercion site: Some(r), inferred generic fields and identity(r) move unconstrained mutable r; reuse is E_MOVE.
+Explicit Option<&mut T>, view-field or result expectations can authorize a reborrow; pass &mut *argument for repeated generic mutable arguments. Aliases/nesting preserve this distinction.
 
-Traits specify methods/associated types; implementations must be unique.
-Signatures, prerequisites, supertraits, associated equations and instantiated
-arguments check. Send/Sync/Data derive structurally; Data excludes capabilities.
-Expanding generic-instantiation SCCs reject, including alias paths.
-Bounds with extra type arguments remain unsupported. Method calls become
-concrete function calls; trait spelling alone never grants builtin semantics.
+Traits specify methods/associated types; implementations must be unique. Signatures, prerequisites, supertraits and instantiated arguments check.
+Send/Sync/Data derive structurally; Data excludes capabilities. Expanding generic-instantiation SCCs reject, including alias paths.
+Method calls lower to concrete function calls; trait spelling alone grants no builtin semantics.
 
-Associated equations key on receiver variable, resolved trait and member, so
-same-spelled members of different traits remain distinct. A unique structurally
-compatible implementation may contribute conditional equations, never proof.
-Selection still validates prerequisites and does not specialize unresolved caller
-types to fit. Associated callable inputs can use declared trait evidence regardless
-of generic parameter order. Missing/ambiguous/incompatible bounds reject.
-Pending/cyclic nonstructural goals are not proofs; associated projections require
-checked child witnesses.
+Associated equations key on receiver variable, resolved declaring trait and member, including inherited members; same-spelled members of different traits remain distinct.
+Equality bindings such as `Source<Item = i64>` work in generic parameter bounds, parameter where clauses, supertraits and associated-type bounds.
+Nested binding values, repeated equal constraints and sibling generic parameters are supported.
+Cycles consisting only of unresolved projection dependencies are refused; finite relationships such as `A::Next = B, B::Next = A` are supported.
+Definitions retain equality before generic-body checking; every concrete instance checks the implementation's actual associated type.
+Implementation prerequisites and trait-method signatures retain that constraint.
+A unique structurally compatible implementation may contribute conditional equations, never proof. Selection checks prerequisites without specializing unresolved caller types to fit.
+Associated callable inputs can use declared trait evidence regardless of generic parameter order. Missing/ambiguous/incompatible bounds reject.
+Projections require checked child witnesses, and pending/cyclic nonstructural goals are not proofs.
+Conflicting, unknown, ambiguous or incompatible member bindings reject at the binding. Equalities on ordinary types or implementation trait headers reject.
+Positional trait type arguments remain unsupported, and generic associated types retain their existing limits.
+Equalities lower to ordinary concrete types/calls with no new checked-IR operation or checker authority.
+Queries retain binding syntax and resolved member references; checked function changes preserve constraints. [Equality cases](../tests/conformance/pass/associated_equality.lkj).
 
-Unused generic function/impl/default bodies and unreachable expressions check under
-rigid parameters through production elaboration and ownership checking, without
-sampling concrete types. Bounds, associated relationships, method signatures and
-explicit arguments check. Selected trait/source methods and receiver dereference
-counts survive specialization; newly applicable inherent methods cannot replace
-them. Rigid verification types/functions never reach execution.
-[Generic selection](../tests/reference/generic_selection.lkj).
+Unused generic function/impl/default bodies and unreachable expressions undergo production elaboration and ownership checking under rigid parameters, without sampling concrete types.
+Bounds, associated relationships, method signatures and explicit arguments check. Selected trait/source methods and receiver dereference counts survive specialization; newly applicable inherent methods cannot replace them.
+Rigid verification types/functions never execute. [Generic selection](../tests/reference/generic_selection.lkj).
 
 | Trait operation | Meaning and lowering | Rejection or rewrite |
 | --- | --- | --- |
@@ -213,14 +207,10 @@ them. Rigid verification types/functions never reach execution.
 | Default derive | Ordinary generated implementation using field defaults under declared bounds. | Unsupported field evidence rejects. |
 | Explicit Copy/Ord/PartialOrd/Data/Send/Sync | Not implemented as source impls. | Use supported derives/structural predicates, or ordinary methods. |
 
-Default nominal/tuple/scalar clone_from uses clone, replacement and old-owner
-cleanup; default ne negates eq and scalar eq/ne execute. Direct Box/array/Vec
-clone_from is unsupported pending forwarding/reuse/truncation/order contracts.
-General source trait-default execution is unfinished.
+Default nominal/tuple/scalar clone_from uses clone, replacement and old-owner cleanup; default ne negates eq and scalar eq/ne execute.
+Direct Box/array/Vec clone_from is unsupported pending forwarding/reuse/truncation/order contracts; general source trait-default execution is unfinished.
 
-The executable remains monomorphic. Generic definition evidence is not yet a
-complete independently replayable generic/witness IR contract; arbitrary hidden
-reference content and external mutation effects are not fully modeled there.
+Executables remain monomorphic. Generic definition evidence is not a complete independently replayable generic/witness IR contract and does not fully model arbitrary hidden reference content or external mutation effects.
 Concrete specializations still receive complete IR provenance checking.
 
 ## Declared regions and closures

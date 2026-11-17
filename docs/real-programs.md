@@ -175,7 +175,7 @@ on source 8ddb023f804d511799cdf9b9f007e14f53f61639, then with
 eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f
 on source 20412b9a49a726e48273b0a07943bb77d1117058 after the bounded-unit integration.
 
-All corresponding commands, source-entry bytes, stdout, stderr, exit statuses
+Across those four historical baseline producers, corresponding commands, source-entry bytes, stdout, stderr, exit statuses
 and signals agree across all four producers. Library inventories, projection
 identities and before/after source verification also agree. The compact evidence
 files identify every raw receipt and comparison; wall time and RSS are measured
@@ -201,10 +201,80 @@ quiescent during projection; this is not a hostile concurrent-namespace snapshot
 
 ### Ranked observed barriers
 
-Language causes are the compiler stream's queue, ahead of further optimizer work.
-Library work follows those barriers; intentional ownership and authority refusals
-retain their distinct port cost. These are first-frontier lower bounds, not all
-gaps that the complete dependency graph will expose.
+`tools/real-programs/rerank.pl` repeats the accounting from the complete probe
+receipts and the reviewed site tables below. Run it once with identical `--before`
+and `--after` inputs to reproduce the baseline, then against each new producer:
+
+```sh
+perl tools/real-programs/rerank.pl --baseline docs/real-programs-nom.json \
+  --before OLD_PROBE.json --after NEW_PROBE.json \
+  --projection PROJECTION/projection.json --source ORIGINAL_SOURCE \
+  --output NEW_COMPARISON.json
+```
+
+Use the corresponding DOM and Sōzu tables and receipts for those packages. The
+baseline table's `current_verification.receipt_sha256` pins the before receipt.
+The tool verifies captured stream hashes, unchanged probe scope and commands,
+projection identity, and complete original-file hashes for every diagnostic
+anchor. Its columns follow the compiler's UTF-8 byte convention, distinct from
+the census tool's Unicode-scalar columns.
+
+Old causes carry forward only at the same unchanged source coordinate with the
+same complete diagnostic. Recovery remains excluded only while its reviewed
+parent diagnostic also survives. New or changed diagnostics remain unclassified;
+an optional `--review` file assigns exact code/message/file-hash sites after source
+review. A reviewed recovery row also supplies its complete parent diagnostic,
+which must occur earlier in every root reporting the child. `--help` gives that
+schema. The comparison separates an exact surviving
+diagnostic, a different diagnostic at the old coordinate, and an old site no longer
+observed. The last is not proof that the surrounding program admits or runs.
+Counts re-rank the observed frontier; implementation priority is a separate
+decision. The required offline gate runs 30 controls for this accounting,
+including all three table schemas, repeated-root de-duplication, changed recovery
+parents, source substitution and receipt corruption.
+
+An offline reviewer needs the frozen baseline table, the complete before and
+after probe JSON files, the frozen `projection.json`, the original source bytes
+for their diagnostic anchors, and any explicit review JSON. The original source
+can be restored elsewhere with `--source`; leave the captured paths and identities
+inside receipts and the projection manifest unchanged. This comparison executes
+no compiler and requires no build output. It recomputes the captured stream and
+diagnosed source-file hashes and retains every input-file identity in its result.
+
+Before removing a completed branch's build output, preserve raw probe receipts
+byte-for-byte in the shared specimen evidence directory and record their retained
+paths and hashes in the current summary. Keep the baseline classification and
+explicit review inputs with the code; retain upstream originals and notices once.
+The larger comparison JSON can then be regenerated from these inputs. A receipt
+still under `target/` is a temporary candidate observation, not a durable evidence
+link. Fresh observations additionally require the original/projected trees to pass
+`project.pl --verify`; use `probe.pl --help` for its exact entry and package options.
+
+The sixth note assigns ordinary `impl Trait`, qualified associated paths,
+associated-type equality and the following ranked ordinary forms to Programs.
+Macro tokenization/expansion and Debug formatting remain with the compiler stream.
+Intentional ownership and authority refusals retain their distinct port cost.
+These are observed frontier lower bounds, not all gaps that the complete dependency
+graph will expose.
+
+The [current equality implementation](real-programs-current.json), producer
+`809c5052…0a32a9f`, repeats all twelve observations on unchanged upstream bytes.
+Its ten nom and three DOM equality-binding sites are no longer observed. Four
+qualified-path sites become independently visible in nom, so its primary frontier
+changes from 149 to 143; DOM changes from 95 to 92. Sōzu keeps its 449 classified
+sites while two previously unclassified parse rows disappear. No large root admits
+and no nom own test has run under lkjscript. All three raw receipts are retained
+in the shared specimen evidence directory at the paths and hashes in the current
+summary. Their complete diagnostic streams and exact re-ranking payloads match
+the source-reviewed candidate; the new receipt identities and measurements are recorded.
+To reproduce this frontier, add `--review docs/real-programs-equality-review.json`
+to the nom comparison. DOM and Sōzu need only their frozen baseline classifications.
+
+The producer passes 29 focused cases across 87 route checks. Its refreshed seed
+reproduces the fixed point; the full four-worker gate passes in 1,165.546 seconds
+with 5,543 fresh case requests and 128 IR mutants, zero findings. The standalone
+real-programs test also passes. [Retained proof records](real-programs-current.json)
+identify the logs; publication CI is recorded with the landing report.
 
 The tables give **observed unique sites** and physical lines in files containing
 those sites. File coverage overlaps between rows and includes inactive code;
@@ -215,25 +285,32 @@ transitive blocked-line count is used.
 
 #### nom: generic code
 
-[Exact site table](real-programs-nom.json): 457 raw rows contain 149 unique primary
-sites after excluding 79 recovery artifacts and 229 E_BLOCKED rows. Of those
-sites, 145 are upstream default-path candidates and four are inactive (three
-documentation predicates and one test macro).
+[Original site table](real-programs-nom.json) and [current frontier](real-programs-current.json):
+the equality candidate has 445 raw rows, 143 unique primary sites, 79 recovery
+artifacts and 223 E_BLOCKED rows. Of its primary sites, 139 are upstream default-path
+candidates and four remain inactive (three documentation predicates and one test
+macro). The baseline was 457 rows, 149 primary sites, 79 recovery rows and 229
+E_BLOCKED rows. The ten original equality-binding sites disappear; four newly
+exposed qualified paths explain why the net primary reduction is six.
 
 | Rank | Cause | Sites | Affected file lines | Owner / next route |
 | --- | --- | ---: | ---: | --- |
-| 1 | Macro $ tokenization | 8 | 6,418 | Language / checked expansion producer |
-| 2 | Returned impl Trait | 78 | 5,964 | Language |
-| 3 | Fully qualified associated paths | 41 | 4,360 | Language; 35 type/where/nested paths and six value calls |
-| 4 | Associated-type equality bindings | 10 | 6,004 | Language |
-| 5 | Const generics | 6 | 1,681 | Language |
-| 6 | ?Sized bound syntax | 1 | 1,044 | Language |
-| 7 | Documentation/doctest cfg predicates | 3 | 460 | Language/configuration; inactive candidates |
-| 8 | Unsafe blocks | 2 | 1,681 | Refused by design; checked indexing/ownership port |
+| 1 | Macro $ tokenization | 8 | 6,418 | Compiler / checked expansion producer |
+| 2 | Returned impl Trait | 78 | 5,964 | Programs |
+| 3 | Fully qualified associated paths | 45 | 4,360 | Programs; 38 type/where/nested paths and seven value calls |
+| 4 | Const generics | 6 | 1,681 | Programs after the three leading ordinary forms |
+| 5 | ?Sized bound syntax | 1 | 1,044 | Programs |
+| 6 | Documentation/doctest cfg predicates | 3 | 460 | Language/configuration; inactive candidates |
+| 7 | Unsafe blocks | 2 | 1,681 | Refused by design; checked indexing/ownership port |
 
-All eight lexical errors are macro $ tokens. The 28 "where predicate on a
-nonparameter" messages are recovery following impl Trait and are not another
-counted language gap. Generic associated types, heap-held views and raw offsets
+All eight lexical errors are macro $ tokens. The [explicit source review](real-programs-equality-review.json)
+classifies 51 changed recovery rows: forty where-clause messages after a rejected
+`impl Trait`, eight reparsed qualified return types, two function-body constructors
+mistaken for impl members, and one return reparsed after a qualified parameter
+failure. Another 28 recovery rows survive unchanged. These do not become new
+language causes. The four independent new sites are `src/bytes/mod.rs:941:3` and
+`src/multi/mod.rs:982:16`, `996:13`, `1440:3`.
+Generic associated types, heap-held views and raw offsets
 occur in source inventory behind this frontier; inventory does not establish an
 independently observed semantic refusal. The unsafe get_unchecked paths need
 an explicit checked implementation or an identified foreign boundary; a hand
@@ -241,28 +318,30 @@ rewrite still costs the original gap.
 
 #### DOM: parser, owned tree and selector views
 
-[Exact site table](real-programs-dom.json): 98 primary messages reduce to
-95 unique sites after three same-coordinate impl-item recovery duplicates.
-Another 99 E_BLOCKED rows are excluded. There are 88 default-path candidates and
-seven test-only sites; diagnosed files cover 5,375 physical lines in 16 files.
+[Original site table](real-programs-dom.json) and [current frontier](real-programs-current.json):
+95 candidate primary messages reduce to 92 unique sites after three same-coordinate
+impl-item recovery duplicates; 96 E_BLOCKED rows are excluded. There are 85
+default-path candidates and seven test-only sites; diagnosed files still cover
+5,375 physical lines in 16 files. The baseline was 95 unique sites and 99
+E_BLOCKED rows. All three equality sites in `src/matcher.rs` disappear without
+new independent or unclassified diagnostics.
 
 | Rank | Cause | Sites | Affected file lines | Owner / next route |
 | --- | --- | ---: | ---: | --- |
-| 1 | ns! / local_name! expansion | 21 | 1,843 | Language / producer; 16 default candidates and five test-only |
-| 2 | Debug ? formatting | 24 | 207 | Language formatting producer |
-| 3 | const fn | 14 | 2,839 | Language |
-| 4 | Fully qualified associated types | 9 | 556 | Language |
-| 5 | impl Trait arguments/results | 5 | 1,784 | Language |
-| 6 | Associated-type equality | 3 | 334 | Language |
-| 7 | Generic associated types | 2 | 844 | Language |
-| 8 | Lifetime-outlives where predicate | 1 | 917 | Language |
-| 9 | Concrete-type where left-hand side | 1 | 867 | Language |
-| 10 | Box with dyn Iterator | 1 | 917 | Language |
-| 11 | doc include_str! attribute | 1 | 45 | Language / producer |
-| 12 | Expression-statement cfg | 1 | 510 | Language/configuration |
-| 13 | rustfmt::skip; static CONTENTS | 1 + 1 | 692 each | Language; test-only |
-| 14 | std::io imported as io::Result | 1 | 115 | Library data facade; not an ambient-I/O proof |
-| 15 | Ref / RefCell / Cell | 9 | 4,073 | Refused by design; explicit ownership/tree port |
+| 1 | ns! / local_name! expansion | 21 | 1,843 | Compiler / producer; 16 default candidates and five test-only |
+| 2 | Debug ? formatting | 24 | 207 | Compiler formatting producer |
+| 3 | const fn | 14 | 2,839 | Programs after the three leading ordinary forms |
+| 4 | Fully qualified associated types | 9 | 556 | Programs |
+| 5 | impl Trait arguments/results | 5 | 1,784 | Programs |
+| 6 | Generic associated types | 2 | 844 | Language |
+| 7 | Lifetime-outlives where predicate | 1 | 917 | Programs |
+| 8 | Concrete-type where left-hand side | 1 | 867 | Programs |
+| 9 | Box with dyn Iterator | 1 | 917 | Language |
+| 10 | doc include_str! attribute | 1 | 45 | Language / producer |
+| 11 | Expression-statement cfg | 1 | 510 | Language/configuration |
+| 12 | rustfmt::skip; static CONTENTS | 1 + 1 | 692 each | Language; test-only |
+| 13 | std::io imported as io::Result | 1 | 115 | Library data facade; not an ambient-I/O proof |
+| 14 | Ref / RefCell / Cell | 9 | 4,073 | Refused by design; explicit ownership/tree port |
 
 All 24 Debug-format refusals are direct producer refusals; the compiler formatting
 parser unconditionally rejects that syntax. RefCell supports upstream's shared
@@ -273,10 +352,14 @@ count both representation and API/test adaptation.
 
 #### Sōzu: concurrent network service
 
-[Exact site table](real-programs-sozu.json): four roots produce 486 unique located
-nonblocked rows. Of these, 449 have a classified cause; 37 parse/recovery rows stay
-unclassified rather than becoming speculative gaps. Another 490 E_BLOCKED rows
-are excluded.
+[Original site table](real-programs-sozu.json) and [current frontier](real-programs-current.json):
+four roots produce 484 unique located nonblocked rows in the equality candidate.
+Of these, the same 449 have a classified cause; 35 parse/recovery rows stay
+unclassified. Another 488 E_BLOCKED rows are excluded. The baseline had 486
+nonblocked rows, including 37 unclassified, and 490 E_BLOCKED rows. The two removed
+unclassified rows point to `Iterator<Item = (K, &'a V)>` at
+`command/src/state.rs:1409:23` and `1435:27`; they are not retroactively added to
+the original ranked equality-site count.
 
 | Rank | Cause | Sites | Affected file lines | Owner / next route |
 | --- | --- | ---: | ---: | --- |
@@ -297,7 +380,7 @@ are excluded.
 | 15 | Unsafe/raw-pointer forms | 44 | 4,399 | Refused by design; ownership or foreign-process port |
 | 16 | Arc | 1 | 68 | Refused by design |
 | 17 | Same-process thread API | 2 | 209 | Refused by design / missing concurrency IR |
-| — | Parse/recovery, not independently classified | 37 | 9,351 | No new gap assigned |
+| — | Parse/recovery, not independently classified | 35 | 9,351 | No new gap assigned |
 
 The 86 ambient calls are 82 print-family uses and one each of exit, read,
 read_to_string and Instant::now. The unsafe group includes four unsafe function
@@ -326,10 +409,11 @@ count every omitted/rewritten form, and run the upstream tests. A hand rewrite
 bypassing a refusal remains charged to it.
 
 Fifteen independently reduced Rust-valid diagnostic fixtures retain specific
-exposed forms. They add 105 handwritten .lkj lines and no operation credit.
-The optional Rust witness compiles those exact final files as Rust metadata;
-the required diagnostic gate verifies precise lkjscript refusals. These are
-compiler work items, not extra sites added to the root census.
+exposed forms. Their original 105 handwritten .lkj lines earn no operation credit.
+The associated-equality reduction now checks; fourteen other reductions retain
+located refusals. The optional Rust witness compiles those exact final files as
+Rust metadata; the required diagnostic gate checks each current verdict. These
+are compiler work items, not extra sites added to the root census.
 
 ### Own-test Rust oracle and measurements
 

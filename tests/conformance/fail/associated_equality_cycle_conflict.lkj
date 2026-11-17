@@ -1,0 +1,13 @@
+// expect: reject E_TYPE
+// witness: {"rustCode":"E0271"}
+trait Node { type Next: Node; }
+struct Left {}
+struct Right {}
+struct End {}
+impl Node for Left { type Next = Right; }
+impl Node for Right { type Next = Left; }
+impl Node for End { type Next = End; }
+fn conflict<A: Node<Next = B>, B: Node<Next = A> + Node<Next = End>>(
+    _left: A, _right: B,
+) -> i64 { 42 }
+pub fn probe() -> i64 { conflict(Left {}, Right {}) }

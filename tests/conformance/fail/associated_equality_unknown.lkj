@@ -1,0 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {"rustCode":"E0220"}
+trait Source { type Item; }
+fn invalid<S: Source<Missing = i64>>(_source: S) {}
+pub fn probe() -> i64 { 42 }

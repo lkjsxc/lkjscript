@@ -38,6 +38,7 @@ trap 'exit 143' HUP TERM
 perl tools/real-programs/census.pl --self-test > "$work/census-controls.json"
 perl tools/real-programs/project.pl --self-test > "$work/projection-controls.json"
 perl tools/real-programs/probe-test.pl > "$work/probe-controls.json"
+perl tools/real-programs/rerank-test.pl > "$work/rerank-controls.json"
 perl tools/real-programs/verify-levenshtein.pl --self-test "$source" > "$work/provenance.json"
 perl -MJSON::PP -0777 -e '
     my $report=decode_json(<>);

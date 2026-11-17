@@ -1,0 +1,75 @@
+//! Source associated equalities name a resolved trait member. They are ordinary
+//! producer constraints; no equality or trait proof is added to checked IR.
+use super::*;
+
+pub(crate) fn associated_binding_owner(
+    source: &Program,
+    path: &Path,
+    binding: &AssociatedBinding,
+) -> Result<usize, Diagnostic> {
+    let TraitIdentity::Declared(first) = bound_identity(source, path) else {
+        return Err(Diagnostic::new(binding.span, "E_TRAIT",
+            "associated-type equality binding needs a declared trait"));
+    };
+    let mut pending = vec![first];
+    let mut seen = BTreeSet::<usize>::new();
+    let mut owner = None;
+    while let Some(index) = pending.pop() {
+        if !seen.insert(index) { continue; }
+        let declaration = &source.traits[index];
+        if declaration.associated.iter().any(|item| item.name == binding.name) {
+            if owner.is_some() {
+                return Err(Diagnostic::new(binding.span, "E_TRAIT",
+                    "associated-type equality binding is ambiguous between supertraits"));
+            }
+            owner = Some(index);
+        }
+        for parent in &declaration.bounds {
+            if let Type::Path(parent) = &source.types[*parent].kind {
+                if let TraitIdentity::Declared(index) = bound_identity(source, parent) {
+                    pending.push(index);
+                }
+            }
+        }
+    }
+    owner.ok_or_else(|| Diagnostic::new(binding.span, "E_TRAIT",
+        &format!("associated-type equality binding names unknown member {}", binding.name)))
+}
+
+fn parameter_bounds(parameters: &[GenericParam], bounds: &mut BTreeSet<TypeId>) {
+    for parameter in parameters {
+        if parameter.lifetime { continue; }
+        for bound in &parameter.bounds { bounds.insert(*bound); }
+    }
+}
+
+pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
+    let mut bounds = BTreeSet::<TypeId>::new();
+    for function in &source.functions { parameter_bounds(&function.generics, &mut bounds); }
+    for item in &source.structs { parameter_bounds(&item.generics, &mut bounds); }
+    for item in &source.enums { parameter_bounds(&item.generics, &mut bounds); }
+    for item in &source.aliases { parameter_bounds(&item.generics, &mut bounds); }
+    for item in &source.impls { parameter_bounds(&item.generics, &mut bounds); }
+    for item in &source.traits {
+        parameter_bounds(&item.generics, &mut bounds);
+        for bound in &item.bounds { bounds.insert(*bound); }
+        for associated in &item.associated {
+            for bound in &associated.bounds { bounds.insert(*bound); }
+        }
+    }
+    // Compatibility belongs to contextual equality checking: sibling bounds
+    // may make differently spelled projection values equal. Keep every binding
+    // for inference, rigid assumptions, and concrete witness validation.
+    for index in 0..source.types.len() {
+        let Type::Path(path) = &source.types[index].kind else { continue; };
+        if path.bindings.is_empty() { continue; }
+        if !bounds.contains(&index) {
+            return Err(Diagnostic::new(path.bindings[0].span, "E_TRAIT",
+                "associated-type equality bindings are only accepted in trait bounds"));
+        }
+        for binding in &path.bindings {
+            associated_binding_owner(source, path, binding)?;
+        }
+    }
+    Ok(())
+}

@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; fn get(self) -> Self::Item; }
+struct Number {}
+impl Source for Number { type Item = i64; fn get(self) -> i64 { 42 } }
+trait Compute { fn compute(self) -> i64; }
+struct Wrap<S> { source: S }
+impl<S: Source<Item = i64>> Compute for Wrap<S> {
+    fn compute(self) -> i64 { self.source.get() }
+}
+fn execute<C: Compute>(value: C) -> i64 { value.compute() }
+pub fn probe() -> i64 { execute(Wrap { source: Number {} }) }
