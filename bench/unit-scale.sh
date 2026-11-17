@@ -7,6 +7,7 @@ repository=$(cd "$script_root/.." && pwd -P)
 compiler=
 results=
 rungs=10000,100000,1000000,10000000
+unit_lines=10000
 memory_ceiling=8192
 time_ceiling=3600
 real=yes
@@ -16,6 +17,7 @@ while (($#)); do
         --compiler) compiler=$(realpath "$2"); shift 2 ;;
         --results) results=$(realpath -m "$2"); shift 2 ;;
         --rungs) rungs=$2; shift 2 ;;
+        --unit-lines) unit_lines=$2; shift 2 ;;
         --memory-ceiling-mib) memory_ceiling=$2; shift 2 ;;
         --time-ceiling) time_ceiling=$2; shift 2 ;;
         --skip-real) real=no; shift ;;
@@ -25,7 +27,8 @@ done
 [[ -n "$compiler" ]] || compiler="$repository/target/lkjscript"
 [[ -n "$results" ]] || results="$repository/bench/unit-scale-results"
 [[ -x "$compiler" && -d "$repository/library" && -f "$repository/src/main.lkj" ]] || exit 2
-[[ "$memory_ceiling" =~ ^[1-9][0-9]*$ && "$time_ceiling" =~ ^[1-9][0-9]*$ ]] || exit 2
+[[ "$memory_ceiling" =~ ^[1-9][0-9]*$ && "$time_ceiling" =~ ^[1-9][0-9]*$ && "$unit_lines" =~ ^[1-9][0-9]*$ ]] || exit 2
+((unit_lines >= 100)) || exit 2
 ((memory_ceiling <= 8192)) || { echo 'shared-host memory ceiling must not exceed 8192 MiB' >&2; exit 2; }
 IFS=, read -r -a sizes <<< "$rungs"
 previous=0
@@ -58,7 +61,7 @@ unset LKJSCRIPT_STORE LKJSCRIPT_STORE_KEY
     printf 'started_utc=%s\nrepository=%s\ncompiler=%s\nrungs=%s\n' "$(date -u +%FT%TZ)" "$repository" "$compiler" "$rungs"
     printf 'compiler_sha256='; sha256sum "$producer" | cut -d' ' -f1
     printf 'source_commit='; git -C "$repository" rev-parse HEAD
-    printf 'memory_ceiling_mib=%s\ntime_ceiling_s=%s\n' "$memory_ceiling" "$time_ceiling"
+    printf 'memory_ceiling_mib=%s\ntime_ceiling_s=%s\nmaximum_unit_lines=%s\n' "$memory_ceiling" "$time_ceiling" "$unit_lines"
     printf 'workload=connected explicit-unit DAG; separate from the historical shape-sampled ladder\n'
     printf 'ten_million=one cold-build invocation only; no fresh check, warm build or retry at that rung\n'
     printf 'memory=per-process virtual-address envelope; GNU time reports largest process RSS\n'
@@ -167,7 +170,7 @@ for lines in "${sizes[@]}"; do
     fi
     rung="$run/rung-$lines"
     mkdir "$rung"
-    perl "$script_root/unit-scale-generate.pl" generate "$rung/source" "$lines" > "$results/workload-$lines.summary.json"
+    perl "$script_root/unit-scale-generate.pl" generate "$rung/source" "$lines" "$unit_lines" > "$results/workload-$lines.summary.json"
     cp "$rung/source/workload.json" "$results/workload-$lines.json"
     metadata="$results/workload-$lines.json"
     expected=$(perl -MJSON::PP -0777 -ne 'print decode_json($_)->{expected_baseline}' "$metadata")

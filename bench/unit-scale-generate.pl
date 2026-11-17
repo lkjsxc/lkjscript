@@ -5,8 +5,8 @@ use Digest::SHA qw(sha256_hex);
 use JSON::PP;
 use File::Spec;
 use File::Path qw(make_path);
-my ($action, $directory, $requested) = @ARGV;
-die "usage: unit-scale-generate.pl generate NEW_DIRECTORY LINES | edit DIRECTORY\n"
+my ($action, $directory, $requested, $maximum) = @ARGV;
+die "usage: unit-scale-generate.pl generate NEW_DIRECTORY LINES [MAXIMUM_UNIT_LINES] | edit DIRECTORY\n"
     unless defined($action) && defined($directory);
 my $json = JSON::PP->new->canonical->pretty;
 sub read_file {
@@ -38,8 +38,10 @@ die "unknown action\n" unless $action eq 'generate';
 die "positive integer line count of at least 100 required\n"
     unless defined($requested) && $requested =~ /^[1-9][0-9]*$/ && $requested >= 100;
 die "generation destination already exists\n" if -e $directory || -l $directory;
+$maximum = 10_000 unless defined $maximum;
+die "maximum unit line count of at least 100 required\n"
+    unless $maximum =~ /^[1-9][0-9]*$/ && $maximum >= 100;
 make_path("$directory/units");
-my $maximum = 10_000;
 my $leaves = int(($requested + $maximum - 1) / $maximum);
 my $joins = $leaves - 1;
 my $entry_lines = 5;
@@ -190,7 +192,7 @@ my @manifest = ('const UNITS: &[&str] = &[',
     (map {qq{    "$_",}} @edges), '];', 'const ENTRY: &str = "entry::main";');
 write_file("$directory/units.lkj", join("\n", @manifest) . "\n");
 my $metadata = {
-    generator_version=>1, workload=>'connected balanced source-unit DAG; explicit package-boundary workload',
+    generator_version=>2, maximum_unit_lines=>$maximum, workload=>'connected balanced source-unit DAG; explicit package-boundary workload',
     source_lines=>$source_lines, source_bytes=>$source_bytes, manifest_lines=>scalar(@manifest),
     units=>scalar(@units), leaf_units=>$leaves, linking_units=>$join_index+1,
     largest_unit_lines=>$largest, maximum_direct_dependencies=>($leaves > 1 ? 2 : 1), dependency_depth=>$depth+1,

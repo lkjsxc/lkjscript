@@ -40,6 +40,14 @@ checked. The maximum leaf at 100,000 and 1,000,000 lines has the same size. The
 same first leaf function changes its `7i64` bias to `8i64` in both rungs.
 An exact SHA-256 guard refuses an already edited or otherwise changed specimen.
 
+`--unit-lines` varies the maximum leaf size while preserving the requested total
+line count. After the baseline 100,000-line rung, a separately labelled cohort
+with `--rungs 100000 --unit-lines 100000 --skip-real` supplies a fixed-total,
+larger-unit control. It has two units rather than twenty; its repeated module
+headers and type declarations therefore also differ. Interpret its measured
+frontier and memory as a partitioning control, not an identical-IR comparison.
+The default ladder always keeps `--unit-lines 10000`.
+
 ## Phases and limits
 
 At each rung below ten million, the runner performs:
