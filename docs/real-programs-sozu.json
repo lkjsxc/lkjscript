@@ -1,3931 +1,1179 @@
 {
-   "classifier_support" : {
-      "debug_formatting" : {
-         "fact" : "The '?' format specification returns E_UNSUPPORTED unconditionally in the observed producer source; all 21 diagnostic coordinates remain observed causes.",
-         "git_revision" : "e6d13590b7bb2d665d668727f1a8d1ee4f76c33d",
-         "lines" : [
-            81,
-            85
-         ],
-         "path" : "/home/coder/workspace/lkjscript-programs-20261115/src/syntax/formatting.lkj",
-         "sha256" : "e1699026a980f60cc0cee32666847b0e282a010eb623234d12c5b1764891ef8a"
+  "classifier_support": {
+    "debug_formatting": {
+      "fact": "The '?' format specification returns E_UNSUPPORTED unconditionally in the observed producer source; all 21 diagnostic coordinates remain observed causes.",
+      "git_revision": "e6d13590b7bb2d665d668727f1a8d1ee4f76c33d",
+      "lines": [81,85],
+      "path": "/home/coder/workspace/lkjscript-programs-20261115/src/syntax/formatting.lkj",
+      "sha256": "e1699026a980f60cc0cee32666847b0e282a010eb623234d12c5b1764891ef8a"
+    }
+  },
+  "compiler_sha256": "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+  "counting": "Unique located non-E_BLOCKED diagnostics across roots. E_PARSE is retained as recovery/unclassified, not counted as independent gaps. Direct unsupported/macro/capability diagnostics are observed sites, not an exhaustive census or proof that every site is active under upstream default cfg.",
+  "coverage": "Per-cause file totals are overlapping physical coverage, not causal dependency counts. All dependency-blocked line counts remain unknown; whole selected source is an overlapping 38,575-line upper bound.",
+  "current_verification": {
+    "check_measurements": [
+      {
+        "exit_status": 1,
+        "launcher_signal": 0,
+        "peak_rss_kib": 4396,
+        "route": "original_suffix",
+        "upstream_entry": "bin/src/main.rs",
+        "wall_seconds": 0.00204
+      },
+      {
+        "exit_status": 1,
+        "launcher_signal": 0,
+        "peak_rss_kib": 26156,
+        "route": "suffix_projection",
+        "upstream_entry": "bin/src/main.rs",
+        "wall_seconds": 0.13536
+      },
+      {
+        "exit_status": 1,
+        "launcher_signal": 0,
+        "peak_rss_kib": 4396,
+        "route": "original_suffix",
+        "upstream_entry": "lib/src/lib.rs",
+        "wall_seconds": 0.001859
+      },
+      {
+        "exit_status": 1,
+        "launcher_signal": 0,
+        "peak_rss_kib": 22060,
+        "route": "suffix_projection",
+        "upstream_entry": "lib/src/lib.rs",
+        "wall_seconds": 0.073062
+      },
+      {
+        "exit_status": 1,
+        "launcher_signal": 0,
+        "peak_rss_kib": 4396,
+        "route": "original_suffix",
+        "upstream_entry": "command/src/lib.rs",
+        "wall_seconds": 0.002135
+      },
+      {
+        "exit_status": 1,
+        "launcher_signal": 0,
+        "peak_rss_kib": 27840,
+        "route": "suffix_projection",
+        "upstream_entry": "command/src/lib.rs",
+        "wall_seconds": 0.171289
+      },
+      {
+        "exit_status": 1,
+        "launcher_signal": 0,
+        "peak_rss_kib": 4396,
+        "route": "original_suffix",
+        "upstream_entry": "e2e/src/lib.rs",
+        "wall_seconds": 0.001488
+      },
+      {
+        "exit_status": 1,
+        "launcher_signal": 0,
+        "peak_rss_kib": 24108,
+        "route": "suffix_projection",
+        "upstream_entry": "e2e/src/lib.rs",
+        "wall_seconds": 0.083027
       }
-   },
-   "compiler_sha256" : "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
-   "counting" : "Unique located non-E_BLOCKED diagnostics across roots. E_PARSE is retained as recovery/unclassified, not counted as independent gaps. Direct unsupported/macro/capability diagnostics are observed sites, not an exhaustive census or proof that every site is active under upstream default cfg.",
-   "coverage" : "Per-cause file totals are overlapping physical coverage, not causal dependency counts. All dependency-blocked line counts remain unknown; whole selected source is an overlapping 38,575-line upper bound.",
-   "current_verification" : {
-      "compiler_sha256" : "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0",
-      "complete_stdout_stderr_exit_and_source_entry_bytes_equal" : true,
-      "initial_compiler_sha256" : "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
-      "initial_receipt_sha256" : "f23038b11941f09dddd25bdd358252ed584271371649e4b74e0e55380aab250b",
-      "library_manifest_sha256" : "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
-      "observations" : 8,
-      "observer_package_label_difference" : {
-         "field" : "package.name",
-         "initial" : "sozu-workspace",
-         "repeat" : "sozu",
-         "significance" : "Observer label only; command, diagnostic bytes, status, signal, source, version, origin, root, commit and projection identities agree. Whole-package metadata objects are not identical."
-      },
-      "probe_sha256" : "afc7174933a0e67862e43d2f5d0f991a093609b86bb08c6e42ff39d6ccb9cbff",
-      "projection_manifest_sha256" : "3ad1b9efdc73fb42f61aa3cb5d0dfaf1edea4d5fecf68e4b48e4cedd01db38b0",
-      "projector_sha256" : "622f63b9d22c23beb6db3f3dd77ef2cc6a1a0aa20d8620ac36a6730baafa0f95",
-      "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-units-9db99295.json",
-      "receipt_sha256" : "d1467ef9c66586c8b11af1c8edb5c61b77c5c231b12f17ae6bd057dd7302a235",
-      "source_commit" : "d095ba7cd32a44bea7e7964767f02fa5195c3462"
-   },
-   "excluded_E_BLOCKED_rows" : 490,
-   "files" : [
+    ],
+    "comparisons": [
       {
-         "path" : "bin/src/cli.rs",
-         "physical_lines" : 879,
-         "sha256" : "c7f62b969319e7415510a5437a0672d792c6e8ca658fa1b14b72ade7f6a6d361"
+        "command_stdout_stderr_exit_signal_source_entry_equal": true,
+        "compiler_sha256": "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+        "library_and_projection_verifications_equal": true,
+        "observations_equal": 8,
+        "observer_label_difference": {
+          "after": "sozu",
+          "before": "sozu-workspace",
+          "field": "package.name"
+        },
+        "package_equal_except_observer_label": true,
+        "receipt": "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified.json",
+        "receipt_sha256": "f23038b11941f09dddd25bdd358252ed584271371649e4b74e0e55380aab250b"
       },
       {
-         "path" : "bin/src/command/mod.rs",
-         "physical_lines" : 195,
-         "sha256" : "e26472d2d1f6ff4f42f2e925b38d8a62d4d77bee4bd3b8923b0dfe4e77a83cc2"
+        "command_stdout_stderr_exit_signal_source_entry_equal": true,
+        "compiler_sha256": "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0",
+        "library_and_projection_verifications_equal": true,
+        "observations_equal": 8,
+        "observer_label_difference": null,
+        "package_equal_except_observer_label": true,
+        "receipt": "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-units-9db99295.json",
+        "receipt_sha256": "d1467ef9c66586c8b11af1c8edb5c61b77c5c231b12f17ae6bd057dd7302a235"
       },
       {
-         "path" : "bin/src/command/requests.rs",
-         "physical_lines" : 868,
-         "sha256" : "a399e526490d19158b0de8cb1f6cae1efa93eae560f5d01e711a499e4bc1aee9"
-      },
-      {
-         "path" : "bin/src/command/server.rs",
-         "physical_lines" : 880,
-         "sha256" : "face23b874029f2a9b4644d1b6883e05bd11897ce69c0dba3b82ad66435203b9"
-      },
-      {
-         "path" : "bin/src/command/sessions.rs",
-         "physical_lines" : 293,
-         "sha256" : "57f8cbd47a38dee40ce58db5eb778e6e305d578d7c1393923786e1686fc12282"
-      },
-      {
-         "path" : "bin/src/command/upgrade.rs",
-         "physical_lines" : 351,
-         "sha256" : "f2ea8709b1a7647cbbea9fab8d5bcfe6aca23397d9f19cf3bad9ef5c3873bf80"
-      },
-      {
-         "path" : "bin/src/ctl/command.rs",
-         "physical_lines" : 209,
-         "sha256" : "d44178d4ba036c9643e88e61a8982b16f9f24803c5e696911010edad2e697648"
-      },
-      {
-         "path" : "bin/src/ctl/mod.rs",
-         "physical_lines" : 230,
-         "sha256" : "84dafdf061978006c9a593a30a011911099fb28f65b936b6f14413bcbd025793"
-      },
-      {
-         "path" : "bin/src/ctl/request_builder.rs",
-         "physical_lines" : 620,
-         "sha256" : "5534efd3ca1f5a84f1903c05a512b29ace2ddf0e656dbff0ca4acf8422e35750"
-      },
-      {
-         "path" : "bin/src/main.rs",
-         "physical_lines" : 205,
-         "sha256" : "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289"
-      },
-      {
-         "path" : "bin/src/upgrade.rs",
-         "physical_lines" : 209,
-         "sha256" : "1e05cf413c7e33c9cedd80034eb9ceb5f14031767890e495cdd0de4a0c8e68f0"
-      },
-      {
-         "path" : "bin/src/util.rs",
-         "physical_lines" : 175,
-         "sha256" : "b4aaf6a07d76465f0f0120188f2bd4d63bfdc9b1d92f4f0f5ef0e59bb955ff2d"
-      },
-      {
-         "path" : "bin/src/worker.rs",
-         "physical_lines" : 307,
-         "sha256" : "f1490c398aace2fae6999bad627d26bd63255b19acebfbeaa214c9d06b3a5118"
-      },
-      {
-         "path" : "command/src/buffer/fixed.rs",
-         "physical_lines" : 323,
-         "sha256" : "c21619e41dd0602282a647e3509c47979be58eb36c923a1b40896866b0ce2765"
-      },
-      {
-         "path" : "command/src/buffer/growable.rs",
-         "physical_lines" : 314,
-         "sha256" : "b9acedae9b07e98c24f3500948a3b94dc6fc68e2a199c106b41401db8b0620b1"
-      },
-      {
-         "path" : "command/src/certificate.rs",
-         "physical_lines" : 281,
-         "sha256" : "7d45992130e33e380e4e13ac182da7a7a082dc53f84ed38e3c5e29b005db80dc"
-      },
-      {
-         "path" : "command/src/channel.rs",
-         "physical_lines" : 690,
-         "sha256" : "985f5e84ff8cb0db7268ac1ce13a7f9e99f26d31ebbc3fd94c8b6b3cf0edaeb8"
-      },
-      {
-         "path" : "command/src/config.rs",
-         "physical_lines" : 1915,
-         "sha256" : "fa1d5320ea6845a9685351e3c664e703822bb41f7b199ca7c926b9dc23104a74"
-      },
-      {
-         "path" : "command/src/lib.rs",
-         "physical_lines" : 115,
-         "sha256" : "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44"
-      },
-      {
-         "path" : "command/src/logging/access_logs.rs",
-         "physical_lines" : 188,
-         "sha256" : "d324a99126654449d4984e23284ffac903645b7415d6b1f3602d2e0960b9dad2"
-      },
-      {
-         "path" : "command/src/logging/display.rs",
-         "physical_lines" : 167,
-         "sha256" : "944bda3012e9a818e6cc983a360880acb8e3c2098c03aa72856306e8f51664d8"
-      },
-      {
-         "path" : "command/src/logging/logs.rs",
-         "physical_lines" : 1046,
-         "sha256" : "7ee1313b6d86afd29176af7f86c19121d70977d477ea7edb58c5e94891038f32"
-      },
-      {
-         "path" : "command/src/logging/mod.rs",
-         "physical_lines" : 32,
-         "sha256" : "67d6a4611e5cda65dd6d2043cf7d715db4057767db6a271424747199d1f677ae"
-      },
-      {
-         "path" : "command/src/proto/display.rs",
-         "physical_lines" : 1119,
-         "sha256" : "3500d0628a6892b706f62bff5b2b8813403d56584e367ba24f0fe27da9cd4aed"
-      },
-      {
-         "path" : "command/src/proto/mod.rs",
-         "physical_lines" : 257,
-         "sha256" : "76e5e665bae5de58b9df8ca7d66e5f500c236e591ef76ae50f1b6fd8f77579a2"
-      },
-      {
-         "path" : "command/src/ready.rs",
-         "physical_lines" : 148,
-         "sha256" : "e36219a1862eb67594d47774dc5d42427746899c78e397343254cddd7d235d10"
-      },
-      {
-         "path" : "command/src/request.rs",
-         "physical_lines" : 308,
-         "sha256" : "c80dde5be90bbfa151f8a2eda24b8e1224be3daa6c41908098cc3678c65ab5c9"
-      },
-      {
-         "path" : "command/src/response.rs",
-         "physical_lines" : 304,
-         "sha256" : "2c0a6a2ca396cff2d60960a3955962b627edc1ac279e18c435e2e6ad3aa2bb7c"
-      },
-      {
-         "path" : "command/src/scm_socket.rs",
-         "physical_lines" : 402,
-         "sha256" : "755d34e38d30f4e26f764cb7498cacc3fcee207137e3878d91f205da70ee78f5"
-      },
-      {
-         "path" : "command/src/state.rs",
-         "physical_lines" : 2198,
-         "sha256" : "8d60ac243fdc0c9cff1622fe83290ae3a264ae69e1acb9d3c701bcad1b9a15e8"
-      },
-      {
-         "path" : "command/src/writer.rs",
-         "physical_lines" : 146,
-         "sha256" : "a868aba37ea952dfc46246b44fc10f857a88c30f885111df220a498e1ab8326c"
-      },
-      {
-         "path" : "e2e/src/http_utils/mod.rs",
-         "physical_lines" : 35,
-         "sha256" : "a54e16834b31c9adcd14953b6754cab8e9034a412dc0e77cf53f8ba22c4f60bc"
-      },
-      {
-         "path" : "e2e/src/mock/async_backend.rs",
-         "physical_lines" : 147,
-         "sha256" : "92b38e50d89b61f7fb53f6cc509a33a20b8db46bd6ba25f69f3518a2a4b27048"
-      },
-      {
-         "path" : "e2e/src/mock/client.rs",
-         "physical_lines" : 129,
-         "sha256" : "6dd8f3e683be98ea03c1dc870fdb8b6d59fd557a74a0faa0bc23d922569e4e56"
-      },
-      {
-         "path" : "e2e/src/mock/https_client.rs",
-         "physical_lines" : 68,
-         "sha256" : "505d3d4aa294698f97870039ec9cafa8d7ad5d68061ba342450964472da748d1"
-      },
-      {
-         "path" : "e2e/src/mock/sync_backend.rs",
-         "physical_lines" : 200,
-         "sha256" : "a4c3ade221744056fa2b3b00b991e5f6ae9f6e1ddcdafd6e3e8b9201ae4e0683"
-      },
-      {
-         "path" : "e2e/src/sozu/worker.rs",
-         "physical_lines" : 311,
-         "sha256" : "6547993335b31ecddce0d7496286016b5416af31596d7dfaa465649cfc9601ab"
-      },
-      {
-         "path" : "lib/src/lib.rs",
-         "physical_lines" : 1260,
-         "sha256" : "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789"
+        "command_stdout_stderr_exit_signal_source_entry_equal": true,
+        "compiler_sha256": "2a76113394bb40ea5612965ed4567ca69f3f43555334bb6874b88588975cee3b",
+        "library_and_projection_verifications_equal": true,
+        "observations_equal": 8,
+        "observer_label_difference": null,
+        "package_equal_except_observer_label": true,
+        "receipt": "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-units-2a761133.json",
+        "receipt_sha256": "9d346e3d7dc99c85af786b98dfda7b60438e45d4a25823ee28835a7cb986a8b1"
       }
-   ],
-   "groups" : {
-      "ambient_effect_calls" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 7562,
-         "diagnosed_sites" : 86,
-         "diagnostic_kinds" : [
-            "E_CAPABILITY: `eprintln!` requires ambient output; help: obtain world.stderr() and call its write(bytes) method",
-            "E_CAPABILITY: `print!` requires ambient output; help: obtain world.stdout() and call its write(bytes) method",
-            "E_CAPABILITY: `println!` requires ambient output; help: obtain world.stdout() and call its write(bytes) method",
-            "E_CAPABILITY: `std::fs::read_to_string` is unavailable; help: use world.directory(path), then directory.open(name) or directory.create(name)",
-            "E_CAPABILITY: `std::fs::read` is unavailable; help: use world.directory(path), then directory.open(name) or directory.create(name)",
-            "E_CAPABILITY: `std::process::exit` is unavailable; help: accept granted ExitStatus, call .set_status(code), and return for cleanup; World.process() is broad host execution authority and does not prove a child capability subset",
-            "E_CAPABILITY: `std::time::Instant::now` is unavailable; help: this capability is not implemented; pass required values explicitly"
-         ],
-         "independent_gap_sites" : 86,
-         "owner" : "design: calls require explicit authority",
-         "rank" : 14,
-         "sites" : [
-            [
-               "bin/src/ctl/command.rs",
-               104,
-               13,
-               1,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/command.rs",
-               128,
-               13,
-               1,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/mod.rs",
-               83,
-               9,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/mod.rs",
-               84,
-               27,
-               5,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/main.rs",
-               132,
-               9,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/upgrade.rs",
-               170,
-               5,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/upgrade.rs",
-               183,
-               5,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "command/src/channel.rs",
-               321,
-               42,
-               6,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1765,
-               32,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1773,
-               22,
-               4,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1817,
-               5,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1819,
-               9,
-               1,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               119,
-               5,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               129,
-               21,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               132,
-               40,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               144,
-               21,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               146,
-               21,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               158,
-               31,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               242,
-               5,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               246,
-               9,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               253,
-               13,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               260,
-               9,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               283,
-               9,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               306,
-               13,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               422,
-               13,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               483,
-               5,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               485,
-               9,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               487,
-               5,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               489,
-               9,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               577,
-               5,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               580,
-               9,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               583,
-               5,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               586,
-               9,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               589,
-               5,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               679,
-               9,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               683,
-               5,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               716,
-               5,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               740,
-               5,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               764,
-               5,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               782,
-               5,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               859,
-               9,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               870,
-               19,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               907,
-               9,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               910,
-               13,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/state.rs",
-               1339,
-               9,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/async_backend.rs",
-               54,
-               25,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/async_backend.rs",
-               63,
-               29,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/async_backend.rs",
-               109,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/async_backend.rs",
-               110,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/async_backend.rs",
-               135,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/async_backend.rs",
-               138,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/client.rs",
-               61,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/client.rs",
-               65,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/client.rs",
-               69,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/client.rs",
-               81,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/client.rs",
-               85,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/client.rs",
-               90,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/client.rs",
-               94,
-               17,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/client.rs",
-               107,
-               25,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/client.rs",
-               110,
-               25,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/client.rs",
-               115,
-               25,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/client.rs",
-               120,
-               17,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/sync_backend.rs",
-               78,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/sync_backend.rs",
-               82,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/sync_backend.rs",
-               86,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/sync_backend.rs",
-               100,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/sync_backend.rs",
-               111,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/sync_backend.rs",
-               124,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/sync_backend.rs",
-               128,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/sync_backend.rs",
-               133,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/sync_backend.rs",
-               140,
-               17,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/sync_backend.rs",
-               153,
-               25,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/sync_backend.rs",
-               156,
-               25,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/sync_backend.rs",
-               161,
-               25,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/sync_backend.rs",
-               169,
-               17,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/sozu/worker.rs",
-               133,
-               9,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/sozu/worker.rs",
-               137,
-               17,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/sozu/worker.rs",
-               148,
-               13,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/sozu/worker.rs",
-               174,
-               9,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/sozu/worker.rs",
-               175,
-               9,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/sozu/worker.rs",
-               196,
-               9,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/sozu/worker.rs",
-               218,
-               9,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/sozu/worker.rs",
-               240,
-               13,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/sozu/worker.rs",
-               243,
-               13,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/sozu/worker.rs",
-               246,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/sozu/worker.rs",
-               250,
-               21,
-               2,
-               "e2e/src/lib.rs"
-            ]
-         ]
+    ],
+    "compiler_sha256": "eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f",
+    "complete_command_stdout_stderr_exit_signal_and_source_entry_bytes_equal": true,
+    "complete_stdout_stderr_exit_and_source_entry_bytes_equal": true,
+    "initial_compiler_sha256": "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+    "initial_receipt_sha256": "f23038b11941f09dddd25bdd358252ed584271371649e4b74e0e55380aab250b",
+    "library_inventory_and_projection_verifications_equal": true,
+    "library_manifest_sha256": "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+    "observations": 8,
+    "observer_package_label_difference": {
+      "field": "package.name",
+      "initial": "sozu-workspace",
+      "repeat": "sozu",
+      "significance": "Observer label only; command, diagnostic bytes, status, signal, source, version, origin, root, commit and projection identities agree. Whole-package metadata objects are not identical."
+    },
+    "prior_receipts_compared": 3,
+    "probe_sha256": "afc7174933a0e67862e43d2f5d0f991a093609b86bb08c6e42ff39d6ccb9cbff",
+    "projection_manifest_sha256": "3ad1b9efdc73fb42f61aa3cb5d0dfaf1edea4d5fecf68e4b48e4cedd01db38b0",
+    "projector_sha256": "622f63b9d22c23beb6db3f3dd77ef2cc6a1a0aa20d8620ac36a6730baafa0f95",
+    "receipt": "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-units-eb08fbaa.json",
+    "receipt_sha256": "3c203d7b11d97d5faa0310cace27173ba36d4ffe2e800b6dc044f29ebdc10ac4",
+    "source_commit": "20412b9a49a726e48273b0a07943bb77d1117058",
+    "timing_and_rss_are_identity_fields": false
+  },
+  "excluded_E_BLOCKED_rows": 490,
+  "files": [
+    {
+      "path": "bin/src/cli.rs",
+      "physical_lines": 879,
+      "sha256": "c7f62b969319e7415510a5437a0672d792c6e8ca658fa1b14b72ade7f6a6d361"
+    },
+    {
+      "path": "bin/src/command/mod.rs",
+      "physical_lines": 195,
+      "sha256": "e26472d2d1f6ff4f42f2e925b38d8a62d4d77bee4bd3b8923b0dfe4e77a83cc2"
+    },
+    {
+      "path": "bin/src/command/requests.rs",
+      "physical_lines": 868,
+      "sha256": "a399e526490d19158b0de8cb1f6cae1efa93eae560f5d01e711a499e4bc1aee9"
+    },
+    {
+      "path": "bin/src/command/server.rs",
+      "physical_lines": 880,
+      "sha256": "face23b874029f2a9b4644d1b6883e05bd11897ce69c0dba3b82ad66435203b9"
+    },
+    {
+      "path": "bin/src/command/sessions.rs",
+      "physical_lines": 293,
+      "sha256": "57f8cbd47a38dee40ce58db5eb778e6e305d578d7c1393923786e1686fc12282"
+    },
+    {
+      "path": "bin/src/command/upgrade.rs",
+      "physical_lines": 351,
+      "sha256": "f2ea8709b1a7647cbbea9fab8d5bcfe6aca23397d9f19cf3bad9ef5c3873bf80"
+    },
+    {
+      "path": "bin/src/ctl/command.rs",
+      "physical_lines": 209,
+      "sha256": "d44178d4ba036c9643e88e61a8982b16f9f24803c5e696911010edad2e697648"
+    },
+    {
+      "path": "bin/src/ctl/mod.rs",
+      "physical_lines": 230,
+      "sha256": "84dafdf061978006c9a593a30a011911099fb28f65b936b6f14413bcbd025793"
+    },
+    {
+      "path": "bin/src/ctl/request_builder.rs",
+      "physical_lines": 620,
+      "sha256": "5534efd3ca1f5a84f1903c05a512b29ace2ddf0e656dbff0ca4acf8422e35750"
+    },
+    {
+      "path": "bin/src/main.rs",
+      "physical_lines": 205,
+      "sha256": "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289"
+    },
+    {
+      "path": "bin/src/upgrade.rs",
+      "physical_lines": 209,
+      "sha256": "1e05cf413c7e33c9cedd80034eb9ceb5f14031767890e495cdd0de4a0c8e68f0"
+    },
+    {
+      "path": "bin/src/util.rs",
+      "physical_lines": 175,
+      "sha256": "b4aaf6a07d76465f0f0120188f2bd4d63bfdc9b1d92f4f0f5ef0e59bb955ff2d"
+    },
+    {
+      "path": "bin/src/worker.rs",
+      "physical_lines": 307,
+      "sha256": "f1490c398aace2fae6999bad627d26bd63255b19acebfbeaa214c9d06b3a5118"
+    },
+    {
+      "path": "command/src/buffer/fixed.rs",
+      "physical_lines": 323,
+      "sha256": "c21619e41dd0602282a647e3509c47979be58eb36c923a1b40896866b0ce2765"
+    },
+    {
+      "path": "command/src/buffer/growable.rs",
+      "physical_lines": 314,
+      "sha256": "b9acedae9b07e98c24f3500948a3b94dc6fc68e2a199c106b41401db8b0620b1"
+    },
+    {
+      "path": "command/src/certificate.rs",
+      "physical_lines": 281,
+      "sha256": "7d45992130e33e380e4e13ac182da7a7a082dc53f84ed38e3c5e29b005db80dc"
+    },
+    {
+      "path": "command/src/channel.rs",
+      "physical_lines": 690,
+      "sha256": "985f5e84ff8cb0db7268ac1ce13a7f9e99f26d31ebbc3fd94c8b6b3cf0edaeb8"
+    },
+    {
+      "path": "command/src/config.rs",
+      "physical_lines": 1915,
+      "sha256": "fa1d5320ea6845a9685351e3c664e703822bb41f7b199ca7c926b9dc23104a74"
+    },
+    {
+      "path": "command/src/lib.rs",
+      "physical_lines": 115,
+      "sha256": "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44"
+    },
+    {
+      "path": "command/src/logging/access_logs.rs",
+      "physical_lines": 188,
+      "sha256": "d324a99126654449d4984e23284ffac903645b7415d6b1f3602d2e0960b9dad2"
+    },
+    {
+      "path": "command/src/logging/display.rs",
+      "physical_lines": 167,
+      "sha256": "944bda3012e9a818e6cc983a360880acb8e3c2098c03aa72856306e8f51664d8"
+    },
+    {
+      "path": "command/src/logging/logs.rs",
+      "physical_lines": 1046,
+      "sha256": "7ee1313b6d86afd29176af7f86c19121d70977d477ea7edb58c5e94891038f32"
+    },
+    {
+      "path": "command/src/logging/mod.rs",
+      "physical_lines": 32,
+      "sha256": "67d6a4611e5cda65dd6d2043cf7d715db4057767db6a271424747199d1f677ae"
+    },
+    {
+      "path": "command/src/proto/display.rs",
+      "physical_lines": 1119,
+      "sha256": "3500d0628a6892b706f62bff5b2b8813403d56584e367ba24f0fe27da9cd4aed"
+    },
+    {
+      "path": "command/src/proto/mod.rs",
+      "physical_lines": 257,
+      "sha256": "76e5e665bae5de58b9df8ca7d66e5f500c236e591ef76ae50f1b6fd8f77579a2"
+    },
+    {
+      "path": "command/src/ready.rs",
+      "physical_lines": 148,
+      "sha256": "e36219a1862eb67594d47774dc5d42427746899c78e397343254cddd7d235d10"
+    },
+    {
+      "path": "command/src/request.rs",
+      "physical_lines": 308,
+      "sha256": "c80dde5be90bbfa151f8a2eda24b8e1224be3daa6c41908098cc3678c65ab5c9"
+    },
+    {
+      "path": "command/src/response.rs",
+      "physical_lines": 304,
+      "sha256": "2c0a6a2ca396cff2d60960a3955962b627edc1ac279e18c435e2e6ad3aa2bb7c"
+    },
+    {
+      "path": "command/src/scm_socket.rs",
+      "physical_lines": 402,
+      "sha256": "755d34e38d30f4e26f764cb7498cacc3fcee207137e3878d91f205da70ee78f5"
+    },
+    {
+      "path": "command/src/state.rs",
+      "physical_lines": 2198,
+      "sha256": "8d60ac243fdc0c9cff1622fe83290ae3a264ae69e1acb9d3c701bcad1b9a15e8"
+    },
+    {
+      "path": "command/src/writer.rs",
+      "physical_lines": 146,
+      "sha256": "a868aba37ea952dfc46246b44fc10f857a88c30f885111df220a498e1ab8326c"
+    },
+    {
+      "path": "e2e/src/http_utils/mod.rs",
+      "physical_lines": 35,
+      "sha256": "a54e16834b31c9adcd14953b6754cab8e9034a412dc0e77cf53f8ba22c4f60bc"
+    },
+    {
+      "path": "e2e/src/mock/async_backend.rs",
+      "physical_lines": 147,
+      "sha256": "92b38e50d89b61f7fb53f6cc509a33a20b8db46bd6ba25f69f3518a2a4b27048"
+    },
+    {
+      "path": "e2e/src/mock/client.rs",
+      "physical_lines": 129,
+      "sha256": "6dd8f3e683be98ea03c1dc870fdb8b6d59fd557a74a0faa0bc23d922569e4e56"
+    },
+    {
+      "path": "e2e/src/mock/https_client.rs",
+      "physical_lines": 68,
+      "sha256": "505d3d4aa294698f97870039ec9cafa8d7ad5d68061ba342450964472da748d1"
+    },
+    {
+      "path": "e2e/src/mock/sync_backend.rs",
+      "physical_lines": 200,
+      "sha256": "a4c3ade221744056fa2b3b00b991e5f6ae9f6e1ddcdafd6e3e8b9201ae4e0683"
+    },
+    {
+      "path": "e2e/src/sozu/worker.rs",
+      "physical_lines": 311,
+      "sha256": "6547993335b31ecddce0d7496286016b5416af31596d7dfaa465649cfc9601ab"
+    },
+    {
+      "path": "lib/src/lib.rs",
+      "physical_lines": 1260,
+      "sha256": "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789"
+    }
+  ],
+  "groups": {
+    "ambient_effect_calls": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 7562,
+      "diagnosed_sites": 86,
+      "diagnostic_kinds": ["E_CAPABILITY: `eprintln!` requires ambient output; help: obtain world.stderr() and call its write(bytes) method","E_CAPABILITY: `print!` requires ambient output; help: obtain world.stdout() and call its write(bytes) method","E_CAPABILITY: `println!` requires ambient output; help: obtain world.stdout() and call its write(bytes) method","E_CAPABILITY: `std::fs::read_to_string` is unavailable; help: use world.directory(path), then directory.open(name) or directory.create(name)","E_CAPABILITY: `std::fs::read` is unavailable; help: use world.directory(path), then directory.open(name) or directory.create(name)","E_CAPABILITY: `std::process::exit` is unavailable; help: accept granted ExitStatus, call .set_status(code), and return for cleanup; World.process() is broad host execution authority and does not prove a child capability subset","E_CAPABILITY: `std::time::Instant::now` is unavailable; help: this capability is not implemented; pass required values explicitly"],
+      "independent_gap_sites": 86,
+      "owner": "design: calls require explicit authority",
+      "rank": 14,
+      "sites": [
+        ["bin/src/ctl/command.rs",104,13,1,"bin/src/main.rs"],
+        ["bin/src/ctl/command.rs",128,13,1,"bin/src/main.rs"],
+        ["bin/src/ctl/mod.rs",83,9,2,"bin/src/main.rs"],
+        ["bin/src/ctl/mod.rs",84,27,5,"bin/src/main.rs"],
+        ["bin/src/main.rs",132,9,0,"bin/src/main.rs"],
+        ["bin/src/upgrade.rs",170,5,2,"bin/src/main.rs"],
+        ["bin/src/upgrade.rs",183,5,2,"bin/src/main.rs"],
+        ["command/src/channel.rs",321,42,6,"command/src/lib.rs"],
+        ["command/src/config.rs",1765,32,3,"command/src/lib.rs"],
+        ["command/src/config.rs",1773,22,4,"command/src/lib.rs"],
+        ["command/src/config.rs",1817,5,2,"command/src/lib.rs"],
+        ["command/src/config.rs",1819,9,1,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",119,5,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",129,21,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",132,40,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",144,21,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",146,21,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",158,31,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",242,5,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",246,9,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",253,13,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",260,9,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",283,9,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",306,13,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",422,13,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",483,5,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",485,9,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",487,5,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",489,9,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",577,5,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",580,9,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",583,5,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",586,9,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",589,5,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",679,9,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",683,5,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",716,5,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",740,5,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",764,5,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",782,5,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",859,9,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",870,19,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",907,9,2,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",910,13,2,"command/src/lib.rs"],
+        ["command/src/state.rs",1339,9,2,"command/src/lib.rs"],
+        ["e2e/src/mock/async_backend.rs",54,25,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/async_backend.rs",63,29,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/async_backend.rs",109,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/async_backend.rs",110,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/async_backend.rs",135,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/async_backend.rs",138,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/client.rs",61,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/client.rs",65,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/client.rs",69,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/client.rs",81,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/client.rs",85,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/client.rs",90,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/client.rs",94,17,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/client.rs",107,25,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/client.rs",110,25,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/client.rs",115,25,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/client.rs",120,17,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/sync_backend.rs",78,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/sync_backend.rs",82,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/sync_backend.rs",86,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/sync_backend.rs",100,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/sync_backend.rs",111,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/sync_backend.rs",124,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/sync_backend.rs",128,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/sync_backend.rs",133,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/sync_backend.rs",140,17,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/sync_backend.rs",153,25,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/sync_backend.rs",156,25,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/sync_backend.rs",161,25,2,"e2e/src/lib.rs"],
+        ["e2e/src/mock/sync_backend.rs",169,17,2,"e2e/src/lib.rs"],
+        ["e2e/src/sozu/worker.rs",133,9,2,"e2e/src/lib.rs"],
+        ["e2e/src/sozu/worker.rs",137,17,2,"e2e/src/lib.rs"],
+        ["e2e/src/sozu/worker.rs",148,13,2,"e2e/src/lib.rs"],
+        ["e2e/src/sozu/worker.rs",174,9,2,"e2e/src/lib.rs"],
+        ["e2e/src/sozu/worker.rs",175,9,2,"e2e/src/lib.rs"],
+        ["e2e/src/sozu/worker.rs",196,9,2,"e2e/src/lib.rs"],
+        ["e2e/src/sozu/worker.rs",218,9,2,"e2e/src/lib.rs"],
+        ["e2e/src/sozu/worker.rs",240,13,2,"e2e/src/lib.rs"],
+        ["e2e/src/sozu/worker.rs",243,13,2,"e2e/src/lib.rs"],
+        ["e2e/src/sozu/worker.rs",246,21,2,"e2e/src/lib.rs"],
+        ["e2e/src/sozu/worker.rs",250,21,2,"e2e/src/lib.rs"]
+      ]
+    },
+    "associated_constants": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 148,
+      "diagnosed_sites": 6,
+      "diagnostic_kinds": ["E_UNSUPPORTED: unsupported construct: impl item"],
+      "independent_gap_sites": 6,
+      "owner": "language",
+      "rank": 5,
+      "sites": [
+        ["command/src/ready.rs",8,9,0,"command/src/lib.rs"],
+        ["command/src/ready.rs",9,9,0,"command/src/lib.rs"],
+        ["command/src/ready.rs",10,9,0,"command/src/lib.rs"],
+        ["command/src/ready.rs",11,9,0,"command/src/lib.rs"],
+        ["command/src/ready.rs",13,9,0,"command/src/lib.rs"],
+        ["command/src/ready.rs",14,9,0,"command/src/lib.rs"]
+      ]
+    },
+    "async_block": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 68,
+      "diagnosed_sites": 1,
+      "diagnostic_kinds": ["E_UNSUPPORTED: unsupported construct: async"],
+      "independent_gap_sites": 1,
+      "owner": "language producer; runtime design separately needed",
+      "rank": 8,
+      "sites": [
+        ["e2e/src/mock/https_client.rs",52,17,0,"e2e/src/lib.rs"]
+      ]
+    },
+    "at_pattern_lexing": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 167,
+      "diagnosed_sites": 1,
+      "diagnostic_kinds": ["E_LEX: unsupported character in source"],
+      "independent_gap_sites": 1,
+      "owner": "language",
+      "rank": 7,
+      "sites": [
+        ["command/src/logging/display.rs",140,17,0,"command/src/lib.rs"]
+      ]
+    },
+    "build_generated_source": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 257,
+      "diagnosed_sites": 1,
+      "diagnostic_kinds": ["E_MODULE_MISSING: module command needs command/src/proto/command.lkj or command/src/proto/command/mod.lkj"],
+      "independent_gap_sites": 1,
+      "owner": "package/build producer",
+      "rank": 10,
+      "sites": [
+        ["command/src/proto/mod.rs",10,5,0,"command/src/lib.rs"]
+      ]
+    },
+    "compile_time_evaluation": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 1092,
+      "diagnosed_sites": 2,
+      "diagnostic_kinds": ["E_UNSUPPORTED: unsupported construct: const fn","E_UNSUPPORTED: unsupported construct: non-literal array length"],
+      "independent_gap_sites": 2,
+      "owner": "language",
+      "rank": 6,
+      "sites": [
+        ["command/src/channel.rs",461,11,0,"command/src/lib.rs"],
+        ["command/src/scm_socket.rs",111,39,1,"command/src/lib.rs"]
+      ]
+    },
+    "debug_formatting": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 7344,
+      "diagnosed_sites": 21,
+      "diagnostic_kinds": ["E_UNSUPPORTED: Debug formatting needs its source trait implementation"],
+      "independent_gap_sites": 21,
+      "owner": "language / format producer; later Debug trait or derive work is not yet reached",
+      "rank": 3,
+      "sites": [
+        ["bin/src/command/requests.rs",686,27,0,"bin/src/main.rs"],
+        ["bin/src/command/upgrade.rs",115,39,0,"bin/src/main.rs"],
+        ["bin/src/command/upgrade.rs",202,43,0,"bin/src/main.rs"],
+        ["bin/src/command/upgrade.rs",213,21,0,"bin/src/main.rs"],
+        ["command/src/certificate.rs",159,36,0,"command/src/lib.rs"],
+        ["command/src/config.rs",1676,50,0,"command/src/lib.rs"],
+        ["command/src/config.rs",1685,49,0,"command/src/lib.rs"],
+        ["command/src/config.rs",1694,49,0,"command/src/lib.rs"],
+        ["command/src/config.rs",1715,47,0,"command/src/lib.rs"],
+        ["command/src/config.rs",1722,44,0,"command/src/lib.rs"],
+        ["command/src/config.rs",1739,48,0,"command/src/lib.rs"],
+        ["command/src/config.rs",1748,40,0,"command/src/lib.rs"],
+        ["command/src/config.rs",1755,47,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",39,9,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1034,36,0,"command/src/lib.rs"],
+        ["command/src/request.rs",135,9,0,"command/src/lib.rs"],
+        ["command/src/response.rs",212,9,0,"command/src/lib.rs"],
+        ["command/src/response.rs",287,9,0,"command/src/lib.rs"],
+        ["command/src/response.rs",293,9,0,"command/src/lib.rs"],
+        ["command/src/state.rs",465,21,0,"command/src/lib.rs"],
+        ["command/src/state.rs",482,25,0,"command/src/lib.rs"]
+      ]
+    },
+    "external_crate_binding": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 320,
+      "diagnosed_sites": 4,
+      "diagnostic_kinds": ["E_UNSUPPORTED: unsupported construct: extern"],
+      "independent_gap_sites": 4,
+      "owner": "package/language",
+      "rank": 9,
+      "sites": [
+        ["bin/src/main.rs",27,1,0,"bin/src/main.rs"],
+        ["bin/src/main.rs",29,1,0,"bin/src/main.rs"],
+        ["bin/src/main.rs",31,1,0,"bin/src/main.rs"],
+        ["command/src/lib.rs",4,1,0,"command/src/lib.rs"]
+      ]
+    },
+    "macro_expansion": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 11224,
+      "diagnosed_sites": 235,
+      "diagnostic_kinds": ["E_UNSUPPORTED_MACRO: unsupported macro: cell!","E_UNSUPPORTED_MACRO: unsupported macro: cmsg_space!","E_UNSUPPORTED_MACRO: unsupported macro: debug!","E_UNSUPPORTED_MACRO: unsupported macro: error!","E_UNSUPPORTED_MACRO: unsupported macro: gauge!","E_UNSUPPORTED_MACRO: unsupported macro: incr!","E_UNSUPPORTED_MACRO: unsupported macro: info!","E_UNSUPPORTED_MACRO: unsupported macro: option_env!","E_UNSUPPORTED_MACRO: unsupported macro: row!","E_UNSUPPORTED_MACRO: unsupported macro: trace!","E_UNSUPPORTED_MACRO: unsupported macro: unimplemented!","E_UNSUPPORTED_MACRO: unsupported macro: warn!"],
+      "independent_gap_sites": 235,
+      "owner": "language",
+      "rank": 1,
+      "sites": [
+        ["bin/src/command/mod.rs",65,5,6,"bin/src/main.rs"],
+        ["bin/src/command/mod.rs",80,9,6,"bin/src/main.rs"],
+        ["bin/src/command/mod.rs",93,5,6,"bin/src/main.rs"],
+        ["bin/src/command/mod.rs",97,5,6,"bin/src/main.rs"],
+        ["bin/src/command/mod.rs",104,5,6,"bin/src/main.rs"],
+        ["bin/src/command/mod.rs",113,5,6,"bin/src/main.rs"],
+        ["bin/src/command/mod.rs",121,5,6,"bin/src/main.rs"],
+        ["bin/src/command/mod.rs",127,9,3,"bin/src/main.rs"],
+        ["bin/src/command/mod.rs",144,9,3,"bin/src/main.rs"],
+        ["bin/src/command/mod.rs",167,9,3,"bin/src/main.rs"],
+        ["bin/src/command/mod.rs",184,5,9,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",40,17,3,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",140,5,2,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",185,5,2,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",201,5,2,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",222,5,2,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",242,5,2,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",251,5,6,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",346,13,6,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",352,13,6,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",378,13,2,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",380,13,2,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",409,27,11,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",618,5,6,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",655,13,9,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",663,21,2,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",782,21,11,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",163,23,11,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",221,13,3,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",226,9,6,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",227,9,2,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",280,17,3,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",298,9,2,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",364,13,9,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",365,13,9,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",366,13,9,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",369,31,3,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",393,25,9,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",399,37,2,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",403,37,6,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",404,37,2,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",451,13,11,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",458,17,11,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",474,13,2,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",476,13,2,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",613,9,4,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",614,9,4,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",615,9,4,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",710,17,3,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",734,13,2,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",751,17,6,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",752,17,9,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",755,17,3,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",780,9,6,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",783,17,3,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",800,17,3,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",806,23,6,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",814,9,9,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",827,21,3,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",848,25,3,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",44,13,3,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",62,9,9,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",67,21,3,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",79,9,6,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",89,9,6,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",99,9,3,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",109,9,6,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",123,9,6,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",137,21,6,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",144,21,6,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",151,21,3,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",158,21,6,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",169,21,6,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",216,9,9,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",218,13,3,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",232,9,9,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",239,13,2,"bin/src/main.rs"],
+        ["bin/src/command/sessions.rs",274,9,9,"bin/src/main.rs"],
+        ["bin/src/command/upgrade.rs",58,5,6,"bin/src/main.rs"],
+        ["bin/src/command/upgrade.rs",257,23,11,"bin/src/main.rs"],
+        ["bin/src/command/upgrade.rs",337,5,2,"bin/src/main.rs"],
+        ["bin/src/ctl/command.rs",47,25,2,"bin/src/main.rs"],
+        ["bin/src/ctl/command.rs",53,25,6,"bin/src/main.rs"],
+        ["bin/src/ctl/command.rs",113,29,2,"bin/src/main.rs"],
+        ["bin/src/ctl/command.rs",139,9,2,"bin/src/main.rs"],
+        ["bin/src/ctl/command.rs",142,9,6,"bin/src/main.rs"],
+        ["bin/src/ctl/command.rs",145,9,6,"bin/src/main.rs"],
+        ["bin/src/ctl/command.rs",156,9,6,"bin/src/main.rs"],
+        ["bin/src/ctl/command.rs",161,13,6,"bin/src/main.rs"],
+        ["bin/src/ctl/command.rs",201,17,3,"bin/src/main.rs"],
+        ["bin/src/ctl/command.rs",205,9,6,"bin/src/main.rs"],
+        ["bin/src/ctl/mod.rs",91,9,2,"bin/src/main.rs"],
+        ["bin/src/ctl/mod.rs",106,9,2,"bin/src/main.rs"],
+        ["bin/src/ctl/request_builder.rs",31,9,2,"bin/src/main.rs"],
+        ["bin/src/ctl/request_builder.rs",37,9,2,"bin/src/main.rs"],
+        ["bin/src/ctl/request_builder.rs",47,9,2,"bin/src/main.rs"],
+        ["bin/src/ctl/request_builder.rs",53,9,2,"bin/src/main.rs"],
+        ["bin/src/ctl/request_builder.rs",59,9,2,"bin/src/main.rs"],
+        ["bin/src/ctl/request_builder.rs",65,9,2,"bin/src/main.rs"],
+        ["bin/src/ctl/request_builder.rs",78,9,2,"bin/src/main.rs"],
+        ["bin/src/ctl/request_builder.rs",93,9,2,"bin/src/main.rs"],
+        ["bin/src/ctl/request_builder.rs",617,9,2,"bin/src/main.rs"],
+        ["bin/src/main.rs",148,9,11,"bin/src/main.rs"],
+        ["bin/src/main.rs",198,9,5,"bin/src/main.rs"],
+        ["bin/src/upgrade.rs",86,5,9,"bin/src/main.rs"],
+        ["bin/src/upgrade.rs",97,5,6,"bin/src/main.rs"],
+        ["bin/src/upgrade.rs",124,5,6,"bin/src/main.rs"],
+        ["bin/src/upgrade.rs",167,9,3,"bin/src/main.rs"],
+        ["bin/src/upgrade.rs",204,5,6,"bin/src/main.rs"],
+        ["bin/src/upgrade.rs",207,5,6,"bin/src/main.rs"],
+        ["bin/src/util.rs",112,17,7,"bin/src/main.rs"],
+        ["bin/src/worker.rs",125,5,9,"bin/src/main.rs"],
+        ["bin/src/worker.rs",130,5,6,"bin/src/main.rs"],
+        ["bin/src/worker.rs",175,5,6,"bin/src/main.rs"],
+        ["bin/src/worker.rs",177,5,6,"bin/src/main.rs"],
+        ["bin/src/worker.rs",194,5,9,"bin/src/main.rs"],
+        ["bin/src/worker.rs",246,9,3,"bin/src/main.rs"],
+        ["bin/src/worker.rs",249,5,6,"bin/src/main.rs"],
+        ["bin/src/worker.rs",250,5,2,"bin/src/main.rs"],
+        ["command/src/buffer/fixed.rs",50,9,10,"command/src/lib.rs"],
+        ["command/src/channel.rs",213,13,9,"command/src/lib.rs"],
+        ["command/src/config.rs",526,21,3,"command/src/lib.rs"],
+        ["command/src/config.rs",534,21,3,"command/src/lib.rs"],
+        ["command/src/config.rs",545,25,3,"command/src/lib.rs"],
+        ["command/src/config.rs",869,29,3,"command/src/lib.rs"],
+        ["command/src/config.rs",1375,41,2,"command/src/lib.rs"],
+        ["command/src/config.rs",1376,41,2,"command/src/lib.rs"],
+        ["command/src/config.rs",1709,9,2,"command/src/lib.rs"],
+        ["command/src/config.rs",1712,9,2,"command/src/lib.rs"],
+        ["command/src/config.rs",1719,9,2,"command/src/lib.rs"],
+        ["command/src/config.rs",1730,9,2,"command/src/lib.rs"],
+        ["command/src/config.rs",1737,17,6,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",220,19,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",226,19,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",350,36,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",353,28,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",357,30,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",358,30,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",361,30,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",362,30,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",366,27,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",394,9,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",411,17,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",447,39,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",457,28,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",465,17,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",472,30,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",495,5,9,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",500,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",501,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",511,27,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",531,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",532,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",542,27,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",562,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",563,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",565,27,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",594,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",595,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",605,27,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",687,18,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",692,18,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",697,18,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",705,26,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",707,26,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",721,42,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",724,18,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",725,18,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",729,26,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",731,26,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",745,42,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",748,18,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",749,18,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",753,26,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",755,26,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",767,28,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",771,26,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",773,26,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",786,13,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",796,26,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",798,26,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",814,27,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",816,21,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",818,17,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",835,28,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",837,22,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",842,22,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",844,22,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",875,19,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",893,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",919,19,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",922,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",969,57,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",971,25,0,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1012,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1013,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1017,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1018,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1019,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1020,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1021,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1022,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1023,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1037,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1038,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1042,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1043,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1044,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1045,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1049,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1050,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1051,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1052,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1053,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1054,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1055,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1056,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1057,23,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1067,27,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1070,27,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1073,27,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1076,27,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1079,27,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1082,27,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1085,27,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1088,27,8,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",1091,27,8,"command/src/lib.rs"],
+        ["command/src/scm_socket.rs",116,9,2,"command/src/lib.rs"],
+        ["command/src/scm_socket.rs",165,13,2,"command/src/lib.rs"],
+        ["command/src/scm_socket.rs",172,9,2,"command/src/lib.rs"],
+        ["command/src/scm_socket.rs",184,24,1,"command/src/lib.rs"],
+        ["command/src/state.rs",384,13,6,"command/src/lib.rs"],
+        ["command/src/state.rs",1157,9,6,"command/src/lib.rs"],
+        ["command/src/state.rs",1369,17,6,"command/src/lib.rs"],
+        ["e2e/src/http_utils/mod.rs",33,14,10,"e2e/src/lib.rs"]
+      ]
+    },
+    "macro_token_lexing": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 2306,
+      "diagnosed_sites": 2,
+      "diagnostic_kinds": ["E_LEX: unsupported character in source"],
+      "independent_gap_sites": 2,
+      "owner": "language",
+      "rank": 2,
+      "sites": [
+        ["command/src/logging/logs.rs",299,27,0,"command/src/lib.rs"],
+        ["lib/src/lib.rs",416,9,0,"lib/src/lib.rs"]
+      ]
+    },
+    "parse_recovery_or_unclassified": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 9351,
+      "diagnosed_sites": 37,
+      "diagnostic_kinds": ["E_PARSE: expected `;` after expression","E_PARSE: expected `>`","E_PARSE: expected `]`, found `::`","E_PARSE: expected an identifier"],
+      "independent_gap_sites": null,
+      "owner": "unclassified; no independent gap count",
+      "rank": null,
+      "sites": [
+        ["bin/src/cli.rs",48,5,3,"bin/src/main.rs"],
+        ["bin/src/cli.rs",192,5,3,"bin/src/main.rs"],
+        ["bin/src/cli.rs",245,5,3,"bin/src/main.rs"],
+        ["bin/src/cli.rs",264,5,3,"bin/src/main.rs"],
+        ["bin/src/cli.rs",307,5,3,"bin/src/main.rs"],
+        ["bin/src/cli.rs",345,5,3,"bin/src/main.rs"],
+        ["bin/src/cli.rs",400,5,3,"bin/src/main.rs"],
+        ["bin/src/cli.rs",460,5,3,"bin/src/main.rs"],
+        ["bin/src/cli.rs",500,5,3,"bin/src/main.rs"],
+        ["bin/src/cli.rs",521,5,3,"bin/src/main.rs"],
+        ["bin/src/cli.rs",599,5,3,"bin/src/main.rs"],
+        ["bin/src/cli.rs",684,5,3,"bin/src/main.rs"],
+        ["bin/src/cli.rs",734,5,3,"bin/src/main.rs"],
+        ["bin/src/cli.rs",828,5,3,"bin/src/main.rs"],
+        ["bin/src/command/mod.rs",27,5,3,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",115,5,3,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",171,5,3,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",490,5,3,"bin/src/main.rs"],
+        ["bin/src/ctl/mod.rs",24,5,3,"bin/src/main.rs"],
+        ["bin/src/main.rs",66,5,3,"bin/src/main.rs"],
+        ["bin/src/main.rs",84,6,2,"bin/src/main.rs"],
+        ["bin/src/upgrade.rs",34,5,3,"bin/src/main.rs"],
+        ["bin/src/upgrade.rs",126,38,0,"bin/src/main.rs"],
+        ["bin/src/util.rs",21,5,3,"bin/src/main.rs"],
+        ["bin/src/worker.rs",42,5,3,"bin/src/main.rs"],
+        ["bin/src/worker.rs",253,50,0,"bin/src/main.rs"],
+        ["command/src/certificate.rs",24,5,3,"command/src/lib.rs"],
+        ["command/src/channel.rs",20,5,3,"command/src/lib.rs"],
+        ["command/src/config.rs",193,5,3,"command/src/lib.rs"],
+        ["command/src/logging/access_logs.rs",35,8,3,"command/src/lib.rs"],
+        ["command/src/logging/mod.rs",18,5,3,"command/src/lib.rs"],
+        ["command/src/proto/mod.rs",17,5,3,"command/src/lib.rs"],
+        ["command/src/request.rs",27,5,3,"command/src/lib.rs"],
+        ["command/src/scm_socket.rs",21,5,3,"command/src/lib.rs"],
+        ["command/src/state.rs",37,5,3,"command/src/lib.rs"],
+        ["command/src/state.rs",1409,23,1,"command/src/lib.rs"],
+        ["command/src/state.rs",1435,27,1,"command/src/lib.rs"]
+      ]
+    },
+    "pure_standard_data_types": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 5106,
+      "diagnosed_sites": 14,
+      "diagnostic_kinds": ["E_CAPABILITY: `std::io::ErrorKind` is unavailable; help: use world.stdin(), world.stdout(), or world.stderr() and pass that capability explicitly","E_CAPABILITY: `std::io::Error` is unavailable; help: use world.stdin(), world.stdout(), or world.stderr() and pass that capability explicitly","E_CAPABILITY: `std::io::IoSlice` is unavailable; help: use world.stdin(), world.stdout(), or world.stderr() and pass that capability explicitly","E_CAPABILITY: `std::net::AddrParseError` is unavailable; help: this capability is not implemented; pass required values explicitly","E_CAPABILITY: `std::net::Shutdown::Both` is unavailable; help: this capability is not implemented; pass required values explicitly","E_CAPABILITY: `std::net::SocketAddr` is unavailable; help: this capability is not implemented; pass required values explicitly","E_CAPABILITY: `std::time::Duration` is unavailable; help: this capability is not implemented; pass required values explicitly"],
+      "independent_gap_sites": 14,
+      "owner": "library plus language namespace routing",
+      "rank": 11,
+      "sites": [
+        ["bin/src/cli.rs",1,49,5,"bin/src/main.rs"],
+        ["bin/src/cli.rs",39,32,1,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",4,25,1,"bin/src/main.rs"],
+        ["bin/src/ctl/command.rs",1,24,6,"bin/src/main.rs"],
+        ["bin/src/ctl/mod.rs",4,24,6,"bin/src/main.rs"],
+        ["bin/src/main.rs",78,25,1,"bin/src/main.rs"],
+        ["command/src/logging/access_logs.rs",1,68,5,"command/src/lib.rs"],
+        ["command/src/logging/mod.rs",11,29,3,"command/src/lib.rs"],
+        ["command/src/proto/display.rs",4,20,5,"command/src/lib.rs"],
+        ["command/src/response.rs",1,69,5,"command/src/lib.rs"],
+        ["command/src/scm_socket.rs",2,17,2,"command/src/lib.rs"],
+        ["e2e/src/mock/async_backend.rs",2,19,0,"e2e/src/lib.rs"],
+        ["e2e/src/mock/sync_backend.rs",178,75,4,"e2e/src/lib.rs"],
+        ["e2e/src/sozu/worker.rs",2,20,5,"e2e/src/lib.rs"]
+      ]
+    },
+    "same_process_thread_api": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 209,
+      "diagnosed_sites": 2,
+      "diagnostic_kinds": ["E_CAPABILITY: `std::thread::sleep` is unavailable; help: this capability is not implemented; pass required values explicitly","E_CAPABILITY: `std::thread::spawn` is unavailable; help: this capability is not implemented; pass required values explicitly"],
+      "independent_gap_sites": 2,
+      "owner": "design and missing IR concurrency",
+      "rank": 17,
+      "sites": [
+        ["bin/src/ctl/command.rs",125,52,0,"bin/src/main.rs"],
+        ["bin/src/ctl/command.rs",164,49,1,"bin/src/main.rs"]
+      ]
+    },
+    "shared_heap_ownership": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 68,
+      "diagnosed_sites": 1,
+      "diagnostic_kinds": ["E_CAPABILITY: `std::sync::Arc` is unavailable; help: use owned values and indices; shared interior mutation is not supported"],
+      "independent_gap_sites": 1,
+      "owner": "design: owner/index or a new checked sharing contract",
+      "rank": 16,
+      "sites": [
+        ["e2e/src/mock/https_client.rs",1,20,0,"e2e/src/lib.rs"]
+      ]
+    },
+    "standard_io_traits": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 1802,
+      "diagnosed_sites": 6,
+      "diagnostic_kinds": ["E_CAPABILITY: `std::io::Read` is unavailable; help: use world.stdin(), world.stdout(), or world.stderr() and pass that capability explicitly","E_CAPABILITY: `std::io` is unavailable; help: use world.stdin(), world.stdout(), or world.stderr() and pass that capability explicitly"],
+      "independent_gap_sites": 6,
+      "owner": "library plus language namespace routing; imports are not proof of ambient I/O",
+      "rank": 12,
+      "sites": [
+        ["command/src/buffer/fixed.rs",3,14,1,"command/src/lib.rs"],
+        ["command/src/buffer/growable.rs",3,14,1,"command/src/lib.rs"],
+        ["command/src/channel.rs",4,14,1,"command/src/lib.rs"],
+        ["command/src/writer.rs",1,19,1,"command/src/lib.rs"],
+        ["e2e/src/mock/client.rs",2,14,0,"e2e/src/lib.rs"],
+        ["e2e/src/mock/sync_backend.rs",3,14,0,"e2e/src/lib.rs"]
+      ]
+    },
+    "standard_os_imports": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 6175,
+      "diagnosed_sites": 8,
+      "diagnostic_kinds": ["E_CAPABILITY: `std::env` is unavailable; help: accept granted Arguments for .args() bytes or Environment for .get() of its one explicitly named variable; no ambient environment lookup or enumeration","E_CAPABILITY: `std::fs::File` is unavailable; help: use world.directory(path), then directory.open(name) or directory.create(name)","E_CAPABILITY: `std::fs::read_link` is unavailable; help: use world.directory(path), then directory.open(name) or directory.create(name)","E_CAPABILITY: `std::fs` is unavailable; help: use world.directory(path), then directory.open(name) or directory.create(name)"],
+      "independent_gap_sites": 8,
+      "owner": "library adapter plus explicit authority; imported names are not execution sites",
+      "rank": 13,
+      "sites": [
+        ["bin/src/command/mod.rs",7,7,3,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",3,8,0,"bin/src/main.rs"],
+        ["bin/src/upgrade.rs",2,13,1,"bin/src/main.rs"],
+        ["bin/src/util.rs",3,19,2,"bin/src/main.rs"],
+        ["bin/src/worker.rs",4,13,1,"bin/src/main.rs"],
+        ["command/src/config.rs",52,8,0,"command/src/lib.rs"],
+        ["command/src/request.rs",4,13,1,"command/src/lib.rs"],
+        ["command/src/state.rs",6,13,1,"command/src/lib.rs"]
+      ]
+    },
+    "trait_object_dispatch": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 2622,
+      "diagnosed_sites": 15,
+      "diagnostic_kinds": ["E_UNSUPPORTED: unsupported construct: dyn"],
+      "independent_gap_sites": 15,
+      "owner": "language",
+      "rank": 4,
+      "sites": [
+        ["bin/src/command/requests.rs",289,40,0,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",392,40,0,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",471,40,0,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",530,40,0,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",708,40,0,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",766,40,0,"bin/src/main.rs"],
+        ["bin/src/command/requests.rs",846,40,0,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",77,40,0,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",122,14,0,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",675,41,0,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",691,18,0,"bin/src/main.rs"],
+        ["bin/src/command/upgrade.rs",184,40,0,"bin/src/main.rs"],
+        ["command/src/request.rs",217,32,0,"command/src/lib.rs"],
+        ["e2e/src/mock/async_backend.rs",26,30,0,"e2e/src/lib.rs"],
+        ["e2e/src/mock/https_client.rs",23,21,0,"e2e/src/lib.rs"]
+      ]
+    },
+    "unsafe_or_raw_pointer": {
+      "dependency_blocked_lines": null,
+      "diagnosed_file_coverage_lines": 4399,
+      "diagnosed_sites": 44,
+      "diagnostic_kinds": ["E_UNSUPPORTED: unsupported construct: *","E_UNSUPPORTED: unsupported construct: impl item","E_UNSUPPORTED: unsupported construct: trait item","E_UNSUPPORTED: unsupported construct: unsafe"],
+      "independent_gap_sites": 44,
+      "owner": "design",
+      "rank": 15,
+      "sites": [
+        ["bin/src/command/mod.rs",71,27,3,"bin/src/main.rs"],
+        ["bin/src/command/mod.rs",140,5,3,"bin/src/main.rs"],
+        ["bin/src/command/mod.rs",157,9,3,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",251,13,3,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",253,29,3,"bin/src/main.rs"],
+        ["bin/src/command/server.rs",272,33,3,"bin/src/main.rs"],
+        ["bin/src/main.rs",155,20,3,"bin/src/main.rs"],
+        ["bin/src/main.rs",182,5,3,"bin/src/main.rs"],
+        ["bin/src/upgrade.rs",125,11,3,"bin/src/main.rs"],
+        ["bin/src/upgrade.rs",160,9,3,"bin/src/main.rs"],
+        ["bin/src/upgrade.rs",172,28,3,"bin/src/main.rs"],
+        ["bin/src/util.rs",99,19,3,"bin/src/main.rs"],
+        ["bin/src/util.rs",146,5,3,"bin/src/main.rs"],
+        ["bin/src/worker.rs",91,9,3,"bin/src/main.rs"],
+        ["bin/src/worker.rs",103,40,3,"bin/src/main.rs"],
+        ["bin/src/worker.rs",252,11,3,"bin/src/main.rs"],
+        ["command/src/buffer/fixed.rs",106,13,3,"command/src/lib.rs"],
+        ["command/src/buffer/fixed.rs",124,9,3,"command/src/lib.rs"],
+        ["command/src/buffer/fixed.rs",145,9,3,"command/src/lib.rs"],
+        ["command/src/buffer/fixed.rs",189,9,3,"command/src/lib.rs"],
+        ["command/src/buffer/fixed.rs",227,9,3,"command/src/lib.rs"],
+        ["command/src/buffer/growable.rs",99,13,3,"command/src/lib.rs"],
+        ["command/src/buffer/growable.rs",117,9,3,"command/src/lib.rs"],
+        ["command/src/buffer/growable.rs",138,9,3,"command/src/lib.rs"],
+        ["command/src/buffer/growable.rs",180,9,3,"command/src/lib.rs"],
+        ["command/src/buffer/growable.rs",218,9,3,"command/src/lib.rs"],
+        ["command/src/channel.rs",132,9,3,"command/src/lib.rs"],
+        ["command/src/channel.rs",149,9,3,"command/src/lib.rs"],
+        ["command/src/logging/access_logs.rs",24,5,2,"command/src/lib.rs"],
+        ["command/src/logging/access_logs.rs",29,5,1,"command/src/lib.rs"],
+        ["command/src/logging/access_logs.rs",30,32,0,"command/src/lib.rs"],
+        ["command/src/logging/access_logs.rs",45,5,1,"command/src/lib.rs"],
+        ["command/src/logging/access_logs.rs",46,49,0,"command/src/lib.rs"],
+        ["command/src/logging/access_logs.rs",51,5,1,"command/src/lib.rs"],
+        ["command/src/logging/access_logs.rs",52,46,0,"command/src/lib.rs"],
+        ["command/src/logging/access_logs.rs",142,9,3,"command/src/lib.rs"],
+        ["command/src/scm_socket.rs",53,9,3,"command/src/lib.rs"],
+        ["command/src/scm_socket.rs",77,9,3,"command/src/lib.rs"],
+        ["command/src/scm_socket.rs",249,13,3,"command/src/lib.rs"],
+        ["command/src/scm_socket.rs",255,13,3,"command/src/lib.rs"],
+        ["command/src/scm_socket.rs",261,13,3,"command/src/lib.rs"],
+        ["e2e/src/mock/sync_backend.rs",53,24,3,"e2e/src/lib.rs"],
+        ["e2e/src/sozu/worker.rs",43,5,3,"e2e/src/lib.rs"],
+        ["e2e/src/sozu/worker.rs",255,9,3,"e2e/src/lib.rs"]
+      ]
+    }
+  },
+  "kind": "independent_foreign_refusal_frontier",
+  "licenses": {
+    "bin": "AGPL-3.0",
+    "command": "LGPL-3.0",
+    "e2e": "root repository LICENSE (AGPL-3.0)",
+    "lib": "AGPL-3.0"
+  },
+  "observations": "four complete original crate roots with unchanged .lkj aliases; Cargo features, generated source and package bindings are not provided by this compiler",
+  "origin": "https://github.com/sozu-proxy/sozu",
+  "package": "sozu",
+  "revision": "c5ff06a12bd514e06ab28965052d0ad1e19c45b3",
+  "schema": 1,
+  "scope": {
+    "e2e_lines": 2976,
+    "source_lines": 38575,
+    "tracked_rust_lines": 42038
+  },
+  "site_columns": ["upstream_file","line","column","diagnostic_kind_index","observed_from_root"],
+  "source_receipt_sha256": "f23038b11941f09dddd25bdd358252ed584271371649e4b74e0e55380aab250b",
+  "source_review": "Lexer stops: one macro_rules dollar token, one @ token in the logger macro DSL, one @ binding pattern. Four unsafe fn items join unsafe/raw-pointer design sites. Six Ready associated constants are language sites. Capability diagnostic names are inspected: pure SocketAddr/Duration/Shutdown/error/data types and Read/Write trait imports are not ambient effects; OS imports are counted separately from executed calls.",
+  "unparsed_rows": [],
+  "verification_history": [
+    {
+      "compiler_sha256": "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0",
+      "complete_stdout_stderr_exit_and_source_entry_bytes_equal": true,
+      "initial_compiler_sha256": "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+      "initial_receipt_sha256": "f23038b11941f09dddd25bdd358252ed584271371649e4b74e0e55380aab250b",
+      "library_manifest_sha256": "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+      "observations": 8,
+      "observer_package_label_difference": {
+        "field": "package.name",
+        "initial": "sozu-workspace",
+        "repeat": "sozu",
+        "significance": "Observer label only; command, diagnostic bytes, status, signal, source, version, origin, root, commit and projection identities agree. Whole-package metadata objects are not identical."
       },
-      "associated_constants" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 148,
-         "diagnosed_sites" : 6,
-         "diagnostic_kinds" : [
-            "E_UNSUPPORTED: unsupported construct: impl item"
-         ],
-         "independent_gap_sites" : 6,
-         "owner" : "language",
-         "rank" : 5,
-         "sites" : [
-            [
-               "command/src/ready.rs",
-               8,
-               9,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/ready.rs",
-               9,
-               9,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/ready.rs",
-               10,
-               9,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/ready.rs",
-               11,
-               9,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/ready.rs",
-               13,
-               9,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/ready.rs",
-               14,
-               9,
-               0,
-               "command/src/lib.rs"
-            ]
-         ]
+      "probe_sha256": "afc7174933a0e67862e43d2f5d0f991a093609b86bb08c6e42ff39d6ccb9cbff",
+      "projection_manifest_sha256": "3ad1b9efdc73fb42f61aa3cb5d0dfaf1edea4d5fecf68e4b48e4cedd01db38b0",
+      "projector_sha256": "622f63b9d22c23beb6db3f3dd77ef2cc6a1a0aa20d8620ac36a6730baafa0f95",
+      "receipt": "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-units-9db99295.json",
+      "receipt_sha256": "d1467ef9c66586c8b11af1c8edb5c61b77c5c231b12f17ae6bd057dd7302a235",
+      "source_commit": "d095ba7cd32a44bea7e7964767f02fa5195c3462"
+    },
+    {
+      "check_measurements": [
+        {
+          "exit_status": 1,
+          "launcher_signal": 0,
+          "peak_rss_kib": 4672,
+          "route": "original_suffix",
+          "upstream_entry": "bin/src/main.rs",
+          "wall_seconds": 0.001917
+        },
+        {
+          "exit_status": 1,
+          "launcher_signal": 0,
+          "peak_rss_kib": 31764,
+          "route": "suffix_projection",
+          "upstream_entry": "bin/src/main.rs",
+          "wall_seconds": 0.121787
+        },
+        {
+          "exit_status": 1,
+          "launcher_signal": 0,
+          "peak_rss_kib": 4672,
+          "route": "original_suffix",
+          "upstream_entry": "lib/src/lib.rs",
+          "wall_seconds": 0.001673
+        },
+        {
+          "exit_status": 1,
+          "launcher_signal": 0,
+          "peak_rss_kib": 26292,
+          "route": "suffix_projection",
+          "upstream_entry": "lib/src/lib.rs",
+          "wall_seconds": 0.078707
+        },
+        {
+          "exit_status": 1,
+          "launcher_signal": 0,
+          "peak_rss_kib": 4672,
+          "route": "original_suffix",
+          "upstream_entry": "command/src/lib.rs",
+          "wall_seconds": 0.001233
+        },
+        {
+          "exit_status": 1,
+          "launcher_signal": 0,
+          "peak_rss_kib": 34920,
+          "route": "suffix_projection",
+          "upstream_entry": "command/src/lib.rs",
+          "wall_seconds": 0.177721
+        },
+        {
+          "exit_status": 1,
+          "launcher_signal": 0,
+          "peak_rss_kib": 4672,
+          "route": "original_suffix",
+          "upstream_entry": "e2e/src/lib.rs",
+          "wall_seconds": 0.001186
+        },
+        {
+          "exit_status": 1,
+          "launcher_signal": 0,
+          "peak_rss_kib": 29852,
+          "route": "suffix_projection",
+          "upstream_entry": "e2e/src/lib.rs",
+          "wall_seconds": 0.093045
+        }
+      ],
+      "comparisons": [
+        {
+          "command_stdout_stderr_exit_signal_source_entry_equal": true,
+          "compiler_sha256": "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+          "library_and_projection_verifications_equal": true,
+          "observations_equal": 8,
+          "observer_label_difference": {
+            "after": "sozu",
+            "before": "sozu-workspace",
+            "field": "package.name"
+          },
+          "package_equal_except_observer_label": true,
+          "receipt": "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified.json",
+          "receipt_sha256": "f23038b11941f09dddd25bdd358252ed584271371649e4b74e0e55380aab250b"
+        },
+        {
+          "command_stdout_stderr_exit_signal_source_entry_equal": true,
+          "compiler_sha256": "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0",
+          "library_and_projection_verifications_equal": true,
+          "observations_equal": 8,
+          "observer_label_difference": null,
+          "package_equal_except_observer_label": true,
+          "receipt": "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-units-9db99295.json",
+          "receipt_sha256": "d1467ef9c66586c8b11af1c8edb5c61b77c5c231b12f17ae6bd057dd7302a235"
+        }
+      ],
+      "compiler_sha256": "2a76113394bb40ea5612965ed4567ca69f3f43555334bb6874b88588975cee3b",
+      "complete_command_stdout_stderr_exit_signal_and_source_entry_bytes_equal": true,
+      "complete_stdout_stderr_exit_and_source_entry_bytes_equal": true,
+      "initial_compiler_sha256": "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+      "initial_receipt_sha256": "f23038b11941f09dddd25bdd358252ed584271371649e4b74e0e55380aab250b",
+      "library_inventory_and_projection_verifications_equal": true,
+      "library_manifest_sha256": "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+      "observations": 8,
+      "observer_package_label_difference": {
+        "field": "package.name",
+        "initial": "sozu-workspace",
+        "repeat": "sozu",
+        "significance": "Observer label only; command, diagnostic bytes, status, signal, source, version, origin, root, commit and projection identities agree. Whole-package metadata objects are not identical."
       },
-      "async_block" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 68,
-         "diagnosed_sites" : 1,
-         "diagnostic_kinds" : [
-            "E_UNSUPPORTED: unsupported construct: async"
-         ],
-         "independent_gap_sites" : 1,
-         "owner" : "language producer; runtime design separately needed",
-         "rank" : 8,
-         "sites" : [
-            [
-               "e2e/src/mock/https_client.rs",
-               52,
-               17,
-               0,
-               "e2e/src/lib.rs"
-            ]
-         ]
-      },
-      "at_pattern_lexing" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 167,
-         "diagnosed_sites" : 1,
-         "diagnostic_kinds" : [
-            "E_LEX: unsupported character in source"
-         ],
-         "independent_gap_sites" : 1,
-         "owner" : "language",
-         "rank" : 7,
-         "sites" : [
-            [
-               "command/src/logging/display.rs",
-               140,
-               17,
-               0,
-               "command/src/lib.rs"
-            ]
-         ]
-      },
-      "build_generated_source" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 257,
-         "diagnosed_sites" : 1,
-         "diagnostic_kinds" : [
-            "E_MODULE_MISSING: module command needs command/src/proto/command.lkj or command/src/proto/command/mod.lkj"
-         ],
-         "independent_gap_sites" : 1,
-         "owner" : "package/build producer",
-         "rank" : 10,
-         "sites" : [
-            [
-               "command/src/proto/mod.rs",
-               10,
-               5,
-               0,
-               "command/src/lib.rs"
-            ]
-         ]
-      },
-      "compile_time_evaluation" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 1092,
-         "diagnosed_sites" : 2,
-         "diagnostic_kinds" : [
-            "E_UNSUPPORTED: unsupported construct: const fn",
-            "E_UNSUPPORTED: unsupported construct: non-literal array length"
-         ],
-         "independent_gap_sites" : 2,
-         "owner" : "language",
-         "rank" : 6,
-         "sites" : [
-            [
-               "command/src/channel.rs",
-               461,
-               11,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/scm_socket.rs",
-               111,
-               39,
-               1,
-               "command/src/lib.rs"
-            ]
-         ]
-      },
-      "debug_formatting" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 7344,
-         "diagnosed_sites" : 21,
-         "diagnostic_kinds" : [
-            "E_UNSUPPORTED: Debug formatting needs its source trait implementation"
-         ],
-         "independent_gap_sites" : 21,
-         "owner" : "language / format producer; later Debug trait or derive work is not yet reached",
-         "rank" : 3,
-         "sites" : [
-            [
-               "bin/src/command/requests.rs",
-               686,
-               27,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/upgrade.rs",
-               115,
-               39,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/upgrade.rs",
-               202,
-               43,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/upgrade.rs",
-               213,
-               21,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "command/src/certificate.rs",
-               159,
-               36,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1676,
-               50,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1685,
-               49,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1694,
-               49,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1715,
-               47,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1722,
-               44,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1739,
-               48,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1748,
-               40,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1755,
-               47,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               39,
-               9,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1034,
-               36,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/request.rs",
-               135,
-               9,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/response.rs",
-               212,
-               9,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/response.rs",
-               287,
-               9,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/response.rs",
-               293,
-               9,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/state.rs",
-               465,
-               21,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/state.rs",
-               482,
-               25,
-               0,
-               "command/src/lib.rs"
-            ]
-         ]
-      },
-      "external_crate_binding" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 320,
-         "diagnosed_sites" : 4,
-         "diagnostic_kinds" : [
-            "E_UNSUPPORTED: unsupported construct: extern"
-         ],
-         "independent_gap_sites" : 4,
-         "owner" : "package/language",
-         "rank" : 9,
-         "sites" : [
-            [
-               "bin/src/main.rs",
-               27,
-               1,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/main.rs",
-               29,
-               1,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/main.rs",
-               31,
-               1,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "command/src/lib.rs",
-               4,
-               1,
-               0,
-               "command/src/lib.rs"
-            ]
-         ]
-      },
-      "macro_expansion" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 11224,
-         "diagnosed_sites" : 235,
-         "diagnostic_kinds" : [
-            "E_UNSUPPORTED_MACRO: unsupported macro: cell!",
-            "E_UNSUPPORTED_MACRO: unsupported macro: cmsg_space!",
-            "E_UNSUPPORTED_MACRO: unsupported macro: debug!",
-            "E_UNSUPPORTED_MACRO: unsupported macro: error!",
-            "E_UNSUPPORTED_MACRO: unsupported macro: gauge!",
-            "E_UNSUPPORTED_MACRO: unsupported macro: incr!",
-            "E_UNSUPPORTED_MACRO: unsupported macro: info!",
-            "E_UNSUPPORTED_MACRO: unsupported macro: option_env!",
-            "E_UNSUPPORTED_MACRO: unsupported macro: row!",
-            "E_UNSUPPORTED_MACRO: unsupported macro: trace!",
-            "E_UNSUPPORTED_MACRO: unsupported macro: unimplemented!",
-            "E_UNSUPPORTED_MACRO: unsupported macro: warn!"
-         ],
-         "independent_gap_sites" : 235,
-         "owner" : "language",
-         "rank" : 1,
-         "sites" : [
-            [
-               "bin/src/command/mod.rs",
-               65,
-               5,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/mod.rs",
-               80,
-               9,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/mod.rs",
-               93,
-               5,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/mod.rs",
-               97,
-               5,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/mod.rs",
-               104,
-               5,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/mod.rs",
-               113,
-               5,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/mod.rs",
-               121,
-               5,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/mod.rs",
-               127,
-               9,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/mod.rs",
-               144,
-               9,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/mod.rs",
-               167,
-               9,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/mod.rs",
-               184,
-               5,
-               9,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               40,
-               17,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               140,
-               5,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               185,
-               5,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               201,
-               5,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               222,
-               5,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               242,
-               5,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               251,
-               5,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               346,
-               13,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               352,
-               13,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               378,
-               13,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               380,
-               13,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               409,
-               27,
-               11,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               618,
-               5,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               655,
-               13,
-               9,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               663,
-               21,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               782,
-               21,
-               11,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               163,
-               23,
-               11,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               221,
-               13,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               226,
-               9,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               227,
-               9,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               280,
-               17,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               298,
-               9,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               364,
-               13,
-               9,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               365,
-               13,
-               9,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               366,
-               13,
-               9,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               369,
-               31,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               393,
-               25,
-               9,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               399,
-               37,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               403,
-               37,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               404,
-               37,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               451,
-               13,
-               11,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               458,
-               17,
-               11,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               474,
-               13,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               476,
-               13,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               613,
-               9,
-               4,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               614,
-               9,
-               4,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               615,
-               9,
-               4,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               710,
-               17,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               734,
-               13,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               751,
-               17,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               752,
-               17,
-               9,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               755,
-               17,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               780,
-               9,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               783,
-               17,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               800,
-               17,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               806,
-               23,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               814,
-               9,
-               9,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               827,
-               21,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               848,
-               25,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               44,
-               13,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               62,
-               9,
-               9,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               67,
-               21,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               79,
-               9,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               89,
-               9,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               99,
-               9,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               109,
-               9,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               123,
-               9,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               137,
-               21,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               144,
-               21,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               151,
-               21,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               158,
-               21,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               169,
-               21,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               216,
-               9,
-               9,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               218,
-               13,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               232,
-               9,
-               9,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               239,
-               13,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/sessions.rs",
-               274,
-               9,
-               9,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/upgrade.rs",
-               58,
-               5,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/upgrade.rs",
-               257,
-               23,
-               11,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/upgrade.rs",
-               337,
-               5,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/command.rs",
-               47,
-               25,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/command.rs",
-               53,
-               25,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/command.rs",
-               113,
-               29,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/command.rs",
-               139,
-               9,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/command.rs",
-               142,
-               9,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/command.rs",
-               145,
-               9,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/command.rs",
-               156,
-               9,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/command.rs",
-               161,
-               13,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/command.rs",
-               201,
-               17,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/command.rs",
-               205,
-               9,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/mod.rs",
-               91,
-               9,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/mod.rs",
-               106,
-               9,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/request_builder.rs",
-               31,
-               9,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/request_builder.rs",
-               37,
-               9,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/request_builder.rs",
-               47,
-               9,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/request_builder.rs",
-               53,
-               9,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/request_builder.rs",
-               59,
-               9,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/request_builder.rs",
-               65,
-               9,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/request_builder.rs",
-               78,
-               9,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/request_builder.rs",
-               93,
-               9,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/request_builder.rs",
-               617,
-               9,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/main.rs",
-               148,
-               9,
-               11,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/main.rs",
-               198,
-               9,
-               5,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/upgrade.rs",
-               86,
-               5,
-               9,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/upgrade.rs",
-               97,
-               5,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/upgrade.rs",
-               124,
-               5,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/upgrade.rs",
-               167,
-               9,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/upgrade.rs",
-               204,
-               5,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/upgrade.rs",
-               207,
-               5,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/util.rs",
-               112,
-               17,
-               7,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/worker.rs",
-               125,
-               5,
-               9,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/worker.rs",
-               130,
-               5,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/worker.rs",
-               175,
-               5,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/worker.rs",
-               177,
-               5,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/worker.rs",
-               194,
-               5,
-               9,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/worker.rs",
-               246,
-               9,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/worker.rs",
-               249,
-               5,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/worker.rs",
-               250,
-               5,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "command/src/buffer/fixed.rs",
-               50,
-               9,
-               10,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/channel.rs",
-               213,
-               13,
-               9,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               526,
-               21,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               534,
-               21,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               545,
-               25,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               869,
-               29,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1375,
-               41,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1376,
-               41,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1709,
-               9,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1712,
-               9,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1719,
-               9,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1730,
-               9,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               1737,
-               17,
-               6,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               220,
-               19,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               226,
-               19,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               350,
-               36,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               353,
-               28,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               357,
-               30,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               358,
-               30,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               361,
-               30,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               362,
-               30,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               366,
-               27,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               394,
-               9,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               411,
-               17,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               447,
-               39,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               457,
-               28,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               465,
-               17,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               472,
-               30,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               495,
-               5,
-               9,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               500,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               501,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               511,
-               27,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               531,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               532,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               542,
-               27,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               562,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               563,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               565,
-               27,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               594,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               595,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               605,
-               27,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               687,
-               18,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               692,
-               18,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               697,
-               18,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               705,
-               26,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               707,
-               26,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               721,
-               42,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               724,
-               18,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               725,
-               18,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               729,
-               26,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               731,
-               26,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               745,
-               42,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               748,
-               18,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               749,
-               18,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               753,
-               26,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               755,
-               26,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               767,
-               28,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               771,
-               26,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               773,
-               26,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               786,
-               13,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               796,
-               26,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               798,
-               26,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               814,
-               27,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               816,
-               21,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               818,
-               17,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               835,
-               28,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               837,
-               22,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               842,
-               22,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               844,
-               22,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               875,
-               19,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               893,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               919,
-               19,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               922,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               969,
-               57,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               971,
-               25,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1012,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1013,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1017,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1018,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1019,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1020,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1021,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1022,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1023,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1037,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1038,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1042,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1043,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1044,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1045,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1049,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1050,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1051,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1052,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1053,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1054,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1055,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1056,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1057,
-               23,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1067,
-               27,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1070,
-               27,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1073,
-               27,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1076,
-               27,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1079,
-               27,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1082,
-               27,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1085,
-               27,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1088,
-               27,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               1091,
-               27,
-               8,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/scm_socket.rs",
-               116,
-               9,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/scm_socket.rs",
-               165,
-               13,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/scm_socket.rs",
-               172,
-               9,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/scm_socket.rs",
-               184,
-               24,
-               1,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/state.rs",
-               384,
-               13,
-               6,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/state.rs",
-               1157,
-               9,
-               6,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/state.rs",
-               1369,
-               17,
-               6,
-               "command/src/lib.rs"
-            ],
-            [
-               "e2e/src/http_utils/mod.rs",
-               33,
-               14,
-               10,
-               "e2e/src/lib.rs"
-            ]
-         ]
-      },
-      "macro_token_lexing" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 2306,
-         "diagnosed_sites" : 2,
-         "diagnostic_kinds" : [
-            "E_LEX: unsupported character in source"
-         ],
-         "independent_gap_sites" : 2,
-         "owner" : "language",
-         "rank" : 2,
-         "sites" : [
-            [
-               "command/src/logging/logs.rs",
-               299,
-               27,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "lib/src/lib.rs",
-               416,
-               9,
-               0,
-               "lib/src/lib.rs"
-            ]
-         ]
-      },
-      "parse_recovery_or_unclassified" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 9351,
-         "diagnosed_sites" : 37,
-         "diagnostic_kinds" : [
-            "E_PARSE: expected `;` after expression",
-            "E_PARSE: expected `>`",
-            "E_PARSE: expected `]`, found `::`",
-            "E_PARSE: expected an identifier"
-         ],
-         "independent_gap_sites" : null,
-         "owner" : "unclassified; no independent gap count",
-         "rank" : null,
-         "sites" : [
-            [
-               "bin/src/cli.rs",
-               48,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/cli.rs",
-               192,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/cli.rs",
-               245,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/cli.rs",
-               264,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/cli.rs",
-               307,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/cli.rs",
-               345,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/cli.rs",
-               400,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/cli.rs",
-               460,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/cli.rs",
-               500,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/cli.rs",
-               521,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/cli.rs",
-               599,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/cli.rs",
-               684,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/cli.rs",
-               734,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/cli.rs",
-               828,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/mod.rs",
-               27,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               115,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               171,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               490,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/mod.rs",
-               24,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/main.rs",
-               66,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/main.rs",
-               84,
-               6,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/upgrade.rs",
-               34,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/upgrade.rs",
-               126,
-               38,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/util.rs",
-               21,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/worker.rs",
-               42,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/worker.rs",
-               253,
-               50,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "command/src/certificate.rs",
-               24,
-               5,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/channel.rs",
-               20,
-               5,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/config.rs",
-               193,
-               5,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/logging/access_logs.rs",
-               35,
-               8,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/logging/mod.rs",
-               18,
-               5,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/mod.rs",
-               17,
-               5,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/request.rs",
-               27,
-               5,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/scm_socket.rs",
-               21,
-               5,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/state.rs",
-               37,
-               5,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/state.rs",
-               1409,
-               23,
-               1,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/state.rs",
-               1435,
-               27,
-               1,
-               "command/src/lib.rs"
-            ]
-         ]
-      },
-      "pure_standard_data_types" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 5106,
-         "diagnosed_sites" : 14,
-         "diagnostic_kinds" : [
-            "E_CAPABILITY: `std::io::ErrorKind` is unavailable; help: use world.stdin(), world.stdout(), or world.stderr() and pass that capability explicitly",
-            "E_CAPABILITY: `std::io::Error` is unavailable; help: use world.stdin(), world.stdout(), or world.stderr() and pass that capability explicitly",
-            "E_CAPABILITY: `std::io::IoSlice` is unavailable; help: use world.stdin(), world.stdout(), or world.stderr() and pass that capability explicitly",
-            "E_CAPABILITY: `std::net::AddrParseError` is unavailable; help: this capability is not implemented; pass required values explicitly",
-            "E_CAPABILITY: `std::net::Shutdown::Both` is unavailable; help: this capability is not implemented; pass required values explicitly",
-            "E_CAPABILITY: `std::net::SocketAddr` is unavailable; help: this capability is not implemented; pass required values explicitly",
-            "E_CAPABILITY: `std::time::Duration` is unavailable; help: this capability is not implemented; pass required values explicitly"
-         ],
-         "independent_gap_sites" : 14,
-         "owner" : "library plus language namespace routing",
-         "rank" : 11,
-         "sites" : [
-            [
-               "bin/src/cli.rs",
-               1,
-               49,
-               5,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/cli.rs",
-               39,
-               32,
-               1,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               4,
-               25,
-               1,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/command.rs",
-               1,
-               24,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/mod.rs",
-               4,
-               24,
-               6,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/main.rs",
-               78,
-               25,
-               1,
-               "bin/src/main.rs"
-            ],
-            [
-               "command/src/logging/access_logs.rs",
-               1,
-               68,
-               5,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/logging/mod.rs",
-               11,
-               29,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/proto/display.rs",
-               4,
-               20,
-               5,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/response.rs",
-               1,
-               69,
-               5,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/scm_socket.rs",
-               2,
-               17,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/async_backend.rs",
-               2,
-               19,
-               0,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/sync_backend.rs",
-               178,
-               75,
-               4,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/sozu/worker.rs",
-               2,
-               20,
-               5,
-               "e2e/src/lib.rs"
-            ]
-         ]
-      },
-      "same_process_thread_api" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 209,
-         "diagnosed_sites" : 2,
-         "diagnostic_kinds" : [
-            "E_CAPABILITY: `std::thread::sleep` is unavailable; help: this capability is not implemented; pass required values explicitly",
-            "E_CAPABILITY: `std::thread::spawn` is unavailable; help: this capability is not implemented; pass required values explicitly"
-         ],
-         "independent_gap_sites" : 2,
-         "owner" : "design and missing IR concurrency",
-         "rank" : 17,
-         "sites" : [
-            [
-               "bin/src/ctl/command.rs",
-               125,
-               52,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/ctl/command.rs",
-               164,
-               49,
-               1,
-               "bin/src/main.rs"
-            ]
-         ]
-      },
-      "shared_heap_ownership" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 68,
-         "diagnosed_sites" : 1,
-         "diagnostic_kinds" : [
-            "E_CAPABILITY: `std::sync::Arc` is unavailable; help: use owned values and indices; shared interior mutation is not supported"
-         ],
-         "independent_gap_sites" : 1,
-         "owner" : "design: owner/index or a new checked sharing contract",
-         "rank" : 16,
-         "sites" : [
-            [
-               "e2e/src/mock/https_client.rs",
-               1,
-               20,
-               0,
-               "e2e/src/lib.rs"
-            ]
-         ]
-      },
-      "standard_io_traits" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 1802,
-         "diagnosed_sites" : 6,
-         "diagnostic_kinds" : [
-            "E_CAPABILITY: `std::io::Read` is unavailable; help: use world.stdin(), world.stdout(), or world.stderr() and pass that capability explicitly",
-            "E_CAPABILITY: `std::io` is unavailable; help: use world.stdin(), world.stdout(), or world.stderr() and pass that capability explicitly"
-         ],
-         "independent_gap_sites" : 6,
-         "owner" : "library plus language namespace routing; imports are not proof of ambient I/O",
-         "rank" : 12,
-         "sites" : [
-            [
-               "command/src/buffer/fixed.rs",
-               3,
-               14,
-               1,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/buffer/growable.rs",
-               3,
-               14,
-               1,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/channel.rs",
-               4,
-               14,
-               1,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/writer.rs",
-               1,
-               19,
-               1,
-               "command/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/client.rs",
-               2,
-               14,
-               0,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/sync_backend.rs",
-               3,
-               14,
-               0,
-               "e2e/src/lib.rs"
-            ]
-         ]
-      },
-      "standard_os_imports" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 6175,
-         "diagnosed_sites" : 8,
-         "diagnostic_kinds" : [
-            "E_CAPABILITY: `std::env` is unavailable; help: accept granted Arguments for .args() bytes or Environment for .get() of its one explicitly named variable; no ambient environment lookup or enumeration",
-            "E_CAPABILITY: `std::fs::File` is unavailable; help: use world.directory(path), then directory.open(name) or directory.create(name)",
-            "E_CAPABILITY: `std::fs::read_link` is unavailable; help: use world.directory(path), then directory.open(name) or directory.create(name)",
-            "E_CAPABILITY: `std::fs` is unavailable; help: use world.directory(path), then directory.open(name) or directory.create(name)"
-         ],
-         "independent_gap_sites" : 8,
-         "owner" : "library adapter plus explicit authority; imported names are not execution sites",
-         "rank" : 13,
-         "sites" : [
-            [
-               "bin/src/command/mod.rs",
-               7,
-               7,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               3,
-               8,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/upgrade.rs",
-               2,
-               13,
-               1,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/util.rs",
-               3,
-               19,
-               2,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/worker.rs",
-               4,
-               13,
-               1,
-               "bin/src/main.rs"
-            ],
-            [
-               "command/src/config.rs",
-               52,
-               8,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/request.rs",
-               4,
-               13,
-               1,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/state.rs",
-               6,
-               13,
-               1,
-               "command/src/lib.rs"
-            ]
-         ]
-      },
-      "trait_object_dispatch" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 2622,
-         "diagnosed_sites" : 15,
-         "diagnostic_kinds" : [
-            "E_UNSUPPORTED: unsupported construct: dyn"
-         ],
-         "independent_gap_sites" : 15,
-         "owner" : "language",
-         "rank" : 4,
-         "sites" : [
-            [
-               "bin/src/command/requests.rs",
-               289,
-               40,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               392,
-               40,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               471,
-               40,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               530,
-               40,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               708,
-               40,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               766,
-               40,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/requests.rs",
-               846,
-               40,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               77,
-               40,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               122,
-               14,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               675,
-               41,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               691,
-               18,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/upgrade.rs",
-               184,
-               40,
-               0,
-               "bin/src/main.rs"
-            ],
-            [
-               "command/src/request.rs",
-               217,
-               32,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/async_backend.rs",
-               26,
-               30,
-               0,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/https_client.rs",
-               23,
-               21,
-               0,
-               "e2e/src/lib.rs"
-            ]
-         ]
-      },
-      "unsafe_or_raw_pointer" : {
-         "dependency_blocked_lines" : null,
-         "diagnosed_file_coverage_lines" : 4399,
-         "diagnosed_sites" : 44,
-         "diagnostic_kinds" : [
-            "E_UNSUPPORTED: unsupported construct: *",
-            "E_UNSUPPORTED: unsupported construct: impl item",
-            "E_UNSUPPORTED: unsupported construct: trait item",
-            "E_UNSUPPORTED: unsupported construct: unsafe"
-         ],
-         "independent_gap_sites" : 44,
-         "owner" : "design",
-         "rank" : 15,
-         "sites" : [
-            [
-               "bin/src/command/mod.rs",
-               71,
-               27,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/mod.rs",
-               140,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/mod.rs",
-               157,
-               9,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               251,
-               13,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               253,
-               29,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/command/server.rs",
-               272,
-               33,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/main.rs",
-               155,
-               20,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/main.rs",
-               182,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/upgrade.rs",
-               125,
-               11,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/upgrade.rs",
-               160,
-               9,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/upgrade.rs",
-               172,
-               28,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/util.rs",
-               99,
-               19,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/util.rs",
-               146,
-               5,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/worker.rs",
-               91,
-               9,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/worker.rs",
-               103,
-               40,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "bin/src/worker.rs",
-               252,
-               11,
-               3,
-               "bin/src/main.rs"
-            ],
-            [
-               "command/src/buffer/fixed.rs",
-               106,
-               13,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/buffer/fixed.rs",
-               124,
-               9,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/buffer/fixed.rs",
-               145,
-               9,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/buffer/fixed.rs",
-               189,
-               9,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/buffer/fixed.rs",
-               227,
-               9,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/buffer/growable.rs",
-               99,
-               13,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/buffer/growable.rs",
-               117,
-               9,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/buffer/growable.rs",
-               138,
-               9,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/buffer/growable.rs",
-               180,
-               9,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/buffer/growable.rs",
-               218,
-               9,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/channel.rs",
-               132,
-               9,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/channel.rs",
-               149,
-               9,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/logging/access_logs.rs",
-               24,
-               5,
-               2,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/logging/access_logs.rs",
-               29,
-               5,
-               1,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/logging/access_logs.rs",
-               30,
-               32,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/logging/access_logs.rs",
-               45,
-               5,
-               1,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/logging/access_logs.rs",
-               46,
-               49,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/logging/access_logs.rs",
-               51,
-               5,
-               1,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/logging/access_logs.rs",
-               52,
-               46,
-               0,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/logging/access_logs.rs",
-               142,
-               9,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/scm_socket.rs",
-               53,
-               9,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/scm_socket.rs",
-               77,
-               9,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/scm_socket.rs",
-               249,
-               13,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/scm_socket.rs",
-               255,
-               13,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "command/src/scm_socket.rs",
-               261,
-               13,
-               3,
-               "command/src/lib.rs"
-            ],
-            [
-               "e2e/src/mock/sync_backend.rs",
-               53,
-               24,
-               3,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/sozu/worker.rs",
-               43,
-               5,
-               3,
-               "e2e/src/lib.rs"
-            ],
-            [
-               "e2e/src/sozu/worker.rs",
-               255,
-               9,
-               3,
-               "e2e/src/lib.rs"
-            ]
-         ]
-      }
-   },
-   "kind" : "independent_foreign_refusal_frontier",
-   "licenses" : {
-      "bin" : "AGPL-3.0",
-      "command" : "LGPL-3.0",
-      "e2e" : "root repository LICENSE (AGPL-3.0)",
-      "lib" : "AGPL-3.0"
-   },
-   "observations" : "four complete original crate roots with unchanged .lkj aliases; Cargo features, generated source and package bindings are not provided by this compiler",
-   "origin" : "https://github.com/sozu-proxy/sozu",
-   "package" : "sozu",
-   "revision" : "c5ff06a12bd514e06ab28965052d0ad1e19c45b3",
-   "schema" : 1,
-   "scope" : {
-      "e2e_lines" : 2976,
-      "source_lines" : 38575,
-      "tracked_rust_lines" : 42038
-   },
-   "site_columns" : [
-      "upstream_file",
-      "line",
-      "column",
-      "diagnostic_kind_index",
-      "observed_from_root"
-   ],
-   "source_receipt_sha256" : "f23038b11941f09dddd25bdd358252ed584271371649e4b74e0e55380aab250b",
-   "source_review" : "Lexer stops: one macro_rules dollar token, one @ token in the logger macro DSL, one @ binding pattern. Four unsafe fn items join unsafe/raw-pointer design sites. Six Ready associated constants are language sites. Capability diagnostic names are inspected: pure SocketAddr/Duration/Shutdown/error/data types and Read/Write trait imports are not ambient effects; OS imports are counted separately from executed calls.",
-   "unparsed_rows" : [],
-   "version" : "1.0.6"
+      "prior_receipts_compared": 2,
+      "probe_sha256": "afc7174933a0e67862e43d2f5d0f991a093609b86bb08c6e42ff39d6ccb9cbff",
+      "projection_manifest_sha256": "3ad1b9efdc73fb42f61aa3cb5d0dfaf1edea4d5fecf68e4b48e4cedd01db38b0",
+      "projector_sha256": "622f63b9d22c23beb6db3f3dd77ef2cc6a1a0aa20d8620ac36a6730baafa0f95",
+      "receipt": "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-units-2a761133.json",
+      "receipt_sha256": "9d346e3d7dc99c85af786b98dfda7b60438e45d4a25823ee28835a7cb986a8b1",
+      "source_commit": "8ddb023f804d511799cdf9b9f007e14f53f61639",
+      "timing_and_rss_are_identity_fields": false
+    }
+  ],
+  "version": "1.0.6"
 }

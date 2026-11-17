@@ -166,16 +166,23 @@ Original .rs entries all refuse E_SOURCE_EXTENSION. Their .lkj entries then
 expose syntax/library/design barriers. Twelve observations cover original and
 projected paths for nom, DOM and four Sōzu workspace roots. The initial producer
 was 60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca.
-After published source units and open-ended ranges landed, all twelve were
-repeated with fixed-point producer
+After source units and open-ended ranges landed, the twelve were repeated with
 9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0
 on source d095ba7cd32a44bea7e7964767f02fa5195c3462.
-Source bytes, stdout, stderr, exit status and signals match in all corresponding
-observations. The compact evidence files identify both raw receipts,
-compiler/library identities, exact sites and file hashes. Sōzu's observer label
-changed from sozu-workspace to sozu between the initial and repeated receipts;
-that label is the only package-metadata difference, not a source or diagnostic
-change. The complete metadata objects are not claimed identical.
+The integrated cohort repeated them with fixed-point producer
+2a76113394bb40ea5612965ed4567ca69f3f43555334bb6874b88588975cee3b
+on source 8ddb023f804d511799cdf9b9f007e14f53f61639, then with
+eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f
+on source 20412b9a49a726e48273b0a07943bb77d1117058 after the bounded-unit integration.
+
+All corresponding commands, source-entry bytes, stdout, stderr, exit statuses
+and signals agree across all four producers. Library inventories, projection
+identities and before/after source verification also agree. The compact evidence
+files identify every raw receipt and comparison; wall time and RSS are measured
+but are not treated as identity fields. Sōzu's observer label changed from
+sozu-workspace to sozu after the initial receipt. That is the only package-metadata
+difference, not a source or diagnostic change; complete metadata objects are not
+claimed identical.
 
 This check is not a Cargo configuration loader. Test mode and feature predicates
 differ from the upstream default-feature build; parsing can reject inactive
@@ -579,6 +586,30 @@ Including the published first route gives 1,407/1,543 changed language lines
 (91.19%) and 62 successful Programs operations. The fourteen temporary SDK
 operations remain separate, with no retained SDK delta after upstream integration.
 
-Final source-store hardening and both independent audits are complete. The full
-four-worker integrated gate and this cohort's publication CI remain next; no
-unexecuted gate is counted as a pass.
+The final four-worker integrated gate passes on source 20412b9a49a726e48273b0a07943bb77d1117058
+with fixed-point producer eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f
+(34,576,115 bytes). It takes 754.213 s at load
+7.72→8.50 and peak individual-process RSS 1,296,976 KiB.
+The gate reruns 5,485 case requests and reuses 0
+authenticated exact cases; all host suites pass, and 128 IR mutants report zero
+findings. The required package suite executes its
+six pure tests on each engine, fourteen inventory controls and twenty-four native
+I/O/substitution controls; all twenty-seven concrete policy controls pass.
+The native-v2 object format needs no Programs source adaptation: the consumer
+uses the published namespace/key/encoding APIs and checks exact EOF.
+
+The [compact integrated proof](../tests/fixtures/real_programs_cohort.gate.json)
+retains actual source/seed/producer identities, suite results, timing scope and
+the twelve-observation repeat. It separately retains the successful 824.679 s
+gate on 8ddb/2a761133 before the compiler integration, with 5,485 fresh requests,
+128 mutants and peak process RSS 1,305,308 KiB. Earlier focused measurements stay
+attached to their actual source and producer; they are not relabeled as this run.
+These shared-host measurements do not establish a performance comparison between
+the two compiler checkpoints.
+
+Completed cohort build/store/query outputs and the private temporary query key
+are removed after this proof and reconstructable operation history are retained.
+Shared original sources, notices, locked archives, the authenticated source store,
+private issuer and trusted catalog remain once. The published commit is also
+checked by the independent gate and Rust-witness jobs of the
+[check workflow](../.github/workflows/check.yml); GitHub retains those run results.

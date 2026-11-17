@@ -1,1497 +1,512 @@
 {
-   "accounting" : {
-      "all_rows_accounted" : true,
-      "blocked_rows_excluded" : 229,
-      "primary_cause_classes" : 8,
-      "primary_rows" : 149,
-      "raw_by_code" : {
-         "E_BLOCKED" : 229,
-         "E_LEX" : 8,
-         "E_PARSE" : 103,
-         "E_UNSUPPORTED" : 117
-      },
-      "raw_rows" : 457,
-      "recovery_rows_excluded" : 79,
-      "unique_primary_sites" : 149,
-      "upstream_default_inactive_sites" : 4,
-      "upstream_default_production_sites" : 145
-   },
-   "causes" : [
+  "accounting": {
+    "all_rows_accounted": true,
+    "blocked_rows_excluded": 229,
+    "primary_cause_classes": 8,
+    "primary_rows": 149,
+    "raw_by_code": {
+      "E_BLOCKED": 229,
+      "E_LEX": 8,
+      "E_PARSE": 103,
+      "E_UNSUPPORTED": 117
+    },
+    "raw_rows": 457,
+    "recovery_rows_excluded": 79,
+    "unique_primary_sites": 149,
+    "upstream_default_inactive_sites": 4,
+    "upstream_default_production_sites": 145
+  },
+  "causes": [
+    {
+      "affected_file_count": 8,
+      "affected_file_physical_line_upper_bound": 6418,
+      "affected_original_files": ["src/branch/mod.rs","src/character/complete.rs","src/character/streaming.rs","src/error.rs","src/internal.rs","src/macros.rs","src/number/mod.rs","src/sequence/mod.rs"],
+      "confirmed_unique_sites": 8,
+      "id": "macro_rules_dollar_token",
+      "interpretation": "Eight first lexer stops in macro_rules! definitions. This observes token intake refusal; it does not measure expansion correctness or count all macro definitions/calls.",
+      "owner": "Language / checked source-producer route",
+      "rank": 1,
+      "sites": [
+        ["src/number/mod.rs",1420,6,null,true],
+        ["src/character/streaming.rs",651,6,null,false],
+        ["src/character/complete.rs",754,6,null,false],
+        ["src/sequence/mod.rs",245,4,null,false],
+        ["src/internal.rs",527,4,null,false],
+        ["src/branch/mod.rs",98,4,null,false],
+        ["src/error.rs",453,4,null,false],
+        ["src/macros.rs",2,7,null,false]
+      ],
+      "title": "Rust declarative macro input stops at dollar tokens",
+      "upstream_default_inactive_sites": 1,
+      "upstream_default_production_sites": 7
+    },
+    {
+      "affected_file_count": 9,
+      "affected_file_physical_line_upper_bound": 5964,
+      "affected_original_files": ["src/bits/complete.rs","src/bits/mod.rs","src/bits/streaming.rs","src/bytes/complete.rs","src/bytes/mod.rs","src/bytes/streaming.rs","src/character/mod.rs","src/combinator/mod.rs","src/multi/mod.rs"],
+      "confirmed_unique_sites": 78,
+      "id": "return_position_impl_trait",
+      "interpretation": "78 direct unsupported-impl reports at return types; later reparsing of the same token as an implementation is excluded.",
+      "owner": "Language / compiler source lowering",
+      "rank": 2,
+      "sites": [
+        ["src/character/mod.rs",98,50,null,false],
+        ["src/character/mod.rs",157,6,null,false],
+        ["src/character/mod.rs",219,55,null,false],
+        ["src/character/mod.rs",242,56,null,false],
+        ["src/character/mod.rs",325,41,null,false],
+        ["src/character/mod.rs",368,46,null,false],
+        ["src/bytes/mod.rs",45,51,null,false],
+        ["src/bytes/mod.rs",114,59,null,false],
+        ["src/bytes/mod.rs",228,54,null,false],
+        ["src/bytes/mod.rs",261,52,null,false],
+        ["src/bytes/mod.rs",292,59,null,false],
+        ["src/bytes/mod.rs",327,60,null,false],
+        ["src/bytes/mod.rs",368,6,null,false],
+        ["src/bytes/mod.rs",465,58,null,false],
+        ["src/bytes/mod.rs",499,59,null,false],
+        ["src/bytes/mod.rs",534,54,null,false],
+        ["src/bytes/mod.rs",596,58,null,false],
+        ["src/bytes/mod.rs",660,59,null,false],
+        ["src/bytes/mod.rs",730,6,null,false],
+        ["src/bytes/streaming.rs",31,51,null,false],
+        ["src/bytes/streaming.rs",65,59,null,false],
+        ["src/bytes/streaming.rs",101,54,null,false],
+        ["src/bytes/streaming.rs",134,52,null,false],
+        ["src/bytes/streaming.rs",166,59,null,false],
+        ["src/bytes/streaming.rs",200,60,null,false],
+        ["src/bytes/streaming.rs",239,6,null,false],
+        ["src/bytes/streaming.rs",273,58,null,false],
+        ["src/bytes/streaming.rs",306,59,null,false],
+        ["src/bytes/streaming.rs",339,54,null,false],
+        ["src/bytes/streaming.rs",370,58,null,false],
+        ["src/bytes/streaming.rs",402,59,null,false],
+        ["src/bytes/streaming.rs",436,6,null,false],
+        ["src/bytes/complete.rs",32,51,null,false],
+        ["src/bytes/complete.rs",68,59,null,false],
+        ["src/bytes/complete.rs",104,54,null,false],
+        ["src/bytes/complete.rs",135,52,null,false],
+        ["src/bytes/complete.rs",164,59,null,false],
+        ["src/bytes/complete.rs",194,60,null,false],
+        ["src/bytes/complete.rs",231,6,null,false],
+        ["src/bytes/complete.rs",260,58,null,false],
+        ["src/bytes/complete.rs",292,59,null,false],
+        ["src/bytes/complete.rs",331,54,null,false],
+        ["src/bytes/complete.rs",359,58,null,false],
+        ["src/bytes/complete.rs",388,59,null,false],
+        ["src/bytes/complete.rs",422,6,null,false],
+        ["src/bits/mod.rs",39,48,null,false],
+        ["src/bits/mod.rs",84,49,null,false],
+        ["src/bits/streaming.rs",12,6,null,false],
+        ["src/bits/streaming.rs",62,6,null,false],
+        ["src/bits/complete.rs",35,6,null,false],
+        ["src/bits/complete.rs",86,6,null,false],
+        ["src/multi/mod.rs",702,43,null,false],
+        ["src/multi/mod.rs",783,43,null,false],
+        ["src/multi/mod.rs",1048,6,null,false],
+        ["src/multi/mod.rs",1152,6,null,false],
+        ["src/multi/mod.rs",1274,6,null,false],
+        ["src/multi/mod.rs",1373,38,null,false],
+        ["src/multi/mod.rs",1408,6,null,false],
+        ["src/multi/mod.rs",1792,6,null,false],
+        ["src/combinator/mod.rs",74,62,null,false],
+        ["src/combinator/mod.rs",105,6,null,false],
+        ["src/combinator/mod.rs",136,6,null,false],
+        ["src/combinator/mod.rs",163,6,null,false],
+        ["src/combinator/mod.rs",189,6,null,false],
+        ["src/combinator/mod.rs",218,6,null,false],
+        ["src/combinator/mod.rs",274,6,null,false],
+        ["src/combinator/mod.rs",321,6,null,false],
+        ["src/combinator/mod.rs",391,6,null,false],
+        ["src/combinator/mod.rs",444,6,null,false],
+        ["src/combinator/mod.rs",498,6,null,false],
+        ["src/combinator/mod.rs",563,6,null,false],
+        ["src/combinator/mod.rs",584,57,null,false],
+        ["src/combinator/mod.rs",633,6,null,false],
+        ["src/combinator/mod.rs",708,6,null,false],
+        ["src/combinator/mod.rs",803,6,null,false],
+        ["src/combinator/mod.rs",859,49,null,false],
+        ["src/combinator/mod.rs",984,58,null,false],
+        ["src/combinator/mod.rs",1019,42,null,false]
+      ],
+      "title": "Opaque impl Trait return types",
+      "upstream_default_inactive_sites": 0,
+      "upstream_default_production_sites": 78
+    },
+    {
+      "affected_file_count": 4,
+      "affected_file_physical_line_upper_bound": 4360,
+      "affected_original_files": ["src/bytes/mod.rs","src/character/mod.rs","src/combinator/mod.rs","src/multi/mod.rs"],
+      "confirmed_unique_sites": 41,
+      "id": "qualified_associated_paths",
+      "interpretation": "35 qualified type/where/nested-type sites and 6 qualified value-call sites. Three nested type sites tokenize the adjacent opening brackets as <<. All are separate concrete declaration/member/body contexts, not return-impl recovery.",
+      "owner": "Language / compiler parser and resolution",
+      "rank": 3,
+      "sites": [
+        ["src/character/mod.rs",115,3,"qualified_type_or_where_path",false],
+        ["src/character/mod.rs",178,3,"qualified_type_or_where_path",false],
+        ["src/character/mod.rs",271,3,"qualified_type_or_where_path",false],
+        ["src/character/mod.rs",288,3,"qualified_type_or_where_path",false],
+        ["src/character/mod.rs",340,3,"qualified_type_or_where_path",false],
+        ["src/character/mod.rs",388,3,"qualified_type_or_where_path",false],
+        ["src/bytes/mod.rs",173,9,"qualified_type_or_where_path",false],
+        ["src/bytes/mod.rs",195,9,"qualified_type_or_where_path",false],
+        ["src/bytes/mod.rs",392,9,"qualified_type_or_where_path",false],
+        ["src/bytes/mod.rs",757,3,"qualified_type_or_where_path",false],
+        ["src/multi/mod.rs",722,16,"qualified_type_or_where_path",false],
+        ["src/multi/mod.rs",741,15,"qualified_value_path",false],
+        ["src/multi/mod.rs",803,16,"qualified_type_or_where_path",false],
+        ["src/multi/mod.rs",816,9,"qualified_value_path",false],
+        ["src/multi/mod.rs",834,19,"qualified_value_path",false],
+        ["src/multi/mod.rs",960,17,"qualified_type_or_where_path",false],
+        ["src/multi/mod.rs",1076,15,"qualified_type_or_where_path",false],
+        ["src/multi/mod.rs",1180,15,"qualified_type_or_where_path",false],
+        ["src/multi/mod.rs",1306,15,"qualified_type_or_where_path",false],
+        ["src/multi/mod.rs",1694,21,"nested_qualified_type_left_shift_token",false],
+        ["src/multi/mod.rs",1821,17,"qualified_type_or_where_path",false],
+        ["src/combinator/mod.rs",234,23,"nested_qualified_type_left_shift_token",false],
+        ["src/combinator/mod.rs",236,16,"qualified_type_or_where_path",false],
+        ["src/combinator/mod.rs",292,23,"nested_qualified_type_left_shift_token",false],
+        ["src/combinator/mod.rs",293,16,"qualified_type_or_where_path",false],
+        ["src/combinator/mod.rs",338,17,"qualified_type_or_where_path",false],
+        ["src/combinator/mod.rs",339,16,"qualified_type_or_where_path",false],
+        ["src/combinator/mod.rs",408,17,"qualified_type_or_where_path",false],
+        ["src/combinator/mod.rs",409,16,"qualified_type_or_where_path",false],
+        ["src/combinator/mod.rs",419,9,"qualified_value_path",false],
+        ["src/combinator/mod.rs",462,17,"qualified_type_or_where_path",false],
+        ["src/combinator/mod.rs",463,16,"qualified_type_or_where_path",false],
+        ["src/combinator/mod.rs",471,9,"qualified_value_path",false],
+        ["src/combinator/mod.rs",523,3,"qualified_type_or_where_path",false],
+        ["src/combinator/mod.rs",602,16,"qualified_type_or_where_path",false],
+        ["src/combinator/mod.rs",608,9,"qualified_value_path",false],
+        ["src/combinator/mod.rs",651,16,"qualified_type_or_where_path",false],
+        ["src/combinator/mod.rs",727,21,"qualified_type_or_where_path",false],
+        ["src/combinator/mod.rs",728,16,"qualified_type_or_where_path",false],
+        ["src/combinator/mod.rs",819,17,"qualified_type_or_where_path",false],
+        ["src/combinator/mod.rs",821,16,"qualified_type_or_where_path",false]
+      ],
+      "title": "Qualified associated type and value paths",
+      "upstream_default_inactive_sites": 0,
+      "upstream_default_production_sites": 41
+    },
+    {
+      "affected_file_count": 6,
+      "affected_file_physical_line_upper_bound": 6004,
+      "affected_original_files": ["src/bits/complete.rs","src/bits/streaming.rs","src/bytes/mod.rs","src/combinator/mod.rs","src/multi/mod.rs","src/traits.rs"],
+      "confirmed_unique_sites": 10,
+      "id": "associated_type_equality_bindings",
+      "interpretation": "10 independently reached Item = / Output = / Error = binding sites. Excludes 46 same-line return-impl recoveries, four recovered bit-parser bounds, and one recovered fill return.",
+      "owner": "Language / compiler parser and bounds",
+      "rank": 4,
+      "sites": [
+        ["src/bytes/mod.rs",940,37,null,false],
+        ["src/bits/streaming.rs",99,17,null,false],
+        ["src/bits/complete.rs",123,17,null,false],
+        ["src/traits.rs",31,28,null,false],
+        ["src/traits.rs",36,35,null,false],
+        ["src/traits.rs",1411,34,null,false],
+        ["src/traits.rs",1413,31,null,false],
+        ["src/multi/mod.rs",979,23,null,false],
+        ["src/multi/mod.rs",1438,22,null,false],
+        ["src/combinator/mod.rs",922,27,null,false]
+      ],
+      "title": "Associated-type equality bindings in trait arguments",
+      "upstream_default_inactive_sites": 0,
+      "upstream_default_production_sites": 10
+    },
+    {
+      "affected_file_count": 1,
+      "affected_file_physical_line_upper_bound": 1681,
+      "affected_original_files": ["src/traits.rs"],
+      "confirmed_unique_sites": 6,
+      "id": "const_generics",
+      "interpretation": "Six array implementation headers reject at const N: usize; all six are before the test-only section.",
+      "owner": "Language / compiler generic parameters",
+      "rank": 5,
+      "sites": [
+        ["src/traits.rs",646,10,null,false],
+        ["src/traits.rs",653,6,null,false],
+        ["src/traits.rs",1099,10,null,false],
+        ["src/traits.rs",1111,14,null,false],
+        ["src/traits.rs",1123,6,null,false],
+        ["src/traits.rs",1129,10,null,false]
+      ],
+      "title": "Const generic parameters",
+      "upstream_default_inactive_sites": 0,
+      "upstream_default_production_sites": 6
+    },
+    {
+      "affected_file_count": 1,
+      "affected_file_physical_line_upper_bound": 1044,
+      "affected_original_files": ["src/combinator/mod.rs"],
+      "confirmed_unique_sites": 1,
+      "id": "maybe_sized_bounds",
+      "interpretation": "One independently reached struct generic bound. Additional ?Sized occurrences in already refused declarations are inventory, not additional diagnosed sites.",
+      "owner": "Language / compiler generic bounds",
+      "rank": 6,
+      "sites": [
+        ["src/combinator/mod.rs",513,29,"maybe_sized",false]
+      ],
+      "title": "Relaxed ?Sized bound syntax",
+      "upstream_default_inactive_sites": 0,
+      "upstream_default_production_sites": 1
+    },
+    {
+      "affected_file_count": 1,
+      "affected_file_physical_line_upper_bound": 460,
+      "affected_original_files": ["src/lib.rs"],
+      "confirmed_unique_sites": 3,
+      "id": "doc_doctest_cfg",
+      "interpretation": "Two doctest attributes and one doc predicate in the recipes gate. Their payloads are inactive in upstream's normal default library build; this check has no Cargo feature/test configuration selection.",
+      "owner": "Language / configuration and source loading",
+      "rank": 7,
+      "sites": [
+        ["src/lib.rs",385,1,null,true],
+        ["src/lib.rs",388,1,null,true],
+        ["src/lib.rs",458,1,null,true]
+      ],
+      "title": "Documentation cfg predicates",
+      "upstream_default_inactive_sites": 3,
+      "upstream_default_production_sites": 0
+    },
+    {
+      "affected_file_count": 1,
+      "affected_file_physical_line_upper_bound": 1681,
+      "affected_original_files": ["src/traits.rs"],
+      "confirmed_unique_sites": 2,
+      "id": "unsafe_blocks",
+      "interpretation": "Two unsafe blocks surround get_unchecked string slicing. A safe checked adaptation or compiler policy decision is required. The receipt proves the current surface refusal; it does not by itself establish that the unsafe keyword is permanently refused by design.",
+      "owner": "Refused by design / checked-memory admission policy",
+      "rank": 8,
+      "sites": [
+        ["src/traits.rs",507,18,null,false],
+        ["src/traits.rs",542,18,null,false]
+      ],
+      "title": "Unsafe block surface",
+      "upstream_default_inactive_sites": 0,
+      "upstream_default_production_sites": 2
+    }
+  ],
+  "compiler_sha256": "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+  "configuration": {
+    "no_cargo_configuration_selected": true,
+    "projection_root": "src/lib.lkj",
+    "root": "src/lib.rs",
+    "semantic_phase_basis": "Receipt ends with E_BLOCKED semantic phase: source errors prevent complete name resolution and semantic checking.",
+    "semantic_phase_reached": false,
+    "upstream_default_configuration": {
+      "doc": false,
+      "docsrs": false,
+      "doctest": false,
+      "feature_basis": "default = [\"std\"]; std = [\"alloc\", \"memchr/std\"]",
+      "features": ["std","alloc"],
+      "manifest": "Cargo.toml",
+      "qualification": "Source-membership classification for the upstream default library build, not a claim that lkjscript selected or compiled that Cargo configuration.",
+      "test": false
+    }
+  },
+  "current_verification": {
+    "check_measurements": [
       {
-         "affected_file_count" : 8,
-         "affected_file_physical_line_upper_bound" : 6418,
-         "affected_original_files" : [
-            "src/branch/mod.rs",
-            "src/character/complete.rs",
-            "src/character/streaming.rs",
-            "src/error.rs",
-            "src/internal.rs",
-            "src/macros.rs",
-            "src/number/mod.rs",
-            "src/sequence/mod.rs"
-         ],
-         "confirmed_unique_sites" : 8,
-         "id" : "macro_rules_dollar_token",
-         "interpretation" : "Eight first lexer stops in macro_rules! definitions. This observes token intake refusal; it does not measure expansion correctness or count all macro definitions/calls.",
-         "owner" : "Language / checked source-producer route",
-         "rank" : 1,
-         "sites" : [
-            [
-               "src/number/mod.rs",
-               1420,
-               6,
-               null,
-               true
-            ],
-            [
-               "src/character/streaming.rs",
-               651,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/character/complete.rs",
-               754,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/sequence/mod.rs",
-               245,
-               4,
-               null,
-               false
-            ],
-            [
-               "src/internal.rs",
-               527,
-               4,
-               null,
-               false
-            ],
-            [
-               "src/branch/mod.rs",
-               98,
-               4,
-               null,
-               false
-            ],
-            [
-               "src/error.rs",
-               453,
-               4,
-               null,
-               false
-            ],
-            [
-               "src/macros.rs",
-               2,
-               7,
-               null,
-               false
-            ]
-         ],
-         "title" : "Rust declarative macro input stops at dollar tokens",
-         "upstream_default_inactive_sites" : 1,
-         "upstream_default_production_sites" : 7
-      },
-      {
-         "affected_file_count" : 9,
-         "affected_file_physical_line_upper_bound" : 5964,
-         "affected_original_files" : [
-            "src/bits/complete.rs",
-            "src/bits/mod.rs",
-            "src/bits/streaming.rs",
-            "src/bytes/complete.rs",
-            "src/bytes/mod.rs",
-            "src/bytes/streaming.rs",
-            "src/character/mod.rs",
-            "src/combinator/mod.rs",
-            "src/multi/mod.rs"
-         ],
-         "confirmed_unique_sites" : 78,
-         "id" : "return_position_impl_trait",
-         "interpretation" : "78 direct unsupported-impl reports at return types; later reparsing of the same token as an implementation is excluded.",
-         "owner" : "Language / compiler source lowering",
-         "rank" : 2,
-         "sites" : [
-            [
-               "src/character/mod.rs",
-               98,
-               50,
-               null,
-               false
-            ],
-            [
-               "src/character/mod.rs",
-               157,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/character/mod.rs",
-               219,
-               55,
-               null,
-               false
-            ],
-            [
-               "src/character/mod.rs",
-               242,
-               56,
-               null,
-               false
-            ],
-            [
-               "src/character/mod.rs",
-               325,
-               41,
-               null,
-               false
-            ],
-            [
-               "src/character/mod.rs",
-               368,
-               46,
-               null,
-               false
-            ],
-            [
-               "src/bytes/mod.rs",
-               45,
-               51,
-               null,
-               false
-            ],
-            [
-               "src/bytes/mod.rs",
-               114,
-               59,
-               null,
-               false
-            ],
-            [
-               "src/bytes/mod.rs",
-               228,
-               54,
-               null,
-               false
-            ],
-            [
-               "src/bytes/mod.rs",
-               261,
-               52,
-               null,
-               false
-            ],
-            [
-               "src/bytes/mod.rs",
-               292,
-               59,
-               null,
-               false
-            ],
-            [
-               "src/bytes/mod.rs",
-               327,
-               60,
-               null,
-               false
-            ],
-            [
-               "src/bytes/mod.rs",
-               368,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/bytes/mod.rs",
-               465,
-               58,
-               null,
-               false
-            ],
-            [
-               "src/bytes/mod.rs",
-               499,
-               59,
-               null,
-               false
-            ],
-            [
-               "src/bytes/mod.rs",
-               534,
-               54,
-               null,
-               false
-            ],
-            [
-               "src/bytes/mod.rs",
-               596,
-               58,
-               null,
-               false
-            ],
-            [
-               "src/bytes/mod.rs",
-               660,
-               59,
-               null,
-               false
-            ],
-            [
-               "src/bytes/mod.rs",
-               730,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/bytes/streaming.rs",
-               31,
-               51,
-               null,
-               false
-            ],
-            [
-               "src/bytes/streaming.rs",
-               65,
-               59,
-               null,
-               false
-            ],
-            [
-               "src/bytes/streaming.rs",
-               101,
-               54,
-               null,
-               false
-            ],
-            [
-               "src/bytes/streaming.rs",
-               134,
-               52,
-               null,
-               false
-            ],
-            [
-               "src/bytes/streaming.rs",
-               166,
-               59,
-               null,
-               false
-            ],
-            [
-               "src/bytes/streaming.rs",
-               200,
-               60,
-               null,
-               false
-            ],
-            [
-               "src/bytes/streaming.rs",
-               239,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/bytes/streaming.rs",
-               273,
-               58,
-               null,
-               false
-            ],
-            [
-               "src/bytes/streaming.rs",
-               306,
-               59,
-               null,
-               false
-            ],
-            [
-               "src/bytes/streaming.rs",
-               339,
-               54,
-               null,
-               false
-            ],
-            [
-               "src/bytes/streaming.rs",
-               370,
-               58,
-               null,
-               false
-            ],
-            [
-               "src/bytes/streaming.rs",
-               402,
-               59,
-               null,
-               false
-            ],
-            [
-               "src/bytes/streaming.rs",
-               436,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/bytes/complete.rs",
-               32,
-               51,
-               null,
-               false
-            ],
-            [
-               "src/bytes/complete.rs",
-               68,
-               59,
-               null,
-               false
-            ],
-            [
-               "src/bytes/complete.rs",
-               104,
-               54,
-               null,
-               false
-            ],
-            [
-               "src/bytes/complete.rs",
-               135,
-               52,
-               null,
-               false
-            ],
-            [
-               "src/bytes/complete.rs",
-               164,
-               59,
-               null,
-               false
-            ],
-            [
-               "src/bytes/complete.rs",
-               194,
-               60,
-               null,
-               false
-            ],
-            [
-               "src/bytes/complete.rs",
-               231,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/bytes/complete.rs",
-               260,
-               58,
-               null,
-               false
-            ],
-            [
-               "src/bytes/complete.rs",
-               292,
-               59,
-               null,
-               false
-            ],
-            [
-               "src/bytes/complete.rs",
-               331,
-               54,
-               null,
-               false
-            ],
-            [
-               "src/bytes/complete.rs",
-               359,
-               58,
-               null,
-               false
-            ],
-            [
-               "src/bytes/complete.rs",
-               388,
-               59,
-               null,
-               false
-            ],
-            [
-               "src/bytes/complete.rs",
-               422,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/bits/mod.rs",
-               39,
-               48,
-               null,
-               false
-            ],
-            [
-               "src/bits/mod.rs",
-               84,
-               49,
-               null,
-               false
-            ],
-            [
-               "src/bits/streaming.rs",
-               12,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/bits/streaming.rs",
-               62,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/bits/complete.rs",
-               35,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/bits/complete.rs",
-               86,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               702,
-               43,
-               null,
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               783,
-               43,
-               null,
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               1048,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               1152,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               1274,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               1373,
-               38,
-               null,
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               1408,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               1792,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               74,
-               62,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               105,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               136,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               163,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               189,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               218,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               274,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               321,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               391,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               444,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               498,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               563,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               584,
-               57,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               633,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               708,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               803,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               859,
-               49,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               984,
-               58,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               1019,
-               42,
-               null,
-               false
-            ]
-         ],
-         "title" : "Opaque impl Trait return types",
-         "upstream_default_inactive_sites" : 0,
-         "upstream_default_production_sites" : 78
+        "exit_status": 1,
+        "launcher_signal": 0,
+        "peak_rss_kib": 4396,
+        "route": "original_suffix",
+        "upstream_entry": "src/lib.rs",
+        "wall_seconds": 0.000988
       },
       {
-         "affected_file_count" : 4,
-         "affected_file_physical_line_upper_bound" : 4360,
-         "affected_original_files" : [
-            "src/bytes/mod.rs",
-            "src/character/mod.rs",
-            "src/combinator/mod.rs",
-            "src/multi/mod.rs"
-         ],
-         "confirmed_unique_sites" : 41,
-         "id" : "qualified_associated_paths",
-         "interpretation" : "35 qualified type/where/nested-type sites and 6 qualified value-call sites. Three nested type sites tokenize the adjacent opening brackets as <<. All are separate concrete declaration/member/body contexts, not return-impl recovery.",
-         "owner" : "Language / compiler parser and resolution",
-         "rank" : 3,
-         "sites" : [
-            [
-               "src/character/mod.rs",
-               115,
-               3,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/character/mod.rs",
-               178,
-               3,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/character/mod.rs",
-               271,
-               3,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/character/mod.rs",
-               288,
-               3,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/character/mod.rs",
-               340,
-               3,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/character/mod.rs",
-               388,
-               3,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/bytes/mod.rs",
-               173,
-               9,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/bytes/mod.rs",
-               195,
-               9,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/bytes/mod.rs",
-               392,
-               9,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/bytes/mod.rs",
-               757,
-               3,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               722,
-               16,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               741,
-               15,
-               "qualified_value_path",
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               803,
-               16,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               816,
-               9,
-               "qualified_value_path",
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               834,
-               19,
-               "qualified_value_path",
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               960,
-               17,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               1076,
-               15,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               1180,
-               15,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               1306,
-               15,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               1694,
-               21,
-               "nested_qualified_type_left_shift_token",
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               1821,
-               17,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               234,
-               23,
-               "nested_qualified_type_left_shift_token",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               236,
-               16,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               292,
-               23,
-               "nested_qualified_type_left_shift_token",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               293,
-               16,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               338,
-               17,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               339,
-               16,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               408,
-               17,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               409,
-               16,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               419,
-               9,
-               "qualified_value_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               462,
-               17,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               463,
-               16,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               471,
-               9,
-               "qualified_value_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               523,
-               3,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               602,
-               16,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               608,
-               9,
-               "qualified_value_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               651,
-               16,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               727,
-               21,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               728,
-               16,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               819,
-               17,
-               "qualified_type_or_where_path",
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               821,
-               16,
-               "qualified_type_or_where_path",
-               false
-            ]
-         ],
-         "title" : "Qualified associated type and value paths",
-         "upstream_default_inactive_sites" : 0,
-         "upstream_default_production_sites" : 41
-      },
-      {
-         "affected_file_count" : 6,
-         "affected_file_physical_line_upper_bound" : 6004,
-         "affected_original_files" : [
-            "src/bits/complete.rs",
-            "src/bits/streaming.rs",
-            "src/bytes/mod.rs",
-            "src/combinator/mod.rs",
-            "src/multi/mod.rs",
-            "src/traits.rs"
-         ],
-         "confirmed_unique_sites" : 10,
-         "id" : "associated_type_equality_bindings",
-         "interpretation" : "10 independently reached Item = / Output = / Error = binding sites. Excludes 46 same-line return-impl recoveries, four recovered bit-parser bounds, and one recovered fill return.",
-         "owner" : "Language / compiler parser and bounds",
-         "rank" : 4,
-         "sites" : [
-            [
-               "src/bytes/mod.rs",
-               940,
-               37,
-               null,
-               false
-            ],
-            [
-               "src/bits/streaming.rs",
-               99,
-               17,
-               null,
-               false
-            ],
-            [
-               "src/bits/complete.rs",
-               123,
-               17,
-               null,
-               false
-            ],
-            [
-               "src/traits.rs",
-               31,
-               28,
-               null,
-               false
-            ],
-            [
-               "src/traits.rs",
-               36,
-               35,
-               null,
-               false
-            ],
-            [
-               "src/traits.rs",
-               1411,
-               34,
-               null,
-               false
-            ],
-            [
-               "src/traits.rs",
-               1413,
-               31,
-               null,
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               979,
-               23,
-               null,
-               false
-            ],
-            [
-               "src/multi/mod.rs",
-               1438,
-               22,
-               null,
-               false
-            ],
-            [
-               "src/combinator/mod.rs",
-               922,
-               27,
-               null,
-               false
-            ]
-         ],
-         "title" : "Associated-type equality bindings in trait arguments",
-         "upstream_default_inactive_sites" : 0,
-         "upstream_default_production_sites" : 10
-      },
-      {
-         "affected_file_count" : 1,
-         "affected_file_physical_line_upper_bound" : 1681,
-         "affected_original_files" : [
-            "src/traits.rs"
-         ],
-         "confirmed_unique_sites" : 6,
-         "id" : "const_generics",
-         "interpretation" : "Six array implementation headers reject at const N: usize; all six are before the test-only section.",
-         "owner" : "Language / compiler generic parameters",
-         "rank" : 5,
-         "sites" : [
-            [
-               "src/traits.rs",
-               646,
-               10,
-               null,
-               false
-            ],
-            [
-               "src/traits.rs",
-               653,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/traits.rs",
-               1099,
-               10,
-               null,
-               false
-            ],
-            [
-               "src/traits.rs",
-               1111,
-               14,
-               null,
-               false
-            ],
-            [
-               "src/traits.rs",
-               1123,
-               6,
-               null,
-               false
-            ],
-            [
-               "src/traits.rs",
-               1129,
-               10,
-               null,
-               false
-            ]
-         ],
-         "title" : "Const generic parameters",
-         "upstream_default_inactive_sites" : 0,
-         "upstream_default_production_sites" : 6
-      },
-      {
-         "affected_file_count" : 1,
-         "affected_file_physical_line_upper_bound" : 1044,
-         "affected_original_files" : [
-            "src/combinator/mod.rs"
-         ],
-         "confirmed_unique_sites" : 1,
-         "id" : "maybe_sized_bounds",
-         "interpretation" : "One independently reached struct generic bound. Additional ?Sized occurrences in already refused declarations are inventory, not additional diagnosed sites.",
-         "owner" : "Language / compiler generic bounds",
-         "rank" : 6,
-         "sites" : [
-            [
-               "src/combinator/mod.rs",
-               513,
-               29,
-               "maybe_sized",
-               false
-            ]
-         ],
-         "title" : "Relaxed ?Sized bound syntax",
-         "upstream_default_inactive_sites" : 0,
-         "upstream_default_production_sites" : 1
-      },
-      {
-         "affected_file_count" : 1,
-         "affected_file_physical_line_upper_bound" : 460,
-         "affected_original_files" : [
-            "src/lib.rs"
-         ],
-         "confirmed_unique_sites" : 3,
-         "id" : "doc_doctest_cfg",
-         "interpretation" : "Two doctest attributes and one doc predicate in the recipes gate. Their payloads are inactive in upstream's normal default library build; this check has no Cargo feature/test configuration selection.",
-         "owner" : "Language / configuration and source loading",
-         "rank" : 7,
-         "sites" : [
-            [
-               "src/lib.rs",
-               385,
-               1,
-               null,
-               true
-            ],
-            [
-               "src/lib.rs",
-               388,
-               1,
-               null,
-               true
-            ],
-            [
-               "src/lib.rs",
-               458,
-               1,
-               null,
-               true
-            ]
-         ],
-         "title" : "Documentation cfg predicates",
-         "upstream_default_inactive_sites" : 3,
-         "upstream_default_production_sites" : 0
-      },
-      {
-         "affected_file_count" : 1,
-         "affected_file_physical_line_upper_bound" : 1681,
-         "affected_original_files" : [
-            "src/traits.rs"
-         ],
-         "confirmed_unique_sites" : 2,
-         "id" : "unsafe_blocks",
-         "interpretation" : "Two unsafe blocks surround get_unchecked string slicing. A safe checked adaptation or compiler policy decision is required. The receipt proves the current surface refusal; it does not by itself establish that the unsafe keyword is permanently refused by design.",
-         "owner" : "Refused by design / checked-memory admission policy",
-         "rank" : 8,
-         "sites" : [
-            [
-               "src/traits.rs",
-               507,
-               18,
-               null,
-               false
-            ],
-            [
-               "src/traits.rs",
-               542,
-               18,
-               null,
-               false
-            ]
-         ],
-         "title" : "Unsafe block surface",
-         "upstream_default_inactive_sites" : 0,
-         "upstream_default_production_sites" : 2
+        "exit_status": 1,
+        "launcher_signal": 0,
+        "peak_rss_kib": 25132,
+        "route": "suffix_projection",
+        "upstream_entry": "src/lib.rs",
+        "wall_seconds": 0.128833
       }
-   ],
-   "compiler_sha256" : "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
-   "configuration" : {
-      "no_cargo_configuration_selected" : true,
-      "projection_root" : "src/lib.lkj",
-      "root" : "src/lib.rs",
-      "semantic_phase_basis" : "Receipt ends with E_BLOCKED semantic phase: source errors prevent complete name resolution and semantic checking.",
-      "semantic_phase_reached" : false,
-      "upstream_default_configuration" : {
-         "doc" : false,
-         "docsrs" : false,
-         "doctest" : false,
-         "feature_basis" : "default = [\"std\"]; std = [\"alloc\", \"memchr/std\"]",
-         "features" : [
-            "std",
-            "alloc"
-         ],
-         "manifest" : "Cargo.toml",
-         "qualification" : "Source-membership classification for the upstream default library build, not a claim that lkjscript selected or compiled that Cargo configuration.",
-         "test" : false
+    ],
+    "comparisons": [
+      {
+        "command_stdout_stderr_exit_signal_source_entry_equal": true,
+        "compiler_sha256": "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+        "library_and_projection_verifications_equal": true,
+        "observations_equal": 2,
+        "observer_label_difference": null,
+        "package_equal_except_observer_label": true,
+        "receipt": "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified.json",
+        "receipt_sha256": "58ce41c96ee849206c7c4f834d5bf5532aa2f064dda6caad8e2a7227ce192082"
+      },
+      {
+        "command_stdout_stderr_exit_signal_source_entry_equal": true,
+        "compiler_sha256": "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0",
+        "library_and_projection_verifications_equal": true,
+        "observations_equal": 2,
+        "observer_label_difference": null,
+        "package_equal_except_observer_label": true,
+        "receipt": "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-units-9db99295.json",
+        "receipt_sha256": "7755d309853b8de28bd2874a2253110bfaf1784113cbcc627073abb41dc51a97"
+      },
+      {
+        "command_stdout_stderr_exit_signal_source_entry_equal": true,
+        "compiler_sha256": "2a76113394bb40ea5612965ed4567ca69f3f43555334bb6874b88588975cee3b",
+        "library_and_projection_verifications_equal": true,
+        "observations_equal": 2,
+        "observer_label_difference": null,
+        "package_equal_except_observer_label": true,
+        "receipt": "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-units-2a761133.json",
+        "receipt_sha256": "099ac1a1040c4b66e71ac895cfe5655406376d3b4bf25e4e397bbc967ffc9610"
       }
-   },
-   "current_verification" : {
-      "compiler_sha256" : "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0",
-      "complete_stdout_stderr_exit_and_source_entry_bytes_equal" : true,
-      "initial_compiler_sha256" : "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
-      "initial_receipt_sha256" : "58ce41c96ee849206c7c4f834d5bf5532aa2f064dda6caad8e2a7227ce192082",
-      "library_manifest_sha256" : "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
-      "observations" : 2,
-      "probe_sha256" : "afc7174933a0e67862e43d2f5d0f991a093609b86bb08c6e42ff39d6ccb9cbff",
-      "projection_manifest_sha256" : "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
-      "projector_sha256" : "622f63b9d22c23beb6db3f3dd77ef2cc6a1a0aa20d8620ac36a6730baafa0f95",
-      "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-units-9db99295.json",
-      "receipt_sha256" : "7755d309853b8de28bd2874a2253110bfaf1784113cbcc627073abb41dc51a97",
-      "source_commit" : "d095ba7cd32a44bea7e7964767f02fa5195c3462"
-   },
-   "focused_cases" : "Separate handwritten cases under tests/diagnostics/programs_foreign_*; not added to whole-root counts.",
-   "kind" : "independent_foreign_refusal_frontier",
-   "license" : "MIT",
-   "limitations" : [
-      "Counts classify complete-root source diagnostics only. Later reduced kernels and Rust oracles have separate evidence and add no root sites.",
-      "Primary counts are lower bounds on later independently exposed barriers; lexing and source recovery hide further constructs.",
-      "Physical file-coverage bounds overlap and include inactive text; they must not be summed as blocked program LOC.",
-      "No Cargo-equivalent configuration, dependency-closure admission, package authority or macro trust exception follows from this summary."
-   ],
-   "line_count_rule" : "Cause file coverage overlaps. Exact dependency-blocked lines are unknown; 21397 source lines is the overlapping whole-library upper bound.",
-   "measurement" : {
-      "compiler" : {
-         "path" : "/home/coder/workspace/lkjscript-programs-20261115/target/lkjscript",
-         "sha256" : "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca"
-      },
-      "library_manifest_sha256" : "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
-      "path" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified.json",
-      "projection_manifest_sha256" : "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
-      "sha256" : "58ce41c96ee849206c7c4f834d5bf5532aa2f064dda6caad8e2a7227ce192082",
-      "timestamp_utc" : "2026-11-17T00:53:33Z"
-   },
-   "origin" : "https://github.com/rust-bakery/nom",
-   "package" : {
-      "commit" : "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
-      "name" : "nom",
-      "object_format" : "sha1",
-      "origin" : "https://github.com/rust-bakery/nom.git",
-      "root" : "/home/coder/workspace/lkjscript-specimens/nom-8.0.0",
-      "version" : "8.0.0"
-   },
-   "recovery_exclusions" : [
-      {
-         "count" : 46,
-         "diagnostic_indices" : [
-            5,
-            8,
-            11,
-            13,
-            17,
-            20,
-            25,
-            27,
-            31,
-            33,
-            35,
-            37,
-            39,
-            42,
-            44,
-            46,
-            48,
-            50,
-            52,
-            135,
-            139,
-            147,
-            150,
-            153,
-            156,
-            158,
-            162,
-            166,
-            168,
-            170,
-            172,
-            174,
-            176,
-            180,
-            184,
-            188,
-            193,
-            198,
-            202,
-            204,
-            208,
-            211,
-            215,
-            219,
-            222,
-            224
-         ],
-         "id" : "reparsed_opaque_parser_binding",
-         "parent_diagnostic_indices" : [
-            4,
-            7,
-            10,
-            12,
-            16,
-            19,
-            24,
-            26,
-            30,
-            32,
-            34,
-            36,
-            38,
-            41,
-            43,
-            45,
-            47,
-            49,
-            51,
-            134,
-            138,
-            146,
-            149,
-            152,
-            155,
-            157,
-            161,
-            165,
-            167,
-            169,
-            171,
-            173,
-            175,
-            179,
-            183,
-            187,
-            192,
-            197,
-            201,
-            203,
-            207,
-            210,
-            214,
-            218,
-            221,
-            223
-         ]
-      },
-      {
-         "count" : 28,
-         "diagnostic_indices" : [
-            56,
-            58,
-            60,
-            62,
-            64,
-            66,
-            68,
-            70,
-            72,
-            74,
-            76,
-            78,
-            80,
-            82,
-            84,
-            86,
-            88,
-            90,
-            92,
-            94,
-            96,
-            98,
-            100,
-            102,
-            104,
-            106,
-            108,
-            110
-         ],
-         "id" : "reparsed_return_impl_without_function_generics",
-         "parent_diagnostic_indices" : [
-            55,
-            57,
-            59,
-            61,
-            63,
-            65,
-            67,
-            69,
-            71,
-            73,
-            75,
-            77,
-            79,
-            81,
-            83,
-            85,
-            87,
-            89,
-            91,
-            93,
-            95,
-            97,
-            99,
-            101,
-            103,
-            105,
-            107,
-            109
-         ]
-      },
-      {
-         "count" : 4,
-         "diagnostic_indices" : [
-            112,
-            114,
-            117,
-            119
-         ],
-         "id" : "reparsed_opaque_fn_where_binding",
-         "parent_diagnostic_indices" : [
-            111,
-            113,
-            116,
-            118
-         ]
-      },
-      {
-         "count" : 1,
-         "diagnostic_indices" : [
-            144
-         ],
-         "id" : "reparsed_return_after_qualified_parameter",
-         "parent_diagnostic_indices" : [
-            143
-         ]
-      }
-   ],
-   "revision" : "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
-   "schema" : 1,
-   "site_columns" : [
-      "upstream_file",
-      "line",
-      "column",
-      "subkind",
-      "inactive_in_upstream_default_library"
-   ],
-   "source" : {
-      "external_test_attribute_sites" : 61,
-      "external_test_files" : 16,
-      "external_test_lines" : 2178,
-      "library_files" : 28,
-      "library_lines" : 21397,
-      "source_test_attribute_sites" : 208
-   }
+    ],
+    "compiler_sha256": "eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f",
+    "complete_command_stdout_stderr_exit_signal_and_source_entry_bytes_equal": true,
+    "complete_stdout_stderr_exit_and_source_entry_bytes_equal": true,
+    "initial_compiler_sha256": "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+    "initial_receipt_sha256": "58ce41c96ee849206c7c4f834d5bf5532aa2f064dda6caad8e2a7227ce192082",
+    "library_inventory_and_projection_verifications_equal": true,
+    "library_manifest_sha256": "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+    "observations": 2,
+    "prior_receipts_compared": 3,
+    "probe_sha256": "afc7174933a0e67862e43d2f5d0f991a093609b86bb08c6e42ff39d6ccb9cbff",
+    "projection_manifest_sha256": "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
+    "projector_sha256": "622f63b9d22c23beb6db3f3dd77ef2cc6a1a0aa20d8620ac36a6730baafa0f95",
+    "receipt": "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-units-eb08fbaa.json",
+    "receipt_sha256": "5c61766cf5f33b2bf13e9028686b2d5b938a0be1907ffbab45457f917b74b41c",
+    "source_commit": "20412b9a49a726e48273b0a07943bb77d1117058",
+    "timing_and_rss_are_identity_fields": false
+  },
+  "focused_cases": "Separate handwritten cases under tests/diagnostics/programs_foreign_*; not added to whole-root counts.",
+  "kind": "independent_foreign_refusal_frontier",
+  "license": "MIT",
+  "limitations": ["Counts classify complete-root source diagnostics only. Later reduced kernels and Rust oracles have separate evidence and add no root sites.","Primary counts are lower bounds on later independently exposed barriers; lexing and source recovery hide further constructs.","Physical file-coverage bounds overlap and include inactive text; they must not be summed as blocked program LOC.","No Cargo-equivalent configuration, dependency-closure admission, package authority or macro trust exception follows from this summary."],
+  "line_count_rule": "Cause file coverage overlaps. Exact dependency-blocked lines are unknown; 21397 source lines is the overlapping whole-library upper bound.",
+  "measurement": {
+    "compiler": {
+      "path": "/home/coder/workspace/lkjscript-programs-20261115/target/lkjscript",
+      "sha256": "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca"
+    },
+    "library_manifest_sha256": "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+    "path": "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified.json",
+    "projection_manifest_sha256": "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
+    "sha256": "58ce41c96ee849206c7c4f834d5bf5532aa2f064dda6caad8e2a7227ce192082",
+    "timestamp_utc": "2026-11-17T00:53:33Z"
+  },
+  "origin": "https://github.com/rust-bakery/nom",
+  "package": {
+    "commit": "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
+    "name": "nom",
+    "object_format": "sha1",
+    "origin": "https://github.com/rust-bakery/nom.git",
+    "root": "/home/coder/workspace/lkjscript-specimens/nom-8.0.0",
+    "version": "8.0.0"
+  },
+  "recovery_exclusions": [
+    {
+      "count": 46,
+      "diagnostic_indices": [5,8,11,13,17,20,25,27,31,33,35,37,39,42,44,46,48,50,52,135,139,147,150,153,156,158,162,166,168,170,172,174,176,180,184,188,193,198,202,204,208,211,215,219,222,224],
+      "id": "reparsed_opaque_parser_binding",
+      "parent_diagnostic_indices": [4,7,10,12,16,19,24,26,30,32,34,36,38,41,43,45,47,49,51,134,138,146,149,152,155,157,161,165,167,169,171,173,175,179,183,187,192,197,201,203,207,210,214,218,221,223]
+    },
+    {
+      "count": 28,
+      "diagnostic_indices": [56,58,60,62,64,66,68,70,72,74,76,78,80,82,84,86,88,90,92,94,96,98,100,102,104,106,108,110],
+      "id": "reparsed_return_impl_without_function_generics",
+      "parent_diagnostic_indices": [55,57,59,61,63,65,67,69,71,73,75,77,79,81,83,85,87,89,91,93,95,97,99,101,103,105,107,109]
+    },
+    {
+      "count": 4,
+      "diagnostic_indices": [112,114,117,119],
+      "id": "reparsed_opaque_fn_where_binding",
+      "parent_diagnostic_indices": [111,113,116,118]
+    },
+    {
+      "count": 1,
+      "diagnostic_indices": [144],
+      "id": "reparsed_return_after_qualified_parameter",
+      "parent_diagnostic_indices": [143]
+    }
+  ],
+  "revision": "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
+  "schema": 1,
+  "site_columns": ["upstream_file","line","column","subkind","inactive_in_upstream_default_library"],
+  "source": {
+    "external_test_attribute_sites": 61,
+    "external_test_files": 16,
+    "external_test_lines": 2178,
+    "library_files": 28,
+    "library_lines": 21397,
+    "source_test_attribute_sites": 208
+  },
+  "verification_history": [
+    {
+      "compiler_sha256": "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0",
+      "complete_stdout_stderr_exit_and_source_entry_bytes_equal": true,
+      "initial_compiler_sha256": "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+      "initial_receipt_sha256": "58ce41c96ee849206c7c4f834d5bf5532aa2f064dda6caad8e2a7227ce192082",
+      "library_manifest_sha256": "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+      "observations": 2,
+      "probe_sha256": "afc7174933a0e67862e43d2f5d0f991a093609b86bb08c6e42ff39d6ccb9cbff",
+      "projection_manifest_sha256": "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
+      "projector_sha256": "622f63b9d22c23beb6db3f3dd77ef2cc6a1a0aa20d8620ac36a6730baafa0f95",
+      "receipt": "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-units-9db99295.json",
+      "receipt_sha256": "7755d309853b8de28bd2874a2253110bfaf1784113cbcc627073abb41dc51a97",
+      "source_commit": "d095ba7cd32a44bea7e7964767f02fa5195c3462"
+    },
+    {
+      "check_measurements": [
+        {
+          "exit_status": 1,
+          "launcher_signal": 0,
+          "peak_rss_kib": 4672,
+          "route": "original_suffix",
+          "upstream_entry": "src/lib.rs",
+          "wall_seconds": 0.001483
+        },
+        {
+          "exit_status": 1,
+          "launcher_signal": 0,
+          "peak_rss_kib": 28224,
+          "route": "suffix_projection",
+          "upstream_entry": "src/lib.rs",
+          "wall_seconds": 0.126164
+        }
+      ],
+      "comparisons": [
+        {
+          "command_stdout_stderr_exit_signal_source_entry_equal": true,
+          "compiler_sha256": "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+          "library_and_projection_verifications_equal": true,
+          "observations_equal": 2,
+          "observer_label_difference": null,
+          "package_equal_except_observer_label": true,
+          "receipt": "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified.json",
+          "receipt_sha256": "58ce41c96ee849206c7c4f834d5bf5532aa2f064dda6caad8e2a7227ce192082"
+        },
+        {
+          "command_stdout_stderr_exit_signal_source_entry_equal": true,
+          "compiler_sha256": "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0",
+          "library_and_projection_verifications_equal": true,
+          "observations_equal": 2,
+          "observer_label_difference": null,
+          "package_equal_except_observer_label": true,
+          "receipt": "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-units-9db99295.json",
+          "receipt_sha256": "7755d309853b8de28bd2874a2253110bfaf1784113cbcc627073abb41dc51a97"
+        }
+      ],
+      "compiler_sha256": "2a76113394bb40ea5612965ed4567ca69f3f43555334bb6874b88588975cee3b",
+      "complete_command_stdout_stderr_exit_signal_and_source_entry_bytes_equal": true,
+      "complete_stdout_stderr_exit_and_source_entry_bytes_equal": true,
+      "initial_compiler_sha256": "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+      "initial_receipt_sha256": "58ce41c96ee849206c7c4f834d5bf5532aa2f064dda6caad8e2a7227ce192082",
+      "library_inventory_and_projection_verifications_equal": true,
+      "library_manifest_sha256": "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+      "observations": 2,
+      "prior_receipts_compared": 2,
+      "probe_sha256": "afc7174933a0e67862e43d2f5d0f991a093609b86bb08c6e42ff39d6ccb9cbff",
+      "projection_manifest_sha256": "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
+      "projector_sha256": "622f63b9d22c23beb6db3f3dd77ef2cc6a1a0aa20d8620ac36a6730baafa0f95",
+      "receipt": "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-units-2a761133.json",
+      "receipt_sha256": "099ac1a1040c4b66e71ac895cfe5655406376d3b4bf25e4e397bbc967ffc9610",
+      "source_commit": "8ddb023f804d511799cdf9b9f007e14f53f61639",
+      "timing_and_rss_are_identity_fields": false
+    }
+  ]
 }

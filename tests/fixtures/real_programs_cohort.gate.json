@@ -1,0 +1,951 @@
+{
+   "adoption" : {
+      "cohort" : {
+         "credited_retained_lkj_lines" : 994,
+         "retained_lkj_lines" : 1102,
+         "successful_operations" : 41
+      },
+      "cumulative" : {
+         "credited_retained_lkj_lines" : 1407,
+         "retained_lkj_lines" : 1543,
+         "successful_operations" : 62
+      },
+      "scope" : "Programs adoption totals from the audited cohort. The compiler SDK Context adaptation receives zero Programs credit.",
+      "sdk_context_adaptation_programs_credit" : {
+         "lines" : 0,
+         "operations" : 0
+      }
+   },
+   "cleanup" : {
+      "all_listed_paths_absent" : true,
+      "apparent_bytes_removed" : 734398020,
+      "completed_utc" : "2026-11-17T06:51:14Z",
+      "evidence_compaction" : "All twenty raw gate/time/metadata/comparison/detail input identities occur in this proof before deletion; full gate summaries and decision-relevant results are retained. Package source history remains reconstructable from its operation receipt.",
+      "preserved" : "Shared specimen originals, licences/notices, locked archives, Rust comparison evidence/toolchains, authenticated source store, private durable issuer/catalog, compiler-store key, unrelated earlier Programs experiments and other streams.",
+      "removed" : [
+         {
+            "apparent_bytes_before" : 159353169,
+            "path" : "target/gate",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 334411801,
+            "path" : "target/store",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 2480563,
+            "path" : "target/unit-check",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 4301297,
+            "path" : "target/unit-native-contracts",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 30530,
+            "path" : "target/unit-native-runtime.lkjir",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 0,
+            "path" : "target/mutation-1701-128",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 198316081,
+            "path" : "target/programs-package.g6iMRb",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 87,
+            "path" : "target/programs-package-current.path",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 34576115,
+            "path" : "target/lkjscript",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 867651,
+            "path" : "target/lkjscript-site",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 13,
+            "path" : "target/programs-cohort-2a761133-details-bootstrap.log",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 36,
+            "path" : "target/programs-cohort-2a761133-details-concrete-unit-policy.log",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 8830,
+            "path" : "target/programs-cohort-2a761133-details-diagnostic-cases.log",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 320,
+            "path" : "target/programs-cohort-2a761133-details-ir-mutation.log",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 280,
+            "path" : "target/programs-cohort-2a761133-details-package-source.log",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 168,
+            "path" : "target/programs-cohort-2a761133-details-real-programs.log",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 9652,
+            "path" : "target/programs-cohort-2a761133-gate.log",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 861,
+            "path" : "target/programs-cohort-2a761133-gate.meta.json",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 794,
+            "path" : "target/programs-cohort-2a761133-gate.time",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 9938,
+            "path" : "target/programs-cohort-2a761133-probes.compare.json",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 13,
+            "path" : "target/programs-cohort-bootstrap.log",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 81,
+            "path" : "target/programs-cohort-bootstrap.meta",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 753,
+            "path" : "target/programs-cohort-bootstrap.time",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 168,
+            "path" : "target/programs-cohort-focused.log",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 777,
+            "path" : "target/programs-cohort-focused.time",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 9533,
+            "path" : "target/programs-cohort-gate.log",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 848,
+            "path" : "target/programs-cohort-gate.meta.json",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 795,
+            "path" : "target/programs-cohort-gate.time",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 4006,
+            "path" : "target/programs-cohort-integration.json",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 11907,
+            "path" : "target/programs-cohort-probes.compare.json",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 156,
+            "path" : "target/programs-cohort-rust-witness.log",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 765,
+            "path" : "target/programs-cohort-rust-witness.time",
+            "removed" : true
+         },
+         {
+            "apparent_bytes_before" : 32,
+            "path" : "/home/coder/workspace/programs-package-query-key.jMCboI",
+            "removed" : true,
+            "scope" : "temporary operation-query key; durable issuer and compiler-store key preserved"
+         }
+      ]
+   },
+   "current_run" : {
+      "gnu_time" : {
+         "bytes" : 795,
+         "lines" : 23,
+         "metrics" : {
+            "cpu_percent" : 255,
+            "elapsed_seconds" : 754.21,
+            "exit_status" : 0,
+            "max_process_rss_kib" : 1296976,
+            "system_seconds" : 43.07,
+            "user_seconds" : 1883.49
+         },
+         "path" : "target/programs-cohort-gate.time",
+         "sha256" : "966fd6f3078339eb00eaa18477b941866aea90971f2952abccf81e2db2680b53",
+         "text" : "\tCommand being timed: \"env LKJSCRIPT_GATE_JOBS=4 bash tools/check.sh\"\n\tUser time (seconds): 1883.49\n\tSystem time (seconds): 43.07\n\tPercent of CPU this job got: 255%\n\tElapsed (wall clock) time (h:mm:ss or m:ss): 12:34.21\n\tAverage shared text size (kbytes): 0\n\tAverage unshared data size (kbytes): 0\n\tAverage stack size (kbytes): 0\n\tAverage total size (kbytes): 0\n\tMaximum resident set size (kbytes): 1296976\n\tAverage resident set size (kbytes): 0\n\tMajor (requiring I/O) page faults: 141\n\tMinor (reclaiming a frame) page faults: 27329104\n\tVoluntary context switches: 101375\n\tInvoluntary context switches: 654830\n\tSwaps: 0\n\tFile system inputs: 415488\n\tFile system outputs: 3276728\n\tSocket messages sent: 0\n\tSocket messages received: 0\n\tSignals delivered: 0\n\tPage size (bytes): 4096\n\tExit status: 0\n"
+      },
+      "metadata" : {
+         "normalization" : {
+            "fields" : [],
+            "operation" : "Remove trailing LF characters from the following JSON string values only; raw evidence was not rewritten."
+         },
+         "raw_file" : {
+            "bytes" : 848,
+            "lines" : 16,
+            "path" : "target/programs-cohort-gate.meta.json",
+            "sha256" : "beb58c982c93888784ca491466ca20678ee592f9b502eb3a6fcdc0e686d2674f"
+         },
+         "values" : {
+            "check_script_sha256" : "dc54dbe1c0b8f49b8eea2efcb3422188fd01bf6bd50332c9ce96087473e771b6",
+            "compiler_after_bytes" : 34576115,
+            "compiler_after_sha256" : "eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f",
+            "compiler_before_sha256" : "2a76113394bb40ea5612965ed4567ca69f3f43555334bb6874b88588975cee3b",
+            "exit_status" : 0,
+            "finished_utc" : "2026-11-17T06:44:48Z",
+            "gate_command" : "LKJSCRIPT_GATE_JOBS=4 bash tools/check.sh",
+            "load_after" : "8.50 8.86 8.41 6/6012 17891",
+            "load_before" : "7.72 7.77 8.09 8/6538 4031850",
+            "seed_gzip_sha256" : "b1917fa4e8db0b26d097aeffeccf20e301cf5ad2cf1caa40a7d12ed8ac53cd4c",
+            "source_commit" : "20412b9a49a726e48273b0a07943bb77d1117058",
+            "started_utc" : "2026-11-17T06:32:14Z",
+            "upstream_commit" : "6ef1a5a354effedfb5679ecc730f8a5a81762921",
+            "workers" : 4
+         }
+      },
+      "outcome" : "passed",
+      "refusal_comparison" : {
+         "raw_file" : {
+            "bytes" : 11907,
+            "lines" : 250,
+            "path" : "target/programs-cohort-probes.compare.json",
+            "sha256" : "273e157c5170eb72c2c93562cbea2ad09633450260333aeadaf358575b7d4cde"
+         },
+         "values" : {
+            "compared_observation_fields" : [
+               "command",
+               "entry_bytes",
+               "entry_sha256",
+               "exit_status",
+               "launcher_signal",
+               "route",
+               "stderr",
+               "stdout",
+               "upstream_entry"
+            ],
+            "comparison_pairs" : 36,
+            "kind" : "foreign-program-new-fixed-point-repeat",
+            "observations" : 12,
+            "schema" : 1,
+            "source_commit" : "20412b9a49a726e48273b0a07943bb77d1117058",
+            "specimens" : [
+               {
+                  "comparisons" : [
+                     {
+                        "command_stdout_stderr_exit_signal_source_entry_equal" : true,
+                        "compiler_sha256" : "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+                        "library_and_projection_verifications_equal" : true,
+                        "observations_equal" : 2,
+                        "observer_label_difference" : null,
+                        "package_equal_except_observer_label" : true,
+                        "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified.json",
+                        "receipt_sha256" : "58ce41c96ee849206c7c4f834d5bf5532aa2f064dda6caad8e2a7227ce192082"
+                     },
+                     {
+                        "command_stdout_stderr_exit_signal_source_entry_equal" : true,
+                        "compiler_sha256" : "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0",
+                        "library_and_projection_verifications_equal" : true,
+                        "observations_equal" : 2,
+                        "observer_label_difference" : null,
+                        "package_equal_except_observer_label" : true,
+                        "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-units-9db99295.json",
+                        "receipt_sha256" : "7755d309853b8de28bd2874a2253110bfaf1784113cbcc627073abb41dc51a97"
+                     },
+                     {
+                        "command_stdout_stderr_exit_signal_source_entry_equal" : true,
+                        "compiler_sha256" : "2a76113394bb40ea5612965ed4567ca69f3f43555334bb6874b88588975cee3b",
+                        "library_and_projection_verifications_equal" : true,
+                        "observations_equal" : 2,
+                        "observer_label_difference" : null,
+                        "package_equal_except_observer_label" : true,
+                        "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-units-2a761133.json",
+                        "receipt_sha256" : "099ac1a1040c4b66e71ac895cfe5655406376d3b4bf25e4e397bbc967ffc9610"
+                     }
+                  ],
+                  "compiler_sha256" : "eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f",
+                  "library_manifest_sha256" : "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+                  "measured_observations" : [
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 4396,
+                        "route" : "original_suffix",
+                        "upstream_entry" : "src/lib.rs",
+                        "wall_seconds" : 0.000988
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 25132,
+                        "route" : "suffix_projection",
+                        "upstream_entry" : "src/lib.rs",
+                        "wall_seconds" : 0.128833
+                     }
+                  ],
+                  "observation_count" : 2,
+                  "projection_manifest_sha256" : "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
+                  "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-units-eb08fbaa.json",
+                  "receipt_sha256" : "5c61766cf5f33b2bf13e9028686b2d5b938a0be1907ffbab45457f917b74b41c",
+                  "specimen" : "nom-8.0.0"
+               },
+               {
+                  "comparisons" : [
+                     {
+                        "command_stdout_stderr_exit_signal_source_entry_equal" : true,
+                        "compiler_sha256" : "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+                        "library_and_projection_verifications_equal" : true,
+                        "observations_equal" : 2,
+                        "observer_label_difference" : null,
+                        "package_equal_except_observer_label" : true,
+                        "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified.json",
+                        "receipt_sha256" : "0b2c95970214ac8137d440cea09b3f3ca9ef5f3462669458bcdaaebb77b9eb90"
+                     },
+                     {
+                        "command_stdout_stderr_exit_signal_source_entry_equal" : true,
+                        "compiler_sha256" : "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0",
+                        "library_and_projection_verifications_equal" : true,
+                        "observations_equal" : 2,
+                        "observer_label_difference" : null,
+                        "package_equal_except_observer_label" : true,
+                        "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-units-9db99295.json",
+                        "receipt_sha256" : "f8b182ec72fd5f610382dca10a4378a3435d911d7ad08866401fcf413cdc7ae2"
+                     },
+                     {
+                        "command_stdout_stderr_exit_signal_source_entry_equal" : true,
+                        "compiler_sha256" : "2a76113394bb40ea5612965ed4567ca69f3f43555334bb6874b88588975cee3b",
+                        "library_and_projection_verifications_equal" : true,
+                        "observations_equal" : 2,
+                        "observer_label_difference" : null,
+                        "package_equal_except_observer_label" : true,
+                        "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-units-2a761133.json",
+                        "receipt_sha256" : "685e1805333793254fecc891b6e08b70e7d4fad248d4cfb6852361376e0ef0b0"
+                     }
+                  ],
+                  "compiler_sha256" : "eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f",
+                  "library_manifest_sha256" : "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+                  "measured_observations" : [
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 4396,
+                        "route" : "original_suffix",
+                        "upstream_entry" : "src/lib.rs",
+                        "wall_seconds" : 0.002066
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 27180,
+                        "route" : "suffix_projection",
+                        "upstream_entry" : "src/lib.rs",
+                        "wall_seconds" : 0.117733
+                     }
+                  ],
+                  "observation_count" : 2,
+                  "projection_manifest_sha256" : "7eef776218daecb22822d613a609a00039600c34cea05a6047216111148272c9",
+                  "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-units-eb08fbaa.json",
+                  "receipt_sha256" : "1e6e0b9eab83c826e041888e067a4e4029f6f7de733ebec4a93d32da22509abb",
+                  "specimen" : "dom_query-0.28.0"
+               },
+               {
+                  "comparisons" : [
+                     {
+                        "command_stdout_stderr_exit_signal_source_entry_equal" : true,
+                        "compiler_sha256" : "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+                        "library_and_projection_verifications_equal" : true,
+                        "observations_equal" : 8,
+                        "observer_label_difference" : {
+                           "after" : "sozu",
+                           "before" : "sozu-workspace",
+                           "field" : "package.name"
+                        },
+                        "package_equal_except_observer_label" : true,
+                        "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified.json",
+                        "receipt_sha256" : "f23038b11941f09dddd25bdd358252ed584271371649e4b74e0e55380aab250b"
+                     },
+                     {
+                        "command_stdout_stderr_exit_signal_source_entry_equal" : true,
+                        "compiler_sha256" : "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0",
+                        "library_and_projection_verifications_equal" : true,
+                        "observations_equal" : 8,
+                        "observer_label_difference" : null,
+                        "package_equal_except_observer_label" : true,
+                        "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-units-9db99295.json",
+                        "receipt_sha256" : "d1467ef9c66586c8b11af1c8edb5c61b77c5c231b12f17ae6bd057dd7302a235"
+                     },
+                     {
+                        "command_stdout_stderr_exit_signal_source_entry_equal" : true,
+                        "compiler_sha256" : "2a76113394bb40ea5612965ed4567ca69f3f43555334bb6874b88588975cee3b",
+                        "library_and_projection_verifications_equal" : true,
+                        "observations_equal" : 8,
+                        "observer_label_difference" : null,
+                        "package_equal_except_observer_label" : true,
+                        "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-units-2a761133.json",
+                        "receipt_sha256" : "9d346e3d7dc99c85af786b98dfda7b60438e45d4a25823ee28835a7cb986a8b1"
+                     }
+                  ],
+                  "compiler_sha256" : "eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f",
+                  "library_manifest_sha256" : "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+                  "measured_observations" : [
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 4396,
+                        "route" : "original_suffix",
+                        "upstream_entry" : "bin/src/main.rs",
+                        "wall_seconds" : 0.00204
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 26156,
+                        "route" : "suffix_projection",
+                        "upstream_entry" : "bin/src/main.rs",
+                        "wall_seconds" : 0.13536
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 4396,
+                        "route" : "original_suffix",
+                        "upstream_entry" : "lib/src/lib.rs",
+                        "wall_seconds" : 0.001859
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 22060,
+                        "route" : "suffix_projection",
+                        "upstream_entry" : "lib/src/lib.rs",
+                        "wall_seconds" : 0.073062
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 4396,
+                        "route" : "original_suffix",
+                        "upstream_entry" : "command/src/lib.rs",
+                        "wall_seconds" : 0.002135
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 27840,
+                        "route" : "suffix_projection",
+                        "upstream_entry" : "command/src/lib.rs",
+                        "wall_seconds" : 0.171289
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 4396,
+                        "route" : "original_suffix",
+                        "upstream_entry" : "e2e/src/lib.rs",
+                        "wall_seconds" : 0.001488
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 24108,
+                        "route" : "suffix_projection",
+                        "upstream_entry" : "e2e/src/lib.rs",
+                        "wall_seconds" : 0.083027
+                     }
+                  ],
+                  "observation_count" : 8,
+                  "projection_manifest_sha256" : "3ad1b9efdc73fb42f61aa3cb5d0dfaf1edea4d5fecf68e4b48e4cedd01db38b0",
+                  "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-units-eb08fbaa.json",
+                  "receipt_sha256" : "3c203d7b11d97d5faa0310cace27173ba36d4ffe2e800b6dc044f29ebdc10ac4",
+                  "specimen" : "sozu-1.0.6"
+               }
+            ],
+            "timing_and_rss_compared_for_identity" : false
+         }
+      },
+      "suite_details" : [
+         {
+            "bytes" : 13,
+            "lines" : 1,
+            "path" : "target/gate/details-bootstrap.log",
+            "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b",
+            "suite" : "bootstrap",
+            "text" : "ok bootstrap\n"
+         },
+         {
+            "bytes" : 8864,
+            "lines" : 16,
+            "path" : "target/gate/details-diagnostic-cases.log",
+            "retained_output" : "ok tests/diagnostics: 81 cases, 114 route checks, 48 pending (13.821 s)\nok target/programs-library-selection.ppGCpC/case.lkj: 1 cases, 2 route checks, 0 pending (0.169 s)\nok mutation --no-store: value-less, order independent, no published store entries\n",
+            "retention" : "All three suite-result lines retained; compiler/store timing traces omitted. Hash covers the complete original log.",
+            "sha256" : "64e4e90451aafc846b36dd7feb3fab4e92eb8182ff1fd928d137a86d4e7e3da7",
+            "suite" : "diagnostic-cases"
+         },
+         {
+            "bytes" : 168,
+            "lines" : 1,
+            "path" : "target/gate/details-real-programs.log",
+            "sha256" : "bfe050316ba1664049ab530cb4ea400a72ef27a18a88620f0f19e8efe78c69bf",
+            "suite" : "real-programs",
+            "text" : "ok real programs: original library syntax, exact upstream hashes, 18 provenance controls, 8 tests on each engine, pure algorithm authority and 7,239 native corpus rows\n"
+         },
+         {
+            "bytes" : 280,
+            "lines" : 3,
+            "path" : "target/gate/details-package-source.log",
+            "sha256" : "cf42a676f6aebce8e75a7afde5f81a2b63007ed64e19f52071d010c8dc7b697c",
+            "suite" : "package-source",
+            "text" : "ok package inventory: 14 controls, exact Git/archive trees and compressed/tar framing refusals\nok package contracts: 6 tests on each engine\nok package source: 24 native I/O and substitution controls, owned-buffer preservation, pinned dependency edge and trusted-catalog isolation\n"
+         },
+         {
+            "bytes" : 36,
+            "lines" : 1,
+            "path" : "target/gate/details-concrete-unit-policy.log",
+            "sha256" : "616a3f9a9a6d7f072c76f95c7fe2603d3f90418031d6b942ec92c882e63d1d89",
+            "suite" : "concrete-unit-policy",
+            "text" : "ok concrete computation 27 controls\n"
+         },
+         {
+            "bytes" : 320,
+            "lines" : 1,
+            "path" : "target/gate/details-ir-mutation.log",
+            "sha256" : "5d5a83c2b01da2cc5cc30bd85b50e89a09f9e09d3a71f7db58045b14825068b8",
+            "suite" : "ir-mutation",
+            "text" : "ok mutation: 128 mutants, 104 rejected, 22 values, 1 traps, 1 did not terminate, 0 resources, 0 findings; 2996 mutants/minute (2.562 s, 4 workers); 28 checked reuses, 3 emitted reuses, 0 store rejects; inline default(0), 0 attempts, 0 accepted, 0 executed, 0 rejected, 0 candidate calls in 0 bodies, 0 local body proofs\n"
+         }
+      ],
+      "suite_summary_log" : {
+         "bytes" : 9533,
+         "lines" : 70,
+         "path" : "target/programs-cohort-gate.log",
+         "sha256" : "90adddde7bbe2165bb60cd301a55a8755cf20e42f323215aff6279d0ab961e5e",
+         "text" : "ok bootstrap (47.127 s, load 7.72 -> 7.81; gate+0.005..47.133 s); rerun suite (live host observations or fresh admission)\nok independence (0.002 s, load 7.81 -> 7.81; gate+47.134..47.136 s); rerun suite (live host observations or fresh admission)\nok tool-build (1.892 s, load 7.81 -> 7.83; gate+47.138..49.030 s); rerun suite (live host observations or fresh admission)\nok closed-build (41.753 s, load 7.83 -> 6.96; gate+49.031..90.784 s); rerun suite (live host observations or fresh admission)\nok generate (0.091 s, load 6.96 -> 6.96; gate+90.786..90.877 s); rerun suite (live host observations or fresh admission)\nok closed-semantics (0.586 s, load 6.96 -> 6.96; gate+90.879..91.466 s); cases reused=0 rerun=28 (authenticated exact stable runner, sealed ELF, checked closure and closed input contract)\nok closed-proof-attacks (1.847 s, load 6.96 -> 8.32; gate+90.879..92.727 s); rerun suite (live host observations or fresh admission)\nok toolchain (73.686 s, load 6.96 -> 8.47; gate+90.879..164.565 s); cases reused=0 rerun=96 (authenticated producer and input closure; misses/open effects rerun)\nok world (29.391 s, load 6.96 -> 8.45; gate+90.880..120.271 s); rerun suite (live host observations or fresh admission)\nok semantic-query (8.712 s, load 6.96 -> 8.54; gate+91.468..100.179 s); rerun suite (live host observations or fresh admission)\nok associated-query (6.685 s, load 8.32 -> 8.54; gate+92.728..99.414 s); rerun suite (live host observations or fresh admission)\nok query-signature (0.506 s, load 8.54 -> 8.54; gate+99.416..99.922 s); rerun suite (live host observations or fresh admission)\nok generated-source (21.657 s, load 8.54 -> 8.45; gate+99.923..121.580 s); rerun suite (live host observations or fresh admission)\nok query-store (2.242 s, load 8.54 -> 8.54; gate+100.181..102.423 s); rerun suite (live host observations or fresh admission)\nok semantic-index-page (25.602 s, load 8.54 -> 8.54; gate+102.425..128.027 s); rerun suite (live host observations or fresh admission)\nok query-publication (0.685 s, load 8.45 -> 8.45; gate+120.273..120.959 s); rerun suite (live host observations or fresh admission)\nok directory-publication (2.983 s, load 8.45 -> 8.42; gate+120.960..123.944 s); rerun suite (live host observations or fresh admission)\nok directory-identity (0.819 s, load 8.45 -> 8.45; gate+121.583..122.402 s); rerun suite (live host observations or fresh admission)\nok structure-projection (20.453 s, load 8.45 -> 8.56; gate+122.403..142.856 s); rerun suite (live host observations or fresh admission)\nok structure-module (2.166 s, load 8.42 -> 8.42; gate+123.946..126.111 s); rerun suite (live host observations or fresh admission)\nok structure-alternate-race (0.120 s, load 8.42 -> 8.42; gate+126.114..126.233 s); rerun suite (live host observations or fresh admission)\nok structure-create (0.573 s, load 8.42 -> 8.42; gate+126.235..126.807 s); rerun suite (live host observations or fresh admission)\nok structure-create-kills (16.411 s, load 8.42 -> 8.56; gate+126.809..143.220 s); rerun suite (live host observations or fresh admission)\nok structure-edit (3.341 s, load 8.54 -> 8.54; gate+128.029..131.370 s); rerun suite (live host observations or fresh admission)\nok structure-help (2.173 s, load 8.54 -> 8.58; gate+131.372..133.546 s); rerun suite (live host observations or fresh admission)\nok structure-embedded (0.507 s, load 8.58 -> 8.58; gate+133.548..134.054 s); rerun suite (live host observations or fresh admission)\nok structure-refactor (21.193 s, load 8.58 -> 8.39; gate+134.058..155.251 s); rerun suite (live host observations or fresh admission)\nok checked-meaning (5.001 s, load 8.56 -> 8.60; gate+142.858..147.859 s); rerun suite (live host observations or fresh admission)\nok type-identity (1.145 s, load 8.56 -> 8.56; gate+143.222..144.367 s); rerun suite (live host observations or fresh admission)\nok history-replay (3.297 s, load 8.56 -> 8.56; gate+144.369..147.666 s); rerun suite (live host observations or fresh admission)\nok profiler (7.435 s, load 8.56 -> 8.39; gate+147.668..155.104 s); rerun suite (live host observations or fresh admission)\nok optimizer (11.037 s, load 8.60 -> 8.60; gate+147.862..158.899 s); rerun suite (live host observations or fresh admission)\nok checked-units (3.237 s, load 8.39 -> 8.60; gate+155.105..158.342 s); rerun suite (live host observations or fresh admission)\nok unit-native (6.498 s, load 8.39 -> 8.60; gate+155.253..161.751 s); rerun suite (live host observations or fresh admission)\nok source-units (10.982 s, load 8.60 -> 8.43; gate+158.345..169.327 s); rerun suite (live host observations or fresh admission)\nok unit-boundaries (2.628 s, load 8.60 -> 8.60; gate+158.901..161.529 s); rerun suite (live host observations or fresh admission)\nok resources (0.720 s, load 8.60 -> 8.60; gate+161.531..162.251 s); rerun suite (live host observations or fresh admission)\nok diagnostic-cases (14.536 s, load 8.60 -> 8.24; gate+161.753..176.289 s); cases reused=0 rerun=82 (authenticated producer and input closure; misses/open effects rerun)\nok cache-io (5.018 s, load 8.60 -> 8.47; gate+162.253..167.271 s); rerun suite (live host observations or fresh admission)\nok cache-read (1.222 s, load 8.47 -> 8.47; gate+164.568..165.790 s); rerun suite (live host observations or fresh admission)\nok store (49.490 s, load 8.47 -> 7.57; gate+167.273..216.763 s); rerun suite (live host observations or fresh admission)\nok program-directory (43.428 s, load 8.24 -> 7.37; gate+176.290..219.718 s); cases reused=0 rerun=4 (authenticated exact stable runner, sealed ELF, checked closure and closed input contract)\nok http (29.076 s, load 7.57 -> 6.91; gate+216.765..245.841 s); cases reused=0 rerun=28 (authenticated exact stable runner, sealed ELF, checked closure and closed input contract)\nok journal (1.570 s, load 7.37 -> 7.37; gate+219.720..221.290 s); rerun suite (live host observations or fresh admission)\nok stop (2.823 s, load 7.37 -> 7.26; gate+221.292..224.115 s); rerun suite (live host observations or fresh admission)\nok stop-interpreter (4.786 s, load 7.26 -> 7.16; gate+224.117..228.903 s); rerun suite (live host observations or fresh admission)\nok site (2.326 s, load 7.16 -> 7.16; gate+228.904..231.231 s); rerun suite (live host observations or fresh admission)\nok desk (7.138 s, load 7.16 -> 6.90; gate+231.233..238.371 s); rerun suite (live host observations or fresh admission)\nok desk-events (2.867 s, load 6.90 -> 6.90; gate+238.373..241.240 s); rerun suite (live host observations or fresh admission)\nok child-image (7.727 s, load 6.90 -> 6.76; gate+241.242..248.968 s); rerun suite (live host observations or fresh admission)\nok foreign-child (2.589 s, load 6.90 -> 6.91; gate+241.242..243.831 s); rerun suite (live host observations or fresh admission)\nok foreign-session (7.132 s, load 6.91 -> 6.94; gate+245.843..252.975 s); rerun suite (live host observations or fresh admission)\nok process-workers (18.381 s, load 6.94 -> 6.30; gate+252.976..271.357 s); rerun suite (live host observations or fresh admission)\nok object-graphs (16.762 s, load 6.30 -> 7.00; gate+271.359..288.121 s); rerun suite (live host observations or fresh admission)\nok real-programs (2.521 s, load 6.30 -> 6.27; gate+271.359..273.880 s); rerun suite (live host observations or fresh admission)\nok package-source (129.674 s, load 6.30 -> 6.76; gate+271.359..401.033 s); rerun suite (live host observations or fresh admission)\nok concrete-unit-policy (7.559 s, load 6.30 -> 6.81; gate+271.359..278.917 s); rerun suite (live host observations or fresh admission)\nok runtime-admission (28.827 s, load 6.81 -> 7.14; gate+278.919..307.747 s); rerun suite (live host observations or fresh admission)\nok pool-publication (1.036 s, load 6.76 -> 6.76; gate+401.037..402.073 s); rerun suite (live host observations or fresh admission)\nok conformance (73.215 s, load 6.76 -> 8.65; gate+402.075..475.290 s); cases reused=0 rerun=816 (authenticated producer and input closure; misses/open effects rerun)\nok generated (65.637 s, load 8.65 -> 9.31; gate+475.293..540.930 s); cases reused=0 rerun=1215 (authenticated producer and input closure; misses/open effects rerun)\nok optimized-conformance (77.494 s, load 9.31 -> 9.03; gate+540.932..618.426 s); cases reused=0 rerun=816 (authenticated producer and input closure; misses/open effects rerun)\nok optimized-generated (72.396 s, load 9.03 -> 11.04; gate+618.429..690.825 s); cases reused=0 rerun=1215 (authenticated producer and input closure; misses/open effects rerun)\nok semantic-structure (23.357 s, load 11.04 -> 10.46; gate+690.827..714.184 s); cases reused=0 rerun=734 (authenticated exact stable runner, sealed ELF, checked closure and closed input contract)\nok semantic-host (0.577 s, load 10.46 -> 10.46; gate+714.186..714.762 s); rerun suite (live host observations or fresh admission)\nok semantic-cases (14.659 s, load 10.46 -> 9.81; gate+714.764..729.423 s); cases reused=0 rerun=436 (authenticated producer and input closure; misses/open effects rerun)\nok references (22.194 s, load 9.81 -> 8.45; gate+729.425..751.619 s); cases reused=0 rerun=15 (authenticated producer and input closure; misses/open effects rerun)\nok gate selection: skipped 0 case requests on authenticated exact compiler/input closure or stable runner/sealed ELF/checked closure/closed contract equality; reran 5485 misses/open effects; host suites rerun\nok ir-mutation (2.565 s, load 8.45 -> 8.50; gate+751.647..754.212 s); rerun suite (live host observations or fresh admission)\nok gate (754.213 s, load 7.72 -> 8.50)\n"
+      },
+      "summary" : {
+         "fixed_point_sha256" : "eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f",
+         "fresh_case_requests" : 5485,
+         "gate_seconds" : 754.213,
+         "host_suites_rerun" : true,
+         "max_process_rss_kib" : 1296976,
+         "mutant_outcomes" : {
+            "findings" : 0,
+            "nontermination" : 1,
+            "rejected" : 104,
+            "resources" : 0,
+            "traps" : 1,
+            "values" : 22
+         },
+         "mutants" : 128,
+         "rss_scope" : "GNU time maximum resident set size is the largest process observation, not simultaneous aggregate memory across all four workers.",
+         "skipped_case_requests" : 0,
+         "suite_lines" : 68,
+         "workers" : 4
+      },
+      "tracked_input_equality" : {
+         "baseline_commit" : "20412b9a49a726e48273b0a07943bb77d1117058",
+         "command" : "git diff --exit-code 20412b9a49a726e48273b0a07943bb77d1117058 -- src library seed tools tests ':!tests/fixtures/real_programs_cohort.gate.json'",
+         "evidence" : "Root's completed post-gate integration check (r39), reported in the final handoff.",
+         "exit_status" : 0,
+         "scope" : "Tracked src, library, seed, tools and tests matched the tested commit at post-gate verification; this new proof file was explicitly excluded. No executed source or test was edited between gate launch and completion. Later documentation, proof and cleanup-metadata edits are outside this assertion.",
+         "stdout" : "",
+         "verified_after_gate" : true
+      }
+   },
+   "historical_run" : {
+      "gnu_time" : {
+         "bytes" : 794,
+         "lines" : 23,
+         "metrics" : {
+            "cpu_percent" : 252,
+            "elapsed_seconds" : 824.68,
+            "exit_status" : 0,
+            "max_process_rss_kib" : 1305308,
+            "system_seconds" : 38.57,
+            "user_seconds" : 2041.56
+         },
+         "path" : "target/programs-cohort-2a761133-gate.time",
+         "sha256" : "9859b178b18ba93e77b1dd949db06bf0b90a43f76b64abc708274af46877cb74",
+         "text" : "\tCommand being timed: \"env LKJSCRIPT_GATE_JOBS=4 bash tools/check.sh\"\n\tUser time (seconds): 2041.56\n\tSystem time (seconds): 38.57\n\tPercent of CPU this job got: 252%\n\tElapsed (wall clock) time (h:mm:ss or m:ss): 13:44.68\n\tAverage shared text size (kbytes): 0\n\tAverage unshared data size (kbytes): 0\n\tAverage stack size (kbytes): 0\n\tAverage total size (kbytes): 0\n\tMaximum resident set size (kbytes): 1305308\n\tAverage resident set size (kbytes): 0\n\tMajor (requiring I/O) page faults: 151\n\tMinor (reclaiming a frame) page faults: 21251638\n\tVoluntary context switches: 94577\n\tInvoluntary context switches: 680657\n\tSwaps: 0\n\tFile system inputs: 174184\n\tFile system outputs: 3156120\n\tSocket messages sent: 0\n\tSocket messages received: 0\n\tSignals delivered: 0\n\tPage size (bytes): 4096\n\tExit status: 0\n"
+      },
+      "metadata" : {
+         "normalization" : {
+            "fields" : [
+               "finished_utc",
+               "load_after",
+               "source_commit",
+               "started_utc",
+               "upstream_commit"
+            ],
+            "operation" : "Remove trailing LF characters from the following JSON string values only; raw evidence was not rewritten."
+         },
+         "raw_file" : {
+            "bytes" : 861,
+            "lines" : 16,
+            "path" : "target/programs-cohort-2a761133-gate.meta.json",
+            "sha256" : "9242fa7627a1e2c85e0ffeb795af6d88baae5ea1c87e39f5bd9ef47ef7e899e1"
+         },
+         "values" : {
+            "check_script_sha256" : "dc54dbe1c0b8f49b8eea2efcb3422188fd01bf6bd50332c9ce96087473e771b6",
+            "compiler_after_bytes" : 34440482,
+            "compiler_after_sha256" : "2a76113394bb40ea5612965ed4567ca69f3f43555334bb6874b88588975cee3b",
+            "compiler_before_sha256" : "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0",
+            "exit_status" : 0,
+            "finished_utc" : "2026-11-17T06:26:14Z",
+            "gate_command" : "LKJSCRIPT_GATE_JOBS=4 bash tools/check.sh",
+            "load_after" : "7.28 9.40 8.72 8/6127 3958901",
+            "load_before" : "6.90 7.41 6.01 24/6393 3766178",
+            "seed_gzip_sha256" : "55dc82a4f501d29b2b100179686b1cdae3d5c9bcb1ce972027bb1378806a1412",
+            "source_commit" : "8ddb023f804d511799cdf9b9f007e14f53f61639",
+            "started_utc" : "2026-11-17T06:12:29Z",
+            "upstream_commit" : "4cb38cb850fe8b47522699df9176cca79f71b64d",
+            "workers" : 4
+         }
+      },
+      "outcome" : "passed",
+      "refusal_comparison" : {
+         "raw_file" : {
+            "bytes" : 9938,
+            "lines" : 220,
+            "path" : "target/programs-cohort-2a761133-probes.compare.json",
+            "sha256" : "0e633dff2f6a48fffffd0443ac91406f5e45581ac34a06408e6285a03427af89"
+         },
+         "values" : {
+            "compared_observation_fields" : [
+               "command",
+               "entry_bytes",
+               "entry_sha256",
+               "exit_status",
+               "launcher_signal",
+               "route",
+               "stderr",
+               "stdout",
+               "upstream_entry"
+            ],
+            "comparison_pairs" : 24,
+            "kind" : "foreign-program-new-fixed-point-repeat",
+            "observations" : 12,
+            "schema" : 1,
+            "source_commit" : "8ddb023f804d511799cdf9b9f007e14f53f61639",
+            "specimens" : [
+               {
+                  "comparisons" : [
+                     {
+                        "command_stdout_stderr_exit_signal_source_entry_equal" : true,
+                        "compiler_sha256" : "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+                        "library_and_projection_verifications_equal" : true,
+                        "observations_equal" : 2,
+                        "observer_label_difference" : null,
+                        "package_equal_except_observer_label" : true,
+                        "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified.json",
+                        "receipt_sha256" : "58ce41c96ee849206c7c4f834d5bf5532aa2f064dda6caad8e2a7227ce192082"
+                     },
+                     {
+                        "command_stdout_stderr_exit_signal_source_entry_equal" : true,
+                        "compiler_sha256" : "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0",
+                        "library_and_projection_verifications_equal" : true,
+                        "observations_equal" : 2,
+                        "observer_label_difference" : null,
+                        "package_equal_except_observer_label" : true,
+                        "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-units-9db99295.json",
+                        "receipt_sha256" : "7755d309853b8de28bd2874a2253110bfaf1784113cbcc627073abb41dc51a97"
+                     }
+                  ],
+                  "compiler_sha256" : "2a76113394bb40ea5612965ed4567ca69f3f43555334bb6874b88588975cee3b",
+                  "library_manifest_sha256" : "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+                  "measured_observations" : [
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 4672,
+                        "route" : "original_suffix",
+                        "upstream_entry" : "src/lib.rs",
+                        "wall_seconds" : 0.001483
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 28224,
+                        "route" : "suffix_projection",
+                        "upstream_entry" : "src/lib.rs",
+                        "wall_seconds" : 0.126164
+                     }
+                  ],
+                  "observation_count" : 2,
+                  "projection_manifest_sha256" : "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
+                  "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-units-2a761133.json",
+                  "receipt_sha256" : "099ac1a1040c4b66e71ac895cfe5655406376d3b4bf25e4e397bbc967ffc9610",
+                  "specimen" : "nom-8.0.0"
+               },
+               {
+                  "comparisons" : [
+                     {
+                        "command_stdout_stderr_exit_signal_source_entry_equal" : true,
+                        "compiler_sha256" : "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+                        "library_and_projection_verifications_equal" : true,
+                        "observations_equal" : 2,
+                        "observer_label_difference" : null,
+                        "package_equal_except_observer_label" : true,
+                        "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified.json",
+                        "receipt_sha256" : "0b2c95970214ac8137d440cea09b3f3ca9ef5f3462669458bcdaaebb77b9eb90"
+                     },
+                     {
+                        "command_stdout_stderr_exit_signal_source_entry_equal" : true,
+                        "compiler_sha256" : "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0",
+                        "library_and_projection_verifications_equal" : true,
+                        "observations_equal" : 2,
+                        "observer_label_difference" : null,
+                        "package_equal_except_observer_label" : true,
+                        "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-units-9db99295.json",
+                        "receipt_sha256" : "f8b182ec72fd5f610382dca10a4378a3435d911d7ad08866401fcf413cdc7ae2"
+                     }
+                  ],
+                  "compiler_sha256" : "2a76113394bb40ea5612965ed4567ca69f3f43555334bb6874b88588975cee3b",
+                  "library_manifest_sha256" : "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+                  "measured_observations" : [
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 4672,
+                        "route" : "original_suffix",
+                        "upstream_entry" : "src/lib.rs",
+                        "wall_seconds" : 0.00161
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 30488,
+                        "route" : "suffix_projection",
+                        "upstream_entry" : "src/lib.rs",
+                        "wall_seconds" : 0.120026
+                     }
+                  ],
+                  "observation_count" : 2,
+                  "projection_manifest_sha256" : "7eef776218daecb22822d613a609a00039600c34cea05a6047216111148272c9",
+                  "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-units-2a761133.json",
+                  "receipt_sha256" : "685e1805333793254fecc891b6e08b70e7d4fad248d4cfb6852361376e0ef0b0",
+                  "specimen" : "dom_query-0.28.0"
+               },
+               {
+                  "comparisons" : [
+                     {
+                        "command_stdout_stderr_exit_signal_source_entry_equal" : true,
+                        "compiler_sha256" : "60149069984ecfe491e322eba406238555c13acc90375c5468e5d5d4954a83ca",
+                        "library_and_projection_verifications_equal" : true,
+                        "observations_equal" : 8,
+                        "observer_label_difference" : {
+                           "after" : "sozu",
+                           "before" : "sozu-workspace",
+                           "field" : "package.name"
+                        },
+                        "package_equal_except_observer_label" : true,
+                        "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified.json",
+                        "receipt_sha256" : "f23038b11941f09dddd25bdd358252ed584271371649e4b74e0e55380aab250b"
+                     },
+                     {
+                        "command_stdout_stderr_exit_signal_source_entry_equal" : true,
+                        "compiler_sha256" : "9db99295e4810a4afc3b622b49cf7f38239915cf0d55d0928c34da3ffa44d7f0",
+                        "library_and_projection_verifications_equal" : true,
+                        "observations_equal" : 8,
+                        "observer_label_difference" : null,
+                        "package_equal_except_observer_label" : true,
+                        "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-units-9db99295.json",
+                        "receipt_sha256" : "d1467ef9c66586c8b11af1c8edb5c61b77c5c231b12f17ae6bd057dd7302a235"
+                     }
+                  ],
+                  "compiler_sha256" : "2a76113394bb40ea5612965ed4567ca69f3f43555334bb6874b88588975cee3b",
+                  "library_manifest_sha256" : "333337f6c197f86907c9dc3d2e6ee002883d80fc562cfdd0fb4b52ede1898ac9",
+                  "measured_observations" : [
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 4672,
+                        "route" : "original_suffix",
+                        "upstream_entry" : "bin/src/main.rs",
+                        "wall_seconds" : 0.001917
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 31764,
+                        "route" : "suffix_projection",
+                        "upstream_entry" : "bin/src/main.rs",
+                        "wall_seconds" : 0.121787
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 4672,
+                        "route" : "original_suffix",
+                        "upstream_entry" : "lib/src/lib.rs",
+                        "wall_seconds" : 0.001673
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 26292,
+                        "route" : "suffix_projection",
+                        "upstream_entry" : "lib/src/lib.rs",
+                        "wall_seconds" : 0.078707
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 4672,
+                        "route" : "original_suffix",
+                        "upstream_entry" : "command/src/lib.rs",
+                        "wall_seconds" : 0.001233
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 34920,
+                        "route" : "suffix_projection",
+                        "upstream_entry" : "command/src/lib.rs",
+                        "wall_seconds" : 0.177721
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 4672,
+                        "route" : "original_suffix",
+                        "upstream_entry" : "e2e/src/lib.rs",
+                        "wall_seconds" : 0.001186
+                     },
+                     {
+                        "exit_status" : 1,
+                        "launcher_signal" : 0,
+                        "peak_rss_kib" : 29852,
+                        "route" : "suffix_projection",
+                        "upstream_entry" : "e2e/src/lib.rs",
+                        "wall_seconds" : 0.093045
+                     }
+                  ],
+                  "observation_count" : 8,
+                  "projection_manifest_sha256" : "3ad1b9efdc73fb42f61aa3cb5d0dfaf1edea4d5fecf68e4b48e4cedd01db38b0",
+                  "receipt" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-units-2a761133.json",
+                  "receipt_sha256" : "9d346e3d7dc99c85af786b98dfda7b60438e45d4a25823ee28835a7cb986a8b1",
+                  "specimen" : "sozu-1.0.6"
+               }
+            ],
+            "timing_and_rss_compared_for_identity" : false
+         }
+      },
+      "suite_details" : [
+         {
+            "bytes" : 13,
+            "lines" : 1,
+            "path" : "target/programs-cohort-2a761133-details-bootstrap.log",
+            "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b",
+            "suite" : "bootstrap",
+            "text" : "ok bootstrap\n"
+         },
+         {
+            "bytes" : 8830,
+            "lines" : 16,
+            "path" : "target/programs-cohort-2a761133-details-diagnostic-cases.log",
+            "retained_output" : "ok tests/diagnostics: 81 cases, 114 route checks, 48 pending (18.112 s)\nok target/programs-library-selection.a8lFo4/case.lkj: 1 cases, 2 route checks, 0 pending (0.180 s)\nok mutation --no-store: value-less, order independent, no published store entries\n",
+            "retention" : "All three suite-result lines retained; compiler/store timing traces omitted. Hash covers the complete original log.",
+            "sha256" : "fb2b86c1a6f9c9ffecce5ddbc1e8355801e1f5d2e22157815184980bf3eda5dd",
+            "suite" : "diagnostic-cases"
+         },
+         {
+            "bytes" : 168,
+            "lines" : 1,
+            "path" : "target/programs-cohort-2a761133-details-real-programs.log",
+            "sha256" : "bfe050316ba1664049ab530cb4ea400a72ef27a18a88620f0f19e8efe78c69bf",
+            "suite" : "real-programs",
+            "text" : "ok real programs: original library syntax, exact upstream hashes, 18 provenance controls, 8 tests on each engine, pure algorithm authority and 7,239 native corpus rows\n"
+         },
+         {
+            "bytes" : 280,
+            "lines" : 3,
+            "path" : "target/programs-cohort-2a761133-details-package-source.log",
+            "sha256" : "cf42a676f6aebce8e75a7afde5f81a2b63007ed64e19f52071d010c8dc7b697c",
+            "suite" : "package-source",
+            "text" : "ok package inventory: 14 controls, exact Git/archive trees and compressed/tar framing refusals\nok package contracts: 6 tests on each engine\nok package source: 24 native I/O and substitution controls, owned-buffer preservation, pinned dependency edge and trusted-catalog isolation\n"
+         },
+         {
+            "bytes" : 36,
+            "lines" : 1,
+            "path" : "target/programs-cohort-2a761133-details-concrete-unit-policy.log",
+            "sha256" : "616a3f9a9a6d7f072c76f95c7fe2603d3f90418031d6b942ec92c882e63d1d89",
+            "suite" : "concrete-unit-policy",
+            "text" : "ok concrete computation 27 controls\n"
+         },
+         {
+            "bytes" : 320,
+            "lines" : 1,
+            "path" : "target/programs-cohort-2a761133-details-ir-mutation.log",
+            "sha256" : "e80c71e7a9869bed0d6345a514ced87e908270663ca25dad821cd03e79fc9b5e",
+            "suite" : "ir-mutation",
+            "text" : "ok mutation: 128 mutants, 104 rejected, 22 values, 1 traps, 1 did not terminate, 0 resources, 0 findings; 2977 mutants/minute (2.578 s, 4 workers); 31 checked reuses, 4 emitted reuses, 0 store rejects; inline default(0), 0 attempts, 0 accepted, 0 executed, 0 rejected, 0 candidate calls in 0 bodies, 0 local body proofs\n"
+         }
+      ],
+      "suite_summary_log" : {
+         "bytes" : 9652,
+         "lines" : 70,
+         "path" : "target/programs-cohort-2a761133-gate.log",
+         "sha256" : "4d3ccaf20d7f80e086553a115ac7a36c2003df332882be0856798d08c713c58e",
+         "text" : "ok bootstrap (54.933 s, load 6.90 -> 8.68; gate+0.007..54.940 s); rerun suite (live host observations or fresh admission)\nok independence (0.002 s, load 8.68 -> 8.68; gate+54.942..54.944 s); rerun suite (live host observations or fresh admission)\nok tool-build (2.650 s, load 8.68 -> 8.86; gate+54.945..57.595 s); rerun suite (live host observations or fresh admission)\nok closed-build (53.718 s, load 8.86 -> 10.72; gate+57.597..111.315 s); rerun suite (live host observations or fresh admission)\nok generate (0.078 s, load 10.72 -> 10.72; gate+111.317..111.395 s); rerun suite (live host observations or fresh admission)\nok closed-semantics (0.626 s, load 10.72 -> 10.72; gate+111.397..112.023 s); cases reused=0 rerun=28 (authenticated exact stable runner, sealed ELF, checked closure and closed input contract)\nok closed-proof-attacks (1.980 s, load 10.72 -> 10.74; gate+111.397..113.377 s); rerun suite (live host observations or fresh admission)\nok toolchain (94.760 s, load 10.72 -> 16.65; gate+111.398..206.158 s); cases reused=0 rerun=96 (authenticated producer and input closure; misses/open effects rerun)\nok world (34.366 s, load 10.72 -> 12.90; gate+111.398..145.763 s); rerun suite (live host observations or fresh admission)\nok semantic-query (9.998 s, load 10.72 -> 11.00; gate+112.025..122.024 s); rerun suite (live host observations or fresh admission)\nok associated-query (7.242 s, load 10.74 -> 11.00; gate+113.379..120.621 s); rerun suite (live host observations or fresh admission)\nok query-signature (0.511 s, load 11.00 -> 11.00; gate+120.623..121.134 s); rerun suite (live host observations or fresh admission)\nok generated-source (28.542 s, load 11.00 -> 12.99; gate+121.135..149.678 s); rerun suite (live host observations or fresh admission)\nok query-store (3.092 s, load 11.00 -> 11.56; gate+122.026..125.119 s); rerun suite (live host observations or fresh admission)\nok semantic-index-page (32.479 s, load 11.56 -> 13.91; gate+125.120..157.599 s); rerun suite (live host observations or fresh admission)\nok query-publication (0.976 s, load 12.90 -> 12.90; gate+145.765..146.741 s); rerun suite (live host observations or fresh admission)\nok directory-publication (3.974 s, load 12.90 -> 12.99; gate+146.745..150.719 s); rerun suite (live host observations or fresh admission)\nok directory-identity (1.037 s, load 12.99 -> 12.99; gate+149.680..150.718 s); rerun suite (live host observations or fresh admission)\nok structure-projection (26.794 s, load 12.99 -> 15.98; gate+150.719..177.514 s); rerun suite (live host observations or fresh admission)\nok structure-module (2.745 s, load 12.99 -> 13.55; gate+150.720..153.465 s); rerun suite (live host observations or fresh admission)\nok structure-alternate-race (0.107 s, load 13.55 -> 13.55; gate+153.468..153.575 s); rerun suite (live host observations or fresh admission)\nok structure-create (0.614 s, load 13.55 -> 13.55; gate+153.577..154.191 s); rerun suite (live host observations or fresh admission)\nok structure-create-kills (20.854 s, load 13.55 -> 16.33; gate+154.192..175.046 s); rerun suite (live host observations or fresh admission)\nok structure-edit (5.501 s, load 13.91 -> 15.20; gate+157.601..163.103 s); rerun suite (live host observations or fresh admission)\nok structure-help (3.032 s, load 15.20 -> 15.20; gate+163.106..166.138 s); rerun suite (live host observations or fresh admission)\nok structure-embedded (0.816 s, load 15.20 -> 15.20; gate+166.141..166.957 s); rerun suite (live host observations or fresh admission)\nok structure-refactor (27.801 s, load 15.20 -> 16.67; gate+166.961..194.763 s); rerun suite (live host observations or fresh admission)\nok checked-meaning (6.879 s, load 16.33 -> 15.98; gate+175.048..181.927 s); rerun suite (live host observations or fresh admission)\nok type-identity (1.529 s, load 15.98 -> 15.98; gate+177.516..179.045 s); rerun suite (live host observations or fresh admission)\nok history-replay (4.678 s, load 15.98 -> 15.98; gate+179.046..183.725 s); rerun suite (live host observations or fresh admission)\nok profiler (9.819 s, load 15.98 -> 16.47; gate+181.929..191.748 s); rerun suite (live host observations or fresh admission)\nok optimizer (14.428 s, load 15.98 -> 16.62; gate+183.728..198.156 s); rerun suite (live host observations or fresh admission)\nok checked-units (4.209 s, load 16.47 -> 16.67; gate+191.750..195.959 s); rerun suite (live host observations or fresh admission)\nok unit-native (9.051 s, load 16.67 -> 16.65; gate+194.764..203.815 s); rerun suite (live host observations or fresh admission)\nok source-units (12.114 s, load 16.67 -> 16.59; gate+195.962..208.076 s); rerun suite (live host observations or fresh admission)\nok unit-boundaries (4.310 s, load 16.62 -> 16.65; gate+198.158..202.469 s); rerun suite (live host observations or fresh admission)\nok resources (1.091 s, load 16.65 -> 16.65; gate+202.472..203.563 s); rerun suite (live host observations or fresh admission)\nok diagnostic-cases (19.035 s, load 16.65 -> 16.64; gate+203.567..222.602 s); cases reused=0 rerun=82 (authenticated producer and input closure; misses/open effects rerun)\nok cache-io (7.151 s, load 16.65 -> 16.59; gate+203.817..210.969 s); rerun suite (live host observations or fresh admission)\nok cache-read (1.626 s, load 16.65 -> 16.59; gate+206.160..207.786 s); rerun suite (live host observations or fresh admission)\nok store (66.902 s, load 16.59 -> 14.62; gate+208.078..274.979 s); rerun suite (live host observations or fresh admission)\nok program-directory (56.875 s, load 16.64 -> 14.17; gate+222.604..279.480 s); cases reused=0 rerun=4 (authenticated exact stable runner, sealed ELF, checked closure and closed input contract)\nok http (33.499 s, load 14.62 -> 12.99; gate+274.982..308.481 s); cases reused=0 rerun=28 (authenticated exact stable runner, sealed ELF, checked closure and closed input contract)\nok journal (1.868 s, load 14.17 -> 14.17; gate+279.482..281.350 s); rerun suite (live host observations or fresh admission)\nok stop (2.865 s, load 14.17 -> 13.76; gate+281.352..284.216 s); rerun suite (live host observations or fresh admission)\nok stop-interpreter (5.747 s, load 13.76 -> 14.26; gate+284.220..289.967 s); rerun suite (live host observations or fresh admission)\nok site (2.700 s, load 14.26 -> 13.83; gate+289.969..292.668 s); rerun suite (live host observations or fresh admission)\nok desk (8.108 s, load 13.83 -> 13.29; gate+292.671..300.778 s); rerun suite (live host observations or fresh admission)\nok desk-events (3.231 s, load 13.29 -> 13.42; gate+300.780..304.011 s); rerun suite (live host observations or fresh admission)\nok child-image (8.563 s, load 13.42 -> 12.67; gate+304.013..312.575 s); rerun suite (live host observations or fresh admission)\nok foreign-child (2.999 s, load 13.42 -> 13.42; gate+304.013..307.011 s); rerun suite (live host observations or fresh admission)\nok foreign-session (8.219 s, load 12.99 -> 12.67; gate+308.483..316.702 s); rerun suite (live host observations or fresh admission)\nok process-workers (20.066 s, load 12.67 -> 11.51; gate+316.704..336.770 s); rerun suite (live host observations or fresh admission)\nok object-graphs (18.107 s, load 11.51 -> 11.07; gate+336.772..354.879 s); rerun suite (live host observations or fresh admission)\nok real-programs (2.827 s, load 11.51 -> 11.47; gate+336.772..339.598 s); rerun suite (live host observations or fresh admission)\nok package-source (137.918 s, load 11.51 -> 9.28; gate+336.772..474.690 s); rerun suite (live host observations or fresh admission)\nok concrete-unit-policy (8.544 s, load 11.51 -> 11.19; gate+336.772..345.316 s); rerun suite (live host observations or fresh admission)\nok runtime-admission (33.716 s, load 11.19 -> 12.05; gate+345.317..379.034 s); rerun suite (live host observations or fresh admission)\nok pool-publication (1.291 s, load 9.28 -> 9.28; gate+474.692..475.983 s); rerun suite (live host observations or fresh admission)\nok conformance (80.322 s, load 9.28 -> 10.90; gate+475.984..556.307 s); cases reused=0 rerun=816 (authenticated producer and input closure; misses/open effects rerun)\nok generated (64.760 s, load 10.90 -> 9.82; gate+556.309..621.069 s); cases reused=0 rerun=1215 (authenticated producer and input closure; misses/open effects rerun)\nok optimized-conformance (76.648 s, load 9.82 -> 9.38; gate+621.071..697.719 s); cases reused=0 rerun=816 (authenticated producer and input closure; misses/open effects rerun)\nok optimized-generated (66.758 s, load 9.38 -> 8.46; gate+697.721..764.479 s); cases reused=0 rerun=1215 (authenticated producer and input closure; misses/open effects rerun)\nok semantic-structure (20.666 s, load 8.46 -> 7.47; gate+764.481..785.148 s); cases reused=0 rerun=734 (authenticated exact stable runner, sealed ELF, checked closure and closed input contract)\nok semantic-host (0.538 s, load 7.47 -> 7.47; gate+785.150..785.687 s); rerun suite (live host observations or fresh admission)\nok semantic-cases (13.549 s, load 7.47 -> 7.65; gate+785.689..799.238 s); cases reused=0 rerun=436 (authenticated producer and input closure; misses/open effects rerun)\nok references (22.828 s, load 7.65 -> 7.13; gate+799.243..822.072 s); cases reused=0 rerun=15 (authenticated producer and input closure; misses/open effects rerun)\nok gate selection: skipped 0 case requests on authenticated exact compiler/input closure or stable runner/sealed ELF/checked closure/closed contract equality; reran 5485 misses/open effects; host suites rerun\nok ir-mutation (2.581 s, load 7.13 -> 7.28; gate+822.097..824.678 s); rerun suite (live host observations or fresh admission)\nok gate (824.679 s, load 6.90 -> 7.28)\n"
+      },
+      "summary" : {
+         "fixed_point_sha256" : "2a76113394bb40ea5612965ed4567ca69f3f43555334bb6874b88588975cee3b",
+         "fresh_case_requests" : 5485,
+         "gate_seconds" : 824.679,
+         "host_suites_rerun" : true,
+         "max_process_rss_kib" : 1305308,
+         "mutant_findings" : 0,
+         "mutants" : 128,
+         "rss_scope" : "GNU time maximum resident set size is the largest process observation, not simultaneous aggregate memory across all four workers.",
+         "skipped_case_requests" : 0,
+         "suite_lines" : 68,
+         "workers" : 4
+      }
+   },
+   "interpretation" : {
+      "comparison_scope" : "Comparison identity covers exactly the named fields. Timing and RSS are retained observations and were not compared for identity.",
+      "gate_scope" : "The complete suite-summary log records every suite result. Detail records retain the six cohort-relevant results; the diagnostic trace is represented by its complete raw-file hash and all result lines.",
+      "refusal_scope" : "The 12 unmodified foreign-program observations are check refusals, not successful ports or executions of the specimens' own tests.",
+      "retention" : "Raw trace duplication is omitted. The recorded paths identify the original evidence locations, which may be cleaned after this proof lands; retained content and hashes remain here."
+   },
+   "kind" : "real-programs-cohort-gate-proof",
+   "purpose" : "Retain completed gate and fixed-point refusal-comparison evidence after disposable build output is removed.",
+   "schema" : 1,
+   "source_scope" : {
+      "current_tested_commit" : "20412b9a49a726e48273b0a07943bb77d1117058",
+      "historical_tested_commit" : "8ddb023f804d511799cdf9b9f007e14f53f61639",
+      "relationship" : "The current merge preserves historical tested commit 8ddb023f804d511799cdf9b9f007e14f53f61639 as an ancestor and integrates compiler-stream commit 6ef1a5a354effedfb5679ecc730f8a5a81762921; the two source identities and compiler images are distinct.",
+      "unchanged_claim" : "Each completed run applies only to its recorded tested source and tests. The current run's post-gate tracked-input comparison is retained below. This proof does not assert that historical and current compiler or library source are unchanged."
+   }
+}
