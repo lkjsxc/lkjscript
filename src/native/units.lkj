@@ -3,7 +3,7 @@ use super::*;
 use crate::check::units::{Binding, CheckedUnit, Interface};
 use crate::reuse::{ProofDomain, VerifiedPayload};
 
-const NAMESPACE: &str = "unit-native-1";
+const NAMESPACE: &str = "unit-native-2";
 const LISTENER: u64 = 1u64 << 0u32;
 const CONNECTOR: u64 = 1u64 << 1u32;
 const READINESS: u64 = 1u64 << 2u32;
@@ -52,6 +52,37 @@ fn symbol(binding: &Binding) -> String {
     format!("unit:{}:{}:{}:{}:{}", binding.unit.len(), binding.unit,
         binding.interface_identity.len(), binding.interface_identity, binding.name)
 }
+
+fn symbol_part(bytes: &[u8], at: &mut usize) -> Option<String> {
+    let first = *at;
+    let mut length = 0usize;
+    while *at < bytes.len() && bytes[*at] >= b'0' && bytes[*at] <= b'9' {
+        length = length.checked_mul(10usize)?.checked_add((bytes[*at] - b'0') as usize)?;
+        *at += 1usize;
+    }
+    if *at == first || *at >= bytes.len() || bytes[*at] != b':'
+        || (*at - first > 1usize && bytes[first] == b'0') { return None; }
+    *at += 1usize;
+    let end = (*at).checked_add(length)?;
+    if end >= bytes.len() || bytes[end] != b':' { return None; }
+    let value = String::from_utf8(bytes[*at..end].to_vec()).ok()?;
+    *at = end + 1usize;
+    Some(value)
+}
+
+fn parse_symbol(name: &str) -> Option<Binding> {
+    let bytes = name.as_bytes();
+    if !bytes.starts_with(b"unit:") { return None; }
+    let mut at = 5usize;
+    let unit = symbol_part(bytes, &mut at)?;
+    let interface_identity = symbol_part(bytes, &mut at)?;
+    if unit.is_empty() || interface_identity.len() != 64usize || at == bytes.len() { return None; }
+    for byte in interface_identity.as_str().bytes() {
+        if !byte.is_ascii_digit() && !(byte >= b'a' && byte <= b'f') { return None; }
+    }
+    let name = String::from_utf8(bytes[at..].to_vec()).ok()?;
+    Some(Binding { unit, interface_identity, name })
+}
 fn platform_symbol(index: usize) -> String { format!("platform:{index}") }
 fn runtime_symbol(name: &str) -> String { format!("runtime:{name}") }
 fn context_key(runtime: &Runtime) -> String {
@@ -72,7 +103,7 @@ impl<'a> Context<'a> {
 }
 pub fn namespace() -> &'static str { NAMESPACE }
 pub fn object_key(interface: &Interface, context: &Context<'_>, source_base: usize, sources: &[String]) -> String {
-    let mut bytes = b"lkjscript-unit-native-object-1\0"[..].to_vec();
+    let mut bytes = b"lkjscript-unit-native-object-2\0"[..].to_vec();
     string(&mut bytes, interface.name()); string(&mut bytes, interface.identity());
     string(&mut bytes, interface.body_identity()); string(&mut bytes, interface.input_identity());
     string(&mut bytes, &context.identity); word(&mut bytes, source_base);
@@ -126,8 +157,9 @@ struct Claim {
     interface: String,
     body: String,
     dependencies: Vec<(String, String)>,
-    imports: Vec<String>,
+    imports: Vec<Binding>,
     definitions: Vec<String>,
+    exports: BTreeMap<String, (usize, Span)>,
 }
 fn claim(interface: &Interface) -> Claim {
     let mut dependencies = Vec::new();
@@ -135,11 +167,31 @@ fn claim(interface: &Interface) -> Claim {
     let mut imports = Vec::new();
     let mut definitions = Vec::new();
     for index in 0usize..interface.program().functions.len() {
-        let name = symbol(&interface.binding(index));
-        if interface.defined(index) { definitions.push(name); } else { imports.push(name); }
+        if interface.defined(index) {
+            definitions.push(interface.program().functions[index].name.clone());
+        } else { imports.push(interface.binding(index)); }
     }
     Claim { name: interface.name().to_string(), interface: interface.identity().to_string(),
-        body: interface.body_identity().to_string(), dependencies, imports, definitions }
+        body: interface.body_identity().to_string(), dependencies, imports, definitions, exports: BTreeMap::new() }
+}
+
+fn resolve_binding(claims: &BTreeMap<String, Claim>, binding: &Binding) -> Option<(usize, Span)> {
+    let claim = claims.get(&binding.unit)?;
+    if claim.interface != binding.interface_identity { return None; }
+    claim.exports.get(&binding.name).copied()
+}
+
+fn resolve_symbol(claims: &BTreeMap<String, Claim>, symbols: &BTreeMap<String, usize>, name: &String) -> Option<usize> {
+    if name.as_str().starts_with("unit:") {
+        let binding = parse_symbol(name.as_str())?;
+        resolve_binding(claims, &binding).map(|value: (usize, Span)| value.0)
+    } else { symbols.get(name).copied() }
+}
+
+struct ObjectReference {
+    at: usize,
+    name: usize,
+    site: Span,
 }
 pub struct Object {
     claim: Claim,
@@ -147,10 +199,13 @@ pub struct Object {
     key: String,
     source_base: usize,
     flags: u64,
-    sites: Vec<(String, Span)>,
+    sites: Vec<Span>,
     sources: Vec<String>,
     messages: Vec<String>,
     code: Linkable,
+    symbols: Vec<String>,
+    references: Vec<ObjectReference>,
+    immediates: Vec<ObjectReference>,
     payload: Vec<u8>,
     code_start: usize,
     code_length: usize,
@@ -165,22 +220,29 @@ impl Object {
         &self.payload[self.code_start..self.code_start + self.code_length]
     }
     pub fn encode(&self) -> Vec<u8> {
-        let mut bytes = b"LKJUNITOBJECT1\n"[..].to_vec();
+        let mut bytes = b"LKJUNITOBJECT2\n"[..].to_vec();
         string(&mut bytes, &self.key); string(&mut bytes, &self.context);
         word(&mut bytes, self.source_base); word(&mut bytes, self.flags as usize);
         word(&mut bytes, self.sources.len());
         for path in &self.sources { string(&mut bytes, path); }
         word(&mut bytes, self.messages.len());
         for message in &self.messages { string(&mut bytes, message); }
-        word(&mut bytes, self.sites.len());
-        for (name, value) in &self.sites { string(&mut bytes, name); site(&mut bytes, *value); }
-        blob(&mut bytes, self.code_bytes());
+        // Exact interface order supplies the authenticated export names.
         word(&mut bytes, self.code.definitions.len());
-        for (name, offset) in &self.code.definitions { string(&mut bytes, name); word(&mut bytes, *offset); }
-        word(&mut bytes, self.code.references.len());
-        for reference in &self.code.references { word(&mut bytes, reference.at); string(&mut bytes, &reference.name); site(&mut bytes, reference.site); }
-        word(&mut bytes, self.code.immediates.len());
-        for reference in &self.code.immediates { word(&mut bytes, reference.at); string(&mut bytes, &reference.message); site(&mut bytes, reference.site); }
+        for (index, (_, offset)) in self.code.definitions.iter().enumerate() {
+            word(&mut bytes, *offset); site(&mut bytes, self.sites[index]);
+        }
+        blob(&mut bytes, self.code_bytes());
+        word(&mut bytes, self.symbols.len());
+        for name in &self.symbols { string(&mut bytes, name); }
+        word(&mut bytes, self.references.len());
+        for reference in &self.references {
+            word(&mut bytes, reference.at); word(&mut bytes, reference.name); site(&mut bytes, reference.site);
+        }
+        word(&mut bytes, self.immediates.len());
+        for reference in &self.immediates {
+            word(&mut bytes, reference.at); word(&mut bytes, reference.name); site(&mut bytes, reference.site);
+        }
         bytes
     }
     pub fn open(domain: &ProofDomain, interface: &Interface, context: &Context<'_>,
@@ -189,7 +251,7 @@ impl Object {
         let key = object_key(interface, context, source_base, sources);
         if !payload.matches_domain(domain, NAMESPACE, &key) { return None; }
         let bytes = payload.into_bytes();
-        let magic = b"LKJUNITOBJECT1\n";
+        let magic = b"LKJUNITOBJECT2\n";
         if !bytes.starts_with(magic) { return None; }
         let mut at = magic.len();
         if take_string(&bytes, &mut at)? != key { return None; }
@@ -210,17 +272,20 @@ impl Object {
         let mut own_messages = Vec::new();
         for _ in 0usize..count {
             let message = take_string(&bytes, &mut at)?;
+            if own_messages.contains(&message) { return None; }
             own_messages.push(message);
         }
         let claim = claim(interface);
         let count = take_word(&bytes, &mut at)?;
         if count != claim.definitions.len() || count > (bytes.len() - at) / 32usize { return None; }
         let mut sites = Vec::new();
+        let mut definitions = Vec::new();
         for index in 0usize..count {
-            let name = take_string(&bytes, &mut at)?;
+            let offset = take_word(&bytes, &mut at)?;
             let value = take_site(&bytes, &mut at)?;
-            if name != claim.definitions[index] || value.file < source_base || value.file - source_base >= sources.len() { return None; }
-            sites.push((name, value));
+            if value.file < source_base || value.file - source_base >= sources.len() { return None; }
+            definitions.push((claim.definitions[index].clone(), offset));
+            sites.push(value);
         }
         // Keep the exact already-authenticated owned bytes. Cloning this span
         // would copy every code byte again on every unchanged build.
@@ -228,14 +293,16 @@ impl Object {
         if code_length > bytes.len() - at { return None; }
         let code_start = at;
         at += code_length;
+        for (_, offset) in &definitions { if *offset >= code_length { return None; } }
         let count = take_word(&bytes, &mut at)?;
-        if count != claim.definitions.len() || count > (bytes.len() - at) / 16usize { return None; }
-        let mut definitions = Vec::new();
-        for index in 0usize..count {
+        if count > (bytes.len() - at) / 8usize { return None; }
+        let mut symbols = Vec::new();
+        let mut unique_symbols: BTreeSet<String> = BTreeSet::new();
+        for _ in 0usize..count {
             let name = take_string(&bytes, &mut at)?;
-            let offset = take_word(&bytes, &mut at)?;
-            if name != claim.definitions[index] || offset >= code_length { return None; }
-            definitions.push((name, offset));
+            if name.is_empty() || !unique_symbols.insert(name.clone())
+                || (name.as_str().starts_with("unit:") && parse_symbol(name.as_str()).is_none()) { return None; }
+            symbols.push(name);
         }
         let count = take_word(&bytes, &mut at)?;
         if count > (bytes.len() - at) / 40usize { return None; }
@@ -243,27 +310,29 @@ impl Object {
         let mut previous = None;
         for _ in 0usize..count {
             let position = take_word(&bytes, &mut at)?;
-            let name = take_string(&bytes, &mut at)?;
+            let name = take_word(&bytes, &mut at)?;
             let value = take_site(&bytes, &mut at)?;
-            if position > code_length || code_length - position < 4usize || value.file < source_base || value.file - source_base >= sources.len()
+            if name >= symbols.len() || position > code_length || code_length - position < 4usize
+                || value.file < source_base || value.file - source_base >= sources.len()
                 || previous.is_some_and(|last| last + 4usize > position) { return None; }
             previous = Some(position);
-            references.push(SymbolReference { at: position, name, site: value });
+            references.push(ObjectReference { at: position, name, site: value });
         }
         let count = take_word(&bytes, &mut at)?;
         if count > (bytes.len() - at) / 40usize { return None; }
         let mut immediates = Vec::new();
         for _ in 0usize..count {
             let position = take_word(&bytes, &mut at)?;
-            let message = take_string(&bytes, &mut at)?;
+            let name = take_word(&bytes, &mut at)?;
             let value = take_site(&bytes, &mut at)?;
-            if position > code_length || code_length - position < 8usize || value.file < source_base
-                || value.file - source_base >= sources.len() || !own_messages.contains(&message) { return None; }
-            immediates.push(ImmediateReference { at: position, message, site: value });
+            if name >= own_messages.len() || position > code_length || code_length - position < 8usize
+                || value.file < source_base || value.file - source_base >= sources.len() { return None; }
+            immediates.push(ObjectReference { at: position, name, site: value });
         }
         if at != bytes.len() { return None; }
         Some(Self { claim, context: stored_context, key, source_base, flags, sites, sources: own_sources, messages: own_messages,
-            code: Linkable { bytes: Vec::new(), definitions, references, immediates }, payload: bytes, code_start, code_length })
+            code: Linkable { bytes: Vec::new(), definitions, references: Vec::new(), immediates: Vec::new() },
+            symbols, references, immediates, payload: bytes, code_start, code_length })
     }
 }
 pub fn emit(unit: &CheckedUnit, context: &Context<'_>, source_base: usize) -> Result<Object, Diagnostic> {
@@ -328,22 +397,60 @@ pub fn emit(unit: &CheckedUnit, context: &Context<'_>, source_base: usize) -> Re
     code.definitions = Vec::new();
     let mut by_site = BTreeMap::new();
     for (name, value) in sites { by_site.insert(name, value); }
-    sites = Vec::new();
+    let mut export_sites = Vec::new();
     for name in &claim.definitions {
-        let offset = *by_name.get(name).ok_or_else(|| error("exported function has no code"))?;
-        let value = *by_site.get(name).ok_or_else(|| error("exported function has no source site"))?;
-        code.definitions.push((name.clone(), offset)); sites.push((name.clone(), value));
+        let external = symbol(&Binding { unit: claim.name.clone(),
+            interface_identity: claim.interface.clone(), name: name.clone() });
+        let offset = *by_name.get(&external).ok_or_else(|| error("exported function has no code"))?;
+        let value = *by_site.get(&external).ok_or_else(|| error("exported function has no source site"))?;
+        code.definitions.push((name.clone(), offset)); export_sites.push(value);
     }
     let own_sources = if program.sources.is_empty() { vec!["<ir>".to_string()] } else { program.sources.clone() };
-    let mut own_messages: Vec<String> = Vec::new();
-    for reference in &code.immediates {
-        if !own_messages.contains(&reference.message) { own_messages.push(reference.message.clone()); }
+    let mut symbols: Vec<String> = Vec::new();
+    let mut symbol_indices: BTreeMap<String, usize> = BTreeMap::new();
+    let mut references = Vec::new();
+    for reference in code.references {
+        let known: Option<usize> = {
+            let value = symbol_indices.get(&reference.name);
+            match value { Some(value) => Some(*value), None => None }
+        };
+        let index = match known {
+            Some(index) => index,
+            None => {
+                let index = symbols.len();
+                symbol_indices.insert(reference.name.clone(), index);
+                symbols.push(reference.name);
+                index
+            }
+        };
+        references.push(ObjectReference { at: reference.at, name: index, site: reference.site });
     }
+    code.references = Vec::new();
+    let mut own_messages: Vec<String> = Vec::new();
+    let mut message_indices: BTreeMap<String, usize> = BTreeMap::new();
+    let mut immediates = Vec::new();
+    for reference in code.immediates {
+        let known: Option<usize> = {
+            let value = message_indices.get(&reference.message);
+            match value { Some(value) => Some(*value), None => None }
+        };
+        let index = match known {
+            Some(index) => index,
+            None => {
+                let index = own_messages.len();
+                message_indices.insert(reference.message.clone(), index);
+                own_messages.push(reference.message);
+                index
+            }
+        };
+        immediates.push(ObjectReference { at: reference.at, name: index, site: reference.site });
+    }
+    code.immediates = Vec::new();
     let code_length = code.bytes.len();
     Ok(Object { claim, context: context.identity.clone(),
         key: object_key(unit.interface(), context, source_base, &own_sources), source_base,
-        flags: features(program), sites, sources: own_sources, messages: own_messages, code,
-        payload: Vec::new(), code_start: 0usize, code_length })
+        flags: features(program), sites: export_sites, sources: own_sources, messages: own_messages, code,
+        symbols, references, immediates, payload: Vec::new(), code_start: 0usize, code_length })
 }
 
 struct Tables {
@@ -360,14 +467,19 @@ pub struct Linker {
     flags: u64,
     claims: BTreeMap<String, Claim>,
     symbols: BTreeMap<String, usize>,
-    sites: BTreeMap<String, Span>,
     relocations: File,
-    reference_count: usize,
+    record_count: usize,
     relocation_bytes: usize,
+    maximum_packet_bytes: usize,
+    maximum_name_bytes: usize,
     relocation_hash: crate::sha256::Sha256,
     failed: bool,
     tables: Vec<Tables>,
 }
+
+
+
+
 impl Linker {
     pub fn new(mut output: File, mut relocations: File) -> Result<Self, Diagnostic> {
         output.truncate(0usize).map_err(|errno: i64| io("truncate unit output", errno))?;
@@ -377,8 +489,10 @@ impl Linker {
         output.write_all(&vec![0u8; platform::CODE_OFFSET]).map_err(|errno: i64| io("reserve ELF header", errno))?;
         output.write_all(&[0xe9u8, 0u8, 0u8, 0u8, 0u8]).map_err(|errno: i64| io("write entry branch", errno))?;
         let mut result = Self { output, position: 5usize, context: None, flags: 0u64,
-            claims: BTreeMap::new(), symbols: BTreeMap::new(), sites: BTreeMap::new(),
-            relocations, reference_count: 0usize, relocation_bytes: 0usize, relocation_hash: crate::sha256::Sha256::new(), failed: false,
+            claims: BTreeMap::new(), symbols: BTreeMap::new(),
+            relocations, record_count: 0usize, relocation_bytes: 0usize,
+            maximum_packet_bytes: 0usize, maximum_name_bytes: 0usize,
+            relocation_hash: crate::sha256::Sha256::new(), failed: false,
             tables: Vec::new() };
         result.reference(0usize, 1usize, "entry", Span::default())?;
         Ok(result)
@@ -386,17 +500,19 @@ impl Linker {
     fn reference(&mut self, kind: usize, position: usize, name: &str, value: Span) -> Result<(), Diagnostic> {
         let mut record = Vec::new();
         word(&mut record, kind); word(&mut record, position); string(&mut record, name); site(&mut record, value);
+        self.maximum_name_bytes = self.maximum_name_bytes.max(name.len());
         self.records(&record, 1usize)
     }
     fn records(&mut self, records: &[u8], count: usize) -> Result<(), Diagnostic> {
         if records.is_empty() { return Ok(()); }
         let next = self.relocation_bytes.checked_add(records.len()).ok_or_else(|| error("relocation spool extent overflow"))?;
+        let next_count = self.record_count.checked_add(count).ok_or_else(|| error("relocation record count overflow"))?;
         if next > 9223372036854775807usize { return Err(error("relocation spool exceeds file seek representation")); }
         self.relocations.seek(self.relocation_bytes as i64, 0u8).map_err(|errno: i64| io("seek relocation append", errno))?;
         self.relocations.write_all(records).map_err(|errno: i64| io("write relocation spool", errno))?;
         self.relocation_hash.update(records);
         self.relocation_bytes = next;
-        self.reference_count += count;
+        self.record_count = next_count;
         Ok(())
     }
     fn append(&mut self, code: &Linkable, bytes: &[u8]) -> Result<(), Diagnostic> {
@@ -416,13 +532,52 @@ impl Linker {
             }
             word(&mut records, 0usize); word(&mut records, self.position + reference.at);
             string(&mut records, &reference.name); site(&mut records, reference.site); count += 1usize;
+            self.maximum_name_bytes = self.maximum_name_bytes.max(reference.name.len());
         }
         for reference in &code.immediates {
             if reference.at > bytes.len() || bytes.len() - reference.at < 8usize { return Err(error("unit message relocation is outside its object")); }
             word(&mut records, 1usize); word(&mut records, self.position + reference.at);
             string(&mut records, &reference.message); site(&mut records, reference.site); count += 1usize;
+            self.maximum_name_bytes = self.maximum_name_bytes.max(reference.message.len());
         }
         self.records(&records, count)?;
+        let position = self.position + platform::CODE_OFFSET;
+        self.output.seek(position as i64, 0u8).map_err(|errno: i64| io("seek unit object", errno))?;
+        self.output.write_all(bytes).map_err(|errno: i64| io("write unit object", errno))?;
+        self.position = next;
+        Ok(())
+    }
+    fn append_object(&mut self, object: &Object) -> Result<(), Diagnostic> {
+        let bytes = object.code_bytes();
+        let next = self.position.checked_add(bytes.len()).ok_or_else(|| error("unit image extent overflow"))?;
+        if next > 9223372036854775807usize - platform::CODE_OFFSET { return Err(error("unit image exceeds file seek representation")); }
+        // Keep each object's names once through the spool as well as its stored payload.
+        let mut records = Vec::new();
+        word(&mut records, 2usize); word(&mut records, 0usize);
+        word(&mut records, object.symbols.len());
+        for name in &object.symbols { string(&mut records, name); }
+        word(&mut records, object.messages.len());
+        for message in &object.messages { string(&mut records, message); }
+        let count = object.references.len().checked_add(object.immediates.len())
+            .ok_or_else(|| error("unit relocation count overflow"))?;
+        word(&mut records, count);
+        for reference in &object.references {
+            if reference.name >= object.symbols.len() || reference.at > bytes.len()
+                || bytes.len() - reference.at < 4usize { return Err(error("unit relocation is outside its object")); }
+            word(&mut records, 0usize); word(&mut records, self.position + reference.at);
+            word(&mut records, reference.name); site(&mut records, reference.site);
+        }
+        for reference in &object.immediates {
+            if reference.name >= object.messages.len() || reference.at > bytes.len()
+                || bytes.len() - reference.at < 8usize { return Err(error("unit message relocation is outside its object")); }
+            word(&mut records, 1usize); word(&mut records, self.position + reference.at);
+            word(&mut records, reference.name); site(&mut records, reference.site);
+        }
+        let payload_length = records.len() - 16usize;
+        for index in 0usize..8usize { records[8usize + index] = (payload_length >> (index * 8usize)) as u8; }
+        self.records(&records, 1usize)?;
+        // This bound comes from the trusted writer, never from the spool reader.
+        self.maximum_packet_bytes = self.maximum_packet_bytes.max(payload_length);
         let position = self.position + platform::CODE_OFFSET;
         self.output.seek(position as i64, 0u8).map_err(|errno: i64| io("seek unit object", errno))?;
         self.output.write_all(bytes).map_err(|errno: i64| io("write unit object", errno))?;
@@ -444,17 +599,31 @@ impl Linker {
         if self.claims.contains_key(&object.claim.name) {
             return Err(error(&format!("duplicate unit implementation {}", object.claim.name)));
         }
-        if object.code.definitions.len() != object.claim.definitions.len() {
+        if object.code.definitions.len() != object.claim.definitions.len()
+            || object.sites.len() != object.claim.definitions.len() {
             return Err(error("unit object does not define its complete checked interface"));
         }
-        for (index, (name, _)) in object.code.definitions.iter().enumerate() {
-            if *name != object.claim.definitions[index] { return Err(error("unit object export differs from checked interface")); }
+        for (index, (name, offset)) in object.code.definitions.iter().enumerate() {
+            if *name != object.claim.definitions[index] || *offset >= object.bytes() {
+                return Err(error("unit object export differs from checked interface"));
+            }
         }
-        self.append(&object.code, object.code_bytes())?;
+        let base = self.position;
+        self.append_object(&object)?;
         self.flags |= object.flags;
-        for (name, site) in object.sites { self.sites.insert(name, site); }
+        let mut claim = object.claim;
+        let mut index = 0usize;
+        for (name, offset) in object.code.definitions {
+            if claim.exports.insert(name, (base + offset, object.sites[index])).is_some() {
+                return Err(error("duplicate unit export"));
+            }
+            index += 1usize;
+        }
+        // The exact ordinal/name comparison is finished. Retain each raw name
+        // once, under the one defining unit and semantic identity.
+        claim.definitions = Vec::new();
         self.tables.push(Tables { source_base: object.source_base, sources: object.sources, messages: object.messages });
-        self.claims.insert(object.claim.name.clone(), object.claim);
+        self.claims.insert(claim.name.clone(), claim);
         Ok(())
     }
     pub fn finish(mut self, context: &Context<'_>, entry: &Interface, entry_name: &str,
@@ -476,7 +645,9 @@ impl Linker {
                 if actual.interface != *identity { return Err(error(&format!("unit {} has a stale dependency interface {name}", claim.name))); }
             }
             for imported in &claim.imports {
-                if !self.symbols.contains_key(imported) { return Err(error(&format!("unit {} has no exact implementation for {imported}", claim.name))); }
+                if resolve_binding(&self.claims, imported).is_none() {
+                    return Err(error(&format!("unit {} has no exact implementation for {}", claim.name, symbol(imported))));
+                }
             }
         }
         for table in &self.tables {
@@ -502,8 +673,9 @@ impl Linker {
         let selected = program.functions.iter().position(|function| function.name == entry_name)
             .ok_or_else(|| error(&format!("unknown unit entry {entry_name}")))?;
         if !entry.defined(selected) { return Err(error("entry must be defined by its selected unit")); }
-        let binding = symbol(&entry.binding(selected));
-        let site = *self.sites.get(&binding).ok_or_else(|| error("entry site has no implementation"))?;
+        let selected_binding = entry.binding(selected);
+        let binding = symbol(&selected_binding);
+        let (_, site) = resolve_binding(&self.claims, &selected_binding).ok_or_else(|| error("entry site has no implementation"))?;
         let (support, data_offset) = support(runtime, program, selected, &binding, site, grants,
             sources, &message_names, result_fd, self.flags, self.position)?;
         self.append(&support, &support.bytes)?;
@@ -512,19 +684,23 @@ impl Linker {
         {
             let mut records = Relocations::new(&mut self.relocations, self.relocation_bytes);
             let mut patches = PatchWindow::new(&mut self.output, platform::CODE_OFFSET + self.position);
-            for _ in 0usize..self.reference_count {
-                let (kind, position, name, site) = records.record()?;
-                let width = if kind == 0usize { 4usize } else if kind == 1usize { 8usize } else { return Err(error("unknown unit relocation kind")); };
-                if position > data_offset || width > data_offset - position { return Err(error("unit relocation is outside image code")); }
-                let bytes = if kind == 0usize {
-                    let target = *self.symbols.get(&name)
-                        .ok_or_else(|| Diagnostic::new(site, "E_UNIT_LINK", &format!("unresolved unit symbol {name}")))?;
-                    crate::x86::displacement(target, position, site)?[..].to_vec()
+            for _ in 0usize..self.record_count {
+                let kind = records.word()?;
+                if kind == 2usize {
+                    records.packet(self.maximum_packet_bytes, &self.claims, &self.symbols, &message_codes,
+                        &mut patches, data_offset, sources.len())?;
                 } else {
-                    let code = *message_codes.get(&name).ok_or_else(|| error("unit message relocation is absent from final table"))?;
-                    let mut bytes = Vec::new(); word(&mut bytes, code); bytes
-                };
-                patches.write(platform::CODE_OFFSET + position, &bytes)?;
+                    if kind > 1usize { return Err(error("unknown unit relocation kind")); }
+                    let (position, name, site) = records.named_record(self.maximum_name_bytes)?;
+                    relocation_position(kind, position, data_offset)?;
+                    let target = if kind == 0usize {
+                        resolve_symbol(&self.claims, &self.symbols, &name)
+                            .ok_or_else(|| Diagnostic::new(site, "E_UNIT_LINK", &format!("unresolved unit symbol {name}")))?
+                    } else {
+                        *message_codes.get(&name).ok_or_else(|| error("unit message relocation is absent from final table"))?
+                    };
+                    apply_relocation(&mut patches, kind, position, target, site)?;
+                }
             }
             records.finish(expected_hash)?;
             patches.flush()?;
@@ -537,9 +713,6 @@ impl Linker {
         Ok((self.output, length))
     }
 }
-
-
-
 const LINK_BUFFER: usize = 65536usize;
 
 struct Relocations<'a> {
@@ -551,6 +724,8 @@ struct Relocations<'a> {
     remaining: usize,
     hash: crate::sha256::Sha256,
 }
+
+
 
 impl<'a> Relocations<'a> {
     fn new(file: &'a mut File, length: usize) -> Self {
@@ -579,20 +754,88 @@ impl<'a> Relocations<'a> {
         }
         Ok(())
     }
-    fn record(&mut self) -> Result<(usize, usize, String, Span), Diagnostic> {
-        if self.remaining < 48usize { return Err(error("truncated relocation record")); }
-        let mut prefix = [0u8; 24]; self.exact(&mut prefix)?;
+    fn word(&mut self) -> Result<usize, Diagnostic> {
+        let mut bytes = [0u8; 8]; self.exact(&mut bytes)?;
         let mut at = 0usize;
-        let kind = take_word(&prefix, &mut at).unwrap();
+        Ok(take_word(&bytes, &mut at).unwrap())
+    }
+    fn named_record(&mut self, maximum_name_bytes: usize) -> Result<(usize, String, Span), Diagnostic> {
+        if self.remaining < 40usize { return Err(error("truncated relocation record")); }
+        let mut prefix = [0u8; 16]; self.exact(&mut prefix)?;
+        let mut at = 0usize;
         let position = take_word(&prefix, &mut at).unwrap();
         let length = take_word(&prefix, &mut at).unwrap();
-        if length > self.remaining - 24usize { return Err(error("invalid relocation symbol extent")); }
+        if length > self.remaining - 24usize || length > maximum_name_bytes {
+            return Err(error("invalid relocation symbol extent"));
+        }
         let mut name = vec![0u8; length]; self.exact(&mut name)?;
         let name = String::from_utf8(name).map_err(|_| error("relocation symbol is not UTF-8"))?;
         let mut coordinates = [0u8; 24]; self.exact(&mut coordinates)?;
         let mut at = 0usize;
         let site = take_site(&coordinates, &mut at).unwrap();
-        Ok((kind, position, name, site))
+        Ok((position, name, site))
+    }
+    fn packet_word(&mut self, remaining: &mut usize) -> Result<usize, Diagnostic> {
+        if *remaining < 8usize { return Err(error("truncated relocation packet")); }
+        *remaining -= 8usize;
+        self.word()
+    }
+    fn packet_names(&mut self, remaining: &mut usize, symbolic: bool) -> Result<Vec<RelocationName>, Diagnostic> {
+        let count = self.packet_word(remaining)?;
+        if count > *remaining / 8usize { return Err(error("invalid relocation table count")); }
+        let mut names = Vec::new();
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        for _ in 0usize..count {
+            let length = self.packet_word(remaining)?;
+            if length > *remaining { return Err(error("invalid relocation symbol extent")); }
+            let mut bytes = vec![0u8; length]; self.exact(&mut bytes)?;
+            *remaining -= length;
+            let name = String::from_utf8(bytes).map_err(|_| error("relocation symbol is not UTF-8"))?;
+            if !seen.insert(name.clone()) { return Err(error("duplicate relocation table name")); }
+            if symbolic && name.is_empty() { return Err(error("empty relocation symbol")); }
+            let binding = if symbolic && name.as_str().starts_with("unit:") {
+                Some(parse_symbol(&name).ok_or_else(|| error("invalid unit relocation symbol"))?)
+            } else { None };
+            names.push(RelocationName { name, binding, value: None });
+        }
+        Ok(names)
+    }
+    fn packet(&mut self, maximum_packet_bytes: usize, claims: &BTreeMap<String, Claim>,
+        symbols: &BTreeMap<String, usize>, message_codes: &BTreeMap<String, usize>,
+        patches: &mut PatchWindow<'_>, data_offset: usize, source_count: usize,
+    ) -> Result<(), Diagnostic> {
+        let length = self.word()?;
+        if length < 24usize || length > maximum_packet_bytes || length > self.remaining {
+            return Err(error("invalid relocation packet extent"));
+        }
+        let mut remaining = length;
+        let mut names = self.packet_names(&mut remaining, true)?;
+        let mut messages = self.packet_names(&mut remaining, false)?;
+        let count = self.packet_word(&mut remaining)?;
+        if remaining % 48usize != 0usize || count != remaining / 48usize {
+            return Err(error("invalid relocation packet rows"));
+        }
+        for _ in 0usize..count {
+            let mut row = [0u8; 48]; self.exact(&mut row)?;
+            remaining -= 48usize;
+            let mut at = 0usize;
+            let kind = take_word(&row, &mut at).unwrap();
+            let position = take_word(&row, &mut at).unwrap();
+            let ordinal = take_word(&row, &mut at).unwrap();
+            let site = take_site(&row, &mut at).unwrap();
+            relocation_position(kind, position, data_offset)?;
+            if site.file >= source_count { return Err(error("invalid relocation reference site")); }
+            let target = if kind == 0usize {
+                if ordinal >= names.len() { return Err(error("invalid relocation symbol ordinal")); }
+                names[ordinal].resolve(claims, symbols, message_codes, false, site)?
+            } else {
+                if ordinal >= messages.len() { return Err(error("invalid relocation message ordinal")); }
+                messages[ordinal].resolve(claims, symbols, message_codes, true, site)?
+            };
+            apply_relocation(patches, kind, position, target, site)?;
+        }
+        if remaining != 0usize { return Err(error("relocation packet has trailing bytes")); }
+        Ok(())
     }
     fn finish(mut self, expected: [u8; 32]) -> Result<(), Diagnostic> {
         if self.remaining != 0usize || self.unread != 0usize || self.at != self.available {
@@ -607,6 +850,51 @@ impl<'a> Relocations<'a> {
     }
 }
 
+struct RelocationName {
+    name: String,
+    binding: Option<Binding>,
+    value: Option<usize>,
+}
+
+impl RelocationName {
+    fn resolve(&mut self, claims: &BTreeMap<String, Claim>, symbols: &BTreeMap<String, usize>,
+        message_codes: &BTreeMap<String, usize>, message: bool, site: Span,
+    ) -> Result<usize, Diagnostic> {
+        if let Some(value) = self.value { return Ok(value); }
+        let value = if message {
+            *message_codes.get(&self.name).ok_or_else(|| error("unit message relocation is absent from final table"))?
+        } else {
+            let target = match &self.binding {
+                Some(binding) => resolve_binding(claims, binding).map(|value: (usize, Span)| value.0),
+                None => symbols.get(&self.name).copied(),
+            };
+            target.ok_or_else(|| Diagnostic::new(site, "E_UNIT_LINK", &format!("unresolved unit symbol {}", self.name)))?
+        };
+        self.value = Some(value);
+        Ok(value)
+    }
+}
+
+fn relocation_position(kind: usize, position: usize, data_offset: usize) -> Result<(), Diagnostic> {
+    let width = if kind == 0usize { 4usize } else if kind == 1usize { 8usize }
+        else { return Err(error("unknown unit relocation kind")); };
+    if position > data_offset || width > data_offset - position {
+        return Err(error("unit relocation is outside image code"));
+    }
+    Ok(())
+}
+
+fn apply_relocation(patches: &mut PatchWindow<'_>, kind: usize, position: usize, target: usize, site: Span)
+    -> Result<(), Diagnostic> {
+    if kind == 0usize {
+        let bytes = crate::x86::displacement(target, position, site)?;
+        patches.write(platform::CODE_OFFSET + position, &bytes)
+    } else {
+        let mut bytes = [0u8; 8];
+        for index in 0usize..8usize { bytes[index] = (target >> (index * 8usize)) as u8; }
+        patches.write(platform::CODE_OFFSET + position, &bytes)
+    }
+}
 struct PatchWindow<'a> {
     file: &'a mut File,
     buffer: Vec<u8>,

@@ -1,0 +1,149 @@
+{
+   "dependency_depth" : 5,
+   "edit_before_sha256" : "2c0b5f1f8fa56d1a18b5a4d92e40dbd61172666eb9880e681f9764225a12d15c",
+   "edit_file" : "units/leaf00000.lkj",
+   "expected_baseline" : 664,
+   "expected_edited" : 670,
+   "files" : [
+      {
+         "bytes" : 323114,
+         "lines" : 9997,
+         "path" : "units/leaf00000.lkj",
+         "sha256" : "2c0b5f1f8fa56d1a18b5a4d92e40dbd61172666eb9880e681f9764225a12d15c"
+      },
+      {
+         "bytes" : 323114,
+         "lines" : 9997,
+         "path" : "units/leaf00001.lkj",
+         "sha256" : "43920e5b9a9f206b4517cebe38c4322df2d23ead38d6e4451414c5377f287c23"
+      },
+      {
+         "bytes" : 323114,
+         "lines" : 9997,
+         "path" : "units/leaf00002.lkj",
+         "sha256" : "908693a7f921a298b5fb0c933ff930214d0470d35e51e56b1aea447d4fae5080"
+      },
+      {
+         "bytes" : 323114,
+         "lines" : 9997,
+         "path" : "units/leaf00003.lkj",
+         "sha256" : "0528258c50c4f8ff625097090780a3fbfc662efe490ba93e568cd09f54e231cd"
+      },
+      {
+         "bytes" : 323114,
+         "lines" : 9997,
+         "path" : "units/leaf00004.lkj",
+         "sha256" : "00f670e4de6bfcc39e370d7fb523817fc2a743333d9104b665a37981dbb30102"
+      },
+      {
+         "bytes" : 323114,
+         "lines" : 9997,
+         "path" : "units/leaf00005.lkj",
+         "sha256" : "4c9177d24d981e0de7c46e53e3ae0a1f6e1c433c101c4ac4d686840c89e3dc33"
+      },
+      {
+         "bytes" : 323114,
+         "lines" : 9997,
+         "path" : "units/leaf00006.lkj",
+         "sha256" : "babfa1afb797522b27c89d91af3855915c633aadd888b1e603178d5a049e197a"
+      },
+      {
+         "bytes" : 323114,
+         "lines" : 9997,
+         "path" : "units/leaf00007.lkj",
+         "sha256" : "d79641a1a8d7e2f537a9cb9568abf670d6b06e2c72e4ce3a5b1eac0136fab4ee"
+      },
+      {
+         "bytes" : 323075,
+         "lines" : 9996,
+         "path" : "units/leaf00008.lkj",
+         "sha256" : "7abb33e795ae18c6cfcbd51a448c1698a08ae24b6b25e927fd2e43409f809798"
+      },
+      {
+         "bytes" : 323075,
+         "lines" : 9996,
+         "path" : "units/leaf00009.lkj",
+         "sha256" : "b497b2916e133e5a7a52439269a23768970caca797a8673d36d4b4b0f1cbed97"
+      },
+      {
+         "bytes" : 84,
+         "lines" : 3,
+         "path" : "units/join00000.lkj",
+         "sha256" : "89a4344f2bee07416b3c8221ba42a46e4f136ec7a09a28b1ce3ba3051a3da99c"
+      },
+      {
+         "bytes" : 84,
+         "lines" : 3,
+         "path" : "units/join00001.lkj",
+         "sha256" : "5f9b0196cbcbb7ba2adbe2010f7c687c34d29e0dd5191583c588e2d57f155006"
+      },
+      {
+         "bytes" : 84,
+         "lines" : 3,
+         "path" : "units/join00002.lkj",
+         "sha256" : "80f277ea69fa0e6f277c872ec97e46b9667480f0a8e2f00d60c7329cceb306f4"
+      },
+      {
+         "bytes" : 84,
+         "lines" : 3,
+         "path" : "units/join00003.lkj",
+         "sha256" : "1ad2ec282a56c7d1efa658342e41a4168cc25ca3c6b93335f564ab34b6608b43"
+      },
+      {
+         "bytes" : 84,
+         "lines" : 3,
+         "path" : "units/join00004.lkj",
+         "sha256" : "35c7aa52e742869e55efb539ae0af615ebefea86d0eb4ddd5a65d88f633db995"
+      },
+      {
+         "bytes" : 84,
+         "lines" : 3,
+         "path" : "units/join00005.lkj",
+         "sha256" : "6382af840dc86fd7af7c1215d8deaf0865fdaaa25ba89522b1e2e221a67b9504"
+      },
+      {
+         "bytes" : 84,
+         "lines" : 3,
+         "path" : "units/join00006.lkj",
+         "sha256" : "5db22e5168078482abafad7e4f23adc5a004c5cad8689961d3fbb3b2150ed2ca"
+      },
+      {
+         "bytes" : 84,
+         "lines" : 3,
+         "path" : "units/join00007.lkj",
+         "sha256" : "236562c8a93915b64a78aa163658318380aadd5f49c234a04dec9a322f8c8c66"
+      },
+      {
+         "bytes" : 84,
+         "lines" : 3,
+         "path" : "units/join00008.lkj",
+         "sha256" : "35bb21544adcf809afd2c206eae04d9286e4a40cbc83cfe02f9d1135d7a00b33"
+      },
+      {
+         "bytes" : 165,
+         "lines" : 5,
+         "path" : "units/entry.lkj",
+         "sha256" : "721156e719b58919f4bf305313a5072d6ebf78636f154be07c42316534122d53"
+      }
+   ],
+   "forms" : [
+      "ordinary cross-unit calls",
+      "generic Copy functions and aggregates",
+      "enums and matches",
+      "Box-indirected recursive nominal types",
+      "reference recursion",
+      "bounded arithmetic loops"
+   ],
+   "generator_version" : 2,
+   "largest_unit_lines" : 9997,
+   "leaf_units" : 10,
+   "linking_units" : 10,
+   "manifest_lines" : 44,
+   "maximum_direct_dependencies" : 2,
+   "maximum_unit_lines" : 10000,
+   "source_bytes" : 3231983,
+   "source_function_definitions" : 7160,
+   "source_lines" : 100000,
+   "units" : 20,
+   "workload" : "connected balanced source-unit DAG; explicit package-boundary workload"
+}

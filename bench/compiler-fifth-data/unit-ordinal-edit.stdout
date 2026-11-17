@@ -1,0 +1,71 @@
+"driver::units::Record" level=source-claim operation-target
+"driver::units::admit" level=source-claim operation-target
+"driver::units::run" level=source-claim operation-target
+"driver::units::source_dependencies" level=source-claim operation-target
+"impl:driver::units::Record#ffae88913b172be2" level=source-claim operation-target
+"impl:native::units::Linker#8ace89006d24dd8b" level=source-claim operation-target
+"impl:native::units::Object#1479fded4fc2e038" level=source-claim operation-target
+"native::units" level=source-claim operation-target
+"native::units::Claim" level=source-claim operation-target
+"native::units::Linker" level=source-claim operation-target
+"native::units::NAMESPACE" level=source-claim operation-target
+"native::units::Object" level=source-claim operation-target
+"native::units::claim" level=source-claim operation-target
+"native::units::emit" level=source-claim operation-target
+"native::units::object_key" level=source-claim operation-target
+"/home/coder/workspace/lkjscript/src/driver/units.lkj" level=source-claim file before=89f9261c185808b8a261f3e11b1f0c166ac81385b7669f01fc20115c4236da30 after=6bbe3180b660797e651fe7b706e5f5a8474d48ebd4942ccc4451cb6202b90c18
+"/home/coder/workspace/lkjscript/src/native/units.lkj" level=source-claim file before=6210f415e8df630da03c14791e69bcf1d4cce9ca391b2ceb5722c86f680a11bf after=6159eb379ebcd72d87f0ec85c95c06117061f95192dd726d1fa53d20ba36c456
+transaction sites=17 files=2 identities=15
+"driver::units::Record" level=source-claim changed=signature
+"driver::units::Record::decode" level=source-claim changed=body
+"driver::units::Record::field:requires" level=source-claim changed=added
+"driver::units::admit" level=source-claim changed=body
+"driver::units::run" level=source-claim changed=body
+"driver::units::source_dependencies" level=source-claim changed=signature,body
+"driver::units::source_dependencies::param:store" level=source-claim changed=removed
+"impl:driver::units::Record#ffae88913b172be2" level=source-claim changed=text-only
+"impl:native::units::Linker#229aa86ffdfba46b" level=source-claim changed=added
+"impl:native::units::Linker#8ace89006d24dd8b" level=source-claim changed=removed
+"impl:native::units::Object#1479fded4fc2e038" level=source-claim changed=text-only
+"native::units::Claim" level=source-claim changed=signature
+"native::units::Claim::field:exports" level=source-claim changed=added
+"native::units::Claim::field:imports" level=source-claim changed=signature
+"native::units::Linker" level=source-claim changed=signature
+"native::units::Linker::append_object" level=source-claim changed=added
+"native::units::Linker::append_object::param:object" level=source-claim changed=added
+"native::units::Linker::append_object::param:self" level=source-claim changed=added
+"native::units::Linker::field:sites" level=source-claim changed=removed
+"native::units::Linker::finish" level=source-claim changed=body
+"native::units::Linker::new" level=source-claim changed=body
+"native::units::Linker::push_object" level=source-claim changed=body
+"native::units::NAMESPACE" level=source-claim changed=signature
+"native::units::Object" level=source-claim changed=signature
+"native::units::Object::encode" level=source-claim changed=body
+"native::units::Object::field:immediates" level=source-claim changed=added
+"native::units::Object::field:references" level=source-claim changed=added
+"native::units::Object::field:sites" level=source-claim changed=signature
+"native::units::Object::field:symbols" level=source-claim changed=added
+"native::units::Object::open" level=source-claim changed=body
+"native::units::ObjectReference" level=source-claim changed=added
+"native::units::ObjectReference::field:at" level=source-claim changed=added
+"native::units::ObjectReference::field:name" level=source-claim changed=added
+"native::units::ObjectReference::field:site" level=source-claim changed=added
+"native::units::claim" level=source-claim changed=body
+"native::units::emit" level=source-claim changed=body
+"native::units::object_key" level=source-claim changed=body
+"native::units::parse_symbol" level=source-claim changed=added
+"native::units::parse_symbol::param:name" level=source-claim changed=added
+"native::units::resolve_binding" level=source-claim changed=added
+"native::units::resolve_binding::param:binding" level=source-claim changed=added
+"native::units::resolve_binding::param:claims" level=source-claim changed=added
+"native::units::resolve_symbol" level=source-claim changed=added
+"native::units::resolve_symbol::param:claims" level=source-claim changed=added
+"native::units::resolve_symbol::param:name" level=source-claim changed=added
+"native::units::resolve_symbol::param:symbols" level=source-claim changed=added
+"native::units::symbol_part" level=source-claim changed=added
+"native::units::symbol_part::param:at" level=source-claim changed=added
+"native::units::symbol_part::param:bytes" level=source-claim changed=added
+program level=checked-ir authority-delta=none
+program level=checked-ir before=338f49d62de19a4661d470d346454d25b855579e27b762bf5fc5beae5f7c264e after=b2498d8032bf6886bb285bb7069fbd7f2326ab376441925347f612703f5c9d38 checked-instances=13795 fresh-checked=13795 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=49719dd5b1eea3a7b6283f22c6e1523819ff179bba4c2ccba41381764b98c5da source-after=4ff9d371e1f22463b8e4de18a79995c8f171aa1a5da3d6118fe6ca50566706f1 mode=apply
+replay desired=b2498d8032bf6886bb285bb7069fbd7f2326ab376441925347f612703f5c9d38 candidate=b2498d8032bf6886bb285bb7069fbd7f2326ab376441925347f612703f5c9d38 verified=true operations=20

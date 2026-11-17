@@ -57,6 +57,15 @@ At each rung below ten million, the runner performs:
 3. Unchanged `build-units` using the first store, requiring identical image bytes.
 4. A one-line, one-body, one-file edit and `build-units` using the same store.
 
+Native-object and metadata-only follow-ups may explicitly pass
+`--skip-generated-check`. That opt-in runs cold build, unchanged build and
+body-edit build; `cohort.txt` records the actual generated phase list and the
+omitted standalone check. The default remains all four phases. Cold build still
+independently checks every unit, and both native output controls and unchanged
+image equality remain mandatory. Real-program check/build/oracle controls are
+unchanged. A change to the checker boundary requires the standalone fresh checks
+again. Never report an omitted phase as measured.
+
 The ten-million rung performs exactly one cold-build compiler invocation and
 then stops, whether it succeeds or refuses. It is not retried, checked again or
 given an edit phase. A marker records that attempt. A refusal stops progression
@@ -80,6 +89,29 @@ not a compiler attempt. Finished source/store/image roots and the private
 authentication key are removed by the same experiment; only useful evidence
 remains. The optional ordinary compiler specimens use the configured ceiling
 rather than an inference from a small generated unit.
+
+A completed lower cohort writes `next-rung.tsv` with the last successful rung's
+actual peak disk use, peak RSS, cold-build time, maximum unit width and producer
+identity. `--continue-from RESULTS` uses those inputs with the same fitting
+formula, so a separately invoked ten-million attempt does not restart at the
+initial 300-second envelope. It requires matching producer, library, harness and
+unit width, increasing rung order and exact complete numeric metadata. Mismatches
+refuse before any real or generated compiler invocation. Integer/rational fitting
+and disk prediction cannot wrap shell arithmetic; real specimens temporarily use
+their own ceiling and then restore the fitted generated envelope.
+
+For the single top-rung attempt after the complete lower cohort and body target
+have passed:
+
+```sh
+bash bench/unit-scale.sh --compiler target/lkjscript \
+  --rungs 10000000 --skip-real --continue-from bench/unit-scale-results-REVISION \
+  --results bench/unit-scale-results-REVISION-10m
+```
+
+The real specimens already belong to the preceding cohort. The continuation
+retains their provenance by linking that cohort, and copies its exact envelope
+inputs into `continued-rung.tsv`. This command is an attempt, not a preview.
 
 ## Evidence and interpretation
 
@@ -273,3 +305,147 @@ image. Authenticated read time is part of the 5.756-second store/link stage,
 not an additional cost. Remaining repeated interface/projection handling,
 native object metadata decoding and global linker tables are the next
 implementation targets. Ten million lines remains unspent.
+
+## After compact native names and retained dependency requirements
+
+The next operation-produced candidate was SHA-256
+`d1f65fbd3b08de2496694ad3bda013b7c337cd203b58d98183db7a27060154b8`.
+Its two-file reconstruction from published `6b02dd1dd` is retained as
+[the exact intermediate-source patch](compiler-fifth-data/unit-ordinal-from-6b02.patch);
+this preserves the measured intermediate even though the following implementation
+supersedes it. An [isolated reconstruction](compiler-fifth-data/unit-ordinal-reproduction.txt)
+from that published base and seed reproduced the measured 34,510,178-byte
+producer exactly in 38.71 seconds, using one compiler worker.
+Native object format version two stores exported-function positions in exact
+authenticated interface order and uses per-object symbol/message tables with
+ordinal references. The linker retains names under an exact owner and semantic
+identity instead of making whole-program qualified-name copies. A selected
+record can retain only dependency requirements already obtained from its
+authenticated source projection; fresh consumers still admit the complete
+required interfaces and projections.
+
+[The complete measurements](unit-scale-d1f65fbd-20261117-lower/measurements.tsv)
+come from `--rungs 100000,1000000 --skip-generated-check`. The opt-in omitted
+only the generated standalone fresh-check phase. Every cold-build unit was
+independently checked (20 and 200 respectively), and real-program checks,
+builds and output controls remained enabled. This is not a new standalone
+fresh-check measurement. The one-million rung used the preceding rung's fitted
+1,536 MiB and 808-second envelope.
+
+| Source lines | Cold build s / KiB RSS | Unchanged build s / KiB RSS | Body build s / KiB RSS | Body checked / reused |
+|---:|---:|---:|---:|---:|
+| 100,000 | 24.91 / 106,332 | 1.04 / 31,456 | 2.94 / 94,628 | 1 / 19 |
+| 1,000,000 | 254.68 / 120,872 | 5.93 / 47,700 | 7.89 / 87,100 | 1 / 199 |
+
+All baseline/edited native outputs and unchanged-image comparisons passed.
+The largest unit and full cold-build frontier remained identical at both
+rungs: 9,997 lines, 2,223 definitions, 71 IR types, 1,434 IR functions,
+two imported interfaces, 76,172 projection bytes and 35 source paths.
+Cold-build RSS grew 13.7% for tenfold total source; body-build RSS did not
+grow. Compact global manifest/link metadata is still retained, so constant
+whole-program memory is not claimed.
+
+**The edit criterion still fails:** 7.89 / 2.94 = 2.683673, above the allowed
+5.88-second one-million-line body build. The actual body-phase loads were
+11.24 to 11.22 at 100k and 13.87 to 13.40 at 1M. These differ from preceding
+cohorts, so cross-cohort wall changes are not isolated causal speedup claims.
+
+The one-million body build spent 0.399605 s on producer identity, 0.261779 s
+loading, 1.389038 s elaborating, 0.201646 s independently checking,
+3.664331 s in store admission/per-unit linking and 1.968331 s in final
+link/source validation/publication. It made 798 authenticated reads of
+102,252,615 payload bytes, taking 1.326982 s inside those reads. Retaining
+requirements removed 199 projection reads; authenticated read time remains
+part of store/link time, not an additional stage.
+
+The ordinary compiler check/build passed in 26.74 / 48.24 s at
+747,584 / 1,153,820 KiB RSS. The exact original Levenshtein units checked/built
+in 0.97 / 1.13 s at 49,444 / 50,760 KiB; all 7,239 oracle rows matched.
+These are the same separately labelled real specimens.
+
+The remaining implementation targets are repeated qualified-name expansion
+in the relocation spool and repeated interface copying/serialization. A change
+to interface restoration requires fresh generated checks in the next cohort.
+The ten-million-line attempt remains **unspent**.
+
+## After per-object relocation frames and bounded interface restoration
+
+The next operation-produced candidate is SHA-256
+`eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f`
+(34,576,115 bytes under the standard relative bootstrap paths). Rust witness
+emission is byte-identical. The native format remains version two. Temporary
+relocation frames now retain each object's names once and resolve an ordinal's
+binding once per frame. Their allocation bounds come from the trusted writer's
+observed extents, with complete spool hash/EOF validation before publication.
+Interface restoration removes the temporary IR-byte copy and a second full
+semantic encoding while retaining structural/layout checks and exact canonical
+reencoding; the original encoder remains an independent identity oracle.
+
+[The complete cohort](unit-scale-eb08fbaa-20261117-lower/measurements.tsv)
+ran `--rungs 100000,1000000` with every default generated phase and every real
+control. All twelve phase rows exited zero; lower-rung baseline/edited outputs
+and unchanged-image equality passed. The selected producer was copied once.
+Post-run library and harness identities matched. The run took 568.04 seconds
+by GNU time, from 05:55:18 through 06:04:46 UTC on 17 November 2026.
+
+| Lines | Phase | Wall s | User + system s | Peak RSS KiB | Checked / reused | Load before → after |
+|---:|---|---:|---:|---:|---:|---:|
+| 100,000 | Cold build | 23.52 | 22.69 + 0.20 | 99,056 | 20 / 0 | 3.65 → 6.15 |
+| 100,000 | Fresh check | 22.83 | 21.91 + 0.21 | 97,436 | 20 / 0 | 6.15 → 7.17 |
+| 100,000 | Unchanged build | 0.93 | 0.88 + 0.01 | 27,568 | 0 / 20 | 7.17 → 7.17 |
+| 100,000 | Body edit | 3.36 | 3.20 + 0.06 | 86,140 | 1 / 19 | 7.17 → 10.12 |
+| 1,000,000 | Cold build | 233.91 | 225.35 + 1.65 | 123,368 | 200 / 0 | 10.12 → 8.06 |
+| 1,000,000 | Fresh check | 208.05 | 200.78 + 1.43 | 106,652 | 200 / 0 | 8.06 → 7.38 |
+| 1,000,000 | Unchanged build | 4.46 | 4.07 + 0.10 | 45,024 | 0 / 200 | 7.38 → 7.35 |
+| 1,000,000 | Body edit | 6.02 | 5.72 + 0.13 | 86,332 | 1 / 199 | 7.35 → 7.32 |
+
+**The recorded body-edit condition passes:** 6.02 / 3.36 = 1.791667×,
+below the 6.72-second ceiling. Recorded CPU time also passes:
+5.85 / 3.26 = 1.794479×. Load changed during the 100k phase; the
+report retains both costs rather than attributing a cross-cohort wall reduction
+solely to this implementation.
+
+The complete fresh frontier is identical at both sizes in both cold build and
+fresh check: largest unit 9,997 lines, 2,223 definitions, 71 types, 1,434 IR
+functions, two imported interfaces, 76,172 projection bytes and 35 source paths.
+For tenfold total source, fresh-check RSS rises 9.46%, cold-build RSS 24.54% and
+body-build RSS 0.22%. Checking storage follows the bounded frontier; compact
+whole-program metadata remains, so strictly constant total memory is not claimed.
+
+| Body-build stage | 100k s | 1M s |
+|---|---:|---:|
+| Producer identity | 0.349784 | 0.296162 |
+| Loading | 0.406265 | 0.269988 |
+| Elaboration | 1.679723 | 1.301915 |
+| Independent checking | 0.254223 | 0.157382 |
+| Store admission and per-unit linking | 0.526731 | 3.048025 |
+| Final link, source validation and publication | 0.138943 | 0.935298 |
+
+The 1M body phase retains 798 authenticated unit-artifact reads of
+102,252,615 payload bytes, taking 1.099427 seconds inside store/link; the 100k
+values are 78 reads, 9,323,047 bytes and 0.132446 seconds. Metadata authentication
+is recorded separately. Source observations/reuses/exact final validations remain
+20/1,159/81 at 100k and 200/12,139/261 at 1M.
+
+The ordinary compiler check/build passes in 21.83/40.32 seconds at
+718,504/1,139,568 KiB. Original Levenshtein units check/build in 0.84/0.86 seconds
+at 47,184/47,232 KiB; all 7,239 oracle rows match with empty stderr.
+The output and oracle hash remains
+`56b8303689ee15edb00f079b6dfe9d289dc5501e463f5fdf7310ede62f833771`.
+
+The completed 1M rung records 211,008,706 bytes of peak working disk,
+123,368 KiB peak RSS and 233.91 seconds cold build in `next-rung.tsv`.
+The fitted 10M continuation therefore uses 1,536 MiB and 3,600 seconds, with
+4,488,609,576 bytes of predicted pool space. The top-rung attempt has not yet
+run. Its invocation must preserve this exact producer, library, harness and unit
+width and use the retained continuation record.
+
+The complete four-worker gate subsequently passed in 768.771 seconds
+(load 7.11 to 8.99), rerunning all 5,470 case requests and all host suites.
+Bootstrap reproduced this measured producer exactly; independent Rust witness
+emission also matched byte for byte. Interface-focused controls refused 2,809
+malformed authenticated inputs, and all 76 native contract controls passed.
+The continuation harness's [36 focused controls](compiler-fifth-data/unit-scale-continuation-smoke.tsv)
+cover exact input matching, malformed continuation refusal before producer use,
+integer overflow, envelope fitting and the disk refusal path; they use only
+small synthetic producers and do not spend a top-rung attempt.

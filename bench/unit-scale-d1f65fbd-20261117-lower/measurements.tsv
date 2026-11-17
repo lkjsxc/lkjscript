@@ -1,0 +1,11 @@
+workload	source_lines	phase	exit	wall_s	user_s	system_s	peak_rss_kib	compiler_peak_rss_bytes	load_before	load_after	memory_limit_mib	watchdog_s	units_checked	units_reused	units_emitted	expected_units	largest_source_unit_lines	maximum_direct_dependencies	dependency_depth	max_definitions	max_types	max_ir_functions	max_import_interfaces	max_projection_bytes	max_sources	emitted_bytes	store_bytes
+compiler	NA	check	0	26.74	25.72	0.22	747584	765526016	10.80	9.85	8192	3600	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	0	0
+compiler	NA	build	0	48.24	46.35	0.45	1153820	1181511680	9.85	12.20	8192	3600	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	NA	34516226	0
+levenshtein-original-units	129	cold-check	0	0.97	0.93	0.01	49444	50630656	12.20	12.59	8192	3600	3	0	0	3	65	1	2	796	70	30	1	333	34	0	34121
+levenshtein-original-units	129	cold-build	0	1.13	1.09	0.01	50760	51978240	12.59	12.59	8192	3600	3	0	3	3	65	1	2	796	70	30	1	333	34	70081	124462
+generated	100000	cold-build	0	24.91	24.15	0.21	106332	108883968	12.59	11.24	2048	300	20	0	20	20	9997	2	5	2223	71	1434	2	76172	35	6053536	10353270
+generated	100000	unchanged-build	0	1.04	1.00	0.01	31456	33181696	11.24	11.24	2048	300	0	20	0	20	9997	2	5	NA	NA	NA	NA	NA	NA	6053536	10353270
+generated	100000	body-build	0	2.94	2.82	0.04	94628	96899072	11.24	11.22	2048	300	1	19	1	20	9997	2	5	1507	57	720	NA	NA	33	6053536	11304855
+generated	1000000	cold-build	0	254.68	246.04	2.05	120872	123772928	11.22	14.04	1536	808	200	0	200	200	9997	2	8	2223	71	1434	2	76172	35	60128475	103499560
+generated	1000000	unchanged-build	0	5.93	5.70	0.09	47700	51363840	14.04	13.87	1536	808	0	200	0	200	9997	2	8	NA	NA	NA	NA	NA	NA	60128475	103499560
+generated	1000000	body-build	0	7.89	7.32	0.13	87100	90660864	13.87	13.40	1536	808	1	199	1	200	9997	2	8	1507	57	720	NA	NA	33	60128475	104451148

@@ -387,6 +387,24 @@ sub edit_metrics {
         edit_invocation_count=>scalar(@invocations),edit_request_count=>scalar(@requests),
         requests_before_first_gate=>$gate_requests,gate_invocation_count=>$gate_calls};
 }
+sub submission_metadata {
+    my ($run)=@_;my @refusals;my $finish;
+    for my $path (sort glob("$run/logs/tool-*.json")) {
+        my $r=load_json($path);
+        push @refusals,{tool_record=>$r->{number},tool=>$r->{tool}}
+            if ($r->{result}{error}//'') =~ /^experiment tool-call allowance exhausted/;
+        $finish={tool_record=>$r->{number},reason=>$r->{arguments}{reason},
+            accepted=>exists($r->{result}{error})?JSON::PP::false:JSON::PP::true}
+            if $r->{tool} eq 'finish';
+    }
+    my $snapshot="$run/gate-01-files.json";my $proposal;
+    if (-f $snapshot) {
+        my $files=load_json($snapshot);my @paths=sort keys %$files;
+        $proposal={snapshot_sha256=>sha256_hex(read_bytes($snapshot)),paths=>\@paths,
+            empty=>@paths?JSON::PP::false:JSON::PP::true};
+    }
+    return {first_proposal=>$proposal,allowance_refusals=>\@refusals,last_finish_request=>$finish};
+}
 sub report {
     my ($out)=@_;
     my @rows;
@@ -404,7 +422,7 @@ sub report {
             checker_first=>$g->{checker_pass},target_first=>$target,
             attempted_tool_calls=>$s->{attempted_tool_calls},outside_tool_calls=>$s->{outside_tool_calls},setup_error=>$s->{setup_error},
             gate_called=>@{$s->{gates}}?JSON::PP::true:JSON::PP::false,full_repository_gate=>$s->{full_repository_gate},
-            edit_metrics=>edit_metrics($path =~ s{/state\.json$}{}r),candidate_kind=>'first-explicit-gate-submission',
+            edit_metrics=>edit_metrics($run),submission=>submission_metadata($run),candidate_kind=>'first-explicit-gate-submission',
             reason=>$s->{reason}//'',timed_out=>($s->{timed_out} || $s->{pause_timeout})?JSON::PP::true:JSON::PP::false,
             path=>$path};
     }
@@ -473,6 +491,7 @@ sub gate_inputs {
             if (!-f $candidate) {push @unsubmitted,$proposal;next;}
             my ($identity,$inputs)=gate_input_identity($repository,$s,load_json($candidate));
             $proposal->{candidate_snapshot_sha256}=sha256_hex(read_bytes($candidate));
+            $proposal->{changed_source_files}=scalar(@{$inputs->{source_delta}});
             my $first=$s->{gates}[0]//{};
             $proposal->{checker_first}=$first->{checker_pass};
             $proposal->{explicit_checker_executed}=@{$s->{gates}}?JSON::PP::true:JSON::PP::false;

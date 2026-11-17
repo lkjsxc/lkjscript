@@ -129,6 +129,7 @@ fn destructor_and_return_contracts() -> usize {
     source.functions.push(choose);
     let origin = units::check_unit("views", "views-v1", source, &no_imports()).unwrap();
     let interface = origin.interface();
+    assert_restoration(interface);
     let mut changed = interface.program().clone();
     changed.functions[0].return_source = Some(ir::ReturnSource::Parameter { index: 1usize, projections: Vec::new() });
     expect_rejection(changed, vec![all_imports(interface)]);
@@ -164,6 +165,7 @@ fn inherited_effects_and_drop_layout() -> usize {
         ]));
     let origin = units::check_unit("files", "files-v1", source, &no_imports()).unwrap();
     let interface = origin.interface();
+    assert_restoration(interface);
     assert!(interface.effects(0usize).contains(&"file_close".to_string()));
     assert_eq!(interface.layouts()[7usize].bytes, 8u64);
     assert!(interface.layouts()[7usize].cleanup);
@@ -175,6 +177,7 @@ fn inherited_effects_and_drop_layout() -> usize {
     let called = units::check_unit_with_exports("caller", "caller-v1", candidate,
         &[all_imports(interface)], &[1usize], &[0usize; 0]).unwrap();
     assert!(called.interface().effects(0usize).contains(&"file_close".to_string()));
+    assert_restoration(called.interface());
     let next = called.interface();
     assert!(units::check_unit("files", "cyclic", next.program().clone(), &[all_imports(next)]).is_err());
     1usize
@@ -244,6 +247,7 @@ fn auth_mutations() -> usize {
 pub fn run() -> usize {
     checked_imports_and_local_mutants() + destructor_and_return_contracts()
         + private_changes_keep_public_identity() + inherited_effects_and_drop_layout() + auth_mutations() + shared_destructor_imports()
+        + restoration_semantic_spans()
 }
 
 fn shared_destructor_imports() -> usize {
@@ -265,10 +269,182 @@ fn shared_destructor_imports() -> usize {
     assert_eq!(b.interface().binding(0usize), a.interface().binding(0usize));
     let c = units::check_unit("c", "c-v1", b.interface().program().clone(),
         &[all_imports(a.interface()), all_imports(b.interface())]).unwrap();
+    assert_restoration(a.interface());
+    assert_restoration(b.interface());
+    assert_restoration(c.interface());
     assert_eq!(c.binding(0usize), a.interface().binding(0usize));
     assert_eq!(c.binding(1usize), b.interface().binding(1usize));
     let impostor = units::check_unit("impostor", "impostor-v1", source, &no_imports()).unwrap();
     assert!(units::check_unit("c", "conflict", a.interface().program().clone(),
         &[all_imports(a.interface()), all_imports(impostor.interface())]).is_err());
     1usize
+}
+
+fn restored_payload(interface: &Interface, dependencies: &[Dependency], bytes: &[u8]) -> Option<Interface> {
+    let producer = [0x31u8; 32];
+    let secret = [0x72u8; 32];
+    let domain = reuse::ProofDomain::new(&producer, &secret);
+    let key = Interface::store_key(interface.name(), interface.input_identity(), dependencies);
+    let payload = verified(&producer, &secret, units::STORE_NAMESPACE, &key, bytes);
+    Interface::from_verified(&domain, interface.name(), interface.input_identity(), dependencies, payload)
+}
+
+fn assert_restoration(interface: &Interface) {
+    let producer = [0x31u8; 32];
+    let secret = [0x72u8; 32];
+    let bytes = interface.encode();
+    let restored = restored_payload(interface, interface.dependencies(), &bytes).unwrap();
+    // The original checked constructor still hashes the independent semantic
+    // encoder. Restoration must agree without changing that constructor.
+    assert_eq!(interface.identity(), restored.identity());
+    assert_eq!(bytes, restored.encode());
+    let envelope = interface.seal(&producer, &secret);
+    let restored = Interface::authenticate(&producer, &secret, interface.name(),
+        interface.input_identity(), interface.dependencies(), &envelope).unwrap();
+    assert_eq!(interface.identity(), restored.identity());
+    assert_eq!(bytes, restored.encode());
+}
+
+fn unused_import(interface: &Interface) -> Import {
+    Import { interface: interface.clone(), types: Vec::new(), functions: Vec::new() }
+}
+
+fn encoded_word(bytes: &[u8], at: usize) -> usize {
+    let mut value = 0usize;
+    for index in 0usize..8usize { value |= (bytes[at + index] as usize) << (index * 8usize); }
+    value
+}
+
+fn encoded_blob_end(bytes: &[u8], at: usize) -> usize {
+    at + 8usize + encoded_word(bytes, at)
+}
+
+fn restoration_payload_mutants(interface: &Interface) -> usize {
+    let bytes = interface.encode();
+    let mut count = 0usize;
+    // Reauthenticate each malformed payload, so these exercise decoding rather
+    // than merely refusing the outer authentication tag.
+    for length in 0usize..bytes.len() {
+        assert!(restored_payload(interface, interface.dependencies(), &bytes[..length]).is_none());
+        count += 1usize;
+    }
+    let mut at = encoded_blob_end(&bytes, 8usize);
+    at = encoded_blob_end(&bytes, at);
+    let input = at;
+    at = encoded_blob_end(&bytes, at);
+    let body = at;
+    at = encoded_blob_end(&bytes, at);
+    let program = at;
+    at = encoded_blob_end(&bytes, at);
+    let defined = at;
+    at += 8usize;
+    let mut origin_units = Vec::new();
+    for _ in &interface.program().functions {
+        at += 8usize;
+        origin_units.push(at + 8usize);
+        for _ in 0usize..3usize { at = encoded_blob_end(&bytes, at); }
+    }
+    let dependencies = at;
+    at += 8usize;
+    let mut dependency_rows = Vec::new();
+    for _ in interface.dependencies() {
+        let start = at;
+        at = encoded_blob_end(&bytes, at);
+        at = encoded_blob_end(&bytes, at);
+        dependency_rows.push((start, at));
+    }
+    let dependencies_end = at;
+    let layouts = at;
+    at += 8usize;
+    for layout in interface.layouts() {
+        at += 40usize + 8usize + layout.fields.len() * 8usize + 8usize;
+        for variant in &layout.variants { at += 8usize + variant.len() * 8usize; }
+    }
+    let effects = at;
+    assert_eq!(encoded_word(&bytes, defined), interface.program().functions.len());
+    assert_eq!(encoded_word(&bytes, dependencies), interface.dependencies().len());
+    assert_eq!(encoded_word(&bytes, layouts), interface.layouts().len());
+    assert_eq!(encoded_word(&bytes, effects), interface.program().functions.len());
+    for offset in &[input, body, program, defined, dependencies, layouts, effects][..] {
+        let mut changed = bytes.clone();
+        for byte in 0usize..8usize { changed[*offset + byte] = 255u8; }
+        assert!(restored_payload(interface, interface.dependencies(), &changed).is_none());
+        count += 1usize;
+    }
+    if !interface.program().functions.is_empty() {
+        let mut changed = bytes.clone();
+        changed[defined + 8usize] = 2u8;
+        assert!(restored_payload(interface, interface.dependencies(), &changed).is_none());
+        count += 1usize;
+        for offset in origin_units {
+            let mut changed = bytes.clone();
+            changed[offset] = 255u8;
+            assert!(restored_payload(interface, interface.dependencies(), &changed).is_none());
+            count += 1usize;
+        }
+    }
+    for variant in 0usize..3usize {
+        let mut changed = bytes.clone();
+        match variant {
+            0usize => { changed[layouts + 8usize] ^= 1u8; }
+            1usize => { changed[layouts + 16usize] = 3u8; }
+            _ => { changed[layouts + 24usize] = 2u8; }
+        }
+        assert!(restored_payload(interface, interface.dependencies(), &changed).is_none());
+        count += 1usize;
+    }
+    let mut changed = bytes.clone();
+    changed.push(0u8);
+    assert!(restored_payload(interface, interface.dependencies(), &changed).is_none());
+    count += 1usize;
+    if dependency_rows.len() >= 2usize {
+        let mut changed = bytes[..dependencies + 8usize].to_vec();
+        let mut expected = Vec::new();
+        let mut index = dependency_rows.len();
+        while index > 0usize {
+            index -= 1usize;
+            let (start, end) = dependency_rows[index];
+            changed.extend_from_slice(&bytes[start..end]);
+            expected.push(interface.dependencies()[index].clone());
+        }
+        changed.extend_from_slice(&bytes[dependencies_end..]);
+        assert!(restored_payload(interface, &expected, &changed).is_none());
+        count += 1usize;
+    }
+    count
+}
+
+fn restoration_semantic_spans() -> usize {
+    let origin = identity();
+    let mut candidate = consumer(origin.interface());
+    candidate.functions[1usize].name = "bridge::probe".to_string();
+    let bridge = units::check_unit("bridge", "bridge-input-longer", candidate,
+        &[all_imports(origin.interface())]).unwrap();
+    let transitive = units::check_unit("relay", "relay-input", bridge.interface().program().clone(),
+        &[all_imports(bridge.interface())]).unwrap();
+    assert_eq!(origin.interface().dependencies().len(), 0usize);
+    assert_eq!(bridge.interface().dependencies().len(), 1usize);
+    assert_eq!(transitive.interface().dependencies().len(), 2usize);
+    assert_restoration(origin.interface());
+    assert_restoration(bridge.interface());
+    assert_restoration(transitive.interface());
+    // Empty, one-row and two-row dependency metadata are semantically omitted,
+    // even when those dependencies contribute no exported signature.
+    let empty = units::check_unit("naïve", "x",
+        program(vec![literal("naïve::value", 41)]), &no_imports()).unwrap();
+    let one = units::check_unit("naïve", "a longer input identity",
+        program(vec![literal("naïve::value", 42)]), &[unused_import(origin.interface())]).unwrap();
+    let two = units::check_unit("naïve", "input-π",
+        program(vec![literal("naïve::value", 43)]), &[unused_import(bridge.interface())]).unwrap();
+    assert_eq!(empty.interface().dependencies().len(), 0usize);
+    assert_eq!(one.interface().dependencies().len(), 1usize);
+    assert_eq!(two.interface().dependencies().len(), 2usize);
+    assert_eq!(empty.interface().identity(), one.interface().identity());
+    assert_eq!(empty.interface().identity(), two.interface().identity());
+    assert!(empty.interface().body_identity() != one.interface().body_identity());
+    assert!(empty.interface().body_identity() != two.interface().body_identity());
+    assert_restoration(empty.interface());
+    assert_restoration(one.interface());
+    assert_restoration(two.interface());
+    restoration_payload_mutants(empty.interface()) + restoration_payload_mutants(transitive.interface())
 }

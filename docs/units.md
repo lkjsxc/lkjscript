@@ -69,10 +69,20 @@ cannot substitute a boolean claiming verification.
 
 A wrong producer, key, unit, input, dependency, namespace, payload or framing
 cannot grant admission. A damaged cache entry is discarded and independently
-checked again when its source is available. A required dependency record that
-was evicted or fails authentication refuses the request. It is never replaced
-by an unsigned declaration. Repeated imports of a genuine reexport are accepted
+checked again when its source is available. When a dependent needs a record
+that the command has not already authenticated and retained, eviction or failed
+authentication refuses that read. No unsigned declaration replaces it. A small
+requirement list already obtained from an authenticated projection can remain
+valid in memory after its backing entry is evicted; it does not authorize a new
+interface or projection read. Repeated imports of a genuine reexport are accepted
 only when their defining binding, exact signature and effects agree.
+
+Interface restoration reads the framed IR directly from its bounded payload
+span. It still verifies structure, origins, layouts, effects, exact EOF and the
+complete canonical encoding. Only then does it hash canonical spans with the
+provenance texts and dependency vector replaced by their encoded empty values.
+The original semantic encoder and checked-interface constructor remain separate
+identity oracles; the interface format and semantic identity are unchanged.
 
 ## Source declarations and generic templates
 
@@ -96,7 +106,10 @@ and associated substitutions. It is not inferred by trimming arbitrary
 name suffixes. Unused private imports are pruned; the retained declaration and
 template requirements determine the dependency source frontier. Transitive
 interface identities remain authenticated even when their source projection
-does not need to be loaded.
+does not need to be loaded. A selected record may retain its authenticated
+projection's requirement list for this command, avoiding repeated decoding
+solely to rediscover the same source frontier. A freshly checked dependent still
+opens the complete authenticated interfaces and projections it actually needs.
 
 A same-line nongeneric body edit can preserve the dependency-facing projection
 and interface, so consumers reuse their prior admission and native objects.
@@ -114,13 +127,27 @@ missing or stale definitions, malformed relocations and unencodable relative
 offsets. Custom trap messages are resolved against the final canonical table,
 including when a later unit adds an earlier-sorting message.
 
+Version-two native objects store export offsets and sites in exact authenticated
+interface order. Their key also binds the ordered checked-body identity; an
+ordinal cannot select a different implementation. Per-object symbol and message
+tables supply checked relocation ordinals. The linker keeps each function name
+under its exact defining unit and semantic identity. Earlier object namespaces
+are cache misses, with no fallback admission.
+
 The linker writes code and relocation spools incrementally and patches the
 unpublished output file through bounded buffers; it does not assemble a
 whole-program IR or executable byte vector. A borrowed immutable runtime context
 reuses its exact identity within the command. Authenticated object payloads keep
 their validated code spans without copying the code into a second allocation.
+Each object's temporary relocation frame keeps its names once and uses ordinal
+rows. A table entry is resolved at first use and then reused within that frame;
+unresolved bindings retain the original full name and source location.
+Initial and runtime-support records retain their named form. Frame and name
+allocations are bounded by maxima observed by the trusted writer, with local
+byte/count checks before allocation. These are extent facts, not resource policy.
+A failed object poisons the linker, and arrival order remains unrestricted.
 Relocation consumption still verifies the complete recorded extent, physical EOF
-and digest before the output can be published.
+and digest before the ELF header is written or the output can be published.
 Source AST, elaboration and IR storage are released after each unit. The source
 frontier includes needed declarations/templates and the standard library.
 
@@ -143,14 +170,18 @@ The ordinary gate runs:
 
 - `tools/check-units.sh`: independently checked interfaces, authenticated
   decoding, structural and ownership attacks, including a three-unit destructor
-  reexport. The current focused run refuses 954 deliberate mutants.
-- `tools/unit-native.sh`: 32 native contract cases covering cross-unit
-  execution, wrong domains, stale bodies, relocations, spool alteration and
-  preserved custom traps.
+  reexport, canonical span identities and reauthenticated malformed payloads.
+  The current focused run refuses 2,809 deliberate mutants.
+- `tools/unit-native.sh`: 76 native contract cases covering cross-unit
+  execution, wrong domains, stale bodies, ordinal tables, bounded spool frames,
+  names larger than 64 KiB, unpublished headers on refusal and preserved custom
+  traps with exact unresolved-binding locations.
 - `tools/unit-source-test.sh`: cold checking/building, byte-identical warm
   reuse, public/private/method body edits, generic invalidation, exact includes,
   corrupted interfaces, key exclusion, cycles and atomic rejection, plus eight
-  snapshot-consistency attacks on both engines and failed-publication cleanup.
+  snapshot-consistency attacks on both engines, transitive generic requirements,
+  corrupted source projections and failed-publication cleanup. The hard-link
+  key attack keeps its key outside the source grant on the same filesystem.
 - `tools/unit-boundaries-test.sh`: returned field views, imported destruction,
   narrow authority, fresh implementation linkage and rejected caller mutation.
 

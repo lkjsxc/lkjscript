@@ -1,0 +1,14 @@
+started_utc=2026-11-17T05:55:18Z
+repository=/home/coder/workspace/lkjscript
+compiler=/home/coder/workspace/lkjscript/target/unit-packets-decoder-current
+rungs=100000,1000000
+compiler_sha256=eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f
+source_commit=5989f48817108d62263e097959573c9b81d1946d
+memory_ceiling_mib=8192
+time_ceiling_s=3600
+maximum_unit_lines=10000
+workload=connected explicit-unit DAG; separate from the historical shape-sampled ladder
+generated_phases=cold-build,cold-check,unchanged-build,body-build
+ten_million=one cold-build invocation only; no fresh check, warm build or retry at that rung
+memory=per-process virtual-address envelope; GNU time reports largest process RSS
+finished_utc=2026-11-17T06:04:46Z

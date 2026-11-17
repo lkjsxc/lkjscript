@@ -11,16 +11,20 @@ unit_lines=10000
 memory_ceiling=8192
 time_ceiling=3600
 real=yes
+generated_check=yes
+continue_from=
 while (($#)); do
     case "$1" in
         --repository) repository=$(realpath "$2"); shift 2 ;;
         --compiler) compiler=$(realpath "$2"); shift 2 ;;
         --results) results=$(realpath -m "$2"); shift 2 ;;
         --rungs) rungs=$2; shift 2 ;;
+        --continue-from) continue_from=$(realpath "$2"); shift 2 ;;
         --unit-lines) unit_lines=$2; shift 2 ;;
         --memory-ceiling-mib) memory_ceiling=$2; shift 2 ;;
         --time-ceiling) time_ceiling=$2; shift 2 ;;
         --skip-real) real=no; shift ;;
+        --skip-generated-check) generated_check=no; shift ;;
         *) printf 'unknown unit-scale option: %s\n' "$1" >&2; exit 2 ;;
     esac
 done
@@ -56,13 +60,20 @@ dd if=/dev/urandom of="$key_root/key" bs=32 count=1 status=none
 cp "$compiler" "$run/producer"
 chmod u-w "$run/producer"
 producer="$run/producer"
+producer_sha=$(sha256sum "$producer" | cut -d' ' -f1)
 unset LKJSCRIPT_STORE LKJSCRIPT_STORE_KEY
 {
     printf 'started_utc=%s\nrepository=%s\ncompiler=%s\nrungs=%s\n' "$(date -u +%FT%TZ)" "$repository" "$compiler" "$rungs"
-    printf 'compiler_sha256='; sha256sum "$producer" | cut -d' ' -f1
+    printf 'compiler_sha256=%s\n' "$producer_sha"
     printf 'source_commit='; git -C "$repository" rev-parse HEAD
     printf 'memory_ceiling_mib=%s\ntime_ceiling_s=%s\nmaximum_unit_lines=%s\n' "$memory_ceiling" "$time_ceiling" "$unit_lines"
     printf 'workload=connected explicit-unit DAG; separate from the historical shape-sampled ladder\n'
+    if [[ "$generated_check" == yes ]]; then
+        printf 'generated_phases=cold-build,cold-check,unchanged-build,body-build\n'
+    else
+        printf 'generated_phases=cold-build,unchanged-build,body-build\n'
+        printf 'generated_cold_check=explicitly omitted; cold build independently checks every unit\n'
+    fi
     printf 'ten_million=one cold-build invocation only; no fresh check, warm build or retry at that rung\n'
     printf 'memory=per-process virtual-address envelope; GNU time reports largest process RSS\n'
 } > "$results/cohort.txt"
@@ -77,6 +88,56 @@ rung=
 rung_peak=0
 rung_disk=0
 cold_wall=0
+fit_next_envelope() {
+    local fitted
+    fitted=$(perl -MMath::BigInt -MMath::BigRat - "$rung_peak" "$cold_wall" "$memory_ceiling" "$time_ceiling" <<'PERL'
+use strict;
+use warnings;
+my ($rss, $wall, $memory_limit, $time_limit) = @ARGV;
+my $maximum = Math::BigInt->new("9223372036854775807");
+for my $value ($rss, $memory_limit, $time_limit) {
+    die "invalid unit-scale envelope integer\n"
+        unless $value =~ /\A[1-9][0-9]{0,18}\z/ && Math::BigInt->new($value) <= $maximum;
+}
+die "invalid unit-scale envelope duration\n"
+    unless $wall =~ /\A(?:0|[1-9][0-9]{0,18})(?:[.][0-9]{1,2})?\z/;
+my $duration = Math::BigRat->new($wall)->bmul(30)->badd(61);
+die "unit-scale envelope duration exceeds integer representation\n" if $duration > $maximum;
+my $memory = Math::BigInt->new($rss)->badd(1023)->bdiv(1024)->bmul(3)->badd(512);
+$memory = Math::BigInt->new(1536) if $memory < 1536;
+$memory = Math::BigInt->new($memory_limit) if $memory > $memory_limit;
+my $seconds = $duration->as_int();
+$seconds = Math::BigInt->new(300) if $seconds < 300;
+$seconds = Math::BigInt->new($time_limit) if $seconds > $time_limit;
+print "$memory\t$seconds\n";
+PERL
+    ) || return 2
+    IFS=$'\t' read -r current_memory current_seconds <<< "$fitted"
+}
+predict_space() {
+    # Compute the existing proportional prediction exactly, including values
+    # whose prediction exceeds a shell integer. Only the fit flag is compared.
+    perl -MMath::BigInt - "$1" "$previous_lines" "$previous_disk" "$2" <<'PERL'
+use strict;
+use warnings;
+my ($lines, $previous, $disk, $free_kib) = @ARGV;
+for my $value ($lines, $previous, $disk, $free_kib) {
+    die "invalid unit-scale disk input\n" unless $value =~ /\A(?:0|[1-9][0-9]*)\z/;
+}
+my $size = Math::BigInt->new($lines);
+die "invalid unit-scale rung\n" if $size < 100 || $size > 10000000;
+my $required;
+if (Math::BigInt->new($previous) > 0) {
+    $required = Math::BigInt->new($disk)->bmul($size)->bdiv($previous)->bmul(2);
+} else {
+    $required = $size->copy()->bmul(128);
+}
+$required->badd(256 * 1024 * 1024);
+my $free = Math::BigInt->new($free_kib)->bmul(1024);
+my $fits = $free >= $required ? "yes" : "no";
+print "$free\t$required\t$fits\n";
+PERL
+}
 store_size() {
     local total=0 directory bytes
     for directory in "$rung/store-build" "$rung/store-check"; do
@@ -122,6 +183,59 @@ native_control() {
     [[ ! -s "$prefix.stderr" ]]
 }
 cd "$repository"
+previous_lines=0
+previous_disk=0
+if [[ -n "$continue_from" ]]; then
+    # Refuse changed or malformed evidence before any producer invocation,
+    # including the real specimens that precede the generated rungs.
+    [[ -f "$continue_from/next-rung.tsv" && -f "$continue_from/cohort.txt" ]] || exit 2
+    grep -Eq '^finished_utc=[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$' "$continue_from/cohort.txt" || exit 2
+    continuation_values=$(perl -MMath::BigInt -MMath::BigRat - "$continue_from/next-rung.tsv" "$unit_lines" "$producer_sha" "${sizes[0]}" <<'PERL'
+use strict;
+use warnings;
+my ($path, $unit_lines, $producer, $next) = @ARGV;
+sub refuse { die "invalid unit-scale continuation metadata: $_[0]\n" }
+my $header = "source_lines\tworking_disk_bytes\tpeak_rss_kib\tcold_wall_s\tmaximum_unit_lines\tcompiler_sha256";
+# The exact six-field representation bounds the read; there is no compiler budget.
+my $maximum_bytes = length($header) + 1 + 7 + 19 + 19 + 22 + 19 + 64 + 5 + 1;
+open my $file, "<:raw", $path or refuse("cannot read row");
+my $count = read($file, my $bytes, $maximum_bytes + 1);
+close $file;
+refuse("oversized row") unless defined($count) && $count <= $maximum_bytes;
+my ($row) = $bytes =~ /\A\Q$header\E\n([^\n]*)\n\z/;
+refuse("expected one header and one complete row") unless defined($row);
+my @values = split /\t/, $row, -1;
+refuse("expected exactly six fields") unless @values == 6;
+my ($lines, $disk, $rss, $wall, $width, $identity) = @values;
+my $maximum = Math::BigInt->new("9223372036854775807");
+for my $value ($lines, $disk, $rss, $width) {
+    refuse("integer representation") unless $value =~ /\A[1-9][0-9]{0,18}\z/
+        && Math::BigInt->new($value) <= $maximum;
+}
+my $prior = Math::BigInt->new($lines);
+refuse("completed rung range") if $prior < 100 || $prior > 9999999;
+refuse("next rung range") unless $next =~ /\A[1-9][0-9]{0,7}\z/
+    && Math::BigInt->new($next) >= 100 && Math::BigInt->new($next) <= 10000000;
+refuse("rung order") unless $prior < Math::BigInt->new($next);
+refuse("duration representation")
+    unless $wall =~ /\A(?:0|[1-9][0-9]{0,18})(?:[.][0-9]{1,2})?\z/;
+my $duration = Math::BigRat->new($wall)->bmul(30)->badd(61);
+refuse("duration overflow") if $duration > $maximum;
+refuse("unit width changed") unless $width eq $unit_lines && Math::BigInt->new($width) >= 100;
+refuse("producer changed") unless $identity =~ /\A[0-9a-f]{64}\z/ && $identity eq $producer;
+print "$row\n";
+PERL
+    ) || exit 2
+    IFS=$'\t' read -r previous_lines previous_disk rung_peak cold_wall prior_unit_lines prior_producer <<< "$continuation_values"
+    cmp "$continue_from/library.sha256" "$results/library.sha256" || exit 2
+    cmp "$continue_from/harness.sha256" "$results/harness.sha256" || exit 2
+    printf 'source_lines\tworking_disk_bytes\tpeak_rss_kib\tcold_wall_s\tmaximum_unit_lines\tcompiler_sha256\n%s\n' \
+        "$continuation_values" > "$results/continued-rung.tsv"
+    printf 'continued_from=%s\n' "$continue_from" >> "$results/cohort.txt"
+    fit_next_envelope
+fi
+generated_memory=$current_memory
+generated_seconds=$current_seconds
 if [[ "$real" == yes ]]; then
     current_memory=$memory_ceiling
     current_seconds=$time_ceiling
@@ -172,18 +286,14 @@ if [[ "$real" == yes ]]; then
     else
         printf 'levenshtein specimen is not present in the selected repository revision\n' >> "$results/walls.txt"
     fi
-    current_memory=2048
-    ((current_memory <= memory_ceiling)) || current_memory=$memory_ceiling
-    current_seconds=300
-    ((current_seconds <= time_ceiling)) || current_seconds=$time_ceiling
+    current_memory=$generated_memory
+    current_seconds=$generated_seconds
 fi
-previous_lines=0
-previous_disk=0
 for lines in "${sizes[@]}"; do
-    free_bytes=$(df -Pk "$repository/target" | awk 'NR == 2 {printf "%.0f", $4 * 1024}')
-    required_bytes=$((256 * 1024 * 1024 + lines * 128))
-    if ((previous_lines > 0)); then required_bytes=$((256 * 1024 * 1024 + previous_disk * lines / previous_lines * 2)); fi
-    if ((free_bytes < required_bytes)); then
+    free_kib=$(df -Pk "$repository/target" | awk 'NR == 2 {print $4}')
+    space_prediction=$(predict_space "$lines" "$free_kib") || exit 2
+    IFS=$'\t' read -r free_bytes required_bytes disk_fits <<< "$space_prediction"
+    if [[ "$disk_fits" != yes ]]; then
         printf '%s lines: pool-space wall, available=%s predicted_required=%s bytes\n' "$lines" "$free_bytes" "$required_bytes" >> "$results/walls.txt"
         break
     fi
@@ -194,7 +304,8 @@ for lines in "${sizes[@]}"; do
     metadata="$results/workload-$lines.json"
     expected=$(perl -MJSON::PP -0777 -ne 'print decode_json($_)->{expected_baseline}' "$metadata")
     expected_edited=$(perl -MJSON::PP -0777 -ne 'print decode_json($_)->{expected_edited}' "$metadata")
-    mkdir "$rung/store-build" "$rung/store-check"
+    mkdir "$rung/store-build"
+    if [[ "$generated_check" == yes ]]; then mkdir "$rung/store-check"; fi
     artifact="$rung/program"
     common=(units.lkj --source-dir "$rung/source" --library-dir "$repository/library" --store-key "$key_root/key" --store-bytes 8589934592 --stats)
     build=("$producer" build-units "${common[@]}" --store "$rung/store-build" --runtime-source "$repository/library/runtime.lkj" -o "$artifact")
@@ -214,11 +325,13 @@ for lines in "${sizes[@]}"; do
     fi
     native_control baseline "$expected" "$artifact"
     cold_image=$(sha256sum "$artifact" | cut -d' ' -f1)
-    if ! run_phase generated cold-check "$lines" "$metadata" - "$producer" check-units "${common[@]}" --store "$rung/store-check"; then
-        printf '%s lines: fresh checking refused; see diagnostic\n' "$lines" >> "$results/walls.txt"
-        break
+    if [[ "$generated_check" == yes ]]; then
+        if ! run_phase generated cold-check "$lines" "$metadata" - "$producer" check-units "${common[@]}" --store "$rung/store-check"; then
+            printf '%s lines: fresh checking refused; see diagnostic\n' "$lines" >> "$results/walls.txt"
+            break
+        fi
+        rm -rf -- "$rung/store-check"
     fi
-    rm -rf -- "$rung/store-check"
     if ! run_phase generated unchanged-build "$lines" "$metadata" "$artifact" "${build[@]}"; then
         printf '%s lines: unchanged build refused; see diagnostic\n' "$lines" >> "$results/walls.txt"
         break
@@ -234,13 +347,10 @@ for lines in "${sizes[@]}"; do
     native_control edited "$expected_edited" "$artifact"
     previous_lines=$lines
     previous_disk=$rung_disk
-    next_memory=$(((rung_peak + 1023) / 1024 * 3 + 512))
-    ((next_memory >= 1536)) || next_memory=1536
-    ((next_memory <= memory_ceiling)) || next_memory=$memory_ceiling
-    current_memory=$next_memory
-    current_seconds=$(awk -v wall="$cold_wall" 'BEGIN {printf "%.0f", int(wall * 30 + 61)}')
-    ((current_seconds >= 300)) || current_seconds=300
-    ((current_seconds <= time_ceiling)) || current_seconds=$time_ceiling
+    # Retain actual envelope inputs so the one 10M attempt can follow this cohort.
+    printf 'source_lines\tworking_disk_bytes\tpeak_rss_kib\tcold_wall_s\tmaximum_unit_lines\tcompiler_sha256\n%s\t%s\t%s\t%s\t%s\t%s\n' \
+        "$lines" "$rung_disk" "$rung_peak" "$cold_wall" "$unit_lines" "$producer_sha" > "$results/next-rung.tsv"
+    fit_next_envelope
     rm -rf -- "$rung"
     rung=
 done

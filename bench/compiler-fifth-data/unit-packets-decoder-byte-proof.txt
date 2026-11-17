@@ -1,0 +1,12 @@
+eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f  target/unit-packets-decoder-current
+eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f  target/unit-packets-decoder-rust-witness
+byte_comparison=equal
+eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f  target/lkjscript
+bootstrap_to_measured_comparison=equal
+bootstrap_to_rust_witness_comparison=equal
+bootstrap_size_bytes=34576115
+gate_exit=0
+gate_wall_seconds=768.771
+gate_fresh_requests=5470
+gate_ir_mutants=128
+gate_ir_mutant_findings=0

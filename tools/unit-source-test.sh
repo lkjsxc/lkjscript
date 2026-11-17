@@ -4,7 +4,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 unit_compiler=$(realpath "${LKJSCRIPT_BINARY:-target/lkjscript}")
 unit_fixture=$(mktemp -d target/unit-source.XXXXXX)
-unit_key_root=$(mktemp -d /tmp/lkjscript-unit-key.XXXXXX)
+# Keep the key outside the source grant but on its filesystem for the hard-link attack.
+unit_key_root=$(mktemp -d "$(pwd -P)/target/unit-key.XXXXXX")
 unit_cleanup() {
     local result=$?
     if (( result != 0 )); then
@@ -133,4 +134,47 @@ if "$unit_compiler" check-units "${unit_options[@]}" > "$unit_root/cycle.out" 2>
 fi
 grep -Fq -- 'unit dependency cycle' "$unit_root/cycle.err"
 mv "$unit_root/units.saved" "$unit_root/units.lkj"
+# A retained generic template needs a declaration behind its direct dependency.
+# Warm source-frontier reuse must come from each selected projection's claim.
+mkdir "$unit_root/ancestor" "$unit_root/ancestor/store"
+cat > "$unit_root/ancestor/units.lkj" <<'SOURCE'
+const UNITS: &[&str] = &["base=base.lkj", "middle=middle.lkj", "app=app.lkj"];
+const DEPENDS: &[&str] = &["middle=base", "app=middle"];
+const ENTRY: &str = "app::main";
+SOURCE
+cat > "$unit_root/ancestor/base.lkj" <<'SOURCE'
+pub fn anchor() -> i64 { 0i64 }
+pub fn identity<T: Copy>(value: T) -> T { value }
+SOURCE
+cat > "$unit_root/ancestor/middle.lkj" <<'SOURCE'
+pub fn anchor() -> i64 { 0i64 }
+pub fn forward<T: Copy>(value: T) -> T { crate::base::identity(value) }
+SOURCE
+cat > "$unit_root/ancestor/app.lkj" <<'SOURCE'
+pub fn main(mut out: Stdout) {
+    let value = crate::middle::forward(42i64);
+    out.write(format!("{value}\n").as_bytes());
+}
+SOURCE
+ancestor_options=(units.lkj --source-dir "$unit_root/ancestor" --store "$unit_root/ancestor/store" --store-key "$unit_key" --stats)
+for ancestor_phase in cold warm; do
+    "$unit_compiler" build-units "${ancestor_options[@]}" --grant out -o "$unit_root/ancestor/$ancestor_phase" > "$unit_root/ancestor-$ancestor_phase.out" 2> "$unit_root/ancestor-$ancestor_phase.err"
+    [[ $("$unit_root/ancestor/$ancestor_phase") == 42 ]]
+done
+grep -Fq -- 'checked=3 reused=0' "$unit_root/ancestor-cold.out"
+grep -Fq -- '"units_max_import_interfaces":2' "$unit_root/ancestor-cold.err"
+grep -Fq -- 'checked=0 reused=3' "$unit_root/ancestor-warm.out"
+perl -0pi -e 's/-> T \{ value \}/-> T { let output = value; output }/' "$unit_root/ancestor/base.lkj"
+"$unit_compiler" build-units "${ancestor_options[@]}" --grant out -o "$unit_root/ancestor/edited" > "$unit_root/ancestor-edited.out" 2> "$unit_root/ancestor-edited.err"
+grep -Fq -- 'checked=3 reused=0' "$unit_root/ancestor-edited.out"
+[[ $("$unit_root/ancestor/edited") == 42 ]]
+# The compact in-memory claim must not replace later artifact authentication.
+ancestor_projections=("$unit_root/ancestor/store"/unit-source-*)
+[[ -f ${ancestor_projections[0]} ]] || { echo 'no retained source projections to corrupt' >&2; exit 1; }
+for ancestor_projection in "${ancestor_projections[@]}"; do
+    perl -e 'open my $f,"+<",$ARGV[0] or die $!; binmode $f; seek $f,-1,2 or die $!; read $f,my $b,1; seek $f,-1,2; print {$f} chr(ord($b)^1);' "$ancestor_projection"
+done
+"$unit_compiler" build-units "${ancestor_options[@]}" --grant out -o "$unit_root/ancestor/recovered" > "$unit_root/ancestor-recovered.out" 2> "$unit_root/ancestor-recovered.err"
+grep -Fq -- 'checked=3 reused=0' "$unit_root/ancestor-recovered.out"
+[[ $("$unit_root/ancestor/recovered") == 42 ]]
 printf 'ok source units: independent check, streamed link, unchanged/body/template reuse, authentication and atomic refusal\n'
