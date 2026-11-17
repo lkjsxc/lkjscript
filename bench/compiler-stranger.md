@@ -79,7 +79,11 @@ Pause stops only this experiment's coordinator and lets its current compiler or
 agent finish. It returns drained=true after the active children have exited. The
 agent's own finish time is preserved; the next case does not start until resume.
 A paused active agent still has its original experimental wall allowance. The
-coordinator identity is checked before signals are sent.
+coordinator identity is checked before signals are sent. If pause drains an index
+build before the agent starts, resume records that idle interval in a separate
+coordinator-pauses.json sidecar. Reports keep the raw setup_seconds and show
+setup_pause_seconds and setup_active_seconds separately; the old coordinator's
+historical timing is never silently rewritten.
 
 ## What is measured
 
@@ -99,7 +103,9 @@ solution.
   setup_seconds is separate: the original metric starts after archive/key/hash
   preparation and covers index setup and its bookkeeping. New preparations also
   record preparation_seconds from entry, including those earlier operations;
-  historical missing values remain unavailable. Commands need a prebuilt index;
+  historical missing values remain unavailable. setup_active_seconds subtracts only
+  separately recorded idle setup pauses; preparation_active_seconds does the same
+  when a complete preparation measurement exists. Commands need a prebuilt index;
   the frozen compiler publishes one only through build --index.
 * checker_first says whether the first explicit gate candidate passed the existing
   independent checker. A missing submission is not-run, not a failed check.
@@ -152,6 +158,27 @@ saved first candidate. Its own tools/check.sh builds the candidate compiler and
 runs the historical fixed point, mutants and suites. The frozen trial compiler is
 not used as the compiler under test. The command reserves four gate workers and
 must run while the campaign and other builds are paused.
+
+List distinct gate inputs before reserving a gate window:
+
+~~~sh
+perl bench/compiler-stranger.pl gate-inputs \
+  /path/to/lkjscript /tmp/lkjscript-stranger-gate-plan.json \
+  /tmp/lkjscript-stranger-before
+~~~
+
+The plan groups identical source deltas with the same source parent and historical
+test/tool/seed revision, and provides exact full-gate argument arrays. It records
+unsubmitted and unfinished trials separately. An input identity is bookkeeping;
+it makes no claim that a gate passed.
+
+Historical gates share REPOSITORY/target/stranger-history-store by default and use
+the private key returned by the normal tools/store-key.sh. Optional STORE and KEY
+arguments select another external persistent store and existing private key.
+Only the infrastructure paths change: normal producer, runner, artifact, closure
+and closed-input authentication still decides reuse. The store and key must stay
+outside the ephemeral gate worktree, and the key outside the store. The same
+actual tools/check.sh runs with LKJSCRIPT_GATE_JOBS=4 for every candidate.
 
 The gate evidence records both revisions, the candidate snapshot and resulting
 compiler hashes, exit status, duration and raw output. A failed historical

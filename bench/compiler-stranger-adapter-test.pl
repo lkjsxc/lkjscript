@@ -72,6 +72,7 @@ my @events=(
     {number=>4,tool=>'gate',arguments=>{},result=>{error=>'experiment allowance exhausted'}},
 );
 for my $event (@events) {put(sprintf("$arm/logs/tool-%03d.json",$event->{number}),$event);}
+put("$arm/coordinator-pauses.json",[{stage=>'setup',seconds=>0.25}]);
 my $rows=$json->decode(run('',$^X,$harness,'report',$cohort));
 my $metrics=$rows->[0]{edit_metrics};
 require_true($metrics->{first_edit_invocation}{kind} eq 'help' && $metrics->{first_edit_invocation}{exit}==0,'help attribution');
@@ -79,14 +80,12 @@ require_true($metrics->{first_edit_request}{exit}==1 && $metrics->{first_edit_re
 require_true($metrics->{edit_request_count}==2 && $metrics->{requests_before_first_gate}==2,'request counts');
 require_true($metrics->{gate_invocation_count}==1 && !$rows->[0]{gate_called},'refused gate attribution');
 require_true($rows->[0]{timed_out},'pause timeout lost from report');
+require_true($rows->[0]{setup_seconds}==2 && $rows->[0]{setup_pause_seconds}==0.25 && $rows->[0]{setup_active_seconds}==1.75,'raw setup and idle pause were conflated');
+require_true(!defined($rows->[0]{preparation_active_seconds}),'missing complete preparation became a measured value');
 
-# Pause a synthetic coordinator while its short-lived child runs. No real
-# compiler, agent or campaign is signalled. A missing finish must get an exit
-# timestamp before the coordinator is resumed.
-my $pause_cohort="$fixture/pause";my $pause_arm="$pause_cohort/01-files";
-make_path($pause_arm);
-put("$pause_arm/state.json",{started=>time,calls=>1});
-copy('/bin/sleep',"$fixture/codex") or die $!;chmod 0755,"$fixture/codex";
+# Pause synthetic coordinators during an agent and an index setup. No real
+# compiler, agent or campaign is signalled. Preserve agent exit time and record
+# setup idle time separately before the coordinator resumes.
 my $coordinator_code=<<'COORDINATOR';
 use strict;use warnings;use Time::HiRes qw(time);
 my ($out,$child)=@ARGV;
@@ -96,28 +95,42 @@ open my $ready,'>',"$out/ready" or die $!;print $ready "$p\n";close $ready;
 waitpid($p,0);
 open my $done,'>',"$out/resumed" or die $!;print $done time;close $done;
 COORDINATOR
-my ($coordinator_in,$coordinator_out);my $coordinator_err=gensym;
-my $coordinator_pid=open3($coordinator_in,$coordinator_out,$coordinator_err,
-    $^X,'-e',$coordinator_code,$pause_cohort,"$fixture/codex",10,24);
-close $coordinator_in;
-my $own_coordinator=$coordinator_pid;
+my $own_coordinator;
 END {
     if ($own_coordinator && waitpid($own_coordinator,WNOHANG)==0) {
         kill 'CONT',$own_coordinator;kill 'TERM',$own_coordinator;waitpid($own_coordinator,0);
     }
 }
-my $deadline=time+5;
-while (!-f "$pause_cohort/ready") {die "synthetic coordinator not ready" if time>$deadline;sleep 0.01;}
-my $paused=$json->decode(run('',$^X,$harness,'pause',$pause_cohort));
-require_true($paused->{drained},'pause did not drain');
-my $paused_state=get("$pause_arm/state.json");
-require_true($paused_state->{finished} && $paused_state->{finish_observation},'drained exit timestamp missing');
-my $observed=$paused_state->{finished};
-sleep 0.1;
-run('',$^X,$harness,'resume',$pause_cohort);
-waitpid($coordinator_pid,0);$own_coordinator=undef;
-require_true(!$?,'synthetic coordinator failed');
-require_true(get("$pause_arm/state.json")->{finished}==$observed,'resume changed observed finish time');
-require_true(bytes("$pause_cohort/resumed")>$observed,'finish was timestamped at resume');
-close $coordinator_out;close $coordinator_err;
-print "ok stranger adapter: UTF-8 bytes, request/help attribution, budget-refused candidate, drained wall clock and timeout report\n";
+for my $stage ('agent','setup') {
+    my $pause_cohort="$fixture/pause-$stage";my $pause_arm="$pause_cohort/01-files";
+    make_path($pause_arm);
+    put("$pause_arm/state.json",$stage eq 'agent'?{started=>time,calls=>1}:{setup_started=>time,calls=>0});
+    my $child="$fixture/".($stage eq 'agent'?'codex':'compiler');
+    copy('/bin/sleep',$child) or die $!;chmod 0755,$child;
+    my ($coordinator_in,$coordinator_out);my $coordinator_err=gensym;
+    my $coordinator_pid=open3($coordinator_in,$coordinator_out,$coordinator_err,
+        $^X,'-e',$coordinator_code,$pause_cohort,$child,10,24);
+    close $coordinator_in;$own_coordinator=$coordinator_pid;
+    my $deadline=time+5;
+    while (!-f "$pause_cohort/ready") {die "synthetic coordinator not ready" if time>$deadline;sleep 0.01;}
+    my $paused=$json->decode(run('',$^X,$harness,'pause',$pause_cohort));
+    require_true($paused->{drained},'pause did not drain');
+    my $paused_state=get("$pause_arm/state.json");
+    my $observed=$paused_state->{finished};
+    if ($stage eq 'agent') {require_true($observed && $paused_state->{finish_observation},'drained exit timestamp missing');}
+    else {require_true(!defined($observed),'setup was mistaken for a finished agent');}
+    sleep 0.1;
+    run('',$^X,$harness,'resume',$pause_cohort);
+    waitpid($coordinator_pid,0);$own_coordinator=undef;
+    require_true(!$?,'synthetic coordinator failed');
+    if ($stage eq 'agent') {
+        require_true(get("$pause_arm/state.json")->{finished}==$observed,'resume changed observed finish time');
+        require_true(bytes("$pause_cohort/resumed")>$observed,'finish was timestamped at resume');
+    } else {
+        my $intervals=get("$pause_arm/coordinator-pauses.json");
+        require_true(@$intervals==1 && $intervals->[0]{stage} eq 'setup' && $intervals->[0]{seconds}>=0.09,'setup idle interval missing');
+        require_true(!get("$pause_arm/state.json")->{started},'resume invented an agent start');
+    }
+    close $coordinator_out;close $coordinator_err;
+}
+print "ok stranger adapter: UTF-8 bytes, request/help attribution, budget-refused candidate, drained wall clock, setup idle and timeout report\n";

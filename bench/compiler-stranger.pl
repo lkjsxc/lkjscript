@@ -392,10 +392,15 @@ sub report {
     my @rows;
     for my $path (sort glob("$out/*/state.json")) {
         my $s=load_json($path);my $g=$s->{gates}[0]//{};
+        (my $run=$path)=~s{/state\.json$}{};
+        my $pauses=-f "$run/coordinator-pauses.json"?load_json("$run/coordinator-pauses.json"):[];
+        my $setup_pause=0;for my $pause (@$pauses) {$setup_pause+=$pause->{seconds} if $pause->{stage} eq 'setup';}
         my $target=$g->{comparison} && $g->{comparison}{exit} ? undef : $g->{canonical_target_pass};
         push @rows,{case=>$s->{case}{id},mode=>$s->{mode},model=>$s->{model},reasoning_effort=>'medium',calls=>$s->{calls},agent_exit=>$s->{agent_exit},
             task_bytes=>$s->{task_bytes}//0,payload_bytes=>$s->{payload_bytes},response_bytes=>$s->{response_bytes},
             wall_seconds=>$s->{wall_seconds}//0,setup_seconds=>$s->{setup_seconds},preparation_seconds=>$s->{preparation_seconds},
+            setup_pause_seconds=>$setup_pause,setup_active_seconds=>defined($s->{setup_seconds})?$s->{setup_seconds}-$setup_pause:undef,
+            preparation_active_seconds=>defined($s->{preparation_seconds})?$s->{preparation_seconds}-$setup_pause:undef,
             checker_first=>$g->{checker_pass},target_first=>$target,
             attempted_tool_calls=>$s->{attempted_tool_calls},outside_tool_calls=>$s->{outside_tool_calls},setup_error=>$s->{setup_error},
             gate_called=>@{$s->{gates}}?JSON::PP::true:JSON::PP::false,full_repository_gate=>$s->{full_repository_gate},
@@ -439,13 +444,73 @@ sub recover_first_candidate {
         snapshot_sha256=>sha256_hex(read_bytes($path))});
     return \%files;
 }
+sub gate_input_identity {
+    my ($repository,$state,$files)=@_;my @delta;
+    for my $path (sort keys %$files) {
+        die "candidate change outside language scope" unless $path=~m{^(src|library)/} && $path!~m{(?:^|/)\.\.?(?:/|$)|//|/$};
+        my $after=defined($files->{$path})?sha256_hex(encode('UTF-8',$files->{$path})):undef;
+        my $original=capture($repository,undef,'git','show',"$state->{parent}:$path");
+        my $before=$original->{exit}?undef:sha256_hex($original->{stdout});
+        next if !defined($before) && !defined($after);
+        next if defined($before) && defined($after) && $before eq $after;
+        push @delta,{path=>$path,sha256=>$after};
+    }
+    my $inputs={version=>1,source_parent=>$state->{parent},test_revision=>$state->{case}{revision},
+        source_delta=>\@delta,gate=>['env','LKJSCRIPT_GATE_JOBS=4','bash','tools/check.sh'],
+        cache_policy=>'normal authenticated cache; shared infrastructure location does not bypass producer, runner, sealed artifact or closed-input validation'};
+    return (sha256_hex($json->encode($inputs)),$inputs);
+}
+sub gate_inputs {
+    my ($repository,$output,@cohorts)=@_;
+    die "gate-inputs needs at least one cohort" unless @cohorts;
+    my %groups;my @unsubmitted;my @unfinished;
+    for my $cohort (@cohorts) {
+        for my $path (sort glob("$cohort/*/state.json")) {
+            my $s=load_json($path);(my $run=$path)=~s{/state\.json$}{};
+            my $proposal={case=>$s->{case}{id},model=>$s->{model},mode=>$s->{mode},run=>$run};
+            if (!exists($s->{wall_seconds})) {push @unfinished,$proposal;next;}
+            my $candidate="$run/gate-01-files.json";
+            if (!-f $candidate) {push @unsubmitted,$proposal;next;}
+            my ($identity,$inputs)=gate_input_identity($repository,$s,load_json($candidate));
+            $proposal->{candidate_snapshot_sha256}=sha256_hex(read_bytes($candidate));
+            my $first=$s->{gates}[0]//{};
+            $proposal->{checker_first}=$first->{checker_pass};
+            $proposal->{explicit_checker_executed}=@{$s->{gates}}?JSON::PP::true:JSON::PP::false;
+            $proposal->{full_repository_gate}=$s->{full_repository_gate};
+            if (!exists $groups{$identity}) {
+                $groups{$identity}={gate_inputs_sha256=>$identity,inputs=>$inputs,proposals=>[],
+                    command=>[$^X,$script,'full-gate',$repository,$run,"$output.runs/$identity"]};
+            }
+            push @{$groups{$identity}{proposals}},$proposal;
+        }
+    }
+    my @groups=map {$groups{$_}} sort keys %groups;
+    my $plan={version=>1,created=>time,
+        scope=>'exact candidate language sources plus historical test/seed/tools revision; no semantic or gate result is inferred from this identity',
+        shared_store=>"$repository/target/stranger-history-store",key_policy=>'normal tools/store-key.sh, or an explicit external private key',
+        groups=>\@groups,without_submitted_source=>\@unsubmitted,unfinished=>\@unfinished};
+    save_json($output,$plan);
+    my $proposals=0;for my $group (@groups) {$proposals+=@{$group->{proposals}};}
+    print $json->encode({unique_gate_inputs=>scalar(@groups),proposals=>$proposals,
+        without_submitted_source=>scalar(@unsubmitted),unfinished=>scalar(@unfinished),plan=>$output}),"\n";
+}
 sub full_gate {
-    my ($repository,$run,$out)=@_;
+    my ($repository,$run,$out,$gate_store,$gate_key)=@_;
     my $state=load_json("$run/state.json");
     my $files=recover_first_candidate($repository,$run,$state);
+    my ($gate_inputs_sha256)=gate_input_identity($repository,$state,$files);
     die "full-gate output already exists" if -e $out;
     make_path($out);$out=abs_path($out);
     my $tree="$out/worktree";
+    $gate_store//="$repository/target/stranger-history-store";
+    make_path($gate_store);$gate_store=abs_path($gate_store);
+    if (!defined $gate_key) {
+        $gate_key=require_ok(capture($repository,undef,'sh','tools/store-key.sh'),'normal authenticated store key');
+        chomp $gate_key;
+    }
+    $gate_key=abs_path($gate_key)//die "store-key path does not exist";
+    die "persistent store must be outside the ephemeral gate worktree" if index($gate_store,"$tree/")==0 || $gate_store eq $tree;
+    die "store key must be outside source and store grants" if index($gate_key,"$tree/")==0 || index($gate_key,"$gate_store/")==0;
     require_ok(capture($repository,undef,'git','worktree','add','--detach',$tree,$state->{case}{revision}),'create historical gate tree');
     require_ok(capture($tree,undef,'git','restore','--source',$state->{parent},'--worktree','--','src','library'),'restore pre-change language sources');
     for my $path (sort keys %$files) {
@@ -457,12 +522,12 @@ sub full_gate {
         write_text($file,$files->{$path});
     }
     my $started=time;
-    my $result=capture($tree,undef,'env','LKJSCRIPT_GATE_JOBS=4','bash','tools/check.sh');
+    my $result=capture($tree,undef,'env','LKJSCRIPT_GATE_JOBS=4',"LKJSCRIPT_STORE=$gate_store","LKJSCRIPT_STORE_KEY=$gate_key",'bash','tools/check.sh');
     my $evidence={version=>1,case=>$state->{case}{id},arm=>$state->{mode},candidate=>1,candidate_kind=>'first-explicit-gate-submission',
-        source_parent=>$state->{parent},test_revision=>$state->{case}{revision},
+        source_parent=>$state->{parent},test_revision=>$state->{case}{revision},gate_inputs_sha256=>$gate_inputs_sha256,
         candidate_snapshot_sha256=>sha256_hex(read_bytes("$run/gate-01-files.json")),
         started=>$started,seconds=>time-$started,exit=>$result->{exit},
-        stdout=>$result->{stdout},stderr=>$result->{stderr},
+        stdout=>$result->{stdout},stderr=>$result->{stderr},store_directory=>$gate_store,store_key_path=>$gate_key,
         compiler_policy=>'historical tools/check.sh bootstraps the saved candidate compiler and runs its own tests/fixed point/mutants; frozen trial executor is not used'};
     if (-f "$tree/target/lkjscript") {$evidence->{candidate_compiler_sha256}=sha256_hex(read_bytes("$tree/target/lkjscript"));}
     save_json("$out/gate.json",$evidence);
@@ -563,14 +628,37 @@ sub pause_campaign {
 }
 sub resume_campaign {
     my ($out)=@_;my ($pid)=coordinator($out);
+    my $pause=load_json("$out/pause-state.json");
+    die "campaign was not drained by pause" unless $pause->{paused} && $pause->{drained} && $pause->{coordinator}==$pid;
+    my @setup;
+    for my $path (glob("$out/*/state.json")) {
+        my $s=load_json($path);
+        push @setup,$path if $s->{setup_started} && !$s->{started} && !exists($s->{wall_seconds});
+    }
+    die "more than one unfinished setup after drain" if @setup>1;
+    my $resumed=time;
+    my $interval={stage=>@setup?'setup':'after-agent-or-between-cases',drained_at=>$pause->{at},
+        resume_requested_at=>$resumed,seconds=>$resumed-$pause->{at},
+        scope=>'idle coordinator interval after active children drained; raw historical timing is retained'};
+    if (@setup) {
+        (my $run=$setup[0])=~s{/state\.json$}{};
+        $interval->{run}=$run;
+        my $path="$run/coordinator-pauses.json";
+        my $history=-f $path?load_json($path):[];
+        push @$history,$interval;save_json($path,$history);
+    }
+    my $history_path="$out/pause-history.json";
+    my $history=-f $history_path?load_json($history_path):[];
+    push @$history,$interval;save_json($history_path,$history);
     unlink "$out/pause";
     kill 'CONT',$pid or die "resume coordinator: $!";
-    save_json("$out/pause-state.json",{coordinator=>$pid,paused=>JSON::PP::false,at=>time});
-    print $json->encode({paused=>JSON::PP::false,coordinator=>$pid}),"\n";
+    save_json("$out/pause-state.json",{coordinator=>$pid,paused=>JSON::PP::false,at=>$resumed});
+    print $json->encode({paused=>JSON::PP::false,coordinator=>$pid,idle_pause_seconds=>$interval->{seconds},stage=>$interval->{stage}}),"\n";
 }
 
 my $action=shift(@ARGV)//'help';
-if ($action eq 'full-gate') {full_gate(abs_path($ARGV[0]),abs_path($ARGV[1]),$ARGV[2]);exit;}
+if ($action eq 'gate-inputs') {my ($repository,$output,@cohorts)=@ARGV;gate_inputs(abs_path($repository),$output,map {abs_path($_)} @cohorts);exit;}
+if ($action eq 'full-gate') {full_gate(abs_path($ARGV[0]),abs_path($ARGV[1]),$ARGV[2],$ARGV[3],$ARGV[4]);exit;}
 if ($action eq 'recover-candidate') {my $s=load_json("$ARGV[1]/state.json");recover_first_candidate(abs_path($ARGV[0]),abs_path($ARGV[1]),$s);exit;}
 if ($action eq 'pause') {pause_campaign(abs_path($ARGV[0]));exit;}
 if ($action eq 'resume') {resume_campaign(abs_path($ARGV[0]));exit;}
@@ -619,4 +707,4 @@ if ($action eq 'campaign') {
     }
     report($out);exit;
 }
-die "usage: $0 campaign REPOSITORY BINARY OUTPUT MODEL CASES|all files,commands SECONDS CALLS\n       $0 report OUTPUT\n       $0 pause|resume OUTPUT\n       $0 full-gate REPOSITORY RUN OUTPUT\n       $0 recover-candidate REPOSITORY RUN\n";
+die "usage: $0 campaign REPOSITORY BINARY OUTPUT MODEL CASES|all files,commands SECONDS CALLS\n       $0 report OUTPUT\n       $0 pause|resume OUTPUT\n       $0 gate-inputs REPOSITORY OUTPUT COHORT...\n       $0 full-gate REPOSITORY RUN OUTPUT [STORE [KEY]]\n       $0 recover-candidate REPOSITORY RUN\n";
