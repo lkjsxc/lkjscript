@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+trait Keep { fn keep<T: Copy>(&self, value: T) -> T { value } }
+struct View<'a, T: ?Sized> { value: &'a T }
+impl<'a, T: ?Sized> Keep for View<'a, T> {}
+fn call<T: ?Sized + Keep>(receiver: &T) -> i64 { receiver.keep(42i64) }
+pub fn probe() -> i64 { let view = View::<str> { value: "default" }; call(&view) }

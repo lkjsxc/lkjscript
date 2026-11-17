@@ -57,10 +57,13 @@ fn owned_text(program: &a::Program, expression: usize) -> bool {
 }
 
 fn vector_loop(program: &a::Program, problem: &Diagnostic) -> Option<String> {
-    if !problem.message.contains("generic argument types disagree") { return None; }
+    let inference = problem.message.contains("generic argument types disagree");
+    let sized = problem.message == "this source position requires Sized; ?Sized values need a borrowed type";
+    if !inference && !sized { return None; }
     for node in &program.exprs {
-        if !primary(problem, node.span) { continue; }
         let Expr::For { iterator, .. } = node.kind else { continue; };
+        if !(inference && primary(problem, node.span))
+            && !(sized && primary(problem, program.exprs[iterator].span)) { continue; }
         let Expr::Macro { name, args, separator } = &program.exprs[iterator].kind else { continue; };
         if name != "vec" || separator != "," || args.is_empty() { continue; }
         let mut strings = true;

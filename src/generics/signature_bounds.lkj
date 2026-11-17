@@ -277,7 +277,12 @@ fn prerequisites(
                 continue;
             }
             let value = *environment.get(&parameter.name).unwrap();
+            if parameter_requires_sized(source, parameter) {
+                let sized = push(terms, Term::Named("Sized".to_string(), Vec::new()));
+                children.push((value, sized));
+            }
             for constraint in &parameter.bounds {
+                if source.relaxed_bounds.contains(constraint) { continue; }
                 children.push((
                     value,
                     signature_type(source, *constraint, &environment, terms)?,
@@ -347,7 +352,7 @@ pub(super) fn prove(
     bound: usize,
     known: &[Goal],
 ) -> Result<bool, Diagnostic> {
-    if symbolic_bound(terms, ty, bound, known) {
+    if sized_bounds::symbolic_goal(source, terms, ty, bound, known) || symbolic_bound(terms, ty, bound, known) {
         return Ok(true);
     }
     let mut canonical = Canonical::default();
@@ -378,7 +383,7 @@ pub(super) fn prove(
             }
             continue;
         }
-        if symbolic_bound(terms, goal.0, goal.1, known) {
+        if sized_bounds::symbolic_goal(source, terms, goal.0, goal.1, known) || symbolic_bound(terms, goal.0, goal.1, known) {
             state.insert(goal, 2);
             continue;
         }

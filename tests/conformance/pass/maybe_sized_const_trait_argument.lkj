@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+trait Marker<T> {}
+impl<const N: usize> Marker<[u8; N]> for [u8; N] {}
+pub fn probe() -> i64 { 42i64 }

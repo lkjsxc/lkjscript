@@ -1,0 +1,8 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+trait Marker {}
+impl<T> Marker for T {}
+trait Call { fn value<T: ?Sized>(input: &T) -> i64; }
+struct Service;
+impl Call for Service { fn value<T: ?Sized + Marker>(_input: &T) -> i64 { 42i64 } }
+pub fn probe() -> i64 { 42i64 }

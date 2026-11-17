@@ -1,0 +1,5 @@
+// expect: value 5
+// witness: {}
+struct View<'a, T: ?Sized> { value: &'a T }
+impl<'a, T: ?Sized> View<'a, T> { fn get(&self) -> &'a T { self.value } }
+pub fn probe() -> i64 { let view = View::<str> { value: "views" }; view.get().len() as i64 }

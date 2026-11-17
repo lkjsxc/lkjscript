@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; fn get(&self) -> Self::Item; }
+impl<const N: usize> Source for [u8; N] {
+    type Item = [u8; N];
+    fn get(&self) -> [u8; N] { *self }
+}
+fn copy<T: ?Sized + Source<Item = [u8; N]>, const N: usize>(value: &T) -> [u8; N] {
+    value.get()
+}
+pub fn probe() -> i64 { copy::<[u8; 3], 3>(&[42u8; 3])[0] as i64 }

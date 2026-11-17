@@ -96,7 +96,7 @@ pub fn source_type_name(program: &a::Program, ty: usize) -> String {
                 }
                 out.push('>');
             }
-            out
+            if program.relaxed_bounds.contains(&ty) { format!("?{out}") } else { out }
         }
         a::Type::Ref { mutable, lifetime, inner } => {
             let mut out = "&".to_string();

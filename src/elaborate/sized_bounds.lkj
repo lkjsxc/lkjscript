@@ -1,0 +1,41 @@
+//! Source-sizedness checks never infer a rigid parameter's layout from its verifier stand-in.
+use super::{Compiler, Result, a, err, ir};
+use crate::generics::TraitIdentity;
+use std::collections::BTreeSet;
+
+impl Compiler<'_> {
+    pub(super) fn source_sized(&self, first: usize) -> bool {
+        let mut pending = vec![first];
+        let mut seen = BTreeSet::new();
+        while let Some(ty) = pending.pop() {
+            if !seen.insert(ty) { continue; }
+            if let Some(contracts) = &self.contracts {
+                if let Some(bounds) = contracts.rigid.get(&ty) {
+                    if !bounds.contains(&TraitIdentity::Builtin("Sized".to_string())) { return false; }
+                    continue;
+                }
+            }
+            match &self.types[ty].kind {
+                ir::TypeKind::Str | ir::TypeKind::Slice { .. } => return false,
+                ir::TypeKind::Array { inner, .. } => pending.push(*inner),
+                ir::TypeKind::Struct { fields, .. } => { for field in fields { pending.push(field.ty); } }
+                ir::TypeKind::Enum { variants, .. } => {
+                    for variant in variants { for field in &variant.fields { pending.push(field.ty); } }
+                }
+                _ => {}
+            }
+        }
+        true
+    }
+
+    pub(super) fn require_source_sized(&self, ty: usize, span: a::Span) -> Result<()> {
+        if self.source_sized(ty) { return Ok(()); }
+        Err(err(span, "E_TYPE", "this source position requires Sized; ?Sized values need a borrowed type"))
+    }
+
+    pub(super) fn check_sized_function(&self, function: &ir::Function, span: a::Span) -> Result<()> {
+        self.require_source_sized(function.result, span)?;
+        for local in &function.locals { self.require_source_sized(local.ty, span)?; }
+        Ok(())
+    }
+}

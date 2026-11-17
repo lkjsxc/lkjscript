@@ -1,0 +1,4 @@
+// expect: value 5
+// witness: {}
+fn same<T: ?Sized>(value: &T) -> &T { value }
+pub fn probe() -> i64 { same::<str>("exact").len() as i64 }

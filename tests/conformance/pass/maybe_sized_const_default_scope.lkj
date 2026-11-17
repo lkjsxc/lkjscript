@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+trait Keep { fn keep<N: Copy>(&self, value: N) -> N { value } }
+impl<const N: usize> Keep for [u8; N] {}
+fn call<T: ?Sized + Keep>(receiver: &&T) -> i64 { receiver.keep(42i64) }
+pub fn probe() -> i64 {
+    let value = [0u8; 3];
+    let view = &value;
+    call(&view)
+}

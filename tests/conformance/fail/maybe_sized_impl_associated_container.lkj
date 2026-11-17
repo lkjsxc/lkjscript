@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+trait Source { type Item; }
+impl<T: ?Sized> Source for &T { type Item = Vec<T>; }
+pub fn probe() -> i64 { 42i64 }

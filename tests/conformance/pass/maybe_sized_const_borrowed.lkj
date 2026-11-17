@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {}
+fn count<T: ?Sized, const N: usize>(_value: &T, bytes: [u8; N]) -> usize {
+    N + bytes.len()
+}
+pub fn probe() -> i64 { count::<str, 21>("borrowed", [0u8; 21]) as i64 }

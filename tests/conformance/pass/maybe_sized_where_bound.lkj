@@ -1,0 +1,4 @@
+// expect: value 6
+// witness: {}
+fn same<T>(value: &T) -> &T where T: ?Sized { value }
+pub fn probe() -> i64 { same("source").len() as i64 }

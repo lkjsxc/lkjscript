@@ -12,6 +12,7 @@ impl Compiler<'_> {
         substitutions: &BTreeMap<String, usize>,
         span: a::Span,
     ) -> Result<()> {
+        if self.source.relaxed_bounds.contains(&bound) { return Ok(()); }
         let node = self.source.types[bound].clone();
         let a::Type::Path(path) = node.kind else {
             return Err(err(span, "E_UNSUPPORTED", "trait bound needs a declared trait path"));
@@ -147,6 +148,8 @@ impl Compiler<'_> {
         // Replaying an identical equation contributes no new assumptions. In
         // particular Next: Loop<Next = Self::Next> closes on this exact fact.
         if existing { return Ok(expected); }
+        // Equality does not supply a named RHS with an implicit Sized fact.
+        // Concrete implementation definitions and owned uses check it separately.
         let declaration = self.source.traits[*owner].associated.iter()
             .find(|item| item.name == *name).unwrap().clone();
         declared_environment.insert("Self".to_string(), *receiver);

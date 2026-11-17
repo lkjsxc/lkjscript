@@ -2,6 +2,7 @@
 use super::{Compiler, ir};
 impl Compiler<'_> {
     pub(super) fn check_owned_element(&self, ty: usize, span: super::a::Span) -> super::Result<()> {
+        self.require_source_sized(ty, span)?;
         if self.has_view(ty) {
             return Err(super::err(
                 span,

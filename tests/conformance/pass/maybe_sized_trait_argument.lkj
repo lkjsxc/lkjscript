@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {}
+trait Marker<T: ?Sized> {}
+struct Holder;
+impl Marker<str> for Holder {}
+pub fn probe() -> i64 { 42i64 }

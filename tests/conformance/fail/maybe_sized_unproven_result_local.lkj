@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+trait Make { fn make() -> Self; }
+fn invalid<T: ?Sized + Make>() { let _ = T::make(); }
+pub fn probe() -> i64 { 42i64 }

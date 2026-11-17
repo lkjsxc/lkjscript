@@ -1375,25 +1375,22 @@ impl Parser {
     fn bounds(&mut self) -> Result<Vec<TypeId>, Diagnostic> {
         let mut bounds = Vec::new();
         loop {
-            if self.token().kind == TokenKind::Lifetime {
-                let span = self.token().span;
+            let span = self.token().span;
+            let relaxed = self.take("?");
+            let bound = if self.token().kind == TokenKind::Lifetime {
                 let name = self.token().text.clone();
                 self.at += 1;
-                bounds.push(self.add_type(
-                    Type::Path(Path {
-                        qualification: None, bindings: Vec::new(),
-                        declaration: None,
-                        name,
-                        args: Vec::new(),
-                    }),
-                    span,
-                ));
-            } else {
-                bounds.push(self.ty()?);
+                self.add_type(Type::Path(Path {
+                    qualification: None, bindings: Vec::new(), declaration: None,
+                    name, args: Vec::new(),
+                }), span)
+            } else { self.ty()? };
+            if relaxed {
+                self.program.relaxed_bounds.insert(bound);
+                self.program.types[bound].span = self.finish_span(span);
             }
-            if !self.take("+") {
-                break;
-            }
+            bounds.push(bound);
+            if !self.take("+") { break; }
         }
         Ok(bounds)
     }

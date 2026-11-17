@@ -35,7 +35,7 @@ enum Work {
         mutable: bool,
         span: a::Span,
     },
-    Slice,
+    Slice { span: a::Span },
     Array {
         len: String,
         span: a::Span,
@@ -43,6 +43,7 @@ enum Work {
     },
     Tuple {
         fields: usize,
+        span: a::Span,
     },
     Struct {
         id: usize,
@@ -168,7 +169,7 @@ impl Compiler<'_> {
                             });
                         }
                         a::Type::Slice(inner) => {
-                            work.pending.push(Work::Slice);
+                            work.pending.push(Work::Slice { span: node.span });
                             work.pending.push(Work::Source {
                                 id: *inner,
                                 environment,
@@ -188,6 +189,7 @@ impl Compiler<'_> {
                         a::Type::Tuple(fields) => {
                             work.pending.push(Work::Tuple {
                                 fields: fields.len(),
+                                span: node.span,
                             });
                             let mut index = fields.len();
                             while index != 0 {
@@ -324,8 +326,9 @@ impl Compiler<'_> {
                     }
                     work.values.push(self.reference(inner, mutable));
                 }
-                Work::Slice => {
+                Work::Slice { span } => {
                     let inner = work.values.pop().expect("slice child");
+                    self.require_source_sized(inner, span)?;
                     let id = self.intern(
                         String::new(),
                         ir::TypeKind::Slice {
@@ -342,7 +345,7 @@ impl Compiler<'_> {
                     let id = self.array_type(inner, constant, span)?;
                     work.values.push(id);
                 }
-                Work::Tuple { fields } => {
+                Work::Tuple { fields, span } => {
                     let values = work.take_values(fields);
                     if values.is_empty() {
                         work.values.push(ir::UNIT);
@@ -350,6 +353,7 @@ impl Compiler<'_> {
                     }
                     let mut fields = Vec::new();
                     for (index, ty) in values.into_iter().enumerate() {
+                        self.require_source_sized(ty, span)?;
                         fields.push(ir::Field {
                             name: format!("{index}"),
                             ty,
@@ -369,6 +373,7 @@ impl Compiler<'_> {
                     let values = work.take_values(definition.fields.len());
                     let mut fields = Vec::new();
                     for (field, ty) in definition.fields.iter().zip(values) {
+                        self.require_source_sized(ty, field.span)?;
                         fields.push(ir::Field {
                             name: field.name.clone(),
                             ty,
@@ -414,6 +419,7 @@ impl Compiler<'_> {
                     for variant in &definition.variants {
                         let mut fields = Vec::new();
                         for field in &variant.fields {
+                            self.require_source_sized(values[at], field.span)?;
                             fields.push(ir::Field {
                                 name: field.name.clone(),
                                 ty: values[at],

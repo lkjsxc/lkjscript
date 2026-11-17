@@ -1,0 +1,9 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+trait Marker {}
+impl<'a, T, const N: usize> Marker for ([u8; N], &'a T) {}
+fn require<U: Marker>(_value: &U) -> i64 { 42i64 }
+fn invalid<T: ?Sized, const N: usize>(value: &T, bytes: [u8; N]) -> i64 {
+    require(&(bytes, value))
+}
+pub fn probe() -> i64 { 42i64 }

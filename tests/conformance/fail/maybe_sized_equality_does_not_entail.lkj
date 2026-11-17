@@ -1,0 +1,7 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+trait Source { type Item; }
+struct Number;
+impl Source for Number { type Item = i64; }
+fn value<T: ?Sized, I: Source<Item = T>>(input: T) -> T { input }
+pub fn probe() -> i64 { value::<i64, Number>(42i64) }

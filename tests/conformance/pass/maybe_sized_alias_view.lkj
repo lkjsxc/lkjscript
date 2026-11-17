@@ -1,0 +1,5 @@
+// expect: value 5
+// witness: {}
+type View<'a, T: ?Sized> = &'a T;
+fn same<'a, T: ?Sized>(value: View<'a, T>) -> View<'a, T> { value }
+pub fn probe() -> i64 { same::<str>("alias").len() as i64 }

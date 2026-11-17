@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+fn invalid<T: ?Sized>(_value: &[T]) {}
+pub fn probe() -> i64 { 42i64 }

@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+fn ordinary<T>(_value: &T) -> i64 { 42i64 }
+pub fn probe() -> i64 { ordinary::<str>("unsized") }

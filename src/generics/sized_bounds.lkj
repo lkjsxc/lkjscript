@@ -1,0 +1,98 @@
+//! Sizedness belongs to source contracts; concrete representation stays in the checked IR.
+use super::*;
+
+pub(crate) fn parameter_requires_sized(source: &Program, parameter: &GenericParam) -> bool {
+    !parameter.lifetime && !parameter.constant && !parameter.bounds.iter().any(|bound| source.relaxed_bounds.contains(bound))
+}
+
+fn parameters(source: &Program, parameters: &[GenericParam], allowed: &mut BTreeSet<TypeId>) -> Result<(), Diagnostic> {
+    for parameter in parameters {
+        let mut count = 0usize;
+        for bound in &parameter.bounds {
+            if !source.relaxed_bounds.contains(bound) { continue; }
+            if parameter.lifetime || parameter.constant || parameter.implicit {
+                return Err(Diagnostic::new(source.types[*bound].span, "E_UNSUPPORTED",
+                    "?Sized requires a named type parameter declaration"));
+            }
+            count += 1usize;
+            if count > 1usize {
+                return Err(Diagnostic::new(source.types[*bound].span, "E_TYPE", "duplicate ?Sized relaxation"));
+            }
+            allowed.insert(*bound);
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
+    let mut allowed = BTreeSet::new();
+    for item in &source.functions { parameters(source, &item.generics, &mut allowed)?; }
+    for item in &source.structs { parameters(source, &item.generics, &mut allowed)?; }
+    for item in &source.enums { parameters(source, &item.generics, &mut allowed)?; }
+    for item in &source.traits { parameters(source, &item.generics, &mut allowed)?; }
+    for item in &source.impls { parameters(source, &item.generics, &mut allowed)?; }
+    for item in &source.aliases { parameters(source, &item.generics, &mut allowed)?; }
+    for bound in &source.relaxed_bounds {
+        let node = &source.types[*bound];
+        let valid = match &node.kind {
+            Type::Path(path) => path.args.is_empty() && path.bindings.is_empty()
+                && bound_identity(source, path) == TraitIdentity::Builtin("Sized".to_string()),
+            _ => false,
+        };
+        if !valid {
+            return Err(Diagnostic::new(node.span, "E_UNSUPPORTED", "relaxed bounds require the builtin Sized trait"));
+        }
+        if !allowed.contains(bound) {
+            return Err(Diagnostic::new(node.span, "E_UNSUPPORTED",
+                "?Sized is supported on named type parameters; associated, concrete and Self relaxations remain unsupported"));
+        }
+    }
+    for implementation in &source.impls {
+        if let Some(trait_ty) = implementation.trait_ty {
+            if let Type::Path(path) = &source.types[trait_ty].kind {
+                if bound_identity(source, path) == TraitIdentity::Builtin("Sized".to_string()) {
+                    return Err(Diagnostic::new(source.types[trait_ty].span, "E_TRAIT", "Sized cannot be implemented explicitly"));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn symbolic_goal(source: &Program, terms: &[Term], ty: usize, bound: usize, known: &[(usize, usize)]) -> bool {
+    if !matches!(&terms[bound], Term::Named(name, arguments) if name == "Sized" && arguments.is_empty()) { return false; }
+    let mut pending = vec![ty];
+    while let Some(ty) = pending.pop() {
+        if known.iter().any(|(given, constraint)| equivalent(terms, ty, *given)
+            && matches!(&terms[*constraint], Term::Named(name, arguments) if name == "Sized" && arguments.is_empty())) { continue; }
+        let Term::Named(name, children) = &terms[ty] else { return false; };
+        if name == "str" || name == "[]" { return false; }
+        if name == "$array" {
+            if children.len() != 2usize { return false; }
+            pending.push(children[0]);
+            continue;
+        }
+        if name == "tuple" {
+            for child in children { pending.push(*child); }
+            continue;
+        }
+        if matches!(name.as_str(), "&" | "&mut" | "fn" | "Vec" | "Box" | "String" | "!"
+            | "bool" | "char" | "u8" | "u16" | "u32" | "u64" | "u128" | "usize"
+            | "i8" | "i16" | "i32" | "i64" | "i128" | "isize" | "f32" | "f64")
+            || name.starts_with("$opaque:") { continue; }
+        if source.structs.iter().any(|item| qualified(&item.module, &item.name) == *name)
+            || source.enums.iter().any(|item| qualified(&item.module, &item.name) == *name) { continue; }
+        if let Some(member) = name.as_str().strip_prefix("$projection:") {
+            if children.len() == 2usize {
+                if let Term::DeclaredTrait(owner, arguments) = &terms[children[1]] {
+                    let declared = &source.traits[*owner];
+                    if arguments.is_empty() && declared.associated.iter().any(|item| item.name.as_str() == member)
+                        && known.iter().any(|(receiver, constraint)| equivalent(terms, children[0], *receiver)
+                            && equivalent(terms, children[1], *constraint)) { continue; }
+                }
+            }
+        }
+        return false;
+    }
+    true
+}

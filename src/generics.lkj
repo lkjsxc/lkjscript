@@ -6,6 +6,8 @@ mod associated_bindings;
 mod const_functions;
 pub(crate) use const_functions::const_data_constructor;
 pub(crate) mod const_arguments;
+mod sized_bounds;
+pub(crate) use sized_bounds::parameter_requires_sized;
 use crate::ast::*;
 use crate::names::qualified;
 pub(crate) use bound_solver::{BoundContext, BoundSolver, BoundStep};
@@ -1204,6 +1206,7 @@ pub fn validate(source: &Program) -> Result<(), Diagnostic> {
     alias_cycles(source)?;
     crate::generics::const_arguments::validate(source)?;
     associated_bindings::validate(source)?;
+    sized_bounds::validate(source)?;
     constant_cycles(source)?;
     finite_data(source)?;
     coherence(source)?;
@@ -1371,7 +1374,8 @@ pub(crate) enum TraitIdentity {
 /// Builtin supertrait contracts shared by assumptions and derive validation.
 pub(crate) fn builtin_parents(name: &str) -> Vec<String> {
     match name {
-        "Copy" => vec!["Clone".to_string()],
+        "Copy" => vec!["Clone".to_string(), "Sized".to_string()],
+        "Clone" => vec!["Sized".to_string()],
         "Ord" => vec![
             "Eq".to_string(),
             "PartialOrd".to_string(),
@@ -1413,6 +1417,7 @@ pub(crate) fn bound_identity(source: &Program, path: &Path) -> TraitIdentity {
             | "PartialEq"
             | "PartialOrd"
             | "Drop"
+            | "Sized"
     ) {
         TraitIdentity::Builtin(path.name.clone())
     } else {
@@ -1488,6 +1493,7 @@ pub(crate) fn derived_coherence(
 }
 
 fn add_bound(source: &Program, id: TypeId, ty: usize, children: &mut Vec<Goal>) -> bool {
+    if source.relaxed_bounds.contains(&id) { return true; }
     if let Type::Path(path) = &source.types[id].kind {
         if path.name.starts_with('\'') {
             return true;
@@ -1786,6 +1792,23 @@ fn trait_requirements(
         TraitIdentity::Declared(_) => "",
         TraitIdentity::Unknown(_) => return None,
     };
+    if bound == "Sized" {
+        let mut children = Vec::new();
+        match &ty.kind {
+            TypeKind::Str | TypeKind::Slice { .. } => return None,
+            TypeKind::Array { inner, .. } => children.push(Goal { ty: *inner, bound: goal.bound.clone() }),
+            TypeKind::Struct { fields, .. } => {
+                for field in fields { children.push(Goal { ty: field.ty, bound: goal.bound.clone() }); }
+            }
+            TypeKind::Enum { variants, .. } => {
+                for variant in variants { for field in &variant.fields {
+                    children.push(Goal { ty: field.ty, bound: goal.bound.clone() });
+                } }
+            }
+            _ => {}
+        }
+        return Some(Requirements::structural(children));
+    }
     if bound == "Copy" {
         return if crate::check::is_copy(types, goal.ty) {
             Some(Requirements::structural(Vec::new()))
@@ -1992,6 +2015,9 @@ fn trait_requirements(
             continue;
         }
         let concrete = *env.get(&param.name)?;
+        if parameter_requires_sized(source, param) {
+            children.push(Goal { ty: concrete, bound: TraitIdentity::Builtin("Sized".to_string()) });
+        }
         for constraint in &param.bounds {
             if !add_bound(source, *constraint, concrete, &mut children) {
                 parameterized.push((*constraint, concrete));
@@ -2328,7 +2354,12 @@ fn known_bounds(
             Some(t) => *t,
             None => continue,
         };
+        if parameter_requires_sized(source, p) {
+            let sized = push(terms, Term::Named("Sized".to_string(), Vec::new()));
+            known.push((ty, sized));
+        }
         for b in &p.bounds {
+            if source.relaxed_bounds.contains(b) { continue; }
             let bound = signature_type(source, *b, env, terms)?;
             for parent in bound_closure(source, bound, ty, terms)? {
                 known.push((ty, parent));
@@ -2582,7 +2613,15 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
                 continue;
             }
             let concrete = *expected_env.get(&generic.name).unwrap();
+            if parameter_requires_sized(source, generic) {
+                let sized = push(&mut terms, Term::Named("Sized".to_string(), Vec::new()));
+                if !signature_bounds::prove(source, &implementations, &mut terms, concrete, sized, &known)? {
+                    return Err(Diagnostic::new(implementation.span, "E_TRAIT",
+                        "implementation does not establish a trait type-argument Sized bound"));
+                }
+            }
             for bound in &generic.bounds {
+                if source.relaxed_bounds.contains(bound) { continue; }
                 let b = signature_type(source, *bound, &expected_env, &mut terms)?;
                 if !signature_bounds::prove(
                     source,
@@ -2752,7 +2791,15 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
                     continue;
                 }
                 let ty = *aenv.get(&g.name).unwrap();
+                if parameter_requires_sized(source, g) {
+                    let sized = push(&mut terms, Term::Named("Sized".to_string(), Vec::new()));
+                    if !signature_bounds::prove(source, &implementations, &mut terms, ty, sized, &available)? {
+                        return Err(Diagnostic::new(actual.span, "E_TRAIT",
+                            "implementation method requires a stronger Sized parameter bound"));
+                    }
+                }
                 for b in &g.bounds {
+                    if source.relaxed_bounds.contains(b) { continue; }
                     let bound = signature_type(source, *b, &aenv, &mut terms)?;
                     if !signature_bounds::prove(
                         source,

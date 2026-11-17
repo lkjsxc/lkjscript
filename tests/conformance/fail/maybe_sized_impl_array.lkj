@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+trait Marker {}
+impl<T: ?Sized> Marker for [T; 0] {}
+pub fn probe() -> i64 { 42i64 }

@@ -1,0 +1,4 @@
+// expect: value 3
+// witness: {}
+fn same<T: ?Sized>(value: &T) -> &T { value }
+pub fn probe() -> i64 { let values = [1i64, 2i64, 3i64]; same::<[i64]>(&values[..]).len() as i64 }

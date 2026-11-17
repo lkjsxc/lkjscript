@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+fn ordinary<T>(value: T) -> T { value }
+fn sized<T: ?Sized + Sized>(value: T) -> T { ordinary(value) }
+pub fn probe() -> i64 { sized(42i64) }

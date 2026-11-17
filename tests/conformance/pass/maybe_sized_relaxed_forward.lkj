@@ -1,0 +1,5 @@
+// expect: value 7
+// witness: {}
+fn same<T: ?Sized>(value: &T) -> &T { value }
+fn forward<T: ?Sized>(value: &T) -> &T { same(value) }
+pub fn probe() -> i64 { forward("forward").len() as i64 }

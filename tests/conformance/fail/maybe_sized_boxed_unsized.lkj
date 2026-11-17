@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":true}
+fn boundary<T: ?Sized>(_value: Box<T>) {}
+pub fn probe() -> i64 { 42i64 }

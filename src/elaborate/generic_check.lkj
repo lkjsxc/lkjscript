@@ -395,11 +395,13 @@ impl Compiler<'_> {
                 copy: false,
             },
         });
+        let mut assumptions = BTreeSet::new();
+        assumptions.insert(TraitIdentity::Builtin("Sized".to_string()));
         self.contracts
             .as_mut()
             .unwrap()
             .rigid
-            .insert(id, BTreeSet::new());
+            .insert(id, assumptions);
         id
     }
 
@@ -421,6 +423,10 @@ impl Compiler<'_> {
             }
             let ty = if parameter.constant { self.rigid_constant(&parameter.name) }
                 else { self.rigid_type(&parameter.name) };
+            if !parameter.constant && !crate::generics::parameter_requires_sized(self.source, parameter) {
+                self.contracts.as_mut().unwrap().rigid.get_mut(&ty).unwrap()
+                    .remove(&TraitIdentity::Builtin("Sized".to_string()));
+            }
             substitutions.insert(parameter.name.clone(), ty);
         }
         Ok(())
@@ -540,6 +546,7 @@ impl Compiler<'_> {
         let mut bindings: Vec<(a::Path, BTreeMap<String, usize>)> = Vec::new();
         let mut predicates = Vec::new();
         while let Some((id, inherited)) = pending.pop() {
+            if self.source.relaxed_bounds.contains(&id) { continue; }
             if !seen.insert(id) { continue; }
             let node = self.source.types[id].clone();
             let mut inherited_substitutions = substitutions.clone();
@@ -615,6 +622,7 @@ impl Compiler<'_> {
                 builtin,
                 "Copy"
                     | "Clone"
+                    | "Sized"
                     | "Data"
                     | "Send"
                     | "Sync"
@@ -686,6 +694,8 @@ impl Compiler<'_> {
         let declaration = self.source.traits[trait_index].clone();
         self.declare_parameters(&declaration.generics, &mut substitutions)?;
         let self_ty = self.rigid_type("Self");
+        self.contracts.as_mut().unwrap().rigid.get_mut(&self_ty).unwrap()
+            .remove(&TraitIdentity::Builtin("Sized".to_string()));
         substitutions.insert("Self".to_string(), self_ty);
         self.contracts
             .as_mut()
@@ -751,6 +761,11 @@ impl Compiler<'_> {
         let mut result = BTreeMap::new();
         for associated in pending {
             let ty = self.implementation_associated_member(index, environment.clone(), &associated.name)?;
+            // Normalize first so a projection cycle keeps its own diagnostic.
+            if !self.source_sized(ty) {
+                return Err(err(associated.span, "E_TRAIT",
+                    "associated type must establish its implicit Sized bound"));
+            }
             result.insert(associated.name, ty);
         }
         Ok(result)
@@ -1383,6 +1398,19 @@ impl super::Builder<'_, '_> {
                 "E_TRAIT",
                 "specialized receiver lacks its checked trait contract",
             ));
+        }
+        if let TraitIdentity::Declared(owner) = identity {
+            // Use the same implementation/default-body and associated-type
+            // environment as a qualified call, retaining the recorded autoderef.
+            let selection = self.compiler.method_selections.get(&expression).cloned();
+            let instance = self.compiler.declared_associated_method(base, *owner, &name,
+                expression, span, span);
+            if let Some(selection) = selection {
+                self.compiler.method_selections.insert(expression, selection);
+            } else {
+                self.compiler.method_selections.remove(&expression);
+            }
+            return self.source_method(target, base, instance?, types, args, span);
         }
         let implementation = self.compiler.implementation_witness(base, identity);
         if let Some(witness) = implementation {

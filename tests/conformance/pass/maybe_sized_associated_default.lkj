@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+trait Source { type Item; }
+struct Number;
+impl Source for Number { type Item = i64; }
+fn same<T: Source>(value: T::Item) -> T::Item { value }
+pub fn probe() -> i64 { same::<Number>(42i64) }

@@ -134,7 +134,7 @@ pub(crate) fn intrinsic_type_name(name: &str) -> bool {
 fn builtin(name: &str) -> bool {
     intrinsic_type_name(name) || matches!(name, "Copy" | "Clone" | "Ord" | "Eq"
             | "PartialEq" | "PartialOrd" | "Send" | "Sync"
-            | "Data" | "Drop" | "Fn" | "FnMut"
+            | "Data" | "Drop" | "Sized" | "Fn" | "FnMut"
             | "FnOnce")
 }
 fn insert_function_owner(

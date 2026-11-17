@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {}
+trait Call { fn value<T>(input: &T) -> i64; }
+struct Service;
+impl Call for Service { fn value<T: ?Sized>(_input: &T) -> i64 { 42i64 } }
+pub fn probe() -> i64 { <Service as Call>::value(&42i64) }

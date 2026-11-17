@@ -1,0 +1,7 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+trait Source { type Item; fn get(&self) -> Self::Item; }
+fn invalid<T: ?Sized + Source<Item = [u8; N]>, const N: usize, const M: usize>(
+    value: &T
+) -> [u8; M] { value.get() }
+pub fn probe() -> i64 { 42i64 }

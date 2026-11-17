@@ -38,6 +38,7 @@ mod text_format;
 mod trait_proofs;
 mod type_display;
 mod type_resolve;
+mod sized_bounds;
 mod variants;
 
 use crate::ast as a;
@@ -1249,6 +1250,9 @@ impl Compiler<'_> {
             if parameter.constant != constant {
                 return Err(err(parameter.span, "E_TYPE", "generic type and const argument kinds differ"));
             }
+            if crate::generics::parameter_requires_sized(self.source, parameter) {
+                self.require_source_sized(ty, parameter.span)?;
+            }
             for id in &parameter.bounds {
                 self.check_type_bound(ty, *id, sub, parameter.span)?;
             }
@@ -1352,6 +1356,7 @@ impl Compiler<'_> {
         if let Some(problem) = unsized_local_problem(&self.types, &function, span) {
             return Err(problem);
         }
+        self.check_sized_function(&function, span)?;
         self.check_opaque_result(instance.source, function.result, &instance.substitutions)?;
         let opaque = self.source.impl_traits.get(&source.result)
             .is_some_and(|form| form.result.is_some());
@@ -1434,6 +1439,10 @@ impl Compiler<'_> {
         let const_calls = std::mem::replace(&mut builder.const_calls, BTreeMap::new());
         let const_constructors = std::mem::replace(&mut builder.const_constructors, BTreeSet::new());
         drop(builder);
+        if let Some(problem) = unsized_local_problem(&self.types, &function, source.span) {
+            return Err(problem);
+        }
+        self.check_sized_function(&function, source.span)?;
         self.check_const_function(instance.source, &function, &const_calls, &const_constructors)?;
         if !body.is_empty() {
             self.scoped_bodies.insert(index, body);

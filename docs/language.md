@@ -199,6 +199,55 @@ Traits specify methods/associated types; implementations must be unique. Signatu
 Send/Sync/Data derive structurally; Data excludes capabilities. Expanding generic-instantiation SCCs reject, including alias paths.
 Method calls lower to concrete function calls; trait spelling alone grants no builtin semantics.
 
+**Sized bounds and borrowed unsized values.** Named type parameters require the
+builtin `Sized` bound by default. `T: ?Sized` removes that default; the equivalent
+`where T: ?Sized` form and additional ordinary bounds are supported. A parameter
+can still establish sizedness through an explicit `Sized`, `Clone` or `Copy`
+bound. Trait `Self` does not have an implicit `Sized` requirement; associated
+types retain theirs.
+
+Borrowed `str`, slices and generic `&T`/`&mut T` values can pass through relaxed
+parameters. Nominal view aggregates may contain references to such parameters:
+`struct View<'a, T: ?Sized> { value: &'a T }` has sized storage. Definition
+checking keeps the relaxed source contract even if a later caller chooses a
+sized concrete type. The verifier's private stand-in layout supplies no
+sizedness evidence. Ordinary calls, implementation prerequisites and method
+signature comparison check implicit and explicit requirements; an implementation
+method cannot strengthen a declared relaxed parameter to require `Sized`.
+
+Executable parameters, results and locals require sized storage. Array and slice
+elements, tuple fields and nominal fields also require a proven `Sized` type,
+including in unused nominal declarations, abstract signature components and
+implementation definitions. An abstract trait signature may name `Self` by
+value; an executable body must establish the storage requirement. Associated
+equalities retain their ordinary contract meaning: they do not fabricate a
+concrete implementation or grant a named relaxed right-hand parameter an
+additional `Sized` assumption. Concrete associated definitions must satisfy the
+associated declaration's implicit bound.
+
+A declaration may combine `T: ?Sized` with `const N: usize`. Const values carry
+no `Sized` obligation; `[T; N]` still requires a sized element even when a later
+caller chooses zero. Associated array equalities retain the distinction between
+independent named counts.
+
+This support uses existing borrowed representations. Unsized tuple and nominal tails,
+owned unsized parameters/results/locals, and `Box<T>`/`Vec<T>` with an unproven
+sized element remain located refusals. Existing restrictions on heap-stored
+views still apply. Relaxation is limited to named type parameters; associated
+`type Item: ?Sized`, explicit `Self` or concrete-target relaxation, and relaxed
+anonymous `impl Trait` bounds remain unsupported. Only the resolved builtin
+`Sized` may be relaxed: a same-spelled user trait supplies no marker authority.
+Duplicate relaxations and explicit implementations of builtin `Sized` reject.
+
+Queries preserve written relaxed bounds and their ordinary trait references.
+Checked renames and bound replacements revalidate existing callers; rejected
+changes leave the admitted source intact. Header changes invalidate frontend
+checkpoints, while unchanged authenticated images remain reusable.
+[Borrowed unsized cases](../tests/conformance/pass/maybe_sized_borrowed_str.lkj),
+[view aggregates](../tests/conformance/pass/maybe_sized_nominal_view.lkj),
+[mixed const and relaxed parameters](../tests/conformance/pass/maybe_sized_const_borrowed.lkj),
+[meaning, edits and cache checks](../tools/maybe-sized-test.sh).
+
 Associated equations key on receiver variable, resolved declaring trait and member, including inherited members; same-spelled members of different traits remain distinct.
 Equality bindings such as `Source<Item = i64>` work in generic parameter bounds, parameter where clauses, supertraits and associated-type bounds.
 Nested binding values, repeated equal constraints and sibling generic parameters are supported.

@@ -44,12 +44,13 @@ impl Compiler<'_> {
                 }
                 _ => continue,
             };
-            let mut required = !predicates.is_empty();
-            for field in &fields { required = required || self.contains_qualified_type(field.ty); }
-            if !required { continue; }
+            // Storage obligations apply to unused nominal declarations too.
             let mut environment = BTreeMap::new();
             self.declare_parameters_with_predicates(&parameters, &predicates, &mut environment)?;
-            for field in &fields { let _ = self.resolve(field.ty, &environment)?; }
+            for field in &fields {
+                let ty = self.resolve(field.ty, &environment)?;
+                self.require_source_sized(ty, field.span)?;
+            }
         }
         for index in 0..self.source.traits.len() {
             let declaration = self.source.traits[index].clone();
@@ -57,15 +58,16 @@ impl Compiler<'_> {
             for method in &declaration.methods {
                 let function = self.source.functions[*method].clone();
                 if function.body.is_some() { continue; }
-                let mut required = !function.predicates.is_empty()
-                    || self.contains_qualified_type(function.result);
-                for parameter in &function.params {
-                    required = required || self.contains_qualified_type(parameter.ty);
-                }
-                if !required { continue; }
                 let environment = self.definition_parameters(*method)?;
-                for parameter in &function.params { let _ = self.resolve(parameter.ty, &environment)?; }
-                let _ = self.resolve(function.result, &environment)?;
+                let self_type = environment.get(&"Self".to_string()).copied();
+                for parameter in &function.params {
+                    let ty = self.resolve(parameter.ty, &environment)?;
+                    // Abstract trait signatures may name Self by value. Every
+                    // nested storage position and ordinary parameter still checks.
+                    if Some(ty) != self_type { self.require_source_sized(ty, parameter.span)?; }
+                }
+                let result = self.resolve(function.result, &environment)?;
+                if Some(result) != self_type { self.require_source_sized(result, function.span)?; }
             }
         }
         // An unused, methodless implementation still has a source contract.
@@ -73,18 +75,13 @@ impl Compiler<'_> {
         // such as bool must actually satisfy the written predicate.
         for index in 0..self.source.impls.len() {
             let implementation = self.source.impls[index].clone();
-            let mut associated = false;
-            for item in &implementation.associated {
-                if let Some(value) = item.value { associated = associated || self.contains_qualified_type(value); }
-            }
-            if implementation.predicates.is_empty() && !associated { continue; }
             let mut environment = BTreeMap::new();
             let predicates = self.parameter_where_predicates(&implementation.predicates);
             self.declare_parameters_with_predicates(&implementation.generics, &predicates, &mut environment)?;
             let receiver = self.resolve(implementation.target, &environment)?;
             environment.insert("Self".to_string(), receiver);
             self.assume_where_predicates(&implementation.predicates, &environment)?;
-            if associated { let _ = self.implementation_associated(index, environment)?; }
+            let _ = self.implementation_associated(index, environment)?;
         }
         Ok(())
     }

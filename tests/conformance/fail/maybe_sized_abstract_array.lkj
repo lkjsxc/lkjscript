@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+trait Broken { fn invalid<T: ?Sized>(value: &[T; 0]); }
+pub fn probe() -> i64 { 42i64 }

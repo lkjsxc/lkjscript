@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {}
+trait Value { fn value(&self) -> i64 { 42i64 } }
+impl Value for str {}
+fn call<T: Value + ?Sized>(value: &T) -> i64 { value.value() }
+pub fn probe() -> i64 { call("borrowed") }
