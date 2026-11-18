@@ -27,12 +27,12 @@
             "path" : "/home/coder/workspace/lkjscript-programs-20261115/target/lkjscript",
             "sha256" : "a2d0d8581c73ceb937addb5ea986ba708fa06c2505161d8745353cf123a9bc8f"
          },
-         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-outlives-temporaryfiles-final/census/sozu-probe.json",
-         "sha256" : "3e8f030f897ba87a5b1ef1f1b30266c35c9639f4fa5922df673088e184103e9b"
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-outlives-watchdog-final/census/sozu-probe.json",
+         "sha256" : "762d48111ab7b56b8d1f1001a467d8e6a8ac41d96a513269ea38459059bfcaca"
       },
       "unreviewed_report" : {
-         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-outlives-temporaryfiles-final/census/sozu-unreviewed.json",
-         "sha256" : "5b6811af4be350ce3a95b9e9158851ee237eab0d9d318060cea0a42279eb5158"
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-outlives-watchdog-final/census/sozu-unreviewed.json",
+         "sha256" : "70c2f8922bda293eecdfbba5f0ff6032285dcd6c853cd7293b55ce03e378b234"
       }
    },
    "interpretation" : "Previously reviewed exact diagnostic identities only; every recovery parent was revalidated earlier in every current root. Unmatched or parentless entries remain unclassified.",

@@ -27,12 +27,12 @@
             "path" : "/home/coder/workspace/lkjscript-programs-20261115/target/lkjscript",
             "sha256" : "a2d0d8581c73ceb937addb5ea986ba708fa06c2505161d8745353cf123a9bc8f"
          },
-         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-outlives-temporaryfiles-final/census/nom-probe.json",
-         "sha256" : "fa0c18624f5b6bc074d681a20efd70cc66ea1ad22384bf8d53c8bec9bc3fa286"
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-outlives-watchdog-final/census/nom-probe.json",
+         "sha256" : "b9b0cd1e1344bdb1bd21adc2bec62b4ed25d1311a10f71e4464b19065413191f"
       },
       "unreviewed_report" : {
-         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-outlives-temporaryfiles-final/census/nom-unreviewed.json",
-         "sha256" : "d824b0230fcf7283233c69011c57b63f084d67c4aeb902457a41eace625c5f9f"
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-outlives-watchdog-final/census/nom-unreviewed.json",
+         "sha256" : "c64b527f4787d693ad2636c42d7723c4f8938c645c53cdc8a0d3025c52231acb"
       }
    },
    "interpretation" : "Previously reviewed exact diagnostic identities only; every recovery parent was revalidated earlier in every current root. Unmatched or parentless entries remain unclassified.",

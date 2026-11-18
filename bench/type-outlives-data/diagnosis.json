@@ -1,0 +1,93 @@
+{
+   "cleanup_controls" : {
+      "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/macro-watchdog-ci-repair/final-cleanup-controls.log",
+      "sha256" : "575f030ee54c68386ece8e37e75ebd5ce2ac3cd2050d8e6a12572cfb8f61bdb4"
+   },
+   "compiler_sha256" : "a2d0d8581c73ceb937addb5ea986ba708fa06c2505161d8745353cf123a9bc8f",
+   "corrective_ci" : "pending",
+   "failed_ci" : {
+      "failed_log" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-outlives-temporaryfiles-final/ci-gate.log",
+         "sha256" : "3266346e21cddf2554c12a801ed24c8ac102fa108fd6aa3f2c06d2d121aa6167"
+      },
+      "gate" : "failure",
+      "head" : "739c8cde24f8df4644274451d5f39c23302a8af6",
+      "run" : 44332902680,
+      "witness" : "success"
+   },
+   "final_patch" : {
+      "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/macro-watchdog-ci-repair/harness-correction-v2.patch",
+      "sha256" : "40ca39c708338c620ed0c60c7a58822168bb4047c3744b31660724b27c2c47f9"
+   },
+   "full_gate" : "pending",
+   "kind" : "Macro-origin host-suite CI watchdog diagnosis",
+   "local_pair" : {
+      "current_vs_parent_percent" : 0.305,
+      "interpretation" : "One serial same-source pair, not a statistical performance claim. It shows no material slowdown and identifies interpreted contract execution as the dominant local phase.",
+      "runs" : {
+         "current" : {
+            "contract_inputs" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/macro-watchdog-ci-repair/current/contract-inputs.sha256",
+               "sha256" : "a3090f4d3a64f2ca516152c1717e94d1af22b35e2841f86a818ce4fcc5ee38e8"
+            },
+            "log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/macro-watchdog-ci-repair/current/focused.log",
+               "sha256" : "ded6f84088354602e3a2fb0212ea1afb4c43d1ec135a15ce855d233bcb6a6683"
+            },
+            "phase_seconds" : {
+               "contract-build" : 3,
+               "contracts-interpreter" : 218,
+               "contracts-native" : 0,
+               "setup" : 0,
+               "source-queries" : 68
+            },
+            "seconds" : 289.42,
+            "time" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/macro-watchdog-ci-repair/current/time.txt",
+               "sha256" : "e8645231ee5be81d7474e358f5d49c89be5f75b6bd773cd9b10780f4b1183e3a"
+            }
+         },
+         "parent" : {
+            "contract_inputs" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/macro-watchdog-ci-repair/parent/contract-inputs.sha256",
+               "sha256" : "a3090f4d3a64f2ca516152c1717e94d1af22b35e2841f86a818ce4fcc5ee38e8"
+            },
+            "log" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/macro-watchdog-ci-repair/parent/focused.log",
+               "sha256" : "a3328c085017c40c59d39c01e48017edefee79524fcb6dfbb667a803e5ccfb69"
+            },
+            "phase_seconds" : {
+               "contract-build" : 3,
+               "contracts-interpreter" : 216,
+               "contracts-native" : 0,
+               "setup" : 0,
+               "source-queries" : 70
+            },
+            "seconds" : 288.54,
+            "time" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/macro-watchdog-ci-repair/parent/time.txt",
+               "sha256" : "554f0d3e412cef07c54c8929c6bf4e3853c08f8a421f27594f0657eaea5db308"
+            }
+         }
+      }
+   },
+   "new_watchdog_seconds" : 1800,
+   "notes" : [
+      "Original failed CI is retained as failed; no rerun has been launched.",
+      "All 25 malformed-origin assertions and native/interpreter commands remain byte-identical.",
+      "The measured first instrumentation revision is frozen and archived; the final revision changes only cleanup and its explanatory comment.",
+      "The final revision removes default fixtures and strips the ephemeral key before explicitly requested retention.",
+      "No compiler, library, checked-IR, independent-checker, runtime, fixture or seed bytes change."
+   ],
+   "prior_successful_ci" : {
+      "macro_origin_host_suite_seconds" : 580.842,
+      "old_watchdog_seconds" : 600,
+      "run" : 44323874130
+   },
+   "seed_gzip_sha256" : "9327f64a3c9a5c37146ca6c91a6926a8707d9fef3d9fd67398125909f4b5f612",
+   "source_commit" : "57efff2ee20d047464478a95d976d572d0ff17e4",
+   "source_preservation" : {
+      "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/macro-watchdog-ci-repair/source-preservation.json",
+      "sha256" : "256826dcba24e63dbe970e07efe4f1228d909bba2b5e9512e942d2861dd1a64f"
+   }
+}
