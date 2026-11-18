@@ -1,0 +1,48 @@
+diff --git a/.github/workflows/check.yml b/.github/workflows/check.yml
+index 6e426d7d3..3869d7bcc 100644
+--- a/.github/workflows/check.yml
++++ b/.github/workflows/check.yml
+@@ -20,7 +20,7 @@ jobs:
+           bash tools/check.sh
+       - name: Record compiler identities
+         run: |
+-          git rev-parse HEAD
++          printf '%s\n' "$GITHUB_SHA"
+           sha256sum target/lkjscript seed/lkjscript.gz
+   witness:
+     runs-on: ubuntu-latest
+@@ -35,5 +35,5 @@ jobs:
+       - run: bash witness/check.sh
+       - name: Record compiler identities
+         run: |
+-          git rev-parse HEAD
++          printf '%s\n' "$GITHUB_SHA"
+           sha256sum target/lkjscript seed/lkjscript.gz
+diff --git a/tools/real-programs-rust.sh b/tools/real-programs-rust.sh
+index d9bbf52a0..70cc89722 100755
+--- a/tools/real-programs-rust.sh
++++ b/tools/real-programs-rust.sh
+@@ -24,10 +24,15 @@ cleanup() {
+ trap cleanup EXIT
+ trap 'exit 130' INT
+ trap 'exit 143' HUP TERM
+-# These handwritten refusal kernels must remain valid Rust; they add no upstream sites.
++# These handwritten form kernels remain valid Rust and add no upstream sites.
++# The accepted macro kernel retains its original body at its promoted location.
+ for foreign_case in macro_rules impl_trait qualified_type qualified_call nested_type associated_binding const_generic maybe_sized unsafe_block doctest_cfg dyn_trait associated_const at_pattern async_block doc_include; do
++    foreign_source="tests/diagnostics/programs_foreign_$foreign_case.lkj"
++    if [[ $foreign_case == macro_rules ]]; then
++        foreign_source=tests/conformance/pass/programs_foreign_macro_rules.lkj
++    fi
+     "$rustc_bin" --edition=2021 --crate-name "foreign_$foreign_case" --crate-type lib --emit=metadata -Awarnings \
+-        "tests/diagnostics/programs_foreign_$foreign_case.lkj" -o "$work/foreign_$foreign_case.rmeta" \
++        "$foreign_source" -o "$work/foreign_$foreign_case.rmeta" \
+         > "$work/foreign_$foreign_case.out" 2> "$work/foreign_$foreign_case.err"
+ done
+ perl tools/real-programs/verify-levenshtein.pl "$source" > "$work/provenance.json"
+@@ -87,4 +92,4 @@ for optimization in 0 3; do
+     cmp "$work/expected.out" "$work/opt-$optimization-corpus.out"
+     test ! -s "$work/opt-$optimization-corpus.err"
+ done
+-printf 'ok optional real-program Rust witness: exact original source/tests, 8 tests and 7,239 corpus rows at opt-level 0 and 3; 15 Rust-valid reduced refusal forms\n'
++printf 'ok optional real-program Rust witness: exact original source/tests, 8 tests and 7,239 corpus rows at opt-level 0 and 3; 15 Rust-valid reduced forms (14 refusal kernels and the promoted macro kernel)\n'

@@ -1,0 +1,10 @@
+{
+  "source_path": "/home/coder/workspace/lkjscript-programs-anonymous-20261118/.github/workflows/check.yml",
+  "source_sha256": "135de58201dc24b17cfd65e5d0f0413920b142f9d1564b1dd8fe7dee918ebcdf",
+  "previous_sha256": "d4672a6dc35c55a9d38da5003125c391c6874a1a8dd59c7a532d539eb339d85f",
+  "author_context": "Anonymous TemporaryFiles writer, TALK 2026-11-18 13:51:42 UTC",
+  "change": "Retain both SHA256 identity commands and print the GitHub checkout commit from GITHUB_SHA in both jobs, avoiding Debian Git dubious-ownership refusal.",
+  "compiler_library_runtime_seed_tests": "Unchanged from published 5fe0ba9e4b48fa4017753aefb3c8eb705ae737dd",
+  "local_gate_scope": "Workflow identity-recording commands are outside the local tools/check.sh execution; the active gate keeps the identical compiler, library, runtime, test sources, seed and gate script.",
+  "review": "Exact two-line diff inspected and imported from the other writer; no independent alternative implementation."
+}

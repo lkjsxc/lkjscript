@@ -1,0 +1,4 @@
+{"compiler_sha256":"77695785a3c15da46bd9a3a794e81a2edf4c0155a891ff0cef2084d7bc3659d8","observations":2,"receipt":"/home/coder/workspace/prompts/reports/lkjscript-next/macros-ci-repair/census/nom-probe.json","source_unchanged":true}
+{"compiler_sha256":"77695785a3c15da46bd9a3a794e81a2edf4c0155a891ff0cef2084d7bc3659d8","observations":2,"receipt":"/home/coder/workspace/prompts/reports/lkjscript-next/macros-ci-repair/census/dom-probe.json","source_unchanged":true}
+{"compiler_sha256":"77695785a3c15da46bd9a3a794e81a2edf4c0155a891ff0cef2084d7bc3659d8","observations":8,"receipt":"/home/coder/workspace/prompts/reports/lkjscript-next/macros-ci-repair/census/sozu-probe.json","source_unchanged":true}
+frontend observations macros-ci-repair: 12 observations, 0 changed streams; rerank review still required

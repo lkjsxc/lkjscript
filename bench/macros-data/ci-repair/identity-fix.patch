@@ -1,0 +1,20 @@
+diff --git a/.github/workflows/check.yml b/.github/workflows/check.yml
+index 6e426d7d3..3869d7bcc 100644
+--- a/.github/workflows/check.yml
++++ b/.github/workflows/check.yml
+@@ -20,7 +20,7 @@ jobs:
+           bash tools/check.sh
+       - name: Record compiler identities
+         run: |
+-          git rev-parse HEAD
++          printf '%s\n' "$GITHUB_SHA"
+           sha256sum target/lkjscript seed/lkjscript.gz
+   witness:
+     runs-on: ubuntu-latest
+@@ -35,5 +35,5 @@ jobs:
+       - run: bash witness/check.sh
+       - name: Record compiler identities
+         run: |
+-          git rev-parse HEAD
++          printf '%s\n' "$GITHUB_SHA"
+           sha256sum target/lkjscript seed/lkjscript.gz

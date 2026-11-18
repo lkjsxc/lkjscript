@@ -106,3 +106,30 @@ original/projected input identity and complete diagnostic accounting.
 The checked IR, independent checker, interpreter and runtime are unchanged.
 Exact-head gate and witness CI are recorded in the session report after
 publication.
+
+## Publication harness correction
+
+The first macro publication's optional witness failed because its final
+real-program Rust helper still used the old path of the promoted macro fixture.
+The declaration and probe body were preserved; the helper now names the accepted
+fixture explicitly. The complete local witness passes, including compiler byte
+identity, 485 values/output cases, 636 verdicts, the runtime/macro witnesses and
+the exact original Levenshtein tests and corpus.
+
+The preceding TemporaryFiles publication had a different receipt failure: its
+native gate passed, but `git rev-parse HEAD` then refused the Debian container's
+repository ownership. The anonymous-file writer's reviewed workflow correction
+records `GITHUB_SHA` and retains the native/seed checksum commands in both jobs.
+The failed jobs remain failures in the retained evidence.
+
+These two harness corrections preserve the compiler, library, runtime, test-body
+and seed bytes of `5fe0ba9e4`. The repeated four-worker gate passes in
+1154.509 seconds with all 6515 case requests fresh and zero IR mutation findings;
+standalone real-program validation passes. All twelve fresh original-source
+streams are byte-identical, retaining nom49, DOM39 and Sozu968 primary sites plus
+34 prior-unclassified Sozu sites. No additional form or root admission is claimed.
+
+The [corrective validation receipt](macros-data/ci-repair/validation.json) and
+[full witness log](macros-data/ci-repair/full-local-witness.log) retain the exact
+patches, unchanged producer/seed identities and local results. Publication still
+requires successful gate and witness jobs on the exact corrective commit.
