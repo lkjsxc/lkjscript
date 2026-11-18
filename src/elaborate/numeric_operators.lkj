@@ -131,7 +131,7 @@ impl Builder<'_, '_> {
         // the definition's exact recipe, rather than rebuilding it from that
         // incidental equality and changing later instances of this expression.
         if let Some(saved) = saved { self.compiler.method_selections.insert(expression, saved); }
-        let value = self.source_method(&target, base, instance?, &[], &[right], span)?;
+        let value = self.source_method(&target, base, instance?, &[0usize; 0], &[right], span)?;
         if operation.compound() && value.1 != ir::UNIT {
             return Err(err(span, "E_TYPE", "compound operator must return unit"));
         }

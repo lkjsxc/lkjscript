@@ -70,7 +70,7 @@ impl Infer<'_, '_> {
         let mut selected: Option<Vec<Variable>> = None;
         for (receiver, bound, arguments, _) in self.trait_headers.clone() {
             if !self.same_projection_receiver(receiver, left) { continue; }
-            let a::Type::Path(path) = &self.source.types[bound].kind else { continue; };
+            let a::Type::Path(path) = self.source.types[bound].kind.clone() else { continue; };
             if path.declaration != Some(declaration) || !self.operator_arguments_match(operation, right, &arguments) { continue; }
             if let Some(previous) = &selected {
                 if self.same_trait_arguments(previous, &arguments) { continue; }

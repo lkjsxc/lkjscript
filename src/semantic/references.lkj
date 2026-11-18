@@ -336,7 +336,7 @@ pub(super) fn operator_member(result: &mut Catalog, files: &[SourceText], progra
     for token in &files[node.span.file].tokens {
         if token.span.start < start { continue; }
         if token.span.end > end { break; }
-        if token.text == operation { span = a::Span { file: node.span.file, ..token.span }; break; }
+        if token.text.as_str() == operation { span = a::Span { file: node.span.file, ..token.span }; break; }
     }
     record_site(result, files, owner.to_string(), target, span, "operator-contract", true);
 }
