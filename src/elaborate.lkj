@@ -856,6 +856,13 @@ impl Compiler<'_> {
         Ok(())
     }
     fn method_access(&self, index: usize, scope: a::ModuleId, span: a::Span) -> Result<()> {
+        if let a::FunctionOwner::Trait(owner) = self.source.function_owner(a::FunctionId { index }) {
+            let declaration = &self.source.traits[owner.index];
+            if !crate::resolve::visible(self.source, self.names.scope(&declaration.module), declaration.public, scope) {
+                return Err(err(span, "E_PRIVACY", "method belongs to a private trait"));
+            }
+            return Ok(());
+        }
         let method = &self.source.functions[index];
         let implementation = match self.source.function_owner(a::FunctionId { index }) {
             a::FunctionOwner::Implementation(owner) => Some(&self.source.impls[owner.index]),
@@ -1262,7 +1269,7 @@ impl Compiler<'_> {
             }
             let ty = *sub
                 .get(&parameter.name)
-                .ok_or_else(|| err(parameter.span, "E_TYPE", "cannot infer generic argument"))?;
+                .ok_or_else(|| err(parameter.span, "E_TYPE", &format!("cannot infer generic argument {}", parameter.name)))?;
             let constant = crate::generics::const_arguments::value(&self.types, ty).is_some();
             if parameter.constant != constant {
                 return Err(err(parameter.span, "E_TYPE", "generic type and const argument kinds differ"));
