@@ -489,7 +489,10 @@ fn general_renames() -> Result<usize, String> {
         let parsed = snapshot(borrowed)?; let binding = identity(&parsed, "binding", "main", "x");
         same_meaning(borrowed, &format!("{{\"op\":\"rename\",\"id\":{},\"name\":\"value\"}}", semantic::quote(&binding)))?;
         let generic = "struct Value<T> { value: T } fn main() -> i64 { Value { value: 7i64 }.value }";
-        refuses(generic, r#"{"op":"rename","id":"Value::generic:T","name":"Element"}"#, "E_EDIT_GENERIC_REFERENCES")?;
+        // Declaration-owned generic references participate in checked rename.
+        same_meaning(generic, r#"{"op":"rename","id":"Value::generic:T","name":"Element"}"#)?;
+        let function_generic = "fn value<T>(input: T) -> T { input } fn main() -> i64 { value(7i64) }";
+        refuses(function_generic, r#"{"op":"rename","id":"value::generic:T","name":"Element"}"#, "E_EDIT_GENERIC_REFERENCES")?;
         let collision = "fn value(x: i64, y: i64) -> i64 { x + y } fn main() -> i64 { value(2i64, 3i64) }";
         refuses(collision, r#"{"op":"rename","id":"value::param:x","name":"y"}"#, "E_EDIT_CAPTURE")?;
         let capture = "const total: i64 = 4i64; fn main() -> i64 { let value = 3i64; value + total }";
@@ -499,7 +502,7 @@ fn general_renames() -> Result<usize, String> {
         refuses(named, r#"{"op":"rename","id":"Point","name":"Position"}"#, "E_EDIT_NAME")?;
         let receiver = "struct Value {} impl Value { fn read(&self) -> i64 { 1i64 } } fn main() -> i64 { Value {}.read() }";
         refuses(receiver, r#"{"op":"rename","id":"Value::read::param:self","name":"value"}"#, "E_EDIT_LOCAL_NAME")?;
-        Ok(14usize)
+        Ok(15usize)
     }
 
 fn rename_scope() -> Result<usize, String> {
