@@ -14,7 +14,7 @@ fn parsed() -> ast::Program {
 }
 fn defaulted() -> ast::Program {
     let root = "#[derive(Default)] struct Defaults<T = i64> { value:T }";
-    let standard = "pub mod default { pub trait Default { fn default() -> Self; } }";
+    let standard = "pub mod default { pub trait Default { fn default() -> Self; } pub fn __lkjscript_default<T: Default>() -> T { T::default() } }";
     let report = source::load_report("main.lkj", Some("$std/lib.lkj"), &mut |path:&str| -> Result<Option<Vec<u8>>,String> {
         Ok(match path { "main.lkj"=>Some(root.as_bytes().to_vec()), "$std/lib.lkj"=>Some(standard.as_bytes().to_vec()), _=>None })
     });
