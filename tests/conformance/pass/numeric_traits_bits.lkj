@@ -1,6 +1,9 @@
 // expect: value 42
 // witness: {}
-use std::ops::{AddAssign, Div, Shl, Shr};
+// The source facade used by nom's feature-disabled lib::std module.
+mod lib { pub mod std { pub use core::{convert, ops}; } }
+use self::lib::std::convert::{From, Into};
+use self::lib::std::ops::{AddAssign, Div, Shl, Shr};
 struct Word { value: u64 }
 impl From<u8> for Word { fn from(value: u8) -> Self { Self { value: value as u64 } } }
 impl AddAssign for Word { fn add_assign(&mut self, rhs: Self) { self.value += rhs.value; } }
@@ -15,7 +18,7 @@ impl Shr<usize> for Word {
 fn accumulate<O: From<u8> + AddAssign + Shl<usize, Output = O> + Shr<usize, Output = O>>(byte: u8) -> O {
     let mut accumulator: O = 0u8.into();
     let value: O = byte.into();
-    accumulator += (value << 4usize) >> 2usize;
+    accumulator += (value << 4) >> 2;
     accumulator += 2u8.into();
     accumulator
 }
@@ -24,6 +27,6 @@ pub fn probe() -> i64 {
     let owned: Word = accumulate(10);
     assert_eq!(primitive, 42u64);
     assert_eq!(owned.value, primitive);
-    assert_eq!(84usize.div(2usize), 42usize);
+    assert_eq!(84usize.div(2), 42usize);
     owned.value as i64
 }
