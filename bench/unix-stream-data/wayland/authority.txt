@@ -1,0 +1,123 @@
+entry main
+declared authority:
+  socket: File Unix stream (--grant socket=unix:/PATH|unix:env:NAME)
+  root: Directory (--grant root=PATH)
+  ready: Readiness (--grant ready)
+  clock: Clock (--grant clock)
+  output: Stdout (--grant output)
+reachable operations (conservative checked-IR branches and owned cleanup):
+  main:
+    directory_create_new
+    file_seek
+    file_close [structural cleanup]
+    stdout_write
+    readiness_close [structural cleanup]
+    directory_close [structural cleanup]
+  $std::prelude::unwrap$f771<E=t3;Self=t64;T=t15;>:
+    file_close [structural cleanup]
+  wayland::open$f9<Self=t14;>:
+    readiness_close [structural cleanup]
+    file_close [structural cleanup]
+    readiness_watch_file
+  $std::prelude::unwrap$f771<E=t20;Self=t67;T=t14;>:
+    readiness_close [structural cleanup]
+    file_close [structural cleanup]
+  $std::io::__lkjscript_create:
+    directory_open
+  wayland::poll$f17<Self=t14;>:
+    readiness_wait
+    file_receive_message
+    file_close [structural cleanup]
+  $std::io::__lkjscript_open:
+    directory_open
+  $std::io::__lkjscript_file_write:
+    file_write
+  wayland::send$f11<Self=t14;>:
+    file_send_message
+  $std::io::__lkjscript_clock_nanoseconds:
+    clock_read
+  $std::prelude::unwrap$f762<Self=t16;T=t15;>:
+    file_close [structural cleanup]
+reachable functions (80; each listed once):
+  main
+  $std::io::__lkjscript_storage_path
+  $std::prelude::unwrap$f771<E=t3;Self=t64;T=t15;>
+  $std::io::__lkjscript_file_write_all
+  $std::prelude::unwrap$f771<E=t3;Self=t61;T=t0;>
+  wayland::cursor_bytes
+  $std::prelude::unwrap$f771<E=t3;Self=t66;T=t4;>
+  wayland::frame_file_size
+  wayland::open$f9<Self=t14;>
+  $std::prelude::unwrap$f771<E=t20;Self=t67;T=t14;>
+  wayland::present$f16<Self=t14;>
+  $std::prelude::unwrap$f771<E=t20;Self=t62;T=t0;>
+  $std::io::__lkjscript_create
+  wayland::poll$f17<Self=t14;>
+  $std::prelude::unwrap$f771<E=t20;Self=t71;T=t59;>
+  $std::io::__lkjscript_open
+  $std::string::__lkjscript_new
+  $std::fmt::__lkjscript_new
+  $std::fmt::__lkjscript_success
+  $std::fmt::__lkjscript_literal
+  $std::fmt::__lkjscript_settings
+  $std::fmt::__lkjscript_display<T=t4;>
+  $std::string::as_bytes$f118<Self=t20;>
+  $std::io::path_bytes
+  $std::io::__lkjscript_file_write
+  $std::string::from_str$f100<Self=t20;>
+  wayland::io
+  wayland::request$f12<Self=t14;>
+  wayland::allocate$f10<Self=t14;>
+  wayland::wire_string
+  wayland::send$f11<Self=t14;>
+  wayland::available$f15<Self=t14;>
+  $std::io::__lkjscript_clock_nanoseconds
+  wayland::failure
+  $std::sequence::extend_from_slice$f63<Self=t19;T=t5;>
+  wayland::number
+  $std::sequence::to_vec$f80<Self=t55;T=t5;>
+  wayland::dispatch$f18<Self=t14;>
+  $std::string::new$f97<Self=t20;>
+  $std::fmt::write_str$f489<Self=t78;>
+  $std::fmt::fmt$f534<Self=t4;>
+  $std::io::count_result
+  $std::string::push_str$f101<Self=t20;>
+  $std::iter::__lkjscript_into_iter<I=t94;I::IntoIter=t112;>
+  $std::iter::__lkjscript_next<I=t112;I::Item=t10;>
+  wayland::word
+  $std::iter::drop$f359<Self=t112;T=t10;> [custom Drop]
+  $std::prelude::take$f763<Self=t16;T=t15;>
+  $std::prelude::unwrap$f762<Self=t16;T=t15;>
+  $std::io::unit_result
+  $std::io::word
+  $std::fmt::__lkjscript_display_str<T=t57;>
+  $std::fmt::__lkjscript_display<T=t3;>
+  $std::text::utf8_lossy
+  $std::fmt::__lkjscript_display<T=t10;>
+  $std::fmt::__lkjscript_display<T=t20;>
+  $std::string::__lkjscript_as_str
+  $std::str::__lkjscript_eq
+  wayland::bind$f13<Self=t14;>
+  wayland::modifiers_up
+  $std::fmt::number$f498<Self=t78;>
+  $std::bytes::append_bytes
+  $std::iter::into_iter$f358<Self=t94;Self::IntoIter=t112;T=t10;>
+  $std::iter::next$f356<Self=t112;Self::Item=t10;T=t10;>
+  $std::fmt::pad$f497<Self=t78;>
+  $std::fmt::fmt$f554<Self=t3;>
+  $std::string::push$f102<Self=t20;>
+  $std::prelude::unwrap$f762<Self=t124;T=t13;>
+  $std::fmt::fmt$f524<Self=t10;>
+  $std::fmt::fmt$f500<Self=t20;>
+  $std::string::as_str$f115<Self=t20;>
+  $std::str::matches_bytes
+  $std::fmt::sign_plus$f492<Self=t78;>
+  $std::fmt::alternate$f493<Self=t78;>
+  $std::string::len$f116<Self=t20;>
+  $std::fmt::sign_aware_zero_pad$f494<Self=t78;>
+  $std::fmt::padding$f496<Self=t78;>
+  $std::iter::owned<T=t10;>
+  $std::prelude::unwrap$f762<Self=t114;T=t10;>
+  $std::prelude::unwrap$f771<E=t126;Self=t127;T=t58;>
+checked-closure-sha256 f390a7e6dcb25bdeb7076a3878ffa8aaf167296156b32233d8c225dd893b109e
+Unix stream parameter=0 grant="unix:env:LKJSCRIPT_UNIX_FRAME_SOCKET" entry-receives=File(owned,nonblocking,close-on-exec) connect=startup

@@ -1,0 +1,41 @@
+lkjscript-ir 1
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "File" file
+type "World" world
+type "Directory" directory
+type "&mut File" ref mut 7
+type "&mut World" ref mut 8
+type "&mut Directory" ref mut 9
+type "[u8]" slice shared 5
+type "&[u8]" ref shared 13
+type "&mut [u8]" ref mut 13
+type "Files" vec 7
+type "Opened" enum move
+variant "Ok" "file" 7
+variant "Err" "error" 3
+endtype
+type "Count" enum copy
+variant "Ok" "count" 4
+variant "Err" "error" 3
+endtype
+type "Message" struct move "count" 4 "files" 16
+type "Received" enum move
+variant "Ok" "message" 19
+variant "Err" "error" 3
+endtype
+type "&Files" ref shared 16
+fn "receive" 4 20
+local "arg0" 10 let
+local "arg1" 14 let
+local "arg2" 4 let
+local "arg3" 4 let
+local "result" 20 let
+@1 intrinsic 4 "file_receive_message" 0 1 2 3
+@2 return 4
+endfn

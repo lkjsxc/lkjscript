@@ -13,6 +13,8 @@ fn path_value(bytes: &[u8]) -> String {
 }
 fn description(grant: &EntryGrant) -> String {
     match grant {
+        EntryGrant::UnixStream(path) => format!("File unix:{}", path_value(path)),
+        EntryGrant::UnixStreamEnvironment(name) | EntryGrant::UnixStreamEnvironmentValue(name, _) => format!("File unix:env:{}", path_value(name)),
         EntryGrant::Directory(path) => format!("Directory {}", path_value(path)),
         EntryGrant::ReadDirectory(path) => format!("ReadDirectory {}", path_value(path)),
         EntryGrant::ReadDirectoryEnvironment(name) | EntryGrant::ReadDirectoryEnvironmentValue(name, _) => format!("ReadDirectory env:{}", path_value(name)),
@@ -75,7 +77,7 @@ impl Plan {
     pub fn prepare(&self, a: &mut Assembler, p: Platform) {
         if let Some(child) = &self.child { child.prepare(a, p); return; }
         for (index, grant) in self.grants.iter().enumerate() {
-            super::diagnostics::operation(a, if matches!(grant, EntryGrant::DirectoryEnvironment(_) | EntryGrant::DirectoryEnvironmentValue(_, _) | EntryGrant::ReadDirectoryEnvironment(_) | EntryGrant::ReadDirectoryEnvironmentValue(_, _)) { 1001 } else { 1000 });
+            super::diagnostics::operation(a, if matches!(grant, EntryGrant::DirectoryEnvironment(_) | EntryGrant::DirectoryEnvironmentValue(_, _) | EntryGrant::ReadDirectoryEnvironment(_) | EntryGrant::ReadDirectoryEnvironmentValue(_, _) | EntryGrant::UnixStreamEnvironment(_) | EntryGrant::UnixStreamEnvironmentValue(_, _)) { 1001 } else { 1000 });
             match grant {
                 EntryGrant::Environment(_) => {
                     a.address(DI, self.paths[index]);
@@ -84,7 +86,7 @@ impl Plan {
                 EntryGrant::EnvironmentValue(value) => {
                     if value.is_some() { a.address(A, self.paths[index]); } else { a.immediate(A, 0); }
                 },
-                EntryGrant::DirectoryEnvironment(_) | EntryGrant::ReadDirectoryEnvironment(_) => {
+                EntryGrant::DirectoryEnvironment(_) | EntryGrant::ReadDirectoryEnvironment(_) | EntryGrant::UnixStreamEnvironment(_) => {
                     // Resolve only the invocation-reviewed key, before application code.
                     let missing = a.label();
                     let scan = a.label();
@@ -108,19 +110,22 @@ impl Plan {
                     a.lea(SI, SI, 1);
                     a.jump(scan);
                     a.bind(open);
-                    a.call(p.directory_open);
+                    a.call(if matches!(grant, EntryGrant::UnixStreamEnvironment(_)) { p.unix_connect } else { p.directory_open });
                     a.jump(done);
                     a.bind(missing);
                     a.immediate(A, (-2i64) as u64);
                     a.bind(done);
                 }
-                EntryGrant::DirectoryEnvironmentValue(_, value) | EntryGrant::ReadDirectoryEnvironmentValue(_, value) => {
+                EntryGrant::DirectoryEnvironmentValue(_, value) | EntryGrant::ReadDirectoryEnvironmentValue(_, value) | EntryGrant::UnixStreamEnvironmentValue(_, value) => {
                     if let Some(path) = value {
                         if !path.is_empty() {
                             a.address(DI, self.paths[index]); a.immediate(SI, path.len() as u64 + 1);
-                            a.call(p.directory_open);
+                            a.call(if matches!(grant, EntryGrant::UnixStreamEnvironmentValue(_, _)) { p.unix_connect } else { p.directory_open });
                         } else { a.immediate(A, (-2i64) as u64); }
                     } else { a.immediate(A, (-2i64) as u64); }
+                }
+                EntryGrant::UnixStream(path) => {
+                    a.address(DI, self.paths[index]); a.immediate(SI, path.len() as u64); a.call(p.unix_connect);
                 }
                 EntryGrant::Directory(path) | EntryGrant::ReadDirectory(path) => {
                     a.address(DI, self.paths[index]);
@@ -183,8 +188,8 @@ impl Plan {
             bytes.extend_from_slice(self.descriptions[index].as_bytes());
             a.data_label(self.paths[index], offset + bytes.len());
             match grant {
-                EntryGrant::Image(path) | EntryGrant::ImagePath(path) | EntryGrant::ForeignCommand(path) | EntryGrant::Directory(path) | EntryGrant::DirectoryEnvironment(path) | EntryGrant::ReadDirectory(path) | EntryGrant::ReadDirectoryEnvironment(path) | EntryGrant::Environment(path) => bytes.extend_from_slice(path),
-                EntryGrant::EnvironmentValue(Some(value)) | EntryGrant::DirectoryEnvironmentValue(_, Some(value)) | EntryGrant::ReadDirectoryEnvironmentValue(_, Some(value)) => { bytes.extend_from_slice(value); bytes.push(0); },
+                EntryGrant::UnixStream(path) | EntryGrant::UnixStreamEnvironment(path) | EntryGrant::Image(path) | EntryGrant::ImagePath(path) | EntryGrant::ForeignCommand(path) | EntryGrant::Directory(path) | EntryGrant::DirectoryEnvironment(path) | EntryGrant::ReadDirectory(path) | EntryGrant::ReadDirectoryEnvironment(path) | EntryGrant::Environment(path) => bytes.extend_from_slice(path),
+                EntryGrant::UnixStreamEnvironmentValue(_, Some(value)) | EntryGrant::EnvironmentValue(Some(value)) | EntryGrant::DirectoryEnvironmentValue(_, Some(value)) | EntryGrant::ReadDirectoryEnvironmentValue(_, Some(value)) => { bytes.extend_from_slice(value); bytes.push(0); },
                 EntryGrant::Listener(address) | EntryGrant::Connector(address) => bytes.extend_from_slice(address),
                 _ => {}
             }

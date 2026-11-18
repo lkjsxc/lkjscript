@@ -73,6 +73,13 @@ pub trait Host {
     fn open_listener(&mut self, address: &[u8]) -> Result<u64, i64>;
     fn connect_socket(&mut self, address: &[u8]) -> Result<u64, i64>;
     fn connect_socket_deadline(&mut self, _address: &[u8], _deadline: usize) -> Result<u64, i64> { Err(38) }
+    fn connect_unix(&mut self, _path: &[u8]) -> Result<u64, i64> { Err(38) }
+    fn directory_connect_unix(&mut self, _directory: u64, _path: &[u8]) -> Result<u64, i64> { Err(38) }
+    /// Consume every supplied File owner on success, partial success, and error.
+    fn send_socket_message(&mut self, _socket: u64, _bytes: &[u8], files: Vec<u64>, _deadline: usize) -> Result<usize, i64> {
+        for file in files { self.close_handle(file); } Err(38)
+    }
+    fn receive_socket_message(&mut self, _socket: u64, _bytes: &mut [u8], _files: usize, _deadline: usize) -> Result<(usize, Vec<u64>), i64> { Err(38) }
     fn fill_entropy(&mut self, bytes: &mut [u8]) -> Result<(), i64>;
     fn realtime_seconds(&mut self) -> Result<i64, i64>;
     fn realtime_nanoseconds(&mut self) -> Result<usize, i64>;
@@ -2040,7 +2047,14 @@ impl<H: Host> Interpreter<'_, H> {
             },
         };
         for (index, (_, value)) in values.into_iter().enumerate() {
-            if index == 1 && matches!(name, ir::IntrinsicOp::ChannelSendFile | ir::IntrinsicOp::WorkerSendFile) {
+            if index == 2 && name == ir::IntrinsicOp::FileSendMessage {
+                let Value::Sequence(fields) = value else { return Err(self.invalid("socket transfer requires an owned File vector")); };
+                for child in fields {
+                    let Some(Value::File(_handle)) = self.cells[child.index].value.take() else { return Err(self.invalid("socket transfer element is not an owned File")); };
+                    // The host consumed these owners before returning; release cells only.
+                    self.release(child)?;
+                }
+            } else if index == 1 && matches!(name, ir::IntrinsicOp::ChannelSendFile | ir::IntrinsicOp::WorkerSendFile) {
                 let Value::File(handle)=value else {return Err(self.invalid("capability transfer requires an owned File"));};
                 // Close any remaining registry owner even in refusal-only hosts.
                 self.host.close_handle(handle);
@@ -2580,7 +2594,11 @@ fn run_inner<'a, H: Host>(
                 ir::EntryGrant::DirectoryEnvironment(name) => matches!(kind, TypeKind::Directory) && valid_environment(name),
                 ir::EntryGrant::DirectoryEnvironmentValue(name, value) => matches!(kind, TypeKind::Directory) && valid_environment(name)
                     && value.as_ref().map_or(true, |bytes| !bytes.contains(&0u8)),
-                ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
+                ir::EntryGrant::UnixStream(path) => matches!(kind, TypeKind::File) && valid_foreign_path(path) && path.len() <= 108,
+        ir::EntryGrant::UnixStreamEnvironment(name) => matches!(kind, TypeKind::File) && valid_environment(name),
+        ir::EntryGrant::UnixStreamEnvironmentValue(name, value) => matches!(kind, TypeKind::File) && valid_environment(name)
+            && value.as_ref().map_or(true, |bytes| !bytes.contains(&0u8)),
+        ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
                 ir::EntryGrant::Connector(_) => matches!(kind, TypeKind::Connector),
                 ir::EntryGrant::Readiness => matches!(kind, TypeKind::Readiness),
                 ir::EntryGrant::Entropy => matches!(kind, TypeKind::Entropy),
@@ -2594,7 +2612,7 @@ fn run_inner<'a, H: Host>(
             let failure = diagnostics::grant_failure(&grants[index]);
             let mut observed_host = matches!(grants[index], ir::EntryGrant::Directory(_) | ir::EntryGrant::ReadDirectory(_)
                 | ir::EntryGrant::Image(_) | ir::EntryGrant::ForeignCommand(_) | ir::EntryGrant::NullDevice | ir::EntryGrant::Listener(_)
-                | ir::EntryGrant::Readiness | ir::EntryGrant::Stop);
+                | ir::EntryGrant::Readiness | ir::EntryGrant::Stop | ir::EntryGrant::UnixStream(_));
             let value: Result<Value, i64> = match &grants[index] {
                 ir::EntryGrant::World => Ok(Value::World),
                 ir::EntryGrant::Arguments => Ok(Value::Arguments),
@@ -2621,6 +2639,29 @@ fn run_inner<'a, H: Host>(
                     Err(errno) => Err(errno),
                 },
 
+                ir::EntryGrant::UnixStream(path) => match interpreter.host.connect_unix(path) {
+                    Ok(handle) if handle != 0 => Ok(Value::File(handle)), Ok(_) => Err(9), Err(error) => Err(error),
+                },
+                ir::EntryGrant::UnixStreamEnvironment(name) => match interpreter.host.environment(&name[..name.len() - 1]) {
+                    Ok(Some(mut path)) if !path.is_empty() => {
+                        if path.contains(&0u8) { Err(22) } else {
+                            path.push(0); observed_host = true;
+                            match interpreter.host.connect_unix(&path) {
+                                Ok(handle) if handle != 0 => Ok(Value::File(handle)), Ok(_) => Err(9), Err(error) => Err(error),
+                            }
+                        }
+                    }
+                    Ok(_) => Err(2), Err(error) => Err(error),
+                },
+                ir::EntryGrant::UnixStreamEnvironmentValue(_, value) => match value {
+                    Some(bytes) if !bytes.is_empty() => {
+                        let mut path = bytes.clone(); path.push(0); observed_host = true;
+                        match interpreter.host.connect_unix(&path) {
+                            Ok(handle) if handle != 0 => Ok(Value::File(handle)), Ok(_) => Err(9), Err(error) => Err(error),
+                        }
+                    }
+                    _ => Err(2),
+                },
                 ir::EntryGrant::DirectoryEnvironment(name) => match interpreter.host.environment(&name[..name.len() - 1]) {
                     Ok(Some(mut path)) => {
                         if path.is_empty() { Err(2) } else {
@@ -2709,10 +2750,10 @@ fn run_inner<'a, H: Host>(
                 Err(errno) => {
                     let operation = if observed_host { interpreter.host.failure_operation() }
                         else if matches!(grants[index], ir::EntryGrant::DirectoryEnvironment(_) | ir::EntryGrant::DirectoryEnvironmentValue(_, _)
-                            | ir::EntryGrant::ReadDirectoryEnvironment(_) | ir::EntryGrant::ReadDirectoryEnvironmentValue(_, _) | ir::EntryGrant::Environment(_)) { 1001 } else { 1000 };
+                            | ir::EntryGrant::ReadDirectoryEnvironment(_) | ir::EntryGrant::ReadDirectoryEnvironmentValue(_, _) | ir::EntryGrant::UnixStreamEnvironment(_) | ir::EntryGrant::UnixStreamEnvironmentValue(_, _) | ir::EntryGrant::Environment(_)) { 1001 } else { 1000 };
                     for (_, previous) in &values {
                         match previous {
-                            Value::Directory(handle) | Value::ReadDirectory(handle) | Value::ForeignCommand(handle) | Value::ForeignSession(handle) | Value::NullDevice(handle) | Value::Listener(handle) => interpreter.host.close_handle(*handle),
+                            Value::File(handle) | Value::Directory(handle) | Value::ReadDirectory(handle) | Value::ForeignCommand(handle) | Value::ForeignSession(handle) | Value::NullDevice(handle) | Value::Listener(handle) => interpreter.host.close_handle(*handle),
                             Value::Readiness(handle) => interpreter.host.close_readiness(*handle),
                             Value::Stop(handle) => interpreter.host.close_stop(*handle),
                             _ => {}

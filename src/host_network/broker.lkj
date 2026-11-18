@@ -7,6 +7,7 @@ use super::lifecycle;
 use super::foreign::{self, ForeignCode};
 use super::foreign_session;
 use super::workers::{self, WorkerCode};
+use super::unix::{self, UnixCode};
 
 pub(super) const REQUEST: i64 = -128;
 const RESPONSE: i64 = -224;
@@ -184,6 +185,8 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     let file_seals = a.label();
     let connect_deadline = a.label();
     let beneath = a.label();
+    let unix = UnixCode::new(&mut a, beneath);
+    let mut unix_operations = Vec::new(); for _ in 0usize..4usize { unix_operations.push(a.label()); }
     let mut operations = Vec::new();
     for _index in 0usize..16usize { operations.push(a.label()); }
     let mut storage = Vec::new();
@@ -335,6 +338,7 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     }
     for index in 0usize..worker_operations.len() { a.immediate(C, 61 + index as u64); a.compare(A,C); a.condition(4,worker_operations[index]); }
     a.immediate(C, 75); a.compare(A, C); a.condition(4, connect_deadline);
+    for index in 0usize..unix_operations.len() { a.immediate(C, 76 + index as u64); a.compare(A,C); a.condition(4,unix_operations[index]); }
     a.immediate(C, 55); a.compare(A, C); a.condition(4, file_seal);
     a.immediate(C, 56); a.compare(A, C); a.condition(4, file_seals);
     a.immediate(C, 50);
@@ -397,6 +401,8 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     foreign::emit(&mut a, foreign);
     workers::dispatch(&mut a, workers, &worker_operations, reply, bad);
     workers::emit(&mut a, workers);
+    unix::dispatch(&mut a, unix, &unix_operations, reply, bad);
+    unix::emit(&mut a, unix);
 
     a.bind(bad);
     a.immediate(A, (-9i64) as u64);

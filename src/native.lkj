@@ -31,6 +31,7 @@ mod workers;
 mod read_region;
 mod network;
 mod connect_deadline;
+mod unix;
 mod readiness;
 mod storage;
 mod storage_plan;
@@ -1698,6 +1699,10 @@ fn grant_matches(kind: &TypeKind, grant: &ir::EntryGrant, parameters: usize) -> 
         ir::EntryGrant::DirectoryEnvironment(name) => matches!(kind, TypeKind::Directory) && valid_environment(name),
                 ir::EntryGrant::DirectoryEnvironmentValue(name, value) => matches!(kind, TypeKind::Directory) && valid_environment(name)
                     && value.as_ref().map_or(true, |bytes| !bytes.contains(&0u8)),
+        ir::EntryGrant::UnixStream(path) => matches!(kind, TypeKind::File) && valid_foreign_path(path) && path.len() <= 108,
+        ir::EntryGrant::UnixStreamEnvironment(name) => matches!(kind, TypeKind::File) && valid_environment(name),
+        ir::EntryGrant::UnixStreamEnvironmentValue(name, value) => matches!(kind, TypeKind::File) && valid_environment(name)
+            && value.as_ref().map_or(true, |bytes| !bytes.contains(&0u8)),
         ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
         ir::EntryGrant::Connector(_) => matches!(kind, TypeKind::Connector),
         ir::EntryGrant::Readiness => matches!(kind, TypeKind::Readiness),
@@ -1809,6 +1814,11 @@ fn prepare_program(
     let connector = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Connector));
     let connect_deadline = program.functions.iter().any(|function| function.body.iter().any(|instruction|
         matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::ConnectorConnectDeadline, .. })));
+    let unix = program.functions.iter().any(|function| function.body.iter().any(|instruction|
+        matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::WorldUnixConnect | IntrinsicOp::DirectoryUnixConnect
+            | IntrinsicOp::FileSendMessage | IntrinsicOp::FileReceiveMessage, .. })))
+        || grants.map_or(false, |provided| provided.iter().any(|grant| matches!(grant, ir::EntryGrant::UnixStream(_)
+            | ir::EntryGrant::UnixStreamEnvironment(_) | ir::EntryGrant::UnixStreamEnvironmentValue(_, _))));
     let readiness = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Readiness));
     let stop_signals = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Stop));
     let entropy = program.functions.iter().any(|function| function.body.iter().any(|instruction|
@@ -1820,7 +1830,7 @@ fn prepare_program(
     let blocking_lock = program.functions.iter().any(|function| function.body.iter().any(|instruction|
         matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::FileLockWait, .. })));
     let command_environment = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Environment))
-        || match grants { Some(grants) => grants.iter().any(|grant| matches!(grant, ir::EntryGrant::DirectoryEnvironment(_) | ir::EntryGrant::ReadDirectoryEnvironment(_))), None => false };
+        || match grants { Some(grants) => grants.iter().any(|grant| matches!(grant, ir::EntryGrant::DirectoryEnvironment(_) | ir::EntryGrant::ReadDirectoryEnvironment(_) | ir::EntryGrant::UnixStreamEnvironment(_))), None => false };
     let foreign = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::ForeignSession)) || program.functions.iter().any(|function| function.body.iter().any(|instruction|
         matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::ForeignRun | IntrinsicOp::ForeignImage | IntrinsicOp::ForeignStart | IntrinsicOp::ForeignExchange | IntrinsicOp::ForeignFinish, .. })))
         || grants.map_or(false, |provided| provided.iter().any(|grant| matches!(grant, ir::EntryGrant::ForeignCommand(_) | ir::EntryGrant::NullDevice)));
@@ -1938,6 +1948,12 @@ fn prepare_program(
         if connect_deadline {
             symbols.push((p.connector_connect_deadline, "$platform::connector_connect_deadline".to_string()));
         }
+        if unix {
+            symbols.push((p.unix_connect, "$platform::unix_connect".to_string()));
+            symbols.push((p.directory_unix_connect, "$platform::directory_unix_connect".to_string()));
+            symbols.push((p.file_send_message, "$platform::file_send_message".to_string()));
+            symbols.push((p.file_receive_message, "$platform::file_receive_message".to_string()));
+        }
         if connector {
             symbols.push((p.world_connector, "$platform::world_connector".to_string()));
             symbols.push((p.connector_connect, "$platform::connector_connect".to_string()));
@@ -1997,7 +2013,8 @@ fn prepare_program(
     if accept_nodelay { network::emit_accept_nodelay(&mut a, p); }
     if readiness { readiness::emit(&mut a, p); }
     if nonblocking { readiness::emit_nonblocking(&mut a, p); }
-    if storage { storage::emit(&mut a, p); }
+    if storage || unix { storage::emit(&mut a, p); }
+    if unix { unix::emit(&mut a, p); }
     if entropy { lifecycle::entropy(&mut a, p); }
     if wall_time { lifecycle::wall_time(&mut a, p); }
     if wall_nanoseconds { lifecycle::wall_nanoseconds(&mut a, p); }

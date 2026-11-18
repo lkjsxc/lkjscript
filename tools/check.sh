@@ -189,6 +189,7 @@ parallel_step 1 child-image timeout --kill-after=10s 600s bash tools/child-image
 parallel_step 1 foreign-child timeout --kill-after=10s 600s bash tools/foreign-child-test.sh --compiler "$check_binary"
 parallel_step 2 foreign-session timeout --kill-after=10s 600s bash tools/programs-foreign-session-test.sh --compiler "$check_binary"
 parallel_step 4 process-workers timeout --kill-after=10s 600s bash tools/programs-process-test.sh --compiler "$check_binary"
+parallel_step 1 unix-stream timeout --kill-after=10s 600s bash tools/unix-stream-test.sh --compiler "$check_binary"
 parallel_step 1 object-graphs timeout --kill-after=10s 600s bash tools/programs-graph-test.sh --compiler "$check_binary"
 parallel_step 1 real-programs timeout --kill-after=10s 600s bash tools/real-programs-test.sh "$check_binary"
 parallel_step 1 package-source timeout --kill-after=10s 600s bash tools/programs-package-test.sh "$check_binary"

@@ -331,6 +331,49 @@ fn foreign_grants_are_exact_affine_and_unforgeable() {
     assert!(host.0.is_empty());
 }
 
+
+fn unix_grants_are_path_scoped_owned_and_unforgeable() {
+    let checked = check::check(ir_text::read(include_str!(
+        "../../tests/fixtures/unix/entry.lkjir"
+    )).unwrap()).unwrap();
+    let runtime = prepared();
+    let path = b"/run/user/example/wayland-0\0"[..].to_vec();
+    let grants = crate::entry_grants::prepare(checked.program(), 0usize, &[
+        "socket=unix:/run/user/example/wayland-0".to_string(),
+    ]).unwrap();
+    assert!(matches!(&grants[0usize], ir::EntryGrant::UnixStream(value) if *value == path));
+    let mut host = FailingHost(Vec::new());
+    interpreter::run_granted(checked.program(), 0usize, &grants, &mut host).unwrap();
+    assert_eq!(host.0.as_slice(), b"UC");
+    native::encode_granted(&checked, &runtime, 0usize, &grants, None, None).unwrap();
+    for supplied in vec![Vec::<String>::new(), vec!["socket".to_string()],
+        vec!["socket=/run/user/example/wayland-0".to_string()],
+        vec!["socket=unix:relative".to_string()], vec!["socket=unix:env:".to_string()]] {
+        assert!(crate::entry_grants::prepare(checked.program(), 0usize, &supplied).is_err());
+    }
+    for value in vec![0u64, 3u64, 65535u64] {
+        let mut host = FailingHost(Vec::new());
+        let error = interpreter::run(checked.program(), 0usize, &[value], &mut host).err().unwrap();
+        assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
+        assert!(host.0.is_empty());
+        let selected = native::Entry { function: 0usize, arguments: vec![value as i64], result_fd: None };
+        assert_eq!(native::encode(&checked, &runtime, selected).err().unwrap().code, "E_ENTRY");
+    }
+    for grant in vec![directory(), ir::EntryGrant::UnixStream(b"relative\0"[..].to_vec()),
+        ir::EntryGrant::UnixStream(b"/socket\0extra\0"[..].to_vec())] {
+        let mut host = FailingHost(Vec::new());
+        let invalid = vec![grant];
+        assert!(interpreter::run_granted(checked.program(), 0usize, &invalid, &mut host).is_err());
+        assert!(native::encode_granted(&checked, &runtime, 0usize, &invalid, None, None).is_err());
+        assert!(host.0.is_empty());
+    }
+    let mut host = FailingHost(Vec::new());
+    let pair = vec![ir::EntryGrant::UnixStream(path), listener()];
+    let error = interpreter::run_granted(checked.program(), 1usize, &pair, &mut host).err().unwrap();
+    assert!(error.kind == ErrorKind::Trap(7));
+    assert_eq!(host.0.as_slice(), b"ULC");
+}
+
 pub fn probe() -> i64 {
 
     mismatched_grants_do_not_acquire_authority();
@@ -338,12 +381,13 @@ pub fn probe() -> i64 {
     listener_cannot_be_forged_from_raw_scalar_arguments();
     non_scalar_result_rejects_before_acquisition();
     connector_grants_are_exact_and_unforgeable();
+    unix_grants_are_path_scoped_owned_and_unforgeable();
     readiness_grants_are_owned_and_unforgeable();
     lifecycle_grants_are_explicit_owned_and_unforgeable();
     command_grants_are_named_affine_and_unforgeable();
     read_roots_reject_mutation_and_writable_grants();
     foreign_grants_are_exact_affine_and_unforgeable();
-    10
+    11
 }
 pub fn run() -> usize {
     probe() as usize

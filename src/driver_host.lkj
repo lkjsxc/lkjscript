@@ -416,6 +416,62 @@ impl interpreter::Host for Host<'_, '_> {
         self.insert_handle(Handle::RemoteFile(descriptor))
     }
 
+    fn connect_unix(&mut self, path: &[u8]) -> Result<u64, i64> {
+        let descriptor = self.network.open_unix(self.world, path);
+        self.last_operation = self.network.failure_operation();
+        self.insert_handle(Handle::RemoteFile(descriptor?))
+    }
+    fn directory_connect_unix(&mut self, directory: u64, path: &[u8]) -> Result<u64, i64> {
+        let directory = self.directory_handle(directory)?;
+        let descriptor = self.network.open_unix_beneath(directory, path);
+        self.last_operation = self.network.failure_operation();
+        self.insert_handle(Handle::RemoteFile(descriptor?))
+    }
+    fn send_socket_message(&mut self, socket: u64, bytes: &[u8], files: Vec<u64>, deadline: usize) -> Result<usize, i64> {
+        let socket = match self.remote_file(socket) {
+            Ok(value) => value, Err(errno) => { for file in files { self.close_handle(file); } return Err(errno); }
+        };
+        let mut descriptors = Vec::new();
+        let mut file_index = 0usize;
+        while file_index < files.len() {
+            let file = files[file_index];
+            match self.remote_file(file) {
+                Ok(value) => descriptors.push(value),
+                Err(errno) => { for file in files { self.close_handle(file); } return Err(errno); }
+            }
+            file_index += 1;
+        }
+        for file in files {
+            match self.handles.remove(&file) {
+                Some(Handle::ImportedFile(local, _)) | Some(Handle::File(local)) => drop(local),
+                Some(Handle::RemoteFile(_)) => {},
+                _ => return Err(9),
+            }
+        }
+        let outcome = self.network.send_socket_message(socket, bytes, &descriptors, deadline);
+        self.last_operation = self.network.failure_operation(); outcome
+    }
+    fn receive_socket_message(&mut self, socket: u64, bytes: &mut [u8], limit: usize, deadline: usize) -> Result<(usize, Vec<u64>), i64> {
+        let socket = self.remote_file(socket)?;
+        let outcome = self.network.receive_socket_message(socket, bytes, limit, deadline);
+        self.last_operation = self.network.failure_operation();
+        let (count, descriptors) = outcome?;
+        let mut files = Vec::new();
+        let mut index = 0usize;
+        while index < descriptors.len() {
+            match self.insert_handle(Handle::RemoteFile(descriptors[index])) {
+                Ok(handle) => files.push(handle),
+                Err(errno) => {
+                    for file in files { self.close_handle(file); }
+                    index += 1;
+                    while index < descriptors.len() { self.network.close_remote(descriptors[index]); index += 1; }
+                    return Err(errno);
+                }
+            }
+            index += 1;
+        }
+        Ok((count, files))
+    }
     fn connect_socket(&mut self, address: &[u8]) -> Result<u64, i64> {
         let descriptor = self.network.open_stream(self.world, address)?;
         self.insert_handle(Handle::RemoteFile(descriptor))

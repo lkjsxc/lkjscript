@@ -882,6 +882,12 @@ fn invocation_grants(world: &mut World, grants: Vec<ir::EntryGrant>) -> Result<V
                     .map_err(|errno: i64| -> String { format!("E_ENTRY directory environment failed: errno {errno}") })?;
                 ir::EntryGrant::DirectoryEnvironmentValue(name.clone(), value)
             }
+            ir::EntryGrant::UnixStreamEnvironment(name) => {
+                let key = &name[..name.len() - 1];
+                let value = driver_host::environment_value(world, key)
+                    .map_err(|errno: i64| -> String { format!("E_ENTRY Unix socket environment failed: errno {errno}") })?;
+                ir::EntryGrant::UnixStreamEnvironmentValue(name.clone(), value)
+            }
             ir::EntryGrant::ReadDirectoryEnvironment(name) => {
                 let key = &name[..name.len() - 1];
                 let value = driver_host::environment_value(world, key)
@@ -1508,9 +1514,20 @@ fn admitted_grants(world: &mut World, grants: Vec<ir::EntryGrant>, options: &Opt
     }
     Ok(output)
 }
-fn image_grant_report(grants: &[ir::EntryGrant]) -> String {
+fn entry_grant_report(grants: &[ir::EntryGrant]) -> String {
     let mut text = String::new();
     for (index, grant) in grants.iter().enumerate() {
+        match grant {
+            ir::EntryGrant::UnixStream(path) => {
+                let path = std::str::from_utf8(&path[..path.len()-1usize]).unwrap();
+                text.push_str(&format!("Unix stream parameter={index} grant={} entry-receives=File(owned,nonblocking,close-on-exec) connect=startup\n", quoted(&format!("unix:{path}"))));
+            }
+            ir::EntryGrant::UnixStreamEnvironment(name) | ir::EntryGrant::UnixStreamEnvironmentValue(name, _) => {
+                let name = std::str::from_utf8(&name[..name.len()-1usize]).unwrap();
+                text.push_str(&format!("Unix stream parameter={index} grant={} entry-receives=File(owned,nonblocking,close-on-exec) connect=startup\n", quoted(&format!("unix:env:{name}"))));
+            }
+            _ => {}
+        }
         if let ir::EntryGrant::Image(bytes) = grant {
             text.push_str(&format!("child image parameter={index} target=linux-x86_64 identity="));
             for byte in &bytes[40usize..72usize] { text.push_str(&format!("{:02x}", *byte)); }
@@ -1826,7 +1843,7 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
         world.stdout().write(output.as_bytes());
         if !options.grants.is_empty() || options.program.is_some() {
             let grants = admitted_grants(world, prepare_grants(checked.original().program(), selected, options)?, options)?;
-            world.stdout().write(image_grant_report(&grants).as_bytes());
+            world.stdout().write(entry_grant_report(&grants).as_bytes());
         }
         return Ok(0);
     }

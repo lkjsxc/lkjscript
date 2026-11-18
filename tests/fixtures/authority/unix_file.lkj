@@ -1,0 +1,5 @@
+// expect: check
+// authority-expect: file: File Unix stream; --grant file=unix:/PATH|unix:env:NAME; file_close
+pub fn main(file: File) {
+    drop(file);
+}

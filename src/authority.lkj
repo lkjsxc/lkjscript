@@ -38,6 +38,7 @@ pub struct Report {
 fn capability(kind: &TypeKind) -> Option<(&'static str, bool)> {
     match kind {
         TypeKind::Arguments => Some(("Arguments", false)),
+        TypeKind::File => Some(("File Unix stream", true)),
         TypeKind::Environment => Some(("Environment", true)),
         TypeKind::ExitStatus => Some(("ExitStatus", false)),
         TypeKind::Stdout => Some(("Stdout", false)),
@@ -82,7 +83,7 @@ pub fn manifest(checked: &CheckedProgram, entry: usize) -> Result<Manifest, Stri
         if matches!(ty.kind, TypeKind::World) {
             return Err("E_ENTRY World must be the entry's only parameter".to_string());
         }
-        if matches!(ty.kind, TypeKind::File | TypeKind::ReadFile) {
+        if matches!(ty.kind, TypeKind::ReadFile) {
             return Err(format!("E_ENTRY File parameter {} cannot be granted; accept Directory and open the file inside the entry", local.name));
         }
         let (label, needs_value) = match capability(&ty.kind) {
@@ -458,6 +459,8 @@ pub fn render(checked: &CheckedProgram, report: &Report) -> String {
         for requirement in &report.manifest.requirements {
             let value = if requirement.capability == "Directory" || requirement.capability == "ReadDirectory" || requirement.capability == "ForeignCommand" || requirement.capability == "Image" {
                 "=PATH"
+            } else if requirement.capability == "File Unix stream" {
+                "=unix:/PATH|unix:env:NAME"
             } else if requirement.capability == "Environment" {
                 "=NAME"
             } else if requirement.capability == "Listener" || requirement.capability == "Connector" {

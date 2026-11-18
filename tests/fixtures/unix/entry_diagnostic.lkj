@@ -1,0 +1,1 @@
+pub fn main(socket: File, errors: Stderr) { drop(socket); drop(errors); }

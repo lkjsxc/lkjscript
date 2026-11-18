@@ -1,0 +1,3 @@
+pub fn main() {
+    let _socket = World.unix_connect("/tmp/socket");
+}

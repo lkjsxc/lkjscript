@@ -1,0 +1,2 @@
+target/lkjscript: OK
+seed/lkjscript.gz: OK

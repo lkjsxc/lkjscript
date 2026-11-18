@@ -1,0 +1,295 @@
+//! Independent interpreter broker Unix effects; no IR or native-lowering imports.
+use crate::x86::*;
+#[derive(Clone, Copy)]
+pub(super) struct UnixCode {
+    pub unix_connect: Label, pub directory_unix_connect: Label,
+    pub file_send_message: Label, pub file_receive_message: Label, pub open_beneath: Label,
+}
+impl UnixCode {
+    pub fn new(a: &mut Assembler, beneath: Label) -> Self {
+        Self { unix_connect: a.label(), directory_unix_connect: a.label(),
+            file_send_message: a.label(), file_receive_message: a.label(), open_beneath: beneath }
+    }
+}
+fn enter(a: &mut Assembler, bytes: u64) { a.push(BP); a.mov(BP,SP); a.lea(SP,SP,-(bytes as i64)); }
+fn leave(a: &mut Assembler) { a.mov(SP,BP); a.pop(BP); a.ret(); }
+fn path(a: &mut Assembler, invalid: Label) {
+    a.test(D,true); a.condition(4,invalid); a.lea(R8,D,-1); a.mov(R9,SI); a.rr(0x01,R9,R8,true);
+    a.load_width(A,R9,0,1,false); a.test(A,false); a.condition(5,invalid); a.mov(R9,SI);
+    let next=a.label(); let done=a.label(); a.bind(next); a.test(R8,true); a.condition(4,done);
+    a.load_width(A,R9,0,1,false); a.test(A,false); a.condition(4,invalid);
+    a.lea(R9,R9,1); a.lea(R8,R8,-1); a.jump(next); a.bind(done);
+}
+
+fn operation(a: &mut Assembler, number: u64) {
+    a.immediate(R11,number); a.store(R13,0,R11);
+}
+fn dispatch_call(a: &mut Assembler, target: Label) {
+    a.push(R13); a.lea(R13,BP,super::broker::LAST_OPERATION); a.call(target); a.pop(R13);
+}
+fn syscall(a: &mut Assembler, number: u64) {
+    let retry = a.label(); a.bind(retry);
+    operation(a,number); a.immediate(A, number); a.syscall();
+    if number != 3 {
+        a.immediate(C, (-4i64) as u64); a.compare(A, C); a.condition(4, retry);
+    }
+}
+fn word(a: &mut Assembler, offset: i64, value: u64) { a.immediate(A,value); a.store(BP,offset,A); }
+fn map(a: &mut Assembler, length: u8) {
+    a.mov(SI,length); a.immediate(DI,0); a.immediate(D,3); a.immediate(R10,0x22);
+    a.immediate(R8,!0u64); a.immediate(R9,0); syscall(a,9);
+}
+fn close_slot(a: &mut Assembler, offset: i64) {
+    a.load(DI,BP,offset); a.immediate(C,3); a.compare(DI,C);
+    let done=a.label(); a.condition(2,done); syscall(a,3); a.bind(done);
+}
+fn unmap_slot(a: &mut Assembler, pointer: i64, length: i64) {
+    a.load(DI,BP,pointer); let done=a.label(); a.test(DI,true); a.condition(4,done);
+    a.load(SI,BP,length); syscall(a,11); a.bind(done);
+}
+fn promote(a: &mut Assembler) {
+    let done=a.label(); a.immediate(C,3); a.compare(A,C); a.condition(3,done);
+    a.mov(R9,A); a.mov(DI,A); a.immediate(SI,1030); a.immediate(D,3); syscall(a,72);
+    a.mov(R10,A); a.mov(DI,R9); syscall(a,3); a.mov(A,R10); a.bind(done);
+}
+fn connect(a: &mut Assembler, p: UnixCode) {
+    a.bind(p.unix_connect); enter(a,160);
+    a.store(BP,-8,DI); a.store(BP,-16,SI);
+    let invalid=a.label(); let done=a.label(); let failed=a.label(); let success=a.label();
+    a.immediate(A,2); a.compare(SI,A); a.condition(2,invalid);
+    a.immediate(A,108); a.compare(SI,A); a.condition(7,invalid);
+    a.load_width(A,DI,0,1,false); a.immediate(C,b'/' as u64); a.compare(A,C); a.condition(5,invalid);
+    a.lea(R8,SI,-1); a.mov(R9,DI); a.rr(0x01,R9,R8,true);
+    a.load_width(A,R9,0,1,false); a.test(A,false); a.condition(5,invalid);
+    a.mov(R9,DI); let scan=a.label(); let valid=a.label(); a.bind(scan);
+    a.test(R8,true); a.condition(4,valid); a.load_width(A,R9,0,1,false);
+    a.test(A,false); a.condition(4,invalid); a.lea(R9,R9,1); a.lea(R8,R8,-1); a.jump(scan);
+    a.bind(valid);
+    word(a,-144,1); a.lea(DI,BP,-142); a.load(SI,BP,-8); a.load(C,BP,-16);
+    a.raw(&[0xfc,0xf3,0xa4]);
+    a.immediate(DI,1); a.immediate(SI,0x80801); a.immediate(D,0); syscall(a,41);
+    a.test(A,true); a.condition(8,done); promote(a); a.test(A,true); a.condition(8,done);
+    a.store(BP,-24,A); a.mov(DI,A); a.lea(SI,BP,-144); a.load(D,BP,-16); a.lea(D,D,2);
+    syscall(a,42);
+    a.immediate(C,(-106i64) as u64); a.compare(A,C); a.condition(4,success);
+    a.test(A,true); a.condition(8,failed);
+    a.bind(success); a.load(A,BP,-24); a.jump(done);
+    a.bind(failed); a.store(BP,-32,A); a.load(C,R13,0); a.store(BP,-40,C);
+    close_slot(a,-24); a.load(C,BP,-40); a.store(R13,0,C); a.load(A,BP,-32); a.jump(done);
+    a.bind(invalid); a.immediate(A,(-22i64) as u64);
+    a.bind(done); leave(a);
+
+    // The caller's Directory authorizes resolution, never a string's ambient root.
+    a.bind(p.directory_unix_connect); enter(a,384);
+    let dir_invalid=a.label(); path(a,dir_invalid);
+    a.immediate(C,0x2a0000); a.immediate(R8,0); operation(a,437); a.call(p.open_beneath); promote(a);
+    let dir_done=a.label(); let cleanup=a.label(); let is_socket=a.label();
+    a.test(A,true); a.condition(8,dir_done); a.store(BP,-8,A);
+    a.mov(DI,A); a.lea(SI,BP,-320); syscall(a,5); a.test(A,true); a.condition(8,cleanup);
+    a.load_width(A,BP,-296,4,false); a.immediate(C,0xf000); a.rr(0x21,A,C,true);
+    a.immediate(C,0xc000); a.compare(A,C); a.condition(4,is_socket);
+    a.immediate(A,(-88i64) as u64); a.jump(cleanup);
+    a.bind(is_socket);
+    let prefix=b"/proc/self/fd/";
+    for index in 0usize..prefix.len() { a.immediate(A,prefix[index] as u64); a.store_width(BP,-176+index as i64,A,1); }
+    a.load(A,BP,-8); a.lea(R8,BP,-64); a.immediate(C,0); a.store_width(R8,0,C,1);
+    let digits=a.label(); a.bind(digits);
+    a.immediate(D,0); a.immediate(C,10); a.divide(C,false); a.lea(D,D,b'0' as i64);
+    a.lea(R8,R8,-1); a.store_width(R8,0,D,1); a.test(A,true); a.condition(5,digits);
+    a.lea(R9,BP,-162); a.immediate(SI,15); let copy=a.label(); let copied=a.label(); a.bind(copy);
+    a.load_width(A,R8,0,1,false); a.store_width(R9,0,A,1);
+    a.test(A,false); a.condition(4,copied); a.lea(R8,R8,1); a.lea(R9,R9,1); a.lea(SI,SI,1); a.jump(copy);
+    a.bind(copied); a.lea(DI,BP,-176); a.call(p.unix_connect);
+    a.bind(cleanup); a.store(BP,-16,A); a.load(C,R13,0); a.store(BP,-24,C);
+    close_slot(a,-8); a.load(C,BP,-24); a.store(R13,0,C); a.load(A,BP,-16);
+    a.jump(dir_done); a.bind(dir_invalid); a.immediate(A,(-22i64) as u64); a.bind(dir_done); leave(a);
+}
+fn wait(a: &mut Assembler, p: UnixCode, ready: Label) {
+    // DI descriptor, SI poll mask, D absolute monotonic nanoseconds.
+    a.bind(ready); enter(a,64);
+    a.store(BP,-8,DI); a.store(BP,-16,SI); a.store(BP,-24,D);
+    let again=a.label(); let expired=a.label(); let done=a.label();
+    a.bind(again); a.immediate(DI,1); a.lea(SI,BP,-48); syscall(a,228);
+    a.test(A,true); a.condition(8,done);
+    a.load(A,BP,-48); a.immediate(C,1_000_000_000); a.imul(A,C);
+    a.load(D,BP,-40); a.rr(0x01,A,D,true); a.load(R8,BP,-24);
+    a.compare(A,R8); a.condition(3,expired); a.rr(0x29,R8,A,true);
+    a.mov(A,R8); a.immediate(D,0); a.divide(C,false); a.store(BP,-48,A); a.store(BP,-40,D);
+    a.load(A,BP,-8); a.store_width(BP,-64,A,4); a.load(A,BP,-16); a.store_width(BP,-60,A,2);
+    a.immediate(A,0); a.store_width(BP,-58,A,2);
+    a.lea(DI,BP,-64); a.immediate(SI,1); a.lea(D,BP,-48); a.immediate(R10,0); a.immediate(R8,8);
+    operation(a,271); a.immediate(A,271); a.syscall();
+    a.immediate(C,(-4i64) as u64); a.compare(A,C); a.condition(4,again);
+    a.test(A,true); a.condition(8,done); a.condition(4,expired); a.immediate(A,0); a.jump(done);
+    a.bind(expired); a.immediate(A,(-110i64) as u64); a.bind(done); leave(a);
+}
+fn socket_kind(a: &mut Assembler, p: UnixCode, valid: Label) {
+    // File may contain any descriptor. Rights transport requires AF_UNIX/SOCK_STREAM.
+    a.bind(valid); enter(a,32);
+    a.store(BP,-8,DI); word(a,-24,4);
+    a.immediate(SI,1); a.immediate(D,39); a.lea(R10,BP,-16); a.lea(R8,BP,-24); syscall(a,55);
+    let done=a.label(); let domain=a.label(); let kind=a.label();
+    a.test(A,true); a.condition(8,done);
+    a.load_width(A,BP,-16,4,false); a.immediate(C,1); a.compare(A,C); a.condition(5,domain);
+    word(a,-24,4); a.load(DI,BP,-8); a.immediate(SI,1); a.immediate(D,3);
+    a.lea(R10,BP,-16); a.lea(R8,BP,-24); syscall(a,55);
+    a.test(A,true); a.condition(8,done); a.load_width(A,BP,-16,4,false);
+    a.immediate(C,1); a.compare(A,C); a.condition(5,kind); a.immediate(A,0); a.jump(done);
+    a.bind(domain); a.immediate(A,(-97i64) as u64); a.jump(done);
+    a.bind(kind); a.immediate(A,(-91i64) as u64); a.bind(done); leave(a);
+}
+fn initialize_message(a: &mut Assembler) {
+    for offset in vec![-144i64,-136,-128,-120,-112,-104,-96] {word(a,offset,0);}
+    a.load(A,BP,-16); a.store(BP,-160,A); a.load(A,BP,-24); a.store(BP,-152,A);
+    a.lea(A,BP,-160); a.store(BP,-128,A); word(a,-120,1);
+    a.load(A,BP,-56); a.store(BP,-112,A); a.load(A,BP,-64); a.store(BP,-104,A);
+}
+fn send(a: &mut Assembler, p: UnixCode, ready: Label, valid: Label) {
+    // DI points to fd, payload, length, owned descriptor words, count, deadline.
+    a.bind(p.file_send_message); enter(a,256);
+    for index in 0usize..6usize {a.load(A,DI,index as i64*8); a.store(BP,-8-index as i64*8,A);}
+    word(a,-56,0); word(a,-64,0);
+    let invalid=a.label(); let bad_fd=a.label(); let overflow=a.label(); let cleanup=a.label(); let done=a.label();
+    let attempt=a.label(); let blocked=a.label(); let control_ready=a.label();
+    a.load(A,BP,-8); a.immediate(C,3); a.compare(A,C); a.condition(2,bad_fd);
+    a.load(A,BP,-24); a.test(A,true); a.condition(4,invalid);
+    a.load(DI,BP,-8); a.call(valid); a.test(A,true); a.condition(8,cleanup);
+    a.load(A,BP,-40); a.test(A,true); a.condition(4,control_ready);
+    a.immediate(C,(!0u64-23)/4); a.compare(A,C); a.condition(7,overflow);
+    a.shift(A,4,2); a.lea(A,A,23); a.immediate(C,!7u64); a.rr(0x21,A,C,true);
+    a.store(BP,-64,A); map(a,A); a.test(A,true); a.condition(8,cleanup); a.store(BP,-56,A);
+    a.load(R8,BP,-56); a.load(A,BP,-40); a.shift(A,4,2); a.lea(A,A,16); a.store(R8,0,A);
+    a.immediate(A,0x100000001); a.store(R8,8,A);
+    a.lea(R8,R8,16); a.load(R9,BP,-32); a.load(R10,BP,-40);
+    let fill=a.label(); a.bind(fill); a.test(R10,true); a.condition(4,control_ready);
+    a.load(A,R9,0); a.immediate(C,3); a.compare(A,C); a.condition(2,bad_fd);
+    a.immediate(C,2147483647); a.compare(A,C); a.condition(7,bad_fd);
+    a.store_width(R8,0,A,4); a.lea(R8,R8,4); a.lea(R9,R9,8); a.lea(R10,R10,-1); a.jump(fill);
+    a.bind(control_ready); initialize_message(a);
+    a.bind(attempt); a.load(DI,BP,-8); a.lea(SI,BP,-144); a.immediate(D,0x4040);
+    operation(a,46); a.immediate(A,46); a.syscall();
+    a.immediate(C,(-4i64) as u64); a.compare(A,C); a.condition(4,blocked);
+    a.immediate(C,(-11i64) as u64); a.compare(A,C); a.condition(5,cleanup);
+    a.bind(blocked); a.load(DI,BP,-8); a.immediate(SI,4); a.load(D,BP,-48); a.call(ready);
+    a.test(A,true); a.condition(8,cleanup); a.jump(attempt);
+    a.bind(invalid); a.immediate(A,(-22i64) as u64); a.jump(cleanup);
+    a.bind(bad_fd); a.immediate(A,(-9i64) as u64); a.jump(cleanup);
+    a.bind(overflow); a.immediate(A,(-75i64) as u64);
+    a.bind(cleanup); a.store(BP,-72,A); a.load(C,R13,0); a.store(BP,-88,C);
+    // Consuming Vec<File> consumes each local owner on every outcome.
+    word(a,-80,0); let close_next=a.label(); let released=a.label(); a.bind(close_next);
+    a.load(A,BP,-80); a.load(C,BP,-40); a.compare(A,C); a.condition(3,released);
+    a.load(R8,BP,-32); a.shift(A,4,3); a.rr(0x01,R8,A,true); a.load(DI,R8,0);
+    let skip=a.label(); a.immediate(C,3); a.compare(DI,C); a.condition(2,skip); syscall(a,3); a.bind(skip);
+    a.load(A,BP,-80); a.lea(A,A,1); a.store(BP,-80,A); a.jump(close_next);
+    a.bind(released); unmap_slot(a,-56,-64); a.load(C,BP,-88); a.store(R13,0,C); a.load(A,BP,-72);
+    a.bind(done); leave(a);
+}
+fn receive(a: &mut Assembler, p: UnixCode, ready: Label, valid: Label) {
+    // The output File array is caller-allocated, but ownership begins only on success.
+    a.bind(p.file_receive_message); enter(a,320);
+    for index in 0usize..6usize {a.load(A,DI,index as i64*8); a.store(BP,-8-index as i64*8,A);}
+    word(a,-56,0); word(a,-64,0); word(a,-80,0); word(a,-176,0); word(a,-184,0);
+    let invalid=a.label(); let overflow=a.label(); let bad_fd=a.label(); let cleanup=a.label();
+    let blocked=a.label(); let attempt=a.label(); let control_ready=a.label(); let parsed=a.label();
+    a.load(A,BP,-8); a.immediate(C,3); a.compare(A,C); a.condition(2,bad_fd);
+    a.load(A,BP,-24); a.test(A,true); a.condition(4,invalid);
+    a.load(DI,BP,-8); a.call(valid); a.test(A,true); a.condition(8,cleanup);
+    a.load(A,BP,-40); a.test(A,true); a.condition(4,control_ready);
+    a.immediate(C,(!0u64-23)/4); a.compare(A,C); a.condition(7,overflow);
+    a.shift(A,4,2); a.lea(A,A,23); a.immediate(C,!7u64); a.rr(0x21,A,C,true);
+    a.store(BP,-64,A); map(a,A); a.test(A,true); a.condition(8,cleanup); a.store(BP,-56,A);
+    a.bind(control_ready); a.load(A,BP,-24); map(a,A); a.test(A,true); a.condition(8,cleanup); a.store(BP,-176,A);
+    a.bind(attempt); initialize_message(a); a.load(A,BP,-176); a.store(BP,-160,A);
+    a.load(DI,BP,-8); a.lea(SI,BP,-144); a.immediate(D,0x40000040);
+    operation(a,47); a.immediate(A,47); a.syscall();
+    a.immediate(C,(-4i64) as u64); a.compare(A,C); a.condition(4,blocked);
+    a.immediate(C,(-11i64) as u64); a.compare(A,C); a.condition(4,blocked);
+    a.test(A,true); a.condition(8,cleanup); a.store(BP,-72,A);
+    a.load_width(A,BP,-96,4,false); a.immediate(C,0x28); a.rr(0x21,A,C,true);
+    let flags_ok=a.label(); a.test(A,true); a.condition(4,flags_ok); word(a,-184,90); a.bind(flags_ok);
+    word(a,-192,0);
+    let header=a.label(); let next_header=a.label(); let malformed=a.label(); a.bind(header);
+    a.load(R8,BP,-192); a.load(R9,BP,-104); a.compare(R8,R9); a.condition(3,parsed);
+    a.rr(0x29,R9,R8,true); a.immediate(C,16); a.compare(R9,C); a.condition(2,parsed);
+    a.load(R10,BP,-56); a.rr(0x01,R10,R8,true); a.load(A,R10,0);
+    a.immediate(C,16); a.compare(A,C); a.condition(2,malformed); a.compare(A,R9); a.condition(7,malformed);
+    a.store(BP,-200,A); a.load(C,R10,8);
+    // A received socket may already have SO_PASSPIDFD enabled. Its SCM_PIDFD
+    // is another owned descriptor, never an integer or an assumed file kind.
+    let rights=a.label(); a.immediate(D,0x100000001); a.compare(C,D); a.condition(4,rights);
+    a.immediate(D,0x400000001); a.compare(C,D); a.condition(5,next_header);
+    a.bind(rights);
+    a.lea(A,A,-16); a.mov(C,A); a.immediate(D,3); a.rr(0x21,C,D,true); a.test(C,true); a.condition(5,malformed);
+    a.shift(A,5,2); a.store(BP,-208,A); a.lea(R10,R10,16); a.store(BP,-216,R10);
+    let descriptor=a.label(); let close_raw=a.label(); let descriptor_done=a.label(); a.bind(descriptor);
+    a.load(A,BP,-208); a.test(A,true); a.condition(4,next_header);
+    a.load(R10,BP,-216); a.load_width(A,R10,0,4,false); a.store(BP,-224,A);
+    a.load(C,BP,-184); a.test(C,true); a.condition(5,close_raw);
+    a.load(C,BP,-80); a.load(D,BP,-40); a.compare(C,D);
+    let room=a.label(); a.condition(2,room); word(a,-184,90); a.jump(close_raw); a.bind(room);
+    a.load(A,BP,-224); promote(a); a.test(A,true);
+    let promoted=a.label(); a.condition(9,promoted);
+    a.negate(A); a.store(BP,-184,A); a.jump(descriptor_done);
+    a.bind(promoted); a.load(R8,BP,-32); a.load(C,BP,-80); a.mov(D,C); a.shift(D,4,3);
+    a.rr(0x01,R8,D,true); a.store(R8,0,A); a.lea(C,C,1); a.store(BP,-80,C); a.jump(descriptor_done);
+    a.bind(close_raw); a.load(DI,BP,-224); syscall(a,3);
+    a.bind(descriptor_done); a.load(A,BP,-208); a.lea(A,A,-1); a.store(BP,-208,A);
+    a.load(A,BP,-216); a.lea(A,A,4); a.store(BP,-216,A); a.jump(descriptor);
+    a.bind(next_header); a.load(A,BP,-200); a.lea(A,A,7); a.immediate(C,!7u64); a.rr(0x21,A,C,true);
+    a.load(C,BP,-192); a.rr(0x01,A,C,true); a.store(BP,-192,A); a.jump(header);
+    a.bind(malformed); word(a,-184,71);
+    a.bind(parsed); a.load(A,BP,-184); a.test(A,true);
+    let success=a.label(); a.condition(4,success); a.negate(A); a.jump(cleanup);
+    a.bind(success); a.load(DI,BP,-16); a.load(SI,BP,-176); a.load(C,BP,-72);
+    a.raw(&[0xfc,0xf3,0xa4]); a.load(A,BP,-72); a.jump(cleanup);
+    a.bind(blocked); a.load(DI,BP,-8); a.immediate(SI,1); a.load(D,BP,-48); a.call(ready);
+    a.test(A,true); a.condition(8,cleanup); a.jump(attempt);
+    a.bind(invalid); a.immediate(A,(-22i64) as u64); a.jump(cleanup);
+    a.bind(overflow); a.immediate(A,(-75i64) as u64); a.jump(cleanup);
+    a.bind(bad_fd); a.immediate(A,(-9i64) as u64);
+    a.bind(cleanup); a.store(BP,-232,A); a.load(C,R13,0); a.store(BP,-248,C);
+    let keep=a.label(); a.test(A,true); a.condition(9,keep); word(a,-240,0);
+    let close_next=a.label(); a.bind(close_next);
+    a.load(A,BP,-240); a.load(C,BP,-80); a.compare(A,C); a.condition(3,keep);
+    a.shift(A,4,3); a.load(R8,BP,-32); a.rr(0x01,R8,A,true); a.load(DI,R8,0); syscall(a,3);
+    a.load(A,BP,-240); a.lea(A,A,1); a.store(BP,-240,A); a.jump(close_next);
+    a.bind(keep); unmap_slot(a,-176,-24); unmap_slot(a,-56,-64);
+    a.load(C,BP,-248); a.store(R13,0,C); a.load(D,BP,-80); a.load(A,BP,-232); leave(a);
+}
+pub(super) fn emit(a: &mut Assembler, p: UnixCode) {
+    let ready=a.label(); let valid=a.label(); connect(a,p); wait(a,p,ready); socket_kind(a,p,valid); send(a,p,ready,valid); receive(a,p,ready,valid);
+}
+
+// RPC numbers are explicit protocol extensions; request bodies are private copies.
+pub(super) fn dispatch(a: &mut Assembler, p: UnixCode, ops: &[Label], reply: Label, bad: Label) {
+    use super::broker::{REQUEST, SCRATCH, empty, check_fd, allocate};
+    a.bind(ops[0]); a.mov(DI,R14); a.mov(SI,R15); dispatch_call(a,p.unix_connect); empty(a,reply);
+    a.bind(ops[1]); a.load(DI,BP,REQUEST+8); check_fd(a,DI,bad);
+    a.mov(SI,R14); a.mov(D,R15); dispatch_call(a,p.directory_unix_connect); empty(a,reply);
+    a.bind(ops[2]); a.load(DI,BP,REQUEST+8); check_fd(a,DI,bad); a.store(BP,SCRATCH,DI);
+    a.load(A,BP,REQUEST+16); a.immediate(C,(!0u64)/8); a.compare(A,C);
+    let invalid=a.label(); a.condition(7,invalid); a.shift(A,4,3); a.compare(A,R15); a.condition(7,invalid);
+    a.mov(C,R14); a.rr(0x01,C,A,true); a.store(BP,SCRATCH+8,C);
+    a.mov(C,R15); a.rr(0x29,C,A,true); a.store(BP,SCRATCH+16,C);
+    a.store(BP,SCRATCH+24,R14); a.load(A,BP,REQUEST+16); a.store(BP,SCRATCH+32,A);
+    a.load(A,BP,REQUEST+24); a.store(BP,SCRATCH+40,A);
+    a.lea(DI,BP,SCRATCH); dispatch_call(a,p.file_send_message); empty(a,reply);
+    a.bind(ops[3]); a.load(DI,BP,REQUEST+8); check_fd(a,DI,bad); a.store(BP,SCRATCH,DI);
+    a.load(A,BP,REQUEST+24); a.immediate(C,(!0u64-8)/8); a.compare(A,C); a.condition(7,invalid);
+    a.shift(A,4,3); a.lea(A,A,8); a.store(BP,SCRATCH+56,A);
+    a.load(C,BP,REQUEST+16); a.rr(0x01,A,C,true); a.condition(2,invalid);
+    a.mov(R15,A); allocate(a,R15); let allocated=a.label(); a.test(A,true); a.condition(9,allocated); empty(a,reply);
+    a.bind(allocated); a.mov(R14,A);
+    a.load(C,BP,SCRATCH+56); a.rr(0x01,A,C,true); a.store(BP,SCRATCH+8,A);
+    a.load(A,BP,REQUEST+16); a.store(BP,SCRATCH+16,A);
+    a.lea(A,R14,8); a.store(BP,SCRATCH+24,A); a.load(A,BP,REQUEST+24); a.store(BP,SCRATCH+32,A);
+    a.load(A,BP,REQUEST+32); a.store(BP,SCRATCH+40,A); a.lea(DI,BP,SCRATCH);
+    dispatch_call(a,p.file_receive_message); let failed=a.label(); a.test(A,true); a.condition(8,failed);
+    a.store(BP,SCRATCH+48,A); a.store(R14,0,D); a.shift(D,4,3); a.lea(D,D,8);
+    a.store(BP,SCRATCH+64,D); a.mov(DI,R14); a.rr(0x01,DI,D,true);
+    a.load(SI,BP,SCRATCH+8); a.mov(C,A); a.raw(&[0xfc,0xf3,0xa4]);
+    a.mov(R8,R14); a.load(R9,BP,SCRATCH+64); a.load(A,BP,SCRATCH+48); a.rr(0x01,R9,A,true); a.jump(reply);
+    a.bind(failed); empty(a,reply);
+    a.bind(invalid); a.immediate(A,(-22i64) as u64); empty(a,reply);
+}

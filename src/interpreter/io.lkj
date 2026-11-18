@@ -248,6 +248,16 @@ impl<H: Host> Interpreter<'_, H> {
         };
         Ok(Value::Aggregate { variant: Some(tag), fields: vec![child] })
     }
+    fn io_message_types(&self, result: usize) -> Result<(usize, usize, usize, usize), RunError> {
+        let (pair, error) = self.io_sum_types(result)?;
+        if !matches!(self.kind(result)?, TypeKind::Enum { copy: false, .. }) { return Err(self.invalid("socket receive result must be affine")); }
+        let TypeKind::Struct { fields, copy: false } = self.kind(pair)? else { return Err(self.invalid("socket receive success must be a count and owned File vector")); };
+        if fields.len() != 2 || fields[0].ty != ir::U64 { return Err(self.invalid("socket receive count must be usize")); }
+        let files = fields[1].ty;
+        let TypeKind::Vec { inner } = self.kind(files)? else { return Err(self.invalid("socket receive files must be a vector")); };
+        if *self.kind(*inner)? != TypeKind::File { return Err(self.invalid("socket receive vector must own Files")); }
+        Ok((pair, files, *inner, error))
+    }
     fn io_file(&self, values: &[(usize, Value)], index: usize) -> Result<u64, RunError> {
 
         let access = self.io_reference(values, index, false)?;
@@ -277,6 +287,8 @@ impl<H: Host> Interpreter<'_, H> {
             ir::IntrinsicOp::EntropyFill | ir::IntrinsicOp::ReadinessUnwatchStop => 2usize,
             ir::IntrinsicOp::ReadinessWatchStop => 3usize,
             ir::IntrinsicOp::FileSeek => 3usize,
+            ir::IntrinsicOp::WorldUnixConnect | ir::IntrinsicOp::DirectoryUnixConnect => 2usize,
+            ir::IntrinsicOp::FileSendMessage | ir::IntrinsicOp::FileReceiveMessage => 4usize,
             ir::IntrinsicOp::FileModifiedNanoseconds => 1usize,
             _ => 0usize,
         };
@@ -284,6 +296,66 @@ impl<H: Host> Interpreter<'_, H> {
             return Err(self.invalid("capability intrinsic argument count differs"));
         }
         let value = match name {
+            ir::IntrinsicOp::WorldUnixConnect | ir::IntrinsicOp::DirectoryUnixConnect => {
+                let world = name == ir::IntrinsicOp::WorldUnixConnect;
+                let authority = self.io_authority(values, if world { TypeKind::World } else { TypeKind::Directory })?;
+                let types = self.io_open_types(result, TypeKind::File)?;
+                let buffer = self.io_buffer(values, 1, false)?; let path = self.bytes(&buffer)?;
+                let opened = if world { self.host.connect_unix(&path) } else {
+                    let directory = self.io_handle(&authority)?; self.host.directory_connect_unix(directory, &path)
+                };
+                self.io_open_result(types, opened, TypeKind::File)?
+            }
+            ir::IntrinsicOp::FileSendMessage => {
+                let authority = self.io_authority(values, TypeKind::File)?; let socket = self.io_handle(&authority)?;
+                let buffer = self.io_buffer(values, 1, false)?; let bytes = self.bytes(&buffer)?;
+                let inner = {
+                    let TypeKind::Vec { inner } = self.kind(values[2].0)? else { return Err(self.invalid("socket send requires an owned File vector")); };
+                    *inner
+                };
+                if *self.kind(inner)? != TypeKind::File { return Err(self.invalid("socket send cannot transfer descriptor integers")); }
+                let Value::Sequence(fields) = &values[2].1 else { return Err(self.invalid("socket send requires vector storage")); };
+                let mut files = Vec::new();
+                for child in fields {
+                    if *self.kind(self.cell(*child)?.ty)? != TypeKind::File { return Err(self.invalid("socket send element type differs")); }
+                    let Value::File(handle) = self.value(*child)? else { return Err(self.invalid("socket send requires owned File elements")); };
+                    files.push(*handle);
+                }
+                let deadline = self.io_number(values, 3, ir::U64)? as usize;
+                let types = self.io_scalar_types(result, TypeKind::Int { bits: 64, signed: false })?;
+                let outcome = self.host.send_socket_message(socket, &bytes, files, deadline);
+                if let Ok(count) = &outcome { if *count > bytes.len() { return Err(self.error(super::InterpreterError::InvalidHost, "socket send exceeded payload")); } }
+                self.io_scalar_result(types, outcome.map(|count: usize| -> u64 { count as u64 }))?
+            }
+            ir::IntrinsicOp::FileReceiveMessage => {
+                let authority = self.io_authority(values, TypeKind::File)?; let socket = self.io_handle(&authority)?;
+                let buffer = self.io_buffer(values, 1, true)?; let mut bytes = self.bytes(&buffer)?;
+                let limit = self.io_number(values, 2, ir::U64)? as usize;
+                let deadline = self.io_number(values, 3, ir::U64)? as usize;
+                let (pair_type, files_type, file_type, error_type) = self.io_message_types(result)?;
+                let received = self.host.receive_socket_message(socket, &mut bytes, limit, deadline);
+                let (tag, child) = match received {
+                    Ok((count, files)) => {
+                        let mut unique: Vec<u64> = Vec::new();
+                        let mut valid = count <= bytes.len() && files.len() <= limit;
+                        for file in &files { if *file == 0 || unique.contains(file) { valid = false; } else { unique.push(*file); } }
+                        if !valid {
+                            for file in unique { self.host.close_handle(file); }
+                            return Err(self.error(super::InterpreterError::InvalidHost, "socket receive exceeded its buffer or returned invalid owners"));
+                        }
+                        self.io_write_buffer(&buffer, &bytes[..count])?;
+                        let mut owned = Vec::new();
+                        for file in files { owned.push(self.allocate(file_type, Some(Value::File(file)), false)?); }
+                        let files = self.allocate(files_type, Some(Value::Sequence(owned)), false)?;
+                        let count = self.allocate(ir::U64, Some(Value::Bits(count as u64)), false)?;
+                        let pair = self.allocate(pair_type, Some(Value::Aggregate { variant: None, fields: vec![count, files] }), false)?;
+                        (0usize, pair)
+                    }
+                    Err(errno) if errno > 0 => (1usize, self.allocate(error_type, Some(Value::Bits(errno as u64)), false)?),
+                    _ => return Err(self.error(super::InterpreterError::InvalidHost, "socket receive returned invalid errno")),
+                };
+                Value::Aggregate { variant: Some(tag), fields: vec![child] }
+            }
             ir::IntrinsicOp::ImageBuffer if values.len() == 2 => {
                 let authority=self.io_authority(values,TypeKind::Image)?; let handle=self.io_handle(&authority)?;
                 let types=self.io_open_types(result,TypeKind::File)?;

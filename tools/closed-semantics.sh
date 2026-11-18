@@ -59,7 +59,7 @@ elif [[ "$action" == structure ]]; then
     for entry in main source_0 source_1 source_2 source_3; do
         while (( ${#closed_active[@]} >= closed_jobs )); do wait_closed; done
         count=134
-        if [[ "$entry" == main ]]; then count=198; fi
+        if [[ "$entry" == main ]]; then count=199; fi
         log="$closed_directory/structure-$entry.log"
         checked_entry="closed_$entry"
         if [[ "$entry" == main ]]; then checked_entry=closed_core; fi

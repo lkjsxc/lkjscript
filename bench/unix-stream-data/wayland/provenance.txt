@@ -1,0 +1,12 @@
+UTC 2026-11-18T07:00:33Z
+compiler-source-commit 99a715561c6d801eb8316892857dac67a9252bb2
+compiler-source-diff-sha256 4cc118084aebf53530d9ce4219c2487a709d2adfc4f5ebcddceae0cc4f7ec3af  -
+9f4660c14d9d0a8082d84affcbe4180416cfab873da048fd7c711a10d02c440b  /home/coder/workspace/lkjscript-programs-20261115/target/lkjscript
+b243f7a28a50b4ee64651cbc28c2a404dd79abe5a7404e8b3631e76249c9fe0c  docs/proofs/unix-wayland-20261118/main.lkj
+2e88507db513d28d4dd6b73550f908e50d973e90589ab28cd8b0649d14ad55bf  docs/proofs/unix-wayland-20261118/wayland.lkj
+8aa21c9e59baf8777a4946a9d35139f316704a617bdf011399dbb9f499acdeb9  docs/proofs/unix-wayland-20261118/verify-png.js
+original-browser-source-commit 2d37da55ffd5b881b2d441b049c72642f8ef4b52
+original-browser-wayland-sha256 026490c4ca6a0d81ed60922cb54d697dd93329c0561ee07e790311c175e09f2a
+compositor-dependencies /home/coder/workspace/lkjbrowser/.deps/root
+26c70f886fc690eab9dae2106f7037209a24a73a86a146e0fbac2eb1dc50d353  /tmp/lkjscript-wayland.769Zba/client
+deb878f126813bd24fb0b0c22067c882a8bc3afb220e972e4641ec34e9be92b2  /tmp/lkjscript-wayland.769Zba/frame/frame.bgra

@@ -514,3 +514,12 @@ pub fn directory_identity(directory: &mut Directory) -> Result<[u8; 16], i64> {
     unit_result(directory.__lkjscript_identity(&mut bytes))?;
     Result::Ok(bytes)
 }
+
+/// Connect only the explicit absolute Unix path; the result is an ordinary owned File.
+pub fn __lkjscript_unix_connect(world: &mut World, path: &str) -> Result<File, i64> {
+    let bytes = path_bytes(path)?; world.__lkjscript_unix_connect(&bytes)
+}
+/// Resolve beneath the held Directory, retain the socket inode, then connect to that inode.
+pub fn __lkjscript_directory_unix_connect(directory: &mut Directory, path: &str) -> Result<File, i64> {
+    let bytes = path_bytes(path)?; directory.__lkjscript_unix_connect(&bytes)
+}

@@ -184,6 +184,28 @@ impl Body<'_> {
                 self.intrinsic_readiness_wait(dst, args);
                 return Ok(true);
             }
+            IntrinsicOp::WorldUnixConnect => {
+                self.read_word(args[1], 0, DI); self.read_word(args[1], 1, SI);
+                self.a.call(self.platform.unix_connect); self.intrinsic_open_result(dst); return Ok(true);
+            }
+            IntrinsicOp::DirectoryUnixConnect => {
+                self.read(args[0], DI); self.a.load(DI, DI, 0);
+                self.read_word(args[1], 0, SI); self.read_word(args[1], 1, D);
+                self.a.call(self.platform.directory_unix_connect); self.intrinsic_open_result(dst); return Ok(true);
+            }
+            IntrinsicOp::FileSendMessage => {
+                self.read(args[0], A); self.a.load(A, A, 0); self.a.store(BP, self.scratch[5], A);
+                self.read_word(args[1], 0, A); self.a.store(BP, self.scratch[4], A);
+                self.read_word(args[1], 1, A); self.a.store(BP, self.scratch[3], A);
+                self.read_word(args[2], 0, A); self.a.store(BP, self.scratch[2], A);
+                self.read_word(args[2], 1, A); self.a.store(BP, self.scratch[1], A);
+                self.read(args[3], A); self.a.store(BP, self.scratch[0], A);
+                self.a.lea(DI, BP, self.scratch[5]); self.a.call(self.platform.file_send_message);
+                self.a.store(BP, self.scratch[6], A);
+                self.read_word(args[2], 0, DI); self.a.call(self.runtime.release);
+                self.a.load(A, BP, self.scratch[6]); self.intrinsic_open_result(dst); return Ok(true);
+            }
+            IntrinsicOp::FileReceiveMessage => { self.intrinsic_receive_message(dst, args); return Ok(true); }
             IntrinsicOp::WorldDirectory => {
 
                 self.read_word(args[1], 0, DI);
@@ -522,6 +544,35 @@ impl Body<'_> {
         Ok(true)
     }
 
+    fn intrinsic_receive_message(&mut self, dst: usize, args: &[usize]) {
+        let ty = self.ty(dst);
+        let success = self.layout.field_offset(ty, Some(0), 0);
+        let failure = self.layout.field_offset(ty, Some(1), 0);
+        let error = self.a.label(); let overflow = self.a.label(); let failure_value = self.a.label(); let done = self.a.label();
+        self.read(args[2], A); self.a.immediate(C, (!0u64) / 8);
+        self.a.compare(A, C); self.a.condition(7, overflow); self.a.shift(A, 4, 3); self.a.mov(DI, A);
+        self.a.call(self.runtime.allocate); self.a.store(BP, self.scratch[6], A);
+        self.a.store(BP, self.scratch[2], A);
+        self.read(args[0], A); self.a.load(A, A, 0); self.a.store(BP, self.scratch[5], A);
+        self.read_word(args[1], 0, A); self.a.store(BP, self.scratch[4], A);
+        self.read_word(args[1], 1, A); self.a.store(BP, self.scratch[3], A);
+        self.read(args[2], A); self.a.store(BP, self.scratch[1], A);
+        self.read(args[3], A); self.a.store(BP, self.scratch[0], A);
+        self.a.lea(DI, BP, self.scratch[5]); self.a.call(self.platform.file_receive_message);
+        self.a.store(BP, self.scratch[7], A); self.a.test(A, true); self.a.condition(8, error);
+        self.local_address(dst, R8); self.a.immediate(C, 0); self.a.store(R8, 0, C);
+        self.a.store(R8, success as i64, A);
+        self.a.load(C, BP, self.scratch[6]); self.a.store(R8, success as i64 + 8, C);
+        self.a.store(R8, success as i64 + 16, D);
+        self.read(args[2], C); self.a.store(R8, success as i64 + 24, C);
+        self.a.jump(done);
+        self.a.bind(error); self.a.load(DI, BP, self.scratch[6]); self.a.call(self.runtime.release);
+        self.a.load(A, BP, self.scratch[7]); self.a.jump(failure_value);
+        self.a.bind(overflow); self.a.immediate(A, (-75i64) as u64);
+        self.a.bind(failure_value); self.a.negate(A); self.local_address(dst, R8);
+        self.a.immediate(C, 1); self.a.store(R8, 0, C); self.a.store(R8, failure as i64, A);
+        self.a.bind(done); self.mark(dst);
+    }
     fn intrinsic_readiness_wait(&mut self, dst: usize, args: &[usize]) {
         // The checked event pair is (u64, u8), with a sixteen-byte native stride.
         let ty = self.ty(dst);

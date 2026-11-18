@@ -48,6 +48,15 @@ fn events_result(types: &[Type], ty: usize) -> bool {
     matches!(&types[inner].kind, TypeKind::Struct { fields, copy: true }
         if fields.len() == 2 && fields[0].ty == U64 && fields[1].ty == U8)
 }
+fn files(types: &[Type], ty: usize) -> bool {
+    matches!(types[ty].kind, TypeKind::Vec { inner } if types[inner].kind == TypeKind::File)
+}
+fn message_result(types: &[Type], ty: usize) -> bool {
+    let TypeKind::Enum { variants, copy: false } = &types[ty].kind else { return false; };
+    if variants.len() != 2 || variants[0].fields.len() != 1 || variants[1].fields.len() != 1 || variants[1].fields[0].ty != I64 { return false; }
+    matches!(&types[variants[0].fields[0].ty].kind, TypeKind::Struct { fields, copy: false }
+        if fields.len() == 2 && fields[0].ty == U64 && files(types, fields[1].ty))
+}
 pub(super) fn signature(
 
     types: &[Type],
@@ -153,6 +162,18 @@ pub(super) fn signature(
         IntrinsicOp::ReadinessWait => {
             args.len() == 3 && authority(types, args[0], &TypeKind::Readiness)
                 && authority(types, args[1], &TypeKind::Clock) && args[2] == U64 && events_result(types, result)
+        }
+        IntrinsicOp::WorldUnixConnect | IntrinsicOp::DirectoryUnixConnect => {
+            let kind = if name == IntrinsicOp::WorldUnixConnect { TypeKind::World } else { TypeKind::Directory };
+            args.len() == 2 && authority(types, args[0], &kind) && bytes(types, args[1], false) && opened(types, result, &TypeKind::File)
+        }
+        IntrinsicOp::FileSendMessage => {
+            args.len() == 4 && authority(types, args[0], &TypeKind::File) && bytes(types, args[1], false)
+                && files(types, args[2]) && args[3] == U64 && scalar_result(types, result, &TypeKind::Int { bits: 64, signed: false })
+        }
+        IntrinsicOp::FileReceiveMessage => {
+            args.len() == 4 && authority(types, args[0], &TypeKind::File) && bytes(types, args[1], true)
+                && args[2] == U64 && args[3] == U64 && message_result(types, result)
         }
         IntrinsicOp::WorldDirectory => {
 

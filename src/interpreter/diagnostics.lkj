@@ -37,6 +37,8 @@ fn endpoint(address: &[u8]) -> String {
 }
 pub(super) fn grant_failure(grant: &ir::EntryGrant) -> HostFailure {
     let identity: String = match grant {
+        ir::EntryGrant::UnixStream(path) => format!("File unix:{}", path_text(path)),
+        ir::EntryGrant::UnixStreamEnvironment(name) | ir::EntryGrant::UnixStreamEnvironmentValue(name, _) => format!("File unix:env:{}", path_text(name)),
         ir::EntryGrant::Directory(path) => format!("Directory {}", path_text(path)),
         ir::EntryGrant::ReadDirectory(path) => format!("ReadDirectory {}", path_text(path)),
         ir::EntryGrant::ReadDirectoryEnvironment(name) | ir::EntryGrant::ReadDirectoryEnvironmentValue(name, _) => format!("ReadDirectory env:{}", path_text(name)),

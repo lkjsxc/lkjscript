@@ -16,6 +16,8 @@ mod foreign;
 mod foreign_session;
 #[path = "host_network/workers.lkj"]
 mod workers;
+#[path = "host_network/unix.lkj"]
+mod unix;
 use crate::x86::*;
 
 struct Connection {
@@ -148,6 +150,31 @@ impl Network {
         self.ensure(world)?;
         let (handle, _) = self.request(75, &[deadline as u64], address)?;
         Ok(handle as u64)
+    }
+    pub fn open_unix(&mut self, world: &mut World, path: &[u8]) -> Result<u64, i64> {
+        self.ensure(world)?; let (handle, _) = self.request(76, &[0u64; 0], path)?; Ok(handle as u64)
+    }
+    pub fn open_unix_beneath(&mut self, directory: u64, path: &[u8]) -> Result<u64, i64> {
+        let (handle, _) = self.request(77, &[directory], path)?; Ok(handle as u64)
+    }
+    pub fn send_socket_message(&mut self, socket: u64, bytes: &[u8], files: &[u64], deadline: usize) -> Result<usize, i64> {
+        let mut payload = Vec::new();
+        for file in files { append_word(&mut payload, *file, 8); }
+        payload.extend_from_slice(bytes);
+        let (count, _) = self.request(78, &[socket, files.len() as u64, deadline as u64], &payload)?;
+        if count as usize > bytes.len() { return Err(5); } Ok(count as usize)
+    }
+    pub fn receive_socket_message(&mut self, socket: u64, bytes: &mut [u8], limit: usize, deadline: usize) -> Result<(usize, Vec<u64>), i64> {
+        if limit > 18_446_744_073_709_551_615usize / 8usize { return Err(75); }
+        let (count, payload) = self.request(79, &[socket, bytes.len() as u64, limit as u64, deadline as u64], b"")?;
+        if payload.len() < 8 { return Err(5); }
+        let received = word(&payload[..8]) as usize;
+        let header = received.checked_mul(8usize).and_then(|n: usize| n.checked_add(8usize)).ok_or(75i64)?;
+        if received > limit || header > payload.len() || payload.len() - header != count as usize || count as usize > bytes.len() { return Err(5); }
+        let mut files = Vec::new();
+        for index in 0usize..received { files.push(word(&payload[8 + index * 8..16 + index * 8])); }
+        bytes[..count as usize].copy_from_slice(&payload[header..]);
+        Ok((count as usize, files))
     }
     pub fn open_stream(&mut self, world: &mut World, address: &[u8]) -> Result<u64, i64> {
         self.ensure(world)?;

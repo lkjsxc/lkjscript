@@ -83,6 +83,10 @@ impl Builder<'_, '_> {
                 arguments.insert("T".to_string(), bytes);
                 self.compiler.named_type(&path, &arguments, span)?
             }
+            Value::Files => {
+                let inner = self.compiler.intern(String::new(), ir::TypeKind::File);
+                self.compiler.intern(String::new(), ir::TypeKind::Vec { inner })
+            }
             Value::Arguments => {
                 let bytes = self
                     .compiler
@@ -107,6 +111,7 @@ impl Builder<'_, '_> {
             | Value::ResultBoolean
             | Value::ResultPid
             | Value::ResultEvents
+            | Value::ResultMessage
             | Value::ResultPort
             | Value::ResultNames
             | Value::ResultStatus
@@ -129,6 +134,12 @@ impl Builder<'_, '_> {
                     Value::ResultPort => self.capability_type(Value::Port, span)?,
                     Value::ResultNames => self.capability_type(Value::Arguments, span)?,
                     Value::ResultStatus => ir::I64,
+                    Value::ResultMessage => {
+                        let files = self.capability_type(Value::Files, span)?;
+                        self.compiler.intern(String::new(), ir::TypeKind::Struct {
+                            fields: vec![ir::Field { name: "0".to_string(), ty: ir::U64 }, ir::Field { name: "1".to_string(), ty: files }], copy: false,
+                        })
+                    }
                     Value::ResultEvents => {
                         let pair = self.compiler.intern(String::new(), ir::TypeKind::Struct {
                             fields: vec![ir::Field { name: "0".to_string(), ty: ir::U64 }, ir::Field { name: "1".to_string(), ty: ir::U8 }],

@@ -22,6 +22,7 @@ const NODELAY: u64 = 1u64 << 14u32;
 const WORKERS: u64 = 1u64 << 15u32;
 const REGION: u64 = 1u64 << 16u32;
 const CONNECT_DEADLINE: u64 = 1u64 << 17u32;
+const UNIX: u64 = 1u64 << 18u32;
 
 fn error(message: &str) -> Diagnostic { Diagnostic::new(Span::default(), "E_UNIT_LINK", message) }
 fn io(operation: &str, errno: i64) -> Diagnostic { error(&format!("{operation}: errno {errno}")) }
@@ -132,6 +133,7 @@ fn features(program: &Program) -> u64 {
             if let Op::Intrinsic { name, .. } = instruction.op {
                 flags |= match name {
                     IntrinsicOp::WorldListen => LISTENER,
+                    IntrinsicOp::WorldUnixConnect | IntrinsicOp::DirectoryUnixConnect | IntrinsicOp::FileSendMessage | IntrinsicOp::FileReceiveMessage => UNIX | STORAGE,
                     IntrinsicOp::EntropyFill => ENTROPY,
                     IntrinsicOp::ClockUnixSeconds => WALL,
                     IntrinsicOp::ClockUnixNanoseconds => NANO,
@@ -260,7 +262,7 @@ impl Object {
         let stored_context = take_string(&bytes, &mut at)?;
         if stored_context != context.identity || take_word(&bytes, &mut at)? != source_base { return None; }
         let flags = take_word(&bytes, &mut at)? as u64;
-        if flags & !0x3ffffu64 != 0u64 { return None; }
+        if flags & !0x7ffffu64 != 0u64 { return None; }
         let count = take_word(&bytes, &mut at)?;
         if count != sources.len() || count > (bytes.len() - at) / 8usize { return None; }
         let mut own_sources = Vec::new();
@@ -965,6 +967,8 @@ fn support(runtime: &Runtime, program: &Program, selected: usize, binding: &str,
         match &grants[index] {
             ir::EntryGrant::Listener(_) => flags |= LISTENER,
             ir::EntryGrant::DirectoryEnvironment(_) | ir::EntryGrant::ReadDirectoryEnvironment(_) => flags |= ENVIRONMENT,
+            ir::EntryGrant::UnixStreamEnvironment(_) => flags |= ENVIRONMENT | UNIX | STORAGE,
+            ir::EntryGrant::UnixStream(_) | ir::EntryGrant::UnixStreamEnvironmentValue(_, _) => flags |= UNIX | STORAGE,
             ir::EntryGrant::ForeignCommand(_) | ir::EntryGrant::NullDevice => flags |= FOREIGN,
             _ => {},
         }
@@ -999,6 +1003,7 @@ fn support(runtime: &Runtime, program: &Program, selected: usize, binding: &str,
     if flags & READINESS != 0u64 { readiness::emit(&mut a, p); }
     if flags & NONBLOCKING != 0u64 { readiness::emit_nonblocking(&mut a, p); }
     if flags & STORAGE != 0u64 { storage::emit(&mut a, p); }
+    if flags & UNIX != 0u64 { unix::emit(&mut a, p); }
     if flags & ENTROPY != 0u64 { lifecycle::entropy(&mut a, p); }
     if flags & WALL != 0u64 { lifecycle::wall_time(&mut a, p); }
     if flags & NANO != 0u64 { lifecycle::wall_nanoseconds(&mut a, p); }

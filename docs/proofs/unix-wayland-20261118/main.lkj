@@ -1,0 +1,35 @@
+//! One direct, explicitly granted Unix connection; frame storage stays source-level.
+mod wayland;
+pub fn main(socket: File, mut root: Directory, ready: Readiness, clock: Clock, mut output: Stdout) {
+    let mut frame = root.create_new("frame.bgra").unwrap();
+    let mut pixels: Vec<u8> = Vec::new();
+    for y in 0usize..240usize {
+        for x in 0usize..320usize {
+            pixels.push((40usize + y / 2usize) as u8);
+            pixels.push((20usize + x / 2usize) as u8);
+            pixels.push((30usize + y / 2usize) as u8);
+            pixels.push(255u8);
+        }
+    }
+    assert_eq!(pixels.len(), 307_200usize);
+    frame.write_all(&pixels).unwrap();
+    frame.write_all(&pixels).unwrap();
+    frame.write_all(&wayland::cursor_bytes()).unwrap();
+    assert_eq!(frame.seek(0i64, 2u8).unwrap(), wayland::frame_file_size(320usize, 240usize));
+    let mut client = wayland::Wayland::open(socket, frame, ready, clock, 320i32, 240i32, "lkjscript owned Unix File proof").unwrap();
+    client.present(0u32).unwrap();
+    let mut marker = root.create("ready").unwrap();
+    marker.write_all(b"committed").unwrap();
+    drop(marker);
+    let mut captured = false;
+    for _round in 0usize..100usize {
+        let _events = client.poll(100usize).unwrap();
+        match root.open("capture-done") {
+            Ok(marker) => { drop(marker); captured = true; break; }
+            Err(_errno) => {}
+        }
+    }
+    assert!(captured);
+    assert_eq!(client.committed_frames, 1usize);
+    output.write(format!("direct Unix Wayland frame: sent={} received={} committed={} frame_bytes=616704\n", client.sent_messages, client.received_messages, client.committed_frames).as_bytes());
+}

@@ -1,0 +1,18 @@
+lkjscript-ir 1
+# expect: check
+# ReadFile remains ungrantable; only explicit Unix authority grants an owned File.
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "ReadFile" read_file
+fn "main" 1 0
+local "file" 7 let
+local "done" 0 let
+@1 drop 0
+@2 unit 1
+@3 return 1
+endfn

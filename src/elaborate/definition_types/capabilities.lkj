@@ -68,6 +68,7 @@ impl Infer<'_, '_> {
                 let declaration = path.declaration.ok_or_else(|| err(span, "E_TYPE", "source Option declaration is missing"))?;
                 self.shaped(Shape::Nominal(declaration, vec![bytes]))
             }
+            Value::Files => { let file = self.atom("File"); self.shaped(Shape::Vec(file)) }
             Value::Arguments => {
                 let byte = self.atom("u8");
                 let bytes = self.shaped(Shape::Vec(byte));
@@ -90,6 +91,7 @@ impl Infer<'_, '_> {
             | Value::ResultBoolean
             | Value::ResultPid
             | Value::ResultEvents
+            | Value::ResultMessage
             | Value::ResultPort
             | Value::ResultNames
             | Value::ResultStatus
@@ -112,6 +114,10 @@ impl Infer<'_, '_> {
                     Value::ResultPort => self.capability_type(Value::Port, span)?,
                     Value::ResultNames => self.capability_type(Value::Arguments, span)?,
                     Value::ResultStatus => self.atom("i64"),
+                    Value::ResultMessage => {
+                        let count = self.atom("usize"); let files = self.capability_type(Value::Files, span)?;
+                        self.shaped(Shape::Tuple(vec![count, files]))
+                    }
                     Value::ResultEvents => {
                         let token = self.atom("usize");
                         let flags = self.atom("u8");

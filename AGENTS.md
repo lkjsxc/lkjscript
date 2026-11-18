@@ -37,5 +37,4 @@ Prefix compiler gateway IDs with compiler-; recover uncertain operations before 
 Compiler owns main; programs owns its worktree and status Programs section. Recheck
 upstream, push main directly, inspect CI; never force-push or rewrite shared history.
 Keep docs/status.md within 60 lines, docs/direction.md within 150, this file within 40.
-Record decisions in direction, current results/next action in status, contracts in
-docs/ir.md and docs/language.md. Git holds history; do not create observation ledgers.
+Record decisions in direction, current results/next action in status, contracts in docs/ir.md and docs/language.md. Git holds history; do not create observation ledgers.

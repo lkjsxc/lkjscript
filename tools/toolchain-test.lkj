@@ -1146,7 +1146,9 @@ fn authority_cases() -> Vec<AuthorityCase> {
             "declared authority:\n  none\n;owned cleanup):\n  none\n;reachable functions (1; each listed once):\n  probe\n", "world_;Unused;unrelated"),
         authority_case("outer_break_ir.lkjir", include_str!("../tests/fixtures/authority/outer_break_ir.lkjir"), "probe",
             "declared authority:\n  none\n;owned cleanup):\n  none\n;reachable functions (1; each listed once):\n  probe\n", "world_;Unused;unrelated"),
-        authority_case("reject_file.lkj", include_str!("../tests/fixtures/authority/reject_file.lkj"), "main",
+        authority_case("unix_file.lkj", include_str!("../tests/fixtures/authority/unix_file.lkj"), "main",
+            "file: File Unix stream (--grant file=unix:/PATH|unix:env:NAME);file_close [structural cleanup]", "world_;directory_open"),
+        authority_case("reject_read_file.lkjir", include_str!("../tests/fixtures/authority/reject_read_file.lkjir"), "main",
             "accept Directory and open the file inside the entry", ""),
         authority_case("reject_child.lkj", include_str!("../tests/fixtures/authority/reject_child.lkj"), "main", "", ""),
         authority_case("reject_reference.lkj", include_str!("../tests/fixtures/authority/reject_reference.lkj"), "main", "", ""),
@@ -1291,6 +1293,9 @@ fn authority_queries(
                         format!("{label}: included unreachable authority {forbidden}"),
                     );
                 }
+            }
+            if case.name == "unix_file.lkj" {
+                authority_rejected_build(world, executable, directory, config, report, &input, &case.entry, &no_grants)?;
             }
             if case.name == "recursive.lkj" {
                 report.require(

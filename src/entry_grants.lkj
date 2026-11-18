@@ -22,10 +22,10 @@ pub fn validate(program: &Program, entry: usize) -> Result<(), String> {
         let local = &function.locals[parameter];
         let ty = program.types.get(local.ty).ok_or_else(|| problem("entry parameter type is missing"))?;
         if matches!(ty.kind, TypeKind::World) && function.params == 1 { continue; }
-        if matches!(ty.kind, TypeKind::File | TypeKind::ReadFile) {
+        if matches!(ty.kind, TypeKind::ReadFile) {
             return Err(problem(&format!("File parameter {} cannot be granted; accept Directory and open the file inside the entry", local.name)));
         }
-        if !matches!(ty.kind, TypeKind::Arguments | TypeKind::Environment | TypeKind::ExitStatus | TypeKind::Stdout | TypeKind::Stdin | TypeKind::Stderr | TypeKind::Clock | TypeKind::Process | TypeKind::Directory | TypeKind::ReadDirectory | TypeKind::ForeignCommand | TypeKind::Image | TypeKind::NullDevice | TypeKind::Listener | TypeKind::Connector | TypeKind::Readiness | TypeKind::Entropy | TypeKind::Stop) {
+        if !matches!(ty.kind, TypeKind::File | TypeKind::Arguments | TypeKind::Environment | TypeKind::ExitStatus | TypeKind::Stdout | TypeKind::Stdin | TypeKind::Stderr | TypeKind::Clock | TypeKind::Process | TypeKind::Directory | TypeKind::ReadDirectory | TypeKind::ForeignCommand | TypeKind::Image | TypeKind::NullDevice | TypeKind::Listener | TypeKind::Connector | TypeKind::Readiness | TypeKind::Entropy | TypeKind::Stop) {
             return Err(problem(&format!("parameter {} requires an owned grantable capability; World must be the only parameter", local.name)));
         }
         if !valid_name(&local.name) || names.contains(&local.name) {
@@ -114,6 +114,20 @@ pub fn prepare(program: &Program, entry: usize, supplied: &[String]) -> Result<V
         let value = supplied_by_name.get(&local.name).ok_or_else(|| problem(&format!("missing --grant {}", local.name)))?;
         let kind = &program.types[local.ty].kind;
         let grant = match kind {
+            TypeKind::File => {
+                let value = value.as_ref().ok_or_else(|| problem(&format!("--grant {} requires unix:/absolute/path or unix:env:VARIABLE", local.name)))?;
+                if !value.starts_with("unix:") { return Err(problem("File entry requires explicit unix: socket authority; ordinary file paths are not grants")); }
+                let path = &value[5..];
+                if path.is_empty() || path.as_bytes().contains(&0u8) { return Err(problem("Unix socket grant is empty or contains NUL")); }
+                if path.starts_with("env:") {
+                    let name = &path[4..];
+                    if !valid_name(name) { return Err(problem("Unix socket environment grant needs one nonempty variable name")); }
+                    let mut key = name.as_bytes().to_vec(); key.push(0); EntryGrant::UnixStreamEnvironment(key)
+                } else {
+                    if !path.starts_with('/') || path.len() >= 108 { return Err(problem("Unix socket grant needs an absolute pathname shorter than 108 bytes")); }
+                    let mut bytes = path.as_bytes().to_vec(); bytes.push(0); EntryGrant::UnixStream(bytes)
+                }
+            }
             TypeKind::Environment => {
                 let name = value.as_ref().ok_or_else(|| problem(&format!("--grant {} requires one environment name", local.name)))?;
                 if !valid_name(name) || name.as_bytes().contains(&0u8) {

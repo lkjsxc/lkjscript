@@ -179,6 +179,9 @@ The intrinsic signatures are checked in `src/check.lkj` and `src/check/io.lkj`:
 | `world_connector` | `(&mut world, &[u8]) -> Result<connector, i64>`: authorize one exact numeric IPv4 TCP destination. |
 | `connector_connect` | `(&mut connector) -> Result<file, i64>`: connect only to its authorized destination. |
 | `connector_connect_deadline` | `(&mut connector, usize deadline) -> Result<file, i64>`: same destination, absolute monotonic nanoseconds; nonblocking connect, readiness and SO_ERROR, returning a blocking owned File or the fresh positive errno. Expiry returns 110 and every unsuccessful attempt closes its private socket. |
+| `world_unix_connect directory_unix_connect` | `(&mut world/directory, &[u8] path) -> Result<file,i64>`: exactly one trailing NUL; absolute World path or confined Directory descendant. Returns a nonblocking close-on-exec stream. |
+| `file_send_message` | `(&mut file, &[u8], Vec<file>, usize deadline) -> Result<usize,i64>`: consume all input owners on every result; raw bytes and SCM_RIGHTS, without framing. |
+| `file_receive_message` | `(&mut file, &mut [u8], usize descriptor_limit, usize deadline) -> Result<(usize,Vec<file>),i64>`: affine success aggregate and File vector; transactional byte output and close-on-truncation ownership. |
 | `listener_address` | `(&mut listener, &mut [u8]) -> i64`: write its local socket address; zero or negative errno. |
 | `world_readiness` | `(&mut world) -> Result<readiness, i64>`: own a kernel readiness set. |
 | `world_stop` | `(&mut world) -> Result<stop, i64>`: claim SIGTERM and own a nonblocking signal descriptor. |
@@ -372,24 +375,28 @@ once. `exact` preserves the selected referent; `bound` permits a descendant.
 actual arguments' provenance through the declared contract. A local owner or
 temporary reference carrier cannot become an escaping view's origin.
 
+Unix send/receive leaves use one ordinary socket byte stream, never Channel's private framing. Send consumes its Vec<File> and every contained local owner on all results; a positive short write conveys rights exactly once. Receive requires an affine Result whose Ok payload is an affine two-field aggregate (usize, Vec<File>); integer vectors, borrowed owners, Copy result/aggregate substitutions and wrong buffer mutability fail independent checking. Linux may return descriptor-bearing SCM_PIDFD on a previously configured socket; it is handled as an owned File alongside SCM_RIGHTS. Received kernel descriptor kinds are not assumed. Before sendmsg/recvmsg, both hosts independently require SO_DOMAIN=AF_UNIX and SO_TYPE=SOCK_STREAM; incompatible domains/types return EAFNOSUPPORT/EPROTOTYPE and ordinary files return ENOTSOCK. This prevents a different socket family from silently dropping rights. Empty byte buffers fail EINVAL, oversized descriptor-array arithmetic fails EOVERFLOW, and ancillary/data truncation fails EMSGSIZE after closing all delivered rights. Bytes remain unchanged on all receive errors. One nonblocking sendmsg/recvmsg is attempted before waiting, so ready work may succeed even with an expired deadline. EINTR/EAGAIN retry after monotonic deadline recomputation; positive prefixes are never silently retried. Both native sealed leaves and the independent interpreter broker implement acquisition, message transfer, cleanup and errno preservation without importing each other's lowering.
+
 ## Host entry and authority reports
 
 A host entry returns unit or a scalar. It may take no parameters, a sole World,
-or owned Arguments, Environment, ExitStatus, Stdout/Stdin/Stderr, Directory,
+or owned Arguments, Environment, ExitStatus, Stdout/Stdin/Stderr, Unix-connected File, Directory,
 ReadDirectory, ForeignCommand, NullDevice, Listener, Connector, Readiness, Process,
 Clock, Entropy and Stop parameters.
 The sole World entry declares implicit full authority. Every other parameter
 requires an explicit invocation grant selected by its distinct, nonempty local
 name. ASCII whitespace, control bytes and equals signs cannot occur in grant names.
-File, ReadFile, Child, reference and aggregate parameters cannot be provisioned as entries;
-use a Directory entry and acquire files through ordinary checked operations.
+ReadFile, Child, reference and aggregate parameters cannot be provisioned as entries.
+File entry grants connect one explicit Unix pathname; ordinary File paths remain refused.
+Use a Directory entry to acquire other files through ordinary checked operations.
 
 Grants are invocation data outside the IR. Directory/ReadDirectory descriptors contain the
-NUL-terminated root path; Listener and Connector descriptors contain the sixteen-byte address
+NUL-terminated root path; UnixStream File grants contain an absolute NUL-terminated socket path of at most 108 bytes (including NUL); Listener and Connector descriptors contain the sixteen-byte address
 above. Environment descriptors contain one exact NUL-terminated variable name; names are nonempty and exclude ASCII whitespace/control bytes and equals signs. ForeignCommand supplies an absolute executable path for immutable snapshot acquisition. Other capabilities, including NullDevice, Arguments and ExitStatus, need no payload.
+CLI File grants use NAME=unix:/absolute/path or NAME=unix:env:VARIABLE; the latter resolves only that variable at invocation/startup, with no ambient default. These are connected File owners, never caller-supplied descriptor integers. Both executors reject malformed grant bytes independently.
 CLI Environment grants use NAME=VARIABLE. The bound value preserves arbitrary non-NUL bytes; absence is valid and differs from an empty value.
 Directory/ReadDirectory also accept NAME=env:VARIABLE, resolving only that variable to its root at invocation/startup. Absence or an empty value fails with errno 2; there is no default or implicit creation. This selector supplies the declared directory kind, not an Environment value. Program-directory relative paths resolve against that program directory for both kinds.
-Build retains names for startup resolution. Native run binds only the named environment values and directory selectors before its empty-environment launch; authority queries retain the named grant specification.
+Build retains names for startup resolution. Native run binds only the named environment values and directory selectors before its empty-environment launch; Unix socket environment selectors follow the same rule. Authority queries retain the named grant specification.
 Both executors independently validate the complete parameter/grant correspondence
 before acquiring handles.
 Raw scalar arguments cannot manufacture an address or derived capability.
