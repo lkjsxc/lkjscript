@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+trait Mode { type Output<T>; fn bind<T>(value: T) -> Self::Output<T>; }
+struct Emit {}
+impl Mode for Emit { type Output<T> = T; fn bind<T>(value: T) -> T { value } }
+fn keep<M: Mode>(value: i64) -> M::Output<i64> { M::bind(value) }
+pub fn probe() -> i64 {
+    let mut message = "discarded".to_string();
+    message.clear();
+    if message.is_empty() { keep::<Emit>(42) } else { 0 }
+}

@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+trait Family { type Output<T: Copy>: Copy; fn keep<T: Copy>(value: T) -> Self::Output<T>; }
+struct Echo {}
+impl Family for Echo {
+    type Output<T: Copy> = T;
+    fn keep<T: Copy>(value: T) -> T { value }
+}
+fn duplicate<F: Family>(value: F::Output<i64>) -> (F::Output<i64>, F::Output<i64>) { (value, value) }
+pub fn probe() -> i64 { let pair = duplicate::<Echo>(Echo::keep(21i64)); pair.0 + pair.1 }

@@ -191,6 +191,13 @@ impl Builder<'_, '_> {
             .is_some_and(|ty| matches!(self.compiler.types[ty].kind, ir::TypeKind::Ref { .. })))
         {
             let value = self.expr(expression, expected)?;
+            if self.reachable {
+                if let Some(expected) = expected {
+                    if expected != value.1 {
+                        return Err(err(self.compiler.source.patterns[pattern].span, "E_TYPE", "binding type differs"));
+                    }
+                }
+            }
             self.annotation_initializer(annotation, ir::Place::local(value.0))?;
             let result = self.bind(pattern, value, line);
             self.typed_bindings.clear();

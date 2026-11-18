@@ -1,0 +1,17 @@
+// expect: value 42
+// witness: {}
+#[derive(Clone)]
+enum Key { Code(i64) }
+trait Sink { fn score(&self, key: &Key) -> i64; }
+struct Score;
+impl Sink for Score {
+    fn score(&self, key: &Key) -> i64 { match key { Key::Code(value) => *value } }
+}
+fn collect<S: Sink>(sink: &S, key: &Key) -> i64 {
+    let mut keys = Vec::new();
+    keys.push(key.clone());
+    let mut result = 0i64;
+    for key in keys { result += sink.score(&key); }
+    result
+}
+pub fn probe() -> i64 { collect(&Score, &Key::Code(42)) }

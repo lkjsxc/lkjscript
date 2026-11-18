@@ -107,6 +107,7 @@ impl Compiler<'_> {
                 environment.insert(parameters[index].name.clone(), arguments[index]);
             }
         }
+        if let Some(owner) = identity.declaration() { environment.insert(format!("$family::trait:{owner}"), receiver); }
         environment
     }
 
@@ -161,9 +162,10 @@ impl Compiler<'_> {
                 let mut names = Vec::new();
                 for (name, value) in captures { names.push(name); children.push(value); }
                 Argument::Opaque(source, names, children.clone())
-            } else if let Some((receiver, identity, member)) = projection {
-                children.push(receiver); children.extend_from_slice(&identity.arguments());
-                Argument::Projection(receiver, identity.declaration().unwrap(), identity.arguments(), member)
+            } else if let Some((receiver, identity, member, family)) = projection {
+                let mut arguments = identity.arguments(); arguments.extend_from_slice(&family);
+                children.push(receiver); children.extend_from_slice(&arguments);
+                Argument::Projection(receiver, identity.declaration().unwrap(), arguments, member)
             } else if let Some((name, arguments)) = application {
                 children.extend_from_slice(&arguments);
                 Argument::Named(name, arguments)
@@ -261,8 +263,10 @@ impl Compiler<'_> {
                     if fields.is_empty() { ir::UNIT } else { self.intern(String::new(), ir::TypeKind::Struct { fields, copy }) }
                 }
                 Argument::Projection(receiver, owner, arguments, member) => {
-                    let arguments = arguments.iter().map(|argument| values[*argument]).collect();
-                    self.associated_type_for_identity(values[*receiver], &TraitIdentity::application(*owner, arguments), member, span)?
+                    let arguments: Vec<usize> = arguments.iter().map(|argument| values[*argument]).collect();
+                    let count = self.source.traits[*owner].generics.len();
+                    self.associated_family_for_identity(values[*receiver], &TraitIdentity::application(*owner, arguments[..count].to_vec()),
+                        member, &arguments[count..], span)?
                 }
                 Argument::Opaque(source, names, arguments) => {
                     let mut environment = BTreeMap::new();
@@ -275,12 +279,15 @@ impl Compiler<'_> {
         Ok(recipe.roots.iter().map(|root| values[*root]).collect())
     }
 
-    fn trait_projection_recipe(&self, ty: usize) -> Option<(usize, TraitIdentity, String)> {
+    fn trait_projection_recipe(&self, ty: usize) -> Option<(usize, TraitIdentity, String, Vec<usize>)> {
         let contracts = self.contracts.as_ref()?;
         for ((receiver, identity), members) in &contracts.traits {
             for (member, value) in members {
-                if *value == ty && *receiver != ty { return Some((*receiver, identity.clone(), member.clone())); }
+                if *value == ty && *receiver != ty { return Some((*receiver, identity.clone(), member.clone(), Vec::new())); }
             }
+        }
+        for ((receiver, identity, member, arguments), value) in &contracts.families {
+            if *value == ty && *receiver != ty { return Some((*receiver, identity.clone(), member.clone(), arguments.clone())); }
         }
         None
     }

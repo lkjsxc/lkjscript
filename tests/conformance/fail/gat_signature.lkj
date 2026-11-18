@@ -1,0 +1,6 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Mode { type Output<T>; fn bind<T>(value: T) -> Self::Output<T>; }
+struct Wrong {}
+impl Mode for Wrong { type Output<T> = T; fn bind<T>(value: T) -> bool { let _ = value; true } }
+pub fn probe() -> i64 { 42 }

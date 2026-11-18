@@ -1,0 +1,9 @@
+// expect: reject E_TYPE
+// witness: {}
+trait Sink { fn total(&mut self, bytes: &[u8]) -> i64; }
+enum Payload { Flags(Vec<bool>) }
+fn unused<H: Sink>(host: &mut H, payload: &Payload) -> i64 {
+    let flags = match payload { Payload::Flags(flags) => flags.clone() };
+    host.total(&flags)
+}
+pub fn probe() -> i64 { 42 }

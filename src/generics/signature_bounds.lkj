@@ -258,7 +258,7 @@ fn prerequisites(
         environment.insert("Self".to_string(), ty);
         parameter_projection_terms(source, &implementation.generics, &mut environment, terms);
         if (projection.is_some() || equality.is_some() || !implementation.predicates.is_empty() || !source.traits[declaration].predicates.is_empty())
-            && !implementation_projection_terms(source, implementation, declaration, &mut environment, terms)? {
+            && !implementation_projection_terms(source, candidate, implementation, declaration, &mut environment, terms)? {
             continue;
         }
         let mut declared = implemented_trait_environment(source, declaration, selected_bound, ty, &environment, terms);

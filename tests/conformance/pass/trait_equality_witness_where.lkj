@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+type Identity<T> = T;
+trait Source { type Output; fn produce(self) -> Self::Output; }
+struct Number;
+impl Source for Number { type Output = i64; fn produce(self) -> i64 { 42 } }
+trait Adapter { type Output; fn adapt(self) -> Self::Output; }
+impl<O, P> Adapter for (P,) where Identity<P>: Source<Output = O> {
+    type Output = O;
+    fn adapt(self) -> O { self.0.produce() }
+}
+fn run<P: Adapter<Output = i64>>(parser: P) -> i64 { parser.adapt() }
+pub fn probe() -> i64 { run((Number,)) }

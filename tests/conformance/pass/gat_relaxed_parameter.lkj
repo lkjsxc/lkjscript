@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+trait Family { type Output<T: ?Sized>; }
+struct Echo {}
+impl Family for Echo { type Output<T: ?Sized> = u8; }
+fn same<F: Family>(value: F::Output<str>) -> F::Output<str> { value }
+pub fn probe() -> i64 { same::<Echo>(42u8) as i64 }

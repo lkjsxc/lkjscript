@@ -1,0 +1,79 @@
+//! Inference preserves both the trait and family application. Equations may
+//! normalize a unique structural implementation but never establish its bounds.
+use super::*;
+
+impl Infer<'_, '_> {
+    pub(super) fn family_projection(&mut self, receiver: Variable, declaration: a::DeclarationId,
+        trait_arguments: &[Variable], member: &str, family_arguments: &[Variable],
+        mut environment: BTreeMap<String, Variable>, alias: &str, span: a::Span) -> Result<Variable> {
+        let a::Item::Trait(owner) = self.source.declarations[declaration].item else { return Ok(self.blocked()); };
+        let member_definition = self.source.traits[owner].associated.iter().find(|item| item.name == member).cloned();
+        let Some(member_definition) = member_definition else { return Ok(self.blocked()); };
+        if member_definition.generics.len() != family_arguments.len() { return Ok(self.blocked()); }
+        for position in 0..family_arguments.len() {
+            environment.insert(member_definition.generics[position].name.clone(), family_arguments[position]);
+        }
+        let mut arguments = trait_arguments.to_vec();
+        arguments.extend_from_slice(family_arguments);
+        let value = self.qualified_projection(receiver, declaration, &arguments, member, span);
+        self.associated_bound_headers(receiver, value, declaration, &arguments, member, alias, &mut environment)?;
+        Ok(value)
+    }
+
+    pub(super) fn named_family_projection(&mut self, id: a::TypeId, path: &a::Path, family: &[Variable],
+        environment: &BTreeMap<String, Variable>, span: a::Span) -> Result<Option<Variable>> {
+        let Some(separator) = path.name.rfind("::") else { return Ok(None); };
+        let prefix = path.name.as_str()[..separator].to_string();
+        let member = path.name.as_str()[separator + 2usize..].to_string();
+        let Some(receiver) = environment.get(&prefix).copied() else { return Ok(None); };
+        let mut selected: Option<(a::DeclarationId, Vec<Variable>, BTreeMap<String, Variable>)> = None;
+        if prefix == "Self" {
+            for index in 0..self.source.impls.len() {
+                if !environment.contains_key(&format!("$family::implementation:{index}")) { continue; }
+                let Some(bound) = self.source.impls[index].trait_ty else { continue; };
+                let a::Type::Path(path) = self.source.types[bound].kind.clone() else { continue; };
+                selected = self.trait_application(receiver, &path, environment)?;
+            }
+            if selected.is_none() {
+                for declaration in &self.source.declarations {
+                    let a::Item::Trait(owner) = declaration.item else { continue; };
+                    if !environment.contains_key(&format!("$family::trait:{owner}")) { continue; }
+                    let mut declared = false;
+                    for item in &self.source.traits[owner].associated { declared = declared || item.name == member; }
+                    if !declared { continue; }
+                    let mut arguments = Vec::new();
+                    for parameter in &self.source.traits[owner].generics {
+                        if !parameter.lifetime { arguments.push(*environment.get(&parameter.name).unwrap()); }
+                    }
+                    let index = self.source.declarations.iter().position(|item| item.item == a::Item::Trait(owner)).unwrap();
+                    selected = Some((index, arguments, environment.clone()));
+                }
+            }
+        }
+        if selected.is_none() {
+            let headers = self.trait_headers.clone();
+            for (target, bound, arguments, declared) in headers {
+                if !self.same_projection_receiver(target, receiver) { continue; }
+                let a::Type::Path(path) = self.source.types[bound].kind.clone() else { continue; };
+                let Some(declaration) = path.declaration else { continue; };
+                let a::Item::Trait(owner) = self.source.declarations[declaration].item else { continue; };
+                let mut declares_member = false;
+                for item in &self.source.traits[owner].associated { declares_member = declares_member || item.name == member; }
+                if !declares_member { continue; }
+                if let Some((previous, previous_arguments, _)) = &selected {
+                    if *previous != declaration || !self.same_trait_arguments(previous_arguments, &arguments) { return Ok(Some(self.blocked())); }
+                }
+                selected = Some((declaration, arguments, declared));
+            }
+        }
+        let Some((declaration, arguments, declared)) = selected else { return Ok(None); };
+        let a::Item::Trait(owner) = self.source.declarations[declaration].item else { return Ok(None); };
+        let member_owner = match self.definition.family_members.get(&id) {
+            Some(Some(previous)) if *previous == owner => Some(owner),
+            None => Some(owner),
+            _ => None,
+        };
+        self.definition.family_members.insert(id, member_owner);
+        Ok(Some(self.family_projection(receiver, declaration, &arguments, &member, family, declared, &path.name, span)?))
+    }
+}

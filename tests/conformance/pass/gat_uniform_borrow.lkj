@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+trait Mode { type Output<T>; fn bind<T>(value: T) -> Self::Output<T>; }
+struct Emit {}
+impl Mode for Emit { type Output<T> = T; fn bind<T>(value: T) -> T { value } }
+fn same<T>(value: T) -> <Emit as Mode>::Output<T> { Emit::bind(value) }
+pub fn probe() -> i64 { let value = 42i64; *same(&value) }

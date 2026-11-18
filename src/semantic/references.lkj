@@ -84,6 +84,41 @@ pub(super) fn self_associated_identity(program: &a::Program, catalog: &Catalog,
     Some(format!("{}::type:{}", qualified(&declaration.module, &declaration.name), member))
 }
 
+/// A family binder owns only the exact type paths inside its member declaration.
+/// Method parameters with the same spelling have a separate lexical owner.
+pub(super) fn family_parameter_reference(result: &mut Catalog, files: &[SourceText],
+    path: &a::Path, span: a::Span) -> bool {
+    if path.declaration.is_some() || path.qualification.is_some() { return false; }
+    let first = path.name.as_str().split("::").next().unwrap_or("");
+    let mut selected: Option<(String, String)> = None;
+    for item in &result.items {
+        if item.kind != "associated-type" || item.file != files[span.file].path
+            || span.start < item.start || span.end > item.end { continue; }
+        let target = format!("{}::generic:{first}", item.identity);
+        if result.by_identity.contains_key(&target) { selected = Some((item.identity.clone(), target)); }
+    }
+    let Some((owner, target)) = selected else { return false; };
+    let file = &files[span.file];
+    let at = path_start(file, span);
+    let Some(token) = file.tokens.get(at) else { return false; };
+    if token.text.as_str() != first || token.span.end > span.end { return false; }
+    record_site(result, files, owner, target, a::Span { file: span.file, ..token.span }, "family-type-parameter", true);
+    !path.name.contains("::")
+}
+
+pub(super) fn family_member_reference(result: &mut Catalog, files: &[SourceText],
+    program: &a::Program, evidence: &Option<Evidence>, source_type: a::TypeId,
+    path: &a::Path, span: a::Span, owner: &str) -> bool {
+    let Some(evidence) = evidence else { return false; };
+    let Some(Some(declaration)) = evidence.family_members.get(&source_type) else { return false; };
+    let definition = &program.traits[*declaration];
+    let member = leaf_name(&path.name);
+    let target = format!("{}::type:{member}", qualified(&definition.module, &definition.name));
+    if !result.by_identity.contains_key(&target) { return false; }
+    add_reference(result, files, owner.to_string(), target, span, member, "associated-type", true);
+    true
+}
+
 pub(super) fn value_identity(program: &a::Program, path: &a::Path, functions: &[String]) -> Option<String> {
     let declaration = path.declaration?;
     let target = declaration_identity(program, declaration, functions)?;

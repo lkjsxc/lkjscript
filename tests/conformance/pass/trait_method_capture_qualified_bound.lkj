@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+mod factory {
+    pub trait Source { type Output; fn produce(self) -> Self::Output; }
+    pub struct Number;
+    impl Source for Number { type Output = i64; fn produce(self) -> i64 { 42 } }
+}
+fn consume<P: factory::Source<Output = i64>>(source: P) -> i64 {
+    let value = source.produce();
+    let closure = || value;
+    closure()
+}
+pub fn probe() -> i64 { consume(factory::Number) }

@@ -11,7 +11,7 @@
          "sozu" : 1
       },
       "nom_dom_primary_sites" : {
-         "after" : 80,
+         "after" : 78,
          "before" : 244
       },
       "removed_old_target_diagnostic_identities" : {
@@ -28,7 +28,7 @@
       "target_site_interpretation" : "A changed diagnostic retaining the same reviewed cause at an original target coordinate remains an observed target site; message disappearance alone earns no form-removal credit."
    },
    "baseline_compiler_sha256" : "eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f",
-   "compiler_sha256" : "3d2fc84dfc880cdd52aee6ca9a16dbef6025500e8453cd7ab75f45f336fda353",
+   "compiler_sha256" : "f9dde2462bf4727d7c5796d4d54d592e22acda512846e00b7b96ebbf97a8009b",
    "form_support" : {
       "argument_impl_trait" : "supported_in_documented_subset",
       "associated_type_equality" : "supported_in_documented_subset",
@@ -77,6 +77,27 @@
          "retained_argument_boundaries" : "Explicit generic-argument inference placeholders and multiple generic-argument lists in one path retain their existing located refusal boundaries.",
          "source_commands" : "Queries preserve symbolic lengths and const-parameter meaning; references cover type/value uses. Checked renames require a fresh spelling throughout the enclosing item and exact use sites; body edits revalidate symbolic identities.",
          "status" : "supported_in_documented_function_and_receiver_impl_subset"
+      },
+      "generic_associated_type_families" : {
+         "accepted" : [
+            "Associated families with named type parameters, parameter/result bounds and implicit or relaxed Sized requirements",
+            "Qualified and unambiguous projected applications, aliases, nested associated owners, method inputs/results and source replay",
+            "Uniform unused-definition checks under distinct implementation and family binders",
+            "Implementation parameters inferred from proven prerequisite associated equalities, retaining final bounds and exact applied identities"
+         ],
+         "checked_ir" : "Families normalize in the untrusted frontend through existing types and calls. No trusted IR or checker enlargement.",
+         "conservative_refusals" : [
+            "Family lifetime/const binders, family defaults and type-outlives bounds",
+            "Written region-bearing family arguments or RHS definitions; uniform generic type arguments may carry borrowed actuals",
+            "Predicates on nonparameter targets and input contracts requiring deferred well-formedness",
+            "Missing/stronger/omitted input contracts, wrong arity, contradictory results and transparent or expanding cycles"
+         ],
+         "identity" : "Receiver, resolved declaring trait with all positional arguments, associated member and ordered family arguments remain distinct; equal outputs never imply equal inputs.",
+         "inference" : "Borrowed unsized view context waits for unresolved owned match/block producers while ordinary sized constructor and closure context still propagates.",
+         "original_dom_lifetime_families_admitted" : false,
+         "original_nom_module_admission" : false,
+         "source_commands" : "Family signatures and types, exact member/binder references and renames, body edits, warm reuse and atomic refusal retain source proof identity.",
+         "status" : "supported_for_named_type_family_parameters_with_exact_application_identity"
       },
       "lifetime_where" : {
          "accepted" : [
@@ -135,7 +156,7 @@
          "borrowed_parameters" : "Uniform type parameters may instantiate borrowed values without inventing lifetime-specific witness equality.",
          "checked_ir" : "Existing checked IR and independent checker are unchanged.",
          "conservative_refusals" : [
-            "Trait lifetime and const parameters, generic associated type families and explicit type inference placeholders",
+            "Trait lifetime and const parameters and explicit type inference placeholders",
             "Written reference arguments, lifetime-parameterized nominal/alias arguments and projections normalizing to views until region-aware witness identity exists",
             "Ambiguous implementation/input applications and cyclic or recursively expanding proof arguments"
          ],
@@ -168,19 +189,19 @@
       "dom" : {
          "accounting" : {
             "baseline_primary_sites" : 95,
-            "current_primary_sites" : 63,
+            "current_primary_sites" : 61,
             "new_unclassified_rows" : 0,
             "prior_unclassified_rows" : 0,
             "raw_by_code" : {
-               "E_BLOCKED" : 64,
+               "E_BLOCKED" : 62,
                "E_CAPABILITY" : 10,
-               "E_PARSE" : 8,
+               "E_PARSE" : 6,
                "E_UNSUPPORTED" : 27,
                "E_UNSUPPORTED_MACRO" : 18
             },
-            "raw_projected_diagnostic_rows" : 127,
+            "raw_projected_diagnostic_rows" : 123,
             "recovery_rows_excluded" : 0,
-            "upstream_default_candidate_sites" : 56,
+            "upstream_default_candidate_sites" : 54,
             "upstream_test_only_sites" : 7
          },
          "baseline_classification" : {
@@ -210,26 +231,26 @@
                "entry_sha256" : "81441eac6c5af9fe4aa7eea33f2f11ebad8a6d309a0f0fb80a17c9d2174f5779",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5876,
+               "peak_rss_kib" : 5100,
                "route" : "original_suffix",
                "stderr_sha256" : "1170c98833b245d8181dc2850bcfc1d36d34bc83792f33ec55fd3787b0b748e1",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.001297
+               "wall_seconds" : 0.002609
             },
             {
                "entry_sha256" : "81441eac6c5af9fe4aa7eea33f2f11ebad8a6d309a0f0fb80a17c9d2174f5779",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 41812,
+               "peak_rss_kib" : 42256,
                "route" : "suffix_projection",
-               "stderr_sha256" : "da65fd706df9cec2624f35856462cedad035d5935600d88f88b7f309df4adbc1",
+               "stderr_sha256" : "40f87b05ad7cd4982233195de0f172d19c7f0c9e772fbab71e418012ac37fb8a",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.117218
+               "wall_seconds" : 0.109781
             }
          ],
-         "observed_at_utc" : "2026-11-18T08:26:57Z",
+         "observed_at_utc" : "2026-11-18T09:29:57Z",
          "old_site_counts" : [
             {
                "baseline_rank" : 6,
@@ -295,9 +316,9 @@
                "baseline_rank" : 7,
                "baseline_sites" : 2,
                "changed_diagnostic_sites" : 0,
-               "exact_surviving_sites" : 2,
+               "exact_surviving_sites" : 0,
                "id" : "generic_associated_types",
-               "not_observed_sites" : 0,
+               "not_observed_sites" : 2,
                "owner" : "language",
                "title" : "Generic associated types"
             },
@@ -401,8 +422,8 @@
             "version" : "0.28.0"
          },
          "probe_receipt" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/positional-final/census/dom-probe.json",
-            "sha256" : "ea3a4053b04ba2ebab15bc3ae6323bd7f54f5b6cf48cbd26ab3824a166c80e95"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/census/dom-probe.json",
+            "sha256" : "179325c71eb2e022c2cd7bcdeea2c048fb1e2ce0c52b95ac28e35483f6f01e40"
          },
          "projection_manifest_sha256" : "7eef776218daecb22822d613a609a00039600c34cea05a6047216111148272c9",
          "ranked_causes" : [
@@ -450,18 +471,6 @@
                "owner" : "refused_by_design",
                "site_count" : 9,
                "title" : "Shared interior mutation and borrow guards"
-            },
-            {
-               "affected_files" : [
-                  "src/document.rs",
-                  "src/matcher.rs"
-               ],
-               "baseline_rank" : 7,
-               "id" : "generic_associated_types",
-               "overlapping_file_physical_lines" : 844,
-               "owner" : "language",
-               "site_count" : 2,
-               "title" : "Generic associated types"
             },
             {
                "affected_files" : [
@@ -531,14 +540,14 @@
             }
          ],
          "removed_previously_unclassified_sites" : [],
-         "rerank_payload_sha256" : "99ea9ea4dbc8055b96019699940d4d3d557c14856f7c44fee1035efc3def117c",
+         "rerank_payload_sha256" : "ee427562ee11c9ab9e65bc054898b7e765002e5674a6aa0e26a6f51608e55bfd",
          "review" : {
             "changed_primary_diagnostics" : 0,
             "changed_recovery_rows" : 0,
             "new_independent_primary_sites" : 1,
-            "path" : "docs/real-programs-positional-traits-dom-review.json",
+            "path" : "docs/real-programs-gat-dom-review.json",
             "reviewed_primary_sites" : 1,
-            "sha256" : "dafc23880fc5e0ed3bee924533c6cf581d1bd280a1ad21c214256988933c1467",
+            "sha256" : "a038674900bdc7004cad084d27bd38c9ef5fc40fd2f95c063f6c2f8aac18f802",
             "unchanged_recovery_rows" : 0
          }
       },
@@ -619,26 +628,26 @@
                "entry_sha256" : "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5876,
+               "peak_rss_kib" : 5100,
                "route" : "original_suffix",
                "stderr_sha256" : "1170c98833b245d8181dc2850bcfc1d36d34bc83792f33ec55fd3787b0b748e1",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.001425
+               "wall_seconds" : 0.001242
             },
             {
                "entry_sha256" : "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 40316,
+               "peak_rss_kib" : 40624,
                "route" : "suffix_projection",
                "stderr_sha256" : "fd8e38ab4e1dc42b7c2e9616494de68978efe9e4bccb88fb1c3f5f05f1615550",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "src/lib.rs",
-               "wall_seconds" : 0.119968
+               "wall_seconds" : 0.117113
             }
          ],
-         "observed_at_utc" : "2026-11-18T08:26:57Z",
+         "observed_at_utc" : "2026-11-18T09:29:57Z",
          "old_site_counts" : [
             {
                "baseline_rank" : 4,
@@ -730,8 +739,8 @@
             "version" : "8.0.0"
          },
          "probe_receipt" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/positional-final/census/nom-probe.json",
-            "sha256" : "45c29cf368acb5ab6e54106243fe1f2da739727a8e4053684d8033fd6de64be0"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/census/nom-probe.json",
+            "sha256" : "2939f60220471e729aab38e7d83ba85c14370a44d07140fe3c40235fab65f01e"
          },
          "projection_manifest_sha256" : "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
          "ranked_causes" : [
@@ -804,9 +813,9 @@
             "changed_primary_diagnostics" : 0,
             "changed_recovery_rows" : 0,
             "new_independent_primary_sites" : 4,
-            "path" : "docs/real-programs-positional-traits-nom-review.json",
+            "path" : "docs/real-programs-gat-nom-review.json",
             "reviewed_primary_sites" : 4,
-            "sha256" : "932660bdd2a330a5263795515e9ba7e7ee75297e3e48aa3ecb2d342800f1fcaf",
+            "sha256" : "5c6cc8e1308f4809680faa5b7d5ef0f8a3b744dfb4369e3a590ccdb68e42a684",
             "unchanged_recovery_rows" : 0
          }
       },
@@ -855,92 +864,92 @@
                "entry_sha256" : "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5876,
+               "peak_rss_kib" : 5100,
                "route" : "original_suffix",
                "stderr_sha256" : "7b549de4db0927e5cfce74b5932bada29e9eb2d1f4453c00765287200f698e06",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "bin/src/main.rs",
-               "wall_seconds" : 0.001242
+               "wall_seconds" : 0.001469
             },
             {
                "entry_sha256" : "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 40620,
+               "peak_rss_kib" : 39224,
                "route" : "suffix_projection",
                "stderr_sha256" : "5a511b9ace6c5b6e56e3cb5266a12315b94102c4439f714268406eef6520fcda",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "bin/src/main.rs",
-               "wall_seconds" : 0.141702
+               "wall_seconds" : 0.127652
             },
             {
                "entry_sha256" : "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5876,
+               "peak_rss_kib" : 5100,
                "route" : "original_suffix",
                "stderr_sha256" : "6c077bd9d3f3ddf7b4272ee7183242c23fa8a77a2d0212dfba601bb1b82481f8",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "lib/src/lib.rs",
-               "wall_seconds" : 0.001253
+               "wall_seconds" : 0.001912
             },
             {
                "entry_sha256" : "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 36652,
+               "peak_rss_kib" : 37828,
                "route" : "suffix_projection",
                "stderr_sha256" : "4a94594ccc6f875d67e35105a6b479f997764d9fa831195a8ab1cce128447579",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "lib/src/lib.rs",
-               "wall_seconds" : 0.080186
+               "wall_seconds" : 0.07709
             },
             {
                "entry_sha256" : "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5876,
+               "peak_rss_kib" : 5100,
                "route" : "original_suffix",
                "stderr_sha256" : "a9f468a468db306f90ff1c8629d09a0a9e63bc215ad0f16255d5b664965a7b6c",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "command/src/lib.rs",
-               "wall_seconds" : 0.00114
+               "wall_seconds" : 0.001556
             },
             {
                "entry_sha256" : "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 40112,
+               "peak_rss_kib" : 41536,
                "route" : "suffix_projection",
                "stderr_sha256" : "27afbcb5353fd743fa8c21ed7278249daa37a7e4addef82dd85cf09633212c78",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "command/src/lib.rs",
-               "wall_seconds" : 0.178489
+               "wall_seconds" : 0.171509
             },
             {
                "entry_sha256" : "8a8900e43c1479621cabd4e27575bdc49624d5c43469a754dc2b6bd5272efa78",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 5876,
+               "peak_rss_kib" : 5100,
                "route" : "original_suffix",
                "stderr_sha256" : "a00167481ac5fad74f5a5729cc5c94ae44f197d913df9a7a953f1767f9b210f3",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "e2e/src/lib.rs",
-               "wall_seconds" : 0.001128
+               "wall_seconds" : 0.001115
             },
             {
                "entry_sha256" : "8a8900e43c1479621cabd4e27575bdc49624d5c43469a754dc2b6bd5272efa78",
                "exit_status" : 1,
                "launcher_signal" : 0,
-               "peak_rss_kib" : 37740,
+               "peak_rss_kib" : 38512,
                "route" : "suffix_projection",
                "stderr_sha256" : "146fbabe3156eed526d9105f8f0984bc3dcd5f6c62e120f5988aa6c13f99075e",
                "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
                "upstream_entry" : "e2e/src/lib.rs",
-               "wall_seconds" : 0.081039
+               "wall_seconds" : 0.08707
             }
          ],
-         "observed_at_utc" : "2026-11-18T08:26:58Z",
+         "observed_at_utc" : "2026-11-18T09:29:58Z",
          "old_site_counts" : [
             {
                "baseline_rank" : 14,
@@ -1132,8 +1141,8 @@
             "version" : "1.0.6"
          },
          "probe_receipt" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/positional-final/census/sozu-probe.json",
-            "sha256" : "f72003098b18c25a91d00d856778a1e19b58f491855cb3d623c74c3dbf4c120f"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/census/sozu-probe.json",
+            "sha256" : "965296af4afbbd7fba5cf461376897c9cb89e0739490dc33cb7423513329d71f"
          },
          "projection_manifest_sha256" : "3ad1b9efdc73fb42f61aa3cb5d0dfaf1edea4d5fecf68e4b48e4cedd01db38b0",
          "ranked_causes" : [
@@ -1424,97 +1433,217 @@
             "changed_primary_diagnostics" : 0,
             "changed_recovery_rows" : 0,
             "new_independent_primary_sites" : 1,
-            "path" : "docs/real-programs-positional-traits-sozu-review.json",
+            "path" : "docs/real-programs-gat-sozu-review.json",
             "reviewed_primary_sites" : 1,
-            "sha256" : "80e6e20744a761504e44b0b44ba079b84e85b762e05dd9a099ed9e7ef1961228",
+            "sha256" : "1b757f04dc8c1676acd27491b3e110adef89d2734d17230aa88fede2b825a949",
             "unchanged_recovery_rows" : 0
          }
       }
    },
-   "stage" : "positional_trait_arguments_gated",
+   "stage" : "generic_associated_type_families_gated",
    "validation" : {
       "admitted_projected_roots" : 0,
       "bootstrap" : {
-         "fixed_point" : "byte-identical",
+         "fixed_point" : "two consecutive current-emitter generations byte-identical",
+         "previous_seed_bridge" : true,
          "receipt" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/positional-final/bootstrap.log",
-            "sha256" : "b58066310e7dd794636987f4b625ed6eeeed4ebd764410e5683d985134395e61"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/bootstrap.log",
+            "sha256" : "44d4eaf7af36c3c1f006da3027b895e514cb1ddc9a282e3842c03dc52bea220b"
          },
+         "refreshed_seed_fixed_point" : "passed again in full gate",
          "status" : "passed"
       },
-      "checked_ir" : "No checked-IR, independent-checker, runtime or library changes in this frontend slice.",
-      "compiler_sha256" : "3d2fc84dfc880cdd52aee6ca9a16dbef6025500e8453cd7ab75f45f336fda353",
+      "checked_ir" : "No checked-IR, independent-checker, interpreter, runtime or library changes in this frontend slice.",
+      "compiler_sha256" : "f9dde2462bf4727d7c5796d4d54d592e22acda512846e00b7b96ebbf97a8009b",
       "focused" : {
-         "cases" : 41,
-         "engine_routes" : 82,
+         "cases" : 56,
+         "engine_routes" : 112,
          "native" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/positional-final/cases-native.log",
-            "sha256" : "276cee2bb0048bd45faa802726327e901d63aff4b3827ebbaebae58e3cc540f0"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/cases-native.log",
+            "sha256" : "7d133f5defddced7a19fdd841db821c7a4ad4993f2d3277d95e47fd6127bc3f6"
          },
          "rust" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/positional-final/cases-rust.log",
-            "sha256" : "f7eb3949e0189e702459cf8c64c3eb17a2cc3e21ef6c475905ddc064754bb16e"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/cases-rust.log",
+            "sha256" : "33a9b805c1f0ebc1b34fcc2417352c9a104bb3a170785f8c1d7f77068e723898"
          },
-         "rust_values_or_output" : 19,
-         "rust_verdicts" : 22,
+         "rust_values_or_output" : 24,
+         "rust_verdicts" : 32,
          "status" : "passed"
       },
       "frontier" : {
-         "changed_streams" : 0,
+         "changed_streams" : 1,
+         "disappeared_dom_sites" : [
+            {
+               "admission_claim" : false,
+               "column" : 18,
+               "form" : "lifetime-family associated definition",
+               "line" : 259,
+               "path" : "src/document.rs"
+            },
+            {
+               "admission_claim" : false,
+               "column" : 27,
+               "form" : "lifetime-family associated definition",
+               "line" : 219,
+               "path" : "src/matcher.rs"
+            }
+         ],
          "fresh_observations" : 12,
+         "interpretation" : "Parsing now carries family binders; later root barriers hide these two semantic lifetime-family boundaries. Their missing parse diagnostics do not establish support for lifetime GATs.",
          "new_unclassified" : 0,
          "observation_index" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/positional-final/census/observation-index.json",
-            "sha256" : "d1750353626444190589cfa960dc6228bdb2442a867d0df0e56ebf152654d8e5"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/census/observation-index.json",
+            "sha256" : "5ab26573606ddb18b3df1710b7fb214f2f051ec59ca034ecd9aa398ef6627d8a"
          },
          "projected_roots" : 6,
          "rerank" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/positional-final/rerank.log",
-            "sha256" : "d4d7152e3dc98388725897d69d5f66c0679fb7bacae542f1a840daab6a579695"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/rerank.log",
+            "sha256" : "5e295989ba26ef9a38056139756ce03e53e86db5b87c4c6365b7b6816e750f9a"
+         },
+         "stage_delta" : {
+            "dom" : [
+               63,
+               61
+            ],
+            "nom" : [
+               17,
+               17
+            ],
+            "sozu_classified" : [
+               448,
+               448
+            ],
+            "sozu_prior_unclassified" : [
+               34,
+               34
+            ]
          }
       },
       "full_gate" : {
-         "finished_at_utc" : "2026-11-18T08:45:18Z",
-         "fresh_case_requests" : 6288,
+         "finished_at_utc" : "2026-11-18T10:21:50Z",
+         "fresh_case_requests" : 6403,
          "ir_findings" : 0,
          "ir_mutants" : 128,
          "receipt" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/positional-final/full-gate.log",
-            "sha256" : "cf74176ea9d1c666319574b9a4f3b503fc8e4ecdd7ba1c537896650475613cf1"
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/full-gate.log",
+            "sha256" : "85dea2e0be738b344617a9ebf40174696a52f284cc8d17d15a4b09500a73528e"
          },
          "reused_case_requests" : 0,
-         "seconds" : 772.339,
-         "started_at_utc" : "2026-11-18T08:32:26Z",
+         "seconds" : 837.933,
+         "started_at_utc" : "2026-11-18T10:07:52Z",
          "status" : "passed"
+      },
+      "gate_expectation_repair" : {
+         "diagnostics" : {
+            "cases" : 79,
+            "engine_routes" : 124,
+            "receipt" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/repair-preflight/diagnostics.log",
+               "sha256" : "5caf8f056821ba9fbdcbde3cbd8da6a2470517ec1fb38bee2cd287d708fea818"
+            },
+            "retained_pending" : 34
+         },
+         "independent_rust_optimization_levels" : [
+            0,
+            3
+         ],
+         "input_manifest" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/repair-preflight/positive-inputs.sha256",
+            "sha256" : "9096ad6c49377c9520fc99bf6429f2167e52405bab762ce6c4a37304a78a6f27"
+         },
+         "library_selection" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/repair-preflight/diagnostic-library-directory.log",
+            "sha256" : "d28811068cdf50b1044727597cf8ba4453b9dfbca9502fc3378146ce9c807c83"
+         },
+         "log_manifest" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/repair-preflight/proof-logs.sha256",
+            "sha256" : "094ed171a5d38c0d93ddcf12ac9c47d24340631cf78f24127428e69ad67f0802"
+         },
+         "mutation_option_order" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/repair-preflight/diagnostic-mutation-no-store.log",
+            "sha256" : "60b5f2f8d5d9a6989633f75b4587b579b83d42ccaddb33ab330ef1c5eace3299"
+         },
+         "positive_originals" : {
+            "cases" : 2,
+            "engine_routes" : 4,
+            "receipt" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/repair-preflight/positive-routes.log",
+               "sha256" : "c44c4f2345602e254c7c843b07060cab61dc9c4fed6fe8e83e83635f78e4ecf8"
+            }
+         },
+         "status" : "passed",
+         "toolchain" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/repair-preflight/toolchain.log",
+            "sha256" : "90a85fbd6a94008a8459bdfea650bf1d86beb9519faf6c1e4436c0e66ea3a685"
+         }
       },
       "nom_own_tests_run_under_lkjscript" : 0,
       "observations" : 12,
-      "projected_roots" : 6,
-      "retained_preflight_limits" : [
-         "The first flattened fixture copy was incomplete because pass/fail basenames overlapped; corrected full directory population is preserved.",
-         "The isolated-worktree preflight rerank retained a located probe-command mismatch for its different library path; the final rerank uses the original command paths and all twelve fresh observations. No comparison guard was weakened.",
-         "The actual nom tuple call exposed missing inference-environment transfer; the final eleven dispatch controls preserve exact candidate identity and mutable-reference move rules."
-      ],
-      "seed_gzip_sha256" : "c1563abbe755c994dc5e9baf2170b384db7b1390ff21dbcc7fe32cbfe27e446a",
-      "source_commands" : {
-         "method_dispatch" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/positional-final/dispatch-query.log",
-            "sha256" : "8b48e787321d39fe86689729247c4c2d6ae554837c65eb832999adfef1a5a0dc"
-         },
-         "queries" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/positional-final/query.log",
-            "sha256" : "29e153b4c62ae1cf0150e0465ccd099834fa0b1b430fdaaa3c11f8a2de9d70f2"
+      "positional_regression" : {
+         "cases" : 41,
+         "engine_routes" : 82,
+         "receipt" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/positional-regression.log",
+            "sha256" : "2ba87da9abe1c84ad427555f681886e2d466c57458b4c5e39463a431daa5d990"
          },
          "status" : "passed"
       },
-      "stage" : "positional_trait_arguments",
+      "prior_full_gate_failure" : {
+         "affected_fixtures" : [
+            "generic_option_closure_context.lkj",
+            "vec_loop_element_inference.lkj",
+            "site-vector-advice.lkj"
+         ],
+         "compiler_or_library_source_changed" : false,
+         "exit_status" : 1,
+         "finding" : "Old diagnostic expectations contradicted newly supported inference. Both original program bodies compile and execute under Rust opt0/3 and both lkjscript engines.",
+         "original_body_sha256" : {
+            "generic_option_closure_context" : "9b11e812e110ff55f05c5930b4de8519c15f8dbcafaf8d618f6cef6f98ef7b72",
+            "vec_loop_element_inference" : "4284de665273bfa382a232771d6db00a13fc1905d675e3552919be22891e3dfc"
+         },
+         "receipt" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/failed-gate-01/full-gate.log",
+            "sha256" : "1d62231cc4f71613ddfaf8cc500809e179c23151d99af7d94e5262cb333b85a5"
+         },
+         "repair" : "The two unchanged bodies move to positive conformance fixtures. The consumer harness executes both the original inferred Vec loop and its annotated equivalent; other advice checks are unchanged.",
+         "status" : "failed",
+         "wall_seconds" : 871.89
+      },
+      "projected_roots" : 6,
+      "retained_preflight_limits" : [
+         "The first associated-equality inference candidate failed native self-reproduction because a borrowed unsized target prematurely constrained an owned match result.",
+         "The repair follows unresolved incoming producers only for slice/str view coercions and preserves ordinary sized constructor/closure inference; owned-match, wrong-element and cloned-key controls remain.",
+         "The published positional seed required a current-emitter bridge; two consecutive resulting generations matched. The refreshed seed is independently rechecked by the full gate.",
+         "The retained authored delegated-parser case is distinct from admission of the unchanged nom module tree."
+      ],
+      "seed_gzip_sha256" : "754c709e8ae210bd1a50a50015636ced39e74061d8c756fee07b7038a06ae254",
+      "source_commands" : {
+         "families" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/query.log",
+            "sha256" : "3fa55a8acb9f3dc015d20b4aca1a1e27d5c9b5cd65b8abb7874144d61470044a"
+         },
+         "method_dispatch" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/dispatch-query.log",
+            "sha256" : "8b48e787321d39fe86689729247c4c2d6ae554837c65eb832999adfef1a5a0dc"
+         },
+         "positional" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/positional-query.log",
+            "sha256" : "29e153b4c62ae1cf0150e0465ccd099834fa0b1b430fdaaa3c11f8a2de9d70f2"
+         },
+         "prerequisite_equalities" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/equality-query.log",
+            "sha256" : "35fd841e338b118ce9158ad188cddadc9ccbdaeedbf70d24f359926fcd16cade"
+         },
+         "status" : "passed"
+      },
+      "stage" : "generic_associated_type_families",
       "standalone_real_programs" : {
-         "finished_at_utc" : "2026-11-18T08:45:21Z",
+         "finished_at_utc" : "2026-11-18T10:21:53Z",
          "levenshtein_tests_per_engine" : 8,
          "native_corpus_rows" : 7239,
          "provenance_controls" : 18,
          "receipt" : {
-            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/positional-final/standalone-real-programs.log",
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/standalone-real-programs.log",
             "sha256" : "bfe050316ba1664049ab530cb4ea400a72ef27a18a88620f0f19e8efe78c69bf"
          },
          "status" : "passed"

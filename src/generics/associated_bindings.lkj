@@ -71,6 +71,10 @@ pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
         predicate_bounds(&item.predicates, &mut bounds);
     }
     for item in &source.impls {
+        for member in &item.associated {
+            parameter_bounds(&member.generics, &mut bounds);
+            predicate_bounds(&member.predicates, &mut bounds);
+        }
         parameter_bounds(&item.generics, &mut bounds);
         predicate_bounds(&item.predicates, &mut bounds);
     }
@@ -79,6 +83,8 @@ pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
         predicate_bounds(&item.predicates, &mut bounds);
         for bound in &item.bounds { bounds.insert(*bound); }
         for associated in &item.associated {
+            parameter_bounds(&associated.generics, &mut bounds);
+            predicate_bounds(&associated.predicates, &mut bounds);
             for bound in &associated.bounds { bounds.insert(*bound); }
         }
     }

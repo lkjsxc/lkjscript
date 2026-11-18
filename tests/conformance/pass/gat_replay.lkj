@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+trait Mode { type Output<T>: Copy; }
+struct Count {}
+impl Mode for Count { type Output<T> = i64; }
+trait Consume<T> { fn consume(self, value: T) -> i64; }
+struct Value {}
+impl Consume<i64> for Value { fn consume(self, value: i64) -> i64 { value } }
+fn apply<M: Mode, C: Consume<M::Output<u8>>>(consumer: C, value: M::Output<u8>) -> i64 { consumer.consume(value) }
+pub fn probe() -> i64 { apply::<Count, Value>(Value {}, 42) }

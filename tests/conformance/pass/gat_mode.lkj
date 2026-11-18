@@ -1,0 +1,26 @@
+// expect: value 42
+// witness: {}
+trait Mode {
+    type Output<T>;
+    fn bind<T>(value: T) -> Self::Output<T>;
+    fn map<T, U, F: FnOnce(T) -> U>(value: Self::Output<T>, function: F) -> Self::Output<U>;
+}
+struct Emit {}
+impl Mode for Emit {
+    type Output<T> = T;
+    fn bind<T>(value: T) -> T { value }
+    fn map<T, U, F: FnOnce(T) -> U>(value: T, function: F) -> U { function(value) }
+}
+struct Check {}
+impl Mode for Check {
+    type Output<T> = ();
+    fn bind<T>(value: T) { let _ = value; }
+    fn map<T, U, F: FnOnce(T) -> U>(value: (), function: F) { let _ = value; let _ = function; }
+}
+fn increment<M: Mode>(value: M::Output<i64>) -> M::Output<i64> {
+    M::map(value, |item: i64| item + 2)
+}
+pub fn probe() -> i64 {
+    let _ = increment::<Check>(Check::bind(0i64));
+    increment::<Emit>(Emit::bind(40i64))
+}

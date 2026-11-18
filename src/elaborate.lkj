@@ -37,6 +37,7 @@ mod sugars;
 mod text_format;
 mod trait_proofs;
 mod trait_arguments;
+mod type_families;
 mod type_display;
 mod type_resolve;
 mod sized_bounds;

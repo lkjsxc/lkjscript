@@ -1,0 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Family { type Output<T>; }
+fn bad<F: Family>(value: F::Output) { let _ = value; }
+pub fn probe() -> i64 { 42 }

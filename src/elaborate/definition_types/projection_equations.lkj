@@ -95,6 +95,7 @@ impl Infer<'_, '_> {
         let mut arguments = Vec::new();
         let mut substitutions = BTreeMap::new();
         substitutions.insert("Self".to_string(), receiver);
+        substitutions.insert(format!("$family::trait:{owner}"), receiver);
         for index in 0..parameters.len() {
             let value = self.source_type(path.args[index], environment)?;
             arguments.push(value);
@@ -248,6 +249,7 @@ impl Infer<'_, '_> {
             let a::Item::Trait(index) = self.source.declarations[declaration].item else { continue; };
             let definition = self.source.traits[index].clone();
             for associated in &definition.associated {
+                if !associated.generics.is_empty() { continue; }
                 let name = format!("{alias}::{}", associated.name);
                 let root = self.projection_receiver(receiver);
                 let key = self.projection_key(root, declaration, &arguments, &associated.name);
@@ -402,6 +404,7 @@ impl Infer<'_, '_> {
             resolved.insert(name, actual);
         }
         resolved.insert("Self".to_string(), receiver);
+        resolved.insert(format!("$family::implementation:{index}"), receiver);
         Ok(Match::Yes(resolved))
     }
 
@@ -427,6 +430,10 @@ impl Infer<'_, '_> {
         let a::Item::Trait(trait_index) = self.source.declarations[declaration].item else {
             return Ok(false);
         };
+        let count = self.source.traits[trait_index].generics.len();
+        if trait_arguments.len() < count { return Ok(false); }
+        let family_arguments = &trait_arguments[count..];
+        let trait_arguments = &trait_arguments[..count];
         let head = self.shape_head(receiver);
         let head_view = match &head {
             Some(head) => Some(head.as_str()),
@@ -462,6 +469,7 @@ impl Infer<'_, '_> {
                 if let Some(argument) = environment.get(&parameter.name) { arguments.push(*argument); }
             }
         }
+        arguments.extend_from_slice(family_arguments);
         let mut ancestry: Vec<(usize, String, Vec<Variable>)> = match self.projection_ancestry.get(&id) {
             Some(previous) => previous.clone(),
             None => Vec::new(),
@@ -488,6 +496,10 @@ impl Infer<'_, '_> {
         let mut associated = None;
         for item in &implementation.associated {
             if item.name == member {
+                if item.generics.len() != family_arguments.len() { return Ok(false); }
+                for position in 0..family_arguments.len() {
+                    environment.insert(item.generics[position].name.clone(), family_arguments[position]);
+                }
                 associated = item.value;
                 break;
             }

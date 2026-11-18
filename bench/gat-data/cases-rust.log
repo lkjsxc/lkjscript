@@ -1,0 +1,2 @@
+ok Rust witness: 24 values/output cases, 32 verdicts
+LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"done","total_ms":789.067,"other_ms":789.039,"producer_hash_ms":0.003,"store_io_ms":0.005,"build_reused":0,"checked_local_reused":0,"checked_reused":0,"emitted_reused":0,"front_definitions":0,"front_functions":0,"front_reused":0,"inline_accepted":0,"inline_attempts":0,"inline_calls":0,"inline_functions":0,"inline_rejected":0,"test_rerun":0,"test_reused":0,"peak_rss_bytes":4845568}

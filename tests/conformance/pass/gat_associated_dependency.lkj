@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+trait Family { type Item; type Output<T>; fn pair<T>(value: T) -> Self::Output<T>; }
+struct Pairs {}
+impl Family for Pairs {
+    type Output<T> = (Self::Item, T);
+    type Item = u8;
+    fn pair<T>(value: T) -> (u8, T) { (2u8, value) }
+}
+fn apply<F: Family>(value: i64) -> F::Output<i64> { F::pair(value) }
+pub fn probe() -> i64 { let result = apply::<Pairs>(40); result.0 as i64 + result.1 }

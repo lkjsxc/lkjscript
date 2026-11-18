@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Family { type Output<T>; }
+struct Echo {}
+impl Family for Echo { type Output<T> = &'static i64; }
+pub fn probe() -> i64 { 42 }

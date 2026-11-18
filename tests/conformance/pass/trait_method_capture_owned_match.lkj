@@ -1,0 +1,17 @@
+// expect: value 42
+// witness: {}
+trait Sink { fn total(&mut self, bytes: &[u8]) -> i64; }
+struct Sum;
+impl Sink for Sum {
+    fn total(&mut self, bytes: &[u8]) -> i64 { bytes[0] as i64 + bytes[1] as i64 }
+}
+enum Payload { Bytes(Vec<u8>) }
+fn deliver<H: Sink>(host: &mut H, payload: &Payload) -> i64 {
+    let bytes = match payload { Payload::Bytes(bytes) => bytes.clone() };
+    host.total(&bytes)
+}
+pub fn probe() -> i64 {
+    let payload = Payload::Bytes(vec![40u8, 2u8]);
+    let mut host = Sum;
+    deliver(&mut host, &payload)
+}

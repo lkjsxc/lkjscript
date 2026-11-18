@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+fn unused<T>() { let _value: T = loop {}; }
+pub fn probe() -> i64 { 42 }

@@ -222,6 +222,7 @@ impl<'a> Resolver<'a> {
         result.import_scopes = ImportScopes::new(program, &result.modules)?;
         for item in &program.impls {
             result.generics(item.span, &item.generics);
+            for member in &item.associated { result.generics(member.span, &member.generics); }
         }
         for (id, item) in program.functions.iter().enumerate() {
             result.generics(item.span, &item.generics);
@@ -260,6 +261,7 @@ impl<'a> Resolver<'a> {
         }
         for (id, item) in program.traits.iter().enumerate() {
             result.generics(item.span, &item.generics);
+            for member in &item.associated { result.generics(member.span, &member.generics); }
             result.declare(
                 &item.name,
                 &item.module,

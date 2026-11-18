@@ -1,0 +1,212 @@
+//! Generic associated types are source families, never unchecked IR aliases.
+use super::*;
+
+fn parameters(source: &Program, member: &AssociatedType, outer: &[GenericParam]) -> Result<(), Diagnostic> {
+    generic_names(&member.generics)?;
+    for parameter in &member.generics {
+        if parameter.lifetime || parameter.constant {
+            return Err(Diagnostic::new(parameter.span, "E_UNSUPPORTED",
+                "associated family lifetime and const parameters require a separate source contract"));
+        }
+        if parameter.name == "Self" || outer.iter().any(|previous| previous.name == parameter.name) {
+            return Err(Diagnostic::new(parameter.span, "E_TRAIT", "associated family parameter shadows an enclosing parameter"));
+        }
+    }
+    if let Some(predicate) = member.predicates.first() {
+        return Err(Diagnostic::new(predicate.span, "E_UNSUPPORTED",
+            "associated family predicates on nonparameter targets require a separate source contract"));
+    }
+    if !member.generics.is_empty() {
+        let mut bounds = member.bounds.clone();
+        for parameter in &member.generics { bounds.extend_from_slice(&parameter.bounds); }
+        for bound in bounds {
+            if matches!(&source.types[bound].kind, Type::Path(path) if path.name.starts_with('\'')) {
+                return Err(Diagnostic::new(source.types[bound].span, "E_UNSUPPORTED",
+                    "associated family type-outlives bounds require a region contract"));
+            }
+        }
+        if let Some(value) = member.value {
+            if trait_argument_regions(source, value).0 {
+                return Err(Diagnostic::new(source.types[value].span, "E_UNSUPPORTED",
+                    "lifetime-bearing associated family definitions require a region contract"));
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
+    for declaration in &source.traits {
+        for member in &declaration.associated {
+            parameters(source, member, &declaration.generics)?;
+            if !member.generics.is_empty() && member.value.is_some() {
+                return Err(Diagnostic::new(member.span, "E_UNSUPPORTED", "generic associated type defaults are not implemented"));
+            }
+        }
+    }
+    for implementation in &source.impls {
+        for member in &implementation.associated { parameters(source, member, &implementation.generics)?; }
+        let Some(bound) = implementation.trait_ty else {
+            if let Some(member) = implementation.associated.iter().find(|member| !member.generics.is_empty()) {
+                return Err(Diagnostic::new(member.span, "E_UNSUPPORTED", "inherent associated type families are not implemented"));
+            }
+            continue;
+        };
+        let Type::Path(path) = &source.types[bound].kind else { continue; };
+        let Some(owner) = bound_identity(source, path).declaration() else { continue; };
+        let declaration = &source.traits[owner];
+        for expected in &declaration.associated {
+            let actual = implementation.associated.iter().find(|member| member.name == expected.name);
+            if let Some(actual) = actual {
+                if actual.generics.len() != expected.generics.len() {
+                    return Err(Diagnostic::new(actual.span, "E_TRAIT", "associated family parameter count differs from its declaration"));
+                }
+                if actual.value.is_none() {
+                    return Err(Diagnostic::new(actual.span, "E_TRAIT", "implementation associated type needs a definition"));
+                }
+            } else if !expected.generics.is_empty() {
+                return Err(Diagnostic::new(implementation.span, "E_TRAIT", "implementation is missing a generic associated type"));
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn install(source: &Program, index: usize, environment: &mut BTreeMap<String, usize>, terms: &mut Vec<Term>) {
+    let implementation = &source.impls[index];
+    if !implementation.associated.iter().any(|member| !member.generics.is_empty()) { return; }
+    let mut captures = vec![*environment.get(&"Self".to_string()).unwrap()];
+    for parameter in &implementation.generics {
+        if !parameter.lifetime { captures.push(*environment.get(&parameter.name).unwrap()); }
+    }
+    for position in 0..implementation.associated.len() {
+        let member = &implementation.associated[position];
+        if member.value.is_none() { continue; }
+        let value = push(terms, Term::Named(format!("$family:{index}:{position}"), captures.clone()));
+        environment.insert(format!("Self::{}", member.name), value);
+        if member.generics.is_empty() {
+            let bound = implementation.trait_ty.unwrap();
+            if let Type::Path(path) = &source.types[bound].kind {
+                if let Some(owner) = bound_identity(source, path).declaration() {
+                    environment.insert(format!("$self-projection:{owner}:{}", member.name), value);
+                }
+            }
+        }
+    }
+}
+
+pub(super) fn apply(source: &Program, path: &Path, values: &[usize], environment: &BTreeMap<String, usize>, terms: &mut Vec<Term>) -> Option<usize> {
+    if path.args.is_empty() { return None; }
+    let key = if let Some(qualification) = &path.qualification {
+        let receiver = environment.get(&"Self".to_string())?;
+        if values.len() < 2usize || !equivalent(terms, values[0], *receiver) { return None; }
+        let owner = qualified_trait_index(source, qualification)?;
+        let selected = environment.get(&format!("$self-trait:{owner}"))?;
+        if !equivalent(terms, values[1], *selected) { return None; }
+        format!("Self::{}", path.name)
+    } else { path.name.clone() };
+    let template = *environment.get(&key)?;
+    let Term::Named(name, mut children) = terms[template].clone() else { return None; };
+    if !name.starts_with("$family:") && !name.starts_with("$projection:") { return None; }
+    let start = if path.qualification.is_some() { values.len() - path.args.len() } else { 0usize };
+    children.extend_from_slice(&values[start..]);
+    Some(push(terms, Term::Named(name, children)))
+}
+
+pub(super) fn definition(source: &Program, name: &str) -> Option<(usize, usize)> {
+    if !name.starts_with("$family:") { return None; }
+    for index in 0..source.impls.len() {
+        for position in 0..source.impls[index].associated.len() {
+            if name == format!("$family:{index}:{position}") { return Some((index, position)); }
+        }
+    }
+    None
+}
+
+pub(super) fn expand(source: &Program, index: usize, position: usize, arguments: &[usize], terms: &mut Vec<Term>) -> Result<usize, Diagnostic> {
+    let implementation = &source.impls[index];
+    let member = &implementation.associated[position];
+    let mut parameters: Vec<GenericParam> = Vec::new();
+    for parameter in &implementation.generics { if !parameter.lifetime { parameters.push(parameter.clone()); } }
+    if arguments.len() != 1usize + parameters.len() + member.generics.len() {
+        return Err(Diagnostic::new(member.span, "E_TRAIT", "generic associated type argument count differs"));
+    }
+    let mut environment = BTreeMap::new();
+    environment.insert("Self".to_string(), arguments[0]);
+    for position in 0..parameters.len() { environment.insert(parameters[position].name.clone(), arguments[position + 1usize]); }
+    let bound = type_term(source, implementation.trait_ty.unwrap(), &environment, terms);
+    if let Term::DeclaredTrait(owner, _) = terms[bound] { environment.insert(format!("$self-trait:{owner}"), bound); }
+    install(source, index, &mut environment, terms);
+    for position in 0..member.generics.len() {
+        environment.insert(member.generics[position].name.clone(), arguments[1usize + parameters.len() + position]);
+    }
+    parameter_projection_terms(source, &parameters, &mut environment, terms);
+    parameter_projection_terms(source, &member.generics, &mut environment, terms);
+    Ok(type_term(source, member.value.unwrap(), &environment, terms))
+}
+
+pub(super) fn contains(terms: &[Term], outer: usize, inner: usize) -> bool {
+    let mut pending = vec![outer];
+    while let Some(value) = pending.pop() {
+        if equivalent(terms, value, inner) { return true; }
+        match &terms[value] {
+            Term::Named(_, children) | Term::DeclaredTrait(_, children) => pending.extend_from_slice(children),
+            _ => {}
+        }
+    }
+    false
+}
+
+pub(super) fn signatures(source: &Program, implementations: &ImplementationIndex, implementation: &Impl,
+    declaration: &Trait, actual: &BTreeMap<String, usize>, expected: &BTreeMap<String, usize>,
+    terms: &mut Vec<Term>, next: &mut usize, known: &[(usize, usize)]) -> Result<(), Diagnostic> {
+    for member in &declaration.associated {
+        if member.generics.is_empty() { continue; }
+        let supplied = implementation.associated.iter().find(|item| item.name == member.name).unwrap();
+        let mut actual = actual.clone(); let mut expected = expected.clone();
+        for position in 0..member.generics.len() {
+            let variable = push(terms, Term::Variable(*next)); *next += 1usize;
+            actual.insert(supplied.generics[position].name.clone(), variable);
+            expected.insert(member.generics[position].name.clone(), variable);
+        }
+        parameter_projection_terms(source, &supplied.generics, &mut actual, terms);
+        parameter_projection_terms(source, &member.generics, &mut expected, terms);
+        let mut available = known.to_vec();
+        available.extend_from_slice(&known_bounds(source, &member.generics, &expected, terms)?);
+        for parameter in &supplied.generics {
+            let receiver = *actual.get(&parameter.name).unwrap();
+            if parameter_requires_sized(source, parameter) {
+                let sized = push(terms, Term::Named("Sized".to_string(), Vec::new()));
+                if !signature_bounds::prove(source, implementations, terms, receiver, sized, &available)? {
+                    return Err(Diagnostic::new(parameter.span, "E_TRAIT", "associated family requires a stronger Sized parameter bound"));
+                }
+            }
+            for bound in &parameter.bounds {
+                if source.relaxed_bounds.contains(bound) { continue; }
+                let bound = signature_type(source, *bound, &actual, terms)?;
+                if !signature_bounds::prove(source, implementations, terms, receiver, bound, &available)? {
+                    return Err(Diagnostic::new(parameter.span, "E_TRAIT", "associated family requires a stronger parameter bound"));
+                }
+            }
+        }
+        let mut output_assumptions = known.to_vec();
+        output_assumptions.extend_from_slice(&known_bounds(source, &supplied.generics, &actual, terms)?);
+        for (receiver, bound) in known_bounds(source, &member.generics, &expected, terms)? {
+            if !signature_bounds::prove(source, implementations, terms, receiver, bound, &output_assumptions)? {
+                return Err(Diagnostic::new(supplied.span, "E_TRAIT", "associated family implementation omits a declared parameter bound"));
+            }
+        }
+        let result = signature_type(source, supplied.value.unwrap(), &actual, terms)?;
+        let sized = push(terms, Term::Named("Sized".to_string(), Vec::new()));
+        if !signature_bounds::prove(source, implementations, terms, result, sized, &output_assumptions)? {
+            return Err(Diagnostic::new(supplied.span, "E_TRAIT", "associated family result does not establish Sized"));
+        }
+        for bound in &member.bounds {
+            let bound = signature_type(source, *bound, &expected, terms)?;
+            if !signature_bounds::prove(source, implementations, terms, result, bound, &output_assumptions)? {
+                return Err(Diagnostic::new(supplied.span, "E_TRAIT", "associated family result does not establish its declared bound"));
+            }
+        }
+    }
+    Ok(())
+}

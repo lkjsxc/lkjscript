@@ -1,0 +1,73 @@
+// expect: value 42
+// witness: {}
+// A handwritten reduction of nom's OutputM/PResult and tuple Parser contracts.
+trait ParseError<I> {}
+impl ParseError<usize> for u8 {}
+enum Err<Failure, Error> { Error(Error), Failure(Failure) }
+trait Mode {
+    type Output<T>;
+    fn bind<T, F: FnOnce() -> T>(f: F) -> Self::Output<T>;
+}
+struct Emit;
+impl Mode for Emit {
+    type Output<T> = T;
+    fn bind<T, F: FnOnce() -> T>(f: F) -> Self::Output<T> { f() }
+}
+struct Check;
+impl Mode for Check {
+    type Output<T> = ();
+    fn bind<T, F: FnOnce() -> T>(_: F) -> Self::Output<T> {}
+}
+trait IsStreaming {}
+struct Complete;
+impl IsStreaming for Complete {}
+trait OutputMode { type Output: Mode; type Error: Mode; type Incomplete: IsStreaming; }
+struct OutputM<M: Mode, E: Mode, S: IsStreaming> { output: M, error: E, incomplete: S }
+impl<M: Mode, E: Mode, S: IsStreaming> OutputMode for OutputM<M, E, S> {
+    type Output = M;
+    type Error = E;
+    type Incomplete = S;
+}
+type PResult<OM, I, O, E> = Result<
+    (I, <<OM as OutputMode>::Output as Mode>::Output<O>),
+    Err<E, <<OM as OutputMode>::Error as Mode>::Output<E>>,
+>;
+trait Parser<I> {
+    type Output;
+    type Error: ParseError<I>;
+    fn process<OM: OutputMode>(&mut self, input: I) -> PResult<OM, I, Self::Output, Self::Error>;
+}
+struct Add { amount: usize, calls: usize }
+impl Parser<usize> for Add {
+    type Output = usize;
+    type Error = u8;
+    fn process<OM: OutputMode>(&mut self, input: usize) -> PResult<OM, usize, usize, u8> {
+        self.calls += 1usize;
+        if self.amount == 0usize { return Err(Err::Error(OM::Error::bind(|| 7u8))); }
+        Ok((input + self.amount, OM::Output::bind(|| input)))
+    }
+}
+impl<I, O, E: ParseError<I>, P: Parser<I, Output = O, Error = E>> Parser<I> for (P,) {
+    type Output = (O,);
+    type Error = E;
+    fn process<OM: OutputMode>(&mut self, input: I) -> PResult<OM, I, Self::Output, Self::Error> {
+        let (input, output) = self.0.process::<OutputM<Emit, OM::Error, OM::Incomplete>>(input)?;
+        Ok((input, OM::Output::bind(|| (output,))))
+    }
+}
+fn emit<P: Parser<usize, Output = (usize,), Error = u8>>(parser: &mut P, input: usize)
+    -> PResult<OutputM<Emit, Emit, Complete>, usize, (usize,), u8> {
+    parser.process::<OutputM<Emit, Emit, Complete>>(input)
+}
+fn check<P: Parser<usize, Output = (usize,), Error = u8>>(parser: &mut P, input: usize)
+    -> PResult<OutputM<Check, Emit, Complete>, usize, (usize,), u8> {
+    parser.process::<OutputM<Check, Emit, Complete>>(input)
+}
+pub fn probe() -> i64 {
+    let mut parser = (Add { amount: 2usize, calls: 0usize },);
+    match emit(&mut parser, 40usize) { Ok((42usize, (40usize,))) => {}, _ => panic!("emit") }
+    match check(&mut parser, 40usize) { Ok((42usize, ())) => {}, _ => panic!("check") }
+    parser.0.amount = 0usize;
+    match emit(&mut parser, 40usize) { Err(Err::Error(7u8)) => {}, _ => panic!("error") }
+    39i64 + parser.0.calls as i64
+}

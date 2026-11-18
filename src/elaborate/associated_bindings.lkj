@@ -5,6 +5,29 @@ use crate::generics::TraitIdentity;
 use std::collections::BTreeMap;
 
 impl Compiler<'_> {
+    // Exact prerequisite projections may determine implementation parameters.
+    // The prerequisite is proved before its values are used, and the completed
+    // implementation still checks every equality and bound in the usual solver.
+    pub(super) fn infer_bound_equalities(&mut self, receiver: usize, bound: a::TypeId,
+        substitutions: &mut BTreeMap<String, usize>) -> Result<()> {
+        let a::Type::Path(path) = self.source.types[bound].kind.clone() else { return Ok(()); };
+        if path.bindings.is_empty() { return Ok(()); }
+        for argument in &path.args {
+            if self.resolve_if_known(*argument, substitutions)?.is_none() { return Ok(()); }
+        }
+        let span = self.source.types[bound].span;
+        let identity = self.trait_identity(&path, substitutions, span)?;
+        if !self.satisfies_identity(receiver, &identity) { return Ok(()); }
+        for binding in &path.bindings {
+            let identity = self.binding_identity(receiver, &path, binding, substitutions)?;
+            let actual = self.associated_type_for_identity(receiver, &identity, &binding.name, binding.span)?;
+            if !self.infer_type_bindings(binding.value, actual, substitutions)? {
+                return Err(err(binding.span, "E_TYPE", "associated equality type arguments disagree"));
+            }
+        }
+        Ok(())
+    }
+
     pub(super) fn check_type_bound(
         &mut self,
         ty: usize,

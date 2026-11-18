@@ -1,0 +1,11 @@
+// expect: reject E_UNSUPPORTED
+// witness: {}
+trait Source { type Output; fn produce(self) -> Self::Output; }
+struct Number;
+impl Source for Number { type Output = i64; fn produce(self) -> i64 { 42 } }
+fn unused<P>(source: P) -> i64 {
+    let value: i64 = source.produce();
+    let closure = || value;
+    closure()
+}
+pub fn probe() -> i64 { 42 }

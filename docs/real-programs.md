@@ -250,45 +250,38 @@ still under `target/` is a temporary candidate observation, not a durable eviden
 link. Fresh observations additionally require the original/projected trees to pass
 `project.pl --verify`; use `probe.pl --help` for its exact entry and package options.
 
-#### Current positional-trait frontier
+#### Current associated-type-family frontier
 
-The current producer 3d2fc84d…36fda353 adds named positional trait type
-arguments, retaining the complete receiver, trait and argument identity.
-Bounds, supertraits, associated equalities, qualified members and opaque
-results use that same application. Blanket implementations may bind type
-parameters through the applied trait. Unused generic definitions check rigidly
-against declared bounds and implicit or relaxed Sized obligations.
+The current producer f9dde246...97a8009b adds type-parameter associated families
+with complete receiver, applied-trait, member and argument identity. Rigid
+unused definitions enforce parameter/result bounds and preserve separate
+implementation/family binders. Proven prerequisite associated equalities can
+infer otherwise nonreceiver implementation parameters for delegated parsers.
 
-Concrete tuple-parser methods infer nonreceiver implementation parameters from
-input and result context. The exact expression, implementation and method
-retain that solution until their prerequisites are checked again. Inference
-does not create a coercion site: unconstrained direct/nested mutable-reference
-arguments still move. Eleven direct dispatch controls cover the missing
-transfer, ambiguity, wrong input, unused contracts and explicit reborrows.
+The 56 focused cases pass 112 native/interpreter routes and a separate Rust
+witness agrees on 24 values/output cases and 32 verdicts. Family, equality and
+dispatch queries, checked renames and invalid-edit rollback pass, together with
+41 earlier positional cases / 82 routes. [Validation](../bench/gat.md) records
+the refreshed seed, fixed point and publication gates.
 
-The focused population passes 41 cases / 82 engine routes; a separate Rust
-witness agrees on 19 values/output cases and 22 verdicts. Applied signatures,
-projections, member/method references, checked rename and atomic rejection of
-invalid body edits pass both source-command suites. The native bootstrap
-reproduces itself byte for byte and the seed is refreshed.
-[Validation](../bench/positional-traits.md) records publication gates.
+The twelve fresh unchanged-source observations change nom 17->17, DOM 63->61,
+and Sozu 448 classified plus 34 prior-unclassified unchanged. Nom retains
+13 default candidates plus four inactive; DOM now has 54 default candidates
+plus seven test-only. All new diagnostic identities are accounted for.
 
-All twelve fresh unchanged-source observations are byte-identical to the
-preceding frontier. The [current accounting](real-programs-current.json) is
-nom 17, DOM 63, and Sōzu 448 classified plus 34 prior-unclassified sites.
-Nom retains 13 default candidates plus four inactive; DOM retains 56 default
-plus seven test-only. There are no new diagnostic identities in this stage.
-Later barriers still mask the independently verified new trait contracts.
+The removed DOM diagnostics were parse refusals at document.rs:259 and
+matcher.rs:219, both lifetime-family definitions. The parser now carries family
+binders, but lifetime GATs remain a located semantic boundary behind later root
+refusals. These two vanished diagnostics do not establish their admission.
 No original large root or nom own test is admitted by these observations.
 
-Current source-hashed reviews are [nom](real-programs-positional-traits-nom-review.json),
-[DOM](real-programs-positional-traits-dom-review.json) and
-[Sōzu](real-programs-positional-traits-sozu-review.json).
-Raw receipts retain the actual producer and selected library inventory;
-commands retain the original source, projection and library paths.
-GATs, trait const/lifetime arguments and written lifetime-bearing trait
-arguments remain separate boundaries. The latest session also assigns
-operational macros and Debug to Programs after these ordinary trait forms.
+Current exact source-hashed reviews are [nom](real-programs-gat-nom-review.json),
+[DOM](real-programs-gat-dom-review.json) and
+[Sozu](real-programs-gat-sozu-review.json). Raw receipts retain the actual
+producer/library inventory and original source/projection command paths.
+The preceding positional frontier and its complete proof remain in
+[the prior accounting](../bench/gat-data/previous-frontier.json) and
+[the positional report](../bench/positional-traits.md).
 
 #### Earlier lifetime-where frontier
 
@@ -337,6 +330,7 @@ has run under lkjscript.
 | Sized bounds | 15 | 64 | 146 | Named relaxed parameters and existing borrowed representations; owned unsized storage remains separate |
 | Lifetime where predicates | 17 | 63 | 146 | Named free/inherent lifetime edges; two type-outlives where boundaries newly explicit |
 | Positional trait arguments | 17 | 63 | 146 | Exact applied type contracts and input/result inference for concrete tuple methods; later barriers still mask the original roots |
+| Type-parameter associated families | 17 | 61 | 146 | Exact family contracts and delegated parser inference; two lifetime-family parse refusals vanish behind later semantic boundaries |
 
 The APIT/RPIT history remains explicit: APIT consumed opaque result syntax
 while other parse errors masked its unsupported-result resolver. Dedicated

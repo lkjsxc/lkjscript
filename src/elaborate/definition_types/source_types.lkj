@@ -14,7 +14,7 @@ enum Work {
         environment: usize,
         arguments: usize,
     },
-    Qualified { id: a::TypeId, qualification: a::QualifiedPath, name: String, environment: usize },
+    Qualified { id: a::TypeId, qualification: a::QualifiedPath, name: String, args: Vec<a::TypeId>, environment: usize },
     Reference(bool),
     Slice,
     Array(String, usize),
@@ -73,7 +73,7 @@ impl Infer<'_, '_> {
                             continue;
                         }
                         if let Some(qualification) = &path.qualification {
-                            pending.push(Work::Qualified { id, qualification: qualification.clone(), name: path.name, environment });
+                            pending.push(Work::Qualified { id, qualification: qualification.clone(), name: path.name, args: path.args, environment });
                             pending.push(Work::Source { id: qualification.receiver, environment });
                             continue;
                         }
@@ -155,7 +155,7 @@ impl Infer<'_, '_> {
                     }
                     a::Type::Function { .. } => values.push(self.blocked()),
                 },
-                Work::Qualified { id, qualification, name, environment } => {
+                Work::Qualified { id, qualification, name, args, environment } => {
                     let receiver = values.pop().expect("qualified inference receiver");
                     let outer = if environment == 0 { base_environment.clone() }
                         else { environments[environment - 1].clone() };
@@ -168,10 +168,10 @@ impl Infer<'_, '_> {
                     };
                     let value = if let Some((declaration, arguments, mut bindings)) = application {
                         let span = self.source.types[id].span;
-                        let value = self.qualified_projection(receiver, declaration, &arguments, &name, span);
+                        let mut family = Vec::new();
+                        for argument in args { family.push(self.source_type(argument, &outer)?); }
                         let alias = super::super::semantic::source_type_name(self.source, id);
-                        self.associated_bound_headers(receiver, value, declaration, &arguments, &name, &alias, &mut bindings)?;
-                        value
+                        self.family_projection(receiver, declaration, &arguments, &name, &family, bindings, &alias, span)?
                     } else { self.blocked() };
                     values.push(value);
                 }
@@ -209,6 +209,11 @@ impl Infer<'_, '_> {
                     arguments,
                 } => {
                     let arguments = take_values(&mut values, arguments);
+                    if path.declaration.is_none() && path.name.contains("::") {
+                        let outer = if environment == 0 { base_environment.clone() } else { environments[environment - 1usize].clone() };
+                        let span = self.source.types[id].span;
+                        if let Some(value) = self.named_family_projection(id, &path, &arguments, &outer, span)? { values.push(value); continue; }
+                    }
                     if path.declaration.is_none() && arguments.len() == 1 {
                         if path.name == "Vec" {
                             values.push(self.shaped(Shape::Vec(arguments[0])));

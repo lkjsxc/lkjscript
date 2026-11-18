@@ -1,0 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Family { type Output<T>; }
+fn preserve<F: Family>(value: F::Output<&'static i64>) -> F::Output<&'static i64> { value }
+pub fn probe() -> i64 { 42 }

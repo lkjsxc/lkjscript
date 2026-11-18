@@ -23,10 +23,20 @@ pub struct Evidence {
     pub bindings: BTreeMap<usize, String>,
     pub locals: BTreeMap<usize, LocalTarget>,
     pub methods: BTreeMap<usize, MethodTarget>,
+    pub family_members: BTreeMap<a::TypeId, Option<usize>>,
     pub fields: BTreeMap<usize, usize>,
     pub builtin_fields: BTreeSet<usize>,
 }
 impl Evidence {
+    pub(super) fn family_member(&mut self, source_type: a::TypeId, owner: Option<usize>) {
+        let selected = match self.family_members.get(&source_type) {
+            Some(previous) if *previous != owner => None,
+            Some(previous) => *previous,
+            None => owner,
+        };
+        self.family_members.insert(source_type, selected);
+    }
+
     pub(super) fn method(&mut self, expression: usize, source: usize) {
         let target = match self.methods.get(&expression) {
             Some(MethodTarget::Source(previous)) if *previous != source => MethodTarget::InstanceDependent,

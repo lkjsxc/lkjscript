@@ -1,0 +1,15 @@
+// expect: value 42
+// witness: {}
+trait Source { type Next; fn next(self) -> Self::Next; }
+trait Finish { type Output; fn finish(self) -> Self::Output; }
+struct Start;
+struct End;
+impl Source for Start { type Next = End; fn next(self) -> End { End } }
+impl Finish for End { type Output = i64; fn finish(self) -> i64 { 42 } }
+trait Adapter { type Output; fn adapt(self) -> Self::Output; }
+impl<O, Q: Finish<Output = O>, P: Source<Next = Q>> Adapter for (P,) {
+    type Output = O;
+    fn adapt(self) -> O { self.0.next().finish() }
+}
+fn run<P: Adapter<Output = i64>>(parser: P) -> i64 { parser.adapt() }
+pub fn probe() -> i64 { run((Start,)) }

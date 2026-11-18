@@ -1,0 +1,6 @@
+// expect: reject E_RECURSION
+// witness: {}
+trait Family { type Output<T>; }
+struct Echo {}
+impl Family for Echo { type Output<T> = <Echo as Family>::Output<T>; }
+pub fn probe() -> i64 { 42 }

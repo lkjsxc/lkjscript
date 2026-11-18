@@ -1,8 +1,0 @@
-// expect: reject E_TYPE
-// cause: expected a Rust form.
-// pending: Identify the Vec element type before a later str borrow drives context into the owned collection.
-// Diagnostic: suggest a Vec<String> local before borrowing loop elements as str.
-fn inspect(value: &str) -> bool { !value.is_empty() }
-pub fn probe() {
-    for value in vec!["text".to_string()] { assert!(inspect(&value)); }
-}

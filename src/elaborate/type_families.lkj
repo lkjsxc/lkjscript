@@ -1,0 +1,267 @@
+//! Type-parameter associated families retain an applied trait and every family
+//! argument until a source implementation normalizes them to ordinary IR types.
+use super::{Compiler, Result, a, err};
+use crate::generics::TraitIdentity;
+use std::collections::BTreeMap;
+
+impl Compiler<'_> {
+    pub(super) fn has_type_families(&self) -> bool {
+        for declaration in &self.source.traits {
+            for member in &declaration.associated {
+                if !member.generics.is_empty() { return true; }
+            }
+        }
+        false
+    }
+
+    pub(super) fn family_arguments(&mut self, syntax: &[a::TypeId],
+        environment: &BTreeMap<String, usize>) -> Result<Vec<usize>> {
+        let mut arguments = Vec::new();
+        for argument in syntax {
+            let regions = crate::generics::trait_argument_regions(self.source, *argument);
+            let ty = self.resolve(*argument, environment)?;
+            if regions.0 || (regions.1 && self.has_view(ty)) {
+                return Err(err(self.source.types[*argument].span, "E_UNSUPPORTED",
+                    "lifetime-bearing associated family arguments require region-aware identity"));
+            }
+            arguments.push(ty);
+        }
+        Ok(arguments)
+    }
+
+    fn family_environment(&mut self, receiver: usize, identity: &TraitIdentity,
+        member: &a::AssociatedType, arguments: &[usize], span: a::Span)
+        -> Result<BTreeMap<String, usize>> {
+        if member.generics.len() != arguments.len() {
+            return Err(err(span, "E_TRAIT", "generic associated type argument count differs"));
+        }
+        let mut environment = self.trait_environment(receiver, identity);
+        for position in 0..arguments.len() {
+            environment.insert(member.generics[position].name.clone(), arguments[position]);
+        }
+        self.bounds(&member.generics, &environment)?;
+        self.check_where_predicates(&member.predicates, &environment)?;
+        Ok(environment)
+    }
+
+    pub(super) fn associated_family_for_identity(&mut self, receiver: usize,
+        identity: &TraitIdentity, name: &str, arguments: &[usize], span: a::Span) -> Result<usize> {
+        let owner = identity.declaration().unwrap();
+        let member = self.source.traits[owner].associated.iter()
+            .find(|member| member.name == name).cloned()
+            .ok_or_else(|| err(span, "E_TRAIT", "associated family is not declared by the selected trait"))?;
+        if member.generics.is_empty() {
+            if !arguments.is_empty() { return Err(err(span, "E_TRAIT", "associated type does not take type arguments")); }
+            return self.associated_type_for_identity(receiver, identity, name, span);
+        }
+        self.trait_argument_contract(receiver, identity, span)?;
+        if !self.satisfies_identity(receiver, identity) {
+            return Err(err(span, "E_TRAIT", "associated family requires its declared trait bound"));
+        }
+        let environment = self.family_environment(receiver, identity, &member, arguments, span)?;
+        let abstract_receiver = self.contracts.as_ref()
+            .is_some_and(|contracts| contracts.traits.contains_key(&(receiver, identity.clone())));
+        if abstract_receiver {
+            let key = (receiver, identity.clone(), name.to_string(), arguments.to_vec());
+            if let Some(value) = self.contracts.as_ref().unwrap().families.get(&key) { return Ok(*value); }
+            for previous in &self.contracts.as_ref().unwrap().active_families {
+                if previous.0 != receiver || previous.1 != *identity || previous.2 != name || previous.3.len() != arguments.len() { continue; }
+                let mut contains = true;
+                for position in 0..arguments.len() { contains = contains && self.associated_argument_contains(arguments[position], previous.3[position]); }
+                if contains { return Err(err(span, "E_RECURSION", "associated family bounds expand recursively")); }
+            }
+            let ordinal = self.contracts.as_ref().unwrap().families.len();
+            let value = self.rigid_type(&format!("t{receiver}::trait{owner}::{name}::family{ordinal}"));
+            self.contracts.as_mut().unwrap().families.insert(key.clone(), value);
+            self.contracts.as_mut().unwrap().active_families.push(key);
+            let mut checked = Ok(());
+            for bound in &member.bounds {
+                checked = self.assume_bound(value, *bound, &environment);
+                if checked.is_err() { break; }
+            }
+            self.contracts.as_mut().unwrap().active_families.pop();
+            checked?;
+            return Ok(value);
+        }
+        let mut witness = self.implementation_witness(receiver, identity).ok_or_else(||
+            err(span, "E_TRAIT", "associated family has no implementation witness"))?;
+        witness.substitutions.insert("Self".to_string(), receiver);
+        self.implementation_associated_family(witness.implementation, witness.substitutions, name, arguments)
+    }
+
+    // Self names the enclosing declaration. A different same-spelled trait
+    // family never replaces that owner, even if its normalized result agrees.
+    pub(super) fn family_self_identity(&mut self, environment: &BTreeMap<String, usize>,
+        span: a::Span) -> Result<Option<TraitIdentity>> {
+        for index in 0..self.source.impls.len() {
+            if !environment.contains_key(&format!("$family::implementation:{index}")) { continue; }
+            let Some(bound) = self.source.impls[index].trait_ty else { return Ok(None); };
+            let a::Type::Path(path) = self.source.types[bound].kind.clone() else { return Ok(None); };
+            return Ok(Some(self.trait_identity(&path, environment, span)?));
+        }
+        for owner in 0..self.source.traits.len() {
+            if environment.contains_key(&format!("$family::trait:{owner}")) {
+                return Ok(Some(self.environment_trait_identity(owner, environment)));
+            }
+        }
+        Ok(None)
+    }
+
+    pub(super) fn named_family(&mut self, path: &a::Path,
+        environment: &BTreeMap<String, usize>, span: a::Span) -> Result<Option<usize>> {
+        if path.qualification.is_some() || path.declaration.is_some() { return Ok(None); }
+        let Some(separator) = path.name.rfind("::") else { return Ok(None); };
+        let prefix = path.name.as_str()[..separator].to_string();
+        let member = path.name.as_str()[separator + 2usize..].to_string();
+        let receiver = if let Some(receiver) = environment.get(&prefix) { *receiver } else {
+            if !prefix.contains("::") { return Ok(None); }
+            let root = prefix.as_str().split("::").next().unwrap().to_string();
+            if !environment.contains_key(&root) { return Ok(None); }
+            let nested = a::Path { qualification: None, bindings: Vec::new(), declaration: None,
+                name: prefix.clone(), args: Vec::new() };
+            self.named_type(&nested, environment, span)?
+        };
+        let mut selected = if prefix == "Self" { self.family_self_identity(environment, span)? } else { None };
+        if selected.is_none() {
+            for owner in 0..self.source.traits.len() {
+                let mut declared = false;
+                for item in &self.source.traits[owner].associated { declared = declared || item.name == member; }
+                if !declared { continue; }
+                let stem = format!("$family::bound:{prefix}:{owner}:");
+                for key in environment.keys() {
+                    if !key.starts_with(&stem) { continue; }
+                    let suffix = &key.as_str()[stem.len()..];
+                    let mut arguments = Vec::new();
+                    for argument in suffix.split(',') {
+                        if !argument.is_empty() { arguments.push(argument.parse::<usize>().unwrap()); }
+                    }
+                    let identity = TraitIdentity::application(owner, arguments);
+                    if let Some(previous) = &selected {
+                        if *previous != identity {
+                            return Err(err(span, "E_TRAIT", "associated family name is ambiguous between trait bounds"));
+                        }
+                    }
+                    selected = Some(identity);
+                }
+            }
+        }
+        if selected.is_none() {
+            if let Some(contracts) = &self.contracts {
+                for (target, identity) in contracts.traits.keys() {
+                    if *target != receiver { continue; }
+                    let owner = identity.declaration().unwrap();
+                    let mut declared = false;
+                    for item in &self.source.traits[owner].associated { declared = declared || item.name == member; }
+                    if !declared { continue; }
+                    if selected.is_some() { return Err(err(span, "E_TRAIT", "associated family name is ambiguous between trait bounds")); }
+                    selected = Some(identity.clone());
+                }
+            }
+        }
+        let Some(identity) = selected else { return Ok(None); };
+        let arguments = self.family_arguments(&path.args, environment)?;
+        Ok(Some(self.associated_family_for_identity(receiver, &identity, &member, &arguments, span)?))
+    }
+
+    pub(super) fn record_family_bound(&self, alias: &str, receiver: usize,
+        identity: &TraitIdentity, environment: &mut BTreeMap<String, usize>) {
+        let Some(owner) = identity.declaration() else { return; };
+        let mut key = format!("$family::bound:{alias}:{owner}:");
+        for argument in identity.arguments() { key.push_str(&format!("{argument},")); }
+        environment.insert(key, receiver);
+    }
+
+    pub(super) fn record_family_result_bounds(&mut self, alias: &str, receiver: usize,
+        identity: &TraitIdentity, results: &BTreeMap<String, usize>,
+        environment: &mut BTreeMap<String, usize>) -> Result<()> {
+        let Some(owner) = identity.declaration() else { return Ok(()); };
+        let declaration = self.source.traits[owner].clone();
+        let mut declared = self.trait_environment(receiver, identity);
+        for (name, value) in results { declared.insert(format!("Self::{name}"), *value); }
+        for member in &declaration.associated {
+            let Some(result) = results.get(&member.name) else { continue; };
+            let result_alias = format!("{alias}::{}", member.name);
+            let mut pending: Vec<(a::TypeId, BTreeMap<String, usize>)> = Vec::new();
+            for bound in &member.bounds { pending.push((*bound, declared.clone())); }
+            let mut seen = std::collections::BTreeSet::<TraitIdentity>::new();
+            while let Some((bound, declared)) = pending.pop() {
+                let a::Type::Path(path) = self.source.types[bound].kind.clone() else { continue; };
+                if crate::generics::bound_identity(self.source, &path).declaration().is_none() { continue; }
+                let span = self.source.types[bound].span;
+                let identity = self.trait_identity(&path, &declared, span)?;
+                if !seen.insert(identity.clone()) { continue; }
+                self.record_family_bound(&result_alias, *result, &identity, environment);
+                let declared = self.trait_environment(*result, &identity);
+                for bound in &self.source.traits[identity.declaration().unwrap()].bounds {
+                    pending.push((*bound, declared.clone()));
+                }
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn validate_trait_families(&mut self, owner: usize) -> Result<()> {
+        let declaration = self.source.traits[owner].clone();
+        let mut has_family = false;
+        for member in &declaration.associated { has_family = has_family || !member.generics.is_empty(); }
+        if !has_family { return Ok(()); }
+        let environment = self.trait_parameters(owner)?;
+        let receiver = *environment.get(&"Self".to_string()).unwrap();
+        let identity = self.environment_trait_identity(owner, &environment);
+        for member in &declaration.associated {
+            if member.generics.is_empty() { continue; }
+            let mut environment = environment.clone();
+            if let Err(mut diagnostic) = self.declare_parameters_with_predicates(&member.generics, &member.predicates, &mut environment) {
+                if diagnostic.code == "E_TRAIT" {
+                    diagnostic.code = "E_UNSUPPORTED".to_string();
+                    diagnostic.message = format!("associated family input contracts need deferred well-formedness: {}", diagnostic.message);
+                }
+                return Err(diagnostic);
+            }
+            let mut arguments = Vec::new();
+            for parameter in &member.generics { arguments.push(*environment.get(&parameter.name).unwrap()); }
+            let result = self.associated_family_for_identity(receiver, &identity, &member.name, &arguments, member.span)?;
+            for bound in &member.bounds { self.check_type_bound(result, *bound, &environment, member.span)?; }
+        }
+        Ok(())
+    }
+
+    pub(super) fn validate_implementation_families(&mut self, index: usize,
+        environment: &BTreeMap<String, usize>) -> Result<()> {
+        let implementation = self.source.impls[index].clone();
+        let Some(bound) = implementation.trait_ty else { return Ok(()); };
+        let a::Type::Path(path) = self.source.types[bound].kind.clone() else { return Ok(()); };
+        let span = self.source.types[bound].span;
+        let identity = self.trait_identity(&path, environment, span)?;
+        let Some(owner) = identity.declaration() else { return Ok(()); };
+        let declaration = self.source.traits[owner].clone();
+        for member in &implementation.associated {
+            if member.generics.is_empty() { continue; }
+            let mut expected: Option<a::AssociatedType> = None;
+            for item in &declaration.associated {
+                if item.name == member.name { expected = Some(item.clone()); }
+            }
+            let Some(expected) = expected else {
+                return Err(err(member.span, "E_TRAIT", "associated family has no declared member"));
+            };
+            let mut actual = environment.clone();
+            self.declare_parameters_with_predicates(&member.generics, &member.predicates, &mut actual)?;
+            let mut arguments = Vec::new();
+            for parameter in &member.generics { arguments.push(*actual.get(&parameter.name).unwrap()); }
+            let receiver = *actual.get(&"Self".to_string()).unwrap();
+            let mut declared = self.trait_environment(receiver, &identity);
+            for position in 0..arguments.len() { declared.insert(expected.generics[position].name.clone(), arguments[position]); }
+            // The implementation's family application must itself satisfy the
+            // declared input contract under its written binder assumptions.
+            self.bounds(&expected.generics, &declared)?;
+            self.check_where_predicates(&expected.predicates, &declared)?;
+            let Some(value) = member.value else {
+                return Err(err(member.span, "E_TRAIT", "associated family needs a definition"));
+            };
+            let result = self.resolve(value, &actual)?;
+            self.require_source_sized(result, member.span)?;
+            for bound in &expected.bounds { self.check_type_bound(result, *bound, &declared, member.span)?; }
+        }
+        Ok(())
+    }
+}

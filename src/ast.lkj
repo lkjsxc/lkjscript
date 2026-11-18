@@ -208,6 +208,8 @@ pub struct Enum {
 #[derive(Clone)]
 pub struct AssociatedType {
     pub name: String,
+    pub generics: Vec<GenericParam>,
+    pub predicates: Vec<WherePredicate>,
     pub bounds: Vec<TypeId>,
     pub value: Option<TypeId>,
     pub span: Span,

@@ -3,6 +3,7 @@
 mod bound_solver;
 mod signature_bounds;
 mod associated_bindings;
+mod type_families;
 mod const_functions;
 pub(crate) use const_functions::const_data_constructor;
 pub(crate) mod const_arguments;
@@ -126,6 +127,11 @@ fn type_term(
         let mut values = Vec::new();
         for child in kids {
             values.push(*done.get(&child).unwrap());
+        }
+        if let Type::Path(path) = &source.types[ty].kind {
+            if let Some(value) = type_families::apply(source, path, &values, env, terms) {
+                done.insert(ty, value); continue;
+            }
         }
         // A concrete spelling of the current receiver uses the same recorded
         // implementation equation as Self. Only structural receiver equality
@@ -1316,6 +1322,7 @@ pub fn validate(source: &Program) -> Result<(), Diagnostic> {
     }
     declarations(source)?;
     trait_applications(source)?;
+    type_families::validate(source)?;
     const_functions::validate(source)?;
     alias_cycles(source)?;
     crate::generics::const_arguments::validate(source)?;
@@ -2338,12 +2345,14 @@ pub(crate) fn alias_cycle_problems(source: &Program) -> Vec<(usize, Diagnostic)>
 enum Normalize {
     Enter(usize),
     Alias(usize, usize),
+    Family(usize, usize),
     Node(usize, String, Vec<usize>),
     DeclaredTrait(usize, usize, Vec<usize>),
 }
 fn normalize(source: &Program, term: usize, terms: &mut Vec<Term>) -> Result<usize, Diagnostic> {
     let mut done = BTreeMap::new();
     let mut tasks = vec![Normalize::Enter(term)];
+    let mut families: Vec<(String, Vec<usize>)> = Vec::new();
     while let Some(task) = tasks.pop() {
         match task {
             Normalize::Enter(id) => {
@@ -2358,6 +2367,20 @@ fn normalize(source: &Program, term: usize, terms: &mut Vec<Term>) -> Result<usi
                         }
                     }
                     Term::Named(name, kids) => {
+                        if let Some((implementation, member)) = type_families::definition(source, &name) {
+                            for (previous, arguments) in &families {
+                                if *previous != name || arguments.len() != kids.len() { continue; }
+                                let mut contains = true;
+                                for position in 0..kids.len() { contains = contains && type_families::contains(terms, kids[position], arguments[position]); }
+                                if contains { return Err(Diagnostic::new(source.impls[implementation].associated[member].span,
+                                    "E_RECURSION", "associated family definition recurs without decreasing its arguments")); }
+                            }
+                            let expanded = type_families::expand(source, implementation, member, &kids, terms)?;
+                            families.push((name, kids));
+                            tasks.push(Normalize::Family(id, expanded));
+                            tasks.push(Normalize::Enter(expanded));
+                            continue;
+                        }
                         let mut alias = None;
                         for a in &source.aliases {
                             if qualified(&a.module, &a.name) == name {
@@ -2391,6 +2414,11 @@ fn normalize(source: &Program, term: usize, terms: &mut Vec<Term>) -> Result<usi
                         done.insert(id, id);
                     }
                 }
+            }
+            Normalize::Family(id, expanded) => {
+                families.pop();
+                let normalized = *done.get(&expanded).unwrap();
+                done.insert(id, normalized);
             }
             Normalize::Alias(id, expanded) => {
                 let normalized = *done.get(&expanded).unwrap();
@@ -2725,6 +2753,7 @@ fn implemented_trait_environment(source: &Program, declaration: usize, bound: us
 
 fn implementation_projection_terms(
     source: &Program,
+    implementation_index: usize,
     implementation: &Impl,
     trait_index: usize,
     env: &mut BTreeMap<String, usize>,
@@ -2734,10 +2763,12 @@ fn implementation_projection_terms(
     let bound = signature_type(source, implementation.trait_ty.unwrap(), env, terms)?;
     env.insert(format!("$self-trait:{trait_index}"), bound);
     let receiver = *env.get(&"Self".to_string()).unwrap();
+    type_families::install(source, implementation_index, env, terms);
     let mut declared = implemented_trait_environment(source, trait_index, bound, receiver, env, terms);
     parameter_projection_terms(source, &declaration.generics, &mut declared, terms);
     let mut pending: Vec<(String, TypeId, bool)> = Vec::new();
     for member in &declaration.associated {
+        if !member.generics.is_empty() { continue; }
         let supplied = implementation.associated.iter().find(|item| item.name == member.name).and_then(|item| item.value);
         let Some(value) = supplied.or(member.value) else { return Ok(false); };
         pending.push((member.name.clone(), value, supplied.is_none()));
@@ -2763,7 +2794,7 @@ fn implementation_projection_terms(
 
 fn signatures(source: &Program) -> Result<(), Diagnostic> {
     let implementations = ImplementationIndex::new(source)?;
-    for implementation in &source.impls {
+    for (implementation_index, implementation) in source.impls.iter().enumerate() {
         let trait_id = match implementation.trait_ty {
             Some(id) => id,
             None => continue,
@@ -2835,8 +2866,16 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
                 }
             }
         }
+        type_families::install(source, implementation_index, &mut actual_env, &mut terms);
+        for member in &declaration.associated {
+            if !member.generics.is_empty() {
+                let key = format!("Self::{}", member.name);
+                expected_env.insert(key.clone(), *actual_env.get(&key).unwrap());
+            }
+        }
         let mut associated: Vec<(String, TypeId, bool)> = Vec::new();
         for expected in &declaration.associated {
+            if !expected.generics.is_empty() { continue; }
             let value = implementation
                 .associated
                 .iter()
@@ -2899,7 +2938,10 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
         for bound in where_bounds(source, &declaration.predicates, &expected_env, &mut terms)? {
             known.push(bound);
         }
+        type_families::signatures(source, &implementations, implementation, declaration,
+            &actual_env, &expected_env, &mut terms, &mut next, &known)?;
         for associated in &declaration.associated {
+            if !associated.generics.is_empty() { continue; }
             if let Some(concrete) = expected_env.get(&format!("Self::{}", associated.name)) {
                 for constraint in &associated.bounds {
                     let b = signature_type(source, *constraint, &expected_env, &mut terms)?;

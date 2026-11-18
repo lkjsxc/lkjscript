@@ -1,0 +1,8 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Other {}
+struct Holder<T: Other> { value: T }
+trait Family { type Output<T>; }
+struct Echo {}
+impl Family for Echo { type Output<T> = Holder<T>; }
+pub fn probe() -> i64 { 42 }

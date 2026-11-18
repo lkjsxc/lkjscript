@@ -213,8 +213,25 @@ trait, so specialization cannot replace that evidence with a different argument
 or a same-spelled inherent method. Provided bodies substitute trait parameters
 independently from implementation parameters. Supertrait cycles and recursively
 expanding proof arguments are refused without a search-depth threshold.
-Trait lifetime/const parameters and generic associated type families remain
-separate located source boundaries. Written reference arguments, arguments through
+An implementation parameter can also be inferred from an exact prerequisite's
+associated equality, as in `P: Parser<I, Output = O, Error = E>`. The receiver and
+trait arguments must be known before that prerequisite is proved and its
+associated values constrain `O` or `E`. Callable and equality constraints reach
+a fixed point; every completed implementation still checks all prerequisites,
+equalities and where predicates. These equations neither choose between
+ambiguous implementations nor invert an associated family to guess its inputs.
+Declared method signatures on rigid parameters also propagate their result
+types into subsequent closure captures. A concrete specialization cannot supply
+a missing declaration-time method contract.
+Unsized reference coercions wait for unresolved producers through match/block result
+constraints; a borrowed-slice parameter does not choose an unsized owned local.
+This also retains the declared `Option<String>` result through `as_ref().is_some_and()`
+on a generic trait receiver, and the owned `String` element of a Vec loop before
+its later `&str` argument coercion. The original diagnostic bodies now have
+positive [closure-context](../tests/conformance/pass/generic_option_closure_context.lkj)
+and [loop-element](../tests/conformance/pass/vec_loop_element_inference.lkj) witnesses.
+[Prerequisite witness case](../tests/conformance/pass/trait_equality_witness.lkj).
+Trait lifetime/const parameters remain separate located source boundaries. Written reference arguments, arguments through
 lifetime-parameterized nominal types/aliases, and projections that normalize to
 views require a region-aware witness identity and are refused. The existing
 region-erased IR type identity cannot prove that two written lifetimes denote the
@@ -229,6 +246,43 @@ candidates do not become witnesses. The completed application supplies no new
 argument coercion site: an inferred mutable-reference argument still moves unless
 the source establishes a reborrow. Checked specialization, references, and method
 renames retain the same application. [Tuple dispatch](../tests/conformance/pass/positional_method_tuple.lkj).
+
+**Generic associated types.** A declared family such as `Mode::Output<T>`
+keeps its receiver, complete trait application, member, and ordered family
+arguments through definition checking, inference and method replay. Qualified
+`<M as Mode>::Output<T>` and unambiguous `M::Output<T>` resolve the same family.
+A concrete implementation normalizes its RHS under separate implementation and
+family binders; no family operation or assumed witness enters checked IR.
+The type-parameter form supports methods, aliases, nested associated owners,
+parameter bounds and result bounds, including nom-style `OutputMode`/`Mode`
+selection. Family results are implicitly Sized; a named parameter may use
+`?Sized`. Equal family outputs never infer equal receivers or arguments.
+
+Every implementation family is checked with rigid parameters even when unused.
+Its written bounds must establish the declared parameter contract and may not
+strengthen it. Its RHS and result bounds must follow from those written bounds;
+omitting a declared input bound is rejected even when the RHS does not need it. Missing
+members, different arities, contradictory result bounds, transparent cycles and
+expanding family queries are refused with source locations. Checked queries
+retain family applications and binder identities; member/binder renames and
+body transactions recheck those obligations. Unproven family reference sites
+remain explicit and block member renames; family binder renames reject capture
+inside their associated declaration.
+
+Family lifetime/const binders, type-outlives bounds, family defaults, predicates on nonparameter
+where targets, written reference/lifetime-bearing arguments and lifetime-bearing
+RHS definitions remain located source boundaries. A named type parameter can
+carry a borrowed actual uniformly, as for positional trait applications; written
+region-specific family identity needs a separate region contract.
+Family input bounds currently require well-formed trait arguments at declaration
+time. A declaration whose input contracts rely on Rust's deferred well-formedness
+is refused with `E_UNSUPPORTED`; its conditions are never silently discarded.
+[Mode family case](../tests/conformance/pass/gat_mode.lkj) and
+[Parser mode case](../tests/conformance/pass/gat_parser_modes.lkj).
+The [delegated parser case](../tests/conformance/pass/gat_delegated_parser.lkj)
+combines exact `OutputM`/`PResult` projections with a handwritten tuple parser,
+including emitting, discarding and error propagation through `?`.
+
 Send/Sync/Data derive structurally; Data excludes capabilities. Expanding generic-instantiation SCCs reject, including alias paths.
 Method calls lower to concrete function calls; trait spelling alone grants no builtin semantics.
 

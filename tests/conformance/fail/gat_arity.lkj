@@ -1,0 +1,6 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Family { type Output<T>; }
+struct Echo {}
+impl Family for Echo { type Output<A, B> = (A, B); }
+pub fn probe() -> i64 { 42 }

@@ -1,0 +1,10 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Source { type Output; }
+struct Number;
+impl Source for Number { type Output = Vec<i64>; }
+trait Adapter {}
+impl<O: Copy, P: Source<Output = O>> Adapter for (P,) {}
+fn require<P: Adapter>(_: P) {}
+fn unused() { require((Number,)); }
+pub fn probe() -> i64 { 42 }

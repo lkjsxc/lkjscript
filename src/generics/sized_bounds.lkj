@@ -32,6 +32,8 @@ pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
     for item in &source.traits { parameters(source, &item.generics, &mut allowed)?; }
     for item in &source.impls { parameters(source, &item.generics, &mut allowed)?; }
     for item in &source.aliases { parameters(source, &item.generics, &mut allowed)?; }
+    for item in &source.traits { for member in &item.associated { parameters(source, &member.generics, &mut allowed)?; } }
+    for item in &source.impls { for member in &item.associated { parameters(source, &member.generics, &mut allowed)?; } }
     for bound in &source.relaxed_bounds {
         let node = &source.types[*bound];
         let valid = match &node.kind {

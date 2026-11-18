@@ -1,0 +1,6 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Family { type Output<T: Copy>; }
+struct Echo {}
+impl Family for Echo { type Output<T: Clone> = u8; }
+pub fn probe() -> i64 { 42 }

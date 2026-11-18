@@ -55,6 +55,7 @@ impl Infer<'_, '_> {
         self.trait_equations(receiver, "Self", trait_ty, &mut equations, false)?;
         self.binding_equations(receiver, trait_ty, &outer, false)?;
         for associated in &definition.associated {
+            if !associated.generics.is_empty() { continue; }
             let value = self.qualified_projection(receiver, declaration, &trait_arguments, &associated.name, span);
             environment.insert(format!("Self::{}", associated.name), value);
         }

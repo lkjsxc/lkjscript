@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {}
+trait Family { type Output<T>; }
+fn bad<F: Family>(value: F::Output<u8>) -> F::Output<bool> { value }
+pub fn probe() -> i64 { 42 }

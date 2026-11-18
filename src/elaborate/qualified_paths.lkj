@@ -54,6 +54,7 @@ impl Compiler<'_> {
         }
         for index in 0..self.source.traits.len() {
             let declaration = self.source.traits[index].clone();
+            self.validate_trait_families(index)?;
             if !declaration.predicates.is_empty() { let _ = self.trait_parameters(index)?; }
             for method in &declaration.methods {
                 let function = self.source.functions[*method].clone();
@@ -81,6 +82,8 @@ impl Compiler<'_> {
             let receiver = self.resolve(implementation.target, &environment)?;
             environment.insert("Self".to_string(), receiver);
             self.assume_where_predicates(&implementation.predicates, &environment)?;
+            environment.insert(format!("$family::implementation:{index}"), receiver);
+            self.validate_implementation_families(index, &environment)?;
             let _ = self.implementation_associated(index, environment)?;
         }
         Ok(())
@@ -133,7 +136,9 @@ impl Compiler<'_> {
             return Ok(value);
         }
         if !self.satisfies_identity(receiver, identity) {
-            return Err(err(span, "E_TRAIT", "fully qualified associated type requires its declared trait bound"));
+            return Err(err(span, "E_TRAIT", &format!(
+                "fully qualified associated type requires its declared trait bound: {} as {} for {name}",
+                self.display_type(receiver), self.source.traits[owner].name)));
         }
         let abstract_receiver = self.contracts.as_ref()
             .is_some_and(|contracts| contracts.traits.contains_key(&(receiver, identity.clone())));
@@ -200,6 +205,7 @@ impl Compiler<'_> {
         };
         substitutions.insert("Self".to_string(), receiver);
         for item in &declaration.associated {
+            if !item.generics.is_empty() { continue; }
             let ty = self.associated_type_for_identity(receiver, identity, &item.name, span)?;
             substitutions.insert(format!("Self::{}", item.name), ty);
         }

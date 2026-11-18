@@ -43,17 +43,23 @@ impl Infer<'_, '_> {
         Ok(())
     }
 
-    /// An opaque receiver contributes only its written trait declarations.
+    /// An abstract receiver contributes only its written trait declarations.
     /// Concrete implementation heads must never determine its source interface.
-    pub(super) fn opaque_header(&mut self, receiver: Variable, name: &str,
+    pub(super) fn bound_method_header(&mut self, receiver: Variable, name: &str,
         type_args: &[a::TypeId], arguments: &[Variable], result: Variable,
         location: (a::ModuleId, a::Span)) -> Result<bool> {
-        let Some(Shape::Opaque(ty, _, _)) = self.shape(receiver) else { return Ok(false); };
+        let opaque = match self.shape(receiver) {
+            Some(Shape::Opaque(ty, _, _)) => Some(ty),
+            Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _, _)) => None,
+            _ => return Ok(false),
+        };
         let (scope, span) = location;
         let mut clone = false;
-        for bound in &self.source.impl_traits.get(&ty).unwrap().bounds {
-            if matches!(&self.source.types[*bound].kind, a::Type::Path(path)
-                if path.declaration.is_none() && matches!(path.name.as_str(), "Clone" | "Copy")) { clone = true; }
+        if let Some(ty) = opaque {
+            for bound in &self.source.impl_traits.get(&ty).unwrap().bounds {
+                if matches!(&self.source.types[*bound].kind, a::Type::Path(path)
+                    if path.declaration.is_none() && matches!(path.name.as_str(), "Clone" | "Copy")) { clone = true; }
+            }
         }
         let mut seen: Vec<(a::DeclarationId, Vec<Variable>)> = Vec::new();
         let mut method: Option<(usize, BTreeMap<String, Variable>)> = None;
@@ -69,7 +75,7 @@ impl Infer<'_, '_> {
                 if matches!(&self.source.types[*parent].kind, a::Type::Path(path)
                     if path.declaration.is_none() && matches!(path.name.as_str(), "Clone" | "Copy")) { clone = true; }
             }
-            if !self.names.trait_in_scope(scope, declaration, span) { continue; }
+            if opaque.is_some() && !self.names.trait_in_scope(scope, declaration, span) { continue; }
             for candidate in &definition.methods {
                 let function = &self.source.functions[*candidate];
                 if function.name != name { continue; }

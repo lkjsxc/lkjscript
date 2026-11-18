@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {}
+trait Source<I> { type Output; fn produce(self, input: I) -> Self::Output; }
+struct Number;
+impl Source<u8> for Number { type Output = i64; fn produce(self, input: u8) -> i64 { input as i64 + 40 } }
+trait Adapter<I> { type Output; fn adapt(self, input: I) -> Self::Output; }
+impl<I, O, P: Source<I, Output = O>> Adapter<I> for (P,) {
+    type Output = O;
+    fn adapt(self, input: I) -> O { self.0.produce(input) }
+}
+fn run<P: Adapter<u8, Output = i64>>(parser: P) -> i64 { parser.adapt(2u8) }
+pub fn probe() -> i64 { run((Number,)) }

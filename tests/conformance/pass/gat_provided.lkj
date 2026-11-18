@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+trait Mode {
+    type Output<T>;
+    fn keep<T>(value: Self::Output<T>) -> Self::Output<T> { value }
+}
+struct Emit {}
+impl Mode for Emit { type Output<T> = T; }
+fn apply<M: Mode, T>(value: M::Output<T>) -> M::Output<T> { <M as Mode>::keep::<T>(value) }
+pub fn probe() -> i64 { apply::<Emit, i64>(42) }

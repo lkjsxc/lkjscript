@@ -60,7 +60,14 @@ impl Compiler<'_> {
     }
 
     pub(super) fn implementation_associated_member(
-        &mut self, index: usize, mut environment: BTreeMap<String, usize>, name: &str,
+        &mut self, index: usize, environment: BTreeMap<String, usize>, name: &str,
+    ) -> Result<usize> {
+        let arguments: Vec<usize> = Vec::new();
+        self.implementation_associated_family(index, environment, name, &arguments)
+    }
+
+    pub(super) fn implementation_associated_family(
+        &mut self, index: usize, mut environment: BTreeMap<String, usize>, name: &str, family: &[usize],
     ) -> Result<usize> {
         let implementation = self.source.impls[index].clone();
         self.prepare_callable_arguments(&implementation.generics, &mut environment)?;
@@ -73,6 +80,11 @@ impl Compiler<'_> {
         let receiver = if let Some(receiver) = environment.get(&"Self".to_string()) { *receiver }
             else { self.resolve(implementation.target, &environment)? };
         environment.insert("Self".to_string(), receiver);
+        environment.insert(format!("$family::implementation:{index}"), receiver);
+        if associated.generics.len() != family.len() {
+            return Err(err(associated.span, "E_TRAIT", "generic associated type argument count differs"));
+        }
+        for position in 0..family.len() { environment.insert(associated.generics[position].name.clone(), family[position]); }
         let mut arguments: Vec<usize> = Vec::new();
         for parameter in &implementation.generics {
             if !parameter.lifetime {
@@ -82,6 +94,7 @@ impl Compiler<'_> {
                 arguments.push(*argument);
             }
         }
+        arguments.extend_from_slice(family);
         let mut identity = arguments.clone();
         identity.push(receiver);
         let key = (index, identity, name.to_string());
@@ -165,7 +178,7 @@ impl Compiler<'_> {
         while let Some(ty) = pending.pop() {
             match &self.source.types[ty].kind {
                 a::Type::Path(path) => {
-                    if path.qualification.is_none() && path.name.starts_with("Self::") {
+                    if path.qualification.is_none() && path.args.is_empty() && path.name.starts_with("Self::") {
                         dependencies.insert(path.name.as_str()[6..].to_string());
                     }
                     if let Some(qualification) = &path.qualification { pending.push(qualification.receiver); }

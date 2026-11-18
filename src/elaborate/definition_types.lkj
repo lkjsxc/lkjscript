@@ -10,6 +10,7 @@ mod method_headers;
 mod pattern_equations;
 mod projection_equations;
 mod qualified_types;
+mod type_families;
 mod source_types;
 mod semantic;
 
@@ -146,6 +147,7 @@ pub(super) struct DefinitionTypes {
     result: Variable,
     expressions: BTreeMap<a::ExprId, Variable>,
     bindings: BTreeMap<a::PatternId, Variable>,
+    family_members: BTreeMap<a::TypeId, Option<usize>>,
     // Values are inference variables here, and resolved types in Types below.
     method_applications: BTreeMap<a::ExprId, MethodApplication>,
     closures: BTreeMap<a::ExprId, closures::Closure>,
@@ -288,8 +290,9 @@ impl DefinitionTypes {
                     let a::Item::Trait(owner) = compiler.source.declarations[declaration].item else {
                         return Err(err(span, "E_TRAIT", "qualified projection requires a declared trait"));
                     };
-                    let identity = crate::generics::TraitIdentity::application(owner, values[1..].to_vec());
-                    Some(compiler.associated_type_for_identity(values[0], &identity, &member, span)?)
+                    let count = compiler.source.traits[owner].generics.len();
+                    let identity = crate::generics::TraitIdentity::application(owner, values[1usize..1usize + count].to_vec());
+                    Some(compiler.associated_family_for_identity(values[0], &identity, &member, &values[1usize + count..], span)?)
                 }
                 Shape::Rigid(name) | Shape::ConstantRigid(name) => substitutions.get(&name).copied(),
                 Shape::Constant(value) => Some(compiler.constant(value)),
@@ -829,6 +832,55 @@ impl Infer<'_, '_> {
             }
         }
     }
+    fn incoming_operation(&self, variable: Variable) -> bool {
+        let mut pending = vec![variable];
+        let mut seen = BTreeSet::new();
+        while let Some(variable) = pending.pop() {
+            let root = self.definition.root(variable);
+            if !seen.insert(root) { continue; }
+            match self.shape(root) {
+                None => {
+                    if self.definition.nodes[root].producers != 0 { return true; }
+                    // A match or block result can still await an arm's producer
+                    // through a coercion edge. A later &[T] argument must not
+                    // turn that unknown owned Vec<T> result into an unsized [T].
+                    for id in &self.waiting[root] {
+                        let Some(Obligation::Coercion { source, target, .. }) = &self.obligations[*id] else { continue; };
+                        let mut target = *target;
+                        loop {
+                            if self.definition.root(target) == root {
+                                pending.push(*source);
+                                break;
+                            }
+                            match self.shape(target) {
+                                Some(Shape::Ref(_, inner) | Shape::Box(inner)) => target = inner,
+                                _ => break,
+                            }
+                        }
+                    }
+                }
+                Some(Shape::Ref(_, inner) | Shape::Box(inner)) => pending.push(inner),
+                _ => {}
+            }
+        }
+        false
+    }
+    fn coercion_operation_pending(&self, from: Variable, to: Variable) -> bool {
+        if self.pending_operation(from) || self.pending_operation(to) { return true; }
+        // An unsized borrowed view must wait for the source's owned referent.
+        // Sized contexts still constrain ordinary constructor/closure unknowns;
+        // following every incoming equation would turn that inference cyclic.
+        if let (Some(Shape::Ref(_, source)), Some(Shape::Ref(_, target))) =
+            (self.shape(from), self.shape(to)) {
+            let view = match self.shape(target) {
+                Some(Shape::Slice(_)) => true,
+                Some(Shape::Atom(name)) => name == "str",
+                _ => false,
+            };
+            if view { return self.incoming_operation(source); }
+        }
+        false
+    }
     fn coercion_pending(&self, from: Variable, to: Variable) -> bool {
         // A known scalar target fixes the type even when its producer is still
         // awaiting a method/projection contract. No reference coercion can
@@ -836,7 +888,7 @@ impl Infer<'_, '_> {
         if matches!(self.shape(to), Some(Shape::Atom(_))) {
             return false;
         }
-        if self.pending_operation(from) || self.pending_operation(to) {
+        if self.coercion_operation_pending(from, to) {
             return true;
         }
         match (self.shape(from), self.shape(to)) {
@@ -919,8 +971,23 @@ impl Infer<'_, '_> {
     }
     fn obligation(&mut self, obligation: Obligation) {
         let id = self.obligations.len();
+        let target = match &obligation {
+            Obligation::Coercion { target, .. } => Some(*target),
+            _ => None,
+        };
         self.obligations.push(Some(obligation));
         self.queued.push(false);
+        // Register the dependency when created, before another expression asks
+        // whether this result has a producer whose type is still unresolved.
+        if let Some(mut target) = target {
+            loop {
+                self.watch(target, id);
+                match self.shape(target) {
+                    Some(Shape::Ref(_, inner) | Shape::Box(inner)) => target = inner,
+                    _ => break,
+                }
+            }
+        }
         self.enqueue(id);
     }
     fn watch(&mut self, variable: Variable, id: usize) {
@@ -2105,7 +2172,7 @@ impl Infer<'_, '_> {
                             }
                         }
                     }
-                    if !self.pending_operation(source) && !self.pending_operation(target) {
+                    if !self.coercion_operation_pending(source, target) {
                         self.fallback.push(id);
                     }
                     return Ok(false);
@@ -2336,7 +2403,7 @@ impl Infer<'_, '_> {
                 let Some((base, shape)) = self.strip_references(receiver, id) else {
                     return Ok(false);
                 };
-                if self.opaque_header(base, &name, &types, &arguments, result, (scope, span))? {
+                if self.bound_method_header(base, &name, &types, &arguments, result, (scope, span))? {
                     return Ok(true);
                 }
                 if self.inherent_header(base, &name, &types, &arguments, result, (scope, span))? {
@@ -2512,7 +2579,7 @@ impl Infer<'_, '_> {
                 span,
             }) = self.obligations[id].clone()
             {
-                if !self.pending_operation(source) && !self.pending_operation(target) {
+                if !self.coercion_operation_pending(source, target) {
                     self.obligations[id] = None;
                     self.coerce_known(source, target, span)?;
                     self.solve()?;
@@ -2586,6 +2653,7 @@ pub(super) fn infer(
             result: 0,
             expressions: BTreeMap::new(),
             bindings: BTreeMap::new(),
+            family_members: BTreeMap::new(),
             method_applications: BTreeMap::new(),
             closures: BTreeMap::new(), local_paths: Vec::new(), semantic_bindings: Vec::new(),
         },
@@ -2616,10 +2684,12 @@ pub(super) fn infer(
             let environment = inference.environment.clone();
             let receiver = inference.source_type(implementation.target, &environment)?;
             inference.environment.insert("Self".to_string(), receiver);
+            inference.environment.insert(format!("$family::implementation:{}", owner.index), receiver);
         }
         a::FunctionOwner::Trait(owner) => {
             let definition = &source.traits[owner.index];
             let receiver = inference.shaped(Shape::Rigid("Self".to_string()));
+            inference.environment.insert(format!("$family::trait:{}", owner.index), receiver);
             inference.environment.insert("Self".to_string(), receiver);
             for parameter in &definition.generics {
                 if !parameter.lifetime {
@@ -2734,6 +2804,7 @@ pub(super) fn assert_reference_capture_deferred(source: &a::Program, index: usiz
                 result: 0,
                 expressions: BTreeMap::new(),
                 bindings: BTreeMap::new(),
+                family_members: BTreeMap::new(),
                 method_applications: BTreeMap::new(),
                 closures: BTreeMap::new(),
                 local_paths: Vec::new(),

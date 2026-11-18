@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+// entry: conformance_probe
+fn inspect(value: &str) -> bool { !value.is_empty() }
+pub fn probe() {
+    for value in vec!["text".to_string()] { assert!(inspect(&value)); }
+}
+
+// Regression observations; the original diagnostic function bodies above stay unchanged.
+pub fn conformance_probe() -> i64 { probe(); 42 }

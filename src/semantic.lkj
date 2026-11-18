@@ -563,6 +563,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             append(&mut result, &files, format!("{}::type:{}", identity, associated.name), identity.clone(),
                 "associated-type", &associated.name, associated.span, None,
                 associated.value.map_or("_".to_string(), |ty| type_name(program, ty)), false)?;
+            append_generics(&mut result, &files, &format!("{}::type:{}", identity, associated.name), &associated.generics)?;
         }
     }
     for (index, value) in program.impls.iter().enumerate() {
@@ -580,6 +581,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             append(&mut result, &files, format!("{}::type:{}", identity, associated.name), identity.clone(),
                 "associated-type", &associated.name, associated.span, None,
                 associated.value.map_or("_".to_string(), |ty| type_name(program, ty)), false)?;
+            append_generics(&mut result, &files, &format!("{}::type:{}", identity, associated.name), &associated.generics)?;
         }
     }
     for value in &program.modules {
@@ -660,10 +662,16 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                     continue;
                 }
                 if path.declaration.is_none() {
+                    if family_parameter_reference(&mut result, &files, path, node.span) { continue; }
                     if let Some(target) = self_associated_identity(program, &result, &self_traits, &owner, &path.name) {
                         add_reference(&mut result, &files, owner, target, node.span,
                             leaf_name(&path.name), "associated-type", true);
                         continue;
+                    }
+                    if family_member_reference(&mut result, &files, program, evidence, type_index, path, node.span, &owner) { continue; }
+                    if !path.args.is_empty() && path.name.contains("::") {
+                        add_reference(&mut result, &files, owner.clone(), path.name.clone(), node.span,
+                            leaf_name(&path.name), "associated-type", false);
                     }
                 }
                 path_qualifications(&mut result, &files, program, &resolver, &owner, node.scope, node.span);

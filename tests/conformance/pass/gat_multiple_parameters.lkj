@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+trait Pairing { type Output<A, B>; fn pair<A, B>(left: A, right: B) -> Self::Output<A, B>; }
+struct Pairs {}
+impl Pairing for Pairs {
+    type Output<X, Y> = (X, Y);
+    fn pair<A, B>(left: A, right: B) -> (A, B) { (left, right) }
+}
+fn apply<P: Pairing>(left: u8, right: i64) -> P::Output<u8, i64> { P::pair(left, right) }
+pub fn probe() -> i64 { let result = apply::<Pairs>(2u8, 40i64); result.0 as i64 + result.1 }

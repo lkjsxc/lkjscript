@@ -1,0 +1,9 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Source { type Output; }
+struct Number;
+impl<O> Source for Number where (Number,): Source<Output = O> { type Output = O; }
+impl<O, P: Source<Output = O>> Source for (P,) { type Output = O; }
+fn require<P: Source>(_: P) {}
+fn unused() { require(Number); }
+pub fn probe() -> i64 { 42 }

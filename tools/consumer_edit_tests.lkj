@@ -195,7 +195,7 @@ fn site_advice(world: &mut World, executable: &File, directory: &mut Directory,
     let scalar = format!("{}\npub fn observed() -> usize {{ probe() as u32 as usize }}\n",
         include_str!("../tests/diagnostics/scalar_char_cast.lkj"));
     let vector = format!("{}\npub fn observed() -> usize {{ probe(); 1usize }}\n",
-        include_str!("../tests/diagnostics/vec_loop_element_inference.lkj"));
+        include_str!("../tests/conformance/pass/vec_loop_element_inference.lkj"));
     let cases = vec![
         advice_case("site-cfg-advice.lkj", include_str!("../tests/diagnostics/cfg_test_helper.lkj"),
             "#[cfg(test)]", "", "probe", "1\n", "is excluded by #[cfg(test)]"),
@@ -213,10 +213,6 @@ fn site_advice(world: &mut World, executable: &File, directory: &mut Directory,
             "observed", "0\n", "integer-to-char casts are unavailable"),
         advice_case("site-chars-advice.lkj", include_str!("../tests/diagnostics/string_chars.lkj"),
             "value.chars()", "value.as_str().chars()", "probe", "4\n", "chars() is provided on a str view"),
-        advice_case("site-vector-advice.lkj", &vector,
-            "for value in vec![\"text\".to_string()]",
-            "let values: Vec<String> = vec![\"text\".to_string()]; for value in values",
-            "observed", "1\n", "this Vec loop needs its owned String element type"),
     ];
     for (item, rewritten) in cases {
         write(directory, &item.name, item.source.as_bytes())?;
@@ -226,6 +222,21 @@ fn site_advice(world: &mut World, executable: &File, directory: &mut Directory,
             format!("site diagnostic {} omitted its explanation: {}", item.name, display_bytes(&rejected.errors)));
         write(directory, &item.name, rewritten.as_bytes())?;
         values.push(ValueRequest { name: item.name.clone(), entry: item.entry.clone(), expected: item.expected.clone() });
+    }
+    // Keep the previously refused original as an executed control. Borrowed
+    // str context now waits for its owned String producer, so an annotation
+    // remains equivalent source rather than a required diagnostic rewrite.
+    let annotated = vector.as_str().replace("for value in vec![\"text\".to_string()]",
+        "let values: Vec<String> = vec![\"text\".to_string()]; for value in values");
+    for (name, source) in vec![
+        ("site-vector-inferred.lkj".to_string(), vector),
+        ("site-vector-annotated.lkj".to_string(), annotated),
+    ] {
+        write(directory, &name, source.as_bytes())?;
+        let admitted = invoke(world, executable, &command(config, "check", &name), b"")?;
+        report.require(admitted.status == 0 && !contains(&admitted.errors, b"LKJSCRIPT_EDITS "),
+            format!("owned Vec loop inference refused {name}: {}", display_bytes(&admitted.errors)));
+        values.push(ValueRequest { name, entry: "observed".to_string(), expected: "1\n".to_string() });
     }
     let unrelated = "mod hidden { #[cfg(test)] fn fixture() {} }\npub fn probe() { fixture(); }\n";
     write(directory, "site-cfg-unrelated.lkj", unrelated.as_bytes())?;

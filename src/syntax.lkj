@@ -2244,19 +2244,25 @@ impl Parser {
         let span = self.token().span;
         self.expect("type")?;
         let name = self.ident()?;
+        let mut generics = self.generics()?;
         let bounds = if self.take(":") {
             self.bounds()?
         } else {
             Vec::new()
         };
+        let mut predicates = self.where_clause(&mut generics)?;
         let value = if self.take("=") {
             Some(self.ty()?)
         } else {
             None
         };
+        let trailing = self.where_clause(&mut generics)?;
+        predicates.extend_from_slice(&trailing);
         self.expect(";")?;
         Ok(AssociatedType {
             name,
+            generics,
+            predicates,
             bounds,
             value,
             span: self.finish_span(span),

@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+trait Mode { type Output<T>; fn bind<T>(value: T) -> Self::Output<T>; }
+struct Emit {}
+impl Mode for Emit { type Output<T> = T; fn bind<T>(value: T) -> T { value } }
+trait OutputMode { type Output: Mode; }
+struct Complete {}
+impl OutputMode for Complete { type Output = Emit; }
+fn produce<M: OutputMode>(value: i64) -> <M::Output as Mode>::Output<i64> { M::Output::bind(value) }
+pub fn probe() -> i64 { produce::<Complete>(42) }

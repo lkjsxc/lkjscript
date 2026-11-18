@@ -1,0 +1,21 @@
+// expect: value 42
+// witness: {}
+trait Mode { type Output<T>; fn bind<T>(value: T) -> Self::Output<T>; }
+struct Emit {}
+impl Mode for Emit { type Output<T> = T; fn bind<T>(value: T) -> T { value } }
+trait OutputMode { type Output: Mode; }
+struct Complete {}
+impl OutputMode for Complete { type Output = Emit; }
+trait Parser<Input> {
+    type Output;
+    fn process<M: OutputMode>(&mut self, input: Input) -> <M::Output as Mode>::Output<Self::Output>;
+}
+struct Number {}
+impl Parser<u8> for Number {
+    type Output = i64;
+    fn process<M: OutputMode>(&mut self, input: u8) -> <M::Output as Mode>::Output<i64> {
+        M::Output::bind(input as i64 + 40)
+    }
+}
+fn parse<P: Parser<u8, Output = i64>>(parser: &mut P, input: u8) -> i64 { parser.process::<Complete>(input) }
+pub fn probe() -> i64 { let mut parser = Number {}; parse(&mut parser, 2u8) }

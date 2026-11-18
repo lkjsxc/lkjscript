@@ -118,6 +118,8 @@ pub(super) struct Contracts {
     methods: BTreeMap<usize, MethodWitness>,
     comparisons: BTreeMap<(usize, String), usize>,
     builtin_methods: BTreeMap<(usize, BuiltinMethod), usize>,
+    pub(super) families: BTreeMap<(usize, TraitIdentity, String, Vec<usize>), usize>,
+    pub(super) active_families: Vec<(usize, TraitIdentity, String, Vec<usize>)>,
 }
 
 #[derive(Default)]
@@ -748,12 +750,14 @@ impl Compiler<'_> {
             self.declare_parameters_with_predicates(&implementation.generics, &predicates, &mut substitutions)?;
             let self_ty = self.resolve(implementation.target, &substitutions)?;
             substitutions.insert("Self".to_string(), self_ty);
+            substitutions.insert(format!("$family::implementation:{}", owner.index), self_ty);
             self.assume_where_predicates(&implementation.predicates, &substitutions)?;
             let mut remaining = implementation.associated.clone();
             while !remaining.is_empty() {
                 let before = remaining.len();
                 let mut retry: Vec<a::AssociatedType> = Vec::new();
                 for associated in remaining {
+                    if !associated.generics.is_empty() { continue; }
                     let Some(value) = associated.value else {
                         return Err(err(
                             associated.span,
@@ -791,6 +795,7 @@ impl Compiler<'_> {
         self.contracts.as_mut().unwrap().rigid.get_mut(&self_ty).unwrap()
             .remove(&TraitIdentity::Builtin("Sized".to_string()));
         substitutions.insert("Self".to_string(), self_ty);
+        substitutions.insert(format!("$family::trait:{trait_index}"), self_ty);
         self.introduce_parameters(&declaration.generics, &mut substitutions)?;
         let mut arguments = Vec::new();
         for parameter in &declaration.generics {
@@ -806,6 +811,7 @@ impl Compiler<'_> {
             .insert(identity.clone());
         let mut associated: BTreeMap<String, usize> = BTreeMap::new();
         for item in &declaration.associated {
+            if !item.generics.is_empty() { continue; }
             let ty = self.rigid_type(&format!("Self::{}", item.name));
             associated.insert(item.name.clone(), ty);
             substitutions.insert(format!("Self::{}", item.name), ty);
@@ -825,6 +831,7 @@ impl Compiler<'_> {
             self.assume_bound(self_ty, *bound, &substitutions)?;
         }
         for item in &declaration.associated {
+            if !item.generics.is_empty() { continue; }
             for bound in &item.bounds {
                 self.assume_bound(
                     *associated.get(&item.name).unwrap(),
@@ -866,6 +873,7 @@ impl Compiler<'_> {
         }
         let mut result = BTreeMap::new();
         for associated in pending {
+            if !associated.generics.is_empty() { continue; }
             let ty = self.implementation_associated_member(index, environment.clone(), &associated.name)?;
             // Normalize first so a projection cycle keeps its own diagnostic.
             if !self.source_sized(ty) {
@@ -925,6 +933,7 @@ impl Compiler<'_> {
                     continue;
                 };
                 if !seen.insert(identity.clone()) { continue; }
+                self.record_family_bound(&parameter.name, ty, &identity, substitutions);
                 let declared_environment = self.trait_environment(ty, &identity);
                 for parent in &self.source.traits[trait_index].bounds { pending.push((*parent, declared_environment.clone())); }
                 if self.source.traits[trait_index].associated.is_empty() {
@@ -940,6 +949,7 @@ impl Compiler<'_> {
                 witness.substitutions.insert("Self".to_string(), ty);
                 let associated =
                     self.implementation_associated(witness.implementation, witness.substitutions)?;
+                self.record_family_result_bounds(&parameter.name, ty, &identity, &associated, substitutions)?;
                 for (name, ty) in associated {
                     if members.contains_key(&name) { members.insert(name, None); }
                     else { members.insert(name, Some(ty)); }
@@ -978,6 +988,8 @@ impl Compiler<'_> {
                 let ty = self.resolve(target, &environment)?;
                 environment.insert("Self".to_string(), ty);
             }
+            let receiver = *environment.get(&"Self".to_string()).unwrap();
+            substitutions.insert(format!("$family::implementation:{owner}"), receiver);
             let associated = self.implementation_associated(owner, environment)?;
             for (name, ty) in associated {
                 substitutions.insert(format!("Self::{name}"), ty);
@@ -1016,6 +1028,9 @@ impl Compiler<'_> {
             }
         }
         let declaration = declaration.unwrap();
+        if !declaration.generics.is_empty() {
+            return Err(err(declaration.span, "E_TRAIT", "generic associated type needs its type arguments"));
+        }
         let ty = self.rigid_type(&format!("t{receiver}::trait{trait_index}::{name}"));
         {
             let traits = &mut self.contracts.as_mut().unwrap().traits;
@@ -1428,6 +1443,7 @@ impl Compiler<'_> {
                 if self.source.functions[method].name == name {
                     let mut substitutions = self.trait_environment(base, &identity);
                     for item in &declaration.associated {
+                        if !item.generics.is_empty() { continue; }
                         let ty = self.associated_identity(base, &identity, &item.name)?;
                         substitutions.insert(format!("Self::{}", item.name), ty);
                     }

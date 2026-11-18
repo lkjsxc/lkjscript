@@ -29,10 +29,31 @@ impl Compiler<'_> {
 
     fn infer_implementation(
         &mut self,
+        goal: &Goal,
         mut witness: ImplementationWitness,
     ) -> Result<ImplementationWitness> {
-        let parameters = self.source.impls[witness.implementation].generics.clone();
-        self.prepare_callable_arguments(&parameters, &mut witness.substitutions)?;
+        let implementation = self.source.impls[witness.implementation].clone();
+        witness.substitutions.insert("Self".to_string(), goal.ty);
+        loop {
+            let before = witness.substitutions.len();
+            self.prepare_callable_arguments(&implementation.generics, &mut witness.substitutions)?;
+            for parameter in &implementation.generics {
+                let receiver = match witness.substitutions.get(&parameter.name) {
+                    Some(receiver) => *receiver,
+                    None => continue,
+                };
+                for bound in &parameter.bounds {
+                    self.infer_bound_equalities(receiver, *bound, &mut witness.substitutions)?;
+                }
+            }
+            for predicate in &implementation.predicates {
+                let Some(receiver) = self.resolve_if_known(predicate.target, &witness.substitutions)? else { continue; };
+                for bound in &predicate.bounds {
+                    self.infer_bound_equalities(receiver, *bound, &mut witness.substitutions)?;
+                }
+            }
+            if witness.substitutions.len() == before { break; }
+        }
         Ok(witness)
     }
 
@@ -149,7 +170,7 @@ impl Compiler<'_> {
                     };
                 }
                 BoundStep::Infer { goal, witness } => {
-                    let completed = self.infer_implementation(witness).ok();
+                    let completed = self.infer_implementation(&goal, witness).ok();
                     solver.inferred(goal, completed);
                 }
                 BoundStep::Validate {

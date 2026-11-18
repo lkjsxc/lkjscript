@@ -62,16 +62,27 @@ impl DefinitionTypes {
                 super::super::semantic::source_type_name(source, ty)
             }
             Shape::Projection(declaration, member, _, arguments) => {
+                let a::Item::Trait(owner) = source.declarations[declaration].item else { return None; };
+                let count = source.traits[owner].generics.len();
                 let mut bound = declaration_name(source, declaration);
-                if !arguments.is_empty() {
+                if count != 0usize {
                     bound.push('<');
-                    for index in 0..arguments.len() {
+                    for index in 0..count {
                         if index != 0usize { bound.push_str(", "); }
                         bound.push_str(&values[index + 1usize]);
                     }
                     bound.push('>');
                 }
-                format!("<{} as {}>::{}", values[0], bound, member)
+                let mut result = format!("<{} as {}>::{}", values[0], bound, member);
+                if arguments.len() > count {
+                    result.push('<');
+                    for index in count..arguments.len() {
+                        if index != count { result.push_str(", "); }
+                        result.push_str(&values[index + 1usize]);
+                    }
+                    result.push('>');
+                }
+                result
             }
             Shape::Opaque(ty, _, _) => super::super::semantic::source_type_name(source, ty),
             Shape::Projected(_, _) | Shape::Closure(_, _) => return None,
@@ -107,6 +118,7 @@ impl DefinitionTypes {
     }
     pub(crate) fn semantic(&self, source: &a::Program, evidence: &mut Evidence) {
         let mut known = BTreeMap::new(); let mut active = BTreeSet::new();
+        for (source_type, owner) in &self.family_members { evidence.family_member(*source_type, *owner); }
         for (expression, variable) in &self.expressions {
             if let Some(value) = self.semantic_type(source, *variable, &mut known, &mut active) {
                 evidence.expressions.insert(*expression, value);

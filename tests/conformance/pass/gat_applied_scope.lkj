@@ -1,0 +1,17 @@
+// expect: value 42
+// witness: {}
+trait Transform<I> {
+    type Output<T>;
+    fn transform<T>(input: I, value: T) -> Self::Output<T>;
+}
+struct Pair {}
+impl<Outer> Transform<Outer> for Pair {
+    type Output<Inner> = (Outer, Inner);
+    fn transform<Value>(input: Outer, value: Value) -> (Outer, Value) { (input, value) }
+}
+type Applied<P: Transform<u8>> = <P as Transform<u8>>::Output<i64>;
+fn apply<P: Transform<u8>>(input: u8, value: i64) -> P::Output<i64> { P::transform(input, value) }
+pub fn probe() -> i64 {
+    let pair: Applied<Pair> = apply::<Pair>(2u8, 40);
+    pair.0 as i64 + pair.1
+}

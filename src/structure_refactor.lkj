@@ -1567,10 +1567,12 @@ pub mod relocation {
     }
     fn rename(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], target: &semantic::Item,
         name: &str, patches: &mut Vec<edit::Patch>) -> Result<(), String> {
+        let family_parameter = target.kind == "generic-parameter" && catalog.by_identity.get(&target.parent)
+            .is_some_and(|index: &usize| catalog.items[*index].kind == "associated-type");
         if target.kind == "generic-parameter" {
             let declaration = syntax::semantic_tokens(&target.text)
                 .map_err(|problem| fail(&target.identity, "GENERIC_REFERENCES", &problem.message))?;
-            if declaration.first().is_none_or(|token| token.text != "const") {
+            if !family_parameter && declaration.first().is_none_or(|token| token.text != "const") {
                 return Err(fail(&target.identity, "GENERIC_REFERENCES", "generic parameter use sites need resolver-backed catalog evidence"));
             }
             let owner = edit::item(catalog, &target.parent)?;
@@ -1578,17 +1580,19 @@ pub mod relocation {
                 .map_err(|problem| fail(&target.identity, "GENERIC_REFERENCES", &problem.message))?;
             // A fresh spelling cannot capture another value/type use anywhere
             // in the declaration's complete lexical scope, including closures.
-            if name != target.name && tokens.iter().any(|token| token.text == name) {
-                return Err(fail(&target.identity, "CAPTURE", "const parameter rename requires a fresh spelling in its enclosing item"));
+            if name == "Self" || (name != target.name && tokens.iter().any(|token| token.text == name)) {
+                return Err(fail(&target.identity, "CAPTURE", "generic parameter rename requires a fresh spelling in its enclosing item"));
             }
             for site in &catalog.unresolved {
-                if site.owner == target.parent || descendant(catalog, &site.owner, &target.parent) {
-                    return Err(at_site(&target.identity, "GENERIC_REFERENCES", site, "const parameter rename requires complete enclosing reference evidence"));
+                if site.owner == target.parent || descendant(catalog, &site.owner, &target.parent)
+                    || (family_parameter && site.file == owner.file && contains(owner.start, owner.end, site.start, site.end)) {
+                    return Err(at_site(&target.identity, "GENERIC_REFERENCES", site, "generic parameter rename requires complete enclosing reference evidence"));
                 }
             }
             for site in &catalog.references {
-                if site.target == target.identity && site.kind != "const-parameter" {
-                    return Err(at_site(&target.identity, "GENERIC_REFERENCES", site, "const parameter rename requires an exact const use site"));
+                let expected = if family_parameter { "family-type-parameter" } else { "const-parameter" };
+                if site.target == target.identity && site.kind != expected {
+                    return Err(at_site(&target.identity, "GENERIC_REFERENCES", site, "generic parameter rename requires an exact resolved use site"));
                 }
             }
         }
@@ -1596,7 +1600,7 @@ pub mod relocation {
         if target.kind == "module" { inline_module(catalog, inputs, target)?; }
         let targets = cohort(catalog, inputs, target)?;
         if matches!(target.kind.as_str(), "parameter" | "binding") { local_scope(catalog, inputs, target, name)?; }
-        else { incomplete(catalog, inputs, &targets)?; }
+        else if !family_parameter { incomplete(catalog, inputs, &targets)?; }
         let global = matches!(target.kind.as_str(), "module" | "struct" | "enum" | "trait" | "alias" | "constant" | "variant")
             || free(catalog, target);
         let mut cache: BTreeMap<String, Vec<syntax::SemanticToken>> = BTreeMap::new();

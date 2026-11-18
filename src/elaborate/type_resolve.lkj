@@ -23,6 +23,7 @@ enum Work {
     Qualified {
         qualification: a::QualifiedPath,
         name: String,
+        args: Vec<a::TypeId>,
         span: a::Span,
         environment: usize,
     },
@@ -230,10 +231,7 @@ impl Compiler<'_> {
                             "associated-type equality bindings are only accepted in trait bounds"));
                     }
                     if let Some(qualification) = &path.qualification {
-                        if !path.args.is_empty() {
-                            return Err(err(span, "E_UNSUPPORTED", "generic associated types in fully qualified paths are not implemented"));
-                        }
-                        work.pending.push(Work::Qualified { qualification: qualification.clone(), name: path.name, span, environment });
+                        work.pending.push(Work::Qualified { qualification: qualification.clone(), name: path.name, args: path.args, span, environment });
                         work.pending.push(Work::Source { id: qualification.receiver, environment });
                         continue;
                     }
@@ -252,6 +250,12 @@ impl Compiler<'_> {
                         ));
                     }
                     let bindings = &work.environments[environment];
+                    if path.args.is_empty() && self.names.generic_path(&path, span) {
+                        if let Some(value) = bindings.get(&path.name) { work.values.push(*value); continue; }
+                    }
+                    if let Some(value) = self.named_family(&path, bindings, span)? {
+                        work.values.push(value); continue;
+                    }
                     if self.names.generic_path(&path, span) {
                         if !path.args.is_empty() {
                             return Err(err(
@@ -302,9 +306,11 @@ impl Compiler<'_> {
                         });
                     }
                 }
-                Work::Qualified { qualification, name, span, environment } => {
+                Work::Qualified { qualification, name, args, span, environment } => {
                     let receiver = work.values.pop().expect("qualified path receiver");
-                    let ty = self.qualified_associated_type(receiver, &qualification, &name, span, &work.environments[environment])?;
+                    let identity = self.qualified_trait(&qualification, &work.environments[environment], span)?;
+                    let arguments = self.family_arguments(&args, &work.environments[environment])?;
+                    let ty = self.associated_family_for_identity(receiver, &identity, &name, &arguments, qualification.member_span)?;
                     work.values.push(ty);
                 }
                 Work::Apply {
@@ -627,6 +633,9 @@ impl Compiler<'_> {
         };
         self.check_where_predicates(&predicates, &bindings)
             .map_err(|problem| super::at_use_site(problem, span))?;
+        if self.has_type_families() {
+            self.prepare_parameter_associated(&parameters, &mut bindings)?;
+        }
         let environment = work.environment(bindings);
         if let Some(a::Item::Alias(index)) = item {
             work.pending.push(Work::Alias { key });
