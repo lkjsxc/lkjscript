@@ -1,0 +1,4 @@
+{"compiler_sha256":"b8bb6e90f28f88f2994a021bf0375fc408692f076a98f4fe97619714706383c6","observations":2,"receipt":"/home/coder/workspace/prompts/reports/lkjscript-next/debug-final/census/nom-probe.json","source_unchanged":true}
+{"compiler_sha256":"b8bb6e90f28f88f2994a021bf0375fc408692f076a98f4fe97619714706383c6","observations":2,"receipt":"/home/coder/workspace/prompts/reports/lkjscript-next/debug-final/census/dom-probe.json","source_unchanged":true}
+{"compiler_sha256":"b8bb6e90f28f88f2994a021bf0375fc408692f076a98f4fe97619714706383c6","observations":8,"receipt":"/home/coder/workspace/prompts/reports/lkjscript-next/debug-final/census/sozu-probe.json","source_unchanged":true}
+frontend observations debug: 12 observations, 3 changed streams; rerank review still required

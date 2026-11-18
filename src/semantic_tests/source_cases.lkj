@@ -1763,8 +1763,8 @@ source_file("derive_case.lkj", Some("#[derive(Clone)] #[derive(Clone)] struct It
     }
     if 163usize % workers == shard {
         record(source_case("duplicate_and_unsupported_derives_are_not_ignored_0002", "derive_case.lkj", None, vec![
-source_file("derive_case.lkj", Some("#[derive(Debug)] struct Item;")),
-], "E_UNSUPPORTED"), errors);
+source_file("derive_case.lkj", Some("#[derive(Debug,Debug)] struct Item;")),
+], "E_TRAIT"), errors);
         count += 1;
     }
     if 164usize % workers == shard {

@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+# Debug formatting keeps ordinary source contracts and checked edit semantics.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+compiler=$(realpath "${1:-target/lkjscript}")
+library="$PWD/library"
+mkdir -p target
+fixture=$(mktemp -d "$PWD/target/debug-format.XXXXXX")
+trap 'if [[ ${LKJSCRIPT_DEBUG_KEEP:-0} == 1 ]]; then printf "retained_fixture=%s\n" "$fixture" >&2; else rm -rf -- "$fixture"; fi' EXIT HUP INT TERM
+umask 077
+mkdir "$fixture/project" "$fixture/store"
+head -c 32 /dev/urandom > "$fixture/key"
+fail() { printf 'debug-format: %s\n' "$*" >&2; exit 1; }
+common=(main.lkj --source-dir "$fixture/project" --library-dir "$library" --store "$fixture/store" --store-key "$fixture/key")
+publish() {
+    "$compiler" build "${common[@]}" --index -o "$fixture/image" > "$fixture/index" 2> "$fixture/error" || { cat "$fixture/error" >&2; fail build; }
+    snapshot=$(awk '$1=="LKJSCRIPT_SNAPSHOT" { print $2 }' "$fixture/index")
+    [[ ${#snapshot} == 64 ]] || fail 'missing indexed snapshot'
+}
+query() {
+    "$compiler" query "${common[@]}" --snapshot "$snapshot" --kind "$1" --id "$2" --depth 2 --limit 128 --bytes 65536
+}
+value() {
+    for engine in native interpreter; do
+        actual=$("$compiler" run main.lkj --source-dir "$fixture/project" --library-dir "$library" --no-store --engine "$engine")
+        [[ $actual == "$1" ]] || fail "$engine returned $actual, expected $1"
+    done
+}
+edit() {
+    "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/plan" 2> "$fixture/error" || { cat "$fixture/error" >&2; fail edit; }
+    grep -q 'mode=apply' "$fixture/plan" || fail 'edit was not applied'
+}
+cat > "$fixture/project/main.lkj" <<'SOURCE'
+#[derive(Debug)]
+struct Packet { code: i64 }
+#[derive(Debug)]
+struct Wrapper<T> { item: T }
+#[derive(Debug)]
+enum Choice<T> { Empty, One(T), Named { item: T } }
+fn shown<T: std::fmt::Debug>(value: &T) -> String { format!("{:?}", value) }
+fn value() -> i64 { 42 }
+fn main() -> i64 {
+    assert_eq!(shown(&Packet { code: 42i64 }), "Packet { code: 42 }");
+    assert_eq!(shown(&Wrapper { item: 17i64 }), "Wrapper { item: 17 }");
+    let empty: Choice<i64> = Choice::Empty;
+    assert_eq!(shown(&empty), "Empty");
+    assert_eq!(shown(&Choice::One(18i64)), "One(18)");
+    assert_eq!(shown(&Choice::Named { item: 19i64 }), "Named { item: 19 }");
+    value()
+}
+SOURCE
+publish
+value 42
+query outline crate > "$fixture/outline"
+query type shown::param:value > "$fixture/type"
+grep -Fq 'value="&T"' "$fixture/type" || { cat "$fixture/type" >&2; fail 'generic source type'; }
+query references shown > "$fixture/references"
+grep -Fq 'std::fmt::Debug' "$fixture/references" || { cat "$fixture/references" >&2; fail 'Debug trait reference'; }
+for nominal in Packet Wrapper Choice; do
+    query impls "$nominal" > "$fixture/impls-$nominal"
+    grep -Fq 'Debug' "$fixture/impls-$nominal" || { cat "$fixture/impls-$nominal" >&2; fail "derived implementation evidence for $nominal"; }
+done
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"rename","id":"shown","name":"rendered"}]}
+REQUEST
+edit
+grep -Fq 'rendered(&Packet' "$fixture/project/main.lkj" || fail 'caller was not renamed'
+value 42
+publish
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-body","id":"value","source":"{ 43 }"}]}
+REQUEST
+edit
+value 43
+publish
+cp "$fixture/project/main.lkj" "$fixture/unchanged"
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-body","id":"rendered","source":"{ format!(\"{:?}\", Missing) }"}]}
+REQUEST
+if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/refused" 2> "$fixture/refused-error"; then fail 'invalid replacement accepted'; fi
+cmp "$fixture/unchanged" "$fixture/project/main.lkj" || fail 'failed transaction wrote source'
+[[ ! -e $fixture/project/.lkjscript-edit.pending ]] || fail 'failed transaction left pending state'
+value 43
+# Implicit captures keep their existing located edit refusal; no guessed byte span.
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-body","id":"rendered","source":"{ format!(\"{value:?}\") }"}]}
+REQUEST
+edit
+publish
+cp "$fixture/project/main.lkj" "$fixture/capture-unchanged"
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"rename","id":"rendered","name":"captured"}]}
+REQUEST
+if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/capture-plan" 2> "$fixture/capture-error"; then fail 'implicit capture rename guessed source spans'; fi
+grep -Fq E_EDIT_REFERENCES "$fixture/capture-error" || { cat "$fixture/capture-error" >&2; fail 'capture refusal'; }
+cmp "$fixture/capture-unchanged" "$fixture/project/main.lkj" || fail 'capture refusal wrote source'
+value 43
+
+# Query the generated functions for concrete and generic structs and a generic
+# enum, and refuse direct mutation of every unwritten body.
+for target in Packet 'Wrapper<T>' 'Choice<T>'; do
+    generated="<$target as std::fmt::Debug>::fmt"
+    query meta "$generated" > "$fixture/generated-meta-$target"
+    grep -Fq 'expansion=derive-debug source-projection=false' "$fixture/generated-meta-$target" || fail "generated Debug metadata for $target"
+    query text "$generated" > "$fixture/generated-text-$target"
+    grep -Fq 'fact=text-unavailable' "$fixture/generated-text-$target" || fail "generated Debug claims authored text for $target"
+    printf '{"version":1,"operations":[{"op":"replace-body","id":"%s","source":"{ std::Result::Ok(()) }"}]}\n' "$generated" > "$fixture/request"
+    if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/generated-plan-$target" 2> "$fixture/generated-error-$target"; then fail "generated body is editable for $target"; fi
+    grep -Fq E_EDIT_GENERATED_SOURCE "$fixture/generated-error-$target" || { cat "$fixture/generated-error-$target" >&2; fail "generated edit refusal for $target"; }
+    cmp "$fixture/capture-unchanged" "$fixture/project/main.lkj" || fail "generated refusal wrote source for $target"
+    [[ ! -e $fixture/project/.lkjscript-edit.pending ]] || fail "generated refusal left pending state for $target"
+done
+
+mkdir "$fixture/contracts"
+for source in ast diagnostic names syntax resolve source; do cp "src/$source.lkj" "$fixture/contracts/$source.lkj"; done
+cp -R src/syntax src/resolve "$fixture/contracts/"
+cp src/semantic/origins.lkj "$fixture/contracts/origins.lkj"
+cp -R src/semantic/origins "$fixture/contracts/"
+cp tests/fixtures/debug_origins.lkj "$fixture/contracts/main.lkj"
+"$compiler" build main.lkj --source-dir "$fixture/contracts" --library-dir "$library" --no-store -o "$fixture/contracts-image" > "$fixture/contracts-out" 2> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract build'; }
+"$fixture/contracts-image" >> "$fixture/contracts-out" 2>> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract execution'; }
+printf 'ok Debug formatting: trait/type/implementation and concrete/generic struct/enum generated-origin queries; checked rename/body edit; capture and generated-edit refusals; ten malformed origins rejected; both engines\n'

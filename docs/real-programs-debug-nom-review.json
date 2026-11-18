@@ -1,0 +1,140 @@
+{
+   "inputs" : {
+      "bank" : {
+         "path" : "/home/coder/workspace/prompts/talk/lkjscript-review/programs2-census/review-bank-through-lifetime-where.json",
+         "sha256" : "d37c1312d0468e8ef260de0d275372f3f97cd0831343bb8f3c025cfafbc4d9f2"
+      },
+      "projection" : {
+         "path" : "/home/coder/workspace/lkjscript-specimens/projections/nom-8.0.0/projection.json",
+         "sha256" : "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
+         "source" : {
+            "commit" : "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
+            "object_format" : "sha1",
+            "origin" : "https://github.com/rust-bakery/nom.git",
+            "root" : "/home/coder/workspace/lkjscript-specimens/nom-8.0.0"
+         }
+      },
+      "receipt" : {
+         "compiler" : {
+            "path" : "/home/coder/workspace/lkjscript-programs-20261115/target/lkjscript",
+            "sha256" : "b8bb6e90f28f88f2994a021bf0375fc408692f076a98f4fe97619714706383c6"
+         },
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/debug-final/census/nom-probe.json",
+         "sha256" : "c113baceb93f125964a17a0e7832d2b33e736e7ee3d0d69e4781fd9efc08e970"
+      },
+      "unreviewed_report" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/debug-final/census/nom-unreviewed.json",
+         "sha256" : "7f046ee792b21e5deeea864b93edfeec26295d9d697e41a0016e122c4f6664f6"
+      }
+   },
+   "interpretation" : "Previously reviewed exact diagnostic identities only; every recovery parent was revalidated earlier in every current root. Unmatched or parentless entries remain unclassified.",
+   "kind" : "explicit_foreign_diagnostic_site_review",
+   "package" : "nom",
+   "schema" : 1,
+   "sites" : [
+      {
+         "cause" : "error_position_macro_expansion",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 24,
+         "disposition" : "primary",
+         "file_sha256" : "467122d4056c0e2655fd4ba087f1ee5042fb86453b662ae7ebe2e42c0066a09a",
+         "line" : 100,
+         "message" : "unsupported macro: error_position!",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "Compiler / checked source producer",
+         "package" : "nom",
+         "path" : "src/bits/complete.rs",
+         "reason" : "The complete::tag closure body is now parsed as an ordinary function body. Its error branch contains the original error_position!(inp, ErrorKind::TagBits) invocation. This is a dependency-provided declarative macro call, not parser recovery from the previously rejected opaque return.",
+         "source_anchor" : {
+            "byte_offset" : 3167,
+            "file_bytes" : 5372,
+            "file_physical_lines" : 195,
+            "file_sha256" : "467122d4056c0e2655fd4ba087f1ee5042fb86453b662ae7ebe2e42c0066a09a",
+            "line_sha256" : "ff902b1530e3ead6f684e4569e9074781d46d3dcbca14ebd0a1462f22e5ef7aa",
+            "line_text" : "        Err(Err::Error(error_position!(inp, ErrorKind::TagBits)))"
+         },
+         "source_review" : "argument-impl-trait-source-review",
+         "title" : "nom error_position macro expansion"
+      },
+      {
+         "cause" : "error_position_macro_expansion",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 24,
+         "disposition" : "primary",
+         "file_sha256" : "dfba58d569c1ab89f6cb9e33153775ed19d45385e39d5047eb717c44b07e3cc0",
+         "line" : 76,
+         "message" : "unsupported macro: error_position!",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "Compiler / checked source producer",
+         "package" : "nom",
+         "path" : "src/bits/streaming.rs",
+         "reason" : "The streaming::tag closure body is now parsed as an ordinary function body. Its error branch contains the original error_position!(inp, ErrorKind::TagBits) invocation. This independently located macro call is not parser recovery from an opaque return.",
+         "source_anchor" : {
+            "byte_offset" : 2175,
+            "file_bytes" : 4434,
+            "file_physical_lines" : 170,
+            "file_sha256" : "dfba58d569c1ab89f6cb9e33153775ed19d45385e39d5047eb717c44b07e3cc0",
+            "line_sha256" : "ff902b1530e3ead6f684e4569e9074781d46d3dcbca14ebd0a1462f22e5ef7aa",
+            "line_text" : "        Err(Err::Error(error_position!(inp, ErrorKind::TagBits)))"
+         },
+         "source_review" : "argument-impl-trait-source-review",
+         "title" : "nom error_position macro expansion"
+      },
+      {
+         "cause" : "type_outlives_where",
+         "code" : "E_UNSUPPORTED",
+         "column" : 46,
+         "disposition" : "primary",
+         "file_sha256" : "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+         "line" : 424,
+         "message" : "type-outlives where predicates are not implemented",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/bytes/complete.rs",
+         "reason" : "The original escaped function declares `I: Clone + crate::traits::Offset + Input + 'a` in its ordinary where clause. The current parser explicitly rejects the lifetime bound on type parameter I at its exact span. This is a real type-outlives contract, outside named lifetime-to-lifetime support; there is no recovery parent or surrounding-function admission.",
+         "source_anchor" : {
+            "byte_offset" : 14826,
+            "file_bytes" : 19430,
+            "file_physical_lines" : 566,
+            "file_sha256" : "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+            "line_sha256" : "505e8b9b4a3a3780011ecb2db0d302bf1a7b6a5272947aa6420ec29f8c6c3fed",
+            "line_text" : "  I: Clone + crate::traits::Offset + Input + 'a,"
+         },
+         "source_review" : "lifetime-where-type-outlives-source-review",
+         "title" : "Type-outlives where predicates"
+      },
+      {
+         "cause" : "type_outlives_where",
+         "code" : "E_UNSUPPORTED",
+         "column" : 29,
+         "disposition" : "primary",
+         "file_sha256" : "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+         "line" : 964,
+         "message" : "type-outlives where predicates are not implemented",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/multi/mod.rs",
+         "reason" : "The original fill function declares `F: Parser<I, Error = E> + 'a` in its ordinary where clause. The current parser explicitly rejects the lifetime bound on type parameter F at its exact span. This remains independent of the unsupported positional Parser contract and is not recovery from the accepted opaque-result syntax.",
+         "source_anchor" : {
+            "byte_offset" : 28970,
+            "file_bytes" : 53630,
+            "file_physical_lines" : 1870,
+            "file_sha256" : "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+            "line_sha256" : "b8d858c0aa21a35edcbf7f0cd9e7976fb774262a32d2254a81b6fa7663974473",
+            "line_text" : "  F: Parser<I, Error = E> + 'a,"
+         },
+         "source_review" : "lifetime-where-type-outlives-source-review",
+         "title" : "Type-outlives where predicates"
+      }
+   ]
+}

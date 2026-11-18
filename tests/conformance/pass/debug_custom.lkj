@@ -1,0 +1,22 @@
+// expect: value 42
+// witness: {}
+use std::fmt;
+struct Custom(i64);
+impl fmt::Debug for Custom {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_tuple("Custom").field(&self.0).finish()
+    }
+}
+impl Custom { fn fmt(&self) -> i64 { 7i64 } }
+fn observed(trace: &mut i64, value: i64) -> Custom {
+    *trace = *trace * 10i64 + value;
+    Custom(value)
+}
+pub fn probe() -> i64 {
+    let mut trace = 0i64;
+    let text = format!("{1:?} {0:?} {1:?}", observed(&mut trace, 1i64), observed(&mut trace, 2i64));
+    assert_eq!(trace, 12i64);
+    assert_eq!(text, "Custom(2) Custom(1) Custom(2)");
+    assert_eq!(Custom(1i64).fmt(), 7i64);
+    42
+}

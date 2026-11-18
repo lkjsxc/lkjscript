@@ -1,0 +1,19 @@
+// expect: value 42
+// witness: {}
+use std::fmt;
+use std::fmt::Write;
+struct Broken;
+impl fmt::Debug for Broken {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("partial")?;
+        Err(fmt::Error)
+    }
+}
+#[derive(Debug)] struct Wrapper { value: Broken, after: i64 }
+pub fn probe() -> i64 {
+    let mut text = String::new();
+    let result = write!(&mut text, "{:?}", Wrapper { value: Broken, after: 1i64 });
+    assert!(result.is_err());
+    assert_eq!(text, "Wrapper { value: partial");
+    42
+}

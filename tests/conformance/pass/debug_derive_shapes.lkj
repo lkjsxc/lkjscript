@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {}
+#[derive(Debug)] struct Unit;
+#[derive(Debug)] struct Empty {}
+#[derive(Debug)] struct Zero();
+#[derive(Debug)] struct Tuple<T>(T);
+#[derive(Debug)] struct View<'a> { value: &'a str }
+#[derive(Debug)] enum Link { End, Next(i64, Box<Link>) }
+pub fn probe() -> i64 {
+    assert_eq!(format!("{:?} {:?} {:?}", Unit, Empty {}, Zero()), "Unit Empty Zero");
+    assert_eq!(format!("{:?}", Tuple("ok")), "Tuple(\"ok\")");
+    let text = "borrowed".to_string();
+    assert_eq!(format!("{:?}", View { value: text.as_str() }), "View { value: \"borrowed\" }");
+    assert_eq!(format!("{:?}", Link::Next(1i64, Box::new(Link::End))), "Next(1, End)");
+    42
+}

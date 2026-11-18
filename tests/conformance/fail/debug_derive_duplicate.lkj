@@ -1,0 +1,4 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+#[derive(Debug, Debug)] struct Container;
+pub fn probe() -> i64 { 42 }

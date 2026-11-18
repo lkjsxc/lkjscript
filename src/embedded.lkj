@@ -16,6 +16,7 @@ pub fn library(path: &str) -> Option<Vec<u8>> {
         "$std/time.lkj" => include_str!("../library/time.lkj"),
         "$std/text.lkj" => include_str!("../library/text.lkj"),
         "$std/text_lower.lkj" => include_str!("../library/text_lower.lkj"),
+        "$std/text_debug.lkj" => include_str!("../library/text_debug.lkj"),
         "$std/bytes.lkj" => include_str!("../library/bytes.lkj"),
         "$std/string.lkj" => include_str!("../library/string.lkj"),
         "$std/str.lkj" => include_str!("../library/str.lkj"),

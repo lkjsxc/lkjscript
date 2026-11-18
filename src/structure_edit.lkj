@@ -138,7 +138,7 @@ pub(crate) fn identifier(name: &str) -> bool {
 pub(crate) fn validate_item(target: &semantic::Item, inputs: &[(String, Vec<u8>)], expected: &str) -> Result<(), String> {
     if !target.generated_from.is_empty() {
         return Err(error(&target.identity, "GENERATED_SOURCE",
-            &format!("derive-default projection has no editable source; edit defining item {}", semantic::quote(&target.generated_from))));
+            &format!("{} projection has no editable source; edit defining item {}", target.generated_expansion, semantic::quote(&target.generated_from))));
     }
     let bytes = input(inputs, &target.file)?;
     if target.start > target.end || target.end > bytes.len() {

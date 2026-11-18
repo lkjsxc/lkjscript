@@ -229,8 +229,9 @@ fn field_reference(result: &mut Catalog, files: &[SourceText], owner: &str, targ
             a::Span { end: outer.start, ..outer }, if pattern { "pattern-field" } else { "constructor-field" }, false),
     }
 }
-pub(super) fn pattern_references(result: &mut Catalog, files: &[SourceText], program: &a::Program, owners: &Owners, resolver: &resolve::Resolver<'_>) {
-    for node in &program.patterns {
+pub(super) fn pattern_references(result: &mut Catalog, files: &[SourceText], program: &a::Program, owners: &Owners, resolver: &resolve::Resolver<'_>, generated: &BTreeMap<usize, usize>) {
+    for (index, node) in program.patterns.iter().enumerate() {
+        if generated.contains_key(&index) { continue; }
         let path = match &node.kind {
             a::Pattern::Path(path) | a::Pattern::Variant { path, .. } | a::Pattern::Struct { path, .. } => path,
             _ => continue,

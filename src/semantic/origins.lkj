@@ -1,21 +1,41 @@
-//! Source projection provenance for parsed functions and Default expansions.
+//! Source projection provenance for parsed functions and validated derives.
 //! Module membership is a container relation, never a claim that a module's
 //! declaration bytes were authored: the loader also injects library modules.
 use crate::{ast as a, names};
 use std::collections::{BTreeMap, BTreeSet};
 
+mod debug;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Expansion { Default, Debug }
+impl Expansion {
+    pub fn name(self) -> &'static str {
+        match self { Self::Default => "derive-default", Self::Debug => "derive-debug" }
+    }
+}
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) struct Origin { pub declaration: usize, pub expansion: Expansion }
+impl Origin {
+    pub fn identity(self, program: &a::Program) -> String {
+        let definition = &program.declarations[self.declaration];
+        names::qualified(&program.scopes[definition.scope].path, &definition.name)
+    }
+}
+
 pub(super) struct Origins {
-    pub functions: Vec<Option<usize>>,
-    pub implementations: Vec<Option<usize>>,
+    pub functions: Vec<Option<Origin>>,
+    pub implementations: Vec<Option<Origin>>,
     pub types: BTreeMap<usize, usize>,
     pub expressions: BTreeMap<usize, usize>,
     pub blocks: BTreeMap<usize, usize>,
+    pub patterns: BTreeMap<usize, usize>,
 }
 struct Written {
     functions: BTreeSet<usize>,
     implementations: BTreeSet<usize>,
     traits: BTreeSet<usize>,
     structures: BTreeSet<usize>,
+    enumerations: BTreeSet<usize>,
 }
 fn failure(identity: &str, detail: &str) -> String {
     format!("\"{identity}\" E_IDENTITY_ORIGIN {detail}")
@@ -30,6 +50,7 @@ fn remember(program: &a::Program, written: &mut Written, item: a::Item) -> Resul
         a::Item::Impl(index) => index < program.impls.len() && written.implementations.insert(index),
         a::Item::Trait(index) => index < program.traits.len() && written.traits.insert(index),
         a::Item::Struct(index) => index < program.structs.len() && written.structures.insert(index),
+        a::Item::Enum(index) => index < program.enums.len() && written.enumerations.insert(index),
         _ => true,
     };
     if !valid { return Err(failure("source", "duplicate or out-of-range parsed declaration")); }
@@ -93,7 +114,7 @@ fn field_value(program: &a::Program, resolver: &crate::resolve::Resolver<'_>, fi
     mark(&mut origins.expressions, value, function)
 }
 fn derived_default(program: &a::Program, resolver: &crate::resolve::Resolver<'_>, written: &Written, implementation: usize,
-    origins: &mut Origins) -> Result<usize, String> {
+    origins: &mut Origins) -> Result<Origin, String> {
     let value = &program.impls[implementation];
     let label = format!("implementation:{implementation}");
     let Some(target) = program.types.get(value.target) else { return Err(failure(&label, "implementation target is absent")); };
@@ -219,15 +240,16 @@ fn derived_default(program: &a::Program, resolver: &crate::resolve::Resolver<'_>
     }
     mark(&mut origins.expressions, tail, function)?;
     mark(&mut origins.blocks, block, function)?;
-    origins.functions[function] = Some(structure);
-    Ok(structure)
+    let origin = Origin { declaration: target_name.declaration.unwrap(), expansion: Expansion::Default };
+    origins.functions[function] = Some(origin);
+    Ok(origin)
 }
 pub(super) fn collect(program: &a::Program, resolver: &crate::resolve::Resolver<'_>) -> Result<Origins, String> {
     if !program.resolved || program.function_owners.len() != program.functions.len() {
         return Err(failure("source", "generated origin requires a complete resolved ownership relation"));
     }
     let mut written = Written { functions: BTreeSet::new(), implementations: BTreeSet::new(),
-        traits: BTreeSet::new(), structures: BTreeSet::new() };
+        traits: BTreeSet::new(), structures: BTreeSet::new(), enumerations: BTreeSet::new() };
     for item in &program.items { remember(program, &mut written, *item)?; }
     for module in &program.modules {
         for item in &module.items { remember(program, &mut written, *item)?; }
@@ -239,10 +261,15 @@ pub(super) fn collect(program: &a::Program, resolver: &crate::resolve::Resolver<
     }
     let mut result = Origins { functions: vec![None; program.functions.len()],
         implementations: vec![None; program.impls.len()], types: BTreeMap::new(),
-        expressions: BTreeMap::new(), blocks: BTreeMap::new() };
+        expressions: BTreeMap::new(), blocks: BTreeMap::new(), patterns: BTreeMap::new() };
     for index in 0usize..program.impls.len() {
         if !written.implementations.contains(&index) {
-            let owner = derived_default(program, resolver, &written, index, &mut result)?;
+            let value = &program.impls[index];
+            let debug = value.trait_ty.is_some_and(|ty| {
+                matches!(&program.types[ty].kind, a::Type::Path(path) if path.name == "$std::fmt::Debug")
+            });
+            let owner = if debug { debug::validate(program, resolver, &written, index, &mut result)? }
+                else { derived_default(program, resolver, &written, index, &mut result)? };
             result.implementations[index] = Some(owner);
         }
     }

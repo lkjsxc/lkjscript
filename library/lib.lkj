@@ -17,6 +17,7 @@ pub mod hmac;
 pub mod time;
 pub mod text;
 mod text_lower;
+mod text_debug;
 pub mod bytes;
 pub mod char;
 pub mod fmt;

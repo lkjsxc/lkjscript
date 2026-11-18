@@ -91,19 +91,19 @@ there is no promise that a prior body-local identity still denotes anything.
 Use the enclosing function identity for a whole-body replacement, or query the
 new body first.
 
-Default derives have semantic function and implementation identities, but their
+Default and Debug derives have semantic function and implementation identities, but their
 expansion is not an independently authored source item. The catalog validates
 the complete parser Item relation for functions and implementations, then
-recognizes the exact resolved Default expansion of a defining struct. Unknown
+recognizes the exact resolved Default expansion of a defining struct and Debug expansions of structs or enums. Debug validation checks the canonical trait, copied generic contracts, field labels/order, borrows, exhaustive variant patterns, builder calls and fresh generated nodes. Unknown
 orphan functions or implementations refuse with `E_IDENTITY_ORIGIN`; the loader's
 injected module declarations are outside this narrower authorship rule.
 
 Generated facts carry `origin=generated`, the `definition` identity and
 `source-projection=false`. Their spans are labelled definition anchors.
 Signatures describe the generated callable or implementation; `text` returns
-`text-unavailable` instead of the struct's bytes. Generated calls use
+`text-unavailable` instead of the defining declaration's bytes. Generated calls use
 `FUNCTION::derived:EPOCH::call:N`; the epoch hashes the defining identity and
-token-normalized declaration under `lkjscript-derived-default-body-1`. It is
+token-normalized declaration under `lkjscript-derived-default-body-1` for Default or `lkjscript-derive-debug-body-1` for Debug. The `expansion` fact names the producer. It is
 distinct from a source-body epoch. Changing that declaration invalidates these
 call IDs; whitespace and comments do not. There are no aliases for the old
 erroneous source-span call IDs.
@@ -119,6 +119,8 @@ elaboration regenerates and checks the expansion. Replay selects authored
 declarations. Existing historical snapshots retain the producing compiler's
 facts, including an older incorrect projection; rebuilding publishes the
 repaired origin contract.
+
+Debug-generated local bindings and enum patterns also remain outside authored spelling references. Explicit-argument formatting participates in ordinary function rename and body replacement. Implicit format captures retain a located `E_EDIT_REFERENCES` refusal when their decoded literal has no independently recorded editable byte span; the compiler does not guess an edit inside that string. [Debug query and mutation controls](../tools/debug-format-test.sh) cover both engines, unchanged source on refused transactions, and ten malformed generated-origin cases.
 
 `references-complete=false` and unresolved-reference facts are explicit limits,
 not evidence that an item has no uses. Declaration-only capture deliberately

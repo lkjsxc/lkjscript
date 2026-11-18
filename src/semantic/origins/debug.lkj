@@ -1,0 +1,247 @@
+//! Exact source-origin validation for the parser's Debug producer.
+use super::*;
+
+fn ensure(value: bool, detail: &str) -> Result<(), String> {
+    if value { Ok(()) } else { Err(failure("Debug", detail)) }
+}
+fn expression<'a>(program: &'a a::Program, index: usize, span: a::Span,
+    function: usize, origins: &mut Origins) -> Result<&'a a::Expr, String> {
+    let node = program.exprs.get(index).ok_or_else(|| -> String { failure("Debug", "generated expression is absent") })?;
+    ensure(same_span(node.span, span), "generated expression has a different definition anchor")?;
+    mark(&mut origins.expressions, index, function)?;
+    Ok(&node.kind)
+}
+fn local(program: &a::Program, index: usize, name: &str, span: a::Span,
+    function: usize, origins: &mut Origins) -> Result<(), String> {
+    let a::Expr::Path(path) = expression(program, index, span, function, origins)? else {
+        return Err(failure("Debug", "generated local is not a path"));
+    };
+    ensure(path.name == name && path.declaration.is_none() && path.args.is_empty()
+        && path.bindings.is_empty() && path.qualification.is_none(), "generated local binding differs")
+}
+fn string(program: &a::Program, index: usize, text: &str, span: a::Span,
+    function: usize, origins: &mut Origins) -> Result<(), String> {
+    ensure(matches!(expression(program, index, span, function, origins)?,
+        a::Expr::String(value) if value == text), "generated label differs from its defining item")
+}
+fn binding(program: &a::Program, index: usize, name: &str, mutable: bool, span: a::Span,
+    function: usize, origins: &mut Origins) -> Result<(), String> {
+    let node = program.patterns.get(index).ok_or_else(|| -> String { failure("Debug", "generated binding is absent") })?;
+    ensure(same_span(node.span, span), "generated binding has a different definition anchor")?;
+    ensure(matches!(&node.kind, a::Pattern::Bind { name: actual, mutable: m, by_ref, ref_mut }
+        if actual == name && *m == mutable && !*by_ref && !*ref_mut), "generated binding shape differs")?;
+    mark(&mut origins.patterns, index, function)
+}
+fn formatter_body(program: &a::Program, body_expression: usize, label: &str, named: bool,
+    fields: &[a::Field], matched: bool, span: a::Span, function: usize,
+    origins: &mut Origins) -> Result<(), String> {
+    let a::Expr::Block(block) = expression(program, body_expression, span, function, origins)? else {
+        return Err(failure("Debug", "generated formatter body is not a block"));
+    };
+    let body = program.blocks.get(*block).ok_or_else(|| -> String { failure("Debug", "generated formatter block is absent") })?;
+    ensure(same_span(body.span, span) && body.statements.len() == fields.len() + 1usize,
+        "generated formatter statement shape differs")?;
+    mark(&mut origins.blocks, *block, function)?;
+    let a::Stmt::Let { pattern, ty, value: Some(value), span: statement_span } = &body.statements[0usize] else {
+        return Err(failure("Debug", "generated formatter builder is not a binding"));
+    };
+    ensure(ty.is_none() && same_span(*statement_span, span), "generated builder binding differs")?;
+    binding(program, *pattern, "$debug_builder", true, span, function, origins)?;
+    let a::Expr::Method { receiver, name, types, args } = expression(program, *value, span, function, origins)? else {
+        return Err(failure("Debug", "generated builder is not a formatter method"));
+    };
+    ensure(name == if named { "debug_struct" } else { "debug_tuple" }
+        && types.is_empty() && args.len() == 1usize, "generated builder method differs")?;
+    local(program, *receiver, "$debug_formatter", span, function, origins)?;
+    string(program, args[0usize], label, span, function, origins)?;
+    for (index, field) in fields.iter().enumerate() {
+        let a::Stmt::Expr { value, semicolon: true } = body.statements[index + 1usize] else {
+            return Err(failure("Debug", "generated field is not a completed statement"));
+        };
+        let a::Expr::Method { receiver, name, types, args } = expression(program, value, field.span, function, origins)? else {
+            return Err(failure("Debug", "generated field is not a builder method"));
+        };
+        ensure(name == "field" && types.is_empty() && args.len() == if named { 2usize } else { 1usize },
+            "generated field method differs")?;
+        local(program, *receiver, "$debug_builder", span, function, origins)?;
+        let argument = if named {
+            string(program, args[0usize], &field.name, field.span, function, origins)?;
+            args[1usize]
+        } else { args[0usize] };
+        if matched {
+            local(program, argument, &format!("$debug_field{index}"), field.span, function, origins)?;
+        } else {
+            let a::Expr::Borrow { mutable: false, value } = expression(program, argument, field.span, function, origins)? else {
+                return Err(failure("Debug", "generated field argument is not an immutable borrow"));
+            };
+            let a::Expr::Field { value: receiver, name } = expression(program, *value, field.span, function, origins)? else {
+                return Err(failure("Debug", "generated field argument is not a field projection"));
+            };
+            ensure(name == &field.name, "generated field projection differs")?;
+            local(program, *receiver, "self", field.span, function, origins)?;
+        }
+    }
+    let tail = body.tail.ok_or_else(|| -> String { failure("Debug", "generated builder has no finish") })?;
+    let a::Expr::Method { receiver, name, types, args } = expression(program, tail, span, function, origins)? else {
+        return Err(failure("Debug", "generated finish is not a method"));
+    };
+    ensure(name == "finish" && types.is_empty() && args.is_empty(), "generated finish method differs")?;
+    local(program, *receiver, "$debug_builder", span, function, origins)
+}
+fn standard(program: &a::Program, resolver: &crate::resolve::Resolver<'_>, index: usize,
+    name: &str, span: a::Span, function: usize, origins: &mut Origins) -> Result<(), String> {
+    let node = program.types.get(index).ok_or_else(|| -> String { failure("Debug", "generated standard type is absent") })?;
+    let a::Type::Path(path) = &node.kind else { return Err(failure("Debug", "generated standard type is not a path")); };
+    let expected = crate::resolve::semantic_type_path(resolver, node.scope, name, node.span)
+        .map_err(|_| -> String { failure("Debug", "canonical standard type does not resolve") })?;
+    ensure(same_span(node.span, span) && path.declaration.is_some() && path.declaration == expected.declaration
+        && path.name == expected.name && path.args.is_empty() && path.bindings.is_empty() && path.qualification.is_none(),
+        "generated standard type does not retain canonical identity")?;
+    mark(&mut origins.types, index, function)
+}
+fn reference(program: &a::Program, index: usize, inner: usize, mutable: bool, span: a::Span,
+    function: usize, origins: &mut Origins) -> Result<(), String> {
+    let node = program.types.get(index).ok_or_else(|| -> String { failure("Debug", "generated reference type is absent") })?;
+    ensure(same_span(node.span, span) && matches!(&node.kind,
+        a::Type::Ref { mutable: actual, lifetime, inner: target }
+        if *actual == mutable && lifetime.is_empty() && *target == inner), "generated reference type differs")?;
+    mark(&mut origins.types, index, function)
+}
+fn variant_pattern(program: &a::Program, resolver: &crate::resolve::Resolver<'_>, index: usize,
+    definition: &a::Enum, variant: &a::Variant, function: usize, origins: &mut Origins) -> Result<(), String> {
+    let node = program.patterns.get(index).ok_or_else(|| -> String { failure("Debug", "generated variant pattern is absent") })?;
+    ensure(same_span(node.span, variant.span), "generated variant has a different definition anchor")?;
+    mark(&mut origins.patterns, index, function)?;
+    let mut patterns = Vec::new();
+    let path = match (&node.kind, variant.style) {
+        (a::Pattern::Path(path), a::VariantStyle::Unit) => path,
+        (a::Pattern::Variant { path, fields }, a::VariantStyle::Tuple) => {
+            patterns.extend_from_slice(fields); path
+        }
+        (a::Pattern::Struct { path, fields, rest: false }, a::VariantStyle::Named) => {
+            ensure(fields.len() == variant.fields.len(), "generated named variant field count differs")?;
+            for (at, field) in fields.iter().enumerate() {
+                ensure(field.0 == variant.fields[at].name, "generated named variant field order differs")?;
+                patterns.push(field.1);
+            }
+            path
+        }
+        _ => return Err(failure("Debug", "generated variant pattern shape differs")),
+    };
+    let expected = a::Path { qualification: None, declaration: None,
+        name: format!("{}::{}", definition.name, variant.name), args: Vec::new(), bindings: Vec::new() };
+    let expected = resolver.value_path(node.scope, &expected, node.span)
+        .map_err(|_| -> String { failure("Debug", "defining variant does not resolve") })?;
+    ensure(path.declaration.is_some() && path.declaration == expected.declaration
+        && path.name == expected.name && path.args.is_empty() && path.bindings.is_empty()
+        && path.qualification.is_none() && patterns.len() == variant.fields.len(),
+        "generated variant path differs from its defining variant")?;
+    for (at, pattern) in patterns.iter().enumerate() {
+        binding(program, *pattern, &format!("$debug_field{at}"), false, variant.fields[at].span, function, origins)?;
+    }
+    Ok(())
+}
+
+pub(super) fn validate(program: &a::Program, resolver: &crate::resolve::Resolver<'_>, written: &Written,
+    implementation: usize, origins: &mut Origins) -> Result<Origin, String> {
+    let value = &program.impls[implementation];
+    let target = program.types.get(value.target).ok_or_else(|| -> String { failure("Debug", "generated target is absent") })?;
+    let a::Type::Path(path) = &target.kind else { return Err(failure("Debug", "generated target is not nominal")); };
+    let declaration = path.declaration.ok_or_else(|| -> String { failure("Debug", "generated target is unresolved") })?;
+    let declaration_value = &program.declarations[declaration];
+    let (name, module, generics, predicates, attrs, span) = match declaration_value.item {
+        a::Item::Struct(index) if written.structures.contains(&index) => {
+            let definition = &program.structs[index];
+            (&definition.name, &definition.module, &definition.generics, &definition.predicates, &definition.attrs, definition.span)
+        }
+        a::Item::Enum(index) if written.enumerations.contains(&index) => {
+            let definition = &program.enums[index];
+            (&definition.name, &definition.module, &definition.generics, &definition.predicates, &definition.attrs, definition.span)
+        }
+        _ => return Err(failure("Debug", "generated target has no parsed nominal definition")),
+    };
+    let mut requests = 0usize;
+    for attr in attrs { if attr.name == "derive" { for name in &attr.args { if name == "Debug" { requests += 1usize; } } } }
+    ensure(requests == 1usize && same_span(value.span, span) && same_span(target.span, span)
+        && value.module == *module && value.methods.len() == 1usize && value.associated.is_empty()
+        && value.generics.len() == generics.len() && path.args.len() == generics.len()
+        && value.predicates.len() == predicates.len(), "unwritten implementation differs from its defining Debug request")?;
+    for (at, predicate) in predicates.iter().enumerate() {
+        let copied = &value.predicates[at];
+        ensure(copied.target == predicate.target && copied.bounds == predicate.bounds
+            && same_span(copied.span, predicate.span), "generated where predicate differs")?;
+    }
+    let function = value.methods[0usize];
+    let method = program.functions.get(function).ok_or_else(|| -> String { failure("Debug", "generated method is absent") })?;
+    ensure(program.function_owner(a::FunctionId { index: function }) == a::FunctionOwner::Implementation(a::ImplId { index: implementation })
+        && method.name == "fmt" && method.module == *module && !method.const_qualified
+        && method.generics.is_empty() && method.predicates.is_empty() && method.outlives.is_empty()
+        && method.params.len() == 2usize && method.attrs.is_empty() && method.public == a::Visibility::Public
+        && same_span(method.span, span), "generated Debug method signature differs")?;
+    let bound = value.trait_ty.ok_or_else(|| -> String { failure("Debug", "generated Debug trait is absent") })?;
+    standard(program, resolver, bound, "std::fmt::Debug", span, function, origins)?;
+    ensure(value.target == bound + generics.len() + 1usize, "generated target does not follow fresh argument types")?;
+    for (index, parameter) in generics.iter().enumerate() {
+        let argument = path.args[index];
+        let node = program.types.get(argument).ok_or_else(|| -> String { failure("Debug", "generated parameter argument is absent") })?;
+        let a::Type::Path(argument_path) = &node.kind else { return Err(failure("Debug", "generated parameter argument is not a path")); };
+        let copied = &value.generics[index];
+        let extra = if parameter.lifetime || parameter.constant { 0usize } else { 1usize };
+        ensure(argument == bound + index + 1usize && same_span(node.span, parameter.span)
+            && argument_path.name == parameter.name && argument_path.declaration.is_none()
+            && argument_path.args.is_empty() && argument_path.bindings.is_empty() && argument_path.qualification.is_none()
+            && copied.name == parameter.name && copied.lifetime == parameter.lifetime && copied.constant == parameter.constant
+            && copied.implicit == parameter.implicit && same_span(copied.span, parameter.span)
+            && copied.bounds.len() == parameter.bounds.len() + extra, "generated generic argument or contract differs")?;
+        for (at, original) in parameter.bounds.iter().enumerate() {
+            ensure(*original < bound && copied.bounds[at] == *original, "generated bound aliases or changes an authored bound")?;
+        }
+        if extra != 0usize { ensure(copied.bounds[parameter.bounds.len()] == bound, "generated generic is missing its Debug bound")?; }
+        mark(&mut origins.types, argument, function)?;
+    }
+    mark(&mut origins.types, value.target, function)?;
+    let self_type = value.target + 1usize;
+    let formatter_type = value.target + 2usize;
+    let formatter_reference = value.target + 3usize;
+    let result = value.target + 4usize;
+    reference(program, self_type, value.target, false, span, function, origins)?;
+    standard(program, resolver, formatter_type, "std::fmt::Formatter", span, function, origins)?;
+    reference(program, formatter_reference, formatter_type, true, span, function, origins)?;
+    standard(program, resolver, result, "std::fmt::Result", span, function, origins)?;
+    ensure(method.result == result && method.params[0usize].name == "self" && method.params[0usize].ty == self_type
+        && method.params[1usize].name == "$debug_formatter" && method.params[1usize].ty == formatter_reference,
+        "generated Debug parameter identities differ")?;
+    for parameter in &method.params {
+        ensure(!parameter.mutable && same_span(parameter.span, span), "generated Debug parameter differs")?;
+    }
+    let block = method.body.ok_or_else(|| -> String { failure("Debug", "generated Debug body is absent") })?;
+    let body = program.blocks.get(block).ok_or_else(|| -> String { failure("Debug", "generated Debug block is absent") })?;
+    ensure(body.statements.is_empty() && same_span(body.span, span), "generated outer Debug body differs")?;
+    mark(&mut origins.blocks, block, function)?;
+    let tail = body.tail.ok_or_else(|| -> String { failure("Debug", "generated Debug body has no result") })?;
+    match declaration_value.item {
+        a::Item::Struct(index) => {
+            let definition = &program.structs[index];
+            formatter_body(program, tail, name, !definition.tuple, &definition.fields, false, span, function, origins)?;
+        }
+        a::Item::Enum(index) => {
+            let definition = &program.enums[index];
+            let a::Expr::Match { value, arms } = expression(program, tail, span, function, origins)? else {
+                return Err(failure("Debug", "generated enum body is not a match"));
+            };
+            ensure(arms.len() == definition.variants.len(), "generated enum does not cover exactly its variants")?;
+            local(program, *value, "self", span, function, origins)?;
+            for (index, variant) in definition.variants.iter().enumerate() {
+                let arm = &arms[index];
+                ensure(arm.guard.is_none() && same_span(arm.span, variant.span), "generated enum arm differs")?;
+                variant_pattern(program, resolver, arm.pattern, definition, variant, function, origins)?;
+                formatter_body(program, arm.value, &variant.name, variant.style == a::VariantStyle::Named,
+                    &variant.fields, true, variant.span, function, origins)?;
+            }
+        }
+        _ => return Err(failure("Debug", "generated Debug target changed kind")),
+    }
+    let origin = Origin { declaration, expansion: Expansion::Debug };
+    origins.functions[function] = Some(origin);
+    Ok(origin)
+}

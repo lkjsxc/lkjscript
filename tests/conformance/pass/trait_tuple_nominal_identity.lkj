@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+trait Value { fn value(&self) -> i64; }
+struct Empty;
+struct Named(i64);
+impl Value for () { fn value(&self) -> i64 { 1 } }
+impl Value for Empty { fn value(&self) -> i64 { 7 } }
+impl Value for (i64,) { fn value(&self) -> i64 { self.0 } }
+impl Value for Named { fn value(&self) -> i64 { self.0 * 2 } }
+fn get<T: Value>(value: T) -> i64 { value.value() }
+pub fn probe() -> i64 { get(()) + get(Empty) + get((10i64,)) + get(Named(12i64)) }

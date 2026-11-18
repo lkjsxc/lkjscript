@@ -1,0 +1,91 @@
+// Producer-origin regression: parsed nominal definitions own exact Debug expansions.
+mod ast; mod diagnostic; mod names; mod syntax; mod resolve; mod source; mod origins;
+mod diagnostics {
+    #[derive(Clone)]
+    pub struct BlockedRegion { pub path: String, pub span: crate::ast::Span, pub kind: String, pub reason: String }
+}
+fn parsed() -> ast::Program {
+    let root = "#[derive(Debug)] struct Packet<T> { value:T } #[derive(Debug)] enum Choice { Empty, One(i64), Named { value:i64 } } fn free() {}";
+    let standard = "pub mod fmt { pub struct Formatter; pub struct Result; pub trait Debug { fn fmt(&self, f:&mut Formatter)->Result; } pub trait Other {} }";
+    let report = source::load_report("main.lkj", Some("$std/lib.lkj"), &mut |path:&str| -> Result<Option<Vec<u8>>,String> {
+        Ok(match path { "main.lkj"=>Some(root.as_bytes().to_vec()), "$std/lib.lkj"=>Some(standard.as_bytes().to_vec()), _=>None })
+    });
+    resolve::resolve(&report.into_result().unwrap()).unwrap()
+}
+fn refused(program:&ast::Program) {
+    let resolver = resolve::Resolver::new(program).unwrap();
+    match origins::collect(program,&resolver) {
+        Err(message)=>assert!(message.contains("E_IDENTITY_ORIGIN")),
+        Ok(_)=>panic!("unexplained Debug origin accepted"),
+    }
+}
+fn main() {
+    let program = parsed();
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    let relation = origins::collect(&program,&resolver).unwrap();
+    let mut generated = Vec::new();
+    for (index, origin) in relation.functions.iter().enumerate() {
+        if let Some(origin) = origin {
+            assert!(origin.expansion.name() == "derive-debug");
+            generated.push(index);
+        }
+    }
+    assert!(generated.len() == 2usize);
+    assert!(!relation.patterns.is_empty());
+    for definition in &program.structs {
+        for field in &definition.fields { assert!(!relation.types.contains_key(&field.ty)); }
+    }
+    let mut label = None; let mut field = None; let mut matched = None;
+    for index in relation.expressions.keys() {
+        match &program.exprs[*index].kind {
+            ast::Expr::String(_) => { if label.is_none() { label=Some(*index); } }
+            ast::Expr::Field { .. } => field=Some(*index),
+            ast::Expr::Match { .. } => matched=Some(*index),
+            _=>{},
+        }
+    }
+    let mut wrong_label=program.clone();
+    wrong_label.exprs[label.unwrap()].kind=ast::Expr::String("invented".to_string());
+    refused(&wrong_label);
+    let mut wrong_field=program.clone();
+    if let ast::Expr::Field { name, .. }=&mut wrong_field.exprs[field.unwrap()].kind { *name="other".to_string(); }
+    refused(&wrong_field);
+    let mut missing_arm=program.clone();
+    if let ast::Expr::Match { arms, .. }=&mut missing_arm.exprs[matched.unwrap()].kind { arms.pop(); }
+    refused(&missing_arm);
+    let mut binding=None;
+    for index in relation.patterns.keys() {
+        if matches!(program.patterns[*index].kind,ast::Pattern::Bind { .. }) { binding=Some(*index); break; }
+    }
+    let mut wrong_binding=program.clone();
+    if let ast::Pattern::Bind { name, .. }=&mut wrong_binding.patterns[binding.unwrap()].kind { *name="captured".to_string(); }
+    refused(&wrong_binding);
+    let mut wrong_owner=program.clone();
+    wrong_owner.function_owners[generated[0usize]]=ast::FunctionOwner::Free;
+    refused(&wrong_owner);
+    let mut no_request=program.clone();
+    no_request.structs[0usize].attrs.clear();
+    refused(&no_request);
+    let mut signature=program.clone();
+    signature.functions[generated[0usize]].params[0usize].mutable=true;
+    refused(&signature);
+    let mut wrong_span=program.clone();
+    wrong_span.exprs[label.unwrap()].span.start += 1usize;
+    refused(&wrong_span);
+    let mut unrelated=None;
+    for (index, declaration) in program.declarations.iter().enumerate() {
+        if declaration.name=="Other" { unrelated=Some(index); }
+    }
+    let mut derived_impl=None;
+    for (index, origin) in relation.implementations.iter().enumerate() {
+        if origin.is_some() { derived_impl=Some(index); break; }
+    }
+    let mut wrong_trait=program.clone();
+    let bound=wrong_trait.impls[derived_impl.unwrap()].trait_ty.unwrap();
+    if let ast::Type::Path(path)=&mut wrong_trait.types[bound].kind { path.declaration=unrelated; }
+    refused(&wrong_trait);
+    let mut body=program.clone();
+    let block=body.functions[generated[0usize]].body.unwrap();
+    body.blocks[block].tail=None;
+    refused(&body);
+}

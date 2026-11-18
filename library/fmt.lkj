@@ -9,6 +9,9 @@ pub struct Formatter<'a> {
     flags: u8,
     fill: char,
 }
+pub trait Debug {
+    fn fmt(&self, formatter: &mut Formatter) -> Result;
+}
 pub trait Display {
     fn fmt(&self, formatter: &mut Formatter) -> Result;
 }
@@ -531,4 +534,481 @@ impl Octal for isize {
 
 pub fn __lkjscript_success() -> Result {
     crate::Result::Ok(())
+}
+
+
+// Debug implementations and builders are ordinary source contracts. The
+// compiler selects this trait; it does not inspect object bytes or manufacture
+// formatting authority.
+pub fn __lkjscript_debug<T: Debug + ?Sized>(formatter: &mut Formatter, value: &T) -> Result {
+    value.fmt(formatter)
+}
+
+fn debug_escape(formatter: &mut Formatter, value: char, quote: char) -> Result {
+    match value {
+        '\0' => formatter.write_str("\\0"),
+        '\t' => formatter.write_str("\\t"),
+        '\r' => formatter.write_str("\\r"),
+        '\n' => formatter.write_str("\\n"),
+        '\\' => formatter.write_str("\\\\"),
+        _ => {
+            if value == quote {
+                formatter.write_char('\\')?;
+                formatter.write_char(value)
+            } else if crate::text_debug::escaped(value as u32) {
+                formatter.write_str("\\u{")?;
+                let mut digits = Vec::new();
+                let mut code = value as u32;
+                loop {
+                    let digit = (code % 16u32) as u8;
+                    digits.push(if digit < 10u8 { b'0' + digit } else { b'a' + digit - 10u8 });
+                    code /= 16u32;
+                    if code == 0u32 { break; }
+                }
+                let mut at = digits.len();
+                while at != 0usize {
+                    at -= 1usize;
+                    formatter.write_char(digits[at] as char)?;
+                }
+                formatter.write_char('}')
+            } else {
+                formatter.write_char(value)
+            }
+        }
+    }
+}
+impl Debug for str {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        formatter.write_char('"')?;
+        for value in self.chars() { debug_escape(formatter, value, '"')?; }
+        formatter.write_char('"')
+    }
+}
+impl Debug for String {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        __lkjscript_debug(formatter, self.as_str())
+    }
+}
+impl Debug for char {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        formatter.write_char('\'')?;
+        debug_escape(formatter, *self, '\'')?;
+        formatter.write_char('\'')
+    }
+}
+impl Debug for bool {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        formatter.pad(if *self { "true" } else { "false" })
+    }
+}
+impl Debug for Error {
+    fn fmt(&self, formatter: &mut Formatter) -> Result { formatter.write_str("Error") }
+}
+impl<T: Debug + ?Sized> Debug for &T {
+    fn fmt(&self, formatter: &mut Formatter) -> Result { __lkjscript_debug(formatter, *self) }
+}
+impl<T: Debug + ?Sized> Debug for &mut T {
+    fn fmt(&self, formatter: &mut Formatter) -> Result { __lkjscript_debug(formatter, &**self) }
+}
+impl<T: Debug> Debug for Box<T> {
+    fn fmt(&self, formatter: &mut Formatter) -> Result { __lkjscript_debug(formatter, &**self) }
+}
+
+// Each child formats into an owned string before its bytes are indented. This
+// keeps nested pretty output within the existing checked borrowing rules.
+fn debug_child<T: Debug + ?Sized>(formatter: &mut Formatter, value: &T) -> Result {
+    let mut bytes = String::new();
+    let result = {
+        let mut child = Formatter {
+            output: &mut bytes, width: formatter.width, flags: formatter.flags, fill: formatter.fill,
+        };
+        __lkjscript_debug(&mut child, value)
+    };
+    if formatter.alternate() {
+        for ch in bytes.as_str().chars() {
+            formatter.write_char(ch)?;
+            if ch == '\n' { formatter.write_str("    ")?; }
+        }
+    } else {
+        formatter.write_str(bytes.as_str())?;
+    }
+    result
+}
+fn debug_field<T: Debug + ?Sized>(formatter: &mut Formatter, count: usize,
+    name: &str, value: &T, style: u8) -> Result {
+    let pretty = formatter.alternate();
+    if count == 0usize {
+        if style == 0u8 { formatter.write_str(if pretty { " {\n    " } else { " { " })?; }
+        else if style == 1u8 { formatter.write_str(if pretty { "(\n    " } else { "(" })?; }
+        else if pretty { formatter.write_str("\n    ")?; }
+    } else if pretty {
+        formatter.write_str("    ")?;
+    } else {
+        formatter.write_str(", ")?;
+    }
+    if style == 0u8 {
+        formatter.write_str(name)?;
+        formatter.write_str(": ")?;
+    }
+    debug_child(formatter, value)?;
+    if pretty { formatter.write_str(",\n")?; }
+    crate::Result::Ok(())
+}
+fn debug_finish(formatter: &mut Formatter, count: usize, style: u8, unnamed: bool) -> Result {
+    if style == 2u8 { return formatter.write_str("]"); }
+    if count == 0usize { return crate::Result::Ok(()); }
+    if style == 0u8 {
+        let closing = if formatter.alternate() { "}" } else { " }" };
+        formatter.write_str(closing)
+    } else {
+        if unnamed && count == 1usize && !formatter.alternate() { formatter.write_str(",")?; }
+        formatter.write_str(")")
+    }
+}
+
+pub struct DebugStruct<'a, 'b> {
+    formatter: &'a mut Formatter<'b>,
+    fields: usize,
+    failed: bool,
+}
+pub struct DebugTuple<'a, 'b> {
+    formatter: &'a mut Formatter<'b>,
+    fields: usize,
+    failed: bool,
+    unnamed: bool,
+}
+pub struct DebugList<'a, 'b> {
+    formatter: &'a mut Formatter<'b>,
+    entries: usize,
+    failed: bool,
+}
+impl<'a> Formatter<'a> {
+    pub fn debug_struct<'b>(&'b mut self, name: &str) -> DebugStruct<'b, 'a> {
+        let failed = self.write_str(name).is_err();
+        DebugStruct { formatter: self, fields: 0usize, failed }
+    }
+    pub fn debug_tuple<'b>(&'b mut self, name: &str) -> DebugTuple<'b, 'a> {
+        let failed = self.write_str(name).is_err();
+        DebugTuple { formatter: self, fields: 0usize, failed, unnamed: name.is_empty() }
+    }
+    pub fn debug_list<'b>(&'b mut self) -> DebugList<'b, 'a> {
+        let failed = self.write_str("[").is_err();
+        DebugList { formatter: self, entries: 0usize, failed }
+    }
+}
+impl<'a, 'b: 'a> DebugStruct<'a, 'b> {
+    pub fn field<'c, T: Debug + ?Sized>(&'c mut self, name: &str, value: &T) -> &'c mut Self where 'a: 'c {
+        if !self.failed {
+            self.failed = debug_field(self.formatter, self.fields, name, value, 0u8).is_err();
+            self.fields += 1usize;
+        }
+        self
+    }
+    pub fn finish(&mut self) -> Result {
+        if self.failed { crate::Result::Err(Error) }
+        else { debug_finish(self.formatter, self.fields, 0u8, false) }
+    }
+}
+impl<'a, 'b: 'a> DebugTuple<'a, 'b> {
+    pub fn field<'c, T: Debug + ?Sized>(&'c mut self, value: &T) -> &'c mut Self where 'a: 'c {
+        if !self.failed {
+            self.failed = debug_field(self.formatter, self.fields, "", value, 1u8).is_err();
+            self.fields += 1usize;
+        }
+        self
+    }
+    pub fn finish(&mut self) -> Result {
+        if self.failed { crate::Result::Err(Error) }
+        else { debug_finish(self.formatter, self.fields, 1u8, self.unnamed) }
+    }
+}
+impl<'a, 'b: 'a> DebugList<'a, 'b> {
+    pub fn entry<'c, T: Debug + ?Sized>(&'c mut self, value: &T) -> &'c mut Self where 'a: 'c {
+        if !self.failed {
+            self.failed = debug_field(self.formatter, self.entries, "", value, 2u8).is_err();
+            self.entries += 1usize;
+        }
+        self
+    }
+    pub fn finish(&mut self) -> Result {
+        if self.failed { crate::Result::Err(Error) }
+        else { debug_finish(self.formatter, self.entries, 2u8, false) }
+    }
+}
+impl<T: Debug> Debug for [T] {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let mut list = formatter.debug_list();
+        for value in self { list.entry(value); }
+        list.finish()
+    }
+}
+impl<T: Debug> Debug for Vec<T> {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let mut list = formatter.debug_list();
+        for value in self { list.entry(value); }
+        list.finish()
+    }
+}
+impl<T: Debug, const N: usize> Debug for [T; N] {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let mut list = formatter.debug_list();
+        for value in &self[..] { list.entry(value); }
+        list.finish()
+    }
+}
+impl<T: Debug> Debug for crate::Option<T> {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        match self {
+            crate::Option::None => formatter.write_str("None"),
+            crate::Option::Some(value) => formatter.debug_tuple("Some").field(value).finish(),
+        }
+    }
+}
+impl<T: Debug, E: Debug> Debug for crate::Result<T, E> {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        match self {
+            crate::Result::Ok(value) => formatter.debug_tuple("Ok").field(value).finish(),
+            crate::Result::Err(value) => formatter.debug_tuple("Err").field(value).finish(),
+        }
+    }
+}
+impl Debug for () {
+    fn fmt(&self, formatter: &mut Formatter) -> Result { formatter.write_str("()") }
+}
+
+impl Debug for u8 {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        formatter.number(*self as u64, false, 10u64, false)
+    }
+}
+
+impl Debug for u16 {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        formatter.number(*self as u64, false, 10u64, false)
+    }
+}
+
+impl Debug for u32 {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        formatter.number(*self as u64, false, 10u64, false)
+    }
+}
+
+impl Debug for u64 {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        formatter.number(*self as u64, false, 10u64, false)
+    }
+}
+
+impl Debug for usize {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        formatter.number(*self as u64, false, 10u64, false)
+    }
+}
+
+impl Debug for i8 {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let value = *self as i64;
+        let negative = value < 0i64;
+        let magnitude = if negative { (-(value + 1i64)) as u64 + 1u64 } else { value as u64 };
+        formatter.number(magnitude, negative, 10u64, false)
+    }
+}
+
+impl Debug for i16 {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let value = *self as i64;
+        let negative = value < 0i64;
+        let magnitude = if negative { (-(value + 1i64)) as u64 + 1u64 } else { value as u64 };
+        formatter.number(magnitude, negative, 10u64, false)
+    }
+}
+
+impl Debug for i32 {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let value = *self as i64;
+        let negative = value < 0i64;
+        let magnitude = if negative { (-(value + 1i64)) as u64 + 1u64 } else { value as u64 };
+        formatter.number(magnitude, negative, 10u64, false)
+    }
+}
+
+impl Debug for i64 {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let value = *self as i64;
+        let negative = value < 0i64;
+        let magnitude = if negative { (-(value + 1i64)) as u64 + 1u64 } else { value as u64 };
+        formatter.number(magnitude, negative, 10u64, false)
+    }
+}
+
+impl Debug for isize {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let value = *self as i64;
+        let negative = value < 0i64;
+        let magnitude = if negative { (-(value + 1i64)) as u64 + 1u64 } else { value as u64 };
+        formatter.number(magnitude, negative, 10u64, false)
+    }
+}
+
+impl<T0: Debug> Debug for (T0,) {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let mut tuple = formatter.debug_tuple("");
+        tuple.field(&self.0);
+        tuple.finish()
+    }
+}
+
+impl<T0: Debug, T1: Debug> Debug for (T0, T1,) {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let mut tuple = formatter.debug_tuple("");
+        tuple.field(&self.0);
+        tuple.field(&self.1);
+        tuple.finish()
+    }
+}
+
+impl<T0: Debug, T1: Debug, T2: Debug> Debug for (T0, T1, T2,) {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let mut tuple = formatter.debug_tuple("");
+        tuple.field(&self.0);
+        tuple.field(&self.1);
+        tuple.field(&self.2);
+        tuple.finish()
+    }
+}
+
+impl<T0: Debug, T1: Debug, T2: Debug, T3: Debug> Debug for (T0, T1, T2, T3,) {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let mut tuple = formatter.debug_tuple("");
+        tuple.field(&self.0);
+        tuple.field(&self.1);
+        tuple.field(&self.2);
+        tuple.field(&self.3);
+        tuple.finish()
+    }
+}
+
+impl<T0: Debug, T1: Debug, T2: Debug, T3: Debug, T4: Debug> Debug for (T0, T1, T2, T3, T4,) {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let mut tuple = formatter.debug_tuple("");
+        tuple.field(&self.0);
+        tuple.field(&self.1);
+        tuple.field(&self.2);
+        tuple.field(&self.3);
+        tuple.field(&self.4);
+        tuple.finish()
+    }
+}
+
+impl<T0: Debug, T1: Debug, T2: Debug, T3: Debug, T4: Debug, T5: Debug> Debug for (T0, T1, T2, T3, T4, T5,) {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let mut tuple = formatter.debug_tuple("");
+        tuple.field(&self.0);
+        tuple.field(&self.1);
+        tuple.field(&self.2);
+        tuple.field(&self.3);
+        tuple.field(&self.4);
+        tuple.field(&self.5);
+        tuple.finish()
+    }
+}
+
+impl<T0: Debug, T1: Debug, T2: Debug, T3: Debug, T4: Debug, T5: Debug, T6: Debug> Debug for (T0, T1, T2, T3, T4, T5, T6,) {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let mut tuple = formatter.debug_tuple("");
+        tuple.field(&self.0);
+        tuple.field(&self.1);
+        tuple.field(&self.2);
+        tuple.field(&self.3);
+        tuple.field(&self.4);
+        tuple.field(&self.5);
+        tuple.field(&self.6);
+        tuple.finish()
+    }
+}
+
+impl<T0: Debug, T1: Debug, T2: Debug, T3: Debug, T4: Debug, T5: Debug, T6: Debug, T7: Debug> Debug for (T0, T1, T2, T3, T4, T5, T6, T7,) {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let mut tuple = formatter.debug_tuple("");
+        tuple.field(&self.0);
+        tuple.field(&self.1);
+        tuple.field(&self.2);
+        tuple.field(&self.3);
+        tuple.field(&self.4);
+        tuple.field(&self.5);
+        tuple.field(&self.6);
+        tuple.field(&self.7);
+        tuple.finish()
+    }
+}
+
+impl<T0: Debug, T1: Debug, T2: Debug, T3: Debug, T4: Debug, T5: Debug, T6: Debug, T7: Debug, T8: Debug> Debug for (T0, T1, T2, T3, T4, T5, T6, T7, T8,) {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let mut tuple = formatter.debug_tuple("");
+        tuple.field(&self.0);
+        tuple.field(&self.1);
+        tuple.field(&self.2);
+        tuple.field(&self.3);
+        tuple.field(&self.4);
+        tuple.field(&self.5);
+        tuple.field(&self.6);
+        tuple.field(&self.7);
+        tuple.field(&self.8);
+        tuple.finish()
+    }
+}
+
+impl<T0: Debug, T1: Debug, T2: Debug, T3: Debug, T4: Debug, T5: Debug, T6: Debug, T7: Debug, T8: Debug, T9: Debug> Debug for (T0, T1, T2, T3, T4, T5, T6, T7, T8, T9,) {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let mut tuple = formatter.debug_tuple("");
+        tuple.field(&self.0);
+        tuple.field(&self.1);
+        tuple.field(&self.2);
+        tuple.field(&self.3);
+        tuple.field(&self.4);
+        tuple.field(&self.5);
+        tuple.field(&self.6);
+        tuple.field(&self.7);
+        tuple.field(&self.8);
+        tuple.field(&self.9);
+        tuple.finish()
+    }
+}
+
+impl<T0: Debug, T1: Debug, T2: Debug, T3: Debug, T4: Debug, T5: Debug, T6: Debug, T7: Debug, T8: Debug, T9: Debug, T10: Debug> Debug for (T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10,) {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let mut tuple = formatter.debug_tuple("");
+        tuple.field(&self.0);
+        tuple.field(&self.1);
+        tuple.field(&self.2);
+        tuple.field(&self.3);
+        tuple.field(&self.4);
+        tuple.field(&self.5);
+        tuple.field(&self.6);
+        tuple.field(&self.7);
+        tuple.field(&self.8);
+        tuple.field(&self.9);
+        tuple.field(&self.10);
+        tuple.finish()
+    }
+}
+
+impl<T0: Debug, T1: Debug, T2: Debug, T3: Debug, T4: Debug, T5: Debug, T6: Debug, T7: Debug, T8: Debug, T9: Debug, T10: Debug, T11: Debug> Debug for (T0, T1, T2, T3, T4, T5, T6, T7, T8, T9, T10, T11,) {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let mut tuple = formatter.debug_tuple("");
+        tuple.field(&self.0);
+        tuple.field(&self.1);
+        tuple.field(&self.2);
+        tuple.field(&self.3);
+        tuple.field(&self.4);
+        tuple.field(&self.5);
+        tuple.field(&self.6);
+        tuple.field(&self.7);
+        tuple.field(&self.8);
+        tuple.field(&self.9);
+        tuple.field(&self.10);
+        tuple.field(&self.11);
+        tuple.finish()
+    }
 }

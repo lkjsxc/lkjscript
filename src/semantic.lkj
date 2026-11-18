@@ -17,8 +17,9 @@ pub struct Item {
     pub name_start: usize,
     pub name_end: usize,
     pub body: Option<(usize, usize)>,
-    /// Defining struct for a validated generated projection; no authored bytes.
+    /// Defining declaration for a validated generated projection; no authored bytes.
     pub generated_from: String,
+    pub generated_expansion: String,
     pub signature: String,
     pub text: String,
     pub type_name: String,
@@ -194,6 +195,9 @@ fn append(
     let generated_from = match result.by_identity.get(&parent) {
         Some(index) => result.items[*index].generated_from.clone(), None => String::new(),
     };
+    let generated_expansion = match result.by_identity.get(&parent) {
+        Some(index) => result.items[*index].generated_expansion.clone(), None => String::new(),
+    };
     let generated = !generated_from.is_empty();
     let signature = if generated { ty.clone() } else { signature };
     let text = if generated { String::new() } else { text };
@@ -204,7 +208,7 @@ fn append(
         file: file.path.clone(), start, end: span.end,
         name_start: if generated { start } else { name_start },
         name_end: if generated { start } else { name_end },
-        body: if generated { None } else { body }, generated_from, signature_digest,
+        body: if generated { None } else { body }, generated_from, generated_expansion, signature_digest,
         text_digest: sha256::hex_digest(text.as_bytes()), body_digest,
         signature, text, type_name: ty, type_resolved: !matches!(kind, "binding" | "call-site"), file_digest: file.digest.clone(),
         references_complete: !generated,
@@ -604,6 +608,14 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
     for (expression, function) in &origins.expressions {
         generated_expression(&mut result, &files, program, &resolver, *expression, *function, &mut generated_calls, evidence)?;
     }
+    for (pattern, function) in &origins.patterns {
+        let node = &program.patterns[*pattern];
+        if let a::Pattern::Path(path) | a::Pattern::Variant { path, .. } | a::Pattern::Struct { path, .. } = &node.kind {
+            let owner = result.function_ids[*function].clone();
+            let target = value_identity(program, path, &result.function_ids);
+            generated_reference(&mut result, &files, &owner, target, node.span, "pattern");
+        }
+    }
     if include_references {
         let has_constant_parameters = crate::generics::const_arguments::has_parameters(program);
         let owners = Owners::new(&result);
@@ -630,9 +642,8 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                     a::Type::Path(path) => {
                         path.declaration.and_then(|declaration| declaration_identity(program, declaration, &result.function_ids))
                             .or_else(|| {
-                                let structure = origins.functions[*function]?;
-                                let definition = &program.structs[structure];
-                                let candidate = format!("{}::generic:{}", qualified(&definition.module, &definition.name), path.name);
+                                let origin = origins.functions[*function]?;
+                                let candidate = format!("{}::generic:{}", module_name(&origin.identity(program)), path.name);
                                 if result.by_identity.contains_key(&candidate) { Some(candidate) } else { None }
                             })
                     }
@@ -723,7 +734,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                 import_reference(&mut result, &files, owner, target, imported, alias);
             }
         }
-        pattern_references(&mut result, &files, program, &owners, &resolver);
+        pattern_references(&mut result, &files, program, &owners, &resolver, &origins.patterns);
         let mut local_names: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         let mut source_functions: BTreeMap<String, usize> = BTreeMap::new();
         for (index, function) in program.functions.iter().enumerate() {
@@ -735,6 +746,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         let mut binding_counts: BTreeMap<(String, String), usize> = BTreeMap::new();
         let mut binding_ids: BTreeMap<usize, String> = BTreeMap::new();
         for (pattern, node) in program.patterns.iter().enumerate() {
+            if origins.patterns.contains_key(&pattern) { continue; }
             if let a::Pattern::Bind { name, .. } = &node.kind {
                 let file = &files[node.span.file];
                 if let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) {
@@ -913,19 +925,26 @@ pub fn catalog_items(program: &a::Program, inputs: &[(String, Vec<u8>)], checked
 
 mod origins;
 
+pub fn generated_epoch_domain(expansion: &str) -> String {
+    if expansion == "derive-default" { "lkjscript-derived-default-body-1".to_string() }
+    else { format!("lkjscript-{expansion}-body-1") }
+}
+
 fn generated_projection(catalog: &mut Catalog, files: &[SourceText], program: &a::Program,
-    identity: &str, structure: usize, signature: String, body: bool) -> Result<(), String> {
-    let definition = &program.structs[structure];
-    let defining = qualified(&definition.module, &definition.name);
+    identity: &str, origin: origins::Origin, signature: String, body: bool) -> Result<(), String> {
+    let definition = &program.declarations[origin.declaration];
+    let defining = module_name(&origin.identity(program));
     let file = &files[definition.span.file];
     let start = preceding(&file.tokens, definition.span.start);
     let declaration = token_digest(&file.tokens, start, definition.span.end);
-    let mut epoch = b"lkjscript-derived-default-body-1"[..].to_vec();
+    let domain = generated_epoch_domain(origin.expansion.name());
+    let mut epoch = domain.as_bytes().to_vec();
     bytes(&mut epoch, defining.as_bytes()); bytes(&mut epoch, declaration.as_bytes());
     let index = *catalog.by_identity.get(&identity.to_string())
         .ok_or_else(|| -> String { format!("{} E_IDENTITY_ORIGIN generated item is absent", quote(identity)) })?;
     let item = &mut catalog.items[index];
     item.generated_from = defining;
+    item.generated_expansion = origin.expansion.name().to_string();
     item.signature_digest = normalized_digest(&signature)?;
     item.signature = signature;
     item.text.clear(); item.text_digest = sha256::hex_digest(b"");
@@ -950,6 +969,7 @@ fn generated_expression(catalog: &mut Catalog, files: &[SourceText], program: &a
     let owner = catalog.function_ids[function].clone();
     match &node.kind {
         a::Expr::Path(path) => {
+            if path.declaration.is_none() && (path.name == "self" || path.name.starts_with("$debug_")) { return Ok(()); }
             let target = resolver.value_path(node.scope, path, node.span).ok()
                 .and_then(|path| value_identity(program, &path, &catalog.function_ids));
             generated_reference(catalog, files, &owner, target, node.span, "value");
@@ -981,6 +1001,43 @@ fn generated_expression(catalog: &mut Catalog, files: &[SourceText], program: &a
             catalog.items[index].type_resolved = ty.is_some();
             catalog.items[index].body_digest = epoch;
         }
+        a::Expr::Method { name, .. } => {
+            let target = evidence.as_ref().and_then(|value| value.methods.get(&expression)).and_then(|method| {
+                match method {
+                    crate::elaborate::semantic::MethodTarget::Source(index) => Some(catalog.function_ids[*index].clone()),
+                    crate::elaborate::semantic::MethodTarget::Trait(index) => {
+                        let value = &program.traits[*index];
+                        Some(format!("{}::{}", qualified(&value.module, &value.name), name))
+                    }
+                    _ => None,
+                }
+            });
+            generated_reference(catalog, files, &owner, target, node.span, "method");
+            let ordinal = calls.get(&owner).copied().unwrap_or(0usize);
+            calls.insert(owner.clone(), ordinal + 1usize);
+            let index = *catalog.by_identity.get(&owner).unwrap();
+            let epoch = catalog.items[index].body_digest.clone();
+            let identity = format!("{owner}::derived:{epoch}::call:{ordinal}");
+            let ty = evidence.as_ref().and_then(|value| value.expressions.get(&expression)).cloned();
+            append(catalog, files, identity.clone(), owner, "call-site", "", node.span, None,
+                ty.clone().unwrap_or_else(|| -> String { "inferred result type is unavailable".to_string() }), false)?;
+            let index = *catalog.by_identity.get(&identity).unwrap();
+            catalog.items[index].type_resolved = ty.is_some();
+            catalog.items[index].body_digest = epoch;
+        }
+        a::Expr::Field { name, .. } => {
+            let source = program.function_owner(a::FunctionId { index: function });
+            let target = match source {
+                a::FunctionOwner::Implementation(index) => {
+                    let target = type_name(program, program.impls[index.index].target);
+                    let base = target.find('<').map_or(target.as_str(), |at| &target[..at]);
+                    Some(format!("{base}::field:{name}"))
+                }
+                _ => None,
+            };
+            generated_reference(catalog, files, &owner, target, node.span, "field");
+        }
+        a::Expr::String(_) | a::Expr::Borrow { .. } | a::Expr::Block(_) | a::Expr::Match { .. } => {}
         _ => return Err(format!("{} E_IDENTITY_ORIGIN generated expression has no validated form", quote(&owner))),
     }
     Ok(())

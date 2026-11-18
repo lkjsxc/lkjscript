@@ -44,7 +44,7 @@ fn source_signature(item: &semantic::Item) -> Vec<String> {
                 item.kind, semantic::quote(part), signature.len(), index + 1usize == total)
         };
         let detail = if item.generated_from.is_empty() { detail } else {
-            format!("{detail} origin=generated definition={} expansion=derive-default source-projection=false", semantic::quote(&item.generated_from))
+            format!("{detail} origin=generated definition={} expansion={} source-projection=false", semantic::quote(&item.generated_from), item.generated_expansion)
         };
         result.push(fact(&item.identity, "source-claim", "signature", &detail));
     }
@@ -92,11 +92,11 @@ pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, 
                     item.signature_digest, item.body_digest)));
         } else {
             result.add("meta", &item.identity, fact(&item.identity, "source-claim", "origin",
-                &format!("origin=generated definition={} expansion=derive-default source-projection=false span=definition-anchor",
-                    semantic::quote(&item.generated_from))));
+                &format!("origin=generated definition={} expansion={} source-projection=false span=definition-anchor",
+                    semantic::quote(&item.generated_from), item.generated_expansion)));
             result.add("meta", &item.identity, fact(&item.identity, "source-claim", "identity",
-                &format!("signature={} derived-epoch={} scope=semantic-path body-locals=derived-declaration-epoch epoch-domain=lkjscript-derived-default-body-1",
-                    item.signature_digest, item.body_digest)));
+                &format!("signature={} derived-epoch={} scope=semantic-path body-locals=derived-declaration-epoch epoch-domain={}",
+                    item.signature_digest, item.body_digest, semantic::generated_epoch_domain(&item.generated_expansion))));
         }
         for signature in source_signature(item) {
             result.add("signature", &item.identity, signature.clone());
@@ -110,8 +110,8 @@ pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, 
             }
         } else {
             result.add("text", &item.identity, fact(&item.identity, "source-claim", "text-unavailable",
-                &format!("reason=generated-definition definition={} expansion=derive-default source-projection=false",
-                    semantic::quote(&item.generated_from))));
+                &format!("reason=generated-definition definition={} expansion={} source-projection=false",
+                    semantic::quote(&item.generated_from), item.generated_expansion)));
         }
         let type_fact = if matches!(item.kind.as_str(), "binding" | "call-site") { if item.type_resolved { "inferred-type" } else { "type-unavailable" } }
             else if matches!(item.kind.as_str(), "module" | "trait" | "implementation") { "source-kind" } else { "declared-type" };
@@ -142,8 +142,8 @@ pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, 
         let index = catalog.by_identity.get(&reference.owner)
             .ok_or_else(|| -> String { format!("{} E_IDENTITY_ORIGIN generated reference owner is absent", semantic::quote(&reference.owner)) })?;
         let owner = &catalog.items[*index];
-        let detail = format!("owner={} definition={} origin=generated expansion=derive-default source-projection=false anchor-file={} anchor-start={} anchor-end={} kind={}",
-            semantic::quote(&reference.owner), semantic::quote(&owner.generated_from),
+        let detail = format!("owner={} definition={} origin=generated expansion={} source-projection=false anchor-file={} anchor-start={} anchor-end={} kind={}",
+            semantic::quote(&reference.owner), semantic::quote(&owner.generated_from), owner.generated_expansion,
             semantic::quote(&reference.file), reference.start, reference.end, reference.kind);
         if reference.target.is_empty() {
             result.add("references", &reference.owner, fact(&reference.owner, "source-claim", "generated-reference",

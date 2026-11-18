@@ -1468,7 +1468,11 @@ fn impl_arguments(
             }
             Type::Tuple(parts) => match &actual_type.kind {
                 TypeKind::Unit if parts.is_empty() => {}
-                TypeKind::Struct { fields, .. } if parts.len() == fields.len() => {
+                TypeKind::Struct { fields, .. }
+                    if parts.len() == fields.len() && !applications.contains_key(&actual)
+                        && actual_type.name.starts_with('(') && actual_type.name.ends_with(')') =>
+                {
+                    // Nominal tuple structs and rigid placeholders are not source tuples.
                     for i in 0..parts.len() {
                         if fields[i].name != format!("{i}") {
                             return None;

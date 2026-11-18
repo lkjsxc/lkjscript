@@ -179,6 +179,7 @@ grep -Fq 'fact=text-unavailable' "$fixture/historical-text"
 for source in ast diagnostic names syntax resolve source; do cp "src/$source.lkj" "$fixture/contracts/$source.lkj"; done
 cp -R src/syntax src/resolve "$fixture/contracts/"
 cp src/semantic/origins.lkj "$fixture/contracts/origins.lkj"
+cp -R src/semantic/origins "$fixture/contracts/"
 cat > "$fixture/contracts/main.lkj" <<'SOURCE'
 mod ast; mod diagnostic; mod names; mod syntax; mod resolve; mod source; mod origins;
 mod diagnostics {

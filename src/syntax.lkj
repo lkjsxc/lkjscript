@@ -1,5 +1,6 @@
 //! Rust-compatible surface reader. The syntax tree is an arena, not a recursive tree.
 mod default;
+mod debug;
 mod impl_trait;
 pub(crate) mod formatting;
 use crate::ast::*;
@@ -2174,6 +2175,7 @@ impl Parser {
             span: self.finish_span(span),
         });
         self.derive_default(id)?;
+        self.derive_debug(Item::Struct(id))?;
         Ok(id)
     }
     fn enumeration(
@@ -2238,6 +2240,7 @@ impl Parser {
             public,
             span: self.finish_span(span),
         });
+        self.derive_debug(Item::Enum(id))?;
         Ok(id)
     }
     fn associated_type(&mut self) -> Result<AssociatedType, Diagnostic> {

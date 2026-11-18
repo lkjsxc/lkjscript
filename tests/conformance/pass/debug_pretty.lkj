@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {}
+#[derive(Debug)]
+struct Item { count: i64, label: String }
+#[derive(Debug)]
+enum Choice<T> { Empty, Value(T), Named { item: T } }
+pub fn probe() -> i64 {
+    let item = Item { count: 2i64, label: "x".to_string() };
+    assert_eq!(format!("{:?}", item), "Item { count: 2, label: \"x\" }");
+    assert_eq!(format!("{:#?}", item), "Item {\n    count: 2,\n    label: \"x\",\n}");
+    assert_eq!(format!("{:#?}", Some(vec![1i64, 2i64])), "Some(\n    [\n        1,\n        2,\n    ],\n)");
+    assert_eq!(format!("{:?}", Choice::<i64>::Empty), "Empty");
+    assert_eq!(format!("{:?}", Choice::Value(7i64)), "Value(7)");
+    assert_eq!(format!("{:#?}", Choice::Named { item: (1i64, true) }), "Named {\n    item: (\n        1,\n        true,\n    ),\n}");
+    42
+}

@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+pub fn probe() -> i64 {
+    assert_eq!(format!("{:?}", "\0\t\r\n\\\""), "\"\\0\\t\\r\\n\\\\\\\"\"");
+    assert_eq!(format!("{:?}", "\u{7f}\u{85}\u{a0}\u{200b}\u{2028}\u{feff}"),
+        "\"\\u{7f}\\u{85}\\u{a0}\\u{200b}\\u{2028}\\u{feff}\"");
+    assert_eq!(format!("{:?}", "é日本語😀"), "\"é日本語😀\"");
+    assert_eq!(format!("{:?}", "\u{301}a\u{301}"), "\"\\u{301}a\\u{301}\"");
+    assert_eq!(format!("{:?}", '\u{301}'), "'\\u{301}'");
+    assert_eq!(format!("{:?}", '\''), "'\\''");
+    assert_eq!(format!("{:?}", '"'), "'\"'");
+    42
+}

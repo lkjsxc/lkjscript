@@ -1,0 +1,1652 @@
+{
+   "accounting" : {
+      "changed_primary_diagnostic_identities" : {
+         "dom" : 0,
+         "nom" : 0,
+         "sozu" : 0
+      },
+      "new_independent_primary_sites" : {
+         "dom" : 1,
+         "nom" : 4,
+         "sozu" : 1
+      },
+      "nom_dom_primary_sites" : {
+         "after" : 78,
+         "before" : 244
+      },
+      "removed_old_target_diagnostic_identities" : {
+         "dom" : 17,
+         "nom" : 129,
+         "total" : 146
+      },
+      "removed_old_target_sites" : {
+         "dom" : 17,
+         "nom" : 129,
+         "total" : 146
+      },
+      "source_semantic_edits" : 0,
+      "target_site_interpretation" : "A changed diagnostic retaining the same reviewed cause at an original target coordinate remains an observed target site; message disappearance alone earns no form-removal credit."
+   },
+   "baseline_compiler_sha256" : "eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f",
+   "compiler_sha256" : "f9dde2462bf4727d7c5796d4d54d592e22acda512846e00b7b96ebbf97a8009b",
+   "form_support" : {
+      "argument_impl_trait" : "supported_in_documented_subset",
+      "associated_type_equality" : "supported_in_documented_subset",
+      "const_functions" : {
+         "accepted" : [
+            "Scalar values, locals and ordinary control flow",
+            "Direct calls and methods selected by exact source declaration identity to another const-qualified free/inherent function",
+            "Shared field and enum projections",
+            "Constructors and identity transfers of generic, non-Copy or custom-Drop values when no destruction is emitted"
+         ],
+         "conservative_refusals" : [
+            "Nonconst, trait or dynamic calls",
+            "Allocation and effect/heap intrinsics",
+            "Closure and try expressions",
+            "Mutable borrowing or mutation through a reference",
+            "Destruction that is not structurally trivial"
+         ],
+         "constant_initializers" : "Every function or method call in a module constant initializer still receives a located CTFE refusal, including a const-qualified call. Aggregate/reference compile-time evaluation is not claimed.",
+         "declarations" : "const-qualified free and inherent functions; every definition is checked rigidly, including unused/unreachable definitions",
+         "destruction" : "Each emitted Drop/DropIf needs structurally trivial destruction. Shared views do not destroy their referents; unknown rigid T requires Copy.",
+         "qualification" : "The frontend checks lowered operations using exact ExprId and selected source declaration metadata; the checked IR and independent checker are unchanged.",
+         "status" : "supported_in_documented_runtime_call_subset"
+      },
+      "const_generics" : {
+         "accepted" : [
+            "Standalone array lengths, repeat counts and ordinary usize value expressions",
+            "Array-argument inference and explicit decimal usize literals or in-scope const parameters",
+            "Mixed type/const parameters, borrowed array receivers and associated array results",
+            "Recursive calls, static methods with explicit method arguments, and opaque-result captures that preserve const identity"
+         ],
+         "conservative_refusals" : [
+            "Const parameter types other than builtin usize",
+            "Const defaults and arithmetic/braced constant arguments or array lengths",
+            "Const parameters on nominal types, aliases, trait declarations or trait methods",
+            "Implementation const parameters absent from the receiver",
+            "Module/global constants used as array lengths",
+            "Where predicates whose written target contains a symbolic array length"
+         ],
+         "declarations" : "Free functions, inherent functions, and implementation blocks whose receiver contains each const parameter.",
+         "definition_checking" : "Each symbolic count remains distinct from literals and sibling parameters, even in unused definitions and branches. An impl for [T; 0] is not evidence for [T; N]; testing N == 0 does not add type equality. A symbolic repeat requires Copy before specialization.",
+         "generic_argument_placement" : "The source frontend records the written generic-argument owner and final-segment flag, validates that owner in its original lexical scope before constructor/call selection, and routes receiver versus method arguments using syntax provenance. Modules cannot own generic arguments. Explicit inference occurrences have distinct identities and exact locations while retaining their refusal boundary.",
+         "global_array_length_admission" : false,
+         "original_nom_limits" : "Compare at traits.rs:1099/1111 has N only in a positional trait argument, not its slice receiver. FindToken at 1123/1129 has const-bearing array receivers but still requires positional generic-trait support. The two AsBytes array receivers do not establish their original bodies or module admission.",
+         "overlap_and_lowering" : "Const variables are independent of type variables in overlap checking. Specialization emits the existing concrete arrays, repeats and integer values; the checked IR and independent checker are unchanged.",
+         "parameter_type" : "builtin usize",
+         "retained_argument_boundaries" : "Explicit generic-argument inference placeholders and multiple generic-argument lists in one path retain their existing located refusal boundaries.",
+         "source_commands" : "Queries preserve symbolic lengths and const-parameter meaning; references cover type/value uses. Checked renames require a fresh spelling throughout the enclosing item and exact use sites; body edits revalidate symbolic identities.",
+         "status" : "supported_in_documented_function_and_receiver_impl_subset"
+      },
+      "generic_associated_type_families" : {
+         "accepted" : [
+            "Associated families with named type parameters, parameter/result bounds and implicit or relaxed Sized requirements",
+            "Qualified and unambiguous projected applications, aliases, nested associated owners, method inputs/results and source replay",
+            "Uniform unused-definition checks under distinct implementation and family binders",
+            "Implementation parameters inferred from proven prerequisite associated equalities, retaining final bounds and exact applied identities"
+         ],
+         "checked_ir" : "Families normalize in the untrusted frontend through existing types and calls. No trusted IR or checker enlargement.",
+         "conservative_refusals" : [
+            "Family lifetime/const binders, family defaults and type-outlives bounds",
+            "Written region-bearing family arguments or RHS definitions; uniform generic type arguments may carry borrowed actuals",
+            "Predicates on nonparameter targets and input contracts requiring deferred well-formedness",
+            "Missing/stronger/omitted input contracts, wrong arity, contradictory results and transparent or expanding cycles"
+         ],
+         "identity" : "Receiver, resolved declaring trait with all positional arguments, associated member and ordered family arguments remain distinct; equal outputs never imply equal inputs.",
+         "inference" : "Borrowed unsized view context waits for unresolved owned match/block producers while ordinary sized constructor and closure context still propagates.",
+         "original_dom_lifetime_families_admitted" : false,
+         "original_nom_module_admission" : false,
+         "source_commands" : "Family signatures and types, exact member/binder references and renames, body edits, warm reuse and atomic refusal retain source proof identity.",
+         "status" : "supported_for_named_type_family_parameters_with_exact_application_identity"
+      },
+      "lifetime_where" : {
+         "accepted" : [
+            "Named lifetime-to-lifetime where predicates, including multiple bounds and enclosing-inherent-impl lifetimes",
+            "Directed unused-definition and call obligations through the existing region edges",
+            "Const-qualified functions with mixed lifetime/type/usize-constant binders and borrowed relaxed-Sized referents"
+         ],
+         "checked_ir" : "No checked-IR, independent-checker, library or runtime change.",
+         "conservative_refusals" : [
+            "Trait/trait-implementation method where lifetime predicates",
+            "Implementation-header where lifetime predicates",
+            "Anonymous/static and higher-ranked predicates",
+            "Type-outlives where predicates such as T: lifetime",
+            "Enclosing-lifetime substitution for paired trait inline bounds"
+         ],
+         "original_dom_surrounding_method_admission" : false,
+         "result_coverage_repair" : "The frontend skips only result-scope obligations already covered at the exact projection/region by ordinary returned-view checking; nested/invariant and mixed-elided result requirements remain checked.",
+         "return_contracts" : "Free/inherent return origins can follow declared directed edges. Ordinary results preserve mutable-storage invariance; opaque result lifetimes require hidden references to outlive the result lifetime without equating their stored regions.",
+         "scope" : "Both sides must resolve to declared names in the proper function/impl scope. Inline bounds share the declared-name checks; an impl header cannot borrow a lifetime declared only by its method.",
+         "source_commands" : "Queries preserve written relationships and exact lifetime declaration references. Checked body edits and function renames retain constraints; invalid edits roll back and relevant frontend/header changes invalidate cached admission.",
+         "status" : "supported_for_named_lifetime_edges_on_free_functions_and_inherent_methods",
+         "trait_inline_bounds" : "Trait return origins retain exact lifetime-label agreement. Method-local inline lifetime edges must match after binder-position pairing; adding or dropping an edge rejects. Enclosing-lifetime edges remain refused pending owner substitution."
+      },
+      "maybe_sized" : {
+         "accepted" : [
+            "Borrowed str/slices and generic shared or mutable references through relaxed parameters",
+            "Nominal view aggregates whose fields are references to relaxed parameters",
+            "Additional ordinary bounds; explicit Sized, Clone or Copy can establish sizedness",
+            "Const usize parameters alongside relaxed type parameters; const values carry no Sized obligation"
+         ],
+         "associated_equalities" : "Equality bindings retain their ordinary contract meaning; they do not fabricate an implementation or grant a named relaxed right-hand parameter an extra Sized assumption. Concrete associated definitions must meet their declaration\u2019s implicit bound.",
+         "checked_ir" : "The checked IR and independent checker are unchanged.",
+         "conservative_refusals" : [
+            "Owned unsized parameters/results/locals and unsized tuple or nominal tails",
+            "Box<T>/Vec<T> without proven Sized elements; existing heap-held view limits remain",
+            "Relaxation of associated type declarations, explicit Self, concrete targets or anonymous impl-Trait parameters",
+            "Relaxing a same-spelled user trait rather than resolved builtin Sized",
+            "Duplicate relaxations and explicit implementations of builtin Sized"
+         ],
+         "const_interaction" : "[T; N] requires a Sized element even if a later call chooses zero. Associated array equalities preserve independent named count identities.",
+         "default_contract" : "Named type parameters require builtin Sized unless relaxed with ?Sized inline or in a where predicate. Trait Self has no implicit Sized requirement; associated types retain theirs.",
+         "definition_checking" : "The relaxed source contract is preserved under rigid checking even if later callers choose sized types. Private verifier layouts supply no Sized evidence. Ordinary calls, implementation prerequisites and method-signature comparison enforce implicit and explicit requirements.",
+         "original_nom_admission" : false,
+         "source_commands" : "Queries preserve written relaxed bounds and ordinary trait references. Checked renames and bound replacements revalidate callers, roll back refused changes and invalidate frontend checkpoints; unchanged authenticated images reuse normally.",
+         "status" : "supported_for_named_type_parameters_with_existing_borrowed_representations",
+         "storage" : "Executable parameters/results/locals, array and slice elements, tuple/nominal fields require proven sized storage, including unused declarations and abstract signature components. An abstract trait signature may mention Self by value; an executable body must establish storage."
+      },
+      "ordinary_impl_trait_form_complete" : true,
+      "positional_trait_arguments" : {
+         "accepted" : [
+            "Declared trait type parameters in bounds, implementations, associated equalities, qualified members, supertraits and opaque results",
+            "Blanket implementation parameters bound through the applied trait as well as the receiver",
+            "Rigid unused-definition checking, declared argument bounds and implicit or relaxed Sized requirements",
+            "Concrete method implementation arguments inferred from input and result context, retained by exact expression/implementation/method identity and re-proven before specialization"
+         ],
+         "borrowed_parameters" : "Uniform type parameters may instantiate borrowed values without inventing lifetime-specific witness equality.",
+         "checked_ir" : "Existing checked IR and independent checker are unchanged.",
+         "conservative_refusals" : [
+            "Trait lifetime and const parameters and explicit type inference placeholders",
+            "Written reference arguments, lifetime-parameterized nominal/alias arguments and projections normalizing to views until region-aware witness identity exists",
+            "Ambiguous implementation/input applications and cyclic or recursively expanding proof arguments"
+         ],
+         "original_nom_module_admission" : false,
+         "ownership" : "Inferred method applications select and prove a candidate; only receiver-derived or explicitly authored argument expectations authorize coercion and reborrowing. Unconstrained direct/nested mutable references still move.",
+         "source_commands" : "Applied signatures, projections, exact member/method references, checked rename and body replacement preserve the contract and reject invalid transactions atomically.",
+         "status" : "supported_for_named_type_arguments_with_exact_application_identity",
+         "witness_identity" : "Receiver, resolved declaring trait and every positional type argument remain distinct; provided bodies and specialization retain the checked source recipe."
+      },
+      "qualified_associated_paths" : "supported_in_documented_subset",
+      "remaining_limits" : [
+         "Lifetime-bearing explicit trait arguments and trait const/lifetime parameters",
+         "Generic associated types",
+         "Standalone qualified function values",
+         "Nested opaque return positions and trait-method opaque results",
+         "Recursive opaque hidden-type inference and unsupported lifetime capture combinations"
+      ],
+      "return_position_impl_trait" : "supported_in_documented_subset"
+   },
+   "interpretation" : [
+      "Original source bytes and projection identities remain unchanged. Each producer records its selected library inventory. Original-suffix refusals are compared byte-for-byte.",
+      "A vanished diagnostic is not proof that the surrounding program admits. New independent sites, changed diagnostic identities at old coordinates, and recovery artifacts are reported separately.",
+      "The three original classification JSON files remain the immutable baseline; this file records the current frontier and exact deltas.",
+      "Source/frontend edits receive no operation-adoption credit from these observations."
+   ],
+   "kind" : "current_foreign_program_refusal_frontier",
+   "rerank_payload_fingerprint" : "sha256(JSON::PP canonical ascii encode(rerank without inputs))",
+   "schema" : 1,
+   "specimens" : {
+      "dom" : {
+         "accounting" : {
+            "baseline_primary_sites" : 95,
+            "current_primary_sites" : 61,
+            "new_unclassified_rows" : 0,
+            "prior_unclassified_rows" : 0,
+            "raw_by_code" : {
+               "E_BLOCKED" : 62,
+               "E_CAPABILITY" : 10,
+               "E_PARSE" : 6,
+               "E_UNSUPPORTED" : 27,
+               "E_UNSUPPORTED_MACRO" : 18
+            },
+            "raw_projected_diagnostic_rows" : 123,
+            "recovery_rows_excluded" : 0,
+            "upstream_default_candidate_sites" : 54,
+            "upstream_test_only_sites" : 7
+         },
+         "baseline_classification" : {
+            "path" : "docs/real-programs-dom.json",
+            "sha256" : "93427cd739b9426b609c4f83b3a7fd4aed7f62fad27103d8b9d4cc662e825d3d"
+         },
+         "baseline_probe_receipt" : {
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-units-eb08fbaa.json",
+            "sha256" : "1e6e0b9eab83c826e041888e067a4e4029f6f7de733ebec4a93d32da22509abb"
+         },
+         "library_manifest_sha256" : "8831f051df396cbf44028a9ab7d74df7a21f7fb3335cd7707d1c161e5215ea87",
+         "new_primary_sites" : [
+            {
+               "cause" : "foreign_atom_macros",
+               "code" : "E_UNSUPPORTED_MACRO",
+               "column" : 40,
+               "file_sha256" : "64ddf365e224fde342c457d8c0543d3851a01cb3112bd730db730500755a2798",
+               "line" : 178,
+               "message" : "unsupported macro: local_name!",
+               "path" : "src/node/selector.rs",
+               "reason" : "The has_id body compares attr.name.local with local_name!(\"id\"). The source contains a real dependency-provided atom macro call. The previously refused qualified associated parameter type now permits reaching this expression; it is a new macro primary, not recovery from the earlier ns! in a different method.",
+               "relationship_to_baseline" : "new_independent_coordinate"
+            }
+         ],
+         "observations" : [
+            {
+               "entry_sha256" : "81441eac6c5af9fe4aa7eea33f2f11ebad8a6d309a0f0fb80a17c9d2174f5779",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 5100,
+               "route" : "original_suffix",
+               "stderr_sha256" : "1170c98833b245d8181dc2850bcfc1d36d34bc83792f33ec55fd3787b0b748e1",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "src/lib.rs",
+               "wall_seconds" : 0.002609
+            },
+            {
+               "entry_sha256" : "81441eac6c5af9fe4aa7eea33f2f11ebad8a6d309a0f0fb80a17c9d2174f5779",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 42256,
+               "route" : "suffix_projection",
+               "stderr_sha256" : "40f87b05ad7cd4982233195de0f172d19c7f0c9e772fbab71e418012ac37fb8a",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "src/lib.rs",
+               "wall_seconds" : 0.109781
+            }
+         ],
+         "observed_at_utc" : "2026-11-18T09:29:57Z",
+         "old_site_counts" : [
+            {
+               "baseline_rank" : 6,
+               "baseline_sites" : 3,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "associated_type_bindings",
+               "not_observed_sites" : 3,
+               "owner" : "language",
+               "title" : "Associated-type equality bindings"
+            },
+            {
+               "baseline_rank" : 3,
+               "baseline_sites" : 14,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "const_functions",
+               "not_observed_sites" : 14,
+               "owner" : "language",
+               "title" : "const fn declarations"
+            },
+            {
+               "baseline_rank" : 2,
+               "baseline_sites" : 24,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 24,
+               "id" : "debug_format_specification",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "Debug format specification requires an unimplemented source-formatting contract"
+            },
+            {
+               "baseline_rank" : 11,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "documentation_attribute_macro",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "Macro-valued documentation attribute"
+            },
+            {
+               "baseline_rank" : 10,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "dynamic_trait_object",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "Boxed dyn Iterator"
+            },
+            {
+               "baseline_rank" : 1,
+               "baseline_sites" : 21,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 21,
+               "id" : "foreign_atom_macros",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "Dependency-provided atom macros in expressions and patterns"
+            },
+            {
+               "baseline_rank" : 7,
+               "baseline_sites" : 2,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "generic_associated_types",
+               "not_observed_sites" : 2,
+               "owner" : "language",
+               "title" : "Generic associated types"
+            },
+            {
+               "baseline_rank" : 8,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "lifetime_outlives_where",
+               "not_observed_sites" : 1,
+               "owner" : "language",
+               "title" : "Lifetime outlives predicate in where"
+            },
+            {
+               "baseline_rank" : 5,
+               "baseline_sites" : 5,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "opaque_impl_trait",
+               "not_observed_sites" : 5,
+               "owner" : "language",
+               "title" : "impl Trait argument/return types"
+            },
+            {
+               "baseline_rank" : 4,
+               "baseline_sites" : 9,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "qualified_associated_type_paths",
+               "not_observed_sites" : 9,
+               "owner" : "language",
+               "title" : "Qualified associated-type paths"
+            },
+            {
+               "baseline_rank" : 13,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "qualified_attribute_path",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "Namespaced rustfmt attribute"
+            },
+            {
+               "baseline_rank" : 15,
+               "baseline_sites" : 9,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 9,
+               "id" : "shared_interior_mutation",
+               "not_observed_sites" : 0,
+               "owner" : "refused_by_design",
+               "title" : "Shared interior mutation and borrow guards"
+            },
+            {
+               "baseline_rank" : 12,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "statement_cfg_attribute",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "Attribute on an expression statement"
+            },
+            {
+               "baseline_rank" : 13,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "static_test_fixture",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "Immutable static test data"
+            },
+            {
+               "baseline_rank" : 14,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "std_io_result_facade",
+               "not_observed_sites" : 0,
+               "owner" : "library",
+               "title" : "std::io data/type facade"
+            },
+            {
+               "baseline_rank" : 9,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "where_bound_on_path_type",
+               "not_observed_sites" : 1,
+               "owner" : "language",
+               "title" : "where bound with a qualified concrete type on its left"
+            }
+         ],
+         "package" : {
+            "commit" : "186c02d9359762404054fbc8af3a5b07cdf795a9",
+            "name" : "dom_query",
+            "object_format" : "sha1",
+            "origin" : "https://github.com/niklak/dom_query.git",
+            "root" : "/home/coder/workspace/lkjscript-specimens/dom_query-0.28.0",
+            "version" : "0.28.0"
+         },
+         "probe_receipt" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/census/dom-probe.json",
+            "sha256" : "179325c71eb2e022c2cd7bcdeea2c048fb1e2ce0c52b95ac28e35483f6f01e40"
+         },
+         "projection_manifest_sha256" : "7eef776218daecb22822d613a609a00039600c34cea05a6047216111148272c9",
+         "ranked_causes" : [
+            {
+               "affected_files" : [
+                  "src/dom_tree/validation.rs"
+               ],
+               "baseline_rank" : 2,
+               "id" : "debug_format_specification",
+               "overlapping_file_physical_lines" : 207,
+               "owner" : "language",
+               "site_count" : 24,
+               "title" : "Debug format specification requires an unimplemented source-formatting contract"
+            },
+            {
+               "affected_files" : [
+                  "src/document.rs",
+                  "src/dom_tree/tree.rs",
+                  "src/node/node_data.rs",
+                  "src/node/selector.rs",
+                  "src/node/text_formatting.rs"
+               ],
+               "baseline_rank" : 1,
+               "id" : "foreign_atom_macros",
+               "overlapping_file_physical_lines" : 1843,
+               "owner" : "language",
+               "site_count" : 22,
+               "title" : "Dependency-provided atom macros in expressions and patterns"
+            },
+            {
+               "affected_files" : [
+                  "src/document.rs",
+                  "src/dom_tree/ops.rs",
+                  "src/dom_tree/traversal.rs",
+                  "src/dom_tree/tree.rs",
+                  "src/node/iters.rs",
+                  "src/node/node_ref.rs",
+                  "src/node/serializing.rs",
+                  "src/node/text_formatting.rs",
+                  "src/selection.rs"
+               ],
+               "baseline_rank" : 15,
+               "id" : "shared_interior_mutation",
+               "overlapping_file_physical_lines" : 4073,
+               "owner" : "refused_by_design",
+               "site_count" : 9,
+               "title" : "Shared interior mutation and borrow guards"
+            },
+            {
+               "affected_files" : [
+                  "src/lib.rs"
+               ],
+               "baseline_rank" : 11,
+               "id" : "documentation_attribute_macro",
+               "overlapping_file_physical_lines" : 45,
+               "owner" : "language",
+               "site_count" : 1,
+               "title" : "Macro-valued documentation attribute"
+            },
+            {
+               "affected_files" : [
+                  "src/selection.rs"
+               ],
+               "baseline_rank" : 10,
+               "id" : "dynamic_trait_object",
+               "overlapping_file_physical_lines" : 917,
+               "owner" : "language",
+               "site_count" : 1,
+               "title" : "Boxed dyn Iterator"
+            },
+            {
+               "affected_files" : [
+                  "src/dom_tree/tree.rs"
+               ],
+               "baseline_rank" : 13,
+               "id" : "qualified_attribute_path",
+               "overlapping_file_physical_lines" : 692,
+               "owner" : "language",
+               "site_count" : 1,
+               "title" : "Namespaced rustfmt attribute"
+            },
+            {
+               "affected_files" : [
+                  "src/document.rs"
+               ],
+               "baseline_rank" : 12,
+               "id" : "statement_cfg_attribute",
+               "overlapping_file_physical_lines" : 510,
+               "owner" : "language",
+               "site_count" : 1,
+               "title" : "Attribute on an expression statement"
+            },
+            {
+               "affected_files" : [
+                  "src/dom_tree/tree.rs"
+               ],
+               "baseline_rank" : 13,
+               "id" : "static_test_fixture",
+               "overlapping_file_physical_lines" : 692,
+               "owner" : "language",
+               "site_count" : 1,
+               "title" : "Immutable static test data"
+            },
+            {
+               "affected_files" : [
+                  "src/node/serializing.rs"
+               ],
+               "baseline_rank" : 14,
+               "id" : "std_io_result_facade",
+               "overlapping_file_physical_lines" : 115,
+               "owner" : "library",
+               "site_count" : 1,
+               "title" : "std::io data/type facade"
+            }
+         ],
+         "removed_previously_unclassified_sites" : [],
+         "rerank_payload_sha256" : "ee427562ee11c9ab9e65bc054898b7e765002e5674a6aa0e26a6f51608e55bfd",
+         "review" : {
+            "changed_primary_diagnostics" : 0,
+            "changed_recovery_rows" : 0,
+            "new_independent_primary_sites" : 1,
+            "path" : "docs/real-programs-gat-dom-review.json",
+            "reviewed_primary_sites" : 1,
+            "sha256" : "a038674900bdc7004cad084d27bd38c9ef5fc40fd2f95c063f6c2f8aac18f802",
+            "unchanged_recovery_rows" : 0
+         }
+      },
+      "nom" : {
+         "accounting" : {
+            "baseline_primary_sites" : 149,
+            "current_primary_sites" : 17,
+            "new_unclassified_rows" : 0,
+            "prior_unclassified_rows" : 0,
+            "raw_by_code" : {
+               "E_BLOCKED" : 18,
+               "E_LEX" : 8,
+               "E_UNSUPPORTED" : 7,
+               "E_UNSUPPORTED_MACRO" : 2
+            },
+            "raw_projected_diagnostic_rows" : 35,
+            "recovery_rows_excluded" : 0,
+            "upstream_default_candidate_sites" : 13,
+            "upstream_default_inactive_sites" : 4
+         },
+         "baseline_classification" : {
+            "path" : "docs/real-programs-nom.json",
+            "sha256" : "d8303c07db0c8073b7fa393ba39b8d439ee5ce8ed28523f0179dbf59b88f6418"
+         },
+         "baseline_probe_receipt" : {
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-units-eb08fbaa.json",
+            "sha256" : "5c61766cf5f33b2bf13e9028686b2d5b938a0be1907ffbab45457f917b74b41c"
+         },
+         "library_manifest_sha256" : "8831f051df396cbf44028a9ab7d74df7a21f7fb3335cd7707d1c161e5215ea87",
+         "new_primary_sites" : [
+            {
+               "cause" : "error_position_macro_expansion",
+               "code" : "E_UNSUPPORTED_MACRO",
+               "column" : 24,
+               "file_sha256" : "467122d4056c0e2655fd4ba087f1ee5042fb86453b662ae7ebe2e42c0066a09a",
+               "line" : 100,
+               "message" : "unsupported macro: error_position!",
+               "path" : "src/bits/complete.rs",
+               "reason" : "The complete::tag closure body is now parsed as an ordinary function body. Its error branch contains the original error_position!(inp, ErrorKind::TagBits) invocation. This is a dependency-provided declarative macro call, not parser recovery from the previously rejected opaque return.",
+               "relationship_to_baseline" : "new_independent_coordinate"
+            },
+            {
+               "cause" : "error_position_macro_expansion",
+               "code" : "E_UNSUPPORTED_MACRO",
+               "column" : 24,
+               "file_sha256" : "dfba58d569c1ab89f6cb9e33153775ed19d45385e39d5047eb717c44b07e3cc0",
+               "line" : 76,
+               "message" : "unsupported macro: error_position!",
+               "path" : "src/bits/streaming.rs",
+               "reason" : "The streaming::tag closure body is now parsed as an ordinary function body. Its error branch contains the original error_position!(inp, ErrorKind::TagBits) invocation. This independently located macro call is not parser recovery from an opaque return.",
+               "relationship_to_baseline" : "new_independent_coordinate"
+            },
+            {
+               "cause" : "type_outlives_where",
+               "code" : "E_UNSUPPORTED",
+               "column" : 46,
+               "file_sha256" : "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+               "line" : 424,
+               "message" : "type-outlives where predicates are not implemented",
+               "path" : "src/bytes/complete.rs",
+               "reason" : "The original escaped function declares `I: Clone + crate::traits::Offset + Input + 'a` in its ordinary where clause. The current parser explicitly rejects the lifetime bound on type parameter I at its exact span. This is a real type-outlives contract, outside named lifetime-to-lifetime support; there is no recovery parent or surrounding-function admission.",
+               "relationship_to_baseline" : "new_independent_coordinate"
+            },
+            {
+               "cause" : "type_outlives_where",
+               "code" : "E_UNSUPPORTED",
+               "column" : 29,
+               "file_sha256" : "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+               "line" : 964,
+               "message" : "type-outlives where predicates are not implemented",
+               "path" : "src/multi/mod.rs",
+               "reason" : "The original fill function declares `F: Parser<I, Error = E> + 'a` in its ordinary where clause. The current parser explicitly rejects the lifetime bound on type parameter F at its exact span. This remains independent of the unsupported positional Parser contract and is not recovery from the accepted opaque-result syntax.",
+               "relationship_to_baseline" : "new_independent_coordinate"
+            }
+         ],
+         "observations" : [
+            {
+               "entry_sha256" : "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 5100,
+               "route" : "original_suffix",
+               "stderr_sha256" : "1170c98833b245d8181dc2850bcfc1d36d34bc83792f33ec55fd3787b0b748e1",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "src/lib.rs",
+               "wall_seconds" : 0.001242
+            },
+            {
+               "entry_sha256" : "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 40624,
+               "route" : "suffix_projection",
+               "stderr_sha256" : "fd8e38ab4e1dc42b7c2e9616494de68978efe9e4bccb88fb1c3f5f05f1615550",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "src/lib.rs",
+               "wall_seconds" : 0.117113
+            }
+         ],
+         "observed_at_utc" : "2026-11-18T09:29:57Z",
+         "old_site_counts" : [
+            {
+               "baseline_rank" : 4,
+               "baseline_sites" : 10,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "associated_type_equality_bindings",
+               "not_observed_sites" : 10,
+               "owner" : "Language / compiler parser and bounds",
+               "title" : "Associated-type equality bindings in trait arguments"
+            },
+            {
+               "baseline_rank" : 5,
+               "baseline_sites" : 6,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "const_generics",
+               "not_observed_sites" : 6,
+               "owner" : "Language / compiler generic parameters",
+               "title" : "Const generic parameters"
+            },
+            {
+               "baseline_rank" : 7,
+               "baseline_sites" : 3,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 3,
+               "id" : "doc_doctest_cfg",
+               "not_observed_sites" : 0,
+               "owner" : "Language / configuration and source loading",
+               "title" : "Documentation cfg predicates"
+            },
+            {
+               "baseline_rank" : 1,
+               "baseline_sites" : 8,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 8,
+               "id" : "macro_rules_dollar_token",
+               "not_observed_sites" : 0,
+               "owner" : "Language / checked source-producer route",
+               "title" : "Rust declarative macro input stops at dollar tokens"
+            },
+            {
+               "baseline_rank" : 6,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "maybe_sized_bounds",
+               "not_observed_sites" : 1,
+               "owner" : "Language / compiler generic bounds",
+               "title" : "Relaxed ?Sized bound syntax"
+            },
+            {
+               "baseline_rank" : 3,
+               "baseline_sites" : 41,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "qualified_associated_paths",
+               "not_observed_sites" : 41,
+               "owner" : "Language / compiler parser and resolution",
+               "title" : "Qualified associated type and value paths"
+            },
+            {
+               "baseline_rank" : 2,
+               "baseline_sites" : 78,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "return_position_impl_trait",
+               "not_observed_sites" : 78,
+               "owner" : "Language / compiler source lowering",
+               "title" : "Opaque impl Trait return types"
+            },
+            {
+               "baseline_rank" : 8,
+               "baseline_sites" : 2,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 2,
+               "id" : "unsafe_blocks",
+               "not_observed_sites" : 0,
+               "owner" : "Refused by design / checked-memory admission policy",
+               "title" : "Unsafe block surface"
+            }
+         ],
+         "package" : {
+            "commit" : "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
+            "name" : "nom",
+            "object_format" : "sha1",
+            "origin" : "https://github.com/rust-bakery/nom.git",
+            "root" : "/home/coder/workspace/lkjscript-specimens/nom-8.0.0",
+            "version" : "8.0.0"
+         },
+         "probe_receipt" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/census/nom-probe.json",
+            "sha256" : "2939f60220471e729aab38e7d83ba85c14370a44d07140fe3c40235fab65f01e"
+         },
+         "projection_manifest_sha256" : "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
+         "ranked_causes" : [
+            {
+               "affected_files" : [
+                  "src/branch/mod.rs",
+                  "src/character/complete.rs",
+                  "src/character/streaming.rs",
+                  "src/error.rs",
+                  "src/internal.rs",
+                  "src/macros.rs",
+                  "src/number/mod.rs",
+                  "src/sequence/mod.rs"
+               ],
+               "baseline_rank" : 1,
+               "id" : "macro_rules_dollar_token",
+               "overlapping_file_physical_lines" : 6418,
+               "owner" : "Language / checked source-producer route",
+               "site_count" : 8,
+               "title" : "Rust declarative macro input stops at dollar tokens"
+            },
+            {
+               "affected_files" : [
+                  "src/lib.rs"
+               ],
+               "baseline_rank" : 7,
+               "id" : "doc_doctest_cfg",
+               "overlapping_file_physical_lines" : 460,
+               "owner" : "Language / configuration and source loading",
+               "site_count" : 3,
+               "title" : "Documentation cfg predicates"
+            },
+            {
+               "affected_files" : [
+                  "src/bits/complete.rs",
+                  "src/bits/streaming.rs"
+               ],
+               "id" : "error_position_macro_expansion",
+               "overlapping_file_physical_lines" : 365,
+               "owner" : "Compiler / checked source producer",
+               "site_count" : 2,
+               "title" : "nom error_position macro expansion"
+            },
+            {
+               "affected_files" : [
+                  "src/bytes/complete.rs",
+                  "src/multi/mod.rs"
+               ],
+               "id" : "type_outlives_where",
+               "overlapping_file_physical_lines" : 2436,
+               "owner" : "language",
+               "site_count" : 2,
+               "title" : "Type-outlives where predicates"
+            },
+            {
+               "affected_files" : [
+                  "src/traits.rs"
+               ],
+               "baseline_rank" : 8,
+               "id" : "unsafe_blocks",
+               "overlapping_file_physical_lines" : 1681,
+               "owner" : "Refused by design / checked-memory admission policy",
+               "site_count" : 2,
+               "title" : "Unsafe block surface"
+            }
+         ],
+         "removed_previously_unclassified_sites" : [],
+         "rerank_payload_sha256" : "07d0f10e80add8020e280ec8465337804e662ae1a8c0e930a084282ba299554b",
+         "review" : {
+            "changed_primary_diagnostics" : 0,
+            "changed_recovery_rows" : 0,
+            "new_independent_primary_sites" : 4,
+            "path" : "docs/real-programs-gat-nom-review.json",
+            "reviewed_primary_sites" : 4,
+            "sha256" : "5c6cc8e1308f4809680faa5b7d5ef0f8a3b744dfb4369e3a590ccdb68e42a684",
+            "unchanged_recovery_rows" : 0
+         }
+      },
+      "sozu" : {
+         "accounting" : {
+            "baseline_primary_sites" : 449,
+            "current_primary_sites" : 448,
+            "new_unclassified_rows" : 0,
+            "prior_unclassified_rows" : 34,
+            "raw_by_code" : {
+               "E_BLOCKED" : 486,
+               "E_CAPABILITY" : 117,
+               "E_LEX" : 3,
+               "E_MODULE_MISSING" : 1,
+               "E_PARSE" : 34,
+               "E_UNSUPPORTED" : 92,
+               "E_UNSUPPORTED_MACRO" : 235
+            },
+            "raw_projected_diagnostic_rows" : 968,
+            "recovery_rows_excluded" : 0
+         },
+         "baseline_classification" : {
+            "path" : "docs/real-programs-sozu.json",
+            "sha256" : "dde8854bfe85d310d90182ba13756212cc3a5684d28baf1d1b4b35bdefb9118e"
+         },
+         "baseline_probe_receipt" : {
+            "path" : "/home/coder/workspace/lkjscript-specimens/evidence/sozu-1.0.6-unmodified-units-eb08fbaa.json",
+            "sha256" : "3c203d7b11d97d5faa0310cace27173ba36d4ffe2e800b6dc044f29ebdc10ac4"
+         },
+         "library_manifest_sha256" : "8831f051df396cbf44028a9ab7d74df7a21f7fb3335cd7707d1c161e5215ea87",
+         "new_primary_sites" : [
+            {
+               "cause" : "unsafe_or_raw_pointer",
+               "code" : "E_UNSUPPORTED",
+               "column" : 5,
+               "file_sha256" : "d324a99126654449d4984e23284ffac903645b7415d6b1f3602d2e0960b9dad2",
+               "line" : 39,
+               "message" : "unsupported construct: impl item",
+               "path" : "command/src/logging/access_logs.rs",
+               "reason" : "The old T: ?Sized parser diagnostic at 35:8 is absent. Parsing now reaches the real unsafe fn duplicate declaration at 39:5 inside the complete Option<&T> implementation header at 33-37. This is an independent unsupported unsafe implementation method, matching the existing primary unsafe methods at 29, 45 and 51, not fallout from a still-failed where clause. The original body and file bytes are unchanged; the unsafe implementation is not admitted.",
+               "relationship_to_baseline" : "new_independent_coordinate"
+            }
+         ],
+         "observations" : [
+            {
+               "entry_sha256" : "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 5100,
+               "route" : "original_suffix",
+               "stderr_sha256" : "7b549de4db0927e5cfce74b5932bada29e9eb2d1f4453c00765287200f698e06",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "bin/src/main.rs",
+               "wall_seconds" : 0.001469
+            },
+            {
+               "entry_sha256" : "1ec294920fee9926e979d33d8510063b2bc4807280cd1f52b3d53ea1e54f1289",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 39224,
+               "route" : "suffix_projection",
+               "stderr_sha256" : "5a511b9ace6c5b6e56e3cb5266a12315b94102c4439f714268406eef6520fcda",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "bin/src/main.rs",
+               "wall_seconds" : 0.127652
+            },
+            {
+               "entry_sha256" : "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 5100,
+               "route" : "original_suffix",
+               "stderr_sha256" : "6c077bd9d3f3ddf7b4272ee7183242c23fa8a77a2d0212dfba601bb1b82481f8",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "lib/src/lib.rs",
+               "wall_seconds" : 0.001912
+            },
+            {
+               "entry_sha256" : "4807145b5eb473c20e7d29dc0832338d096aa90f694657753605667566f5e789",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 37828,
+               "route" : "suffix_projection",
+               "stderr_sha256" : "4a94594ccc6f875d67e35105a6b479f997764d9fa831195a8ab1cce128447579",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "lib/src/lib.rs",
+               "wall_seconds" : 0.07709
+            },
+            {
+               "entry_sha256" : "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 5100,
+               "route" : "original_suffix",
+               "stderr_sha256" : "a9f468a468db306f90ff1c8629d09a0a9e63bc215ad0f16255d5b664965a7b6c",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "command/src/lib.rs",
+               "wall_seconds" : 0.001556
+            },
+            {
+               "entry_sha256" : "84d7708001b86cd13ceb0dcd59ea88d0c611c78e81c86851004e90f174f38b44",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 41536,
+               "route" : "suffix_projection",
+               "stderr_sha256" : "27afbcb5353fd743fa8c21ed7278249daa37a7e4addef82dd85cf09633212c78",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "command/src/lib.rs",
+               "wall_seconds" : 0.171509
+            },
+            {
+               "entry_sha256" : "8a8900e43c1479621cabd4e27575bdc49624d5c43469a754dc2b6bd5272efa78",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 5100,
+               "route" : "original_suffix",
+               "stderr_sha256" : "a00167481ac5fad74f5a5729cc5c94ae44f197d913df9a7a953f1767f9b210f3",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "e2e/src/lib.rs",
+               "wall_seconds" : 0.001115
+            },
+            {
+               "entry_sha256" : "8a8900e43c1479621cabd4e27575bdc49624d5c43469a754dc2b6bd5272efa78",
+               "exit_status" : 1,
+               "launcher_signal" : 0,
+               "peak_rss_kib" : 38512,
+               "route" : "suffix_projection",
+               "stderr_sha256" : "146fbabe3156eed526d9105f8f0984bc3dcd5f6c62e120f5988aa6c13f99075e",
+               "stdout_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+               "upstream_entry" : "e2e/src/lib.rs",
+               "wall_seconds" : 0.08707
+            }
+         ],
+         "observed_at_utc" : "2026-11-18T09:29:58Z",
+         "old_site_counts" : [
+            {
+               "baseline_rank" : 14,
+               "baseline_sites" : 86,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 86,
+               "id" : "ambient_effect_calls",
+               "not_observed_sites" : 0,
+               "owner" : "design: calls require explicit authority",
+               "title" : "ambient_effect_calls"
+            },
+            {
+               "baseline_rank" : 5,
+               "baseline_sites" : 6,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 6,
+               "id" : "associated_constants",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "associated_constants"
+            },
+            {
+               "baseline_rank" : 8,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "async_block",
+               "not_observed_sites" : 0,
+               "owner" : "language producer; runtime design separately needed",
+               "title" : "async_block"
+            },
+            {
+               "baseline_rank" : 7,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "at_pattern_lexing",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "at_pattern_lexing"
+            },
+            {
+               "baseline_rank" : 10,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "build_generated_source",
+               "not_observed_sites" : 0,
+               "owner" : "package/build producer",
+               "title" : "build_generated_source"
+            },
+            {
+               "baseline_rank" : 6,
+               "baseline_sites" : 2,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 0,
+               "id" : "compile_time_evaluation",
+               "not_observed_sites" : 2,
+               "owner" : "language",
+               "title" : "compile_time_evaluation"
+            },
+            {
+               "baseline_rank" : 3,
+               "baseline_sites" : 21,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 21,
+               "id" : "debug_formatting",
+               "not_observed_sites" : 0,
+               "owner" : "language / format producer; later Debug trait or derive work is not yet reached",
+               "title" : "debug_formatting"
+            },
+            {
+               "baseline_rank" : 9,
+               "baseline_sites" : 4,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 4,
+               "id" : "external_crate_binding",
+               "not_observed_sites" : 0,
+               "owner" : "package/language",
+               "title" : "external_crate_binding"
+            },
+            {
+               "baseline_rank" : 1,
+               "baseline_sites" : 235,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 235,
+               "id" : "macro_expansion",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "macro_expansion"
+            },
+            {
+               "baseline_rank" : 2,
+               "baseline_sites" : 2,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 2,
+               "id" : "macro_token_lexing",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "macro_token_lexing"
+            },
+            {
+               "baseline_rank" : null,
+               "baseline_sites" : 37,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 34,
+               "id" : "parse_recovery_or_unclassified",
+               "not_observed_sites" : 3,
+               "owner" : "unclassified; no independent gap count",
+               "title" : "parse_recovery_or_unclassified"
+            },
+            {
+               "baseline_rank" : 11,
+               "baseline_sites" : 14,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 14,
+               "id" : "pure_standard_data_types",
+               "not_observed_sites" : 0,
+               "owner" : "library plus language namespace routing",
+               "title" : "pure_standard_data_types"
+            },
+            {
+               "baseline_rank" : 17,
+               "baseline_sites" : 2,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 2,
+               "id" : "same_process_thread_api",
+               "not_observed_sites" : 0,
+               "owner" : "design and missing IR concurrency",
+               "title" : "same_process_thread_api"
+            },
+            {
+               "baseline_rank" : 16,
+               "baseline_sites" : 1,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 1,
+               "id" : "shared_heap_ownership",
+               "not_observed_sites" : 0,
+               "owner" : "design: owner/index or a new checked sharing contract",
+               "title" : "shared_heap_ownership"
+            },
+            {
+               "baseline_rank" : 12,
+               "baseline_sites" : 6,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 6,
+               "id" : "standard_io_traits",
+               "not_observed_sites" : 0,
+               "owner" : "library plus language namespace routing; imports are not proof of ambient I/O",
+               "title" : "standard_io_traits"
+            },
+            {
+               "baseline_rank" : 13,
+               "baseline_sites" : 8,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 8,
+               "id" : "standard_os_imports",
+               "not_observed_sites" : 0,
+               "owner" : "library adapter plus explicit authority; imported names are not execution sites",
+               "title" : "standard_os_imports"
+            },
+            {
+               "baseline_rank" : 4,
+               "baseline_sites" : 15,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 15,
+               "id" : "trait_object_dispatch",
+               "not_observed_sites" : 0,
+               "owner" : "language",
+               "title" : "trait_object_dispatch"
+            },
+            {
+               "baseline_rank" : 15,
+               "baseline_sites" : 44,
+               "changed_diagnostic_sites" : 0,
+               "exact_surviving_sites" : 44,
+               "id" : "unsafe_or_raw_pointer",
+               "not_observed_sites" : 0,
+               "owner" : "design",
+               "title" : "unsafe_or_raw_pointer"
+            }
+         ],
+         "package" : {
+            "commit" : "c5ff06a12bd514e06ab28965052d0ad1e19c45b3",
+            "name" : "sozu",
+            "object_format" : "sha1",
+            "origin" : "https://github.com/sozu-proxy/sozu.git",
+            "root" : "/home/coder/workspace/lkjscript-specimens/sozu-1.0.6",
+            "version" : "1.0.6"
+         },
+         "probe_receipt" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/census/sozu-probe.json",
+            "sha256" : "965296af4afbbd7fba5cf461376897c9cb89e0739490dc33cb7423513329d71f"
+         },
+         "projection_manifest_sha256" : "3ad1b9efdc73fb42f61aa3cb5d0dfaf1edea4d5fecf68e4b48e4cedd01db38b0",
+         "ranked_causes" : [
+            {
+               "affected_files" : [
+                  "bin/src/command/mod.rs",
+                  "bin/src/command/requests.rs",
+                  "bin/src/command/server.rs",
+                  "bin/src/command/sessions.rs",
+                  "bin/src/command/upgrade.rs",
+                  "bin/src/ctl/command.rs",
+                  "bin/src/ctl/mod.rs",
+                  "bin/src/ctl/request_builder.rs",
+                  "bin/src/main.rs",
+                  "bin/src/upgrade.rs",
+                  "bin/src/util.rs",
+                  "bin/src/worker.rs",
+                  "command/src/buffer/fixed.rs",
+                  "command/src/channel.rs",
+                  "command/src/config.rs",
+                  "command/src/proto/display.rs",
+                  "command/src/scm_socket.rs",
+                  "command/src/state.rs",
+                  "e2e/src/http_utils/mod.rs"
+               ],
+               "baseline_rank" : 1,
+               "id" : "macro_expansion",
+               "overlapping_file_physical_lines" : 11224,
+               "owner" : "language",
+               "site_count" : 235,
+               "title" : "macro_expansion"
+            },
+            {
+               "affected_files" : [
+                  "bin/src/ctl/command.rs",
+                  "bin/src/ctl/mod.rs",
+                  "bin/src/main.rs",
+                  "bin/src/upgrade.rs",
+                  "command/src/channel.rs",
+                  "command/src/config.rs",
+                  "command/src/proto/display.rs",
+                  "command/src/state.rs",
+                  "e2e/src/mock/async_backend.rs",
+                  "e2e/src/mock/client.rs",
+                  "e2e/src/mock/sync_backend.rs",
+                  "e2e/src/sozu/worker.rs"
+               ],
+               "baseline_rank" : 14,
+               "id" : "ambient_effect_calls",
+               "overlapping_file_physical_lines" : 7562,
+               "owner" : "design: calls require explicit authority",
+               "site_count" : 86,
+               "title" : "ambient_effect_calls"
+            },
+            {
+               "affected_files" : [
+                  "bin/src/command/mod.rs",
+                  "bin/src/command/server.rs",
+                  "bin/src/main.rs",
+                  "bin/src/upgrade.rs",
+                  "bin/src/util.rs",
+                  "bin/src/worker.rs",
+                  "command/src/buffer/fixed.rs",
+                  "command/src/buffer/growable.rs",
+                  "command/src/channel.rs",
+                  "command/src/logging/access_logs.rs",
+                  "command/src/scm_socket.rs",
+                  "e2e/src/mock/sync_backend.rs",
+                  "e2e/src/sozu/worker.rs"
+               ],
+               "baseline_rank" : 15,
+               "id" : "unsafe_or_raw_pointer",
+               "overlapping_file_physical_lines" : 4399,
+               "owner" : "design",
+               "site_count" : 45,
+               "title" : "unsafe_or_raw_pointer"
+            },
+            {
+               "affected_files" : [
+                  "bin/src/command/requests.rs",
+                  "bin/src/command/upgrade.rs",
+                  "command/src/certificate.rs",
+                  "command/src/config.rs",
+                  "command/src/proto/display.rs",
+                  "command/src/request.rs",
+                  "command/src/response.rs",
+                  "command/src/state.rs"
+               ],
+               "baseline_rank" : 3,
+               "id" : "debug_formatting",
+               "overlapping_file_physical_lines" : 7344,
+               "owner" : "language / format producer; later Debug trait or derive work is not yet reached",
+               "site_count" : 21,
+               "title" : "debug_formatting"
+            },
+            {
+               "affected_files" : [
+                  "bin/src/command/requests.rs",
+                  "bin/src/command/server.rs",
+                  "bin/src/command/upgrade.rs",
+                  "command/src/request.rs",
+                  "e2e/src/mock/async_backend.rs",
+                  "e2e/src/mock/https_client.rs"
+               ],
+               "baseline_rank" : 4,
+               "id" : "trait_object_dispatch",
+               "overlapping_file_physical_lines" : 2622,
+               "owner" : "language",
+               "site_count" : 15,
+               "title" : "trait_object_dispatch"
+            },
+            {
+               "affected_files" : [
+                  "bin/src/cli.rs",
+                  "bin/src/command/server.rs",
+                  "bin/src/ctl/command.rs",
+                  "bin/src/ctl/mod.rs",
+                  "bin/src/main.rs",
+                  "command/src/logging/access_logs.rs",
+                  "command/src/logging/mod.rs",
+                  "command/src/proto/display.rs",
+                  "command/src/response.rs",
+                  "command/src/scm_socket.rs",
+                  "e2e/src/mock/async_backend.rs",
+                  "e2e/src/mock/sync_backend.rs",
+                  "e2e/src/sozu/worker.rs"
+               ],
+               "baseline_rank" : 11,
+               "id" : "pure_standard_data_types",
+               "overlapping_file_physical_lines" : 5106,
+               "owner" : "library plus language namespace routing",
+               "site_count" : 14,
+               "title" : "pure_standard_data_types"
+            },
+            {
+               "affected_files" : [
+                  "bin/src/command/mod.rs",
+                  "bin/src/command/requests.rs",
+                  "bin/src/upgrade.rs",
+                  "bin/src/util.rs",
+                  "bin/src/worker.rs",
+                  "command/src/config.rs",
+                  "command/src/request.rs",
+                  "command/src/state.rs"
+               ],
+               "baseline_rank" : 13,
+               "id" : "standard_os_imports",
+               "overlapping_file_physical_lines" : 6175,
+               "owner" : "library adapter plus explicit authority; imported names are not execution sites",
+               "site_count" : 8,
+               "title" : "standard_os_imports"
+            },
+            {
+               "affected_files" : [
+                  "command/src/ready.rs"
+               ],
+               "baseline_rank" : 5,
+               "id" : "associated_constants",
+               "overlapping_file_physical_lines" : 148,
+               "owner" : "language",
+               "site_count" : 6,
+               "title" : "associated_constants"
+            },
+            {
+               "affected_files" : [
+                  "command/src/buffer/fixed.rs",
+                  "command/src/buffer/growable.rs",
+                  "command/src/channel.rs",
+                  "command/src/writer.rs",
+                  "e2e/src/mock/client.rs",
+                  "e2e/src/mock/sync_backend.rs"
+               ],
+               "baseline_rank" : 12,
+               "id" : "standard_io_traits",
+               "overlapping_file_physical_lines" : 1802,
+               "owner" : "library plus language namespace routing; imports are not proof of ambient I/O",
+               "site_count" : 6,
+               "title" : "standard_io_traits"
+            },
+            {
+               "affected_files" : [
+                  "bin/src/main.rs",
+                  "command/src/lib.rs"
+               ],
+               "baseline_rank" : 9,
+               "id" : "external_crate_binding",
+               "overlapping_file_physical_lines" : 320,
+               "owner" : "package/language",
+               "site_count" : 4,
+               "title" : "external_crate_binding"
+            },
+            {
+               "affected_files" : [
+                  "command/src/logging/logs.rs",
+                  "lib/src/lib.rs"
+               ],
+               "baseline_rank" : 2,
+               "id" : "macro_token_lexing",
+               "overlapping_file_physical_lines" : 2306,
+               "owner" : "language",
+               "site_count" : 2,
+               "title" : "macro_token_lexing"
+            },
+            {
+               "affected_files" : [
+                  "bin/src/ctl/command.rs"
+               ],
+               "baseline_rank" : 17,
+               "id" : "same_process_thread_api",
+               "overlapping_file_physical_lines" : 209,
+               "owner" : "design and missing IR concurrency",
+               "site_count" : 2,
+               "title" : "same_process_thread_api"
+            },
+            {
+               "affected_files" : [
+                  "e2e/src/mock/https_client.rs"
+               ],
+               "baseline_rank" : 8,
+               "id" : "async_block",
+               "overlapping_file_physical_lines" : 68,
+               "owner" : "language producer; runtime design separately needed",
+               "site_count" : 1,
+               "title" : "async_block"
+            },
+            {
+               "affected_files" : [
+                  "command/src/logging/display.rs"
+               ],
+               "baseline_rank" : 7,
+               "id" : "at_pattern_lexing",
+               "overlapping_file_physical_lines" : 167,
+               "owner" : "language",
+               "site_count" : 1,
+               "title" : "at_pattern_lexing"
+            },
+            {
+               "affected_files" : [
+                  "command/src/proto/mod.rs"
+               ],
+               "baseline_rank" : 10,
+               "id" : "build_generated_source",
+               "overlapping_file_physical_lines" : 257,
+               "owner" : "package/build producer",
+               "site_count" : 1,
+               "title" : "build_generated_source"
+            },
+            {
+               "affected_files" : [
+                  "e2e/src/mock/https_client.rs"
+               ],
+               "baseline_rank" : 16,
+               "id" : "shared_heap_ownership",
+               "overlapping_file_physical_lines" : 68,
+               "owner" : "design: owner/index or a new checked sharing contract",
+               "site_count" : 1,
+               "title" : "shared_heap_ownership"
+            }
+         ],
+         "removed_previously_unclassified_sites" : [
+            {
+               "coordinate" : "command/src/logging/access_logs.rs:35:8",
+               "diagnostic_keys" : [
+                  "[\"command/src/logging/access_logs.rs\",35,8,\"E_PARSE\",\"expected an identifier\"]"
+               ],
+               "file_sha256" : "d324a99126654449d4984e23284ffac903645b7415d6b1f3602d2e0960b9dad2",
+               "line_text" : "    T: ?Sized,"
+            },
+            {
+               "coordinate" : "command/src/state.rs:1409:23",
+               "diagnostic_keys" : [
+                  "[\"command/src/state.rs\",1409,23,\"E_PARSE\",\"expected `>`\"]"
+               ],
+               "file_sha256" : "8d60ac243fdc0c9cff1622fe83290ae3a264ae69e1acb9d3c701bcad1b9a15e8",
+               "line_text" : "    I1: Iterator<Item = (K, &'a V)>,"
+            },
+            {
+               "coordinate" : "command/src/state.rs:1435:27",
+               "diagnostic_keys" : [
+                  "[\"command/src/state.rs\",1435,27,\"E_PARSE\",\"expected `>`\"]"
+               ],
+               "file_sha256" : "8d60ac243fdc0c9cff1622fe83290ae3a264ae69e1acb9d3c701bcad1b9a15e8",
+               "line_text" : "        I1: Iterator<Item = (K, &'a V)>,"
+            }
+         ],
+         "rerank_payload_sha256" : "e50f76390ef668957687a7c606c8e7384bf0f52b664f0f011456f662f0bed90e",
+         "review" : {
+            "changed_primary_diagnostics" : 0,
+            "changed_recovery_rows" : 0,
+            "new_independent_primary_sites" : 1,
+            "path" : "docs/real-programs-gat-sozu-review.json",
+            "reviewed_primary_sites" : 1,
+            "sha256" : "1b757f04dc8c1676acd27491b3e110adef89d2734d17230aa88fede2b825a949",
+            "unchanged_recovery_rows" : 0
+         }
+      }
+   },
+   "stage" : "generic_associated_type_families_gated",
+   "validation" : {
+      "admitted_projected_roots" : 0,
+      "bootstrap" : {
+         "fixed_point" : "two consecutive current-emitter generations byte-identical",
+         "previous_seed_bridge" : true,
+         "receipt" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/bootstrap.log",
+            "sha256" : "44d4eaf7af36c3c1f006da3027b895e514cb1ddc9a282e3842c03dc52bea220b"
+         },
+         "refreshed_seed_fixed_point" : "passed again in full gate",
+         "status" : "passed"
+      },
+      "checked_ir" : "No checked-IR, independent-checker, interpreter, runtime or library changes in this frontend slice.",
+      "compiler_sha256" : "f9dde2462bf4727d7c5796d4d54d592e22acda512846e00b7b96ebbf97a8009b",
+      "focused" : {
+         "cases" : 56,
+         "engine_routes" : 112,
+         "native" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/cases-native.log",
+            "sha256" : "7d133f5defddced7a19fdd841db821c7a4ad4993f2d3277d95e47fd6127bc3f6"
+         },
+         "rust" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/cases-rust.log",
+            "sha256" : "33a9b805c1f0ebc1b34fcc2417352c9a104bb3a170785f8c1d7f77068e723898"
+         },
+         "rust_values_or_output" : 24,
+         "rust_verdicts" : 32,
+         "status" : "passed"
+      },
+      "frontier" : {
+         "changed_streams" : 1,
+         "disappeared_dom_sites" : [
+            {
+               "admission_claim" : false,
+               "column" : 18,
+               "form" : "lifetime-family associated definition",
+               "line" : 259,
+               "path" : "src/document.rs"
+            },
+            {
+               "admission_claim" : false,
+               "column" : 27,
+               "form" : "lifetime-family associated definition",
+               "line" : 219,
+               "path" : "src/matcher.rs"
+            }
+         ],
+         "fresh_observations" : 12,
+         "interpretation" : "Parsing now carries family binders; later root barriers hide these two semantic lifetime-family boundaries. Their missing parse diagnostics do not establish support for lifetime GATs.",
+         "new_unclassified" : 0,
+         "observation_index" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/census/observation-index.json",
+            "sha256" : "5ab26573606ddb18b3df1710b7fb214f2f051ec59ca034ecd9aa398ef6627d8a"
+         },
+         "projected_roots" : 6,
+         "rerank" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/rerank.log",
+            "sha256" : "5e295989ba26ef9a38056139756ce03e53e86db5b87c4c6365b7b6816e750f9a"
+         },
+         "stage_delta" : {
+            "dom" : [
+               63,
+               61
+            ],
+            "nom" : [
+               17,
+               17
+            ],
+            "sozu_classified" : [
+               448,
+               448
+            ],
+            "sozu_prior_unclassified" : [
+               34,
+               34
+            ]
+         }
+      },
+      "full_gate" : {
+         "finished_at_utc" : "2026-11-18T10:21:50Z",
+         "fresh_case_requests" : 6403,
+         "ir_findings" : 0,
+         "ir_mutants" : 128,
+         "receipt" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/full-gate.log",
+            "sha256" : "85dea2e0be738b344617a9ebf40174696a52f284cc8d17d15a4b09500a73528e"
+         },
+         "reused_case_requests" : 0,
+         "seconds" : 837.933,
+         "started_at_utc" : "2026-11-18T10:07:52Z",
+         "status" : "passed"
+      },
+      "gate_expectation_repair" : {
+         "diagnostics" : {
+            "cases" : 79,
+            "engine_routes" : 124,
+            "receipt" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/repair-preflight/diagnostics.log",
+               "sha256" : "5caf8f056821ba9fbdcbde3cbd8da6a2470517ec1fb38bee2cd287d708fea818"
+            },
+            "retained_pending" : 34
+         },
+         "independent_rust_optimization_levels" : [
+            0,
+            3
+         ],
+         "input_manifest" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/repair-preflight/positive-inputs.sha256",
+            "sha256" : "9096ad6c49377c9520fc99bf6429f2167e52405bab762ce6c4a37304a78a6f27"
+         },
+         "library_selection" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/repair-preflight/diagnostic-library-directory.log",
+            "sha256" : "d28811068cdf50b1044727597cf8ba4453b9dfbca9502fc3378146ce9c807c83"
+         },
+         "log_manifest" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/repair-preflight/proof-logs.sha256",
+            "sha256" : "094ed171a5d38c0d93ddcf12ac9c47d24340631cf78f24127428e69ad67f0802"
+         },
+         "mutation_option_order" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/repair-preflight/diagnostic-mutation-no-store.log",
+            "sha256" : "60b5f2f8d5d9a6989633f75b4587b579b83d42ccaddb33ab330ef1c5eace3299"
+         },
+         "positive_originals" : {
+            "cases" : 2,
+            "engine_routes" : 4,
+            "receipt" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/repair-preflight/positive-routes.log",
+               "sha256" : "c44c4f2345602e254c7c843b07060cab61dc9c4fed6fe8e83e83635f78e4ecf8"
+            }
+         },
+         "status" : "passed",
+         "toolchain" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/repair-preflight/toolchain.log",
+            "sha256" : "90a85fbd6a94008a8459bdfea650bf1d86beb9519faf6c1e4436c0e66ea3a685"
+         }
+      },
+      "nom_own_tests_run_under_lkjscript" : 0,
+      "observations" : 12,
+      "positional_regression" : {
+         "cases" : 41,
+         "engine_routes" : 82,
+         "receipt" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/positional-regression.log",
+            "sha256" : "2ba87da9abe1c84ad427555f681886e2d466c57458b4c5e39463a431daa5d990"
+         },
+         "status" : "passed"
+      },
+      "prior_full_gate_failure" : {
+         "affected_fixtures" : [
+            "generic_option_closure_context.lkj",
+            "vec_loop_element_inference.lkj",
+            "site-vector-advice.lkj"
+         ],
+         "compiler_or_library_source_changed" : false,
+         "exit_status" : 1,
+         "finding" : "Old diagnostic expectations contradicted newly supported inference. Both original program bodies compile and execute under Rust opt0/3 and both lkjscript engines.",
+         "original_body_sha256" : {
+            "generic_option_closure_context" : "9b11e812e110ff55f05c5930b4de8519c15f8dbcafaf8d618f6cef6f98ef7b72",
+            "vec_loop_element_inference" : "4284de665273bfa382a232771d6db00a13fc1905d675e3552919be22891e3dfc"
+         },
+         "receipt" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/failed-gate-01/full-gate.log",
+            "sha256" : "1d62231cc4f71613ddfaf8cc500809e179c23151d99af7d94e5262cb333b85a5"
+         },
+         "repair" : "The two unchanged bodies move to positive conformance fixtures. The consumer harness executes both the original inferred Vec loop and its annotated equivalent; other advice checks are unchanged.",
+         "status" : "failed",
+         "wall_seconds" : 871.89
+      },
+      "projected_roots" : 6,
+      "retained_preflight_limits" : [
+         "The first associated-equality inference candidate failed native self-reproduction because a borrowed unsized target prematurely constrained an owned match result.",
+         "The repair follows unresolved incoming producers only for slice/str view coercions and preserves ordinary sized constructor/closure inference; owned-match, wrong-element and cloned-key controls remain.",
+         "The published positional seed required a current-emitter bridge; two consecutive resulting generations matched. The refreshed seed is independently rechecked by the full gate.",
+         "The retained authored delegated-parser case is distinct from admission of the unchanged nom module tree."
+      ],
+      "seed_gzip_sha256" : "754c709e8ae210bd1a50a50015636ced39e74061d8c756fee07b7038a06ae254",
+      "source_commands" : {
+         "families" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/query.log",
+            "sha256" : "3fa55a8acb9f3dc015d20b4aca1a1e27d5c9b5cd65b8abb7874144d61470044a"
+         },
+         "method_dispatch" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/dispatch-query.log",
+            "sha256" : "8b48e787321d39fe86689729247c4c2d6ae554837c65eb832999adfef1a5a0dc"
+         },
+         "positional" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/positional-query.log",
+            "sha256" : "29e153b4c62ae1cf0150e0465ccd099834fa0b1b430fdaaa3c11f8a2de9d70f2"
+         },
+         "prerequisite_equalities" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/equality-query.log",
+            "sha256" : "35fd841e338b118ce9158ad188cddadc9ccbdaeedbf70d24f359926fcd16cade"
+         },
+         "status" : "passed"
+      },
+      "stage" : "generic_associated_type_families",
+      "standalone_real_programs" : {
+         "finished_at_utc" : "2026-11-18T10:21:53Z",
+         "levenshtein_tests_per_engine" : 8,
+         "native_corpus_rows" : 7239,
+         "provenance_controls" : 18,
+         "receipt" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/gat-final/standalone-real-programs.log",
+            "sha256" : "bfe050316ba1664049ab530cb4ea400a72ef27a18a88620f0f19e8efe78c69bf"
+         },
+         "status" : "passed"
+      }
+   }
+}

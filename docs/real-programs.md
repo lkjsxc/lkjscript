@@ -250,38 +250,34 @@ still under `target/` is a temporary candidate observation, not a durable eviden
 link. Fresh observations additionally require the original/projected trees to pass
 `project.pl --verify`; use `probe.pl --help` for its exact entry and package options.
 
-#### Current associated-type-family frontier
+#### Current Debug frontier
 
-The current producer f9dde246...97a8009b adds type-parameter associated families
-with complete receiver, applied-trait, member and argument identity. Rigid
-unused definitions enforce parameter/result bounds and preserve separate
-implementation/family binders. Proven prerequisite associated equalities can
-infer otherwise nonreceiver implementation parameters for delegated parsers.
+The current producer b8bb6e90...3183c6 adds source Debug formatting and
+authenticated derived implementations. The ?/#? modes use ordinary Formatter,
+DebugStruct, DebugTuple and DebugList contracts; field order, alternate
+indentation and formatting errors remain observable source behavior.
 
-The 56 focused cases pass 112 native/interpreter routes and a separate Rust
-witness agrees on 24 values/output cases and 32 verdicts. Family, equality and
-dispatch queries, checked renames and invalid-edit rollback pass, together with
-41 earlier positional cases / 82 routes. [Validation](../bench/gat.md) records
-the refreshed seed, fixed point and publication gates.
+All 18 focused cases pass 36 native/interpreter routes, with independent Rust
+verification of ten values/output cases and eight recorded Rust verdicts. Queries, checked
+renames/body edits and ten malformed-origin controls pass. The complete GAT
+cohort passes 56 cases / 112 routes; a partly overlapping earlier trait cohort
+passes 77 cases / 154 routes. [Validation](../bench/debug.md) records exact
+producer/seed identities, fixed point and the publication gates.
 
-The twelve fresh unchanged-source observations change nom 17->17, DOM 63->61,
-and Sozu 448 classified plus 34 prior-unclassified unchanged. Nom retains
-13 default candidates plus four inactive; DOM now has 54 default candidates
-plus seven test-only. All new diagnostic identities are accounted for.
+The twelve fresh unchanged-source observations give nom 17->17, DOM 61->37,
+and Sozu 448->427 classified sites, with its 34 prior-unclassified sites
+retained and zero new unclassified diagnostics. The 24 original DOM Debug
+format refusals disappear. No original large root or nom own test admits.
 
-The removed DOM diagnostics were parse refusals at document.rs:259 and
-matcher.rs:219, both lifetime-family definitions. The parser now carries family
-binders, but lifetime GATs remain a located semantic boundary behind later root
-refusals. These two vanished diagnostics do not establish their admission.
-No original large root or nom own test is admitted by these observations.
-
-Current exact source-hashed reviews are [nom](real-programs-gat-nom-review.json),
-[DOM](real-programs-gat-dom-review.json) and
-[Sozu](real-programs-gat-sozu-review.json). Raw receipts retain the actual
+Current exact source-hashed reviews are [nom](real-programs-debug-nom-review.json),
+[DOM](real-programs-debug-dom-review.json) and
+[Sozu](real-programs-debug-sozu-review.json). Raw receipts retain the actual
 producer/library inventory and original source/projection command paths.
-The preceding positional frontier and its complete proof remain in
-[the prior accounting](../bench/gat-data/previous-frontier.json) and
-[the positional report](../bench/positional-traits.md).
+The preceding type-family frontier and its complete proof remain in
+[the prior accounting](../bench/debug-data/previous-frontier.json) and
+[the family report](../bench/gat.md). Its two vanished DOM parse refusals were
+lifetime-family definitions; later root barriers still hide that unsupported
+semantic form. Debug support does not change that boundary.
 
 #### Earlier lifetime-where frontier
 

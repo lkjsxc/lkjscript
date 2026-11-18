@@ -1,0 +1,7 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+trait Marker {}
+impl<T> Marker for (T,) {}
+struct Named(i64);
+fn require<T: Marker>(value: T) {}
+pub fn probe() -> i64 { require(Named(42i64)); 42 }

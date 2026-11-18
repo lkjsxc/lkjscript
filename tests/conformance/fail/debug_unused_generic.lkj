@@ -1,0 +1,4 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+fn invalid<T>(value: T) -> String { format!("{:?}", value) }
+pub fn probe() -> i64 { 42 }

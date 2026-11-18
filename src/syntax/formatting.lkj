@@ -78,11 +78,7 @@ fn specification(text: &str, span: Span) -> Result<Specification, Diagnostic> {
             'X' => "upper_hex",
             'b' => "binary",
             'o' => "octal",
-            '?' => return Err(Diagnostic::new(
-                span,
-                "E_UNSUPPORTED",
-                "Debug formatting needs its source trait implementation",
-            )),
+            '?' => "debug",
             _ => return Err(Diagnostic::new(
                 span,
                 "E_UNSUPPORTED",

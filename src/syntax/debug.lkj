@@ -1,0 +1,152 @@
+//! Debug derives produce ordinary source implementations and formatter calls.
+//! All field obligations remain visible to generic checking and the IR checker.
+use super::*;
+fn debug_path(name: &str, args: Vec<TypeId>) -> Path {
+    Path { qualification: None, declaration: None, name: name.to_string(), args, bindings: Vec::new() }
+}
+impl Parser {
+    fn debug_name(&mut self, name: &str, span: Span) -> ExprId {
+        self.add_expr(Expr::Path(debug_path(name, Vec::new())), span)
+    }
+    fn debug_body(&mut self, label: &str, named: bool, fields: &[Field],
+        bindings: bool, span: Span) -> ExprId {
+        let formatter = self.debug_name("$debug_formatter", span);
+        let label = self.add_expr(Expr::String(label.to_string()), span);
+        let value = self.add_expr(Expr::Method {
+            receiver: formatter, name: if named { "debug_struct" } else { "debug_tuple" }.to_string(),
+            types: Vec::new(), args: vec![label],
+        }, span);
+        let pattern = self.add_pattern(Pattern::Bind {
+            name: "$debug_builder".to_string(), mutable: true, by_ref: false, ref_mut: false,
+        }, span);
+        let mut statements = vec![Stmt::Let { pattern, ty: None, value: Some(value), span }];
+        for (index, field) in fields.iter().enumerate() {
+            let value = if bindings {
+                self.debug_name(&format!("$debug_field{index}"), field.span)
+            } else {
+                let receiver = self.debug_name("self", field.span);
+                let field_value = self.add_expr(Expr::Field {
+                    value: receiver, name: field.name.clone(),
+                }, field.span);
+                self.add_expr(Expr::Borrow { mutable: false, value: field_value }, field.span)
+            };
+            let mut args = Vec::new();
+            if named { args.push(self.add_expr(Expr::String(field.name.clone()), field.span)); }
+            args.push(value);
+            let receiver = self.debug_name("$debug_builder", span);
+            let value = self.add_expr(Expr::Method {
+                receiver, name: "field".to_string(), types: Vec::new(), args,
+            }, field.span);
+            statements.push(Stmt::Expr { value, semicolon: true });
+        }
+        let receiver = self.debug_name("$debug_builder", span);
+        let tail = self.add_expr(Expr::Method {
+            receiver, name: "finish".to_string(), types: Vec::new(), args: Vec::new(),
+        }, span);
+        let index = self.program.blocks.len();
+        self.program.blocks.push(Block { statements, tail: Some(tail), span });
+        self.add_expr(Expr::Block(index), span)
+    }
+    pub(super) fn derive_debug(&mut self, item: Item) -> Result<(), Diagnostic> {
+        let (name, module, mut generics, predicates, attrs, span) = match item {
+            Item::Struct(index) => {
+                let definition = &self.program.structs[index];
+                (definition.name.clone(), definition.module.clone(), definition.generics.clone(),
+                    definition.predicates.clone(), definition.attrs.clone(), definition.span)
+            }
+            Item::Enum(index) => {
+                let definition = &self.program.enums[index];
+                (definition.name.clone(), definition.module.clone(), definition.generics.clone(),
+                    definition.predicates.clone(), definition.attrs.clone(), definition.span)
+            }
+            _ => return Ok(()),
+        };
+        let mut requested = 0usize;
+        for attr in &attrs {
+            if attr.name == "derive" {
+                for name in &attr.args { if name == "Debug" { requested += 1usize; } }
+            }
+        }
+        if requested == 0usize { return Ok(()); }
+        if requested != 1usize {
+            return Err(Diagnostic::new(span, "E_TRAIT", "duplicate derive Debug"));
+        }
+        let bound = self.add_type(Type::Path(debug_path("std::fmt::Debug", Vec::new())), span);
+        let mut arguments = Vec::new();
+        let mut parameter_index = 0usize;
+        while parameter_index < generics.len() {
+            if !generics[parameter_index].lifetime && !generics[parameter_index].constant {
+                generics[parameter_index].bounds.push(bound);
+            }
+            let parameter = &generics[parameter_index];
+            arguments.push(self.add_type(
+                Type::Path(debug_path(&parameter.name, Vec::new())), parameter.span));
+            parameter_index += 1usize;
+        }
+        let target = self.add_type(Type::Path(debug_path(&name, arguments)), span);
+        let self_type = self.add_type(Type::Ref {
+            mutable: false, lifetime: String::new(), inner: target,
+        }, span);
+        let formatter_type = self.add_type(
+            Type::Path(debug_path("std::fmt::Formatter", Vec::new())), span);
+        let formatter_type = self.add_type(Type::Ref {
+            mutable: true, lifetime: String::new(), inner: formatter_type,
+        }, span);
+        let result = self.add_type(Type::Path(debug_path("std::fmt::Result", Vec::new())), span);
+        let value = match item {
+            Item::Struct(index) => {
+                let definition = self.program.structs[index].clone();
+                self.debug_body(&name, !definition.tuple, &definition.fields, false, span)
+            }
+            Item::Enum(index) => {
+                let definition = self.program.enums[index].clone();
+                let mut arms = Vec::new();
+                for variant in &definition.variants {
+                    let mut patterns = Vec::new();
+                    for (index, field) in variant.fields.iter().enumerate() {
+                        patterns.push(self.add_pattern(Pattern::Bind {
+                            name: format!("$debug_field{index}"),
+                            mutable: false, by_ref: false, ref_mut: false,
+                        }, field.span));
+                    }
+                    let path = debug_path(&format!("{name}::{}", variant.name), Vec::new());
+                    let pattern = match variant.style {
+                        VariantStyle::Unit => self.add_pattern(Pattern::Path(path), variant.span),
+                        VariantStyle::Tuple => self.add_pattern(
+                            Pattern::Variant { path, fields: patterns }, variant.span),
+                        VariantStyle::Named => {
+                            let mut fields = Vec::new();
+                            for (index, field) in variant.fields.iter().enumerate() {
+                                fields.push((field.name.clone(), patterns[index]));
+                            }
+                            self.add_pattern(Pattern::Struct { path, fields, rest: false }, variant.span)
+                        }
+                    };
+                    let value = self.debug_body(&variant.name,
+                        variant.style == VariantStyle::Named, &variant.fields, true, variant.span);
+                    arms.push(Arm { pattern, guard: None, value, span: variant.span });
+                }
+                let value = self.debug_name("self", span);
+                self.add_expr(Expr::Match { value, arms }, span)
+            }
+            _ => return Ok(()),
+        };
+        let body = self.program.blocks.len();
+        self.program.blocks.push(Block { statements: Vec::new(), tail: Some(value), span });
+        let method = self.program.functions.len();
+        self.program.functions.push(Function {
+            const_qualified: false, name: "fmt".to_string(), module: module.clone(),
+            generics: Vec::new(), predicates: Vec::new(), outlives: Vec::new(),
+            params: vec![
+                Param { name: "self".to_string(), ty: self_type, mutable: false, span },
+                Param { name: "$debug_formatter".to_string(), ty: formatter_type, mutable: false, span },
+            ],
+            result, body: Some(body), attrs: Vec::new(), public: Visibility::Public, span,
+        });
+        self.program.impls.push(Impl {
+            module, generics, predicates, target, trait_ty: Some(bound),
+            methods: vec![method], associated: Vec::new(), span,
+        });
+        Ok(())
+    }
+}

@@ -1,0 +1,18 @@
+// expect: value 42
+// witness: {}
+pub fn probe() -> i64 {
+    let mut values = vec![1i64, 2i64, 3i64];
+    assert_eq!(format!("{:?}", values), "[1, 2, 3]");
+    values.push(4i64);
+    assert_eq!(format!("{:?}", &values[1usize..3usize]), "[2, 3]");
+    assert_eq!(format!("{:?}", [1u8, 2u8]), "[1, 2]");
+    assert_eq!(format!("{:?}", [0u8; 0usize]), "[]");
+    assert_eq!(format!("{:?}", Some("yes")), "Some(\"yes\")");
+    let error: Result<i64, &str> = Err("bad");
+    assert_eq!(format!("{:?}", error), "Err(\"bad\")");
+    assert_eq!(format!("{:?}", (1i64,)), "(1,)");
+    assert_eq!(format!("{:?}", (1i64, "two", true)), "(1, \"two\", true)");
+    assert_eq!(format!("{:?}", ()), "()");
+    assert_eq!(format!("{:?}", Box::new(7i64)), "7");
+    42
+}

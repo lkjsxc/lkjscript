@@ -1,2 +1,3 @@
-// expect: reject E_UNSUPPORTED
+// expect: value 2
+// witness: {}
 pub fn probe()->i64 {let value=format!("{:?}",42i64);value.len() as i64}

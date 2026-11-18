@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {}
+#[derive(Debug, Default)]
+struct Defaulted { value: i64 }
+#[derive(Clone, Debug, Default)]
+struct Wrapped<T: Clone> { value: T }
+pub fn probe() -> i64 {
+    assert_eq!(format!("{:?}", Defaulted::default()), "Defaulted { value: 0 }");
+    let item: Wrapped<i64> = Wrapped::default();
+    assert_eq!(format!("{:?}", item.clone()), "Wrapped { value: 0 }");
+    42
+}

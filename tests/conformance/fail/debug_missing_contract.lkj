@@ -1,0 +1,4 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+struct Hidden;
+pub fn probe() -> i64 { let _ = format!("{:?}", Hidden); 42 }

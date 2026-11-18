@@ -1,0 +1,6 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+use std::fmt;
+#[derive(Debug)] struct Container;
+impl fmt::Debug for Container { fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.write_str("x") } }
+pub fn probe() -> i64 { 42 }
