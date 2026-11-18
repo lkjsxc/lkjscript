@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+use core::str::CharIndices;
+fn indexed<'a>(input: &'a str) -> CharIndices<'a> { input.char_indices() }
+pub fn probe() -> i64 {
+    let mut values = indexed("Aé界😀");
+    assert_eq!(values.next(), Some((0usize, 'A')));
+    assert_eq!(values.next(), Some((1usize, 'é')));
+    assert_eq!(values.next(), Some((3usize, '界')));
+    assert_eq!(values.next(), Some((6usize, '😀')));
+    assert!(values.next().is_none());
+    assert!(values.next().is_none());
+    42
+}

@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {}
+pub fn probe() -> i64 {
+    let range = 3u8..6u8;
+    let mut total = 0i64;
+    for value in range { total += value as i64; }
+    let mut inclusive = (usize::MAX - 1usize)..=usize::MAX;
+    assert_eq!(inclusive.next(), Some(usize::MAX - 1usize));
+    assert_eq!(inclusive.next(), Some(usize::MAX));
+    assert!(inclusive.next().is_none());
+    assert!(!inclusive.contains(&usize::MAX));
+    let mut descending = 4usize..=2usize;
+    assert!(descending.next().is_none());
+    let mut from = (14usize..).take(2usize);
+    total + from.next().unwrap() as i64 + from.next().unwrap() as i64 + 1i64
+}

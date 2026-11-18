@@ -3,6 +3,8 @@
 #[derive(Copy, Clone)]
 pub struct Utf8Error;
 
+pub fn from_utf8(value: &[u8]) -> crate::Result<&str, Utf8Error> { std::str::from_utf8(value) }
+
 use crate::Option;
 use crate::string::String;
 // A pattern is a read-only byte matcher with a known UTF-8 extent. Primitive
@@ -276,6 +278,23 @@ impl<'a> IntoIterator for Chars<'a> {
     }
 }
 
+/// Yield each scalar's byte offset before advancing the UTF-8 cursor.
+pub struct CharIndices<'a> { characters: Chars<'a> }
+impl<'a> Iterator for CharIndices<'a> {
+    type Item = (usize, char);
+    fn next(&mut self) -> Option<(usize, char)> {
+        let offset = self.characters.index;
+        match self.characters.next() {
+            Option::Some(value) => Option::Some((offset, value)),
+            Option::None => Option::None,
+        }
+    }
+}
+impl<'a> IntoIterator for CharIndices<'a> {
+    type IntoIter = Self;
+    fn into_iter(self) -> Self { self }
+}
+
 pub struct Lines<'a> {
     value: &'a str,
     index: usize,
@@ -361,7 +380,7 @@ impl<'a, P: Pattern> IntoIterator for Split<'a, P> {
     }
 }
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq, Eq)]
 pub struct ParseIntError;
 
 // Integer parsing separates checked magnitude decoding from value construction.
@@ -411,14 +430,67 @@ fn decimal_magnitude(
     Result::Ok((result, negative))
 }
 
+/// Parsing is a source contract; integer implementations reuse checked decoding.
+pub trait FromStr: Sized {
+    type Err;
+    fn from_str(value: &str) -> Result<Self, Self::Err>;
+}
+fn parse_integer<T: ParseInteger>(value: &str) -> Result<T, ParseIntError> {
+    match decimal_magnitude(value, T::positive_maximum(), T::is_signed()) {
+        Result::Ok((value, negative)) => Result::Ok(T::from_magnitude(value, negative)),
+        Result::Err(error) => Result::Err(error),
+    }
+}
+impl FromStr for u8 {
+    type Err = ParseIntError;
+    fn from_str(value: &str) -> Result<Self, ParseIntError> { parse_integer::<u8>(value) }
+}
+impl FromStr for u16 {
+    type Err = ParseIntError;
+    fn from_str(value: &str) -> Result<Self, ParseIntError> { parse_integer::<u16>(value) }
+}
+impl FromStr for u32 {
+    type Err = ParseIntError;
+    fn from_str(value: &str) -> Result<Self, ParseIntError> { parse_integer::<u32>(value) }
+}
+impl FromStr for u64 {
+    type Err = ParseIntError;
+    fn from_str(value: &str) -> Result<Self, ParseIntError> { parse_integer::<u64>(value) }
+}
+impl FromStr for usize {
+    type Err = ParseIntError;
+    fn from_str(value: &str) -> Result<Self, ParseIntError> { parse_integer::<usize>(value) }
+}
+impl FromStr for i8 {
+    type Err = ParseIntError;
+    fn from_str(value: &str) -> Result<Self, ParseIntError> { parse_integer::<i8>(value) }
+}
+impl FromStr for i16 {
+    type Err = ParseIntError;
+    fn from_str(value: &str) -> Result<Self, ParseIntError> { parse_integer::<i16>(value) }
+}
+impl FromStr for i32 {
+    type Err = ParseIntError;
+    fn from_str(value: &str) -> Result<Self, ParseIntError> { parse_integer::<i32>(value) }
+}
+impl FromStr for i64 {
+    type Err = ParseIntError;
+    fn from_str(value: &str) -> Result<Self, ParseIntError> { parse_integer::<i64>(value) }
+}
+impl FromStr for isize {
+    type Err = ParseIntError;
+    fn from_str(value: &str) -> Result<Self, ParseIntError> { parse_integer::<isize>(value) }
+}
+
 pub trait TextView {
     fn bytes<'a>(&'a self) -> Bytes<'a>;
     fn chars<'a>(&'a self) -> Chars<'a>;
+    fn char_indices<'a>(&'a self) -> CharIndices<'a>;
     fn lines<'a>(&'a self) -> Lines<'a>;
     fn strip_prefix<'a, P: Pattern>(&'a self, prefix: P) -> Option<&'a str>;
     fn split_once<'a, P: Pattern>(&'a self, pattern: P) -> Option<(&'a str, &'a str)>;
     fn split<'a, P: Pattern>(&'a self, pattern: P) -> Split<'a, P>;
-    fn parse<T: ParseInteger>(&self) -> Result<T, ParseIntError>;
+    fn parse<T: FromStr>(&self) -> Result<T, T::Err>;
 }
 impl TextView for str {
     fn bytes<'a>(&'a self) -> Bytes<'a> {
@@ -432,6 +504,9 @@ impl TextView for str {
             value: self.as_bytes(),
             index: 0,
         }
+    }
+    fn char_indices<'a>(&'a self) -> CharIndices<'a> {
+        CharIndices { characters: self.chars() }
     }
     fn lines<'a>(&'a self) -> Lines<'a> {
         Lines {
@@ -463,12 +538,7 @@ impl TextView for str {
             done: false,
         }
     }
-    fn parse<T: ParseInteger>(&self) -> Result<T, ParseIntError> {
-        match decimal_magnitude(self, T::positive_maximum(), T::is_signed()) {
-            Result::Ok((value, negative)) => Result::Ok(T::from_magnitude(value, negative)),
-            Result::Err(error) => Result::Err(error),
-        }
-    }
+    fn parse<T: FromStr>(&self) -> Result<T, T::Err> { T::from_str(self) }
 }
 
 impl ParseInteger for u8 {

@@ -1,0 +1,9 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
+use core::marker::PhantomData;
+fn marked<'a>(value: &'a i64) -> PhantomData<&'a i64> { let _ = value; PhantomData }
+pub fn probe() -> i64 {
+    let escaped;
+    { let value = 42i64; escaped = marked(&value); }
+    drop(escaped); 42
+}

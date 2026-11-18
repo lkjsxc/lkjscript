@@ -1,0 +1,7 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+use core::marker::PhantomData;
+trait ArrayValue { fn number(&self) -> i64; }
+impl<const N: usize> ArrayValue for [(); N] { fn number(&self) -> i64 { 42 } }
+fn require<T: ArrayValue>(value: T) -> i64 { value.number() }
+pub fn probe() -> i64 { require(PhantomData::<u8>) }

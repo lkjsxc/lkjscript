@@ -1,0 +1,8 @@
+//! A zero-field ownership marker. Its type argument remains a source proof dependency.
+//! The frontend authenticates this exact library declaration before assigning
+//! PhantomData's ownership and auto-trait behavior; no runtime field is fabricated.
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct PhantomData<T: ?Sized>;
+impl<T: ?Sized> crate::prelude::Default for PhantomData<T> {
+    fn default() -> Self { PhantomData }
+}

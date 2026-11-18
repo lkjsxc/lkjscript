@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+use core::marker::PhantomData;
+fn send<T: Send>(_value: T) {}
+fn sync<T: Sync>(_value: T) {}
+fn obey<T: Send + Sync>() {
+    send(PhantomData::<T>);
+    sync(PhantomData::<T>);
+}
+pub fn probe() -> i64 { obey::<String>(); 42 }

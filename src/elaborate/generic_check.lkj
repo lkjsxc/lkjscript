@@ -328,6 +328,7 @@ fn validate_selected(
             line: 1,
         }];
     }
+    if let Err(problem) = compiler.check_phantom_types() { problems.push(problem); }
     let mut refinement = compiler.closures.checked_functions.clone();
     for function in &compiler.return_inference {
         refinement.insert(*function);
@@ -379,6 +380,7 @@ impl Compiler<'_> {
         self.derived_functions = BTreeMap::new();
         self.instance_names = BTreeMap::new();
         self.applications = BTreeMap::new();
+        self.phantom_spans = BTreeMap::new();
         self.destructors = Vec::new();
         self.contracts = None;
         self.method_selections = BTreeMap::new();

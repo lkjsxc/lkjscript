@@ -1,0 +1,6 @@
+//! Ownership operations are ordinary source wrappers over checked operations.
+pub fn drop<T>(value: T) { std::mem::drop(value); }
+pub fn replace<T>(destination: &mut T, value: T) -> T { std::mem::replace(destination, value) }
+pub fn take<T: crate::prelude::Default>(destination: &mut T) -> T {
+    std::mem::replace(destination, T::default())
+}

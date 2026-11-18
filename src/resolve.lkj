@@ -1,6 +1,7 @@
 //! Module and declaration identity. Later phases consume resolved paths, never bare-name guesses.
 mod import_scopes;
 mod iteration;
+mod primitive_limits;
 use crate::ast::*;
 use crate::names::qualified;
 use import_scopes::ImportScopes;
@@ -498,6 +499,9 @@ impl<'a> Resolver<'a> {
             && (namespace == Namespace::Type || parts.len() > 1usize || self.generic_value(span, parts[0].as_str())) {
             return Ok(Some(Resolved::intrinsic(path.to_string())));
         }
+        if let Some(limit) = self.primitive_limit(scope, path, &parts, namespace, span)? {
+            return Ok(Some(limit));
+        }
         if matches!(
             path,
             "std::mem::replace"
@@ -544,12 +548,14 @@ impl<'a> Resolver<'a> {
         } else {
             self.lookup_lexical(current, parts[at].as_str(), first_namespace, span)
         };
+        let standard_root = if parts[at].as_str() == "core" { "$std::core" } else { "$std" };
         if binding.is_none()
             && !rooted
-            && parts[at].as_str() == "std"
-            && self.modules.contains_key(&"$std".to_string())
+            && matches!(parts[at].as_str(), "std" | "core")
+            && self.modules.contains_key(&standard_root.to_string())
         {
-            current = *self.modules.get(&"$std".to_string()).unwrap();
+            let core = parts[at].as_str() == "core";
+            current = *self.modules.get(&standard_root.to_string()).unwrap();
             at += 1;
             rooted = true;
             if at == parts.len() {
@@ -557,20 +563,29 @@ impl<'a> Resolver<'a> {
             }
             let remaining = join_parts(&parts[at..]);
             let intrinsic = match remaining.as_str() {
-                "vec::Vec" => Some("Vec"),
-                "boxed::Box" => Some("Box"),
-                "mem::replace" => Some("std::mem::replace"),
-                "mem::drop" => Some("std::mem::drop"),
-                "str::from_utf8" => Some("std::str::from_utf8"),
+                "vec::Vec" if !core => Some("Vec"),
+                "boxed::Box" if !core => Some("Box"),
+                "mem::replace" if !core => Some("std::mem::replace"),
+                "mem::drop" if !core => Some("std::mem::drop"),
+                "str::from_utf8" if !core => Some("std::str::from_utf8"),
+                "marker::Sized" => Some("Sized"),
+                "marker::Copy" => Some("Copy"),
+                "marker::Clone" => Some("Clone"),
+                "marker::Send" => Some("Send"),
+                "marker::Sync" => Some("Sync"),
+                "cmp::PartialEq" => Some("PartialEq"),
+                "cmp::Eq" => Some("Eq"),
+                "cmp::PartialOrd" => Some("PartialOrd"),
+                "cmp::Ord" => Some("Ord"),
                 _ => None,
             };
             if let Some(name) = intrinsic {
                 return Ok(Some(Resolved::intrinsic(name.to_string())));
             }
-            if remaining.starts_with("vec::Vec::") {
+            if !core && remaining.starts_with("vec::Vec::") {
                 return Ok(Some(Resolved::intrinsic(remaining[5..].to_string())));
             }
-            if remaining.starts_with("boxed::Box::") {
+            if !core && remaining.starts_with("boxed::Box::") {
                 return Ok(Some(Resolved::intrinsic(remaining[7..].to_string())));
             }
             binding = self.lookup(
@@ -850,12 +865,11 @@ impl<'a> Resolver<'a> {
         if path == "self" {
             return Ok(Some(scope));
         }
-        if path == "std"
-            && self
-                .lookup_lexical(scope, "std", Namespace::Type, span)
-                .is_none()
+        if matches!(path, "std" | "core")
+            && self.lookup_lexical(scope, path, Namespace::Type, span).is_none()
         {
-            return Ok(self.modules.get(&"$std".to_string()).copied());
+            let root = if path == "core" { "$std::core" } else { "$std" };
+            return Ok(self.modules.get(&root.to_string()).copied());
         }
         if !path.is_empty() && path.split("::").all(|part| part == "super") {
             let mut current = scope;

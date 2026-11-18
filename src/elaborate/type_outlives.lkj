@@ -85,6 +85,10 @@ impl Compiler<'_> {
                 }
                 continue;
             }
+            if let Some(argument) = crate::generics::phantom::argument(&self.applications, ty) {
+                pending.push(argument);
+                continue;
+            }
             match &self.types[ty].kind {
                 ir::TypeKind::Struct { fields, .. } => {
                     for field in fields { pending.push(field.ty); }

@@ -35,6 +35,7 @@ mod sequences;
 pub mod semantic;
 mod static_lifetimes;
 mod type_outlives;
+mod phantom;
 mod sugars;
 mod text_format;
 mod trait_proofs;
@@ -126,6 +127,7 @@ struct Compiler<'a> {
     derived_functions: BTreeMap<(usize, generic_check::BuiltinMethod), usize>,
     instance_names: BTreeMap<(usize, Vec<(String, usize)>), usize>,
     applications: BTreeMap<usize, (String, Vec<usize>)>,
+    phantom_spans: BTreeMap<usize, a::Span>,
     destructors: Vec<(usize, usize)>,
     uses: BTreeMap<(a::FileId, String), Vec<usize>>,
     expanded_order: Option<borrow_order::Order>,
@@ -625,6 +627,7 @@ fn elaborate_definitions(
             next += 1;
         }
     }
+    c.check_phantom_types()?;
     let mut refinement = c.closures.checked_functions.clone();
     for function in &c.return_inference {
         refinement.insert(*function);
@@ -709,6 +712,7 @@ impl<'a> Compiler<'a> {
             derived_functions: BTreeMap::new(),
             instance_names: BTreeMap::new(),
             applications: BTreeMap::new(),
+            phantom_spans: BTreeMap::new(),
             destructors: Vec::new(),
             uses: BTreeMap::new(),
             expanded_order: borrow_order::expanded(source),
@@ -2150,6 +2154,9 @@ impl Builder<'_, '_> {
                     place.projections.push(ir::Projection::Deref);
                     ty = inner;
                 }
+                if self.compiler.applications.contains_key(&ty) {
+                    return Err(err(node.span, "E_TYPE", "nominal value is not an indexable array"));
+                }
                 let (index, _) = self.expr(index, Some(ir::U64))?;
                 place.projections.push(ir::Projection::Index(index));
                 Ok(place)
@@ -2666,7 +2673,8 @@ impl Builder<'_, '_> {
                         if let ir::TypeKind::Slice { inner: element, .. } =
                             self.compiler.types[want].kind
                         {
-                            if matches!(self.compiler.types[inner].kind,ir::TypeKind::Vec{inner:t}|ir::TypeKind::Array{inner:t,..} if t==element)
+                            if !self.compiler.applications.contains_key(&inner)
+                                && matches!(self.compiler.types[inner].kind,ir::TypeKind::Vec{inner:t}|ir::TypeKind::Array{inner:t,..} if t==element)
                             {
                                 let dst = self.temp(target);
                                 self.emit(
@@ -4355,7 +4363,9 @@ impl Builder<'_, '_> {
         if let Some(value) = self.generic_method(expression, &target, base, name, _types, args)? {
             return Ok(value);
         }
-        let direct = methods::direct(methods::receiver(&self.compiler.types[base].kind), name);
+        let receiver_kind = if self.compiler.applications.contains_key(&base) { methods::Receiver::Other }
+            else { methods::receiver(&self.compiler.types[base].kind) };
+        let direct = methods::direct(receiver_kind, name);
         if direct == Some(methods::Direct::FloatBits) {
             if !args.is_empty() || !_types.is_empty() {
                 return Err(err(span, "E_TYPE", "f64::to_bits takes no arguments"));
@@ -4776,6 +4786,11 @@ impl Builder<'_, '_> {
             None
         };
         let ty = self.finish_constructor(target, span)?;
+        if crate::generics::phantom::argument(&self.compiler.applications, ty).is_some() {
+            let dst = self.temp(ty);
+            self.emit(ir::Op::Array { dst, elements: Vec::new() }, span.line);
+            return Ok((dst, ty));
+        }
         let ir::TypeKind::Struct {
             fields: declared, ..
         } = self.compiler.types[ty].kind.clone()

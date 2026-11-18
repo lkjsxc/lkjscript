@@ -1,0 +1,5 @@
+//! Borrowing conversions preserve the lifetime of the borrowed receiver.
+pub trait Borrow<T: ?Sized> { fn borrow(&self) -> &T; }
+pub trait BorrowMut<T: ?Sized> { fn borrow_mut(&mut self) -> &mut T; }
+impl<T: ?Sized> Borrow<T> for T { fn borrow(&self) -> &T { self } }
+impl<T: ?Sized> BorrowMut<T> for T { fn borrow_mut(&mut self) -> &mut T { self } }

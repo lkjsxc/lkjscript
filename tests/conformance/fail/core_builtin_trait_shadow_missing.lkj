@@ -1,0 +1,6 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+mod core { pub mod marker { pub trait Send {} } }
+struct Local;
+fn obey<T: core::marker::Send>(_value: T) {}
+pub fn probe() -> i64 { obey(Local); 42 }

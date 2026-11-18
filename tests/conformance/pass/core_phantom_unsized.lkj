@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {}
+use core::marker::PhantomData;
+fn copy<T: ?Sized>(value: PhantomData<T>) { let again = value; drop(value); drop(again); }
+pub fn probe() -> i64 {
+    let text: PhantomData<str> = PhantomData;
+    let bytes: PhantomData<[u8]> = PhantomData::default();
+    copy(text); copy(bytes);
+    let PhantomData = text;
+    let PhantomData {} = bytes;
+    42
+}

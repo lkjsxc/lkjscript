@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+mod core { pub mod num { pub struct Number { pub value: i64 } } }
+pub fn probe() -> i64 { core::num::Number { value: 42i64 }.value }

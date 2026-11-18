@@ -1,0 +1,44 @@
+//! Phantom ownership remains source metadata; its runtime representation is empty.
+use super::{Compiler, Result, a, err, ir};
+use std::collections::BTreeSet;
+impl Compiler<'_> {
+    pub(super) fn check_phantom_argument(&self, first: usize, span: a::Span) -> Result<()> {
+        let mut pending = vec![first];
+        let mut seen: BTreeSet<usize> = BTreeSet::new();
+        while let Some(ty) = pending.pop() {
+            if !seen.insert(ty) { continue; }
+            if let Some(argument) = crate::generics::phantom::argument(&self.applications, ty) {
+                pending.push(argument);
+            }
+            match &self.types[ty].kind {
+                ir::TypeKind::Ref { .. } => return Err(err(span, "E_UNSUPPORTED",
+                    "reference-bearing PhantomData requires a phantom region proof")),
+                ir::TypeKind::Struct { fields, .. } => {
+                    for field in fields { pending.push(field.ty); }
+                }
+                ir::TypeKind::Enum { variants, .. } => {
+                    for variant in variants { for field in &variant.fields { pending.push(field.ty); } }
+                }
+                ir::TypeKind::Vec { inner } | ir::TypeKind::Box { inner }
+                | ir::TypeKind::Array { inner, .. } | ir::TypeKind::Slice { inner, .. } => pending.push(*inner),
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+    // Recheck completed types after the work graph closes: a recursive nominal
+    // argument may have been an unfinished placeholder at its first occurrence.
+    pub(super) fn check_phantom_types(&self) -> Result<()> {
+        for (ty, (name, arguments)) in &self.applications {
+            if crate::generics::phantom::is_name(name) && arguments.len() == 1usize {
+                let span = self.phantom_spans.get(ty).copied().unwrap_or_else(|| -> a::Span {
+                    self.source.structs.iter().find(|definition|
+                        crate::generics::phantom::is_name(&super::qualified(&definition.module, &definition.name)))
+                        .map(|definition| definition.span).unwrap_or(a::Span::default())
+                });
+                self.check_phantom_argument(arguments[0], span)?;
+            }
+        }
+        Ok(())
+    }
+}

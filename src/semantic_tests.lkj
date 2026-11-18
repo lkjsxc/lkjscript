@@ -49,6 +49,14 @@ fn complete_library(files: &mut Vec<source::SourceInput>) {
         return;
     }
     let additions: Vec<String> = vec![
+        "$std/core.lkj".to_string(),
+        "$std/borrow.lkj".to_string(),
+        "$std/cmp.lkj".to_string(),
+        "$std/mem.lkj".to_string(),
+        "$std/num.lkj".to_string(),
+        "$std/slice.lkj".to_string(),
+        "$std/marker.lkj".to_string(),
+        "$std/range.lkj".to_string(),
         "$std/text_debug.lkj".to_string(),
         "$std/arena.lkj".to_string(),
         "$std/process_model.lkj".to_string(),

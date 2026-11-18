@@ -1,0 +1,18 @@
+// expect: value 42
+// witness: {}
+const BYTE_LIMIT: u8 = u8::MAX;
+const WORD_LIMIT: usize = usize::MAX;
+pub fn probe() -> i64 {
+    assert_eq!(BYTE_LIMIT, 255u8);
+    assert_eq!(WORD_LIMIT, 18446744073709551615usize);
+    assert_eq!(u8::MIN, 0u8); assert_eq!(u16::MIN, 0u16); assert_eq!(u16::MAX, 65535u16);
+    assert_eq!(u32::MIN, 0u32); assert_eq!(u32::MAX, 4294967295u32);
+    assert_eq!(u64::MIN, 0u64); assert_eq!(u64::MAX, 18446744073709551615u64);
+    assert_eq!(usize::MIN, 0usize);
+    assert_eq!(i8::MIN, -128i8); assert_eq!(i8::MAX, 127i8);
+    assert_eq!(i16::MIN, -32768i16); assert_eq!(i16::MAX, 32767i16);
+    assert_eq!(i32::MIN, -2147483648i32); assert_eq!(i32::MAX, 2147483647i32);
+    assert_eq!(i64::MIN, -9223372036854775808i64); assert_eq!(i64::MAX, 9223372036854775807i64);
+    assert_eq!(isize::MIN, -9223372036854775808isize); assert_eq!(isize::MAX, 9223372036854775807isize);
+    42
+}

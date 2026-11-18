@@ -1,0 +1,4 @@
+// expect: reject E_PRIVACY
+// witness: {"rustAccept":false}
+use core::num::NonZeroUsize;
+pub fn probe() -> i64 { let _ = NonZeroUsize { value: 0usize }; 42 }

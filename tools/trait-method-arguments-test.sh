@@ -58,3 +58,58 @@ cmp "$fixture/before" "$fixture/project/main.lkj"
 [[ ! -e $fixture/project/.lkjscript-edit.pending ]]
 value
 printf 'ok trait method arguments: concrete tuple dispatch, exact method references/rename and rejected input transaction on both engines\n'
+
+# Method-local arguments inferred from a result must survive header selection.
+cp "$fixture/project/main.lkj" "$fixture/implementation-arguments-source.lkj"
+cat > "$fixture/project/main.lkj" <<'SOURCE'
+trait Seed { fn seed() -> Self; }
+impl Seed for i64 { fn seed() -> Self { 42i64 } }
+struct Envelope<T> { value: T }
+impl<T> Envelope<T> { fn take(self) -> T { self.value } }
+trait Factory { fn create<T: Seed>(&self) -> Envelope<T>; }
+struct Maker;
+impl Factory for Maker {
+    fn create<T: Seed>(&self) -> Envelope<T> { Envelope { value: T::seed() } }
+}
+fn produce<R: Seed>(maker: &Maker) -> R { maker.create().take() }
+fn main() -> i64 { produce::<i64>(&Maker) }
+SOURCE
+publish
+value
+query signature Factory::create > "$fixture/method-result-signature"
+grep -Fq 'T: Seed' "$fixture/method-result-signature"
+query references produce > "$fixture/method-result-references"
+grep -Eq 'create.*kind=method' "$fixture/method-result-references"
+query callees produce > "$fixture/method-result-callees"
+grep -Eq 'create.*i64|i64.*create' "$fixture/method-result-callees"
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"rename","id":"Factory::create","name":"construct"}]}
+REQUEST
+"$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/method-result-rename"
+grep -Fq 'maker.construct().take()' "$fixture/project/main.lkj"
+value
+publish
+query references produce > "$fixture/method-result-renamed"
+grep -Eq 'construct.*kind=method' "$fixture/method-result-renamed"
+cp "$fixture/project/main.lkj" "$fixture/method-result-before"
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-item","id":"produce","source":"fn produce<R>(maker: &Maker) -> R { maker.construct().take() }"}]}
+REQUEST
+if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/method-result-bound-rejected" 2> "$fixture/method-result-bound-error"; then
+    printf 'method result inference manufactured a missing generic bound\n' >&2
+    exit 1
+fi
+grep -Fq E_TRAIT "$fixture/method-result-bound-error"
+cmp "$fixture/method-result-before" "$fixture/project/main.lkj"
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-body","id":"produce","source":"{ maker.construct::<i64>().take() }"}]}
+REQUEST
+if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/method-result-type-rejected" 2> "$fixture/method-result-type-error"; then
+    printf 'method result inference replaced a rigid result with one instance\n' >&2
+    exit 1
+fi
+grep -Fq E_TYPE "$fixture/method-result-type-error"
+cmp "$fixture/method-result-before" "$fixture/project/main.lkj"
+[[ ! -e $fixture/project/.lkjscript-edit.pending ]]
+value
+printf 'ok method result arguments: chained context, exact specialized calls and rename, missing-bound and wrong-result transactions on both engines\n'

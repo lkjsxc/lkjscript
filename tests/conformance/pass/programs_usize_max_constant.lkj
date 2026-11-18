@@ -1,0 +1,10 @@
+// expect: value 42
+// entry: verify
+// witness: {}
+// The original real-program probe is preserved; verify supplies the i64 test entry.
+pub fn probe() -> usize { usize::MAX }
+
+pub fn verify() -> i64 {
+    assert_eq!(probe(), !0usize);
+    42
+}

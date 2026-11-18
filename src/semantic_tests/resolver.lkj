@@ -82,7 +82,7 @@ fn open_range_values_call_the_library_declaration_once() {
             },
             crate::source::SourceInput {
                 path: "library.lkj".to_string(),
-                text: "pub mod iter {pub fn range_from(start:usize)->usize{start+1usize}}".to_string(),
+                text: "pub mod range {pub fn range_from(start:usize)->usize{start+1usize}}".to_string(),
             },
         ],
     }).unwrap();
@@ -94,13 +94,13 @@ fn open_range_values_call_the_library_declaration_once() {
 }
 
 
-fn open_range_slices_need_no_iterator_library_and_local_names_cannot_supply_it() {
+fn open_range_slices_need_no_range_library_and_local_names_cannot_supply_it() {
     let source = crate::syntax::parse(
         "pub fn probe()->i64{let values=[1i64,42i64];let tail=&values[1usize..];tail[0usize]}"
     ).unwrap();
     assert!(crate::frontend::check_source(&source).is_ok());
     let source = crate::syntax::parse(
-        "mod iter{pub fn range_from(start:usize)->usize{start}} pub fn probe()->usize{(1usize..)}"
+        "mod range{pub fn range_from(start:usize)->usize{start}} pub fn probe()->usize{(1usize..)}"
     ).unwrap();
     let problem = crate::resolve::resolve(&source).err().unwrap();
     assert_eq!(problem.code, "E_UNSUPPORTED");
@@ -110,6 +110,6 @@ pub fn run() -> usize {
     lookup_keeps_file_name_and_enclosing_span_boundaries();
     nested_method_and_impl_ranges_both_supply_parameters();
     open_range_values_call_the_library_declaration_once();
-    open_range_slices_need_no_iterator_library_and_local_names_cannot_supply_it();
+    open_range_slices_need_no_range_library_and_local_names_cannot_supply_it();
     4
 }
