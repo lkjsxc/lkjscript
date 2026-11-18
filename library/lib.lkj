@@ -26,6 +26,7 @@ pub mod io;
 // command.lkj is an optional typed capability module mounted by the current loader;
 // the stored seed reads this root without resolving the newer capability types.
 pub mod iter;
+pub mod range;
 mod ordered_map;
 mod ordered_set;
 pub mod sha256;
