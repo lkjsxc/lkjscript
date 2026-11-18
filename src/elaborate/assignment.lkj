@@ -80,7 +80,7 @@ impl Builder<'_, '_> {
         Some(ty)
     }
 
-    fn assignment_type(&mut self, expression: usize) -> Result<usize> {
+    pub(super) fn assignment_type(&mut self, expression: usize) -> Result<usize> {
         if let Some(ty) = self.inferred.expressions.get(&expression) {
             return Ok(*ty);
         }

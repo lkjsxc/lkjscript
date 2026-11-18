@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod capabilities;
 mod closures;
 mod method_headers;
+mod numeric_operators;
 mod pattern_equations;
 mod projection_equations;
 mod qualified_types;
@@ -454,6 +455,15 @@ enum Obligation {
     },
     Unary {
         source: Variable,
+        result: Variable,
+        span: a::Span,
+    },
+    Operator {
+        operation: super::numeric_operators::Operator,
+        left: Variable,
+        right: Variable,
+        left_value: Variable,
+        right_value: Variable,
         result: Variable,
         span: a::Span,
     },
@@ -1729,6 +1739,15 @@ impl Infer<'_, '_> {
                 } else if matches!(op.as_str(), "<" | "<=" | ">" | ">=") {
                     self.unify(left, right, span)?;
                     self.atom("bool")
+                } else if let Some(operation) = super::numeric_operators::Operator::parse(&op) {
+                    let left_value = self.operation_type();
+                    self.obligation(Obligation::Unary { source: left, result: left_value, span });
+                    let right_value = self.operation_type();
+                    self.obligation(Obligation::Unary { source: right, result: right_value, span });
+                    let result = self.operation_type();
+                    self.obligation(Obligation::Operator { operation, left, right,
+                        left_value, right_value, result, span });
+                    result
                 } else {
                     // Primitive operators forward one shared reference layer.
                     // Keep that choice delayed until both operand shapes are
@@ -1752,11 +1771,18 @@ impl Infer<'_, '_> {
                     left_value
                 }
             }
-            a::Expr::Assign { place, value, .. } => {
+            a::Expr::Assign { op, place, value } => {
                 let place = self.expr(place)?;
                 let value = self.expr(value)?;
-                self.coerce(value, place, span)?;
-                self.atom("()")
+                if let Some(operation) = super::numeric_operators::Operator::parse(&op) {
+                    let result = self.operation_type();
+                    self.obligation(Obligation::Operator { operation, left: place, right: value,
+                        left_value: place, right_value: value, result, span });
+                    result
+                } else {
+                    self.coerce(value, place, span)?;
+                    self.atom("()")
+                }
             }
             a::Expr::Borrow { mutable, value } => {
                 let value = self.expr(value)?;
@@ -2317,6 +2343,9 @@ impl Infer<'_, '_> {
                 }
                 _ => self.unify(result, source, span)?,
             },
+            Obligation::Operator { operation, left, right, left_value, right_value, result, span } => {
+                return self.solve_operator(id, operation, left, right, left_value, right_value, result, span);
+            }
             Obligation::Deref {
                 source,
                 result,
@@ -2566,6 +2595,7 @@ impl Infer<'_, '_> {
                     Obligation::Projection { result, .. }
                     | Obligation::Try { result, .. }
                     | Obligation::Unary { result, .. }
+                    | Obligation::Operator { result, .. }
                     | Obligation::Deref { result, .. }
                     | Obligation::Index { result, .. }
                     | Obligation::Field { result, .. }

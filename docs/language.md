@@ -23,6 +23,35 @@ then compound assignment reads the old value. Each operand executes once. Empty 
 Traps terminate without cleanup or recovery; there is no unwinding.
 Cases: [scalar bits](../tests/reference/scalar_bits.lkj), [evaluation order](../tests/reference/evaluation_order.lkj).
 
+`std::convert::{From<T>, Into<T>}` are ordinary source traits. Identity `From<T>`
+and the blanket `Into<U> for T where U: From<T>` retain the exact applied input
+type. Lossless `u8` conversions cover the wider integer types and `f64`.
+`std::ops::{Shl<Rhs>, Shr<Rhs>, Div<Rhs>, AddAssign}` provide source contracts for
+`<<`, `>>`, `/`, and `+=`. Generic bodies must establish the canonical library
+trait and its exact RHS and output types even when unused. A same-spelled local
+trait or inherent method cannot grant the operator. Primitive operations keep
+their checked scalar lowering; admitted source operators become ordinary checked
+calls. A generic definition's trait recipe survives specialization even if
+unrelated type arguments happen to be equal in one instance.
+
+Binary operator calls evaluate their left operand before the right operand.
+Source-trait compound assignment evaluates the destination expression before
+the RHS and retains its ordinary exclusive receiver borrow, including when a
+generic body later specializes to a primitive type. The independent checker
+still verifies the call, moves, borrows, and destruction. Operator query edges
+name the canonical trait method at the punctuation token; that token is not an
+editable method name. Checked body edits must prove the replacement contract.
+
+The source primitive implementations cover all ten integer types for
+`Shl<usize>`, `Shr<usize>`, same-type `Div`, and same-type `AddAssign`, plus `f64`
+division and addition assignment. This slice admits bare `AddAssign` with its
+standard `Self` RHS. General trait parameter defaults, bare `Div`/`Shl`/`Shr`,
+explicit heterogeneous `AddAssign<Rhs>`, and additional primitive conversion or
+operator trait applications remain located source boundaries. These library
+limits do not restrict the existing primitive shift-count widths.
+[Bit-accumulation case](../tests/conformance/pass/numeric_traits_bits.lkj),
+[evaluation-order case](../tests/conformance/pass/numeric_traits_compound_order.lkj).
+
 ## Statements, control and patterns
 
 Functions, structs, enums, module constants, aliases, generics, trait implementations,

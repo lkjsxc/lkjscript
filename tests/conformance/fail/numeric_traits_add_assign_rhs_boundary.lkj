@@ -1,0 +1,6 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":true}
+use std::ops::AddAssign;
+struct Word { value: i64 }
+impl AddAssign<u8> for Word { fn add_assign(&mut self, rhs: u8) { self.value += rhs as i64; } }
+pub fn probe() -> i64 { let mut value = Word { value: 41 }; value += 1u8; value.value }

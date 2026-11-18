@@ -305,6 +305,32 @@ pub(super) fn typed_member(result: &mut Catalog, files: &[SourceText], program: 
         _ => false,
     }
 }
+
+/// Operator punctuation denotes a checked canonical contract, but is not an
+/// editable spelling of the trait method. Retain the exact token as evidence.
+pub(super) fn operator_member(result: &mut Catalog, files: &[SourceText], program: &a::Program,
+    evidence: &Evidence, expression: usize, owner: &str) {
+    let node = &program.exprs[expression];
+    let (operation, left, right) = match &node.kind {
+        a::Expr::Binary { op, left, right } => (op.as_str(), *left, *right),
+        a::Expr::Assign { op, place, value } => (op.as_str(), *place, *value),
+        _ => return,
+    };
+    let Some(operator) = crate::elaborate::numeric_operators::Operator::parse(operation) else { return; };
+    let Some(MethodTarget::Trait(index)) = evidence.methods.get(&expression) else { return; };
+    let declaration = &program.traits[*index];
+    let target = format!("{}::{}", qualified(&declaration.module, &declaration.name), operator.method_name());
+    if !result.by_identity.contains_key(&target) { return; }
+    let mut span = a::Span { end: node.span.start, ..node.span };
+    let start = program.exprs[left].span.end;
+    let end = program.exprs[right].span.start;
+    for token in &files[node.span.file].tokens {
+        if token.span.start < start { continue; }
+        if token.span.end > end { break; }
+        if token.text == operation { span = a::Span { file: node.span.file, ..token.span }; break; }
+    }
+    record_site(result, files, owner.to_string(), target, span, "operator-contract", true);
+}
 pub(super) fn local_reference(result: &mut Catalog, files: &[SourceText], program: &a::Program,
     bindings: &BTreeMap<usize, String>, functions: &BTreeMap<String, usize>, owner: &str,
     node: &a::ExprNode, name: &str, target: LocalTarget) {

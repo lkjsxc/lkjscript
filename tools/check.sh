@@ -174,6 +174,7 @@ parallel_step 1 trait-method-arguments timeout --kill-after=10s 600s bash tools/
 parallel_step 1 trait-equality-inference timeout --kill-after=10s 600s bash tools/trait-equality-inference-test.sh "$check_binary"
 parallel_step 1 type-defaults timeout --kill-after=10s 600s bash tools/type-defaults-test.sh "$check_binary"
 parallel_step 1 type-defaults-origins timeout --kill-after=10s 600s bash tools/type-defaults-origins-test.sh "$check_binary"
+parallel_step 1 numeric-traits timeout --kill-after=10s 600s bash tools/numeric-traits-test.sh "$check_binary"
 parallel_step 1 type-identity timeout --kill-after=10s 600s bash tools/type-identity-test.sh "$check_binary"
 parallel_step 1 history-replay timeout --kill-after=10s 600s bash tools/replay-test.sh "$check_binary"
 parallel_step 1 profiler timeout --kill-after=10s 600s sh tools/profile-test.sh "$check_binary"

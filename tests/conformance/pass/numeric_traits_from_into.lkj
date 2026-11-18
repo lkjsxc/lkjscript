@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {}
+struct Owned { text: String }
+impl From<String> for Owned { fn from(text: String) -> Self { Self { text } } }
+fn convert<T, U: From<T>>(value: T) -> U { value.into() }
+fn identity<T>(value: T) -> T { value.into() }
+pub fn probe() -> i64 {
+    let owned: Owned = convert("forty-two".to_string());
+    let text: String = identity(owned.text);
+    assert_eq!(text, "forty-two".to_string());
+    let byte: u8 = identity(42u8);
+    let wide: u64 = convert(byte);
+    let float: f64 = byte.into();
+    assert_eq!(float, 42.0);
+    wide as i64
+}

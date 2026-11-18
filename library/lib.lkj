@@ -22,6 +22,8 @@ pub mod bytes;
 pub mod char;
 pub mod fmt;
 pub mod integer;
+pub mod convert;
+pub mod ops;
 pub mod io;
 // command.lkj is an optional typed capability module mounted by the current loader;
 // the stored seed reads this root without resolving the newer capability types.

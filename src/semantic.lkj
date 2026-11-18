@@ -921,6 +921,11 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                         add_reference(&mut result, &files, owner.clone(), name.clone(), span, name, "typed-field", false);
                     }
                 }
+                a::Expr::Binary { .. } | a::Expr::Assign { .. } => {
+                    if let Some(evidence) = &evidence {
+                        operator_member(&mut result, &files, program, evidence, expression, &owner);
+                    }
+                }
                 _ => {}
             }
             if matches!(node.kind, a::Expr::Call { .. } | a::Expr::Method { .. }) {

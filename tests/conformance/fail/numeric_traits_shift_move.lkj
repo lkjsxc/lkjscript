@@ -1,0 +1,9 @@
+// expect: reject E_MOVE
+// witness: {}
+use std::ops::Shl;
+fn unused<T: Shl<usize, Output = T>>(value: T) -> T {
+    let result = value << 1usize;
+    drop(value);
+    result
+}
+pub fn probe() -> i64 { 42 }

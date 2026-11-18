@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {}
+struct Word { value: i64 }
+impl Word { fn shl(self, rhs: usize) -> Self { Self { value: self.value << rhs } } }
+pub fn probe() -> i64 { (Word { value: 21 } << 1usize).value }

@@ -21,6 +21,7 @@ mod inference;
 pub mod incremental;
 mod integers;
 mod methods;
+pub(crate) mod numeric_operators;
 mod operators;
 mod opaque;
 mod const_arguments;
@@ -2958,6 +2959,9 @@ impl Builder<'_, '_> {
                 Ok((dst, ty))
             }
             a::Expr::Binary { op, left, right } => {
+                if let Some(operation) = numeric_operators::Operator::parse(&op) {
+                    if let Some(value) = self.numeric_operator(id, operation, left, right, node.span)? { return Ok(value); }
+                }
                 if op == "<<" || op == ">>" {
                     return self.shift_expr(&op, left, right, expected, node.span);
                 }
@@ -3001,6 +3005,9 @@ impl Builder<'_, '_> {
                 Ok((dst, ty))
             }
             a::Expr::Assign { op, place, value } => {
+                if let Some(operation) = numeric_operators::Operator::parse(&op) {
+                    if let Some(value) = self.numeric_operator(id, operation, place, value, node.span)? { return Ok(value); }
+                }
                 self.assignment_expr(&op, place, value, node.span)
             }
             a::Expr::Cast { value, ty } => {
