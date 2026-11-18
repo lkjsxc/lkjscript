@@ -47,8 +47,11 @@ The source primitive implementations cover all ten integer types for
 division and addition assignment. This slice admits bare `AddAssign` with its
 standard `Self` RHS. General trait parameter defaults, bare `Div`/`Shl`/`Shr`,
 explicit heterogeneous `AddAssign<Rhs>`, and additional primitive conversion or
-operator trait applications remain located source boundaries. These library
-limits do not restrict the existing primitive shift-count widths.
+operator trait applications remain located source boundaries. Reference-bearing
+operator trait arguments also require a source region recipe and are explicitly
+refused until that proof is available; their identity cannot be reconstructed
+from erased reference types. Primitive shared-reference forwarding and the
+existing primitive shift-count widths retain their ordinary scalar semantics.
 [Bit-accumulation case](../tests/conformance/pass/numeric_traits_bits.lkj),
 [evaluation-order case](../tests/conformance/pass/numeric_traits_compound_order.lkj).
 

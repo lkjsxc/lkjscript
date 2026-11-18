@@ -35,6 +35,26 @@ pub(super) fn declaration(source: &a::Program, names: &crate::resolve::Resolver<
 }
 
 impl Builder<'_, '_> {
+    fn operator_arguments_have_regions(&self, arguments: &[usize]) -> bool {
+        let mut pending = arguments.to_vec();
+        let mut seen = std::collections::BTreeSet::new();
+        while let Some(ty) = pending.pop() {
+            if !seen.insert(ty) { continue; }
+            if self.compiler.has_view(ty) { return true; }
+            // Nominal parameters retain identity even when their runtime
+            // layout has no fields, as with PhantomData.
+            if let Some((_, arguments)) = self.compiler.applications.get(&ty) {
+                pending.extend_from_slice(arguments);
+            }
+            match self.compiler.types[ty].kind {
+                ir::TypeKind::Vec { inner } | ir::TypeKind::Box { inner }
+                | ir::TypeKind::Array { inner, .. } => pending.push(inner),
+                _ => {}
+            }
+        }
+        false
+    }
+
     fn numeric_scalar(&self, ty: usize) -> bool {
         matches!(self.compiler.types[ty].kind,
             ir::TypeKind::Bool | ir::TypeKind::Char | ir::TypeKind::Int { .. } | ir::TypeKind::F64)
@@ -84,6 +104,10 @@ impl Builder<'_, '_> {
             let right = right_type.ok_or_else(|| err(span, "E_TYPE", "operator right operand needs a type annotation"))?;
             TraitIdentity::application(owner, vec![right])
         };
+        if self.operator_arguments_have_regions(&identity.arguments()) {
+            return Err(err(span, "E_UNSUPPORTED",
+                "reference-bearing operator trait arguments require a source region recipe"));
+        }
         if identity.declaration() != Some(owner) {
             return Err(err(span, "E_GENERIC", "operator witness names a different source-library trait"));
         }
