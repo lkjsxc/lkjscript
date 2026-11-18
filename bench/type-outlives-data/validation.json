@@ -7,7 +7,7 @@
       },
       "status" : "passed"
    },
-   "checked_ir" : "Relative to published operational-macro commit 5fe0ba9e4b48fa4017753aefb3c8eb705ae737dd, all source forms lower through existing checked types and calls; no independent-checker, interpreter, backend or runtime changes.",
+   "checked_ir" : "Relative to corrected operational-macro publication d6401d43812c224ceb03d9775057386375444d0e, all source forms lower through existing checked types and calls; no independent-checker, interpreter, backend or runtime changes.",
    "compiler_sha256" : "a2d0d8581c73ceb937addb5ea986ba708fa06c2505161d8745353cf123a9bc8f",
    "focused" : {
       "cases" : 31,
@@ -53,15 +53,39 @@
       }
    },
    "full_gate" : {
-      "status" : "pending"
+      "finished_at_utc" : "2026-11-18T14:53:05Z",
+      "fresh_case_requests" : 6575,
+      "ir_findings" : 0,
+      "ir_mutants" : 128,
+      "receipt" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-outlives-temporaryfiles-final/full-gate.log",
+         "sha256" : "d19951eed8d05324762f189731b54942ed5d49986633c8d3ecf6830e62242e9d"
+      },
+      "reused_case_requests" : 0,
+      "seconds" : 1416.187,
+      "started_at_utc" : "2026-11-18T14:29:29Z",
+      "status" : "passed"
    },
    "nom_own_tests_run_under_lkjscript" : 0,
    "notes" : [
       "This combined preflight includes the published TemporaryFiles/Unix/TcpPort runtime, corrected GAT inference, Debug and operational macros with transactional diagnostic recovery.",
       "Source integration retains the macro-generated-reference guard and adds exact type-outlives bound references after that guard.",
-      "The earlier private type-outlives preflight and its separate 210-case regression proof remain retained; only the exact combined producer is used for publication."
+      "The earlier private type-outlives preflight and its separate 210-case regression proof remain retained; only the exact combined producer is used for publication.",
+      "The current parent imports the explicit promoted-macro witness path and reviewed CI identity repair. Its compiler, seed and census bytes are identical to 5fe0ba9e4; the retained focused preflight and twelve observations use the exact a2d0d858 producer in this candidate."
    ],
-   "regressions" : [],
+   "regressions" : [
+      {
+         "compiler_byte_identity" : "exact",
+         "name" : "Complete local Rust witness",
+         "receipt" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-outlives-temporaryfiles-final/full-local-witness.log",
+            "sha256" : "f9a0b627920c81010b6ad05cef3dc890f24ff674914140c07980a845ad96838c"
+         },
+         "rust_values_or_output" : 499,
+         "rust_verdicts" : 652,
+         "status" : "passed"
+      }
+   ],
    "seed_gzip_sha256" : "9327f64a3c9a5c37146ca6c91a6926a8707d9fef3d9fd67398125909f4b5f612",
    "source_commands" : {
       "lifetime_outlives" : {
@@ -76,6 +100,14 @@
    },
    "stage" : "type_outlives_where",
    "standalone_real_programs" : {
-      "status" : "pending"
+      "finished_at_utc" : "2026-11-18T14:53:09Z",
+      "levenshtein_tests_per_engine" : 8,
+      "native_corpus_rows" : 7239,
+      "provenance_controls" : 18,
+      "receipt" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-outlives-temporaryfiles-final/standalone-real-programs.log",
+         "sha256" : "bfe050316ba1664049ab530cb4ea400a72ef27a18a88620f0f19e8efe78c69bf"
+      },
+      "status" : "passed"
    }
 }
