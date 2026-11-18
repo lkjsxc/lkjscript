@@ -58,7 +58,7 @@ The complete local Rust witness passes 499 values/output cases and 652 verdicts,
 including exact compiler byte identity and all registered runtime, macro and
 original Levenshtein proofs. Both reviewed CI harness corrections are retained.
 
-The refreshed-seed four-worker full gate and separate real-program regression are pending; the focused proofs and fresh source census are complete.
+The refreshed-seed four-worker [full gate](type-outlives-data/full-gate.log) passes in 1416.187 seconds with 6575 fresh case requests, zero reuse and 128 IR mutants with zero findings. The separate [real-program regression](type-outlives-data/standalone-real-programs.log) passes eight original Levenshtein tests per engine, eighteen provenance controls and all 7,239 native corpus rows. Producer and seed hashes remain unchanged.
 
 Twelve fresh unchanged-source observations give nom 49->47, DOM 39->39 and Sozu 968->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
 No original large root or nom own test admits. The

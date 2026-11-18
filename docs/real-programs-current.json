@@ -10948,7 +10948,7 @@
          }
       }
    },
-   "stage" : "type_outlives_where_candidate",
+   "stage" : "type_outlives_where_gated",
    "validation" : {
       "admitted_projected_roots" : 0,
       "bootstrap" : {
@@ -11005,7 +11005,18 @@
          }
       },
       "full_gate" : {
-         "status" : "pending"
+         "finished_at_utc" : "2026-11-18T14:53:05Z",
+         "fresh_case_requests" : 6575,
+         "ir_findings" : 0,
+         "ir_mutants" : 128,
+         "receipt" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-outlives-temporaryfiles-final/full-gate.log",
+            "sha256" : "d19951eed8d05324762f189731b54942ed5d49986633c8d3ecf6830e62242e9d"
+         },
+         "reused_case_requests" : 0,
+         "seconds" : 1416.187,
+         "started_at_utc" : "2026-11-18T14:29:29Z",
+         "status" : "passed"
       },
       "nom_own_tests_run_under_lkjscript" : 0,
       "notes" : [
@@ -11043,7 +11054,15 @@
       },
       "stage" : "type_outlives_where",
       "standalone_real_programs" : {
-         "status" : "pending"
+         "finished_at_utc" : "2026-11-18T14:53:09Z",
+         "levenshtein_tests_per_engine" : 8,
+         "native_corpus_rows" : 7239,
+         "provenance_controls" : 18,
+         "receipt" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-outlives-temporaryfiles-final/standalone-real-programs.log",
+            "sha256" : "bfe050316ba1664049ab530cb4ea400a72ef27a18a88620f0f19e8efe78c69bf"
+         },
+         "status" : "passed"
       }
    }
 }
