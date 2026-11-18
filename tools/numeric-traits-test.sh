@@ -101,7 +101,9 @@ if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/reje
     printf 'operator punctuation was treated as an editable trait-method name\n' >&2
     exit 1
 fi
-grep -q 'OPERATOR_REFERENCE' "$fixture/error"
+## The generated functions depend on this exact protocol member. The existing
+# generated-reference guard runs before the standard-trait rename guard.
+grep -q 'E_EDIT_GENERATED_REFERENCE' "$fixture/error"
 cmp "$fixture/before" "$fixture/project/main.lkj"
 cat > "$fixture/request" <<'REQUEST'
 {"version":1,"operations":[{"op":"rename","id":"Word","name":"Number"}]}
@@ -128,4 +130,4 @@ fi
 grep -q 'E_TRAIT' "$fixture/error"
 cmp "$fixture/before" "$fixture/project/main.lkj"
 value 84
-printf 'ok numeric traits: exact authored/generated operator dependencies, generated edit refusal, noneditable protocol punctuation, nominal rename, body edits and atomic wrong-contract refusal on both engines\n'
+printf 'ok numeric traits: exact authored/generated operator dependencies, generated item/protocol edit refusal, nominal rename, body edits and atomic wrong-contract refusal on both engines\n'
