@@ -1,0 +1,8 @@
+// expect: reject E_TYPE
+// witness: {}
+trait First<I> { fn choose(&self, value: I) -> I; }
+trait Second<I> { fn choose(&self, value: I) -> I; }
+struct Both {}
+impl<I> First<I> for Both { fn choose(&self, value: I) -> I { value } }
+impl<I> Second<I> for Both { fn choose(&self, value: I) -> I { value } }
+pub fn probe() -> i64 { Both {}.choose(42i64) }

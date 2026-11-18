@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+trait Pick<T> { type Item; fn pick(self, value: T) -> Self::Item; }
+struct Identity {}
+impl<T: Copy> Pick<T> for Identity { type Item = T; fn pick(self, value: T) -> T { value } }
+fn route<T: Copy, P: Pick<T, Item = T>>(parser: P, value: T) -> T { parser.pick(value) }
+pub fn probe() -> i64 { route(Identity {}, 21i64) + <Identity as Pick<i64>>::pick(Identity {}, 21) }

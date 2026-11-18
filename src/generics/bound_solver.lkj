@@ -20,7 +20,7 @@ pub(crate) enum BoundStep {
     Validate {
         goal: Goal,
         witness: ImplementationWitness,
-        constraints: Vec<(TypeId, usize)>,
+        constraints: Vec<(TypeId, usize, Option<BTreeMap<String, usize>>)>,
     },
 }
 

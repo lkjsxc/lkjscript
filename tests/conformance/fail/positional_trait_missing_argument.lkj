@@ -1,0 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Read<T> {}
+fn unused<P: Read>() {}
+pub fn probe() -> i64 { 42 }

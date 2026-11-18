@@ -1,0 +1,8 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Parser<I> { fn parse(&mut self, input: I) -> i64; }
+struct Number {}
+impl Parser<usize> for Number { fn parse(&mut self, input: usize) -> i64 { input as i64 } }
+trait Pair<I> { fn parse_pair(&mut self, input: I) -> i64; }
+impl<I, P: Parser<I>> Pair<I> for (P,) { fn parse_pair(&mut self, input: I) -> i64 { self.0.parse(input) } }
+pub fn probe() -> i64 { let mut pair = (Number {},); pair.parse_pair(true) }

@@ -1,10 +1,9 @@
-//! Declared bare-trait proofs for symbolic implementation signatures.
+//! Argument-aware trait proofs for symbolic implementation signatures.
 //!
 //! Implementation parameters are flexible patterns; the caller's parameters
 //! remain rigid. Every selected implementation's bounds are proved in turn.
-//! Parameterized bounds still require a declared assumption, matching the
-//! existing concrete bare-bound solver's contract. Thus recursive prerequisites
-//! inspect existing type subterms rather than manufacturing expanding goals.
+//! The complete applied trait is matched together with its receiver. Declaration
+//! parameters and implementation parameters have independent environments.
 use super::*;
 
 type Goal = (usize, usize);
@@ -133,7 +132,7 @@ fn prerequisites(
         }
     }
     let declaration = match &terms[selected_bound] {
-        Term::DeclaredTrait(declaration, args) if args.is_empty() => *declaration,
+        Term::DeclaredTrait(declaration, _) => *declaration,
         _ => return Ok(None),
     };
     let Some(candidates) = index.by_trait.get(&TraitIdentity::Declared(declaration)) else {
@@ -262,13 +261,14 @@ fn prerequisites(
             && !implementation_projection_terms(source, implementation, declaration, &mut environment, terms)? {
             continue;
         }
+        let mut declared = implemented_trait_environment(source, declaration, selected_bound, ty, &environment, terms);
+        parameter_projection_terms(source, &source.traits[declaration].generics, &mut declared, terms);
         if let Some((member, expected)) = &equality {
-            let definition = implementation.associated.iter().find(|item| item.name == *member)
-                .and_then(|item| item.value)
-                .or_else(|| source.traits[declaration].associated.iter()
-                    .find(|item| item.name == *member).and_then(|item| item.value));
+            let supplied = implementation.associated.iter().find(|item| item.name == *member).and_then(|item| item.value);
+            let definition = supplied.or_else(|| source.traits[declaration].associated.iter()
+                .find(|item| item.name == *member).and_then(|item| item.value));
             let Some(definition) = definition else { continue; };
-            let actual = signature_type(source, definition, &environment, terms)?;
+            let actual = signature_type(source, definition, if supplied.is_some() { &environment } else { &declared }, terms)?;
             if !equivalent(terms, actual, *expected) { continue; }
         }
         let mut children = Vec::new();
@@ -292,7 +292,7 @@ fn prerequisites(
         for constraint in &source.traits[declaration].bounds {
             children.push((
                 ty,
-                signature_type(source, *constraint, &environment, terms)?,
+                signature_type(source, *constraint, &declared, terms)?,
             ));
         }
         for predicate in &implementation.predicates {
@@ -302,9 +302,18 @@ fn prerequisites(
             }
         }
         for predicate in &source.traits[declaration].predicates {
-            let receiver = signature_type(source, predicate.target, &environment, terms)?;
+            let receiver = signature_type(source, predicate.target, &declared, terms)?;
             for bound in &predicate.bounds {
-                children.push((receiver, signature_type(source, *bound, &environment, terms)?));
+                children.push((receiver, signature_type(source, *bound, &declared, terms)?));
+            }
+        }
+        for parameter in &source.traits[declaration].generics {
+            let Some(value) = declared.get(&parameter.name).copied() else { continue; };
+            if parameter_requires_sized(source, parameter) {
+                let sized = push(terms, Term::Named("Sized".to_string(), Vec::new())); children.push((value, sized));
+            }
+            for bound in &parameter.bounds {
+                if !source.relaxed_bounds.contains(bound) { children.push((value, signature_type(source, *bound, &declared, terms)?)); }
             }
         }
         if let Some((member, bound)) = projection {
@@ -324,12 +333,12 @@ fn prerequisites(
 fn concrete_projection(terms: &[Term], ty: usize) -> Option<(Goal, String)> {
     let Term::Named(name, children) = &terms[ty] else { return None; };
     if !name.starts_with("$projection:") || children.len() != 2 { return None; }
-    if !matches!(&terms[children[1]], Term::DeclaredTrait(_, arguments) if arguments.is_empty()) {
+    if !matches!(&terms[children[1]], Term::DeclaredTrait(_, _)) {
         return None;
     }
     let receiver = children[0];
     let owner = children[1];
-    let mut pending = vec![receiver];
+    let mut pending = vec![receiver, owner];
     while let Some(ty) = pending.pop() {
         match &terms[ty] {
             Term::Unknown | Term::Variable(_) | Term::ConstantVariable(_) => return None,
@@ -342,6 +351,32 @@ fn concrete_projection(terms: &[Term], ty: usize) -> Option<(Goal, String)> {
         }
     }
     Some(((receiver, owner), name["$projection:".len()..].to_string()))
+}
+
+fn term_contains(terms: &[Term], outer: usize, inner: usize) -> bool {
+    let mut pending = vec![outer];
+    let mut seen = BTreeSet::new();
+    while let Some(value) = pending.pop() {
+        if equivalent(terms, value, inner) { return true; }
+        if !seen.insert(value) { continue; }
+        match &terms[value] {
+            Term::Named(_, children) | Term::DeclaredTrait(_, children) => pending.extend_from_slice(children),
+            _ => {}
+        }
+    }
+    false
+}
+
+fn expanding_goal(terms: &[Term], goal: Goal, previous: Goal) -> bool {
+    let (Term::DeclaredTrait(owner, arguments), Term::DeclaredTrait(earlier_owner, earlier)) =
+        (&terms[goal.1], &terms[previous.1]) else { return false; };
+    if owner != earlier_owner || arguments.len() != earlier.len() || !term_contains(terms, goal.0, previous.0) { return false; }
+    let mut larger = !equivalent(terms, goal.0, previous.0);
+    for position in 0..arguments.len() {
+        if !term_contains(terms, arguments[position], earlier[position]) { return false; }
+        larger = larger || !equivalent(terms, arguments[position], earlier[position]);
+    }
+    larger
 }
 
 pub(super) fn prove(
@@ -386,6 +421,13 @@ pub(super) fn prove(
         if sized_bounds::symbolic_goal(source, terms, goal.0, goal.1, known) || symbolic_bound(terms, goal.0, goal.1, known) {
             state.insert(goal, 2);
             continue;
+        }
+        let mut expanding = false;
+        for (previous, status) in &state {
+            if *status == 0u8 && expanding_goal(terms, goal, *previous) { expanding = true; break; }
+        }
+        if expanding {
+            state.insert(goal, 1); continue;
         }
         // A concrete projection may belong to a different trait than the
         // implementation whose signature is being checked. Select that exact

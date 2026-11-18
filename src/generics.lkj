@@ -106,12 +106,6 @@ fn type_term(
                 continue;
             }
             if let Type::Path(p) = &source.types[ty].kind {
-                if let Some(key) = self_projection_key(source, p) {
-                    if let Some(value) = env.get(&key) {
-                        done.insert(ty, *value);
-                        continue;
-                    }
-                }
                 if p.qualification.is_none() && p.declaration.is_none() && p.args.is_empty() && p.bindings.is_empty() {
                     if let Some(value) = env.get(&p.name) {
                         done.insert(ty, *value);
@@ -141,9 +135,12 @@ fn type_term(
                 if path.args.is_empty() && equivalent(terms, values[0], *self_ty) {
                     if let Some(owner) = qualified_trait_index(source, qualification) {
                         let key = format!("$self-projection:{owner}:{}", path.name);
-                        if let Some(value) = env.get(&key) {
-                            done.insert(ty, *value);
-                            continue;
+                        let selected = env.get(&format!("$self-trait:{owner}"));
+                        if selected.is_some_and(|selected| values.len() >= 2usize && equivalent(terms, values[1], *selected)) {
+                            if let Some(value) = env.get(&key) {
+                                done.insert(ty, *value);
+                                continue;
+                            }
                         }
                     }
                 }
@@ -161,10 +158,14 @@ fn type_term(
                         TraitIdentity::Declared(index) => Term::DeclaredTrait(index, args),
                         _ => Term::Named(p.name.clone(), args),
                     };
-                    let mut constraints = vec![push(terms, base)];
+                    let base = push(terms, base);
+                    let mut constraints = vec![base];
                     for (index, binding) in p.bindings.iter().enumerate() {
-                        let owner = associated_binding_owner(source, p, binding).unwrap_or(source.traits.len());
-                        let trait_term = push(terms, Term::DeclaredTrait(owner, Vec::new()));
+                        let self_ty = env.get(&"$bound-self".to_string()).copied()
+                            .or_else(|| env.get(&"Self".to_string()).copied())
+                            .unwrap_or_else(|| push(terms, Term::Unknown));
+                        let trait_term = member_owner_term(source, base, self_ty, &binding.name, terms)
+                            .unwrap_or_else(|| push(terms, Term::Unknown));
                         let member = push(terms, Term::Named(format!("$associated-member:{}", binding.name), Vec::new()));
                         constraints.push(push(terms, Term::Named("$associated-equality".to_string(),
                             vec![trait_term, member, values[p.args.len() + index]])));
@@ -198,6 +199,37 @@ fn type_term(
     *done.get(&id).unwrap()
 }
 
+fn plain_trait_term(terms: &[Term], bound: usize) -> usize {
+    if let Term::Named(name, children) = &terms[bound] {
+        if name == "$associated-bound" && !children.is_empty() { return children[0]; }
+    }
+    bound
+}
+
+fn member_owner_term(source: &Program, first: usize, receiver: usize, member: &str,
+    terms: &mut Vec<Term>) -> Option<usize> {
+    let mut pending = vec![first];
+    let mut seen: Vec<usize> = Vec::new();
+    let mut selected = None;
+    while let Some(bound) = pending.pop() {
+        let bound = plain_trait_term(terms, bound);
+        if seen.iter().any(|previous| equivalent(terms, *previous, bound)) { continue; }
+        seen.push(bound);
+        let Term::DeclaredTrait(index, arguments) = terms[bound].clone() else { continue; };
+        let declaration = &source.traits[index];
+        if declaration.generics.len() != arguments.len() { continue; }
+        if declaration.associated.iter().any(|item| item.name == member) {
+            if selected.is_some() { return None; }
+            selected = Some(bound);
+        }
+        let mut environment = BTreeMap::new();
+        environment.insert("Self".to_string(), receiver);
+        for position in 0..arguments.len() { environment.insert(declaration.generics[position].name.clone(), arguments[position]); }
+        for parent in &declaration.bounds { pending.push(type_term(source, *parent, &environment, terms)); }
+    }
+    selected
+}
+
 // Shorthand T::Item and <T as Trait>::Item have one symbolic identity when the
 // parameter has exactly one declared owner for that member. Ambiguous members
 // remain unresolved; spelling never chooses between unrelated trait contracts.
@@ -211,26 +243,33 @@ fn parameter_projection_terms(
         if parameter.lifetime { continue; }
         let receiver = match env.get(&parameter.name) { Some(receiver) => Some(*receiver), None => None };
         let Some(receiver) = receiver else { continue; };
-        let mut pending = parameter.bounds.clone();
-        let mut seen = BTreeSet::new();
+        let mut pending = Vec::new();
+        for bound in &parameter.bounds { pending.push(type_term(source, *bound, env, terms)); }
+        let mut seen: Vec<usize> = Vec::new();
         let mut owners: BTreeMap<String, Option<usize>> = BTreeMap::new();
         while let Some(bound) = pending.pop() {
-            let Type::Path(path) = &source.types[bound].kind else { continue; };
-            if !path.args.is_empty() { continue; }
-            let TraitIdentity::Declared(index) = bound_identity(source, path) else { continue; };
-            if !seen.insert(index) { continue; }
+            let bound = plain_trait_term(terms, bound);
+            if seen.iter().any(|previous| equivalent(terms, *previous, bound)) { continue; }
+            seen.push(bound);
+            let Term::DeclaredTrait(index, arguments) = terms[bound].clone() else { continue; };
             let declaration = &source.traits[index];
-            for parent in &declaration.bounds { pending.push(*parent); }
+            if declaration.generics.len() != arguments.len() { continue; }
+            let mut declared = BTreeMap::new();
+            declared.insert("Self".to_string(), receiver);
+            for position in 0..arguments.len() { declared.insert(declaration.generics[position].name.clone(), arguments[position]); }
+            for parent in &declaration.bounds { pending.push(type_term(source, *parent, &declared, terms)); }
             for member in &declaration.associated {
-                if owners.contains_key(&member.name) { owners.insert(member.name.clone(), None); }
-                else { owners.insert(member.name.clone(), Some(index)); }
+                let previous = owners.get(&member.name).copied();
+                if let Some(previous) = previous {
+                    let different = previous.is_none_or(|previous: usize| !equivalent(terms, previous, bound));
+                    if different { owners.insert(member.name.clone(), None); }
+                } else { owners.insert(member.name.clone(), Some(bound)); }
             }
         }
         for (member, owner) in owners {
             let key = format!("{}::{member}", parameter.name);
             if let Some(owner) = owner {
-                let bound = push(terms, Term::DeclaredTrait(owner, Vec::new()));
-                let projection = push(terms, Term::Named(projection_name(&member), vec![receiver, bound]));
+                let projection = push(terms, Term::Named(projection_name(&member), vec![receiver, owner]));
                 env.insert(key, projection);
             } else {
                 env.remove(&key);
@@ -1197,12 +1236,86 @@ fn finite(source: &Program) -> Result<(), Diagnostic> {
     }
     Ok(())
 }
+pub(crate) fn trait_argument_regions(source: &Program, first: TypeId) -> (bool, bool) {
+    let mut pending = vec![first];
+    let mut seen = BTreeSet::new();
+    let mut projection = false;
+    while let Some(ty) = pending.pop() {
+        if !seen.insert(ty) { continue; }
+        match &source.types[ty].kind {
+            Type::Ref { .. } => return (true, projection),
+            Type::Path(path) => {
+                if path.name.starts_with('\'') { return (true, projection); }
+                projection = projection || path.qualification.is_some()
+                    || (path.declaration.is_none() && path.name.contains("::"));
+                if let Some(declaration) = path.declaration {
+                    match source.declarations[declaration].item {
+                        Item::Alias(index) => {
+                            let alias = &source.aliases[index];
+                            if alias.generics.iter().any(|parameter| parameter.lifetime) { return (true, projection); }
+                            pending.push(alias.ty);
+                        }
+                        Item::Struct(index) => {
+                            if source.structs[index].generics.iter().any(|parameter| parameter.lifetime) { return (true, projection); }
+                        }
+                        Item::Enum(index) => {
+                            if source.enums[index].generics.iter().any(|parameter| parameter.lifetime) { return (true, projection); }
+                        }
+                        _ => {}
+                    }
+                }
+            }
+            _ => {}
+        }
+        pending.extend_from_slice(&type_children(source, ty));
+    }
+    (false, projection)
+}
+
+fn trait_applications(source: &Program) -> Result<(), Diagnostic> {
+    for node in &source.types {
+        if let Type::Path(path) = &node.kind {
+            if bound_identity(source, path).declaration().is_some() {
+                for argument in &path.args {
+                    if trait_argument_regions(source, *argument).0 {
+                        return Err(Diagnostic::new(source.types[*argument].span, "E_UNSUPPORTED",
+                            "lifetime-bearing positional trait arguments require region-aware witness identity"));
+                    }
+                }
+            }
+        }
+    }
+    let mut edges = Vec::new();
+    for (index, declaration) in source.traits.iter().enumerate() {
+        for parameter in &declaration.generics {
+            if parameter.lifetime || parameter.constant {
+                return Err(Diagnostic::new(parameter.span, "E_UNSUPPORTED", "trait lifetime and const arguments require a separate source contract"));
+            }
+        }
+        for bound in &declaration.bounds {
+            if let Type::Path(path) = &source.types[*bound].kind {
+                if let TraitIdentity::Declared(parent) = bound_identity(source, path) {
+                    edges.push(Edge { from: index, to: parent, expanding: false, unknown: false, span: source.types[*bound].span });
+                }
+            }
+        }
+    }
+    let groups = components(source.traits.len(), &edges);
+    for edge in edges {
+        if groups[edge.from] == groups[edge.to] {
+            return Err(Diagnostic::new(edge.span, "E_TRAIT", "supertrait declarations form a cycle"));
+        }
+    }
+    Ok(())
+}
+
 pub fn validate(source: &Program) -> Result<(), Diagnostic> {
     if !source.resolved {
         // Direct callers use the same recorded identities as compilation.
         return validate(&crate::resolve::resolve(source)?);
     }
     declarations(source)?;
+    trait_applications(source)?;
     const_functions::validate(source)?;
     alias_cycles(source)?;
     crate::generics::const_arguments::validate(source)?;
@@ -1224,11 +1337,10 @@ fn impl_arguments(
     types: &[crate::ir::Type],
     applications: &BTreeMap<usize, (String, Vec<usize>)>,
     implementation: &Impl,
-    actual: usize,
+    mut work: Vec<(TypeId, usize)>,
 ) -> Option<BTreeMap<String, usize>> {
     use crate::ir::TypeKind;
     let mut env = BTreeMap::new();
-    let mut work = vec![(implementation.target, actual)];
     let mut aliases = BTreeMap::new();
     while let Some((pattern, actual)) = work.pop() {
         let actual_type = types.get(actual)?;
@@ -1371,7 +1483,25 @@ fn impl_arguments(
 pub(crate) enum TraitIdentity {
     Builtin(String),
     Declared(usize),
+    Applied(usize, Vec<usize>),
     Unknown(String),
+}
+impl TraitIdentity {
+    pub(crate) fn declaration(&self) -> Option<usize> {
+        match self {
+            Self::Declared(index) | Self::Applied(index, _) => Some(*index),
+            _ => None,
+        }
+    }
+    pub(crate) fn arguments(&self) -> Vec<usize> {
+        match self { Self::Applied(_, arguments) => arguments.clone(), _ => Vec::new() }
+    }
+    pub(crate) fn application(index: usize, arguments: Vec<usize>) -> Self {
+        if arguments.is_empty() { Self::Declared(index) } else { Self::Applied(index, arguments) }
+    }
+    pub(crate) fn head(&self) -> Self {
+        match self { Self::Applied(index, _) => Self::Declared(*index), _ => self.clone() }
+    }
 }
 /// Builtin supertrait contracts shared by assumptions and derive validation.
 pub(crate) fn builtin_parents(name: &str) -> Vec<String> {
@@ -1437,7 +1567,7 @@ struct Requirements {
     structural: bool,
     witness: Option<ImplementationWitness>,
     infer: bool,
-    parameterized: Vec<(TypeId, usize)>,
+    parameterized: Vec<(TypeId, usize, Option<BTreeMap<String, usize>>)>,
     where_predicates: bool,
 }
 impl Requirements {
@@ -1643,7 +1773,7 @@ impl ImplementationIndex {
         ty: usize,
         bound: &TraitIdentity,
     ) -> Vec<usize> {
-        match self.by_trait.get(bound) {
+        match self.by_trait.get(&bound.head()) {
             Some(candidates) => candidates.matching(Self::receiver_head(types, applications, ty)),
             None => Vec::new(),
         }
@@ -1748,13 +1878,21 @@ pub(crate) fn select_implementation(
             None => continue,
         };
         let path = match &source.types[trait_type].kind {
-            Type::Path(path) if path.args.is_empty() => path,
+            Type::Path(path) => path,
             _ => continue,
         };
-        if bound_identity(source, path) != *bound {
+        if bound_identity(source, path) != bound.head() {
             continue;
         }
-        if let Some(substitutions) = impl_arguments(source, types, applications, implementation, ty)
+        let arguments = bound.arguments();
+        let mut written: Vec<TypeId> = Vec::new();
+        for argument in &path.args {
+            if !matches!(&source.types[*argument].kind, Type::Path(path) if path.name.starts_with('\'')) { written.push(*argument); }
+        }
+        if written.len() != arguments.len() { continue; }
+        let mut pairs = vec![(implementation.target, ty)];
+        for index in 0..written.len() { pairs.push((written[index], arguments[index])); }
+        if let Some(substitutions) = impl_arguments(source, types, applications, implementation, pairs)
         {
             if selected.is_some() {
                 return None;
@@ -1791,7 +1929,7 @@ fn trait_requirements(
     }
     let bound = match &goal.bound {
         TraitIdentity::Builtin(name) => name.as_str(),
-        TraitIdentity::Declared(_) => "",
+        TraitIdentity::Declared(_) | TraitIdentity::Applied(_, _) => "",
         TraitIdentity::Unknown(_) => return None,
     };
     if bound == "Sized" {
@@ -2024,16 +2162,35 @@ fn trait_requirements(
         }
         for constraint in &param.bounds {
             if !add_bound(source, *constraint, concrete, &mut children) {
-                parameterized.push((*constraint, concrete));
+                parameterized.push((*constraint, concrete, None));
             }
         }
     }
     let mut where_predicates = !implementation.predicates.is_empty();
-    if let TraitIdentity::Declared(index) = goal.bound {
+    if let Some(index) = goal.bound.declaration() {
+        let arguments = goal.bound.arguments();
+        let declaration = &source.traits[index];
+        if declaration.generics.len() != arguments.len() { return None; }
+        let mut declared: BTreeMap<String, usize> = BTreeMap::new();
+        declared.insert("Self".to_string(), goal.ty);
+        for (position, parameter) in declaration.generics.iter().enumerate() {
+            let argument = arguments[position];
+            declared.insert(parameter.name.clone(), argument);
+            if parameter_requires_sized(source, parameter) {
+                children.push(Goal { ty: argument, bound: TraitIdentity::Builtin("Sized".to_string()) });
+            }
+        }
+        for (position, parameter) in declaration.generics.iter().enumerate() {
+            for constraint in &parameter.bounds {
+                if !add_bound(source, *constraint, arguments[position], &mut children) {
+                    parameterized.push((*constraint, arguments[position], Some(declared.clone())));
+                }
+            }
+        }
         where_predicates = where_predicates || !source.traits[index].predicates.is_empty();
         for constraint in &source.traits[index].bounds {
             if !add_bound(source, *constraint, goal.ty, &mut children) {
-                parameterized.push((*constraint, goal.ty));
+                parameterized.push((*constraint, goal.ty, Some(declared.clone())));
             }
         }
     }
@@ -2364,7 +2521,9 @@ fn known_bounds(
         }
         for b in &p.bounds {
             if source.relaxed_bounds.contains(b) { continue; }
-            let bound = signature_type(source, *b, env, terms)?;
+            let mut bound_env = env.clone();
+            bound_env.insert("$bound-self".to_string(), ty);
+            let bound = signature_type(source, *b, &bound_env, terms)?;
             for parent in bound_closure(source, bound, ty, terms)? {
                 known.push((ty, parent));
             }
@@ -2383,7 +2542,9 @@ fn where_bounds(
     for predicate in predicates {
         let receiver = signature_type(source, predicate.target, env, terms)?;
         for bound in &predicate.bounds {
-            let bound = signature_type(source, *bound, env, terms)?;
+            let mut bound_env = env.clone();
+            bound_env.insert("$bound-self".to_string(), receiver);
+            let bound = signature_type(source, *bound, &bound_env, terms)?;
             for inherited in bound_closure(source, bound, receiver, terms)? {
                 known.push((receiver, inherited));
             }
@@ -2521,12 +2682,17 @@ fn symbolic_bound(
     }
     true
 }
-fn associated_dependencies(source: &Program, ty: TypeId, env: &BTreeMap<String, usize>) -> bool {
+fn associated_dependencies(source: &Program, ty: TypeId, env: &BTreeMap<String, usize>, terms: &mut Vec<Term>) -> bool {
     let mut work = vec![ty];
     while let Some(t) = work.pop() {
         if let Type::Path(path) = &source.types[t].kind {
             if let Some(key) = self_projection_key(source, path) {
-                if !env.contains_key(&key) { return false; }
+                let qualification = path.qualification.as_ref().unwrap();
+                let owner = qualified_trait_index(source, qualification).unwrap();
+                if let Some(selected) = env.get(&format!("$self-trait:{owner}")) {
+                    let bound = type_term(source, qualification.trait_ty.unwrap(), env, terms);
+                    if equivalent(terms, bound, *selected) && !env.contains_key(&key) { return false; }
+                }
             }
             if path.name.starts_with("Self::") && !env.contains_key(&path.name) {
                 return false;
@@ -2539,6 +2705,24 @@ fn associated_dependencies(source: &Program, ty: TypeId, env: &BTreeMap<String, 
     true
 }
 
+fn implemented_trait_environment(source: &Program, declaration: usize, bound: usize,
+    receiver: usize, implementation: &BTreeMap<String, usize>, terms: &[Term]) -> BTreeMap<String, usize> {
+    let mut environment = BTreeMap::new();
+    environment.insert("Self".to_string(), receiver);
+    environment.insert(format!("$self-trait:{declaration}"), bound);
+    if let Term::DeclaredTrait(_, arguments) = &terms[bound] {
+        for (parameter, argument) in source.traits[declaration].generics.iter().zip(arguments) {
+            environment.insert(parameter.name.clone(), *argument);
+        }
+    }
+    for member in &source.traits[declaration].associated {
+        for key in vec![format!("Self::{}", member.name), format!("$self-projection:{declaration}:{}", member.name)] {
+            if let Some(value) = implementation.get(&key) { environment.insert(key, *value); }
+        }
+    }
+    environment
+}
+
 fn implementation_projection_terms(
     source: &Program,
     implementation: &Impl,
@@ -2547,24 +2731,29 @@ fn implementation_projection_terms(
     terms: &mut Vec<Term>,
 ) -> Result<bool, Diagnostic> {
     let declaration = &source.traits[trait_index];
-    let mut pending: Vec<(String, TypeId)> = Vec::new();
+    let bound = signature_type(source, implementation.trait_ty.unwrap(), env, terms)?;
+    env.insert(format!("$self-trait:{trait_index}"), bound);
+    let receiver = *env.get(&"Self".to_string()).unwrap();
+    let mut declared = implemented_trait_environment(source, trait_index, bound, receiver, env, terms);
+    parameter_projection_terms(source, &declaration.generics, &mut declared, terms);
+    let mut pending: Vec<(String, TypeId, bool)> = Vec::new();
     for member in &declaration.associated {
-        let value = implementation.associated.iter().find(|item| item.name == member.name)
-            .and_then(|item| item.value).or(member.value);
-        let Some(value) = value else { return Ok(false); };
-        pending.push((member.name.clone(), value));
+        let supplied = implementation.associated.iter().find(|item| item.name == member.name).and_then(|item| item.value);
+        let Some(value) = supplied.or(member.value) else { return Ok(false); };
+        pending.push((member.name.clone(), value, supplied.is_none()));
     }
     while !pending.is_empty() {
         let before = pending.len();
         let mut retry = Vec::new();
-        for (member, source_type) in pending {
-            if !associated_dependencies(source, source_type, env) {
-                retry.push((member, source_type));
-                continue;
+        for (member, source_type, default) in pending {
+            let environment = if default { &declared } else { &*env };
+            if !associated_dependencies(source, source_type, environment, terms) {
+                retry.push((member, source_type, default)); continue;
             }
-            let value = signature_type(source, source_type, env, terms)?;
-            env.insert(format!("Self::{member}"), value);
-            env.insert(format!("$self-projection:{trait_index}:{member}"), value);
+            let value = signature_type(source, source_type, environment, terms)?;
+            for key in vec![format!("Self::{member}"), format!("$self-projection:{trait_index}:{member}")] {
+                env.insert(key.clone(), value); declared.insert(key, value);
+            }
         }
         if retry.len() == before { return Ok(false); }
         pending = retry;
@@ -2607,6 +2796,9 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
             let t = signature_type(source, path.args[i], &actual_env, &mut terms)?;
             expected_env.insert(declaration.generics[i].name.clone(), t);
         }
+        let implemented = signature_type(source, trait_id, &actual_env, &mut terms)?;
+        actual_env.insert(format!("$self-trait:{trait_index}"), implemented);
+        expected_env.insert(format!("$self-trait:{trait_index}"), implemented);
         parameter_projection_terms(source, &declaration.generics, &mut expected_env, &mut terms);
         let mut known = known_bounds(source, &implementation.generics, &actual_env, &mut terms)?;
         for bound in where_bounds(source, &implementation.predicates, &actual_env, &mut terms)? {
@@ -2666,7 +2858,7 @@ fn signatures(source: &Program) -> Result<(), Diagnostic> {
                 }
                 let (name, ty, default) = &associated[i];
                 let env = if *default { &expected_env } else { &actual_env };
-                if !associated_dependencies(source, *ty, env) {
+                if !associated_dependencies(source, *ty, env, &mut terms) {
                     continue;
                 }
                 let value = signature_type(source, *ty, env, &mut terms)?;

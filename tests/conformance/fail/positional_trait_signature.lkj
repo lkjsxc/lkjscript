@@ -1,0 +1,6 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Convert<T> { fn convert(self, input: T) -> T; }
+struct Bad {}
+impl Convert<i64> for Bad { fn convert(self, input: bool) -> i64 { 42 } }
+pub fn probe() -> i64 { 42 }

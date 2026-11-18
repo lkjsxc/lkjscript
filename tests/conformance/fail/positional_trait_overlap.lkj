@@ -1,0 +1,7 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Convert<T> {}
+struct Both {}
+impl<T> Convert<T> for Both {}
+impl Convert<i64> for Both {}
+pub fn probe() -> i64 { 42 }

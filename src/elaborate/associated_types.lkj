@@ -36,7 +36,7 @@ impl Compiler<'_> {
     // Follow type arguments, never a nominal declaration's recursive fields.
     // This distinguishes a decreasing family such as Chain<Chain<T>> -> Chain<T>
     // from an expanding family such as Grow<T> -> Grow<Vec<T>>.
-    fn associated_argument_contains(&self, outer: usize, inner: usize) -> bool {
+    pub(super) fn associated_argument_contains(&self, outer: usize, inner: usize) -> bool {
         let mut pending = vec![outer];
         let mut seen = BTreeSet::<usize>::new();
         while let Some(ty) = pending.pop() {
@@ -128,7 +128,8 @@ impl Compiler<'_> {
             self.associated_queries.active.push(Active { key: key.clone(), arguments,
                 interned: self.type_keys.len() });
         }
-        let result = self.resolve_associated_member(index, value, environment);
+        let default = !implementation.associated.iter().any(|item: &a::AssociatedType| item.name == name);
+        let result = self.resolve_associated_member(index, value, environment, default);
         if outermost { self.associated_queries.active.pop(); }
         if reusable {
             if let Ok(ty) = &result { self.associated_queries.completed.insert(key, *ty); }
@@ -155,7 +156,7 @@ impl Compiler<'_> {
     }
 
     fn resolve_associated_member(
-        &mut self, index: usize, value: a::TypeId, mut environment: BTreeMap<String, usize>,
+        &mut self, index: usize, value: a::TypeId, mut environment: BTreeMap<String, usize>, default: bool,
     ) -> Result<usize> {
         let parameters = self.source.impls[index].generics.clone();
         self.prepare_parameter_associated(&parameters, &mut environment)?;
@@ -187,6 +188,17 @@ impl Compiler<'_> {
                 environment.insert(key, ty);
             }
         }
-        self.resolve(value, &environment)
+        if default {
+            let bound = self.source.impls[index].trait_ty.unwrap();
+            let a::Type::Path(path) = self.source.types[bound].kind.clone() else { unreachable!() };
+            let span = self.source.types[bound].span;
+            let identity = self.trait_identity(&path, &environment, span)?;
+            let receiver = *environment.get(&"Self".to_string()).unwrap();
+            let mut declared = self.trait_environment(receiver, &identity);
+            for (name, value) in &environment {
+                if name.starts_with("Self::") { declared.insert(name.clone(), *value); }
+            }
+            self.resolve(value, &declared)
+        } else { self.resolve(value, &environment) }
     }
 }

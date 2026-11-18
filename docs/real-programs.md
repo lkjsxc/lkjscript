@@ -250,14 +250,49 @@ still under `target/` is a temporary candidate observation, not a durable eviden
 link. Fresh observations additionally require the original/projected trees to pass
 `project.pl --verify`; use `probe.pl --help` for its exact entry and package options.
 
-The sixth note assigns ordinary `impl Trait`, qualified associated paths,
-associated-type equality and the following ranked ordinary forms to Programs.
-Macro tokenization/expansion and Debug formatting remain with the compiler stream.
-Intentional ownership and authority refusals retain their distinct port cost.
-These are observed frontier lower bounds, not all gaps that the complete dependency
-graph will expose.
+#### Current positional-trait frontier
 
-The [current ordinary-form implementation](real-programs-current.json), producer
+The current producer 3d2fc84d…36fda353 adds named positional trait type
+arguments, retaining the complete receiver, trait and argument identity.
+Bounds, supertraits, associated equalities, qualified members and opaque
+results use that same application. Blanket implementations may bind type
+parameters through the applied trait. Unused generic definitions check rigidly
+against declared bounds and implicit or relaxed Sized obligations.
+
+Concrete tuple-parser methods infer nonreceiver implementation parameters from
+input and result context. The exact expression, implementation and method
+retain that solution until their prerequisites are checked again. Inference
+does not create a coercion site: unconstrained direct/nested mutable-reference
+arguments still move. Eleven direct dispatch controls cover the missing
+transfer, ambiguity, wrong input, unused contracts and explicit reborrows.
+
+The focused population passes 41 cases / 82 engine routes; a separate Rust
+witness agrees on 19 values/output cases and 22 verdicts. Applied signatures,
+projections, member/method references, checked rename and atomic rejection of
+invalid body edits pass both source-command suites. The native bootstrap
+reproduces itself byte for byte and the seed is refreshed.
+[Validation](../bench/positional-traits.md) records publication gates.
+
+All twelve fresh unchanged-source observations are byte-identical to the
+preceding frontier. The [current accounting](real-programs-current.json) is
+nom 17, DOM 63, and Sōzu 448 classified plus 34 prior-unclassified sites.
+Nom retains 13 default candidates plus four inactive; DOM retains 56 default
+plus seven test-only. There are no new diagnostic identities in this stage.
+Later barriers still mask the independently verified new trait contracts.
+No original large root or nom own test is admitted by these observations.
+
+Current source-hashed reviews are [nom](real-programs-positional-traits-nom-review.json),
+[DOM](real-programs-positional-traits-dom-review.json) and
+[Sōzu](real-programs-positional-traits-sozu-review.json).
+Raw receipts retain the actual producer and selected library inventory;
+commands retain the original source, projection and library paths.
+GATs, trait const/lifetime arguments and written lifetime-bearing trait
+arguments remain separate boundaries. The latest session also assigns
+operational macros and Debug to Programs after these ordinary trait forms.
+
+#### Earlier lifetime-where frontier
+
+The [preceding lifetime-where implementation](../bench/positional-traits-data/previous-frontier.json), producer
 `59c7df4c…749a0836a`, adds named lifetime-outlives where predicates on free
 functions and inherent methods to the earlier forms, within the
 [language limits](language.md). A predicate such as `where 'long: 'short`
@@ -301,6 +336,7 @@ has run under lkjscript.
 | Const generics | 18 | 64 | 146 | Function/receiver-impl const usize parameters; nominal const parameters and global constant array lengths remain separate |
 | Sized bounds | 15 | 64 | 146 | Named relaxed parameters and existing borrowed representations; owned unsized storage remains separate |
 | Lifetime where predicates | 17 | 63 | 146 | Named free/inherent lifetime edges; two type-outlives where boundaries newly explicit |
+| Positional trait arguments | 17 | 63 | 146 | Exact applied type contracts and input/result inference for concrete tuple methods; later barriers still mask the original roots |
 
 The APIT/RPIT history remains explicit: APIT consumed opaque result syntax
 while other parse errors masked its unsupported-result resolver. Dedicated
@@ -356,7 +392,7 @@ logs, source patch and Rust-hosted repair proof remain in the validation record;
 the canonical proof above is fresh on final native `59c7df4c…`.
 The full four-worker gate passes in 721.195 seconds with 6175 fresh case
 requests and 128 IR mutants, zero findings. The standalone real-programs
-validation also passes. Publication CI is recorded with the landing report. [Proof records](real-programs-current.json)
+validation also passes. Publication CI is recorded with the landing report. [Historical proof records](../bench/positional-traits-data/previous-frontier.json)
 pin completed checks and root-owned validation paths.
 
 The original fifteen foreign reductions retain **six checking and nine
@@ -372,7 +408,7 @@ Its first failed gate and diagnostic-precedence/vector-advice repair remain
 recorded, along with the separate Poll admission. The earlier const-generics
 expectation/argument-placement failure and const-function fingerprint failure
 also retain their repairs and later successful gates. These historical results
-are separate from the current lifetime gate.
+are separate from that lifetime gate.
 
 The tables give **observed unique sites** and physical lines in files containing
 those sites. File coverage overlaps between rows and includes inactive code;

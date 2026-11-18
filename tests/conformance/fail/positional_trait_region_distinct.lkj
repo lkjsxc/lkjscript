@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {}
+trait Takes<T> {}
+fn require<I, P: Takes<I>>() {}
+fn unused<'a, 'b, P: Takes<&'a str>>() { require::<&'b str, P>(); }
+pub fn probe() -> i64 { 42 }

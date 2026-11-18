@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+trait Make<T: Copy> { fn make<U: Copy>(left: T, right: U) -> (T, U) { (left, right) } }
+struct Holder<T> { value: T }
+impl<U: Copy> Make<U> for Holder<U> {}
+fn pair<P: Make<i64>>() -> (i64, bool) { <P as Make<i64>>::make::<bool>(42, true) }
+pub fn probe() -> i64 { let (value, flag) = pair::<Holder<i64>>(); if flag { value } else { 0 } }

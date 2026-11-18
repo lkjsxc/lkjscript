@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+trait Parser<Input> { type Output; fn parse(self, input: Input) -> Self::Output; }
+struct Number {}
+impl Parser<u8> for Number { type Output = i64; fn parse(self, input: u8) -> i64 { input as i64 + 40 } }
+fn invoke<I: Copy, O: Copy, P: Parser<I, Output = O>>(parser: P, input: I) -> O {
+    let output: <P as Parser<I>>::Output = parser.parse(input);
+    output
+}
+pub fn probe() -> i64 { invoke(Number {}, 2u8) }

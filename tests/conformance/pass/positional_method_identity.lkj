@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+trait First<I> { fn first(&self, value: I) -> I; }
+trait Second<I> { fn second(&self, value: I) -> I; }
+struct Both {}
+impl<I: Copy> First<I> for Both { fn first(&self, value: I) -> I { value } }
+impl<I> Second<I> for Both { fn second(&self, value: I) -> I { value } }
+pub fn probe() -> i64 { let both = Both {}; both.first(40i64) + both.second(2i64) }

@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+trait Read<I> { type Output; fn read(self, input: I) -> Self::Output; }
+trait Source { type Item; }
+struct Marker {}
+impl Source for Marker { type Item = i64; }
+struct Identity {}
+impl<I> Read<I> for Identity { type Output = I; fn read(self, input: I) -> I { input } }
+fn first<P: Read<A::Item, Output = A::Item>, A: Source<Item = i64>>(parser: P, input: A::Item) -> A::Item { parser.read(input) }
+fn second<A: Source<Item = i64>, P: Read<A::Item, Output = A::Item>>(parser: P, input: A::Item) -> A::Item { parser.read(input) }
+pub fn probe() -> i64 { first::<Identity, Marker>(Identity {}, 21) + second::<Marker, Identity>(Identity {}, 21) }

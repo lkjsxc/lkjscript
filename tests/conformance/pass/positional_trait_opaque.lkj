@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+trait Read<T> { type Output; fn read(&self, input: T) -> Self::Output; }
+struct Holder<T> { value: T }
+impl<T: Copy> Read<T> for Holder<T> { type Output = T; fn read(&self, input: T) -> T { self.value } }
+fn hold<T: Copy>(value: T) -> impl Read<T, Output = T> { Holder { value } }
+fn use_value<T: Copy>(value: T) -> T { let hidden = hold(value); hidden.read(value) }
+pub fn probe() -> i64 { use_value(42i64) }

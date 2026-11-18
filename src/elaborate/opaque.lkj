@@ -51,6 +51,10 @@ pub(super) fn result_lifetime(source: &a::Program, ty: a::TypeId) -> Option<Stri
 }
 
 impl Compiler<'_> {
+    pub(super) fn opaque_recipe(&self, ty: usize) -> Option<(a::TypeId, Vec<(String, usize)>)> {
+        self.opaque.abstract_types.iter().find(|(_, value)| **value == ty).map(|(key, _)| key.clone())
+    }
+
     fn opaque_key(&self, ty: a::TypeId, substitutions: &BTreeMap<String, usize>) -> Key {
         let mut bindings = Vec::new();
         for name in capture_names(self.source, ty) {

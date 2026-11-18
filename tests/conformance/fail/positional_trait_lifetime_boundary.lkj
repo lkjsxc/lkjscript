@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Borrow<'a> {}
+pub fn probe() -> i64 { 42 }

@@ -25,6 +25,11 @@ impl Infer<'_, '_> {
             if left == right || !seen.insert((left, right)) { continue; }
             match (self.shape(left), self.shape(right)) {
                 (Some(Shape::Atom(left)), Some(Shape::Atom(right))) if left == right => {}
+                (Some(Shape::Projection(ld, lm, lr, la)), Some(Shape::Projection(rd, rm, rr, ra))) => {
+                    if ld != rd || lm != rm || la.len() != ra.len() { return false; }
+                    pending.push((lr, rr));
+                    for index in 0..la.len() { pending.push((la[index], ra[index])); }
+                }
                 (Some(Shape::Never), Some(Shape::Never)) => {}
                 (Some(Shape::Vec(left)), Some(Shape::Vec(right)))
                 | (Some(Shape::Box(left)), Some(Shape::Box(right)))
@@ -58,6 +63,69 @@ impl Infer<'_, '_> {
         }
         self.projection_receivers.push(receiver);
         receiver
+    }
+
+    pub(super) fn same_trait_arguments(&self, left: &[Variable], right: &[Variable]) -> bool {
+        if left.len() != right.len() { return false; }
+        for index in 0..left.len() {
+            if !self.same_projection_receiver(left[index], right[index]) { return false; }
+        }
+        true
+    }
+
+    pub(super) fn projection_key(&self, root: Variable, declaration: a::DeclarationId,
+        arguments: &[Variable], member: &str) -> (a::DeclarationId, Vec<Variable>, String) {
+        for key in self.projections[root].keys() {
+            if key.0 == declaration && key.2 == member && self.same_trait_arguments(&key.1, arguments) {
+                return key.clone();
+            }
+        }
+        (declaration, arguments.to_vec(), member.to_string())
+    }
+
+    pub(super) fn trait_application(&mut self, receiver: Variable, path: &a::Path,
+        environment: &BTreeMap<String, Variable>)
+        -> Result<Option<(a::DeclarationId, Vec<Variable>, BTreeMap<String, Variable>)>> {
+        let Some(declaration) = path.declaration else { return Ok(None); };
+        let a::Item::Trait(owner) = self.source.declarations[declaration].item else { return Ok(None); };
+        let parameters = self.source.traits[owner].generics.clone();
+        if parameters.len() != path.args.len() || parameters.iter().any(|p: &a::GenericParam| p.lifetime || p.constant) {
+            return Ok(None);
+        }
+        let mut arguments = Vec::new();
+        let mut substitutions = BTreeMap::new();
+        substitutions.insert("Self".to_string(), receiver);
+        for index in 0..parameters.len() {
+            let value = self.source_type(path.args[index], environment)?;
+            arguments.push(value);
+            substitutions.insert(parameters[index].name.clone(), value);
+        }
+        Ok(Some((declaration, arguments, substitutions)))
+    }
+
+    fn binding_application(&mut self, receiver: Variable, first: &a::Path, member: &str,
+        environment: &BTreeMap<String, Variable>, span: a::Span)
+        -> Result<(a::DeclarationId, Vec<Variable>, BTreeMap<String, Variable>)> {
+        let mut pending = vec![(first.clone(), environment.clone())];
+        let mut seen: Vec<(a::DeclarationId, Vec<Variable>)> = Vec::new();
+        let mut selected: Option<(a::DeclarationId, Vec<Variable>, BTreeMap<String, Variable>)> = None;
+        while let Some((path, environment)) = pending.pop() {
+            let Some((declaration, arguments, substitutions)) = self.trait_application(receiver, &path, &environment)? else { continue; };
+            if seen.iter().any(|(owner, previous)| *owner == declaration && self.same_trait_arguments(previous, &arguments)) { continue; }
+            seen.push((declaration, arguments.clone()));
+            let a::Item::Trait(owner) = self.source.declarations[declaration].item else { continue; };
+            let definition = self.source.traits[owner].clone();
+            if definition.associated.iter().any(|item: &a::AssociatedType| item.name == member) {
+                if selected.is_some() { return Err(err(span, "E_TRAIT", "associated-type equality binding is ambiguous")); }
+                selected = Some((declaration, arguments, substitutions.clone()));
+            }
+            for bound in &definition.bounds {
+                if let a::Type::Path(parent) = &self.source.types[*bound].kind {
+                    pending.push((parent.clone(), substitutions.clone()));
+                }
+            }
+        }
+        selected.ok_or_else(|| err(span, "E_TRAIT", "associated-type equality binding has no declared member"))
     }
 
     fn projection_argument_contains(&self, outer: Variable, inner: Variable) -> bool {
@@ -123,33 +191,25 @@ impl Infer<'_, '_> {
         environment: &BTreeMap<String, Variable>,
         rigid: bool,
     ) -> Result<()> {
-        let mut pending = vec![(first, false)];
-        let mut seen = BTreeSet::<a::TypeId>::new();
-        while let Some((bound, inherited)) = pending.pop() {
-            if !seen.insert(bound) { continue; }
+        let mut pending = vec![(first, environment.clone())];
+        let mut seen: Vec<(a::DeclarationId, Vec<Variable>)> = Vec::new();
+        while let Some((bound, substitutions)) = pending.pop() {
             let a::Type::Path(path) = self.source.types[bound].kind.clone() else { continue; };
-            let crate::generics::TraitIdentity::Declared(index) =
-                crate::generics::bound_identity(self.source, &path) else { continue; };
-            let mut substitutions = environment.clone();
-            if inherited { substitutions.insert("Self".to_string(), receiver); }
+            let Some((declaration, arguments, declared)) = self.trait_application(receiver, &path, &substitutions)? else { continue; };
+            if seen.iter().any(|(owner, previous)| *owner == declaration && self.same_trait_arguments(previous, &arguments)) { continue; }
+            seen.push((declaration, arguments));
+            let a::Item::Trait(index) = self.source.declarations[declaration].item else { continue; };
             for binding in &path.bindings {
-                let owner = crate::generics::associated_binding_owner(self.source, &path, binding)?;
-                let mut declaration: Option<usize> = None;
-                for (index, candidate) in self.source.declarations.iter().enumerate() {
-                    if candidate.item == a::Item::Trait(owner) { declaration = Some(index); break; }
-                }
-                let Some(declaration) = declaration else {
-                    return Err(err(binding.span, "E_TRAIT", "associated-type equality binding has no trait identity"));
-                };
+                let (declaration, arguments, _) = self.binding_application(receiver, &path, &binding.name, &substitutions, binding.span)?;
                 let root = self.projection_receiver(receiver);
-                let key = (declaration, binding.name.clone());
+                let key = self.projection_key(root, declaration, &arguments, &binding.name);
                 let value = self.source_type(binding.value, &substitutions)?;
                 let previous = self.projections[root].get(&key).copied();
                 if let Some(previous) = previous {
                     self.projection_bindings.insert(previous, binding.span);
                     let previous = self.root(previous);
                     let value = self.root(value);
-                    if previous != value && rigid && matches!(self.shape(previous), Some(Shape::Projected(_, _) | Shape::Projection(_, _, _))) {
+                    if previous != value && rigid && matches!(self.shape(previous), Some(Shape::Projected(_, _) | Shape::Projection(_, _, _, _))) {
                         if self.occurs(previous, value) {
                             return Err(err(binding.span, "E_TYPE", "cyclic associated-type equality binding"));
                         }
@@ -165,7 +225,7 @@ impl Infer<'_, '_> {
                     self.projections[root].insert(key, value);
                 }
             }
-            for parent in &self.source.traits[index].bounds { pending.push((*parent, true)); }
+            for parent in &self.source.traits[index].bounds { pending.push((*parent, declared.clone())); }
         }
         Ok(())
     }
@@ -178,72 +238,42 @@ impl Infer<'_, '_> {
         environment: &mut BTreeMap<String, Variable>,
         rigid: bool,
     ) -> Result<()> {
-        let mut pending = vec![bound];
-        let mut seen = BTreeSet::<Variable>::new();
-        while let Some(bound) = pending.pop() {
-            let declaration = match &self.source.types[bound].kind {
-                a::Type::Path(path) if path.args.is_empty() => path.declaration,
-                _ => None,
-            };
-            let Some(declaration) = declaration else {
-                continue;
-            };
-            let a::Item::Trait(index) = self.source.declarations[declaration].item else {
-                continue;
-            };
-            // Parameterized associated families need their argument identity in
-            // the key. Leave that existing boundary unresolved rather than
-            // conflating two applications of the same trait.
-            if !seen.insert(declaration) {
-                continue;
-            }
-            self.trait_headers.push((receiver, bound));
+        let mut pending = vec![(bound, environment.clone())];
+        let mut seen: Vec<(a::DeclarationId, Vec<Variable>)> = Vec::new();
+        while let Some((bound, outer)) = pending.pop() {
+            let a::Type::Path(path) = self.source.types[bound].kind.clone() else { continue; };
+            let Some((declaration, arguments, mut declared)) = self.trait_application(receiver, &path, &outer)? else { continue; };
+            if seen.iter().any(|(owner, previous)| *owner == declaration && self.same_trait_arguments(previous, &arguments)) { continue; }
+            seen.push((declaration, arguments.clone()));
+            let a::Item::Trait(index) = self.source.declarations[declaration].item else { continue; };
             let definition = self.source.traits[index].clone();
-            for bound in &definition.bounds {
-                pending.push(*bound);
-            }
-            for associated in definition.associated {
+            for associated in &definition.associated {
                 let name = format!("{alias}::{}", associated.name);
                 let root = self.projection_receiver(receiver);
-                let key = (declaration, associated.name.clone());
-                let previous = match self.projections[root].get(&key) {
-                    Some(previous) => Some(*previous),
-                    None => None,
-                };
-                let value = if let Some(previous) = previous {
-                    previous
-                } else {
+                let key = self.projection_key(root, declaration, &arguments, &associated.name);
+                let previous = self.projections[root].get(&key).copied();
+                let value = if let Some(previous) = previous { previous } else {
                     let result = if rigid {
-                        self.shaped(Shape::Projected(declaration, name.clone()))
-                    } else {
-                        self.operation_type()
-                    };
+                        self.shaped(Shape::Projection(declaration, associated.name.clone(), receiver, arguments.clone()))
+                    } else { self.operation_type() };
                     self.projections[root].insert(key, result);
                     if !rigid {
-                        self.obligation(Obligation::Projection {
-                            receiver,
-                            declaration,
-                            member: associated.name,
-                            result,
-                            span: associated.span,
-                        });
+                        self.obligation(Obligation::Projection { receiver, declaration,
+                            arguments: arguments.clone(), member: associated.name.clone(), result, span: associated.span });
                     }
                     result
                 };
-                // Ambiguous same-spelled associated members do not establish an
-                // equation. The declaration checker diagnoses that source path.
-                let previous = match environment.get(&name) {
-                    Some(previous) => Some(*previous),
-                    None => None,
-                };
+                declared.insert(format!("Self::{}", associated.name), value);
+                // Only one exact applied owner establishes a shorthand member.
+                let previous = environment.get(&name).copied();
                 if let Some(previous) = previous {
                     if self.definition.root(previous) != self.definition.root(value) {
                         environment.insert(name, self.blocked());
                     }
-                } else {
-                    environment.insert(name, value);
-                }
+                } else { environment.insert(name, value); }
             }
+            self.trait_headers.push((receiver, bound, arguments, declared.clone()));
+            for parent in &definition.bounds { pending.push((*parent, declared.clone())); }
         }
         Ok(())
     }
@@ -284,6 +314,11 @@ impl Infer<'_, '_> {
         index: usize,
         receiver: Variable,
     ) -> Result<Match> {
+        self.implementation_application_environment(index, receiver, None)
+    }
+
+    fn implementation_application_environment(&mut self, index: usize, receiver: Variable,
+        arguments: Option<&[Variable]>) -> Result<Match> {
         let implementation = self.source.impls[index].clone();
         let mut environment = BTreeMap::new();
         for parameter in &implementation.generics {
@@ -298,6 +333,14 @@ impl Infer<'_, '_> {
         let target = self.source_type(implementation.target, &environment)?;
         let mut substitutions: BTreeMap<Variable, Variable> = BTreeMap::new();
         let mut pending = vec![(target, receiver)];
+        if let Some(arguments) = arguments {
+            let Some(bound) = implementation.trait_ty else { return Ok(Match::No); };
+            let a::Type::Path(path) = self.source.types[bound].kind.clone() else { return Ok(Match::No); };
+            if path.args.len() != arguments.len() { return Ok(Match::No); }
+            for position in 0..arguments.len() {
+                pending.push((self.source_type(path.args[position], &environment)?, arguments[position]));
+            }
+        }
         let mut deferred = false;
         while let Some((pattern, actual)) = pending.pop() {
             let pattern = self.definition.root(pattern);
@@ -367,6 +410,7 @@ impl Infer<'_, '_> {
         id: usize,
         receiver: Variable,
         declaration: a::DeclarationId,
+        trait_arguments: &[Variable],
         member: &str,
         result: Variable,
         span: a::Span,
@@ -378,7 +422,7 @@ impl Infer<'_, '_> {
         if matches!(shape, Shape::Rigid(_) | Shape::Opaque(..)) {
             // Joining the receiver with a declared parameter has already joined
             // the corresponding projection slot; no concrete impl is guessed.
-            return Ok(matches!(self.shape(result), Some(Shape::Projected(_, _) | Shape::Projection(_, _, _))));
+            return Ok(matches!(self.shape(result), Some(Shape::Projected(_, _) | Shape::Projection(_, _, _, _))));
         }
         let a::Item::Trait(trait_index) = self.source.declarations[declaration].item else {
             return Ok(false);
@@ -393,10 +437,11 @@ impl Infer<'_, '_> {
             .trait_candidates_by_head(trait_index, head_view);
         let mut selected = None;
         for candidate in candidates {
-            match self.implementation_environment(candidate, receiver)? {
+            match self.implementation_application_environment(candidate, receiver, Some(trait_arguments))? {
                 Match::No => {}
                 Match::Deferred => {
                     self.watch_shape(receiver, id);
+                    for argument in trait_arguments { self.watch_shape(*argument, id); }
                     return Ok(false);
                 }
                 Match::Yes(environment) => {
@@ -448,6 +493,10 @@ impl Infer<'_, '_> {
             }
         }
         if associated.is_none() {
+            let bound = implementation.trait_ty.unwrap();
+            if let a::Type::Path(path) = self.source.types[bound].kind.clone() {
+                if let Some((_, _, declared)) = self.trait_application(receiver, &path, &environment)? { environment = declared; }
+            }
             for item in &self.source.traits[trait_index].associated {
                 if item.name == member {
                     associated = item.value;

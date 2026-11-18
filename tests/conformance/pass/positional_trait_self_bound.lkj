@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+trait Accept<T> {}
+trait Choose<T: Accept<Self>>: Sized { fn choose(value: T) -> i64; }
+struct Argument {}
+struct Receiver {}
+impl Accept<Receiver> for Argument {}
+impl Choose<Argument> for Receiver { fn choose(value: Argument) -> i64 { 42 } }
+fn choose<T: Accept<P>, P: Choose<T>>(value: T) -> i64 { <P as Choose<T>>::choose(value) }
+pub fn probe() -> i64 { choose::<Argument, Receiver>(Argument {}) }

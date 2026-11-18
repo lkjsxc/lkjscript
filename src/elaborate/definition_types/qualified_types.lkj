@@ -1,13 +1,12 @@
 //! Qualified projections keep the receiver and declared trait through inference.
 use super::*;
-use std::collections::BTreeSet;
 
 impl Infer<'_, '_> {
     pub(super) fn qualified_projection(
-        &mut self, receiver: Variable, declaration: a::DeclarationId, member: &str, span: a::Span,
+        &mut self, receiver: Variable, declaration: a::DeclarationId, arguments: &[Variable], member: &str, span: a::Span,
     ) -> Variable {
         let root = self.projection_receiver(receiver);
-        let key = (declaration, member.to_string());
+        let key = self.projection_key(root, declaration, arguments, member);
         let previous = match self.projections[root].get(&key) {
             Some(value) => Some(*value),
             None => None,
@@ -15,15 +14,15 @@ impl Infer<'_, '_> {
         if let Some(value) = previous {
             let value = self.root(value);
             if matches!(self.shape(value), Some(Shape::Projected(_, _))) {
-                self.definition.nodes[value].shape = Some(Shape::Projection(declaration, member.to_string(), receiver));
+                self.definition.nodes[value].shape = Some(Shape::Projection(declaration, member.to_string(), receiver, arguments.to_vec()));
             }
             return value;
         }
-        let value = if matches!(self.shape(receiver), Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Opaque(..))) {
-            self.shaped(Shape::Projection(declaration, member.to_string(), receiver))
+        let value = if matches!(self.shape(receiver), Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _, _) | Shape::Opaque(..))) {
+            self.shaped(Shape::Projection(declaration, member.to_string(), receiver, arguments.to_vec()))
         } else {
             let value = self.operation_type();
-            self.obligation(Obligation::Projection { receiver, declaration, member: member.to_string(), result: value, span });
+            self.obligation(Obligation::Projection { receiver, declaration, arguments: arguments.to_vec(), member: member.to_string(), result: value, span });
             value
         };
         self.projections[root].insert(key, value);
@@ -45,19 +44,18 @@ impl Infer<'_, '_> {
         };
         let Some(declaration) = bound.declaration else { return Ok(self.blocked()); };
         let a::Item::Trait(owner) = self.source.declarations[declaration].item else { return Ok(self.blocked()); };
-        if !bound.args.is_empty() { return Ok(self.blocked()); }
+        let Some((_, trait_arguments, mut environment)) = self.trait_application(receiver, &bound, &outer)? else { return Ok(self.blocked()); };
         let definition = self.source.traits[owner].clone();
         let mut method = None;
         for index in &definition.methods {
             if self.source.functions[*index].name == path.name { method = Some(*index); break; }
         }
         let Some(method) = method else { return Ok(self.blocked()); };
-        let mut environment = BTreeMap::new();
-        environment.insert("Self".to_string(), receiver);
-        self.trait_equations(receiver, "Self", trait_ty, &mut environment, false)?;
-        self.binding_equations(receiver, trait_ty, &environment, false)?;
+        let mut equations = outer.clone();
+        self.trait_equations(receiver, "Self", trait_ty, &mut equations, false)?;
+        self.binding_equations(receiver, trait_ty, &outer, false)?;
         for associated in &definition.associated {
-            let value = self.qualified_projection(receiver, declaration, &associated.name, span);
+            let value = self.qualified_projection(receiver, declaration, &trait_arguments, &associated.name, span);
             environment.insert(format!("Self::{}", associated.name), value);
         }
         self.header_signature(method, &path.args, arguments, environment, 0, span)
@@ -68,6 +66,7 @@ impl Infer<'_, '_> {
         source_receiver: Variable,
         receiver: Variable,
         declaration: a::DeclarationId,
+        arguments: &[Variable],
         member: &str,
         alias: &str,
         environment: &mut BTreeMap<String, Variable>,
@@ -77,7 +76,7 @@ impl Infer<'_, '_> {
         // The original receiver and declared member distinguish equal results
         // whose different associated declarations contribute separate bounds.
         let root = self.projection_receiver(source_receiver);
-        let key = (declaration, member.to_string());
+        let key = self.projection_key(root, declaration, arguments, member);
         if !self.projection_headers[root].insert(key.clone()) { return Ok(()); }
         let result = self.associated_bound_equations(receiver, declaration, member, alias, environment);
         if result.is_err() {
@@ -100,7 +99,7 @@ impl Infer<'_, '_> {
         for associated in &self.source.traits[owner].associated {
             if associated.name == member { bounds = associated.bounds.clone(); break; }
         }
-        let rigid = matches!(self.shape(receiver), Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Opaque(..)));
+        let rigid = matches!(self.shape(receiver), Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _, _) | Shape::Opaque(..)));
         for bound in &bounds {
             self.trait_equations(receiver, alias, *bound, environment, rigid)?;
         }
@@ -124,37 +123,34 @@ impl Infer<'_, '_> {
             self.watch(receiver, id);
             return Ok(false);
         };
-        if matches!(shape, Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Opaque(..)) {
+        if matches!(shape, Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _, _) | Shape::Opaque(..)) {
             // These are declaration equations, not implementation evidence.
             // Definition checking still selects and proves the exact bound.
             let root = self.root(receiver);
             let headers = self.trait_headers.clone();
-            let mut seen = BTreeSet::new();
-            let mut selected = None;
-            for (target, bound) in headers {
+            let mut seen: Vec<(a::DeclarationId, Vec<Variable>)> = Vec::new();
+            let mut selected: Option<(usize, BTreeMap<String, Variable>)> = None;
+            for (target, bound, trait_arguments, environment) in headers {
                 if self.root(target) != root { continue; }
                 let declaration = match &self.source.types[bound].kind {
-                    a::Type::Path(path) if path.args.is_empty() => path.declaration,
+                    a::Type::Path(path) => path.declaration,
                     _ => None,
                 };
                 let Some(declaration) = declaration else { continue; };
                 if !self.names.trait_in_scope(scope, declaration, span) { continue; }
-                if !seen.insert(declaration) { continue; }
+                if seen.iter().any(|(owner, previous)| *owner == declaration && self.same_trait_arguments(previous, &trait_arguments)) { continue; }
+                seen.push((declaration, trait_arguments));
                 let a::Item::Trait(owner) = self.source.declarations[declaration].item else { continue; };
                 for method in &self.source.traits[owner].methods {
                     let function = &self.source.functions[*method];
                     if function.name == name && function.params.len() == arguments.len()
                         && function.params.first().is_none_or(|parameter| parameter.name != "self") {
                         if selected.is_some() { return Ok(false); }
-                        selected = Some((*method, bound));
+                        selected = Some((*method, environment.clone()));
                     }
                 }
             }
-            let Some((method, bound)) = selected else { return Ok(false); };
-            let mut environment = BTreeMap::new();
-            environment.insert("Self".to_string(), receiver);
-            self.trait_equations(receiver, "Self", bound, &mut environment, false)?;
-            self.binding_equations(receiver, bound, &environment, false)?;
+            let Some((method, environment)) = selected else { return Ok(false); };
             let output = self.header_signature(method, types, arguments, environment, 0, span)?;
             self.unify(result, output, span)?;
             return Ok(true);

@@ -1,0 +1,6 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Read<T> { fn read(self, input: T) -> i64; }
+fn require<P: Read<u8>>() {}
+fn unused<P: Read<bool>>() { require::<P>(); }
+pub fn probe() -> i64 { 42 }

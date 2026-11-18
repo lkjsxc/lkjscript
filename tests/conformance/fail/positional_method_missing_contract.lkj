@@ -1,0 +1,7 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Parser<I> { fn parse(&mut self, input: I) -> i64; }
+trait Pair<I> { fn parse_pair(&mut self, input: I) -> i64; }
+impl<I, P: Parser<I>> Pair<I> for (P,) { fn parse_pair(&mut self, input: I) -> i64 { self.0.parse(input) } }
+fn unused<P>(parser: P, input: i64) -> i64 { let mut pair = (parser,); pair.parse_pair(input) }
+pub fn probe() -> i64 { 42 }

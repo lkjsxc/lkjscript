@@ -24,6 +24,7 @@ enum Work {
         qualification: a::QualifiedPath,
         name: String,
         span: a::Span,
+        environment: usize,
     },
     Apply {
         path: a::Path,
@@ -232,7 +233,7 @@ impl Compiler<'_> {
                         if !path.args.is_empty() {
                             return Err(err(span, "E_UNSUPPORTED", "generic associated types in fully qualified paths are not implemented"));
                         }
-                        work.pending.push(Work::Qualified { qualification: qualification.clone(), name: path.name, span });
+                        work.pending.push(Work::Qualified { qualification: qualification.clone(), name: path.name, span, environment });
                         work.pending.push(Work::Source { id: qualification.receiver, environment });
                         continue;
                     }
@@ -301,9 +302,9 @@ impl Compiler<'_> {
                         });
                     }
                 }
-                Work::Qualified { qualification, name, span } => {
+                Work::Qualified { qualification, name, span, environment } => {
                     let receiver = work.values.pop().expect("qualified path receiver");
-                    let ty = self.qualified_associated_type(receiver, &qualification, &name, span)?;
+                    let ty = self.qualified_associated_type(receiver, &qualification, &name, span, &work.environments[environment])?;
                     work.values.push(ty);
                 }
                 Work::Apply {

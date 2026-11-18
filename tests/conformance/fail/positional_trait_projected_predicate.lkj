@@ -1,0 +1,7 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Read<I> where I: Copy {}
+trait Source { type Item; }
+struct Owned {}
+fn unused<P: Read<A::Item>, A: Source<Item = Owned>>() {}
+pub fn probe() -> i64 { 42 }

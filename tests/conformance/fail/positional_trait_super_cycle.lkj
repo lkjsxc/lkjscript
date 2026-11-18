@@ -1,0 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait First<T>: Second<Vec<T>> {}
+trait Second<T>: First<T> {}
+pub fn probe() -> i64 { 42 }

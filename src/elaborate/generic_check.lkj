@@ -12,6 +12,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Clone)]
 pub(super) struct MethodWitness {
     pub(super) declaration: usize,
+    pub(super) identity: TraitIdentity,
     pub(super) method: usize,
     pub(super) substitutions: BTreeMap<String, usize>,
 }
@@ -89,6 +90,7 @@ impl BuiltinMethod {
 pub(super) enum MethodTarget {
     Builtin,
     Trait(TraitIdentity),
+    AppliedTrait(usize, super::trait_arguments::Recipe),
     Source(usize),
 }
 
@@ -106,11 +108,13 @@ pub(super) struct Contracts {
     pub(super) rigid: BTreeMap<usize, BTreeSet<TraitIdentity>>,
     pub(super) active_where_predicates: BTreeSet<a::TypeId>,
     // (rigid receiver, resolved trait declaration) -> associated-type identities.
-    pub(super) traits: BTreeMap<(usize, usize), BTreeMap<String, usize>>,
-    pub(super) equalities: BTreeMap<(usize, usize, String), usize>,
-    pub(super) equality_sources: BTreeMap<(usize, usize, String), Vec<(a::TypeId, BTreeMap<String, usize>, a::Span)>>,
-    pub(super) equality_active: BTreeSet<(usize, usize, String)>,
+    pub(super) traits: BTreeMap<(usize, TraitIdentity), BTreeMap<String, usize>>,
+    pub(super) equalities: BTreeMap<(usize, TraitIdentity, String), usize>,
+    pub(super) equality_sources: BTreeMap<(usize, TraitIdentity, String), Vec<(a::TypeId, BTreeMap<String, usize>, a::Span)>>,
+    pub(super) equality_active: BTreeSet<(usize, TraitIdentity, String)>,
     pub(super) equality_collecting: bool,
+    applied_sources: BTreeMap<(usize, a::TypeId, Vec<(String, usize)>), BTreeSet<TraitIdentity>>,
+    obsolete_applications: BTreeSet<(usize, TraitIdentity)>,
     methods: BTreeMap<usize, MethodWitness>,
     comparisons: BTreeMap<(usize, String), usize>,
     builtin_methods: BTreeMap<(usize, BuiltinMethod), usize>,
@@ -284,7 +288,7 @@ fn validate_selected(
                 .contains(&witness.method)
                 || !contracts
                     .traits
-                    .contains_key(&(receiver, witness.declaration))
+                    .contains_key(&(receiver, witness.identity.clone()))
             {
                 return Err(err(
                     a::Span::default(),
@@ -460,6 +464,89 @@ impl Compiler<'_> {
         self.assume_parameter_contract(parameters, &predicates, substitutions)
     }
 
+    fn introduce_parameter_headers(&mut self, parameters: &[a::GenericParam],
+        predicates: &[a::WherePredicate], substitutions: &BTreeMap<String, usize>)
+        -> Result<Vec<(a::WherePredicate, usize)>> {
+        let mut pending: Vec<(usize, a::TypeId)> = Vec::new();
+        for parameter in parameters {
+            if parameter.lifetime { continue; }
+            let receiver = *substitutions.get(&parameter.name).unwrap();
+            for bound in &parameter.bounds {
+                if !self.is_callable_bound(*bound) { pending.push((receiver, *bound)); }
+            }
+        }
+        let mut where_pending = predicates.to_vec();
+        let mut resolved: Vec<(a::WherePredicate, usize)> = Vec::new();
+        while !pending.is_empty() || !where_pending.is_empty() {
+            let before = pending.len() + where_pending.len();
+            let mut retry: Vec<(usize, a::TypeId)> = Vec::new();
+            let mut where_retry: Vec<a::WherePredicate> = Vec::new();
+            let mut failure: Option<a::Diagnostic> = None;
+            for (receiver, bound) in pending {
+                match self.assume_bound_with_equalities(receiver, bound, substitutions, false) {
+                    Ok(_) => {}
+                    Err(problem) => { failure = Some(problem); retry.push((receiver, bound)); }
+                }
+            }
+            for predicate in where_pending {
+                match self.introduce_where_predicates(&vec![predicate.clone()], substitutions) {
+                    Ok(found) => resolved.extend_from_slice(&found),
+                    Err(problem) => { failure = Some(problem); where_retry.push(predicate); }
+                }
+            }
+            if retry.len() + where_retry.len() == before { return Err(failure.unwrap()); }
+            pending = retry; where_pending = where_retry;
+        }
+        Ok(resolved)
+    }
+
+    fn retire_refined_applications(&mut self) {
+        let obsolete = std::mem::replace(&mut self.contracts.as_mut().unwrap().obsolete_applications, BTreeSet::new());
+        for (receiver, identity) in obsolete {
+            let mut retained = false;
+            for (source, identities) in &self.contracts.as_ref().unwrap().applied_sources {
+                if source.0 == receiver && identities.contains(&identity) { retained = true; break; }
+            }
+            if retained { continue; }
+            let contracts = self.contracts.as_mut().unwrap();
+            contracts.rigid.get_mut(&receiver).unwrap().remove(&identity);
+            contracts.traits.remove(&(receiver, identity.clone()));
+            let mut removed: Vec<(usize, TraitIdentity, String)> = Vec::new();
+            for key in contracts.equalities.keys() {
+                if key.0 == receiver && key.1 == identity { removed.push(key.clone()); }
+            }
+            for key in removed { contracts.equalities.remove(&key); }
+        }
+    }
+
+    fn refine_applied_parameter_bounds(&mut self, parameters: &[a::GenericParam],
+        predicates: &[(a::WherePredicate, usize)], substitutions: &BTreeMap<String, usize>)
+        -> Result<Option<Vec<(Vec<a::WherePredicate>, BTreeMap<String, usize>)>>> {
+        if self.contracts.as_ref().unwrap().applied_sources.is_empty() { return Ok(None); }
+        loop {
+            let before = self.contracts.as_ref().unwrap().applied_sources.clone();
+            let before_equalities = self.contracts.as_ref().unwrap().equalities.clone();
+            self.contracts.as_mut().unwrap().equality_collecting = true;
+            let mut declared_predicates: Vec<(Vec<a::WherePredicate>, BTreeMap<String, usize>)> = Vec::new();
+            for parameter in parameters {
+                if parameter.lifetime { continue; }
+                let receiver = *substitutions.get(&parameter.name).unwrap();
+                for bound in &parameter.bounds {
+                    if !self.is_callable_bound(*bound) {
+                        let declared = self.assume_bound_with_equalities(receiver, *bound, substitutions, true)?;
+                        declared_predicates.extend_from_slice(&declared);
+                    }
+                }
+            }
+            self.collect_where_equalities(predicates, substitutions)?;
+            self.contracts.as_mut().unwrap().equality_collecting = false;
+            self.finish_associated_equalities()?;
+            self.retire_refined_applications();
+            if self.contracts.as_ref().unwrap().applied_sources == before
+                && self.contracts.as_ref().unwrap().equalities == before_equalities { return Ok(Some(declared_predicates)); }
+        }
+    }
+
     fn assume_parameter_contract(
         &mut self,
         parameters: &[a::GenericParam],
@@ -469,8 +556,8 @@ impl Compiler<'_> {
         // Associated identities come from declared trait bounds. Establish all
         // of them before a callable signature resolves a sibling's I::Item,
         // regardless of the source order of generic parameter declarations.
-        let mut where_headers: Vec<(a::WherePredicate, usize)> = Vec::new();
-        for phase in 0..3usize {
+        let where_headers = self.introduce_parameter_headers(parameters, predicates, substitutions)?;
+        for phase in 1..3usize {
             // Register every sibling equation before resolving any of them.
             // A projection on the right may be defined by a later parameter.
             self.contracts.as_mut().unwrap().equality_collecting = phase == 1;
@@ -484,25 +571,30 @@ impl Compiler<'_> {
                 for bound in &parameter.bounds {
                     if self.is_callable_bound(*bound) == callable {
                         let declared = self.assume_bound_with_equalities(ty, *bound, substitutions, phase != 0)?;
-                        if phase == 1 { declared_predicates.push((ty, declared)); }
+                        if phase == 1 { declared_predicates.extend_from_slice(&declared); }
                     }
                 }
             }
-            if phase == 0 {
-                where_headers = self.introduce_where_predicates(predicates, substitutions)?;
-            } else if phase == 1 {
+            if phase == 1 {
                 let collected = self.collect_where_equalities(&where_headers, substitutions);
                 self.contracts.as_mut().unwrap().equality_collecting = false;
                 collected?;
                 self.finish_associated_equalities()?;
+                if let Some(refined) = self.refine_applied_parameter_bounds(parameters, &where_headers, substitutions)? {
+                    declared_predicates = refined;
+                }
                 // Trait predicates can use a sibling equality or a supertrait
                 // projection. Establish both before resolving their targets.
-                for (receiver, declared) in declared_predicates {
-                    let mut environment = substitutions.clone();
-                    environment.insert("Self".to_string(), receiver);
+                for (declared, environment) in declared_predicates {
                     self.assume_where_predicates(&declared, &environment)?;
                 }
                 self.finish_where_predicates(&where_headers, substitutions)?;
+                for parameter in parameters {
+                    if parameter.lifetime || parameter.constant { continue; }
+                    let ty = *substitutions.get(&parameter.name).unwrap();
+                    let identities = self.contracts.as_ref().unwrap().rigid.get(&ty).unwrap().clone();
+                    for identity in identities { self.trait_argument_contract(ty, &identity, parameter.span)?; }
+                }
             }
         }
         Ok(())
@@ -529,9 +621,11 @@ impl Compiler<'_> {
         substitutions: &BTreeMap<String, usize>,
     ) -> Result<()> {
         let predicates = self.assume_bound_with_equalities(ty, first, substitutions, true)?;
-        let mut environment = substitutions.clone();
-        environment.insert("Self".to_string(), ty);
-        self.assume_where_predicates(&predicates, &environment)
+        for (predicates, environment) in predicates { self.assume_where_predicates(&predicates, &environment)?; }
+        let identities = self.contracts.as_ref().unwrap().rigid.get(&ty).unwrap().clone();
+        let span = self.source.types[first].span;
+        for identity in identities { self.trait_argument_contract(ty, &identity, span)?; }
+        Ok(())
     }
 
     pub(super) fn assume_bound_with_equalities(
@@ -540,25 +634,21 @@ impl Compiler<'_> {
         first: a::TypeId,
         substitutions: &BTreeMap<String, usize>,
         equalities: bool,
-    ) -> Result<Vec<a::WherePredicate>> {
-        let mut pending = vec![(first, false)];
-        let mut seen = BTreeSet::<a::TypeId>::new();
+    ) -> Result<Vec<(Vec<a::WherePredicate>, BTreeMap<String, usize>)>> {
+        let mut pending = vec![(first, substitutions.clone())];
+        let mut seen = BTreeSet::<TraitIdentity>::new();
         let mut bindings: Vec<(a::Path, BTreeMap<String, usize>)> = Vec::new();
         let mut predicates = Vec::new();
-        while let Some((id, inherited)) = pending.pop() {
+        while let Some((id, inherited_substitutions)) = pending.pop() {
             if self.source.relaxed_bounds.contains(&id) { continue; }
-            if !seen.insert(id) { continue; }
             let node = self.source.types[id].clone();
-            let mut inherited_substitutions = substitutions.clone();
-            if inherited { inherited_substitutions.insert("Self".to_string(), ty); }
             if let a::Type::Path(path) = &node.kind {
                 if self.assume_callable(ty, path, &inherited_substitutions, node.span)? {
                     continue;
                 }
             }
             let path = match node.kind {
-                a::Type::Path(path) if path.args.is_empty() => path,
-                a::Type::Path(path) if path.name.starts_with('\'') => continue,
+                a::Type::Path(path) => path,
                 _ => {
                     return Err(err(
                         node.span,
@@ -570,7 +660,8 @@ impl Compiler<'_> {
             if path.name.starts_with('\'') {
                 continue;
             }
-            let identity = crate::generics::bound_identity(self.source, &path);
+            let identity = self.trait_identity(&path, &inherited_substitutions, node.span)?;
+            if !seen.insert(identity.clone()) { continue; }
             let inserted = self
                 .contracts
                 .as_mut()
@@ -589,35 +680,24 @@ impl Compiler<'_> {
             if !builtin.is_empty() {
                 self.assume_builtin(ty, builtin);
             }
-            let trait_index = match identity {
-                TraitIdentity::Declared(index) => Some(index),
-                _ => None,
-            };
+            let trait_index = identity.declaration();
             if let Some(trait_index) = trait_index {
                 let declaration = self.source.traits[trait_index].clone();
-                for parameter in &declaration.generics {
-                    if !parameter.lifetime {
-                        return Err(err(
-                            node.span,
-                            "E_UNSUPPORTED",
-                            "parameterized trait witnesses need explicit type arguments",
-                        ));
-                    }
-                }
+                let environment = self.trait_environment(ty, &identity);
                 for bound in &declaration.bounds {
-                    pending.push((*bound, true));
+                    pending.push((*bound, environment.clone()));
                 }
                 // Associated projections are introduced lazily. A valid bound
                 // such as A::Next: A must not eagerly create an infinite family.
                 {
                     let traits = &mut self.contracts.as_mut().unwrap().traits;
-                    let key = (ty, trait_index);
+                    let key = (ty, identity.clone());
                     if !traits.contains_key(&key) {
                         traits.insert(key, BTreeMap::new());
                     }
                 }
                 if equalities && !path.bindings.is_empty() { bindings.push((path.clone(), inherited_substitutions)); }
-                predicates.extend_from_slice(&declaration.predicates);
+                predicates.push((declaration.predicates.clone(), environment));
             } else if !matches!(
                 builtin,
                 "Copy"
@@ -639,6 +719,21 @@ impl Compiler<'_> {
             }
         }
         for (path, environment) in bindings { self.assume_associated_bindings(ty, &path, &environment)?; }
+        let mut applied = false;
+        for identity in &seen { if matches!(identity, TraitIdentity::Applied(_, _)) { applied = true; break; } }
+        if applied {
+            let mut captures: Vec<(String, usize)> = Vec::new();
+            for (name, value) in substitutions { if !name.contains("::") { captures.push((name.clone(), *value)); } }
+            let key = (ty, first, captures);
+            let previous = self.contracts.as_mut().unwrap().applied_sources.insert(key, seen.clone());
+            if let Some(previous) = previous {
+                for identity in previous {
+                    if matches!(identity, TraitIdentity::Applied(_, _)) && !seen.contains(&identity) {
+                        self.contracts.as_mut().unwrap().obsolete_applications.insert((ty, identity));
+                    }
+                }
+            }
+        }
         Ok(predicates)
     }
 
@@ -692,18 +787,23 @@ impl Compiler<'_> {
     pub(super) fn trait_parameters(&mut self, trait_index: usize) -> Result<BTreeMap<String, usize>> {
         let mut substitutions = BTreeMap::new();
         let declaration = self.source.traits[trait_index].clone();
-        self.declare_parameters(&declaration.generics, &mut substitutions)?;
         let self_ty = self.rigid_type("Self");
         self.contracts.as_mut().unwrap().rigid.get_mut(&self_ty).unwrap()
             .remove(&TraitIdentity::Builtin("Sized".to_string()));
         substitutions.insert("Self".to_string(), self_ty);
+        self.introduce_parameters(&declaration.generics, &mut substitutions)?;
+        let mut arguments = Vec::new();
+        for parameter in &declaration.generics {
+            if !parameter.lifetime { arguments.push(*substitutions.get(&parameter.name).unwrap()); }
+        }
+        let identity = TraitIdentity::application(trait_index, arguments);
         self.contracts
             .as_mut()
             .unwrap()
             .rigid
             .get_mut(&self_ty)
             .unwrap()
-            .insert(TraitIdentity::Declared(trait_index));
+            .insert(identity.clone());
         let mut associated: BTreeMap<String, usize> = BTreeMap::new();
         for item in &declaration.associated {
             let ty = self.rigid_type(&format!("Self::{}", item.name));
@@ -714,7 +814,13 @@ impl Compiler<'_> {
             .as_mut()
             .unwrap()
             .traits
-            .insert((self_ty, trait_index), associated.clone());
+            .insert((self_ty, identity), associated.clone());
+        // Introduce every parameter and Self contract before checking a trait
+        // argument that names a sibling parameter or Self.
+        for bound in &declaration.bounds {
+            let _ = self.assume_bound_with_equalities(self_ty, *bound, &substitutions, false)?;
+        }
+        self.assume_parameter_contract(&declaration.generics, &declaration.predicates, &substitutions)?;
         for bound in &declaration.bounds {
             self.assume_bound(self_ty, *bound, &substitutions)?;
         }
@@ -772,39 +878,55 @@ impl Compiler<'_> {
     }
 
     pub(super) fn prepare_parameter_associated(
-        &mut self,
-        parameters: &[a::GenericParam],
-        substitutions: &mut BTreeMap<String, usize>,
+        &mut self, parameters: &[a::GenericParam], substitutions: &mut BTreeMap<String, usize>,
     ) -> Result<()> {
-        for parameter in parameters {
-            if parameter.lifetime {
-                continue;
+        let mut pending = parameters.to_vec();
+        while !pending.is_empty() {
+            let before = pending.len();
+            let mut retry: Vec<a::GenericParam> = Vec::new();
+            let mut failure: Option<a::Diagnostic> = None;
+            for parameter in pending {
+                match self.prepare_one_parameter_associated(&parameter, substitutions) {
+                    Ok(()) => {}
+                    Err(problem) => { failure = Some(problem); retry.push(parameter); }
+                }
             }
+            if retry.len() == before { return Err(failure.unwrap()); }
+            pending = retry;
+        }
+        Ok(())
+    }
+
+    fn prepare_one_parameter_associated(&mut self, parameter: &a::GenericParam,
+        substitutions: &mut BTreeMap<String, usize>) -> Result<()> {
+            if parameter.lifetime { return Ok(()); }
             let ty = match substitutions.get(&parameter.name) {
                 Some(ty) => *ty,
-                None => continue,
+                None => return Ok(()),
             };
             if self
                 .contracts
                 .as_ref()
                 .is_some_and(|contracts| contracts.rigid.contains_key(&ty))
-            {
-                continue;
-            }
-            let mut pending = parameter.bounds.clone();
-            let mut seen = BTreeSet::<usize>::new();
+            { return Ok(()); }
+            let mut pending: Vec<(a::TypeId, BTreeMap<String, usize>)> = parameter.bounds.iter()
+                .map(|bound| (*bound, substitutions.clone())).collect();
+            let mut seen = BTreeSet::<TraitIdentity>::new();
             let mut members: BTreeMap<String, Option<usize>> = BTreeMap::new();
-            while let Some(bound) = pending.pop() {
-                let path = match &self.source.types[bound].kind {
-                    a::Type::Path(path) if path.args.is_empty() => path,
+            while let Some((bound, environment)) = pending.pop() {
+                let path = match self.source.types[bound].kind.clone() {
+                    a::Type::Path(path) => path,
                     _ => continue,
                 };
-                let identity = crate::generics::bound_identity(self.source, path);
-                let TraitIdentity::Declared(trait_index) = identity else {
+                if crate::generics::bound_identity(self.source, &path).declaration().is_none() { continue; }
+                let span = self.source.types[bound].span;
+                let identity = self.trait_identity(&path, &environment, span)?;
+                let Some(trait_index) = identity.declaration() else {
                     continue;
                 };
-                if !seen.insert(trait_index) { continue; }
-                for parent in &self.source.traits[trait_index].bounds { pending.push(*parent); }
+                if !seen.insert(identity.clone()) { continue; }
+                let declared_environment = self.trait_environment(ty, &identity);
+                for parent in &self.source.traits[trait_index].bounds { pending.push((*parent, declared_environment.clone())); }
                 if self.source.traits[trait_index].associated.is_empty() {
                     continue;
                 }
@@ -828,7 +950,6 @@ impl Compiler<'_> {
                 if let Some(ty) = ty { substitutions.insert(key, ty); }
                 else { substitutions.remove(&key); }
             }
-        }
         Ok(())
     }
 
@@ -868,10 +989,11 @@ impl Compiler<'_> {
     pub(super) fn associated_identity(
         &mut self,
         receiver: usize,
-        trait_index: usize,
+        identity: &TraitIdentity,
         name: &str,
     ) -> Result<usize> {
-        let key = (receiver, trait_index, name.to_string());
+        let trait_index = identity.declaration().unwrap();
+        let key = (receiver, identity.clone(), name.to_string());
         let pending = self.contracts.as_ref().unwrap().equality_sources.contains_key(&key);
         if pending {
             return self.resolve_associated_equality(key);
@@ -881,7 +1003,7 @@ impl Compiler<'_> {
             .as_ref()
             .unwrap()
             .traits
-            .get(&(receiver, trait_index))
+            .get(&(receiver, identity.clone()))
             .and_then(|items| items.get(&name.to_string()))
         {
             return Ok(*ty);
@@ -897,14 +1019,13 @@ impl Compiler<'_> {
         let ty = self.rigid_type(&format!("t{receiver}::trait{trait_index}::{name}"));
         {
             let traits = &mut self.contracts.as_mut().unwrap().traits;
-            let key = (receiver, trait_index);
+            let key = (receiver, identity.clone());
             if !traits.contains_key(&key) {
-                traits.insert(key, BTreeMap::new());
+                traits.insert(key.clone(), BTreeMap::new());
             }
             traits.get_mut(&key).unwrap().insert(name.to_string(), ty);
         }
-        let mut substitutions = BTreeMap::new();
-        substitutions.insert("Self".to_string(), receiver);
+        let mut substitutions = self.trait_environment(receiver, identity);
         substitutions.insert(format!("Self::{name}"), ty);
         for bound in declaration.bounds {
             self.assume_bound(ty, bound, &substitutions)?;
@@ -933,11 +1054,11 @@ impl Compiler<'_> {
         let declarations = {
             let contracts = self.contracts.as_ref().unwrap();
             let mut declarations = Vec::new();
-            for (receiver, trait_index) in contracts.traits.keys() {
+            for (receiver, identity) in contracts.traits.keys() {
                 if *receiver == ty {
-                    for item in &self.source.traits[*trait_index].associated {
+                    for item in &self.source.traits[identity.declaration().unwrap()].associated {
                         if item.name == name {
-                            declarations.push(*trait_index);
+                            declarations.push(identity.clone());
                             break;
                         }
                     }
@@ -952,8 +1073,8 @@ impl Compiler<'_> {
                 "associated type name is ambiguous between declared trait bounds",
             ));
         }
-        if let Some(trait_index) = declarations.first() {
-            Ok(Some(self.associated_identity(ty, *trait_index, name)?))
+        if let Some(identity) = declarations.first() {
+            Ok(Some(self.associated_identity(ty, identity, name)?))
         } else {
             Ok(None)
         }
@@ -1171,6 +1292,7 @@ impl Compiler<'_> {
         name: &str,
         expression: a::ExprId,
         span: a::Span,
+        caller: &BTreeMap<String, usize>,
     ) -> Result<Option<Instance>> {
         let selection = if self.contracts.is_none() {
             match self.method_selections.get(&expression) {
@@ -1201,11 +1323,12 @@ impl Compiler<'_> {
                 ));
             }
             if let Some(witness) = candidates.pop() {
+                let target = self.bound_method_target(&witness.identity, caller, span)?;
                 self.method_selections.insert(
                     expression,
                     MethodSelection {
                         dereferences: 0,
-                        target: MethodTarget::Trait(TraitIdentity::Declared(witness.declaration)),
+                        target,
                     },
                 );
                 return Ok(Some(Instance {
@@ -1213,11 +1336,15 @@ impl Compiler<'_> {
                     substitutions: witness.substitutions,
                 }));
             }
-        } else if let Some(MethodSelection {
-            target: MethodTarget::Trait(identity),
-            ..
-        }) = selection
-        {
+        } else if let Some(selection) = selection {
+            let identity = match selection.target {
+                MethodTarget::Trait(identity) => identity,
+                MethodTarget::AppliedTrait(owner, recipe) => {
+                    let arguments = self.instantiate_trait_recipe(&recipe, caller, span)?;
+                    TraitIdentity::application(owner, arguments)
+                }
+                _ => return Ok(None),
+            };
             if !self.satisfies_identity(base, &identity) {
                 return Err(err(
                     span,
@@ -1239,11 +1366,11 @@ impl Compiler<'_> {
                     }));
                 }
             }
-            if let TraitIdentity::Declared(owner) = identity {
+            if let Some(owner) = identity.declaration() {
                 let provided = self.source.traits[owner].methods.iter().any(|method|
                     self.source.functions[*method].name == name && self.source.functions[*method].body.is_some());
                 if provided {
-                    let instance = self.declared_associated_method(base, owner, name, expression, span, span)?;
+                    let instance = self.declared_associated_method(base, &identity, name, expression, span, span, caller)?;
                     return Ok(Some(instance));
                 }
             }
@@ -1265,11 +1392,13 @@ impl Compiler<'_> {
         if let a::FunctionOwner::Trait(owner) =
             self.source.function_owner(a::FunctionId { index: source })
         {
+            let identity = self.environment_trait_identity(owner.index, &substitutions);
             if let Some(contracts) = &mut self.contracts {
                 contracts.methods.insert(
                     called,
                     MethodWitness {
                         declaration: owner.index,
+                        identity,
                         method: source,
                         substitutions,
                     },
@@ -1284,26 +1413,27 @@ impl Compiler<'_> {
                 return Ok(Vec::new());
             };
             let mut declarations = Vec::new();
-            for (receiver, trait_index) in contracts.traits.keys() {
+            for (receiver, identity) in contracts.traits.keys() {
                 if *receiver == base {
-                    declarations.push(*trait_index);
+                    declarations.push(identity.clone());
                 }
             }
             declarations
         };
         let mut candidates = Vec::new();
-        for trait_index in declarations {
+        for identity in declarations {
+            let trait_index = identity.declaration().unwrap();
             let declaration = self.source.traits[trait_index].clone();
             for method in declaration.methods {
                 if self.source.functions[method].name == name {
-                    let mut substitutions = BTreeMap::new();
-                    substitutions.insert("Self".to_string(), base);
+                    let mut substitutions = self.trait_environment(base, &identity);
                     for item in &declaration.associated {
-                        let ty = self.associated_identity(base, trait_index, &item.name)?;
+                        let ty = self.associated_identity(base, &identity, &item.name)?;
                         substitutions.insert(format!("Self::{}", item.name), ty);
                     }
                     candidates.push(MethodWitness {
                         declaration: trait_index,
+                        identity: identity.clone(),
                         method,
                         substitutions,
                     });
@@ -1399,12 +1529,12 @@ impl super::Builder<'_, '_> {
                 "specialized receiver lacks its checked trait contract",
             ));
         }
-        if let TraitIdentity::Declared(owner) = identity {
+        if identity.declaration().is_some() {
             // Use the same implementation/default-body and associated-type
             // environment as a qualified call, retaining the recorded autoderef.
             let selection = self.compiler.method_selections.get(&expression).cloned();
-            let instance = self.compiler.declared_associated_method(base, *owner, &name,
-                expression, span, span);
+            let instance = self.compiler.declared_associated_method(base, identity, &name,
+                expression, span, span, &self.sub);
             if let Some(selection) = selection {
                 self.compiler.method_selections.insert(expression, selection);
             } else {
@@ -1450,15 +1580,14 @@ impl super::Builder<'_, '_> {
         &mut self,
         target: &ir::Place,
         base: usize,
+        expression: a::ExprId,
         index: usize,
         types: &[usize],
         args: &[usize],
         span: a::Span,
     ) -> Result<(usize, usize)> {
-        let implementation = match self.compiler.source.function_owner(a::FunctionId { index }) {
-            a::FunctionOwner::Implementation(owner) => {
-                Some(self.compiler.source.impls[owner.index].clone())
-            }
+        let owner = match self.compiler.source.function_owner(a::FunctionId { index }) {
+            a::FunctionOwner::Implementation(owner) => Some(owner.index),
             _ => None,
         }
         .ok_or_else(|| {
@@ -1468,6 +1597,7 @@ impl super::Builder<'_, '_> {
                 "checked source method has no implementation",
             )
         })?;
+        let implementation = self.compiler.source.impls[owner].clone();
         let mut substitutions = BTreeMap::new();
         self.infer_type(implementation.target, base, &mut substitutions)?;
         substitutions.insert("Self".to_string(), base);
@@ -1482,19 +1612,37 @@ impl super::Builder<'_, '_> {
                 "specialized receiver differs from checked method target",
             ));
         }
-        self.compiler
-            .bounds(&implementation.generics, &substitutions)?;
-        self.source_method(
+        let inputs = substitutions.clone();
+        if !self.complete_method_application(expression, owner, index, &mut substitutions) {
+            return Err(err(span, "E_TYPE", "method implementation arguments disagree with its receiver"));
+        }
+        self.compiler.implementation_bounds(&implementation, &substitutions)?;
+        self.source_method_with_application(
             target,
             base,
             Instance {
                 source: index,
-                substitutions,
+                substitutions: inputs,
             },
             types,
             args,
             span,
+            substitutions,
         )
+    }
+
+    pub(super) fn complete_method_application(&self, expression: a::ExprId,
+        implementation: usize, method: usize, substitutions: &mut BTreeMap<String, usize>) -> bool {
+        let Some(application) = self.inferred.method_applications.get(&expression) else { return true; };
+        if application.implementation != implementation || application.method != method { return true; }
+        let mut completed = substitutions.clone();
+        for (name, value) in &application.arguments {
+            if let Some(previous) = completed.insert(name.clone(), *value) {
+                if previous != *value { return false; }
+            }
+        }
+        *substitutions = completed;
+        true
     }
 
     pub(super) fn source_method(
@@ -1505,6 +1653,19 @@ impl super::Builder<'_, '_> {
         types: &[usize],
         args: &[usize],
         span: a::Span,
+    ) -> Result<(usize, usize)> {
+        self.source_method_with_application(target, base, instance, types, args, span, BTreeMap::new())
+    }
+
+    pub(super) fn source_method_with_application(
+        &mut self,
+        target: &ir::Place,
+        base: usize,
+        instance: Instance,
+        types: &[usize],
+        args: &[usize],
+        span: a::Span,
+        application: BTreeMap<String, usize>,
     ) -> Result<(usize, usize)> {
         let index = instance.source;
         let mut substitutions = instance.substitutions;
@@ -1557,6 +1718,15 @@ impl super::Builder<'_, '_> {
             let value = self.expr(args[index], expected)?;
             self.infer_type(ty, value.1, &mut substitutions)?;
             values.push(value.0);
+        }
+        // The solved application proves candidate eligibility, but does not
+        // turn an inferred reference argument into an authored coercion site.
+        // Evaluate with the receiver/preceding arguments first, then complete
+        // the exact application before ordinary instantiation checks it again.
+        for (name, value) in application {
+            if let Some(previous) = substitutions.insert(name, value) {
+                if previous != value { return Err(err(span, "E_TYPE", "method arguments differ from the inferred implementation application")); }
+            }
         }
         let called = self
             .compiler
@@ -1641,11 +1811,13 @@ impl super::Builder<'_, '_> {
         }
         let witness = candidates[0].clone();
         let trait_index = witness.declaration;
+        let identity = witness.identity.clone();
+        let selected_target = self.compiler.bound_method_target(&identity, &self.sub, span)?;
         self.compiler
             .method_selections
             .get_mut(&expression)
             .unwrap()
-            .target = MethodTarget::Trait(TraitIdentity::Declared(trait_index));
+            .target = selected_target;
         let index = witness.method;
         let mut substitutions = witness.substitutions;
         let function = self.compiler.source.functions[index].clone();
@@ -1686,6 +1858,7 @@ impl super::Builder<'_, '_> {
             called,
             MethodWitness {
                 declaration: trait_index,
+                identity,
                 method: index,
                 substitutions,
             },

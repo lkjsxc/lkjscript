@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+trait Read<I> where I: Copy { fn read(self, input: I) -> I; }
+trait Source { type Item; }
+struct Number {}
+impl Source for Number { type Item = i64; }
+struct Identity {}
+impl<I: Copy> Read<I> for Identity { fn read(self, input: I) -> I { input } }
+fn read<P: Read<A::Item>, A: Source<Item = i64>>(parser: P, input: A::Item) -> i64 { parser.read(input) }
+pub fn probe() -> i64 { read::<Identity, Number>(Identity {}, 42) }

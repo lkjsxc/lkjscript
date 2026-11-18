@@ -86,28 +86,24 @@ impl Compiler<'_> {
         Ok(())
     }
 
-    pub(super) fn qualified_trait(&self, qualification: &a::QualifiedPath, span: a::Span) -> Result<usize> {
+    pub(super) fn qualified_trait(&mut self, qualification: &a::QualifiedPath,
+        substitutions: &BTreeMap<String, usize>, span: a::Span) -> Result<TraitIdentity> {
         let Some(trait_ty) = qualification.trait_ty else {
             return Err(err(span, "E_UNSUPPORTED", "associated type projections require an explicit declared trait"));
         };
-        let a::Type::Path(path) = &self.source.types[trait_ty].kind else {
+        let a::Type::Path(path) = self.source.types[trait_ty].kind.clone() else {
             return Err(err(span, "E_TRAIT", "fully qualified path requires a declared trait"));
         };
         if !path.bindings.is_empty() {
             return Err(err(path.bindings[0].span, "E_TRAIT",
                 "associated-type equality bindings are not allowed in a qualified as-clause"));
         }
-        if !path.args.is_empty() {
-            return Err(err(self.source.types[trait_ty].span, "E_UNSUPPORTED",
-                "parameterized trait applications in fully qualified paths are not implemented"));
-        }
-        let TraitIdentity::Declared(index) = crate::generics::bound_identity(self.source, path) else {
+        let span = self.source.types[trait_ty].span;
+        let identity = self.trait_identity(&path, substitutions, span)?;
+        if identity.declaration().is_none() {
             return Err(err(span, "E_TRAIT", "fully qualified path requires a declared trait"));
-        };
-        if self.source.traits[index].generics.iter().any(|parameter| !parameter.lifetime) {
-            return Err(err(span, "E_UNSUPPORTED", "parameterized trait applications in fully qualified paths are not implemented"));
         }
-        Ok(index)
+        Ok(identity)
     }
 
     pub(super) fn qualified_associated_type(
@@ -116,29 +112,35 @@ impl Compiler<'_> {
         qualification: &a::QualifiedPath,
         name: &str,
         span: a::Span,
+        substitutions: &BTreeMap<String, usize>,
     ) -> Result<usize> {
-        let owner = self.qualified_trait(qualification, span)?;
-        self.associated_type_for_trait(receiver, owner, name, qualification.member_span)
+        let identity = self.qualified_trait(qualification, substitutions, span)?;
+        self.associated_type_for_identity(receiver, &identity, name, qualification.member_span)
     }
 
     pub(super) fn associated_type_for_trait(&mut self, receiver: usize, owner: usize, name: &str, span: a::Span) -> Result<usize> {
+        self.associated_type_for_identity(receiver, &TraitIdentity::Declared(owner), name, span)
+    }
+
+    pub(super) fn associated_type_for_identity(&mut self, receiver: usize, identity: &TraitIdentity, name: &str, span: a::Span) -> Result<usize> {
+        let owner = identity.declaration().unwrap();
         if !self.source.traits[owner].associated.iter().any(|item| item.name == name) {
             return Err(err(span, "E_TRAIT",
                 &format!("fully qualified associated type {name} is not declared by the selected trait")));
         }
-        let identity = TraitIdentity::Declared(owner);
-        if let Some(value) = self.active_associated_type(receiver, &identity, name) {
+        self.trait_argument_contract(receiver, identity, span)?;
+        if let Some(value) = self.active_associated_type(receiver, identity, name) {
             return Ok(value);
         }
-        if !self.satisfies_identity(receiver, &identity) {
+        if !self.satisfies_identity(receiver, identity) {
             return Err(err(span, "E_TRAIT", "fully qualified associated type requires its declared trait bound"));
         }
         let abstract_receiver = self.contracts.as_ref()
-            .is_some_and(|contracts| contracts.traits.contains_key(&(receiver, owner)));
+            .is_some_and(|contracts| contracts.traits.contains_key(&(receiver, identity.clone())));
         if abstract_receiver {
-            return self.associated_identity(receiver, owner, name);
+            return self.associated_identity(receiver, identity, name);
         }
-        let mut witness = self.implementation_witness(receiver, &identity).ok_or_else(||
+        let mut witness = self.implementation_witness(receiver, identity).ok_or_else(||
             err(span, "E_TRAIT", "fully qualified associated type has no implementation witness"))?;
         witness.substitutions.insert("Self".to_string(), receiver);
         self.implementation_associated_member(witness.implementation, witness.substitutions, name)
@@ -151,15 +153,18 @@ impl Compiler<'_> {
         name: &str,
         expression: a::ExprId,
         span: a::Span,
+        substitutions: &BTreeMap<String, usize>,
     ) -> Result<Instance> {
-        let owner = self.qualified_trait(qualification, span)?;
-        self.declared_associated_method(receiver, owner, name, expression, qualification.member_span, span)
+        let identity = self.qualified_trait(qualification, substitutions, span)?;
+        self.declared_associated_method(receiver, &identity, name, expression, qualification.member_span, span, substitutions)
     }
 
     pub(super) fn declared_associated_method(
-        &mut self, receiver: usize, owner: usize, name: &str, expression: a::ExprId,
+        &mut self, receiver: usize, identity: &TraitIdentity, name: &str, expression: a::ExprId,
         member_span: a::Span, span: a::Span,
+        caller: &BTreeMap<String, usize>,
     ) -> Result<Instance> {
+        let owner = identity.declaration().unwrap();
         let declaration = self.source.traits[owner].clone();
         let mut method = None;
         for index in &declaration.methods {
@@ -167,16 +172,16 @@ impl Compiler<'_> {
         }
         let method = method.ok_or_else(|| err(member_span, "E_TRAIT",
             &format!("fully qualified function {name} is not declared by the selected trait")))?;
-        let identity = TraitIdentity::Declared(owner);
-        if !self.satisfies_identity(receiver, &identity) {
+        self.trait_argument_contract(receiver, identity, span)?;
+        if !self.satisfies_identity(receiver, identity) {
             return Err(err(span, "E_TRAIT", "fully qualified function requires its declared trait bound"));
         }
         let abstract_receiver = self.contracts.as_ref()
-            .is_some_and(|contracts| contracts.traits.contains_key(&(receiver, owner)));
+            .is_some_and(|contracts| contracts.traits.contains_key(&(receiver, identity.clone())));
         let (source, mut substitutions) = if abstract_receiver {
-            (method, BTreeMap::new())
+            (method, self.trait_environment(receiver, identity))
         } else {
-            let witness = self.implementation_witness(receiver, &identity).ok_or_else(||
+            let witness = self.implementation_witness(receiver, identity).ok_or_else(||
                 err(span, "E_TRAIT", "fully qualified function has no implementation witness"))?;
             let implementation = &self.source.impls[witness.implementation];
             let mut selected = None;
@@ -189,18 +194,19 @@ impl Compiler<'_> {
                     "fully qualified function has no implementation definition")); };
             // A provided body has the trait's parameter scope. Implementation
             // parameter spellings must not capture its own method parameters.
-            let substitutions = if source == method { BTreeMap::new() }
+            let substitutions = if source == method { self.trait_environment(receiver, identity) }
                 else { witness.substitutions };
             (source, substitutions)
         };
         substitutions.insert("Self".to_string(), receiver);
         for item in &declaration.associated {
-            let ty = self.associated_type_for_trait(receiver, owner, &item.name, span)?;
+            let ty = self.associated_type_for_identity(receiver, identity, &item.name, span)?;
             substitutions.insert(format!("Self::{}", item.name), ty);
         }
+        let target = self.bound_method_target(identity, caller, span)?;
         self.method_selections.insert(expression, MethodSelection {
             dereferences: 0,
-            target: MethodTarget::Trait(identity),
+            target,
         });
         Ok(Instance { source, substitutions })
     }
@@ -211,7 +217,7 @@ impl super::Builder<'_, '_> {
         &mut self, receiver: usize, name: &str, expression: a::ExprId, span: a::Span,
     ) -> Result<Option<Instance>> {
         if self.compiler.contracts.is_none() {
-            return self.compiler.static_contract(receiver, name, expression, span);
+            return self.compiler.static_contract(receiver, name, expression, span, &self.sub);
         }
         let mut candidates = Vec::new();
         for candidate in self.compiler.declared_methods(receiver, name)? {
@@ -230,9 +236,10 @@ impl super::Builder<'_, '_> {
             return Err(err(span, "E_TRAIT", "associated function is ambiguous between declared traits in scope"));
         }
         if let Some(candidate) = candidates.pop() {
+            let target = self.compiler.bound_method_target(&candidate.identity, &self.sub, span)?;
             self.compiler.method_selections.insert(expression, MethodSelection {
                 dereferences: 0,
-                target: MethodTarget::Trait(TraitIdentity::Declared(candidate.declaration)),
+                target,
             });
             return Ok(Some(Instance { source: candidate.method, substitutions: candidate.substitutions }));
         }
@@ -249,7 +256,7 @@ impl super::Builder<'_, '_> {
     ) -> Result<Option<Instance>> {
         let contract = if explicit_receiver {
             self.scoped_associated_contract(receiver, name, expression, span)?
-        } else { self.compiler.static_contract(receiver, name, expression, span)? };
+        } else { self.compiler.static_contract(receiver, name, expression, span, &self.sub)? };
         if let Some(instance) = contract {
             return Ok(Some(instance));
         }
@@ -261,8 +268,8 @@ impl super::Builder<'_, '_> {
         } else { None };
         let implementations = self.compiler.implementations.associated_method_candidates(
             self.compiler.source, &self.compiler.types, &self.compiler.applications, receiver, name);
-        let mut candidates: Vec<(usize, BTreeMap<String, usize>)> = Vec::new();
-        let mut inherent: Vec<(usize, BTreeMap<String, usize>)> = Vec::new();
+        let mut candidates: Vec<(usize, usize, BTreeMap<String, usize>)> = Vec::new();
+        let mut inherent: Vec<(usize, usize, BTreeMap<String, usize>)> = Vec::new();
         let mut prerequisite_problem = None;
         for index in implementations {
             let implementation = self.compiler.source.impls[index].clone();
@@ -290,15 +297,18 @@ impl super::Builder<'_, '_> {
                 continue;
             }
             for candidate in methods {
-                if implementation.trait_ty.is_none() { inherent.push((candidate, substitutions.clone())); }
-                else { candidates.push((candidate, substitutions.clone())); }
+                if implementation.trait_ty.is_none() { inherent.push((index, candidate, substitutions.clone())); }
+                else { candidates.push((index, candidate, substitutions.clone())); }
             }
         }
         if !inherent.is_empty() { candidates = inherent; }
         if candidates.len() > 1 { return Err(err(span, "E_TRAIT", "ambiguous associated function")); }
-        if let Some((source, substitutions)) = candidates.pop() {
-            if let a::FunctionOwner::Trait(owner) = self.compiler.source.function_owner(a::FunctionId { index: source }) {
-                let instance = self.compiler.declared_associated_method(receiver, owner.index, name, expression, span, span)?;
+        if let Some((implementation, source, substitutions)) = candidates.pop() {
+            if matches!(self.compiler.source.function_owner(a::FunctionId { index: source }), a::FunctionOwner::Trait(_)) {
+                let bound = self.compiler.source.impls[implementation].trait_ty.unwrap();
+                let a::Type::Path(path) = self.compiler.source.types[bound].kind.clone() else { unreachable!() };
+                let identity = self.compiler.trait_identity(&path, &substitutions, span)?;
+                let instance = self.compiler.declared_associated_method(receiver, &identity, name, expression, span, span, &self.sub)?;
                 return Ok(Some(instance));
             }
             if explicit_receiver && self.compiler.contracts.is_some() {

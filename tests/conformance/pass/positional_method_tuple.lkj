@@ -1,0 +1,29 @@
+// expect: value 42
+// witness: {}
+type IResult<I, O, E> = Result<(I, O), E>;
+trait ParseError<I> {}
+impl ParseError<usize> for u8 {}
+trait Parser<I> {
+    type Output;
+    type Error: ParseError<I>;
+    fn parse(&mut self, input: I) -> IResult<I, Self::Output, Self::Error>;
+}
+trait Pair<I, O, E> { fn parse_pair(&mut self, input: I) -> IResult<I, O, E>; }
+struct Add { amount: usize }
+impl Parser<usize> for Add {
+    type Output = usize;
+    type Error = u8;
+    fn parse(&mut self, input: usize) -> IResult<usize, usize, u8> { Ok((input + self.amount, input)) }
+}
+impl<I: Clone, A, B, E: ParseError<I>, P: Parser<I, Output = A, Error = E>, Q: Parser<I, Output = B, Error = E>>
+    Pair<I, (A, B), E> for (P, Q) {
+    fn parse_pair(&mut self, input: I) -> IResult<I, (A, B), E> {
+        let (input, first) = self.0.parse(input)?;
+        let (input, second) = self.1.parse(input)?;
+        Ok((input, (first, second)))
+    }
+}
+pub fn probe() -> i64 {
+    let mut pair = (Add { amount: 2usize }, Add { amount: 3usize });
+    match pair.parse_pair(20usize) { Ok((_, (first, second))) => (first + second) as i64, Err(_) => 0 }
+}

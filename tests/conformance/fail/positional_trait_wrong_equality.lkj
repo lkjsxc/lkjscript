@@ -1,0 +1,8 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Source<T> { type Item; }
+struct SourceValue {}
+impl Source<u8> for SourceValue { type Item = i64; }
+impl Source<bool> for SourceValue { type Item = bool; }
+fn require<P: Source<bool, Item = i64>>() {}
+pub fn probe() -> i64 { require::<SourceValue>(); 42 }

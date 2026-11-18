@@ -196,6 +196,39 @@ A solved type is not a coercion site: Some(r), inferred generic fields and ident
 Explicit Option<&mut T>, view-field or result expectations can authorize a reborrow; pass &mut *argument for repeated generic mutable arguments. Aliases/nesting preserve this distinction.
 
 Traits specify methods/associated types; implementations must be unique. Signatures, prerequisites, supertraits and instantiated arguments check.
+
+**Positional trait type arguments.** Declared source traits can bind named type
+parameters, as in `trait Parser<Input> { type Output; }`. Bounds, implementations,
+qualified members, inherited contracts, associated equalities, and opaque
+`impl Trait` results preserve the complete application. `Parser<u8>` and
+`Parser<bool>` are distinct witnesses even for the same receiver. A blanket
+implementation can bind a parameter through the trait argument as well as through
+its receiver. Trait type parameters check their declared bounds and implicit
+`Sized` requirement; `?Sized` permits an explicitly unsized argument.
+
+Generic bodies are checked with rigid argument identities, including unused
+bodies. Sibling associated equalities refine applied arguments independently of
+parameter order; the corresponding proof identity is updated before use. A recorded method keeps a source substitution recipe for its applied
+trait, so specialization cannot replace that evidence with a different argument
+or a same-spelled inherent method. Provided bodies substitute trait parameters
+independently from implementation parameters. Supertrait cycles and recursively
+expanding proof arguments are refused without a search-depth threshold.
+Trait lifetime/const parameters and generic associated type families remain
+separate located source boundaries. Written reference arguments, arguments through
+lifetime-parameterized nominal types/aliases, and projections that normalize to
+views require a region-aware witness identity and are refused. The existing
+region-erased IR type identity cannot prove that two written lifetimes denote the
+same trait argument. Ordinary type parameters can still carry borrowed values
+through uniformly generic implementations; no lifetime-specific witness is inferred. [Positional trait cases](../tests/conformance/pass/positional_trait_identity.lkj).
+Concrete method arguments and result context can also determine implementation
+parameters absent from the receiver, such as `Input` in a tuple parser's
+`Parser<Input>` prerequisites. Definition inference retains those equations with
+the exact expression, implementation, and method identities; selection proves
+every completed prerequisite before using the candidate. Unresolved or competing
+candidates do not become witnesses. The completed application supplies no new
+argument coercion site: an inferred mutable-reference argument still moves unless
+the source establishes a reborrow. Checked specialization, references, and method
+renames retain the same application. [Tuple dispatch](../tests/conformance/pass/positional_method_tuple.lkj).
 Send/Sync/Data derive structurally; Data excludes capabilities. Expanding generic-instantiation SCCs reject, including alias paths.
 Method calls lower to concrete function calls; trait spelling alone grants no builtin semantics.
 
@@ -248,7 +281,7 @@ checkpoints, while unchanged authenticated images remain reusable.
 [mixed const and relaxed parameters](../tests/conformance/pass/maybe_sized_const_borrowed.lkj),
 [meaning, edits and cache checks](../tools/maybe-sized-test.sh).
 
-Associated equations key on receiver variable, resolved declaring trait and member, including inherited members; same-spelled members of different traits remain distinct.
+Associated equations key on receiver variable, resolved declaring trait, its positional type arguments and member, including inherited members; different trait applications remain distinct.
 Equality bindings such as `Source<Item = i64>` work in generic parameter bounds, parameter where clauses, supertraits and associated-type bounds.
 Nested binding values, repeated equal constraints and sibling generic parameters are supported.
 Cycles consisting only of unresolved projection dependencies are refused; finite relationships such as `A::Next = B, B::Next = A` are supported.
@@ -262,7 +295,7 @@ A unique structurally compatible implementation may contribute conditional equat
 Associated callable inputs can use declared trait evidence regardless of generic parameter order. Missing/ambiguous/incompatible bounds reject.
 Projections require checked child witnesses, and pending/cyclic nonstructural goals are not proofs.
 Conflicting, unknown, ambiguous or incompatible member bindings reject at the binding. Equalities on ordinary types or implementation trait headers reject.
-Positional trait type arguments remain unsupported, and generic associated types retain their existing limits.
+Positional arguments can precede equality bindings, as in `Parser<u8, Output = i64>`; the equality belongs to that exact applied trait. Generic associated types retain their existing limits.
 Equalities lower to ordinary concrete types/calls with no new checked-IR operation or checker authority.
 Queries retain binding syntax and resolved member references; checked function changes preserve constraints. [Equality cases](../tests/conformance/pass/associated_equality.lkj).
 
@@ -301,7 +334,7 @@ implementation may remain a located refusal.
 Associated and concrete type predicates apply to functions, nominal types, aliases,
 traits and implementations. A method implementation cannot strengthen its declared
 predicate. Invalid concrete predicates and missing trait/member evidence reject
-at the source form. Positional trait arguments, generic associated families,
+at the source form. Trait lifetime/const arguments, generic associated families,
 standalone qualified function values, builtin-trait qualification and recursive
 where assumptions requiring a lazy contract remain located refusals. These forms add no checked-IR
 operation or trusted trait proof. Queries preserve the written qualified type and

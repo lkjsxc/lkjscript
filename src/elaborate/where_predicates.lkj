@@ -44,10 +44,8 @@ impl Compiler<'_> {
         if self.callable_bound(receiver, &path, substitutions, span)? {
             return Ok(());
         }
-        if !path.args.is_empty() {
-            return Err(err(node.span, "E_UNSUPPORTED", "parameterized where-predicate trait bounds are not implemented"));
-        }
-        let identity = crate::generics::bound_identity(self.source, &path);
+        let identity = self.trait_identity(&path, substitutions, node.span)?;
+        self.trait_argument_contract(receiver, &identity, node.span)?;
         if !self.satisfies_identity(receiver, &identity) {
             return Err(err(span, "E_TRAIT", &format!(
                 "where predicate requires {} to implement {}", self.display_type(receiver), path.name)));

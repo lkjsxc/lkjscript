@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {}
+trait Read<T> { type Item; fn read(self, input: T) -> Self::Item; }
+fn unused<T, P: Read<T>>(parser: P, input: T) -> i64 { parser.read(input) }
+pub fn probe() -> i64 { 42 }

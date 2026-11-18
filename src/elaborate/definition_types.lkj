@@ -26,7 +26,7 @@ enum Shape {
     Constant(usize),
     ConstantRigid(String),
     Projected(a::DeclarationId, String),
-    Projection(a::DeclarationId, String, Variable),
+    Projection(a::DeclarationId, String, Variable, Vec<Variable>),
     Source(a::TypeId),
     Opaque(a::TypeId, Vec<String>, Vec<Variable>),
     Vec(Variable),
@@ -46,6 +46,9 @@ impl Shape {
                 vec![*v]
             }
             Self::Array(element, length) => vec![*element, *length],
+            Self::Projection(_, _, receiver, arguments) => {
+                let mut children = vec![*receiver]; children.extend_from_slice(arguments); children
+            }
             Self::Tuple(v) | Self::Nominal(_, v) | Self::Closure(_, v) | Self::Opaque(_, _, v) => v.clone(),
             _ => Vec::new(),
         }
@@ -143,14 +146,23 @@ pub(super) struct DefinitionTypes {
     result: Variable,
     expressions: BTreeMap<a::ExprId, Variable>,
     bindings: BTreeMap<a::PatternId, Variable>,
+    // Values are inference variables here, and resolved types in Types below.
+    method_applications: BTreeMap<a::ExprId, MethodApplication>,
     closures: BTreeMap<a::ExprId, closures::Closure>,
     local_paths: Vec<(a::ExprId, super::semantic::LocalTarget)>,
     semantic_bindings: Vec<(a::PatternId, Variable)>,
+}
+#[derive(Clone)]
+pub(super) struct MethodApplication {
+    pub(super) implementation: usize,
+    pub(super) method: usize,
+    pub(super) arguments: BTreeMap<String, usize>,
 }
 #[derive(Clone, Default)]
 pub(super) struct Types {
     pub(super) expressions: BTreeMap<a::ExprId, usize>,
     pub(super) bindings: BTreeMap<a::PatternId, usize>,
+    pub(super) method_applications: BTreeMap<a::ExprId, MethodApplication>,
 }
 impl DefinitionTypes {
     pub(super) fn result_type(&self, compiler: &mut Compiler<'_>,
@@ -187,6 +199,21 @@ impl DefinitionTypes {
                 result.bindings.insert(*pattern, ty);
             }
         }
+        for (expression, application) in &self.method_applications {
+            let span = compiler.source.exprs[*expression].span;
+            let mut arguments = BTreeMap::new();
+            let mut complete = true;
+            for (name, variable) in &application.arguments {
+                if let Some(ty) = self.materialize(*variable, compiler, substitutions, &mut known, span)? {
+                    arguments.insert(name.clone(), ty);
+                } else { complete = false; break; }
+            }
+            if complete {
+                result.method_applications.insert(*expression, MethodApplication {
+                    implementation: application.implementation, method: application.method, arguments,
+                });
+            }
+        }
         Ok(result)
     }
 
@@ -209,10 +236,7 @@ impl DefinitionTypes {
                 known.insert(id, None);
                 continue;
             };
-            let children = match &shape {
-                Shape::Projection(_, _, receiver) => vec![*receiver],
-                _ => shape.children(),
-            };
+            let children = shape.children();
             if !ready && !children.is_empty() {
                 pending.push((id, true));
                 let mut next = children.len();
@@ -260,11 +284,12 @@ impl DefinitionTypes {
                         )?)
                     }
                 }
-                Shape::Projection(declaration, member, _) => {
+                Shape::Projection(declaration, member, _, _) => {
                     let a::Item::Trait(owner) = compiler.source.declarations[declaration].item else {
                         return Err(err(span, "E_TRAIT", "qualified projection requires a declared trait"));
                     };
-                    Some(compiler.associated_type_for_trait(values[0], owner, &member, span)?)
+                    let identity = crate::generics::TraitIdentity::application(owner, values[1..].to_vec());
+                    Some(compiler.associated_type_for_identity(values[0], &identity, &member, span)?)
                 }
                 Shape::Rigid(name) | Shape::ConstantRigid(name) => substitutions.get(&name).copied(),
                 Shape::Constant(value) => Some(compiler.constant(value)),
@@ -412,6 +437,7 @@ enum Obligation {
     Projection {
         receiver: Variable,
         declaration: a::DeclarationId,
+        arguments: Vec<Variable>,
         member: String,
         result: Variable,
         span: a::Span,
@@ -457,6 +483,7 @@ enum Obligation {
         span: a::Span,
     },
     Method {
+        expression: a::ExprId,
         receiver: Variable,
         name: String,
         types: Vec<a::TypeId>,
@@ -480,10 +507,10 @@ struct Infer<'a, 'b> {
     capture_references: bool,
     capture_frames: Vec<closures::Frame>,
     callable_parameters: BTreeMap<String, (Vec<Variable>, Variable)>,
-    projections: Vec<BTreeMap<(a::DeclarationId, String), Variable>>,
-    projection_headers: Vec<BTreeSet<(a::DeclarationId, String)>>,
+    projections: Vec<BTreeMap<(a::DeclarationId, Vec<Variable>, String), Variable>>,
+    projection_headers: Vec<BTreeSet<(a::DeclarationId, Vec<Variable>, String)>>,
     projection_bindings: BTreeMap<Variable, a::Span>,
-    trait_headers: Vec<(Variable, a::TypeId)>,
+    trait_headers: Vec<(Variable, a::TypeId, Vec<Variable>, BTreeMap<String, Variable>)>,
     projection_receivers: Vec<Variable>,
     projection_ancestry: BTreeMap<usize, Vec<(usize, String, Vec<Variable>)>>,
     source: &'a a::Program,
@@ -588,7 +615,7 @@ impl Infer<'_, '_> {
                     format!("{name}<{}>", self.display_variables(&args))
                 }
             }
-            Some(Shape::Projected(_, member)) | Some(Shape::Projection(_, member, _)) => format!("associated type {member}"),
+            Some(Shape::Projected(_, member)) | Some(Shape::Projection(_, member, _, _)) => format!("associated type {member}"),
             Some(Shape::Opaque(id, _, _)) => super::semantic::source_type_name(self.source, id),
             Some(Shape::Source(id)) => match &self.source.types[id].kind {
                 a::Type::Path(path) => path.name.clone(),
@@ -654,6 +681,7 @@ impl Infer<'_, '_> {
         }
         let mut equations = Vec::new();
         for (key, value) in std::mem::replace(&mut self.projections[b], BTreeMap::new()) {
+            let key = self.projection_key(a, key.0, &key.1, &key.2);
             if let Some(previous) = self.projections[a].insert(key, value) {
                 equations.push((previous, value));
             }
@@ -686,10 +714,10 @@ impl Infer<'_, '_> {
                 // Opaque generic projections stay with the original type checker.
                 if matches!(
                     sa,
-                    Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Source(_))
+                    Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _, _) | Shape::Source(_))
                 ) || matches!(
                     sb,
-                    Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Source(_))
+                    Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _, _) | Shape::Source(_))
                 ) {
                     continue;
                 }
@@ -700,8 +728,9 @@ impl Infer<'_, '_> {
                 ));
             }
             let merge = match (&sa, &sb) {
-                (Some(Shape::Projection(ad, an, ar)), Some(Shape::Projection(bd, bn, br)))
-                    if ad == bd && an == bn && self.root(*ar) == self.root(*br) => true,
+                (Some(Shape::Projection(ad, an, ar, aa)), Some(Shape::Projection(bd, bn, br, ba)))
+                    if ad == bd && an == bn && self.same_projection_receiver(*ar, *br)
+                        && self.same_trait_arguments(aa, ba) => true,
                 (None, _) | (_, None) => {
                     if self.occurs(a, b) || self.occurs(b, a) {
                         return Err(err(
@@ -765,8 +794,8 @@ impl Infer<'_, '_> {
                         ),
                     ));
                 }
-                (Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Source(_)), _)
-                | (_, Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Source(_))) => {
+                (Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _, _) | Shape::Source(_)), _)
+                | (_, Some(Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _, _) | Shape::Source(_))) => {
                     sa == sb
                 }
                 _ if sa == sb => true,
@@ -879,7 +908,7 @@ impl Infer<'_, '_> {
             if matches!(
                 self.shape(to),
                 None | Some(
-                    Shape::Box(_) | Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Source(_) | Shape::Opaque(..)
+                    Shape::Box(_) | Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _, _) | Shape::Source(_) | Shape::Opaque(..)
                 )
             ) {
                 break;
@@ -1766,6 +1795,7 @@ impl Infer<'_, '_> {
                 }
                 let result = self.operation_type();
                 self.obligation(Obligation::Method {
+                    expression: id,
                     receiver,
                     name,
                     types,
@@ -2045,11 +2075,12 @@ impl Infer<'_, '_> {
             Obligation::Projection {
                 receiver,
                 declaration,
+                arguments,
                 member,
                 result,
                 span,
             } => {
-                return self.solve_projection(id, receiver, declaration, &member, result, span);
+                return self.solve_projection(id, receiver, declaration, &arguments, &member, result, span);
             }
             Obligation::Callable {
                 receiver,
@@ -2094,7 +2125,7 @@ impl Infer<'_, '_> {
                 let Shape::Nominal(declaration, arguments) = shape else {
                     if matches!(
                         shape,
-                        Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _) | Shape::Source(_)
+                        Shape::Rigid(_) | Shape::Projected(_, _) | Shape::Projection(_, _, _, _) | Shape::Source(_)
                     ) {
                         return Ok(false);
                     }
@@ -2293,6 +2324,7 @@ impl Infer<'_, '_> {
                 return self.associated_receiver_header(receiver, &name, &types, &arguments, result, (id, scope, span));
             }
             Obligation::Method {
+                expression,
                 receiver,
                 name,
                 types,
@@ -2339,7 +2371,7 @@ impl Infer<'_, '_> {
                         &types,
                         &arguments,
                         result,
-                        (id, scope, span),
+                        (id, expression, scope, span),
                     )?
                 {
                     return Ok(true);
@@ -2554,6 +2586,7 @@ pub(super) fn infer(
             result: 0,
             expressions: BTreeMap::new(),
             bindings: BTreeMap::new(),
+            method_applications: BTreeMap::new(),
             closures: BTreeMap::new(), local_paths: Vec::new(), semantic_bindings: Vec::new(),
         },
         bindings: semantic::SourceBindings::default(),
@@ -2701,6 +2734,7 @@ pub(super) fn assert_reference_capture_deferred(source: &a::Program, index: usiz
                 result: 0,
                 expressions: BTreeMap::new(),
                 bindings: BTreeMap::new(),
+                method_applications: BTreeMap::new(),
                 closures: BTreeMap::new(),
                 local_paths: Vec::new(),
                 semantic_bindings: Vec::new(),

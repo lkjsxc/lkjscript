@@ -47,7 +47,9 @@ pub(super) fn finish(compiler: &mut Compiler<'_>) -> Option<Evidence> {
         let target = match &selection.target {
             generic_check::MethodTarget::Builtin => MethodTarget::Builtin,
             generic_check::MethodTarget::Source(source) => MethodTarget::Source(*source),
-            generic_check::MethodTarget::Trait(crate::generics::TraitIdentity::Declared(declaration)) => MethodTarget::Trait(*declaration),
+            generic_check::MethodTarget::AppliedTrait(declaration, _)
+            | generic_check::MethodTarget::Trait(crate::generics::TraitIdentity::Applied(declaration, _))
+            | generic_check::MethodTarget::Trait(crate::generics::TraitIdentity::Declared(declaration)) => MethodTarget::Trait(*declaration),
             generic_check::MethodTarget::Trait(crate::generics::TraitIdentity::Builtin(name)) => MethodTarget::BuiltinTrait(name.clone()),
             generic_check::MethodTarget::Trait(crate::generics::TraitIdentity::Unknown(_)) => MethodTarget::InstanceDependent,
         };

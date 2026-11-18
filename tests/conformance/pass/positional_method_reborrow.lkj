@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+trait Consume<I> { fn consume(&mut self, input: I); }
+struct Sink {}
+impl<I> Consume<I> for Sink { fn consume(&mut self, input: I) { let _ = input; } }
+pub fn probe() -> i64 {
+    let mut value = 41i64;
+    let reference = &mut value;
+    let mut sink = Sink {};
+    sink.consume(&mut *reference);
+    *reference += 1i64;
+    *reference
+}

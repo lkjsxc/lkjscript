@@ -1,0 +1,9 @@
+// expect: reject E_TYPE
+// witness: {}
+trait Kind<I> {}
+struct Both {}
+impl Kind<u8> for Both {}
+impl Kind<bool> for Both {}
+trait Inspect<I> { fn inspect(&self) -> i64; }
+impl<I, P: Kind<I>> Inspect<I> for (P,) { fn inspect(&self) -> i64 { 42 } }
+pub fn probe() -> i64 { (Both {},).inspect() }

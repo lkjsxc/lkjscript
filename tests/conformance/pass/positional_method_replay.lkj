@@ -1,0 +1,21 @@
+// expect: value 42
+// witness: {}
+trait Parser<I> { type Output; fn parse(&mut self, input: I) -> (I, Self::Output); }
+trait Pair<I, O> { fn parse_pair(&mut self, input: I) -> (I, O); }
+struct Add { amount: i64 }
+impl Parser<i64> for Add {
+    type Output = i64;
+    fn parse(&mut self, input: i64) -> (i64, i64) { (input + self.amount, input) }
+}
+impl<I, A, B, P: Parser<I, Output = A>, Q: Parser<I, Output = B>> Pair<I, (A, B)> for (P, Q) {
+    fn parse_pair(&mut self, input: I) -> (I, (A, B)) {
+        let (input, first) = self.0.parse(input);
+        let (input, second) = self.1.parse(input);
+        (input, (first, second))
+    }
+}
+fn chain<I, A, B, P: Parser<I, Output = A>, Q: Parser<I, Output = B>>(first: P, second: Q, input: I) -> (I, (A, B)) {
+    let mut pair = (first, second);
+    pair.parse_pair(input)
+}
+pub fn probe() -> i64 { let (_, (first, second)) = chain(Add { amount: 2 }, Add { amount: 3 }, 20i64); first + second }

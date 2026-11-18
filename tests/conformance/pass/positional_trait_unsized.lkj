@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+trait Marker<T: ?Sized> {}
+struct Witness {}
+impl Marker<str> for Witness {}
+fn prove<T: ?Sized, P: Marker<T>>() -> i64 { 42 }
+pub fn probe() -> i64 { prove::<str, Witness>() }

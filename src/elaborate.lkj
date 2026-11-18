@@ -36,6 +36,7 @@ mod static_lifetimes;
 mod sugars;
 mod text_format;
 mod trait_proofs;
+mod trait_arguments;
 mod type_display;
 mod type_resolve;
 mod sized_bounds;
@@ -3913,7 +3914,7 @@ impl Builder<'_, '_> {
         if let Some(qualification) = &path.qualification {
             let receiver = self.compiler.resolve(qualification.receiver, &self.sub)?;
             let instance = if qualification.trait_ty.is_some() {
-                self.compiler.qualified_method(receiver, qualification, &path.name, callee, span)?
+                self.compiler.qualified_method(receiver, qualification, &path.name, callee, span, &self.sub)?
             } else {
                 self.associated_receiver(receiver, &path.name, callee, true, span)?
                     .ok_or_else(|| err(qualification.member_span, "E_TRAIT",
@@ -4305,8 +4306,13 @@ impl Builder<'_, '_> {
                     return self
                         .witnessed_method(&target, base, identity, expression, _types, args);
                 }
+                generic_check::MethodTarget::AppliedTrait(owner, recipe) => {
+                    let arguments = self.compiler.instantiate_trait_recipe(recipe, &self.sub, span)?;
+                    let identity = crate::generics::TraitIdentity::application(*owner, arguments);
+                    return self.witnessed_method(&target, base, &identity, expression, _types, args);
+                }
                 generic_check::MethodTarget::Source(index) => {
-                    return self.fixed_source_method(&target, base, *index, _types, args, span);
+                    return self.fixed_source_method(&target, base, expression, *index, _types, args, span);
                 }
                 generic_check::MethodTarget::Builtin => {}
             }
@@ -4511,8 +4517,8 @@ impl Builder<'_, '_> {
                 Ok((dst, ty))
             }
             _ => {
-                let mut candidates: Vec<(usize, BTreeMap<String, usize>)> = Vec::new();
-                let mut inherent_candidates: Vec<(usize, BTreeMap<String, usize>)> = Vec::new();
+                let mut candidates: Vec<(usize, BTreeMap<String, usize>, BTreeMap<String, usize>)> = Vec::new();
+                let mut inherent_candidates: Vec<(usize, BTreeMap<String, usize>, BTreeMap<String, usize>)> = Vec::new();
                 let mut unavailable_trait = false;
                 let mut private_trait = false;
                 let mut prerequisite_problem = None;
@@ -4554,16 +4560,19 @@ impl Builder<'_, '_> {
                                 }
                                 continue;
                             }
-                            if let Err(problem) = self.compiler.implementation_bounds(&im, &sub) {
-                                prerequisite_problem.get_or_insert(problem);
-                                continue;
-                            }
                             for method in &im.methods {
                                 if self.compiler.source.functions[*method].name == name {
+                                    let inputs = sub.clone();
+                                    let mut application = sub.clone();
+                                    if !self.complete_method_application(expression, index, *method, &mut application) { continue; }
+                                    if let Err(problem) = self.compiler.implementation_bounds(&im, &application) {
+                                        prerequisite_problem.get_or_insert(problem);
+                                        continue;
+                                    }
                                     if im.trait_ty.is_none() {
-                                        inherent_candidates.push((*method, sub.clone()));
+                                        inherent_candidates.push((*method, inputs, application));
                                     } else {
-                                        candidates.push((*method, sub.clone()));
+                                        candidates.push((*method, inputs, application));
                                     }
                                 }
                             }
@@ -4613,7 +4622,7 @@ impl Builder<'_, '_> {
                         ),
                     ));
                 }
-                let (index, sub) = candidates[0].clone();
+                let (index, sub, application) = candidates[0].clone();
                 if let Some(evidence) = self.compiler.semantic_evidence.as_mut() { evidence.method(expression, index); }
                 if self.compiler.contracts.is_some() {
                     self.compiler
@@ -4622,7 +4631,7 @@ impl Builder<'_, '_> {
                         .unwrap()
                         .target = generic_check::MethodTarget::Source(index);
                 }
-                self.source_method(
+                self.source_method_with_application(
                     &target,
                     base,
                     Instance {
@@ -4632,6 +4641,7 @@ impl Builder<'_, '_> {
                     _types,
                     args,
                     span,
+                    application,
                 )
             }
         }

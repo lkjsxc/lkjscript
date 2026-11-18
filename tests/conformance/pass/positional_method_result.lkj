@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+trait Build: Sized { fn build() -> Self; }
+impl Build for i64 { fn build() -> i64 { 42 } }
+trait Produce<T> { fn produce(&self) -> T; }
+struct Factory {}
+impl<T: Build> Produce<T> for Factory { fn produce(&self) -> T { T::build() } }
+pub fn probe() -> i64 { let result: i64 = Factory {}.produce(); result }

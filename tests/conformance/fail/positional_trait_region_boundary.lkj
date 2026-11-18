@@ -1,0 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Takes<T> {}
+fn unused<'a, P: Takes<&'a str>>() {}
+pub fn probe() -> i64 { 42 }

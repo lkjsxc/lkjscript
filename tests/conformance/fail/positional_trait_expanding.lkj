@@ -1,0 +1,7 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Grow<T> {}
+struct Infinite {}
+impl<T> Grow<T> for Infinite where Infinite: Grow<Vec<T>> {}
+fn require<T: Grow<i64>>() {}
+pub fn probe() -> i64 { require::<Infinite>(); 42 }

@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+trait Convert<T> { fn convert(self, input: T) -> i64; }
+struct Mapper {}
+impl Convert<u8> for Mapper { fn convert(self, input: u8) -> i64 { input as i64 } }
+struct Wrap<P> { parser: P }
+trait Execute { fn execute(self) -> i64; }
+impl<P> Execute for Wrap<P> where P: Convert<u8> { fn execute(self) -> i64 { self.parser.convert(42u8) } }
+fn execute<T: Execute>(value: T) -> i64 { value.execute() }
+pub fn probe() -> i64 { execute(Wrap { parser: Mapper {} }) }

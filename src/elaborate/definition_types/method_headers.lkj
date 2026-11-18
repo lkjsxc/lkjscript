@@ -37,8 +37,8 @@ impl Infer<'_, '_> {
         let root = self.root(receiver);
         let projections = self.projections[root].clone();
         let span = self.source.types[ty].span;
-        for ((declaration, member), _) in projections {
-            self.qualified_projection(receiver, declaration, &member, span);
+        for ((declaration, arguments, member), _) in projections {
+            self.qualified_projection(receiver, declaration, &arguments, &member, span);
         }
         Ok(())
     }
@@ -50,21 +50,25 @@ impl Infer<'_, '_> {
         location: (a::ModuleId, a::Span)) -> Result<bool> {
         let Some(Shape::Opaque(ty, _, _)) = self.shape(receiver) else { return Ok(false); };
         let (scope, span) = location;
-        let mut pending = self.source.impl_traits.get(&ty).unwrap().bounds.clone();
-        let mut seen = BTreeSet::new();
-        let mut method: Option<(usize, a::TypeId)> = None;
         let mut clone = false;
-        while let Some(bound) = pending.pop() {
-            let a::Type::Path(path) = self.source.types[bound].kind.clone() else { continue; };
-            if path.declaration.is_none() {
-                if matches!(path.name.as_str(), "Clone" | "Copy") { clone = true; }
-                continue;
-            }
-            let declaration = path.declaration.unwrap();
-            if !seen.insert(declaration) { continue; }
+        for bound in &self.source.impl_traits.get(&ty).unwrap().bounds {
+            if matches!(&self.source.types[*bound].kind, a::Type::Path(path)
+                if path.declaration.is_none() && matches!(path.name.as_str(), "Clone" | "Copy")) { clone = true; }
+        }
+        let mut seen: Vec<(a::DeclarationId, Vec<Variable>)> = Vec::new();
+        let mut method: Option<(usize, BTreeMap<String, Variable>)> = None;
+        for (target, bound, trait_arguments, environment) in self.trait_headers.clone() {
+            if self.definition.root(target) != self.definition.root(receiver) { continue; }
+            let a::Type::Path(path) = &self.source.types[bound].kind else { continue; };
+            let Some(declaration) = path.declaration else { continue; };
+            if seen.iter().any(|(owner, previous)| *owner == declaration && self.same_trait_arguments(previous, &trait_arguments)) { continue; }
+            seen.push((declaration, trait_arguments));
             let a::Item::Trait(index) = self.source.declarations[declaration].item else { continue; };
             let definition = self.source.traits[index].clone();
-            pending.extend_from_slice(&definition.bounds);
+            for parent in &definition.bounds {
+                if matches!(&self.source.types[*parent].kind, a::Type::Path(path)
+                    if path.declaration.is_none() && matches!(path.name.as_str(), "Clone" | "Copy")) { clone = true; }
+            }
             if !self.names.trait_in_scope(scope, declaration, span) { continue; }
             for candidate in &definition.methods {
                 let function = &self.source.functions[*candidate];
@@ -75,15 +79,10 @@ impl Infer<'_, '_> {
                     return Ok(false);
                 }
                 if method.is_some() { return Ok(false); }
-                method = Some((*candidate, bound));
+                method = Some((*candidate, environment.clone()));
             }
         }
-        if let Some((method, bound)) = method {
-            let mut environment = BTreeMap::new();
-            environment.insert("Self".to_string(), receiver);
-            // Reuse the advertised slots after binding method Self. Replaying
-            // their equalities here would change the meaning of a captured Self.
-            self.trait_equations(receiver, "Self", bound, &mut environment, true)?;
+        if let Some((method, environment)) = method {
             let output = self.header_signature(method, type_args, arguments, environment, 1, span)?;
             self.unify(result, output, span)?;
             return Ok(true);
@@ -197,9 +196,9 @@ impl Infer<'_, '_> {
         type_args: &[a::TypeId],
         arguments: &[Variable],
         result: Variable,
-        location: (usize, a::ModuleId, a::Span),
+        location: (usize, a::ExprId, a::ModuleId, a::Span),
     ) -> Result<bool> {
-        let (id, scope, span) = location;
+        let (id, expression, scope, span) = location;
         if matches!(self.shape(receiver), None | Some(Shape::Rigid(_) | Shape::Opaque(..))) {
             self.watch(receiver, id);
             return Ok(false);
@@ -273,8 +272,19 @@ impl Infer<'_, '_> {
         if let Some(bound) = self.source.impls[candidate].trait_ty {
             self.trait_equations(receiver, "Self", bound, &mut environment, false)?;
         }
-        let output = self.header_signature(method, type_args, arguments, environment, 1, span)?;
+        let output = self.header_signature(method, type_args, arguments, environment.clone(), 1, span)?;
         self.unify(result, output, span)?;
+        let mut application = BTreeMap::new();
+        for parameter in &generics {
+            if !parameter.lifetime {
+                if let Some(value) = environment.get(&parameter.name) {
+                    application.insert(parameter.name.clone(), *value);
+                }
+            }
+        }
+        self.definition.method_applications.insert(expression, super::MethodApplication {
+            implementation: candidate, method, arguments: application,
+        });
         Ok(true)
     }
 }

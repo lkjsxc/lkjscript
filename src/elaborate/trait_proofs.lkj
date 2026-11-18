@@ -10,6 +10,7 @@ use std::collections::{BTreeMap, BTreeSet};
 #[derive(Default)]
 pub(super) struct Session {
     active: BTreeSet<Goal>,
+    pub(super) arguments: Vec<Goal>,
     proved: BTreeMap<Goal, Option<ImplementationWitness>>,
     projections: BTreeMap<Goal, BTreeMap<String, usize>>,
 }
@@ -39,14 +40,14 @@ impl Compiler<'_> {
         &mut self,
         goal: &Goal,
         mut witness: ImplementationWitness,
-        constraints: &[(a::TypeId, usize)],
+        constraints: &[(a::TypeId, usize, Option<BTreeMap<String, usize>>)],
     ) -> Result<ImplementationWitness> {
         let parameters = self.source.impls[witness.implementation].generics.clone();
         witness.substitutions.insert("Self".to_string(), goal.ty);
         // Child proofs are already available in this session. Resolving an
         // associated projection consumes that evidence, not a trait-name guess.
         self.prepare_parameter_associated(&parameters, &mut witness.substitutions)?;
-        for (bound, ty) in constraints {
+        for (bound, ty, environment) in constraints {
             let node = self.source.types[*bound].clone();
             let a::Type::Path(path) = node.kind else {
                 return Err(err(
@@ -55,21 +56,15 @@ impl Compiler<'_> {
                     "invalid parameterized trait prerequisite",
                 ));
             };
-            if !path.bindings.is_empty() && path.args.is_empty() {
-                self.check_associated_bindings(*ty, &path, &witness.substitutions, node.span)?;
-            } else if !self.callable_bound(*ty, &path, &witness.substitutions, node.span)? {
-                return Err(err(
-                    node.span,
-                    "E_UNSUPPORTED",
-                    "parameterized trait prerequisite needs explicit evidence",
-                ));
-            }
+            let _ = path;
+            // Implementation prerequisites consume the completed callable and
+            // projection environment. Declared trait parameters keep their own
+            // names and must never capture same-spelled implementation names.
+            let environment = environment.as_ref().unwrap_or(&witness.substitutions);
+            self.check_type_bound(*ty, *bound, environment, node.span)?;
         }
         let predicates = self.source.impls[witness.implementation].predicates.clone();
-        let trait_predicates = match goal.bound {
-            TraitIdentity::Declared(index) => self.source.traits[index].predicates.clone(),
-            _ => Vec::new(),
-        };
+        let trait_predicates = goal.bound.declaration().map_or(Vec::new(), |index| self.source.traits[index].predicates.clone());
         if predicates.is_empty() && trait_predicates.is_empty() { return Ok(witness); }
         if self.trait_proofs.as_ref().unwrap().projections.contains_key(goal) {
             return Err(err(self.source.impls[witness.implementation].span, "E_TRAIT",
@@ -84,7 +79,8 @@ impl Compiler<'_> {
         self.trait_proofs.as_mut().unwrap().projections.insert(goal.clone(), associated);
         let mut checked = self.check_where_predicates(&predicates, &witness.substitutions);
         if checked.is_ok() {
-            checked = self.check_where_predicates(&trait_predicates, &witness.substitutions);
+            let environment = self.trait_environment(goal.ty, &goal.bound);
+            checked = self.check_where_predicates(&trait_predicates, &environment);
         }
         let session = self.trait_proofs.as_mut().unwrap();
         session.projections.remove(goal);
@@ -106,6 +102,8 @@ impl Compiler<'_> {
         if self.trait_proofs.is_none() {
             self.trait_proofs = Some(Session::default());
         }
+        let expanding = self.trait_proofs.as_ref().unwrap().active.iter().any(|previous| self.expanding_trait_goal(&goal, previous));
+        if expanding { if outermost { self.trait_proofs = None; } return None; }
         let session = self.trait_proofs.as_mut().unwrap();
         if let Some(proof) = session.proved.get(&goal) {
             return Some(proof.clone());
@@ -171,6 +169,19 @@ impl Compiler<'_> {
             self.trait_proofs = None;
         }
         result
+    }
+
+    pub(super) fn expanding_trait_goal(&self, goal: &Goal, previous: &Goal) -> bool {
+        if goal.bound.head() != previous.bound.head() { return false; }
+        let mut arguments = goal.bound.arguments(); arguments.push(goal.ty);
+        let mut earlier = previous.bound.arguments(); earlier.push(previous.ty);
+        if arguments.len() != earlier.len() { return false; }
+        let mut larger = false;
+        for position in 0..arguments.len() {
+            if !self.associated_argument_contains(arguments[position], earlier[position]) { return false; }
+            larger = larger || arguments[position] != earlier[position];
+        }
+        larger
     }
 
     pub(super) fn satisfies_bound(&mut self, ty: usize, bound: &str) -> bool {

@@ -1,0 +1,287 @@
+//! Trait applications are source evidence. Their argument identities never
+//! become trusted IR kinds, and recorded calls retain source recipes rather
+//! than disposable definition-verification type IDs.
+use super::{Compiler, Result, a, err, ir};
+use crate::generics::TraitIdentity;
+use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(Clone)]
+pub(super) enum Argument {
+    Parameter(String),
+    Named(String, Vec<usize>),
+    Constant(usize),
+    Reference(bool, usize),
+    Slice(bool, usize),
+    Vector(usize),
+    Boxed(usize),
+    Array(usize, usize),
+    Tuple(Vec<usize>),
+    Projection(usize, usize, Vec<usize>, String),
+    Opaque(a::TypeId, Vec<String>, Vec<usize>),
+}
+
+#[derive(Clone, Default)]
+pub(super) struct Recipe {
+    nodes: Vec<Argument>,
+    roots: Vec<usize>,
+}
+
+impl Compiler<'_> {
+    pub(super) fn bound_method_target(&mut self, identity: &TraitIdentity,
+        substitutions: &BTreeMap<String, usize>, span: a::Span) -> Result<super::generic_check::MethodTarget> {
+        if let TraitIdentity::Applied(owner, arguments) = identity {
+            Ok(super::generic_check::MethodTarget::AppliedTrait(*owner, self.trait_recipe(arguments, substitutions, span)?))
+        } else { Ok(super::generic_check::MethodTarget::Trait(identity.clone())) }
+    }
+
+    pub(super) fn environment_trait_identity(&self, owner: usize, substitutions: &BTreeMap<String, usize>) -> TraitIdentity {
+        let mut arguments = Vec::new();
+        for parameter in &self.source.traits[owner].generics {
+            if !parameter.lifetime { arguments.push(*substitutions.get(&parameter.name).unwrap()); }
+        }
+        TraitIdentity::application(owner, arguments)
+    }
+
+    pub(super) fn binding_identity(&mut self, receiver: usize, path: &a::Path,
+        binding: &a::AssociatedBinding, substitutions: &BTreeMap<String, usize>) -> Result<TraitIdentity> {
+        let first = self.trait_identity(path, substitutions, binding.span)?;
+        let mut pending = vec![first]; let mut seen: BTreeSet<TraitIdentity> = BTreeSet::new(); let mut selected: Option<TraitIdentity> = None;
+        while let Some(identity) = pending.pop() {
+            if !seen.insert(identity.clone()) { continue; }
+            let Some(owner) = identity.declaration() else { continue; };
+            let declaration = self.source.traits[owner].clone();
+            if declaration.associated.iter().any(|member: &a::AssociatedType| member.name == binding.name) {
+                if selected.is_some() { return Err(err(binding.span, "E_TRAIT", "associated-type equality binding is ambiguous between supertraits")); }
+                selected = Some(identity.clone());
+            }
+            let environment = self.trait_environment(receiver, &identity);
+            for parent in &declaration.bounds {
+                if let a::Type::Path(path) = self.source.types[*parent].kind.clone() {
+                    let span = self.source.types[*parent].span;
+                    pending.push(self.trait_identity(&path, &environment, span)?);
+                }
+            }
+        }
+        selected.ok_or_else(|| err(binding.span, "E_TRAIT", "associated-type equality binding names unknown member"))
+    }
+
+    pub(super) fn trait_identity(&mut self, path: &a::Path,
+        substitutions: &BTreeMap<String, usize>, span: a::Span) -> Result<TraitIdentity> {
+        let identity = crate::generics::bound_identity(self.source, path);
+        let Some(owner) = identity.declaration() else {
+            if !path.args.is_empty() {
+                return Err(err(span, "E_UNSUPPORTED", "positional arguments require a declared source trait"));
+            }
+            return Ok(identity);
+        };
+        let parameters = self.source.traits[owner].generics.clone();
+        // Lifetime-bearing trait families need a region-argument identity, not
+        // erasure of their written lifetime. Keep that separate source boundary.
+        if parameters.iter().any(|parameter: &a::GenericParam| parameter.lifetime || parameter.constant) {
+            return Err(err(span, "E_UNSUPPORTED", "trait lifetime and const arguments require a separate source contract"));
+        }
+        if parameters.len() != path.args.len() {
+            return Err(err(span, "E_TRAIT", "trait type argument count differs"));
+        }
+        let mut arguments = Vec::new();
+        for argument in &path.args {
+            let regions = crate::generics::trait_argument_regions(self.source, *argument);
+            let ty = self.resolve(*argument, substitutions)?;
+            if regions.0 || (regions.1 && self.has_view(ty)) {
+                return Err(err(self.source.types[*argument].span, "E_UNSUPPORTED",
+                    "lifetime-bearing positional trait arguments require region-aware witness identity"));
+            }
+            arguments.push(ty);
+        }
+        Ok(TraitIdentity::application(owner, arguments))
+    }
+
+    pub(super) fn trait_environment(&self, receiver: usize, identity: &TraitIdentity)
+        -> BTreeMap<String, usize> {
+        let mut environment = BTreeMap::new();
+        environment.insert("Self".to_string(), receiver);
+        if let Some(owner) = identity.declaration() {
+            let arguments = identity.arguments();
+            let parameters = &self.source.traits[owner].generics;
+            for index in 0..arguments.len() {
+                environment.insert(parameters[index].name.clone(), arguments[index]);
+            }
+        }
+        environment
+    }
+
+    pub(super) fn trait_argument_contract(&mut self, receiver: usize, identity: &TraitIdentity, span: a::Span) -> Result<()> {
+        let Some(owner) = identity.declaration() else { return Ok(()); };
+        let parameters = self.source.traits[owner].generics.clone();
+        let arguments = identity.arguments();
+        if parameters.len() != arguments.len() {
+            return Err(err(span, "E_TRAIT", "trait type argument count differs"));
+        }
+        if parameters.is_empty() { return Ok(()); }
+        let environment = self.trait_environment(receiver, identity);
+        let goal = crate::generics::Goal { ty: receiver, bound: identity.clone() };
+        let outermost = self.trait_proofs.is_none();
+        if outermost { self.trait_proofs = Some(super::trait_proofs::Session::default()); }
+        if self.trait_proofs.as_ref().unwrap().arguments.contains(&goal) { return Ok(()); }
+        let expanding = self.trait_proofs.as_ref().unwrap().arguments.iter()
+            .any(|previous: &crate::generics::Goal| self.expanding_trait_goal(&goal, previous));
+        if expanding {
+            if outermost { self.trait_proofs = None; }
+            return Err(err(span, "E_TRAIT", "trait type-argument obligations expand recursively"));
+        }
+        self.trait_proofs.as_mut().unwrap().arguments.push(goal);
+        let result = self.bounds(&parameters, &environment);
+        self.trait_proofs.as_mut().unwrap().arguments.pop();
+        if outermost { self.trait_proofs = None; }
+        result
+    }
+
+    pub(super) fn trait_recipe(&mut self, arguments: &[usize], substitutions: &BTreeMap<String, usize>,
+        span: a::Span) -> Result<Recipe> {
+        let mut recipe = Recipe::default();
+        let mut known = BTreeMap::new();
+        let mut active = BTreeSet::new();
+        let mut pending = Vec::new();
+        for argument in arguments { pending.push((*argument, false)); }
+        while let Some((ty, ready)) = pending.pop() {
+            if known.contains_key(&ty) { continue; }
+            let mut parameter: Option<String> = None;
+            for (name, value) in substitutions {
+                if *value == ty && !name.contains("::") { parameter = Some(name.clone()); break; }
+            }
+            if let Some(name) = parameter {
+                let id = recipe.nodes.len(); recipe.nodes.push(Argument::Parameter(name));
+                known.insert(ty, id); continue;
+            }
+            let mut children = Vec::new();
+            let application: Option<(String, Vec<usize>)> = self.applications.get(&ty).cloned();
+            let rigid = self.contracts.as_ref().is_some_and(|contracts| contracts.rigid.contains_key(&ty));
+            let projection = if rigid { self.trait_projection_recipe(ty) } else { None };
+            let node = if let Some((source, captures)) = self.opaque_recipe(ty) {
+                let mut names = Vec::new();
+                for (name, value) in captures { names.push(name); children.push(value); }
+                Argument::Opaque(source, names, children.clone())
+            } else if let Some((receiver, identity, member)) = projection {
+                children.push(receiver); children.extend_from_slice(&identity.arguments());
+                Argument::Projection(receiver, identity.declaration().unwrap(), identity.arguments(), member)
+            } else if let Some((name, arguments)) = application {
+                children.extend_from_slice(&arguments);
+                Argument::Named(name, arguments)
+            } else if let Some(crate::generics::const_arguments::Value::Known(value)) = crate::generics::const_arguments::value(&self.types, ty) {
+                Argument::Constant(value)
+            } else {
+                if self.contracts.as_ref().is_some_and(|contracts| contracts.rigid.contains_key(&ty)) {
+                    return Err(err(span, "E_UNSUPPORTED", "trait argument cannot retain an unnamed definition variable"));
+                }
+                match self.types[ty].kind.clone() {
+                    ir::TypeKind::Ref { inner, mutable } => { children.push(inner); Argument::Reference(mutable, inner) }
+                    ir::TypeKind::Slice { inner, mutable } => { children.push(inner); Argument::Slice(mutable, inner) }
+                    ir::TypeKind::Vec { inner } => { children.push(inner); Argument::Vector(inner) }
+                    ir::TypeKind::Box { inner } => { children.push(inner); Argument::Boxed(inner) }
+                    ir::TypeKind::Array { inner, .. } => {
+                        let length = crate::generics::const_arguments::array_length(&self.types, ty).unwrap();
+                        let count = match length { crate::generics::const_arguments::Value::Known(value) => self.constant(value),
+                            crate::generics::const_arguments::Value::Rigid(value) => value };
+                        children.push(inner); children.push(count); Argument::Array(inner, count)
+                    }
+                    ir::TypeKind::Struct { fields, .. } if self.types[ty].name.is_empty()
+                        || self.types[ty].name.starts_with('(') => {
+                        for field in fields { children.push(field.ty); }
+                        Argument::Tuple(children.clone())
+                    }
+                    _ => Argument::Named(self.types[ty].name.clone(), Vec::new()),
+                }
+            };
+            if !ready {
+                if !active.insert(ty) { return Err(err(span, "E_TYPE", "cyclic trait argument recipe")); }
+                pending.push((ty, true));
+                for child in &children { pending.push((*child, false)); }
+                continue;
+            }
+            let node = match node {
+                Argument::Named(name, args) => Argument::Named(name, args.iter().map(|value: &usize| *known.get(value).unwrap()).collect()),
+                Argument::Reference(mutable, inner) => Argument::Reference(mutable, *known.get(&inner).unwrap()),
+                Argument::Slice(mutable, inner) => Argument::Slice(mutable, *known.get(&inner).unwrap()),
+                Argument::Vector(inner) => Argument::Vector(*known.get(&inner).unwrap()),
+                Argument::Boxed(inner) => Argument::Boxed(*known.get(&inner).unwrap()),
+                Argument::Array(inner, count) => Argument::Array(*known.get(&inner).unwrap(), *known.get(&count).unwrap()),
+                Argument::Tuple(args) => Argument::Tuple(args.iter().map(|value: &usize| *known.get(value).unwrap()).collect()),
+                Argument::Projection(receiver, owner, args, member) => Argument::Projection(*known.get(&receiver).unwrap(),
+                    owner, args.iter().map(|value: &usize| *known.get(value).unwrap()).collect(), member),
+                Argument::Opaque(source, names, args) => Argument::Opaque(source, names, args.iter().map(|value: &usize| *known.get(value).unwrap()).collect()),
+                other => other,
+            };
+            let id = recipe.nodes.len(); recipe.nodes.push(node); known.insert(ty, id); active.remove(&ty);
+        }
+        for argument in arguments { recipe.roots.push(*known.get(argument).unwrap()); }
+        Ok(recipe)
+    }
+
+    pub(super) fn instantiate_trait_recipe(&mut self, recipe: &Recipe, substitutions: &BTreeMap<String, usize>,
+        span: a::Span) -> Result<Vec<usize>> {
+        let mut values: Vec<usize> = Vec::new();
+        for node in &recipe.nodes {
+            let value = match node {
+                Argument::Parameter(name) => *substitutions.get(name).ok_or_else(||
+                    err(span, "E_GENERIC", "checked trait argument is missing its source substitution"))?,
+                Argument::Constant(value) => self.constant(*value),
+                Argument::Named(name, arguments) => {
+                    let direct = self.type_names.get(name).copied();
+                    if arguments.is_empty() && direct.is_some() { direct.unwrap() }
+                    else {
+                        let mut environment = BTreeMap::new();
+                        let declaration = self.declaration_names.get(name).copied();
+                        let parameters = match declaration.map(|index| self.source.declarations[index].item) {
+                            Some(a::Item::Struct(index)) => self.source.structs[index].generics.clone(),
+                            Some(a::Item::Enum(index)) => self.source.enums[index].generics.clone(),
+                            _ => Vec::new(),
+                        };
+                        let mut index = 0usize;
+                        for parameter in parameters {
+                            if parameter.lifetime { continue; }
+                            if index >= arguments.len() { return Err(err(span, "E_GENERIC", "checked nominal trait argument count differs")); }
+                            environment.insert(parameter.name, values[arguments[index]]); index += 1;
+                        }
+                        if index != arguments.len() { return Err(err(span, "E_GENERIC", "checked nominal trait argument count differs")); }
+                        self.named_type(&a::Path { qualification: None, declaration, name: name.clone(),
+                            args: Vec::new(), bindings: Vec::new() }, &environment, span)?
+                    }
+                }
+                Argument::Reference(mutable, inner) => self.reference(values[*inner], *mutable),
+                Argument::Slice(mutable, inner) => self.intern(String::new(), ir::TypeKind::Slice { inner: values[*inner], mutable: *mutable }),
+                Argument::Vector(inner) => self.intern(String::new(), ir::TypeKind::Vec { inner: values[*inner] }),
+                Argument::Boxed(inner) => self.intern(String::new(), ir::TypeKind::Box { inner: values[*inner] }),
+                Argument::Array(inner, count) => self.array_type(values[*inner], values[*count], span)?,
+                Argument::Tuple(arguments) => {
+                    let mut fields = Vec::new(); let mut copy = true;
+                    for (index, argument) in arguments.iter().enumerate() {
+                        let ty = values[*argument]; copy = copy && super::is_copy(&self.types, ty);
+                        fields.push(ir::Field { name: format!("{index}"), ty });
+                    }
+                    if fields.is_empty() { ir::UNIT } else { self.intern(String::new(), ir::TypeKind::Struct { fields, copy }) }
+                }
+                Argument::Projection(receiver, owner, arguments, member) => {
+                    let arguments = arguments.iter().map(|argument| values[*argument]).collect();
+                    self.associated_type_for_identity(values[*receiver], &TraitIdentity::application(*owner, arguments), member, span)?
+                }
+                Argument::Opaque(source, names, arguments) => {
+                    let mut environment = BTreeMap::new();
+                    for index in 0..names.len() { environment.insert(names[index].clone(), values[arguments[index]]); }
+                    self.opaque_type(*source, &environment)?
+                }
+            };
+            values.push(value);
+        }
+        Ok(recipe.roots.iter().map(|root| values[*root]).collect())
+    }
+
+    fn trait_projection_recipe(&self, ty: usize) -> Option<(usize, TraitIdentity, String)> {
+        let contracts = self.contracts.as_ref()?;
+        for ((receiver, identity), members) in &contracts.traits {
+            for (member, value) in members {
+                if *value == ty && *receiver != ty { return Some((*receiver, identity.clone(), member.clone())); }
+            }
+        }
+        None
+    }
+}

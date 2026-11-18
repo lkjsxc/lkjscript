@@ -61,9 +61,17 @@ impl DefinitionTypes {
                 if matches!(source.types[ty].kind, a::Type::Infer) { return None; }
                 super::super::semantic::source_type_name(source, ty)
             }
-            Shape::Projection(declaration, member, receiver) => {
-                let receiver = self.semantic_type(source, receiver, known, active)?;
-                format!("<{} as {}>::{}", receiver, declaration_name(source, declaration), member)
+            Shape::Projection(declaration, member, _, arguments) => {
+                let mut bound = declaration_name(source, declaration);
+                if !arguments.is_empty() {
+                    bound.push('<');
+                    for index in 0..arguments.len() {
+                        if index != 0usize { bound.push_str(", "); }
+                        bound.push_str(&values[index + 1usize]);
+                    }
+                    bound.push('>');
+                }
+                format!("<{} as {}>::{}", values[0], bound, member)
             }
             Shape::Opaque(ty, _, _) => super::super::semantic::source_type_name(source, ty),
             Shape::Projected(_, _) | Shape::Closure(_, _) => return None,

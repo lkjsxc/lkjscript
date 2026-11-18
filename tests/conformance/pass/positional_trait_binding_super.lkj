@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {}
+trait Source<T> { type Item; fn make(input: T) -> Self::Item; }
+trait Derived<T>: Source<Vec<T>> {}
+struct Counter {}
+impl<T: Copy> Source<Vec<T>> for Counter { type Item = i64; fn make(input: Vec<T>) -> i64 { input.len() as i64 } }
+impl<T: Copy> Derived<T> for Counter {}
+fn count<P: Derived<u8, Item = i64>>() -> i64 { <P as Source<Vec<u8>>>::make(vec![1u8, 2u8]) }
+pub fn probe() -> i64 { count::<Counter>() + 40 }

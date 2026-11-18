@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+trait Read<Input> { fn read(self, input: Input) -> i64; }
+trait Parse<Element>: Read<Vec<Element>> {}
+struct Count {}
+impl<T: Copy> Read<Vec<T>> for Count { fn read(self, input: Vec<T>) -> i64 { input.len() as i64 } }
+impl<U: Copy> Parse<U> for Count {}
+fn count<T: Copy, P: Parse<T>>(parser: P, input: Vec<T>) -> i64 {
+    <P as Read<Vec<T>>>::read(parser, input)
+}
+pub fn probe() -> i64 { count(Count {}, vec![1u8, 2u8]) + 40 }

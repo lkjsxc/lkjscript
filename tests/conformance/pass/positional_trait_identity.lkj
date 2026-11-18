@@ -1,0 +1,18 @@
+// expect: value 42
+// witness: {}
+trait Pick<T> { type Item; fn pick(self, value: T) -> Self::Item; }
+struct Both {}
+impl Pick<u8> for Both { type Item = i64; fn pick(self, value: u8) -> i64 { value as i64 + 40 } }
+impl Pick<bool> for Both { type Item = bool; fn pick(self, value: bool) -> bool { value } }
+fn select<P: Make + Pick<u8, Item = i64> + Pick<bool, Item = bool>>() -> i64 {
+    let number: <P as Pick<u8>>::Item = <P as Pick<u8>>::pick(make::<P>(), 2u8);
+    number
+}
+trait Make { fn make() -> Self; }
+fn make<T: Make>() -> T { T::make() }
+impl Make for Both { fn make() -> Both { Both {} } }
+pub fn probe() -> i64 {
+    let number = <Both as Pick<u8>>::pick(Both {}, 2u8);
+    let flag = <Both as Pick<bool>>::pick(Both {}, true);
+    if flag { number + select::<Both>() - 42 } else { 0 }
+}
