@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+use core::marker::PhantomData;
+fn mark<'a, T>(anchor: &'a (), value: T) -> impl Fn() -> i64 + 'a
+where T: 'a {
+    let _ = anchor; drop(value);
+    let marker: PhantomData<T> = PhantomData;
+    move || { drop(marker); 42i64 }
+}
+pub fn probe() -> i64 { let anchor = (); mark(&anchor, String::from("value"))() }

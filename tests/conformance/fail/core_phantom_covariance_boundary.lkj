@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+use core::marker::PhantomData;
+fn shorten<'a, 'b>(value: PhantomData<&'a i64>) -> PhantomData<&'b i64>
+where 'a: 'b { value }
+pub fn probe() -> i64 { 42 }

@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {}
+trait Decode: Sized { type Error; fn decode() -> Result<Self, Self::Error>; }
+impl Decode for i64 { type Error = (); fn decode() -> Result<Self, ()> { Ok(42i64) } }
+trait Construct { fn make<T: Decode>(&self) -> Result<T, T::Error>; }
+struct Factory;
+impl Construct for Factory { fn make<T: Decode>(&self) -> Result<T, T::Error> { T::decode() } }
+fn make<R: Decode>(factory: &Factory) -> Option<R> { factory.make().ok() }
+pub fn probe() -> i64 { make::<i64>(&Factory).unwrap() }

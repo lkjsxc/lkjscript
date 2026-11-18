@@ -1,7 +1,7 @@
 //! Source standard library, also buildable by rustc during bootstrap.
 mod prelude;
 pub use prelude::{
-    CheckedArithmetic, IntoIterator, IterSource, Iterator, IteratorExt, Option, ParseInteger,
+    CheckedArithmetic, SaturatingArithmetic, IntoIterator, IterSource, Iterator, IteratorExt, Option, ParseInteger,
     Result, SequencePrefix, SliceClone, SliceCopy, TextView, VecAccess, VecAccessMut, VecClear,
     VecContains, VecExtend,
 };
@@ -26,6 +26,14 @@ pub mod io;
 // command.lkj is an optional typed capability module mounted by the current loader;
 // the stored seed reads this root without resolving the newer capability types.
 pub mod iter;
+pub mod core;
+pub mod borrow;
+pub mod cmp;
+pub mod marker;
+pub mod mem;
+pub mod num;
+pub mod range;
+pub mod slice;
 mod ordered_map;
 mod ordered_set;
 pub mod sha256;

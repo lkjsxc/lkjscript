@@ -1,0 +1,25 @@
+// expect: value 42
+// witness: {}
+use core::ops::{Range, RangeFrom, RangeTo, RangeToInclusive, RangeInclusive, RangeFull, RangeBounds};
+pub fn probe() -> i64 {
+    let middle: Range<usize> = 2usize..5usize;
+    assert_eq!(middle.start, 2usize);
+    assert_eq!(middle.end, 5usize);
+    assert!(<Range<usize> as RangeBounds<usize>>::contains(&middle, &4usize));
+    assert!(!<Range<usize> as RangeBounds<usize>>::contains(&middle, &5usize));
+    let from: RangeFrom<usize> = 7usize..;
+    assert!(<RangeFrom<usize> as RangeBounds<usize>>::contains(&from, &usize::MAX));
+    let to: RangeTo<usize> = ..3usize;
+    assert!(!<RangeTo<usize> as RangeBounds<usize>>::contains(&to, &3usize));
+    let closed: RangeToInclusive<usize> = ..=3usize;
+    assert!(<RangeToInclusive<usize> as RangeBounds<usize>>::contains(&closed, &3usize));
+    let full: RangeFull = ..;
+    assert!(<RangeFull as RangeBounds<usize>>::contains(&full, &42usize));
+    let inclusive: RangeInclusive<usize> = 4usize..=6usize;
+    assert_eq!(*inclusive.start(), 4usize);
+    assert_eq!(*inclusive.end(), 6usize);
+    assert!(inclusive.contains(&6usize));
+    let empty: Range<usize> = Range::default();
+    assert!(!<Range<usize> as RangeBounds<usize>>::contains(&empty, &0usize));
+    42
+}

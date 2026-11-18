@@ -361,3 +361,110 @@ impl ByteAscii for u8 {
         self.to_ascii_lowercase() == other.to_ascii_lowercase()
     }
 }
+
+/// Saturating addition is ordinary source over checked integer addition.
+pub trait SaturatingArithmetic: Sized {
+    fn saturating_add(self, other: Self) -> Self;
+}
+impl SaturatingArithmetic for u8 {
+    fn saturating_add(self, other: u8) -> u8 {
+        match self.checked_add(other) {
+            Some(value) => value,
+            None => 255u8,
+        }
+    }
+}
+impl SaturatingArithmetic for u16 {
+    fn saturating_add(self, other: u16) -> u16 {
+        match self.checked_add(other) {
+            Some(value) => value,
+            None => 65535u16,
+        }
+    }
+}
+impl SaturatingArithmetic for u32 {
+    fn saturating_add(self, other: u32) -> u32 {
+        match self.checked_add(other) {
+            Some(value) => value,
+            None => 4294967295u32,
+        }
+    }
+}
+impl SaturatingArithmetic for u64 {
+    fn saturating_add(self, other: u64) -> u64 {
+        match self.checked_add(other) {
+            Some(value) => value,
+            None => 18446744073709551615u64,
+        }
+    }
+}
+impl SaturatingArithmetic for usize {
+    fn saturating_add(self, other: usize) -> usize {
+        match self.checked_add(other) {
+            Some(value) => value,
+            None => 18446744073709551615usize,
+        }
+    }
+}
+impl SaturatingArithmetic for i8 {
+    fn saturating_add(self, other: i8) -> i8 {
+        match self.checked_add(other) {
+            Some(value) => value,
+            None => if other < 0i8 { -128i8 } else { 127i8 },
+        }
+    }
+}
+impl SaturatingArithmetic for i16 {
+    fn saturating_add(self, other: i16) -> i16 {
+        match self.checked_add(other) {
+            Some(value) => value,
+            None => if other < 0i16 { -32768i16 } else { 32767i16 },
+        }
+    }
+}
+impl SaturatingArithmetic for i32 {
+    fn saturating_add(self, other: i32) -> i32 {
+        match self.checked_add(other) {
+            Some(value) => value,
+            None => if other < 0i32 { -2147483648i32 } else { 2147483647i32 },
+        }
+    }
+}
+impl SaturatingArithmetic for i64 {
+    fn saturating_add(self, other: i64) -> i64 {
+        match self.checked_add(other) {
+            Some(value) => value,
+            None => if other < 0i64 { -9223372036854775808i64 } else { 9223372036854775807i64 },
+        }
+    }
+}
+impl SaturatingArithmetic for isize {
+    fn saturating_add(self, other: isize) -> isize {
+        match self.checked_add(other) {
+            Some(value) => value,
+            None => if other < 0isize { -9223372036854775808isize } else { 9223372036854775807isize },
+        }
+    }
+}
+
+// Primitive associated limits resolve to these ordinary typed constants.
+pub const __lkjscript_u8_min: u8 = 0u8;
+pub const __lkjscript_u8_max: u8 = 255u8;
+pub const __lkjscript_u16_min: u16 = 0u16;
+pub const __lkjscript_u16_max: u16 = 65535u16;
+pub const __lkjscript_u32_min: u32 = 0u32;
+pub const __lkjscript_u32_max: u32 = 4294967295u32;
+pub const __lkjscript_u64_min: u64 = 0u64;
+pub const __lkjscript_u64_max: u64 = 18446744073709551615u64;
+pub const __lkjscript_usize_min: usize = 0usize;
+pub const __lkjscript_usize_max: usize = 18446744073709551615usize;
+pub const __lkjscript_i8_min: i8 = -128i8;
+pub const __lkjscript_i8_max: i8 = 127i8;
+pub const __lkjscript_i16_min: i16 = -32768i16;
+pub const __lkjscript_i16_max: i16 = 32767i16;
+pub const __lkjscript_i32_min: i32 = -2147483648i32;
+pub const __lkjscript_i32_max: i32 = 2147483647i32;
+pub const __lkjscript_i64_min: i64 = -9223372036854775808i64;
+pub const __lkjscript_i64_max: i64 = 9223372036854775807i64;
+pub const __lkjscript_isize_min: isize = -9223372036854775808isize;
+pub const __lkjscript_isize_max: isize = 9223372036854775807isize;

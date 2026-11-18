@@ -1,0 +1,20 @@
+//! A checked nonzero value. No niche or external ABI equivalence is claimed.
+use crate::Option;
+#[derive(Copy, Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub struct NonZeroUsize { value: usize }
+impl NonZeroUsize {
+    pub fn new(value: usize) -> Option<Self> {
+        if value == 0usize { Option::None } else { Option::Some(Self { value }) }
+    }
+    pub fn get(self) -> usize { self.value }
+}
+impl crate::fmt::Display for NonZeroUsize {
+    fn fmt(&self, formatter: &mut crate::fmt::Formatter) -> crate::fmt::Result {
+        <usize as crate::fmt::Display>::fmt(&self.value, formatter)
+    }
+}
+impl crate::fmt::Debug for NonZeroUsize {
+    fn fmt(&self, formatter: &mut crate::fmt::Formatter) -> crate::fmt::Result {
+        <usize as crate::fmt::Debug>::fmt(&self.value, formatter)
+    }
+}

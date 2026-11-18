@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {}
+mod lib { pub mod std {
+    pub use core::{borrow, cmp, fmt, iter, mem, num, option, result, slice, str};
+    pub mod prelude { pub use core::prelude as v1; }
+} }
+use self::lib::std::num::NonZeroUsize;
+pub fn probe() -> i64 {
+    let mut value = 40i64;
+    let old = self::lib::std::mem::replace(&mut value, 2i64);
+    old + NonZeroUsize::new(value as usize).unwrap().get() as i64
+}

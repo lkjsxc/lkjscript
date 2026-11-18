@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+pub fn probe() -> i64 {
+    assert_eq!(usize::MAX.saturating_add(1usize), usize::MAX);
+    assert_eq!(u8::MAX.saturating_add(10u8), u8::MAX);
+    assert_eq!(i64::MAX.saturating_add(1i64), i64::MAX);
+    assert_eq!(i64::MIN.saturating_add(-1i64), i64::MIN);
+    assert_eq!((-10i8).saturating_add(12i8), 2i8);
+    40usize.saturating_add(2usize) as i64
+}

@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+trait Echo { fn echo<T>(&self, value: T) -> T; }
+struct Factory;
+impl Echo for Factory { fn echo<T>(&self, value: T) -> T { value } }
+pub fn probe() -> i64 {
+    let mut value = 0i64;
+    let reference = &mut value;
+    let returned: &mut i64 = Factory.echo(&mut *reference);
+    *returned = 40i64;
+    drop(returned);
+    *reference += 2i64;
+    *reference
+}

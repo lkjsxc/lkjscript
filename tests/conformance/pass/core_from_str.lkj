@@ -1,0 +1,19 @@
+// expect: value 42
+// witness: {}
+use core::str::FromStr;
+struct Code { value: i64 }
+impl FromStr for Code {
+    type Err = ();
+    fn from_str(value: &str) -> Result<Self, ()> {
+        if value == "answer" { Ok(Code { value: 42i64 }) } else { Err(()) }
+    }
+}
+fn parse<R: FromStr>(value: &str) -> Option<R> { value.parse().ok() }
+pub fn probe() -> i64 {
+    assert_eq!("255".parse::<u8>(), Ok(255u8));
+    assert!("256".parse::<u8>().is_err());
+    assert!("-1".parse::<usize>().is_err());
+    assert_eq!("-128".parse::<i8>(), Ok(-128i8));
+    assert!(parse::<Code>("other").is_none());
+    parse::<Code>("answer").unwrap().value
+}

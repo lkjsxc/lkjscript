@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":false}
+use core::marker::PhantomData;
+pub fn probe() -> i64 { PhantomData::<u8>.len() as i64 }

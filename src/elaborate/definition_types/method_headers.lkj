@@ -278,7 +278,28 @@ impl Infer<'_, '_> {
         if let Some(bound) = self.source.impls[candidate].trait_ty {
             self.trait_equations(receiver, "Self", bound, &mut environment, false)?;
         }
-        let output = self.header_signature(method, type_args, arguments, environment.clone(), 1, span)?;
+        self.method_application_header((candidate, method, expression),
+            type_args, arguments, result, environment, span)?;
+        Ok(true)
+    }
+
+    /// A selected source header contributes bindings to its exact application.
+    /// The caller supplies conditional receiver and implementation equations;
+    /// the ordinary selector still proves eligibility before lowering a call.
+    /// These bindings never create an argument coercion or reborrow site.
+    pub(super) fn method_application_header(
+        &mut self,
+        selection: (usize, usize, a::ExprId),
+        type_args: &[a::TypeId],
+        arguments: &[Variable],
+        result: Variable,
+        environment: BTreeMap<String, Variable>,
+        span: a::Span,
+    ) -> Result<()> {
+        let (candidate, method, expression) = selection;
+        let generics = self.source.impls[candidate].generics.clone();
+        let (output, method_environment) = self.header_signature_environment(
+            method, type_args, arguments, environment.clone(), 1, span)?;
         self.unify(result, output, span)?;
         let mut application = BTreeMap::new();
         for parameter in &generics {
@@ -288,10 +309,24 @@ impl Infer<'_, '_> {
                 }
             }
         }
+        // Result context can determine a method-local argument even when no
+        // value parameter names it, as in text.parse().ok(). Retain its
+        // variable under this exact expression/implementation/method identity.
+        // Lowering consumes these bindings only after evaluating arguments.
+        for parameter in &self.source.functions[method].generics {
+            if parameter.lifetime { continue; }
+            if application.contains_key(&parameter.name) {
+                return Err(err(parameter.span, "E_NAME",
+                    "method generic parameter shadows an implementation parameter"));
+            }
+            if let Some(value) = method_environment.get(&parameter.name) {
+                application.insert(parameter.name.clone(), *value);
+            }
+        }
         self.definition.method_applications.insert(expression, super::MethodApplication {
             implementation: candidate, method, arguments: application,
         });
-        Ok(true)
+        Ok(())
     }
 }
 

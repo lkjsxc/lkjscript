@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {}
+use core::iter::Copied;
+use core::slice::Iter;
+fn copied<'a>(input: &'a [u8]) -> Copied<Iter<'a, u8>> { input.iter().copied() }
+pub fn probe() -> i64 {
+    let bytes = [20u8, 22u8];
+    let mut values = copied(&bytes[..]);
+    let result = values.next().unwrap() as i64 + values.next().unwrap() as i64;
+    assert!(values.next().is_none());
+    result
+}

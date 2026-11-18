@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {}
+mod u8 { pub const MAX: i64 = 20i64; }
+mod bounds { pub const MIN: i64 = 22i64; }
+use self::bounds as usize;
+pub fn probe() -> i64 { u8::MAX + usize::MIN }

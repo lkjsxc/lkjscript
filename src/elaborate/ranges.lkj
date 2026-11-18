@@ -26,6 +26,9 @@ impl Builder<'_, '_> {
     }
 
     pub(super) fn range_referent(&mut self, ty: usize, span: a::Span) -> Result<usize> {
+        if crate::generics::phantom::argument(&self.compiler.applications, ty).is_some() {
+            return Err(err(span, "E_TYPE", "nominal marker is not an array view"));
+        }
         match self.compiler.types[ty].kind {
             ir::TypeKind::Vec { inner }
             | ir::TypeKind::Array { inner, .. }

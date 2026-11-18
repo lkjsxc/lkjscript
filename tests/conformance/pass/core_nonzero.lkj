@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {}
+use core::num::NonZeroUsize;
+#[derive(Debug)]
+enum Needed { Size(NonZeroUsize) }
+pub fn probe() -> i64 {
+    assert!(NonZeroUsize::new(0usize).is_none());
+    assert_eq!(NonZeroUsize::new(usize::MAX).unwrap().get(), usize::MAX);
+    let value = NonZeroUsize::new(42usize).unwrap();
+    let copied = value;
+    assert_eq!(format!("{:04}", copied), "0042");
+    assert_eq!(format!("{:?}", value), "42");
+    assert_eq!(format!("{:#?}", value), "42");
+    assert_eq!(format!("{:?}", Needed::Size(value)), "Size(42)");
+    value.get() as i64
+}

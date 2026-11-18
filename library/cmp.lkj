@@ -1,0 +1,3 @@
+//! Ordering selection uses the existing checked comparison contracts.
+pub fn min<T: Ord>(left: T, right: T) -> T { if left <= right { left } else { right } }
+pub fn max<T: Ord>(left: T, right: T) -> T { if left > right { left } else { right } }

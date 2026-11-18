@@ -79,33 +79,7 @@ impl<T> IterSource<T> for [T] {
 }
 
 
-/// An unbounded usize iterator; advancing beyond usize::MAX traps.
-pub struct RangeFrom {
-    next_value: usize,
-}
-
-
-pub fn range_from(start: usize) -> RangeFrom {
-    RangeFrom { next_value: start }
-}
-
-
-impl Iterator for RangeFrom {
-    type Item = usize;
-    fn next(&mut self) -> Option<usize> {
-        let value = self.next_value;
-        self.next_value += 1usize;
-        Some(value)
-    }
-}
-
-
-impl IntoIterator for RangeFrom {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self {
-        self
-    }
-}
+pub use crate::range::{RangeFrom, range_from};
 
 pub struct Enumerate<I> {
     iterator: I,
@@ -598,4 +572,35 @@ impl<T> IntoIterator for OptionIter<T> {
     fn into_iter(self) -> Self {
         self
     }
+}
+
+/// Copy each item from a shared slice iterator, retaining its input borrow.
+pub struct Copied<I> { iterator: I }
+impl<'a, T: Copy> Iter<'a, T> {
+    pub fn copied(self) -> Copied<Self> { Copied { iterator: self } }
+}
+impl<'a, T: Copy> Iterator for Copied<Iter<'a, T>> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        match self.iterator.next() { Some(value) => Some(*value), None => None }
+    }
+}
+impl<'a, T: Copy> IntoIterator for Copied<Iter<'a, T>> {
+    type IntoIter = Self;
+    fn into_iter(self) -> Self { self }
+}
+/// Clone each item once; the adapter owns only the borrowed iterator.
+pub struct Cloned<I> { iterator: I }
+impl<'a, T: Clone> Iter<'a, T> {
+    pub fn cloned(self) -> Cloned<Self> { Cloned { iterator: self } }
+}
+impl<'a, T: Clone> Iterator for Cloned<Iter<'a, T>> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
+        match self.iterator.next() { Some(value) => Some(value.clone()), None => None }
+    }
+}
+impl<'a, T: Clone> IntoIterator for Cloned<Iter<'a, T>> {
+    type IntoIter = Self;
+    fn into_iter(self) -> Self { self }
 }

@@ -9,8 +9,8 @@ struct Helpers {
     option: Path,
 }
 
-fn library_function_path(resolver: &Resolver<'_>, name: &str, span: Span) -> Result<Path> {
-    let function = resolver.library_function("iter", name, span)?;
+fn library_function_path(resolver: &Resolver<'_>, module: &str, name: &str, span: Span) -> Result<Path> {
+    let function = resolver.library_function(module, name, span)?;
     let declaration = resolver
         .declarations
         .iter()
@@ -29,8 +29,8 @@ fn library_function_path(resolver: &Resolver<'_>, name: &str, span: Span) -> Res
 impl Helpers {
     fn new(resolver: &Resolver<'_>, span: Span) -> Result<Self> {
         Ok(Self {
-            into: library_function_path(resolver, "__lkjscript_into_iter", span)?,
-            next: library_function_path(resolver, "__lkjscript_next", span)?,
+            into: library_function_path(resolver, "iter", "__lkjscript_into_iter", span)?,
+            next: library_function_path(resolver, "iter", "__lkjscript_next", span)?,
             option: resolver.library_type("prelude", "Option", span)?,
         })
     }
@@ -38,26 +38,40 @@ impl Helpers {
 
 
 fn range_values(program: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
-    let mut indexes: BTreeSet<usize> = BTreeSet::new();
+    let mut syntax: BTreeSet<usize> = BTreeSet::new();
     for node in &program.exprs {
-        if let Expr::Index { index, .. } = &node.kind { indexes.insert(*index); }
-    }
-    let mut helper = None;
-    for id in 0usize..program.exprs.len() {
-        if indexes.contains(&id) { continue; }
-        let node = program.exprs[id].clone();
-        let Expr::Range { start: Some(start), end: None, inclusive: false } = node.kind
-        else { continue; };
-        if helper.is_none() {
-            helper = Some(library_function_path(resolver, "range_from", node.span)?);
+        match &node.kind {
+            Expr::Index { index, .. } => { syntax.insert(*index); }
+            Expr::For { iterator, .. } => {
+                if matches!(program.exprs[*iterator].kind,
+                    Expr::Range { start: Some(_), end: Some(_), .. }) {
+                    // The existing primitive bounded-for route is available
+                    // without a library and keeps its checked loop semantics.
+                    syntax.insert(*iterator);
+                }
+            }
+            _ => {}
         }
+    }
+    for id in 0usize..program.exprs.len() {
+        if syntax.contains(&id) { continue; }
+        let node = program.exprs[id].clone();
+        let Expr::Range { start, end, inclusive } = node.kind else { continue; };
+        let (name, args) = match (start, end, inclusive) {
+            (Some(start), Some(end), false) => ("range", vec![start, end]),
+            (Some(start), Some(end), true) => ("range_inclusive", vec![start, end]),
+            (Some(start), None, false) => ("range_from", vec![start]),
+            (None, Some(end), false) => ("range_to", vec![end]),
+            (None, Some(end), true) => ("range_to_inclusive", vec![end]),
+            (None, None, false) => ("range_full", Vec::new()),
+            _ => return Err(Diagnostic::new(node.span, "E_PARSE", "inclusive range requires an end")),
+        };
+        let helper = library_function_path(resolver, "range", name, node.span)?;
         let callee = program.exprs.len();
         program.exprs.push(ExprNode {
-            kind: Expr::Path(helper.as_ref().unwrap().clone()),
-            scope: node.scope,
-            span: node.span,
+            kind: Expr::Path(helper), scope: node.scope, span: node.span,
         });
-        program.exprs[id].kind = Expr::Call { callee, args: vec![start] };
+        program.exprs[id].kind = Expr::Call { callee, args };
     }
     Ok(())
 }

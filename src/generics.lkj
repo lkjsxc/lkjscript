@@ -12,6 +12,7 @@ mod sized_bounds;
 pub(crate) use sized_bounds::parameter_requires_sized;
 mod lifetime_predicates;
 pub(crate) mod type_outlives;
+pub(crate) mod phantom;
 use crate::ast::*;
 use crate::names::qualified;
 pub(crate) use bound_solver::{BoundContext, BoundSolver, BoundStep};
@@ -1333,6 +1334,7 @@ pub fn validate(source: &Program) -> Result<(), Diagnostic> {
     lifetime_predicates::validate(source)?;
     type_outlives::validate(source)?;
     sized_bounds::validate(source)?;
+    phantom::validate(source)?;
     constant_cycles(source)?;
     finite_data(source)?;
     coherence(source)?;
@@ -1463,6 +1465,7 @@ fn impl_arguments(
                 }
             }
             Type::Array { inner, len } => {
+                if applications.contains_key(&actual) { return None; }
                 let TypeKind::Array { inner: actual_inner, .. } = actual_type.kind else { return None; };
                 let actual_length = crate::generics::const_arguments::array_length(types, actual)?;
                 if implementation.generics.iter().any(|parameter| parameter.constant && parameter.name == *len) {
@@ -1720,6 +1723,7 @@ impl ImplementationIndex {
         }
     }
     pub(crate) fn new(source: &Program) -> Result<Self, Diagnostic> {
+        phantom::validate(source)?;
         let mut index = Self::empty(source);
         for id in 0..source.impls.len() {
             index.insert(source, id)?;
@@ -1952,6 +1956,11 @@ fn trait_requirements(
         TraitIdentity::Declared(_) | TraitIdentity::Applied(_, _) => "",
         TraitIdentity::Unknown(_) => return None,
     };
+    if bound == "Send" || bound == "Sync" {
+        if let Some(argument) = phantom::argument(applications, goal.ty) {
+            return Some(Requirements::structural(vec![Goal { ty: argument, bound: goal.bound.clone() }]));
+        }
+    }
     if bound == "Sized" {
         let mut children = Vec::new();
         match &ty.kind {
@@ -2696,6 +2705,9 @@ fn symbolic_bound(
                 ) {
                     return false;
                 }
+            }
+            "$std::marker::PhantomData" if children.len() == 1usize => {
+                if name == "Send" || name == "Sync" { pending.push((children[0], bound)); }
             }
             "String" => {
                 if name == "Copy" {

@@ -1,0 +1,6 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+use core::marker::PhantomData;
+fn sync<T: Sync>(_value: T) {}
+fn bad<T>() { sync(PhantomData::<T>); }
+pub fn probe() -> i64 { 42 }

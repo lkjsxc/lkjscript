@@ -351,7 +351,7 @@ impl Compiler<'_> {
                                 (
                                     ir::TypeKind::Vec { inner } | ir::TypeKind::Array { inner, .. },
                                     MatchMode::Referent,
-                                ) => Some(*inner),
+                                ) if !self.applications.contains_key(&actual) => Some(*inner),
                                 _ => None,
                             };
                             if let Some(actual) = element {
@@ -364,6 +364,7 @@ impl Compiler<'_> {
                             }
                         }
                         a::Type::Array { inner, len } => {
+                            if self.applications.contains_key(&actual) { return Ok(false); }
                             if let ir::TypeKind::Array { inner: actual_inner, .. } = self.types[actual].kind {
                                 let length = crate::generics::const_arguments::array_length(&self.types, actual).unwrap();
                                 if let Some(literal) = crate::generics::const_arguments::literal(&len) {
