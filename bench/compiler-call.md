@@ -1,5 +1,25 @@
 # Replacing one authored call through a checked transaction
 
+## Current integration state
+
+The reviewed candidate is now merged locally with exact public parent
+`e414aeddbb2ec6985fd564c96a44a4f583b6ba1b`, including its watchdog correction.
+Merge `db299790d539f75f5bc3cde25399628fd4952737` preserves both histories and
+unchanged reviewed compiler/library bytes. Separate seed-only commit
+`20935b4c66f87e9e52a68ce79bf5e60603b75198` applies the approved proposal.
+The reserved integrated full gate has not yet started; publication remains with
+lead. [Integrated-input evidence](compiler-call-data/integration/README.md)
+records this step separately.
+
+The implementation experiments and verification below describe the original
+review and landing packet, before this integration and seed refresh. Their raw
+receipts, earlier published-parent identity and then-unapplied seed proposal are
+preserved as historical evidence. The public parent's watchdog failure has since
+been corrected in `e414aeddb`; that parent's gate and witness CI 44352321149
+passed. No type-defaults or namespace-collision implementation is included.
+
+## Reviewed behavior
+
 This slice adds `replace-call`: an agent can replace one existing authored call or
 method-call expression using its queried semantic identity. It no longer has to
 submit the entire owning body for that change. The complete candidate still goes
