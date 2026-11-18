@@ -335,7 +335,12 @@ old call IDs; a trivia-only edit retains them, but exact-text expectations remai
 exact. All operations in a request address the original catalog, so two disjoint
 calls can change together. Nested overlapping selections refuse before publication.
 
-Replacement source must be one expression. The projected bytes are an opening parenthesis, newline, supplied source, newline
+Replacement source must be one value expression. The raw source is parsed with
+the existing expression grammar to the end of input, with no recovered errors,
+before adding projection delimiters. Block-, `if`- and `match`-led arithmetic,
+block casts and explicitly written tuples retain their value-expression meaning;
+a bare comma list cannot acquire tuple syntax from the projection.
+The projected bytes are an opening parenthesis, newline, supplied source, newline
 and closing parenthesis. Parentheses preserve expression precedence and the
 newlines isolate trailing line comments. Shape validation retains macro
 invocations; the complete candidate expands and independently checks them in the

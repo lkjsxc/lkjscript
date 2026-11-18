@@ -1,0 +1,11 @@
+{
+  "version": 1,
+  "operations": [
+    {
+      "op": "replace-call",
+      "id": "Number::doubled::body:ec137f7a510637b9d9ad8186ee99e09a45bb6a3acabb217e7b686995937be607::call:1",
+      "expect": "1cf0a9ca71a6ca86882b1649e0d493667549af2ee2492a73d023b1e36bb0b715",
+      "source": "{ 40i64 } + 2i64"
+    }
+  ]
+}

@@ -1,0 +1,8 @@
+"Number::doubled::body:ec137f7a510637b9d9ad8186ee99e09a45bb6a3acabb217e7b686995937be607::call:1" level=source-claim operation-target
+"target/semantic-operations/repro/source/main.lkj" level=source-claim file before=873487978dc8d0891080042a90d5148f51181eb99da889b1b5720f5ced44df4c after=6d51fab3f0db5a3cc435ad54a99b9dba6c864fa3429765cbec57673508602e6c
+transaction sites=1 files=1 identities=1
+"Number::doubled" level=source-claim changed=body
+"impl:Number#cd19e823f37f5bd8" level=source-claim changed=text-only
+program level=checked-ir authority-delta=none
+program level=checked-ir before=e207108def576597aaa549a750e6f45129202ce28987e0be9790605d4442d1c6 after=250cfd42b58054221c7774132ebc0b95892b5cdedd57170751eba7a274fac4c2 checked-instances=4 fresh-checked=2 proof-reused=2 frontend-resumed=4 library-validation=demanded
+transaction source-before=057b965886017e5e0594efaadfd8f123842d3482b0e5123470595f71e540c2c8 source-after=c051b5b5137a308a41814cef309a40e84d2abb034ee9b9b0cb54175b3e451da0 mode=apply

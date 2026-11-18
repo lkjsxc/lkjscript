@@ -1,0 +1,3 @@
+program level=checked-ir identity-domain=lkjscript-checked-meaning-1 before=250cfd42b58054221c7774132ebc0b95892b5cdedd57170751eba7a274fac4c2 after=250cfd42b58054221c7774132ebc0b95892b5cdedd57170751eba7a274fac4c2 exact-before=fb72b09b5f1613298d099d410630c468e05f399dbe77a68b5c64e9eb9798e531 exact-after=3732c18a9a71c12370ad26401a87f58014086675c16b369817ce470b70ccec22
+program level=checked-ir verdict="text identical, checked IR identical" diagnostic-metadata=differs
+program changed-facts=0 checked-facts=0 source-facts=0 shown=0 omitted=0 authority-facts=0 layout-facts=0 type-identity-facts=0 destructor-facts=0 instance-facts=0 detail=--id identity

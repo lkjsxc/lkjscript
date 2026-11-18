@@ -1,0 +1,247 @@
+{
+   "records" : [
+      {
+         "row" : {
+            "agent_exit" : 0,
+            "attempted_tool_calls" : 11,
+            "calls" : 11,
+            "candidate_kind" : "first-explicit-gate-submission",
+            "case" : 6,
+            "checker_first" : null,
+            "edit_metrics" : {
+               "edit_invocation_count" : 1,
+               "edit_request_count" : 0,
+               "first_edit_invocation" : {
+                  "diagnostic" : null,
+                  "exit" : 0,
+                  "kind" : "help",
+                  "tool_record" : 8
+               },
+               "first_edit_request" : null,
+               "gate_invocation_count" : 0,
+               "requests_before_first_gate" : null
+            },
+            "full_repository_gate" : "not-run",
+            "gate_called" : false,
+            "mode" : "commands",
+            "model" : "gpt-6-luna",
+            "outside_tool_calls" : 0,
+            "path" : "/tmp/lkjscript-stranger-luna-help-schema-20261117/06-commands/state.json",
+            "payload_bytes" : 79914,
+            "preparation_active_seconds" : 93.6436858177185,
+            "preparation_seconds" : 93.6436858177185,
+            "reason" : "Blocked before producing a complete candidate. The indexed query exposed source text and the edit schema, but safely updating both host and emitted native implementations requires complete function bodies and the precise timeout control-flow mapping; I did not publish a partial edit or run the gate.",
+            "reasoning_effort" : "medium",
+            "response_bytes" : 85117,
+            "setup_active_seconds" : 93.4156749248505,
+            "setup_error" : null,
+            "setup_pause_seconds" : 0,
+            "setup_seconds" : 93.4156749248505,
+            "submission" : {
+               "allowance_refusals" : [],
+               "first_proposal" : null,
+               "last_finish_request" : {
+                  "accepted" : true,
+                  "reason" : "Blocked before producing a complete candidate. The indexed query exposed source text and the edit schema, but safely updating both host and emitted native implementations requires complete function bodies and the precise timeout control-flow mapping; I did not publish a partial edit or run the gate.",
+                  "tool_record" : 11
+               }
+            },
+            "target_first" : null,
+            "task_bytes" : 1684,
+            "timed_out" : false,
+            "wall_seconds" : 56.6187000274658
+         },
+         "source_path" : "/home/coder/workspace/lkjscript/bench/compiler-stranger-data/schema-luna-20261117-results.json",
+         "source_row_index" : 10,
+         "source_sha256" : "311a50aa986f844b30b61cfcb5c2cf25332b9e7d9909888505506e2c307d4bf8"
+      },
+      {
+         "row" : {
+            "agent_exit" : 0,
+            "attempted_tool_calls" : 26,
+            "calls" : 26,
+            "candidate_kind" : "first-explicit-gate-submission",
+            "case" : 6,
+            "checker_first" : true,
+            "edit_metrics" : {
+               "edit_invocation_count" : 0,
+               "edit_request_count" : 0,
+               "first_edit_invocation" : null,
+               "first_edit_request" : null,
+               "gate_invocation_count" : 1,
+               "requests_before_first_gate" : 0
+            },
+            "full_repository_gate" : "not-run",
+            "gate_called" : true,
+            "mode" : "files",
+            "model" : "gpt-6-luna",
+            "outside_tool_calls" : 0,
+            "path" : "/tmp/lkjscript-stranger-luna-help-schema-20261117/06-files/state.json",
+            "payload_bytes" : 45351,
+            "preparation_active_seconds" : 0.243404865264893,
+            "preparation_seconds" : 0.243404865264893,
+            "reason" : "",
+            "reasoning_effort" : "medium",
+            "response_bytes" : 47631,
+            "setup_active_seconds" : 0.00388598442077637,
+            "setup_error" : null,
+            "setup_pause_seconds" : 0,
+            "setup_seconds" : 0.00388598442077637,
+            "submission" : {
+               "allowance_refusals" : [
+                  {
+                     "tool" : "replace",
+                     "tool_record" : 25
+                  },
+                  {
+                     "tool" : "finish",
+                     "tool_record" : 26
+                  }
+               ],
+               "first_proposal" : {
+                  "empty" : false,
+                  "paths" : [
+                     "src/host_network/foreign_session.lkj",
+                     "src/native/foreign_session.lkj"
+                  ],
+                  "snapshot_sha256" : "e15a031341494fcc134fb858b96d1c287fcc4ad0c4825210ee5f9675bf9bfb6b"
+               },
+               "last_finish_request" : {
+                  "accepted" : false,
+                  "reason" : "The first candidate passed the checker but failed exact historical target equality. I revised the approach to check readiness (which also checks the timer and preserves timeout/dead-session results) at each exchange chunk boundary in both implementations, but the experiment tool-call allowance was exhausted before completing the native emit wiring or checking the revised candidate. The full repository gate was not run.",
+                  "tool_record" : 26
+               }
+            },
+            "target_first" : false,
+            "task_bytes" : 1565,
+            "timed_out" : false,
+            "wall_seconds" : 278.482812166214
+         },
+         "source_path" : "/home/coder/workspace/lkjscript/bench/compiler-stranger-data/schema-luna-20261117-results.json",
+         "source_row_index" : 11,
+         "source_sha256" : "311a50aa986f844b30b61cfcb5c2cf25332b9e7d9909888505506e2c307d4bf8"
+      },
+      {
+         "row" : {
+            "agent_exit" : 0,
+            "attempted_tool_calls" : 9,
+            "calls" : 9,
+            "candidate_kind" : "first-explicit-gate-submission",
+            "case" : 14,
+            "checker_first" : null,
+            "edit_metrics" : {
+               "edit_invocation_count" : 2,
+               "edit_request_count" : 0,
+               "first_edit_invocation" : {
+                  "diagnostic" : null,
+                  "exit" : 0,
+                  "kind" : "help",
+                  "tool_record" : 2
+               },
+               "first_edit_request" : null,
+               "gate_invocation_count" : 0,
+               "requests_before_first_gate" : null
+            },
+            "full_repository_gate" : "not-run",
+            "gate_called" : false,
+            "mode" : "commands",
+            "model" : "gpt-6-luna",
+            "outside_tool_calls" : 0,
+            "path" : "/tmp/lkjscript-stranger-luna-help-operation-20261117/14-commands/state.json",
+            "payload_bytes" : 60230,
+            "preparation_active_seconds" : 169.226008892059,
+            "preparation_seconds" : 169.226008892059,
+            "reason" : "Blocked before producing a candidate: the compiler interface exposes source text as bounded indexed facts, but provides no way to read the complete target function or apply a partial text splice; edit operations replace whole semantic items, and the edit function is too large to reconstruct safely from chunked facts. No source was changed and the common gate was not run.",
+            "reasoning_effort" : "medium",
+            "response_bytes" : 64408,
+            "setup_active_seconds" : 168.900728940964,
+            "setup_error" : null,
+            "setup_pause_seconds" : 0,
+            "setup_seconds" : 168.900728940964,
+            "submission" : {
+               "allowance_refusals" : [],
+               "first_proposal" : null,
+               "last_finish_request" : {
+                  "accepted" : true,
+                  "reason" : "Blocked before producing a candidate: the compiler interface exposes source text as bounded indexed facts, but provides no way to read the complete target function or apply a partial text splice; edit operations replace whole semantic items, and the edit function is too large to reconstruct safely from chunked facts. No source was changed and the common gate was not run.",
+                  "tool_record" : 9
+               }
+            },
+            "target_first" : null,
+            "task_bytes" : 1723,
+            "timed_out" : false,
+            "wall_seconds" : 54.7144799232483
+         },
+         "source_path" : "/home/coder/workspace/lkjscript/bench/compiler-stranger-data/operation-luna-20261117-results.json",
+         "source_row_index" : 26,
+         "source_sha256" : "12b4e75f49e10c1ea161329c69ad5e8543d95b029f94dbc197cbab96db0dee39"
+      },
+      {
+         "row" : {
+            "agent_exit" : 0,
+            "attempted_tool_calls" : 26,
+            "calls" : 26,
+            "candidate_kind" : "first-explicit-gate-submission",
+            "case" : 14,
+            "checker_first" : true,
+            "edit_metrics" : {
+               "edit_invocation_count" : 0,
+               "edit_request_count" : 0,
+               "first_edit_invocation" : null,
+               "first_edit_request" : null,
+               "gate_invocation_count" : 1,
+               "requests_before_first_gate" : 0
+            },
+            "full_repository_gate" : "not-run",
+            "gate_called" : true,
+            "mode" : "files",
+            "model" : "gpt-6-luna",
+            "outside_tool_calls" : 0,
+            "path" : "/tmp/lkjscript-stranger-luna-help-operation-20261117/14-files/state.json",
+            "payload_bytes" : 81273,
+            "preparation_active_seconds" : 0.38320517539978,
+            "preparation_seconds" : 0.38320517539978,
+            "reason" : "",
+            "reasoning_effort" : "medium",
+            "response_bytes" : 86340,
+            "setup_active_seconds" : 0.0175919532775879,
+            "setup_error" : null,
+            "setup_pause_seconds" : 0,
+            "setup_seconds" : 0.0175919532775879,
+            "submission" : {
+               "allowance_refusals" : [
+                  {
+                     "tool" : "read",
+                     "tool_record" : 25
+                  },
+                  {
+                     "tool" : "finish",
+                     "tool_record" : 26
+                  }
+               ],
+               "first_proposal" : {
+                  "empty" : false,
+                  "paths" : [
+                     "src/driver/structure.lkj"
+                  ],
+                  "snapshot_sha256" : "ddb2932fbaf9ac73f4c69bcff261b0f24012a64163c5e09e59d45fc2773c16f6"
+               },
+               "last_finish_request" : {
+                  "accepted" : false,
+                  "reason" : "The first candidate passed the checker but failed canonical historical equality. The diff indicates the intended implementation uses a changes_library(before, draft) helper to scope check-library promotion to library edits. The experiment tool-call allowance was exhausted before I could make and gate that correction; full repository gate remains not run.",
+                  "tool_record" : 26
+               }
+            },
+            "target_first" : false,
+            "task_bytes" : 1604,
+            "timed_out" : false,
+            "wall_seconds" : 243.329111099243
+         },
+         "source_path" : "/home/coder/workspace/lkjscript/bench/compiler-stranger-data/operation-luna-20261117-results.json",
+         "source_row_index" : 27,
+         "source_sha256" : "12b4e75f49e10c1ea161329c69ad5e8543d95b029f94dbc197cbab96db0dee39"
+      }
+   ],
+   "scope" : "Exact retained files/commands companion result objects; original outcomes are unchanged.",
+   "version" : 1
+}

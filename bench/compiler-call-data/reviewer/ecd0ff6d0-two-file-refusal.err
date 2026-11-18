@@ -1,0 +1,2 @@
+transaction E_EDIT_CHECK identities="main::body:f76187ad73f67ffa5b3455bcbc8da103ede1f5f9fe15ba86a94172c7d892dfc9::call:0,other::second::body:c606cb723c5b4f94566533745196ecd28a68cec315ca231868d1c8a4d1248a36::call:0" /tmp/lkj-call-reviewed-transactions.r20JFkcx/mixed/other.lkj:2:5: E_TYPE function result type differs: type mismatch: expected i64, found bool; help: make the expression and its declared context use the same type
+main.lkj:1:1: E_BLOCKED remaining semantic analysis: failed bodies are blocked; independent typed bodies were constructed and checked
