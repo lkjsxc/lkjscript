@@ -1,0 +1,216 @@
+//! Token-tree expansion is an untrusted source producer. Captures retain syntax context.
+mod matcher;
+mod expand;
+pub(crate) mod provenance;
+use super::{Parser, Token, TokenKind};
+use crate::ast::*;
+use crate::diagnostics::BlockedRegion;
+use std::collections::BTreeSet;
+
+fn error(span: Span, code: &str, message: &str) -> Diagnostic {
+    Diagnostic::new(span, code, message)
+}
+fn opening(text: &str) -> bool { text == "(" || text == "[" || text == "{" }
+fn closing(text: &str) -> bool { text == ")" || text == "]" || text == "}" }
+fn partner(text: &str) -> String {
+    match text { "(" => ")".to_string(), "[" => "]".to_string(), "{" => "}".to_string(), _ => String::new() }
+}
+fn token_kind(kind: &TokenKind) -> u8 {
+    match kind {
+        TokenKind::Ident => 0u8, TokenKind::Number => 1u8, TokenKind::String => 2u8,
+        TokenKind::Char => 3u8, TokenKind::Bytes => 4u8, TokenKind::Lifetime => 5u8,
+        TokenKind::Symbol => 6u8, TokenKind::End => 7u8, TokenKind::Expression(_) => 8u8,
+    }
+}
+fn capture_token(token: &Token) -> MacroToken {
+    MacroToken { kind: token_kind(&token.kind), text: token.text.clone(), literal_spelling: token.literal_spelling.clone(), span: token.span,
+        origin: token.origin, context: token.context,
+        expression: match token.kind { TokenKind::Expression(id) => Some(id), _ => None } }
+}
+fn restore_token(token: MacroToken) -> Token {
+    let kind = match token.kind {
+        0u8 => TokenKind::Ident, 1u8 => TokenKind::Number, 2u8 => TokenKind::String,
+        3u8 => TokenKind::Char, 4u8 => TokenKind::Bytes, 5u8 => TokenKind::Lifetime,
+        6u8 => TokenKind::Symbol, 8u8 => TokenKind::Expression(token.expression.unwrap()),
+        _ => TokenKind::End,
+    };
+    Token { kind, text: token.text, literal_spelling: token.literal_spelling, span: token.span, origin: token.origin, context: token.context }
+}
+fn symbol(token: &MacroToken, text: &str) -> bool { token.kind == 6u8 && token.text == text }
+fn group_end(tokens: &[MacroToken], start: usize) -> Result<usize, Diagnostic> {
+    if start >= tokens.len() || tokens[start].kind != 6u8 || !opening(&tokens[start].text) {
+        return Err(error(tokens.get(start).map(|token| token.span).unwrap_or(Span::default()),
+            "E_MACRO_RULE", "expected a delimited token tree"));
+    }
+    let mut stack = vec![partner(&tokens[start].text).to_string()];
+    let mut at = start + 1usize;
+    while at < tokens.len() {
+        if tokens[at].kind == 6u8 {
+            if opening(&tokens[at].text) { stack.push(partner(&tokens[at].text).to_string()); }
+            else if closing(&tokens[at].text) {
+                if stack.last().unwrap() != &tokens[at].text {
+                    return Err(error(tokens[at].span, "E_MACRO_RULE", "mismatched token-tree delimiter"));
+                }
+                stack.pop();
+                if stack.is_empty() { return Ok(at); }
+            }
+        }
+        at += 1usize;
+    }
+    Err(error(tokens[start].span, "E_MACRO_RULE", "unclosed token-tree delimiter"))
+}
+impl Parser {
+    pub(super) fn macro_item_ahead(&self) -> bool {
+        let mut at = self.at;
+        if self.tokens[at].kind == TokenKind::Symbol && self.tokens[at].text == "::" { at += 1usize; }
+        if self.tokens[at].kind != TokenKind::Ident { return false; }
+        loop {
+            at += 1usize;
+            if self.tokens[at].kind != TokenKind::Symbol { return false; }
+            if self.tokens[at].text == "!" { return true; }
+            if self.tokens[at].text != "::" { return false; }
+            at += 1usize;
+            if self.tokens[at].kind != TokenKind::Ident { return false; }
+        }
+    }
+    pub(super) fn macro_terminator(&mut self, braces: bool) -> Result<(), Diagnostic> {
+        if self.token().kind == TokenKind::Symbol && self.take(";") { return Ok(()); }
+        if braces { return Ok(()); }
+        Err(self.err("parenthesized or bracketed macro items require a semicolon"))
+    }
+    fn macro_tree(&mut self) -> Result<Vec<MacroToken>, Diagnostic> {
+        if self.token().kind != TokenKind::Symbol || !opening(&self.token().text) { return Err(self.err("expected macro delimiter")); }
+        let start = self.token().span;
+        let mut stack = vec![partner(&self.token().text).to_string()];
+        self.at += 1usize;
+        let mut tokens = Vec::new();
+        while self.tokens[self.at].kind != TokenKind::End {
+            let token = self.tokens[self.at].clone();
+            if token.kind == TokenKind::Symbol {
+                if opening(&token.text) { stack.push(partner(&token.text)); }
+                else if closing(&token.text) {
+                    if stack.last().unwrap() != &token.text {
+                        return Err(error(token.span, "E_MACRO_RULE", "mismatched token-tree delimiter"));
+                    }
+                    stack.pop();
+                    if stack.is_empty() { self.at += 1usize; return Ok(tokens); }
+                }
+            }
+            tokens.push(capture_token(&token));
+            self.at += 1usize;
+        }
+        Err(error(start, "E_MACRO_RULE", "unclosed macro token tree"))
+    }
+    pub(super) fn macro_definition(&mut self, attrs: &[Attribute], public: &Visibility) -> Result<(), Diagnostic> {
+        let span = self.token().span;
+        if self.expansion.is_some() || self.fragment {
+            return Err(error(span, "E_UNSUPPORTED_MACRO", "generated macro definitions are not supported"));
+        }
+        if !matches!(public, Visibility::Private) {
+            return Err(error(span, "E_MACRO_RULE", "macro_rules visibility uses macro_export"));
+        }
+        self.expect("macro_rules")?;
+        if self.token().kind != TokenKind::Symbol { return Err(self.err("expected ! after macro_rules")); }
+        self.expect("!")?;
+        let name_span = self.token().span;
+        let name = self.ident()?;
+        if matches!(name.as_str(), "assert" | "assert_eq" | "assert_ne" | "panic" | "vec" | "format"
+            | "write" | "writeln" | "matches" | "unreachable" | "debug_assert" | "debug_assert_eq"
+            | "debug_assert_ne" | "include_str" | "include_bytes" | "print" | "println" | "eprint" | "eprintln") {
+            return Err(error(name_span, "E_UNSUPPORTED_MACRO", "built-in macro names are reserved"));
+        }
+        for attribute in attrs {
+            if !matches!(attribute.name.as_str(), "macro_export" | "allow" | "cfg" | "doc" | "deprecated") {
+                return Err(error(attribute.span, "E_UNSUPPORTED_MACRO", "unsupported attribute on macro definition"));
+            }
+            if attribute.name == "macro_export" && !attribute.args.is_empty()
+                && (attribute.args.len() != 1usize || attribute.args[0] != "local_inner_macros") {
+                return Err(error(attribute.span, "E_MACRO_RULE", "macro_export only accepts local_inner_macros"));
+            }
+        }
+        let braces = self.is("{");
+        let body = self.macro_tree()?;
+        self.macro_terminator(braces)?;
+        let exported = attrs.iter().any(|attribute| attribute.name == "macro_export");
+        let local_inner = attrs.iter().any(|attribute| attribute.name == "macro_export"
+            && attribute.args.iter().any(|argument| argument == "local_inner_macros"));
+        self.program.macro_definitions.push(MacroDefinition { name, scope: self.scope,
+            span: self.finish_span(span), name_span, body, exported, local_inner });
+        Ok(())
+    }
+    pub(super) fn macro_invocation(&mut self, name: String, span: Span, name_span: Span, item: bool)
+        -> Result<usize, Diagnostic> {
+        let tokens = self.macro_tree()?;
+        let id = self.program.macro_invocations.len();
+        self.program.macro_invocations.push(MacroInvocation { name, scope: self.scope,
+            span: self.finish_span(span), name_span, tokens, self_context: self.self_context,
+            parent: self.expansion, item });
+        Ok(id)
+    }
+}
+fn parser(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation,
+    expansion: Option<usize>) -> Parser {
+    let mut restored = Vec::new();
+    for token in tokens { restored.push(restore_token(token.clone())); }
+    let span = tokens.last().map(|token| token.span).unwrap_or(invocation.span);
+    restored.push(Token { kind: TokenKind::End, text: String::new(), literal_spelling: String::new(), span, origin: span, context: 0usize });
+    Parser { tokens: restored, at: 0usize, module: program.scopes[invocation.scope].path.clone(),
+        scope: invocation.scope, program: std::mem::replace(program, Program::default()),
+        diagnostics: Vec::new(), blocked: Vec::<BlockedRegion>::new(), diagnostic_keys: BTreeSet::new(),
+        self_context: invocation.self_context, expansion, probing: false, fragment: true }
+}
+fn expression_mode(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation,
+    expansion: Option<usize>, complete: bool, probing: bool) -> Result<(ExprId, usize), Diagnostic> {
+    let mut parser = parser(program, tokens, invocation, expansion);
+    parser.probing = probing;
+    let mut result = parser.expr(true);
+    if let Some(diagnostic) = parser.diagnostics.first().cloned() { result = Err(diagnostic); }
+    if result.is_ok() && complete && parser.token().kind != TokenKind::End {
+        result = Err(error(parser.token().span, "E_MACRO_EXPANSION", "macro expansion must be one complete expression"));
+    }
+    let consumed = parser.at;
+    *program = parser.program;
+    result.map(|id| (id, consumed))
+}
+fn expression(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation,
+    expansion: Option<usize>, complete: bool) -> Result<(ExprId, usize), Diagnostic> {
+    expression_mode(program, tokens, invocation, expansion, complete, false)
+}
+fn probe_expression(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation)
+    -> Result<(ExprId, usize), Diagnostic> {
+    expression_mode(program, tokens, invocation, invocation.parent, false, true)
+}
+impl Parser {
+    pub(super) fn macro_capture_expression(&mut self, id: usize) -> Result<ExprId, Diagnostic> {
+        let tokens = self.program.macro_captures[id].tokens.clone();
+        let scope = self.program.macro_captures[id].scope;
+        let span = self.program.macro_captures[id].span;
+        let self_context = self.program.macro_captures[id].self_context;
+        let parent = self.program.macro_captures[id].parent;
+        let invocation = MacroInvocation { name: "$capture".to_string(), scope,
+            span, name_span: span, tokens: Vec::new(), self_context, parent, item: false };
+        let (expression, _) = expression_mode(&mut self.program, &tokens, &invocation,
+            parent, true, self.probing)?;
+        if self.program.macro_captures[id].expression.is_none() { self.program.macro_captures[id].expression = Some(expression); }
+        self.program.macro_captures[id].materializations.push(expression);
+        Ok(expression)
+    }
+}
+fn items(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation,
+    expansion: usize) -> Result<Vec<Item>, Diagnostic> {
+    let first_function = program.functions.len();
+    let first_impl = program.impls.len();
+    let mut parser = parser(program, tokens, invocation, Some(expansion));
+    let result = parser.items(false);
+    let diagnostic = parser.diagnostics.first().cloned();
+    *program = parser.program;
+    if let Some(diagnostic) = diagnostic { return Err(diagnostic); }
+    let items = result?;
+    for id in first_function..program.functions.len() { program.macro_expansions[expansion].functions.push(id); }
+    for id in first_impl..program.impls.len() { program.macro_expansions[expansion].implementations.push(id); }
+    program.macro_expansions[expansion].items = items.clone();
+    Ok(items)
+}
+
+pub(crate) fn expand(program: &mut Program) -> Result<(), Diagnostic> { expand::run(program) }
+pub(crate) fn expand_report(program: &mut Program) -> (Vec<Diagnostic>, Vec<BlockedRegion>) { expand::report(program) }

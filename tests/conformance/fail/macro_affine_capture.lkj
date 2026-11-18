@@ -1,0 +1,4 @@
+// expect: reject E_MOVE
+// witness: {"rustAccept":false,"rustCode":"E0382","world":true}
+macro_rules! twice { ($value:expr) => { ($value, $value) }; }
+fn probe(file: File) { let pair = twice!(file); }

@@ -113,7 +113,7 @@ done
 
 mkdir "$fixture/contracts"
 for source in ast diagnostic names syntax resolve source; do cp "src/$source.lkj" "$fixture/contracts/$source.lkj"; done
-cp -R src/syntax src/resolve "$fixture/contracts/"
+cp -R src/ast src/syntax src/resolve "$fixture/contracts/"
 cp src/semantic/origins.lkj "$fixture/contracts/origins.lkj"
 cp -R src/semantic/origins "$fixture/contracts/"
 cp tests/fixtures/debug_origins.lkj "$fixture/contracts/main.lkj"

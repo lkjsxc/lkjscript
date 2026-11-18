@@ -1,0 +1,4 @@
+// expect: reject E_PARSE
+// witness: {"rustAccept":true}
+macro_rules! discard_tree { ($value:tt) => { 1i32 }; }
+fn probe() -> i32 { discard_tree!(c"unsupported") }

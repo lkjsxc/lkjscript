@@ -1,0 +1,191 @@
+//! Expansion keeps authored fragments and generated syntax in distinct provenance tables.
+mod recovery;
+use super::*;
+use std::collections::BTreeMap;
+
+fn before(left: Span, right: Span) -> bool { left.file == right.file && left.start < right.start }
+fn module_index(program: &Program, scope: usize) -> Option<usize> {
+    program.modules.iter().position(|module| module.scope == scope)
+}
+fn visible(program: &Program, scope: usize, cutoff: Span, name: &str) -> Option<usize> {
+    let mut selected: Option<(usize, usize)> = None;
+    for (id, definition) in program.macro_definitions.iter().enumerate() {
+        if definition.scope == scope && definition.name == name && before(definition.span, cutoff)
+            && selected.is_none_or(|(_, position)| definition.span.start > position) {
+            selected = Some((id, definition.span.start));
+        }
+    }
+    for module in &program.modules {
+        if program.scopes[module.scope].parent == Some(scope) && program.macro_use_modules.contains(&module.scope)
+            && before(module.span, cutoff) {
+            let file = program.loaded_modules.iter().find(|loaded| loaded.scope == module.scope)
+                .map(|loaded| loaded.file).unwrap_or(module.span.file);
+            let end = Span { file, start: 18446744073709551615usize, end: 18446744073709551615usize, ..module.span };
+            if let Some(id) = visible(program, module.scope, end, name) {
+                if selected.is_none_or(|(_, position)| module.span.start > position) { selected = Some((id, module.span.start)); }
+            }
+        }
+    }
+    selected.map(|(id, _)| id)
+}
+fn resolve(program: &Program, invocation: &MacroInvocation) -> Result<usize, Diagnostic> {
+    let crate_root = program.scopes[invocation.scope].crate_root;
+    let mut root = crate_root;
+    let mut name = invocation.name.as_str();
+    let qualified = name.contains("::");
+    if qualified {
+        let split = name.rfind("::").unwrap();
+        let prefix = &name[..split]; name = &name[split + 2usize..];
+        if prefix != "crate" && prefix != program.scopes[crate_root].path {
+            root = program.scopes.iter().position(|scope| scope.parent.is_none() && scope.path == prefix)
+                .ok_or_else(|| error(invocation.span, "E_UNSUPPORTED_MACRO", "macro path must name an exported macro in a source crate"))?;
+        }
+    } else {
+        let mut scope = invocation.scope;
+        let mut cutoff = invocation.span;
+        loop {
+            if let Some(id) = visible(program, scope, cutoff, name) { return Ok(id); }
+            match program.scopes[scope].parent {
+                Some(parent) => {
+                    if let Some(module) = module_index(program, scope) { cutoff = program.modules[module].span; }
+                    scope = parent;
+                }
+                None => break,
+            }
+        }
+    }
+    for (id, definition) in program.macro_definitions.iter().enumerate() {
+        if definition.exported && definition.name.as_str() == name && program.scopes[definition.scope].crate_root == root { return Ok(id); }
+    }
+    Err(error(invocation.span, "E_UNSUPPORTED_MACRO", &format!("unsupported macro: {}!; no visible declarative definition", invocation.name)))
+}
+fn fingerprint(tokens: &[MacroToken]) -> String {
+    let mut result = String::new();
+    for token in tokens {
+        result.push_str(&format!("{}:{}:{}:{}:{};", token.kind, token.text.len(), token.text, token.literal_spelling.len(), token.literal_spelling));
+        if token.expression.is_some() { result.push_str(&format!("{}:{}:{};", token.origin.file, token.origin.start, token.origin.end)); }
+    }
+    result
+}
+struct Expander {
+    rules: Vec<Vec<matcher::Rule>>,
+    invalid_rules: BTreeMap<usize, Diagnostic>,
+    expressions: BTreeMap<usize, usize>,
+}
+impl Expander {
+    fn begin(&self, program: &mut Program, call: usize) -> Result<(Vec<MacroToken>, usize), Diagnostic> {
+        let invocation = program.macro_invocations[call].clone();
+        let definition = resolve(program, &invocation)?;
+        if let Some(problem) = self.invalid_rules.get(&definition) { return Err(problem.clone()); }
+        let key = fingerprint(&invocation.tokens);
+        let mut ancestor = invocation.parent;
+        while let Some(id) = ancestor {
+            let expansion = &program.macro_expansions[id];
+            let prior = &program.macro_invocations[expansion.invocation];
+            if expansion.definition == definition && fingerprint(&prior.tokens) == key {
+                return Err(error(invocation.span, "E_MACRO_RECURSION", "declarative expansion repeats an active invocation"));
+            }
+            ancestor = expansion.parent;
+        }
+        let expansion = program.macro_expansions.len();
+        let context = match expansion.checked_add(1usize) { Some(context) => context,
+            None => return Err(error(invocation.span, "E_MACRO_EXPANSION", "macro syntax context is not representable")) };
+        let start = crate::ast::macros::inventory(program);
+        program.macro_expansions.push(MacroExpansion { start: start.clone(), end: start, definition, invocation: call, context,
+            parent: invocation.parent, types: Vec::new(), expressions: Vec::new(), patterns: Vec::new(),
+            functions: Vec::new(), implementations: Vec::new(), items: Vec::new() });
+        let declaration = program.macro_definitions[definition].clone();
+        let tokens = matcher::apply(program, &declaration, &self.rules[definition], &invocation, context)?;
+        Ok((tokens, expansion))
+    }
+    fn expression(&mut self, program: &mut Program, call: usize) -> Result<usize, Diagnostic> {
+        if let Some(id) = self.expressions.get(&call) { return Ok(*id); }
+        let (tokens, expansion) = self.begin(program, call)?;
+        let invocation = program.macro_invocations[call].clone();
+        let (mut id, _) = super::expression(program, &tokens, &invocation, Some(expansion), true)?;
+        let end = crate::ast::macros::inventory(program);
+        program.macro_expansions[expansion].end = end;
+        if let Expr::MacroInvocation(nested) = program.exprs[id].kind {
+            id = self.expression(program, nested)?;
+        }
+        self.expressions.insert(call, id);
+        Ok(id)
+    }
+    fn item(&self, program: &mut Program, call: usize) -> Result<Vec<Item>, Diagnostic> {
+        let (tokens, expansion) = self.begin(program, call)?;
+        let invocation = program.macro_invocations[call].clone();
+        let expanded = super::items(program, &tokens, &invocation, expansion)?;
+        let end = crate::ast::macros::inventory(program);
+        program.macro_expansions[expansion].end = end;
+        for item in &expanded {
+            if let Item::Module(id) = item {
+                if program.modules[*id].external { return Err(error(invocation.span,
+                    "E_UNSUPPORTED_MACRO", "macro expansion cannot discover an external source module")); }
+            }
+        }
+        Ok(expanded)
+    }
+    fn items(&mut self, program: &mut Program, input: Vec<Item>) -> Result<Vec<Item>, Diagnostic> {
+        let mut output = Vec::new();
+        for item in input {
+            if let Item::MacroInvocation(call) = item {
+                let expanded = self.item(program, call)?;
+                for item in self.items(program, expanded)? { output.push(item); }
+            } else { output.push(item); }
+        }
+        Ok(output)
+    }
+}
+pub(super) fn run(program: &mut Program) -> Result<(), Diagnostic> {
+    if !program.macros_expanded && (!program.macro_definitions.is_empty() || !program.macro_invocations.is_empty())
+        && program.macro_input.is_none() {
+        let mut input = program.clone(); input.macro_input = None;
+        program.macro_input = Some(Box::new(input));
+    }
+    replay(program)
+}
+pub(super) fn replay(program: &mut Program) -> Result<(), Diagnostic> {
+    if program.macros_expanded { return Ok(()); }
+    if program.macro_definitions.is_empty() && program.macro_invocations.is_empty() { program.macros_expanded = true; return Ok(()); }
+    let mut rules = Vec::new();
+    let mut exports: BTreeSet<(usize, String)> = BTreeSet::new();
+    for definition in &program.macro_definitions {
+        if definition.exported && !exports.insert((program.scopes[definition.scope].crate_root, definition.name.clone())) {
+            return Err(error(definition.name_span, "E_MACRO_RULE", "duplicate exported macro name"));
+        }
+        rules.push(matcher::rules(definition)?);
+    }
+    let mut expander = Expander { rules, invalid_rules: BTreeMap::new(), expressions: BTreeMap::new() };
+    let original = std::mem::replace(&mut program.items, Vec::new());
+    program.items = expander.items(program, original)?;
+    let mut module = 0usize;
+    while module < program.modules.len() {
+        let items = std::mem::replace(&mut program.modules[module].items, Vec::new());
+        program.modules[module].items = expander.items(program, items)?;
+        module += 1usize;
+    }
+    let mut at = 0usize;
+    while at < program.exprs.len() {
+        if let Expr::MacroInvocation(call) = program.exprs[at].kind {
+            let id = expander.expression(program, call)?;
+            program.macro_aliases.push(MacroAlias { expression: at, original: program.exprs[at].clone(), expanded: id, invocation: call });
+            program.exprs[at] = program.exprs[id].clone();
+        }
+        at += 1usize;
+    }
+    program.macros_expanded = true;
+    Ok(())
+}
+
+/// Successful source loading uses the same expansion and provenance as replay.
+/// Only a refused input pays for isolated diagnostic recovery.
+pub(super) fn report(program: &mut Program) -> (Vec<Diagnostic>, Vec<BlockedRegion>) {
+    let mut problem = match run(program) { Ok(()) => return (Vec::new(), Vec::new()), Err(problem) => problem };
+    if problem.path.is_empty() { problem.path = program.files[problem.file].path.clone(); }
+    let input = match program.macro_input.take() {
+        Some(input) => input,
+        None => return (vec![problem], Vec::new()),
+    };
+    *program = *input;
+    recovery::run(program, problem)
+}

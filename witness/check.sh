@@ -25,6 +25,7 @@ bash tools/directory-rename-new-test.sh target/lkjscript --witness "$witness_rus
 bash tools/directory-identity-test.sh target/lkjscript --witness "$witness_rustc"
 bash tools/connect-deadline-test.sh target/lkjscript --witness "$witness_rustc"
 bash tools/tcp-port-test.sh target/lkjscript --witness "$witness_rustc"
+bash tools/declarative-macro-test.sh target/lkjscript --witness "$witness_rustc"
 bash tools/temporary-files-test.sh target/lkjscript --witness "$witness_rustc"
 bash tools/real-programs-rust.sh "$witness_rustc"
 printf 'ok optional Rust witness and compiler byte identity\n'

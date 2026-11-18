@@ -1,0 +1,4 @@
+// expect: reject E_MACRO_RECURSION
+// witness: {"rustAccept":false}
+macro_rules! forever { ($($tokens:tt)*) => {{ forever!($($tokens)*) }}; }
+fn probe() { forever!(x); }

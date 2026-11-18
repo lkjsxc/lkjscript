@@ -1,0 +1,164 @@
+//! Replay declarative expansion from its original token-bearing source program.
+//! Receipts are compared with regenerated topology; flags never authorize an origin.
+use crate::ast::{Diagnostic, MacroToken, Program, Span};
+use std::collections::BTreeSet;
+
+fn failure(span: Span, detail: &str) -> Diagnostic {
+    Diagnostic::new(span, "E_IDENTITY_ORIGIN", detail)
+}
+fn replay_failure(mut problem: Diagnostic, phase: &str) -> Diagnostic {
+    problem.code = "E_IDENTITY_ORIGIN".to_string();
+    problem.message = format!("{phase}: {}", problem.message);
+    problem
+}
+fn raw_token(program: &Program, token: &MacroToken) -> bool {
+    token.kind <= 6u8 && token.expression.is_none() && token.context == 0usize
+        && token.span == token.origin && token.span.file < program.files.len()
+        && token.span.start <= token.span.end
+}
+fn source_input(program: &Program) -> Result<(), Diagnostic> {
+    if program.resolved || program.macros_expanded || program.macro_input.is_some()
+        || !program.macro_expansions.is_empty() || !program.macro_aliases.is_empty()
+        || !program.macro_inputs.is_empty() || !program.macro_captures.is_empty()
+    {
+        return Err(failure(Span::default(), "macro replay input is not an unexpanded source program"));
+    }
+    for definition in &program.macro_definitions {
+        if definition.scope >= program.scopes.len() || definition.span.file >= program.files.len()
+            || definition.name_span.file != definition.span.file
+        {
+            return Err(failure(definition.span, "macro definition has no source scope"));
+        }
+        for token in &definition.body {
+            if !raw_token(program, token) {
+                return Err(failure(token.span, "macro definition token does not retain its source spelling"));
+            }
+        }
+    }
+    for invocation in &program.macro_invocations {
+        if invocation.scope >= program.scopes.len() || invocation.span.file >= program.files.len()
+            || invocation.parent.is_some()
+        {
+            return Err(failure(invocation.span, "macro invocation has no authored source scope"));
+        }
+        for token in &invocation.tokens {
+            if !raw_token(program, token) {
+                return Err(failure(token.span, "macro invocation token does not retain its source spelling"));
+            }
+        }
+    }
+    Ok(())
+}
+
+pub(crate) fn validate(program: &Program) -> Result<(), Diagnostic> {
+    let Some(input) = &program.macro_input else {
+        if !program.macro_definitions.is_empty() || !program.macro_invocations.is_empty()
+            || !program.macro_expansions.is_empty() || !program.macro_aliases.is_empty()
+            || !program.macro_inputs.is_empty() || !program.macro_captures.is_empty()
+        {
+            return Err(failure(Span::default(), "macro origins require their unexpanded token-bearing input"));
+        }
+        return Ok(());
+    };
+    source_input(input)?;
+    let mut replay = (**input).clone();
+    super::expand::replay(&mut replay)
+        .map_err(|problem| replay_failure(problem, "macro origin replay refused"))?;
+    crate::source::replay_macro_includes(&mut replay, &program.macro_inputs)
+        .map_err(|problem| replay_failure(problem, "macro include replay refused"))?;
+    let mut replay = crate::resolve::resolve(&replay)
+        .map_err(|problem| replay_failure(problem, "macro resolution replay refused"))?;
+    let mut presented = program.clone();
+    presented.macro_input = None;
+    replay.macro_input = None;
+    if presented != replay {
+        return Err(failure(Span::default(),
+            "macro origin differs from exact token matching, capture, expansion or resolved AST replay"));
+    }
+    Ok(())
+}
+
+/// Source discovery uses $std; the driver presents the mounted library path.
+/// Replay maps only that namespace and never consults a filesystem.
+fn source_path(path: &str, standard: &Option<String>) -> String {
+    let Some(root) = standard else { return path.to_string(); };
+    if path == "$std/lib.lkj" { return root.clone(); }
+    if !path.starts_with("$std/") { return path.to_string(); }
+    let directory = match root.rfind('/') {
+        Some(0usize) => "/",
+        Some(at) => &root[..at],
+        None => "",
+    };
+    if directory.is_empty() { path[5usize..].to_string() }
+    else if directory == "/" { format!("/{}", &path[5usize..]) }
+    else { format!("{directory}/{}", &path[5usize..]) }
+}
+fn root_path(program: &Program, scope: usize) -> Result<String, Diagnostic> {
+    let loaded = program.loaded_modules.iter().find(|loaded| loaded.scope == scope)
+        .ok_or_else(|| failure(Span::default(), "macro source snapshot has no loaded root"))?;
+    program.files.get(loaded.file).map(|file| file.path.clone())
+        .ok_or_else(|| failure(Span::default(), "macro source snapshot root file is absent"))
+}
+
+/// Reparse the authenticated bytes to bind the entire pre-expansion program.
+/// This checks empty token groups, attributes, scopes, inactive syntax and
+/// original capture topology without trusting an origin bit or a partial match.
+fn authenticated_input(input: &Program, inputs: &[(String, Vec<u8>)]) -> Result<(), Diagnostic> {
+    let root = root_path(input, 0usize)?;
+    let standard_scope = input.scopes.iter().position(|scope|
+        scope.parent.is_none() && scope.path == "$std");
+    let standard = match standard_scope {
+        Some(scope) => Some(root_path(input, scope)?),
+        None => None,
+    };
+    let library = if standard.is_some() { Some("$std/lib.lkj") } else { None };
+    let mut rebuilt = crate::source::load(&root, library, &mut |path: &str| {
+        let path = source_path(path, &standard);
+        Ok(inputs.iter().find(|(candidate, _)| candidate == &path)
+            .map(|(_, bytes)| bytes.clone()))
+    }).map_err(|problem| replay_failure(problem, "macro authenticated source replay refused"))?;
+    let Some(rebuilt) = rebuilt.macro_input.as_mut() else {
+        return Err(failure(Span::default(), "authenticated source has no declarative macro snapshot"));
+    };
+    for index in 0usize..rebuilt.files.len() {
+        rebuilt.files[index].path = source_path(&rebuilt.files[index].path, &standard);
+    }
+    for index in 0usize..rebuilt.loaded_modules.len() {
+        if !rebuilt.loaded_modules[index].alternate.is_empty() {
+            rebuilt.loaded_modules[index].alternate = source_path(&rebuilt.loaded_modules[index].alternate, &standard);
+        }
+    }
+    if &**rebuilt != input {
+        return Err(failure(Span::default(),
+            "macro replay input differs from the exact authenticated source program"));
+    }
+    Ok(())
+}
+
+/// Snapshot facts bind replay receipts to the actual authenticated inputs.
+/// A changed include payload cannot forge a matching expanded literal.
+pub(crate) fn validate_inputs(program: &Program, inputs: &[(String, Vec<u8>)])
+    -> Result<(), Diagnostic> {
+    let Some(input) = &program.macro_input else { return Ok(()); };
+    source_input(input)?;
+    let mut exact: std::collections::BTreeMap<String, usize> = std::collections::BTreeMap::new();
+    for (index, (path, bytes)) in inputs.iter().enumerate() {
+        if exact.contains_key(path) {
+            let prior = *exact.get(path).unwrap();
+            if &inputs[prior].1 != bytes {
+                return Err(failure(Span::default(), "conflicting authenticated macro source inputs"));
+            }
+        } else { exact.insert(path.clone(), index); }
+    }
+    authenticated_input(input, inputs)?;
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for (path, bytes) in &program.macro_inputs {
+        if !seen.insert(path.clone()) {
+            return Err(failure(Span::default(), "duplicate macro include input"));
+        }
+        if !inputs.iter().any(|(actual_path, actual_bytes)| actual_path == path && actual_bytes == bytes) {
+            return Err(failure(Span::default(), "macro include receipt differs from the authenticated source input"));
+        }
+    }
+    Ok(())
+}

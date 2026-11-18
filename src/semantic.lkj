@@ -261,6 +261,7 @@ fn implementation_identity(program: &a::Program, index: usize) -> String {
 }
 fn item_identity(program: &a::Program, item: a::Item, function_ids: &[String]) -> String {
     match item {
+        a::Item::MacroInvocation(id) => format!("macro-invocation:{id}"),
         a::Item::Function(index) => function_ids[index].clone(),
         a::Item::Struct(index) => qualified(&program.structs[index].module, &program.structs[index].name),
         a::Item::Enum(index) => qualified(&program.enums[index].module, &program.enums[index].name),
@@ -467,6 +468,8 @@ pub(crate) fn parameter_identity(owner: &str, name: &str, position: usize) -> St
 fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir::CheckedProgram,
     evidence: &Option<crate::elaborate::semantic::Evidence>, include_references: bool) -> Result<Catalog, String> {
     if !program.resolved { return Err("E_IDENTITY source is not resolved".to_string()); }
+    crate::syntax::macros::provenance::validate_inputs(program, inputs)
+        .map_err(|problem| -> String { format!("E_IDENTITY_ORIGIN {}", problem.message) })?;
     let resolver = resolve::Resolver::new(program).map_err(|problem| problem.message)?;
     let origins = origins::collect(program, &resolver)?;
     let mut by_path: BTreeMap<String, usize> = BTreeMap::new();
@@ -509,6 +512,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             file: program.files[loaded.file].path.clone(), alternate: loaded.alternate.clone() });
     }
     for index in 0usize..program.functions.len() { result.function_ids.push(function_identity(program, index)); }
+    macro_sources::append_entries(&mut result, &files, program)?;
     for (index, value) in program.functions.iter().enumerate() {
         let identity = result.function_ids[index].clone();
         let parent = match program.function_owner(a::FunctionId { index }) {
@@ -575,7 +579,10 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         append(&mut result, &files, identity.clone(), root_parent(&value.module), "implementation", "impl",
             value.span, None, type_name(program, value.target), true)?;
         if let Some(structure) = origins.implementations[index] {
-            let signature = format!("impl {} for {}", type_name(program, value.trait_ty.unwrap()), type_name(program, value.target));
+            let signature = match value.trait_ty {
+                Some(trait_ty) => format!("impl {} for {}", type_name(program, trait_ty), type_name(program, value.target)),
+                None => format!("impl {}", type_name(program, value.target)),
+            };
             generated_projection(&mut result, &files, program, &identity, structure, signature, false)?;
         }
         append_generics(&mut result, &files, &identity, &value.generics)?;
@@ -602,12 +609,15 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         append(&mut result, &files, qualified(&value.module, &value.name), root_parent(&value.module), "constant",
             &value.name, value.span, None, type_name(program, value.ty), true)?;
     }
+    macro_sources::project_items(&mut result, &files, program, &origins)?;
     // Validated generated calls have identities even in declaration-only catalogs.
     // Their edges never require editable source spelling or body inference.
     let mut generated_calls: BTreeMap<String, usize> = BTreeMap::new();
     for (expression, function) in &origins.expressions {
         generated_expression(&mut result, &files, program, &resolver, *expression, *function, &mut generated_calls, evidence)?;
     }
+    macro_sources::generated_nodes(&mut result, &files, program, &resolver, &origins, &mut generated_calls, evidence)?;
+    macro_sources::generated_imports(&mut result, &files, program, &resolver, &origins);
     for (pattern, function) in &origins.patterns {
         let node = &program.patterns[*pattern];
         if let a::Pattern::Path(path) | a::Pattern::Variant { path, .. } | a::Pattern::Struct { path, .. } = &node.kind {
@@ -621,11 +631,23 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         let owners = Owners::new(&result);
         let self_traits = self_trait_owners(program);
         lifetime_predicate_references(&mut result, &files, program);
-        import_qualifications(&mut result, &files, program, &resolver);
+        import_qualifications(&mut result, &files, program, &resolver, &origins);
         visibility_qualifications(&mut result, &files, &owners);
         // Every declaration-backed type path is a resolved reference, including aliases.
         for (type_index, node) in program.types.iter().enumerate() {
             if program.impl_traits.contains_key(&type_index) || program.constant_arguments.contains_key(&type_index) { continue; }
+            if !origins.types.contains_key(&type_index) {
+                if let Some(expansion) = origins.macros.types.get(&type_index) {
+                    let owner = origins::macros::expansion_identity(*expansion);
+                    let target = match &node.kind {
+                        a::Type::Path(path) => path.declaration.and_then(|declaration|
+                            declaration_identity(program, declaration, &result.function_ids)),
+                        _ => None,
+                    };
+                    generated_reference(&mut result, &files, &owner, target, node.span, "type");
+                    continue;
+                }
+            }
             if let a::Type::Array { len, .. } = &node.kind {
                 if has_constant_parameters && crate::generics::const_arguments::literal(len).is_none()
                     && crate::generics::const_arguments::declared(program, node.span, len) {
@@ -710,8 +732,8 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                 }
             }
         }
-        for imported in &program.uses {
-            if imported.glob { continue; }
+        for (index, imported) in program.uses.iter().enumerate() {
+            if origins.macros.items.contains_key(&(5usize, index)) || imported.glob { continue; }
             let scope = resolve::module(program, &imported.module);
             let path = a::Path { qualification: None, bindings: Vec::new(), declaration: None, name: imported.path.clone(), args: Vec::new() };
             let mut target: Option<String> = None;
@@ -734,7 +756,9 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                 import_reference(&mut result, &files, owner, target, imported, alias);
             }
         }
-        pattern_references(&mut result, &files, program, &owners, &resolver, &origins.patterns);
+        let mut generated_patterns = origins.patterns.clone();
+        for pattern in origins.macros.patterns.keys() { generated_patterns.insert(*pattern, 0usize); }
+        pattern_references(&mut result, &files, program, &owners, &resolver, &generated_patterns);
         let mut local_names: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
         let mut source_functions: BTreeMap<String, usize> = BTreeMap::new();
         for (index, function) in program.functions.iter().enumerate() {
@@ -746,7 +770,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         let mut binding_counts: BTreeMap<(String, String), usize> = BTreeMap::new();
         let mut binding_ids: BTreeMap<usize, String> = BTreeMap::new();
         for (pattern, node) in program.patterns.iter().enumerate() {
-            if origins.patterns.contains_key(&pattern) { continue; }
+            if generated_patterns.contains_key(&pattern) { continue; }
             if let a::Pattern::Bind { name, .. } = &node.kind {
                 let file = &files[node.span.file];
                 if let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) {
@@ -770,7 +794,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         }
         let mut calls: BTreeMap<String, usize> = BTreeMap::new();
         for (expression, node) in program.exprs.iter().enumerate() {
-            if origins.expressions.contains_key(&expression) { continue; }
+            if origins.expressions.contains_key(&expression) || origins.macros.expressions.contains_key(&expression) { continue; }
             let file = &files[node.span.file];
             let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) else { continue; };
             let key = (file.path.clone(), node.span.start, node.span.end);
@@ -924,6 +948,7 @@ pub fn catalog_items(program: &a::Program, inputs: &[(String, Vec<u8>)], checked
 }
 
 mod origins;
+mod macro_sources;
 
 pub fn generated_epoch_domain(expansion: &str) -> String {
     if expansion == "derive-default" { "lkjscript-derived-default-body-1".to_string() }
@@ -932,14 +957,19 @@ pub fn generated_epoch_domain(expansion: &str) -> String {
 
 fn generated_projection(catalog: &mut Catalog, files: &[SourceText], program: &a::Program,
     identity: &str, origin: origins::Origin, signature: String, body: bool) -> Result<(), String> {
-    let definition = &program.declarations[origin.declaration];
+    let span = origin.span(program);
     let defining = module_name(&origin.identity(program));
-    let file = &files[definition.span.file];
-    let start = preceding(&file.tokens, definition.span.start);
-    let declaration = token_digest(&file.tokens, start, definition.span.end);
+    let file = &files[span.file];
+    let start = preceding(&file.tokens, span.start);
+    let declaration = token_digest(&file.tokens, start, span.end);
     let domain = generated_epoch_domain(origin.expansion.name());
     let mut epoch = domain.as_bytes().to_vec();
     bytes(&mut epoch, defining.as_bytes()); bytes(&mut epoch, declaration.as_bytes());
+    if let origins::Expansion::Macro(index) = origin.expansion {
+        macro_sources::epoch(&mut epoch, files, program, index);
+    } else {
+        macro_sources::derived_epoch(&mut epoch, files, program, origin);
+    }
     let index = *catalog.by_identity.get(&identity.to_string())
         .ok_or_else(|| -> String { format!("{} E_IDENTITY_ORIGIN generated item is absent", quote(identity)) })?;
     let item = &mut catalog.items[index];
@@ -965,11 +995,23 @@ fn generated_reference(catalog: &mut Catalog, files: &[SourceText], owner: &str,
 fn generated_expression(catalog: &mut Catalog, files: &[SourceText], program: &a::Program,
     resolver: &resolve::Resolver<'_>, expression: usize, function: usize, calls: &mut BTreeMap<String, usize>,
     evidence: &Option<crate::elaborate::semantic::Evidence>) -> Result<(), String> {
-    let node = &program.exprs[expression];
     let owner = catalog.function_ids[function].clone();
+    generated_expression_owned(catalog, files, program, resolver, expression, &owner, Some(function), false, calls, evidence)
+}
+
+fn generated_expression_owned(catalog: &mut Catalog, files: &[SourceText], program: &a::Program,
+    resolver: &resolve::Resolver<'_>, expression: usize, selected_owner: &str, function: Option<usize>,
+    macro_expansion: bool, calls: &mut BTreeMap<String, usize>,
+    evidence: &Option<crate::elaborate::semantic::Evidence>) -> Result<(), String> {
+    let node = &program.exprs[expression];
+    let owner = selected_owner.to_string();
     match &node.kind {
         a::Expr::Path(path) => {
             if path.declaration.is_none() && (path.name == "self" || path.name.starts_with("$debug_")) { return Ok(()); }
+            if macro_expansion && evidence.as_ref().is_some_and(|value| value.locals.contains_key(&expression)) {
+                generated_reference(catalog, files, &owner, None, node.span, "local-value");
+                return Ok(());
+            }
             let target = resolver.value_path(node.scope, path, node.span).ok()
                 .and_then(|path| value_identity(program, &path, &catalog.function_ids));
             generated_reference(catalog, files, &owner, target, node.span, "value");
@@ -984,8 +1026,9 @@ fn generated_expression(catalog: &mut Catalog, files: &[SourceText], program: &a
         }
         a::Expr::Call { callee, .. } => {
             let target = match &program.exprs[*callee].kind {
-                a::Expr::Path(path) => resolver.value_path(program.exprs[*callee].scope, path, program.exprs[*callee].span).ok()
-                    .and_then(|path| value_identity(program, &path, &catalog.function_ids)),
+                a::Expr::Path(path) if !evidence.as_ref().is_some_and(|value| value.locals.contains_key(callee)) =>
+                    resolver.value_path(program.exprs[*callee].scope, path, program.exprs[*callee].span).ok()
+                        .and_then(|path| value_identity(program, &path, &catalog.function_ids)),
                 _ => None,
             };
             generated_reference(catalog, files, &owner, target, node.span, "call");
@@ -1026,18 +1069,23 @@ fn generated_expression(catalog: &mut Catalog, files: &[SourceText], program: &a
             catalog.items[index].body_digest = epoch;
         }
         a::Expr::Field { name, .. } => {
-            let source = program.function_owner(a::FunctionId { index: function });
-            let target = match source {
-                a::FunctionOwner::Implementation(index) => {
+            if evidence.as_ref().is_some_and(|value| value.builtin_fields.contains(&expression)) { return Ok(()); }
+            let inferred = evidence.as_ref().and_then(|value| value.fields.get(&expression))
+                .and_then(|declaration| declaration_identity(program, *declaration, &catalog.function_ids))
+                .map(|parent| format!("{parent}::field:{name}"));
+            let source = function.map(|function| program.function_owner(a::FunctionId { index: function }));
+            let target = inferred.or_else(|| match source {
+                Some(a::FunctionOwner::Implementation(index)) => {
                     let target = type_name(program, program.impls[index.index].target);
                     let base = target.find('<').map_or(target.as_str(), |at| &target[..at]);
                     Some(format!("{base}::field:{name}"))
                 }
                 _ => None,
-            };
+            });
             generated_reference(catalog, files, &owner, target, node.span, "field");
         }
         a::Expr::String(_) | a::Expr::Borrow { .. } | a::Expr::Block(_) | a::Expr::Match { .. } => {}
+        _ if macro_expansion => {}
         _ => return Err(format!("{} E_IDENTITY_ORIGIN generated expression has no validated form", quote(&owner))),
     }
     Ok(())

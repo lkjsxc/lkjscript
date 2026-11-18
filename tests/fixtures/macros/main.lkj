@@ -1,0 +1,20 @@
+#[macro_use]
+mod definitions;
+macro_rules! shadow { () => { 17i32 }; }
+fn first() -> i32 { shadow!() }
+mod inherited { pub fn value() -> i32 { shadow!() } }
+macro_rules! shadow { () => { 29i32 }; }
+fn second() -> i32 { shadow!() }
+mod caller;
+fn base() -> i32 { 43i32 }
+pub fn main(mut world: World) {
+    assert_eq!((first(), second(), inherited::value()), (17i32, 29i32, 17i32));
+    assert_eq!(imported!(), 13i32);
+    assert_eq!(external!(), 43i32);
+    assert_eq!(crate::external!(), 43i32);
+    assert_eq!(explicit_external!(), 43i32);
+    assert_eq!(caller::value(), 56i32);
+    assert_eq!(template_include!(), "root payload\n");
+    assert_eq!(capture_include!("payload.txt"), "root payload\n");
+    world.stdout().write(b"macro scopes ok\n");
+}

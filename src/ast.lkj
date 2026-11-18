@@ -1,5 +1,8 @@
 //! Flat syntax trees. Edges are arena indices, so dropping a deeply nested source is iterative.
 
+pub mod macros;
+pub use macros::{MacroToken, MacroDefinition, MacroInvocation, MacroExpansion, MacroCapture, MacroAlias, MacroInventory};
+
 pub type FileId = usize;
 pub type ModuleId = usize;
 pub type DeclarationId = usize;
@@ -30,14 +33,14 @@ pub enum FunctionOwner {
 
 pub use crate::diagnostic::{Diagnostic, Span};
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct AssociatedBinding {
     pub name: String,
     pub value: TypeId,
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct QualifiedPath {
     pub receiver: TypeId,
     // A missing trait selects a value member on the explicit receiver type.
@@ -46,7 +49,7 @@ pub struct QualifiedPath {
     pub member_span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Path {
     pub qualification: Option<QualifiedPath>,
     pub declaration: Option<DeclarationId>,
@@ -55,7 +58,7 @@ pub struct Path {
     pub bindings: Vec<AssociatedBinding>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Type {
     Infer,
     Path(Path),
@@ -77,34 +80,34 @@ pub enum Type {
     Never,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct TypeNode {
     pub scope: ModuleId,
     pub kind: Type,
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct WherePredicate {
     pub target: TypeId,
     pub bounds: Vec<TypeId>,
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct NamedLifetime {
     pub name: String,
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct LifetimePredicate {
     pub target: NamedLifetime,
     pub bounds: Vec<NamedLifetime>,
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct GenericParam {
     pub name: String,
     pub bounds: Vec<TypeId>,
@@ -117,21 +120,21 @@ pub struct GenericParam {
 }
 
 /// The written projection of an anonymous parameter survives ordinary generic lowering.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ImplTrait {
     pub bounds: Vec<TypeId>,
     pub argument: bool,
     pub result: Option<usize>,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Attribute {
     pub name: String,
     pub args: Vec<String>,
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Param {
     pub name: String,
     pub ty: TypeId,
@@ -139,7 +142,7 @@ pub struct Param {
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Function {
     pub const_qualified: bool,
     pub name: String,
@@ -155,7 +158,7 @@ pub struct Function {
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Field {
     pub name: String,
     pub ty: TypeId,
@@ -163,7 +166,7 @@ pub struct Field {
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Struct {
     pub name: String,
     pub module: String,
@@ -184,7 +187,7 @@ pub enum VariantStyle {
     Named,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Variant {
     pub name: String,
     pub fields: Vec<Field>,
@@ -193,7 +196,7 @@ pub struct Variant {
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Enum {
     pub name: String,
     pub module: String,
@@ -205,7 +208,7 @@ pub struct Enum {
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct AssociatedType {
     pub name: String,
     pub generics: Vec<GenericParam>,
@@ -215,7 +218,7 @@ pub struct AssociatedType {
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Trait {
     pub name: String,
     pub module: String,
@@ -228,7 +231,7 @@ pub struct Trait {
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Impl {
     pub module: String,
     pub generics: Vec<GenericParam>,
@@ -240,7 +243,7 @@ pub struct Impl {
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Use {
     pub module: String,
     pub path: String,
@@ -252,7 +255,7 @@ pub struct Use {
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Module {
     pub scope: ModuleId,
     pub name: String,
@@ -263,7 +266,7 @@ pub struct Module {
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Alias {
     pub name: String,
     pub module: String,
@@ -274,7 +277,7 @@ pub struct Alias {
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Constant {
     pub name: String,
     pub module: String,
@@ -295,9 +298,10 @@ pub enum Item {
     Module(usize),
     Alias(usize),
     Constant(usize),
+    MacroInvocation(usize),
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Expr {
     Int(String),
     Float(String),
@@ -400,6 +404,7 @@ pub enum Expr {
     Return(Option<ExprId>),
     Break(Option<ExprId>),
     Continue,
+    MacroInvocation(usize),
     Macro {
         name: String,
         args: Vec<ExprId>,
@@ -415,14 +420,14 @@ pub enum Expr {
     },
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ExprNode {
     pub scope: ModuleId,
     pub kind: Expr,
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Arm {
     pub pattern: PatternId,
     pub guard: Option<ExprId>,
@@ -430,7 +435,7 @@ pub struct Arm {
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Pattern {
     Wild,
     /// An omitted tuple/tuple-variant field span, expanded after arity is known.
@@ -465,14 +470,14 @@ pub enum Pattern {
     Or(Vec<PatternId>),
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct PatternNode {
     pub scope: ModuleId,
     pub kind: Pattern,
     pub span: Span,
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub enum Stmt {
     Let {
         pattern: PatternId,
@@ -487,7 +492,7 @@ pub enum Stmt {
     Item(Item),
 }
 
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Block {
     pub statements: Vec<Stmt>,
     pub tail: Option<ExprId>,
@@ -506,24 +511,24 @@ pub enum Visibility {
 
 
 /// Actual loader-selected source for a module or crate root; includes are not modules.
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct LoadedModule {
     pub scope: ModuleId,
     pub file: FileId,
     pub alternate: String,
 }
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct SourceFile {
     pub path: String,
     pub crate_root: ModuleId,
 }
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ModuleScope {
     pub path: String,
     pub parent: Option<ModuleId>,
     pub crate_root: ModuleId,
 }
-#[derive(Clone)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct Declaration {
     pub name: String,
     pub scope: ModuleId,
@@ -532,8 +537,18 @@ pub struct Declaration {
     pub span: Span,
 }
 
-#[derive(Clone, Default)]
+#[derive(Clone, Default, PartialEq, Eq)]
 pub struct Program {
+    pub macro_input: Option<Box<Program>>,
+    pub macro_aliases: Vec<MacroAlias>,
+    pub macro_inputs: Vec<(String, Vec<u8>)>,
+    pub macro_captures: Vec<MacroCapture>,
+    pub macro_definitions: Vec<MacroDefinition>,
+    pub macro_invocations: Vec<MacroInvocation>,
+    pub macro_expansions: Vec<MacroExpansion>,
+    pub macro_use_modules: std::collections::BTreeSet<ModuleId>,
+    pub macros_expanded: bool,
+    pub macro_pattern_bindings: std::collections::BTreeMap<PatternId, (usize, bool, bool)>,
     pub files: Vec<SourceFile>,
     pub loaded_modules: Vec<LoadedModule>,
     pub scopes: Vec<ModuleScope>,

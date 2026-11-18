@@ -1,0 +1,9 @@
+macro_rules! imported { () => { 13i32 }; }
+#[macro_export]
+macro_rules! exported_helper { () => { $crate::base() }; }
+#[macro_export(local_inner_macros)]
+macro_rules! external { () => { exported_helper!() }; }
+#[macro_export(local_inner_macros)]
+macro_rules! explicit_external { () => { $crate::exported_helper!() }; }
+macro_rules! template_include { () => { include_str!("payload.txt") }; }
+macro_rules! capture_include { ($path:expr) => { include_str!($path) }; }

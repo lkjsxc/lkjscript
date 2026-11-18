@@ -48,6 +48,7 @@ pub struct Resolver<'a> {
     modules: BTreeMap<String, ModuleId>,
     alternatives: BTreeMap<(ModuleId, String, Namespace), Vec<Binding>>,
     generic_ranges: BTreeMap<(FileId, String), Vec<Span>>,
+    generic_value_ranges: BTreeMap<(FileId, String), Vec<Span>>,
     import_scopes: ImportScopes,
     trait_names: BTreeMap<(usize, DeclarationId), BTreeSet<String>>,
     anonymous_traits: BTreeSet<(usize, DeclarationId)>,
@@ -211,6 +212,7 @@ impl<'a> Resolver<'a> {
             modules: BTreeMap::new(),
             alternatives: BTreeMap::new(),
             generic_ranges: BTreeMap::new(),
+            generic_value_ranges: BTreeMap::new(),
             import_scopes: ImportScopes::default(),
             trait_names: BTreeMap::new(),
             anonymous_traits: BTreeSet::new(),
@@ -325,6 +327,10 @@ impl<'a> Resolver<'a> {
                 self.generic_ranges.insert(key.clone(), Vec::new());
             }
             self.generic_ranges.get_mut(&key).unwrap().push(span);
+            if param.constant {
+                if !self.generic_value_ranges.contains_key(&key) { self.generic_value_ranges.insert(key.clone(), Vec::new()); }
+                self.generic_value_ranges.get_mut(&key).unwrap().push(span);
+            }
         }
     }
     pub(crate) fn generic(&self, span: Span, name: &str) -> bool {
@@ -337,6 +343,23 @@ impl<'a> Resolver<'a> {
                 .any(|range| range.start <= span.start && span.end <= range.end),
             None => false,
         }
+    }
+    fn generic_value(&self, span: Span, name: &str) -> bool {
+        match self.generic_value_ranges.get(&(span.file, name.to_string())) {
+            Some(ranges) => ranges.iter().any(|range| range.start <= span.start && span.end <= range.end),
+            None => false,
+        }
+    }
+    fn value_pattern(&self, scope: ModuleId, name: &str, span: Span) -> Result<Option<Path>> {
+        let Some(resolved) = self.path(scope, name, Namespace::Value, span, true)? else { return Ok(None); };
+        let constructor = match &resolved.binding {
+            Some(binding) => matches!(self.declarations[binding.declaration].item,
+                Item::Struct(_) | Item::Enum(_) | Item::Constant(_)),
+            None => self.generic_value(span, name) || matches!(name, "Some" | "None" | "Ok" | "Err"),
+        };
+        if !constructor { return Ok(None); }
+        Ok(Some(Path { name: resolved.name, declaration: resolved.binding.map(|binding| binding.declaration),
+            qualification: None, bindings: Vec::new(), args: Vec::new() }))
     }
     fn declare(
         &mut self,
@@ -471,7 +494,8 @@ impl<'a> Resolver<'a> {
         let local_type = self
             .lookup_owner(scope, parts[0].as_str(), Namespace::Type, span)
             .is_some_and(|owner| owner >= self.program.scopes.len());
-        if !local_type && self.generic(span, parts[0].as_str()) {
+        if !local_type && self.generic(span, parts[0].as_str())
+            && (namespace == Namespace::Type || parts.len() > 1usize || self.generic_value(span, parts[0].as_str())) {
             return Ok(Some(Resolved::intrinsic(path.to_string())));
         }
         if matches!(
@@ -1051,6 +1075,24 @@ fn resolve_nodes(result: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
         }
     }
     for id in 0..result.patterns.len() {
+        if let Some((context, mutable, by_ref)) = result.macro_pattern_bindings.get(&id).copied() {
+            let name: Option<String> = match &result.patterns[id].kind {
+                Pattern::Path(path) if path.qualification.is_none() && path.args.is_empty() && !path.name.contains("::") => Some(path.name.clone()),
+                Pattern::Bind { name, .. } => Some(crate::ast::macros::source_name(name).to_string()),
+                _ => None,
+            };
+            if let Some(name) = name {
+                let scope = result.patterns[id].scope;
+                let span = result.patterns[id].span;
+                if let Some(path) = resolver.value_pattern(scope, &name, span)? {
+                    if mutable || by_ref { return Err(Diagnostic::new(span, "E_TYPE", "binding mode cannot shadow a value constructor or constant")); }
+                    result.patterns[id].kind = Pattern::Path(path);
+                } else {
+                    result.patterns[id].kind = Pattern::Bind { name: crate::ast::macros::local_name(&name, context),
+                        mutable: mutable && !by_ref, by_ref, ref_mut: mutable && by_ref };
+                }
+            }
+        }
         let node = &mut result.patterns[id];
         let scope = node.scope;
         let span = node.span;
@@ -1104,6 +1146,7 @@ impl Resolver<'_> {
             return Ok(path.clone());
         }
         let mut path = path.clone();
+        if path.name.starts_with("__macro$") { let marked = path.name.clone(); path.name = crate::ast::macros::source_name(&marked).to_string(); }
         self.resolve_path(scope, &mut path, Namespace::Value, span)?;
         Ok(path)
     }

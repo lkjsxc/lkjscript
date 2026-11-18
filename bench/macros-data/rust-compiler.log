@@ -1,0 +1,350 @@
+warning: unused import: `FileId`
+ --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/ast/macros.rs:2:21
+  |
+2 | use super::{ExprId, FileId, Item, ModuleId, Span};
+  |                     ^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `SymbolReference`
+ --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/x86.rs:4:48
+  |
+4 | pub(crate) use units::{displacement, Linkable, SymbolReference, ImmediateReference};
+  |                                                ^^^^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/definition_types/source_types.rs:170:70
+    |
+170 |                     let value = if let Some((declaration, arguments, mut bindings)) = application {
+    |                                                                      ----^^^^^^^^
+    |                                                                      |
+    |                                                                      help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate.rs:5135:13
+     |
+5135 |         let mut definitions = infer_resolved_report_with_capture(&source, false, capture_references).unwrap();
+     |             ----^^^^^^^^^^^
+     |             |
+     |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/native/units.rs:845:15
+    |
+845 |     fn finish(mut self, expected: [u8; 32]) -> Result<(), Diagnostic> {
+    |               ----^^^^
+    |               |
+    |               help: remove this `mut`
+
+warning: unused variable: `fd`
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/native/diagnostics.rs:25:44
+   |
+25 | fn literal(a: &mut Assembler, p: Platform, fd: u32, value: &str) {
+   |                                            ^^ help: if this is intentional, prefix it with an underscore: `_fd`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `index`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/structure_refactor.rs:323:18
+    |
+323 |             for (index, parameter) in parameters.iter().enumerate() {
+    |                  ^^^^^ help: if this is intentional, prefix it with an underscore: `_index`
+
+warning: value assigned to `arguments` is never read
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/structure_refactor.rs:297:45
+    |
+297 |             let mut arguments: Vec<usize> = Vec::new(); let mut head = String::new();
+    |                                             ^^^^^^^^^^ this value is reassigned later and never used
+...
+300 |                 a::Expr::Call { callee, args } => { head = raw(&caller, caller.tree.exprs[*callee].span)?; arguments = args.clone(); }
+    |                                                                                                            --------- `arguments` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `head` is never read
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/structure_refactor.rs:297:72
+    |
+297 |             let mut arguments: Vec<usize> = Vec::new(); let mut head = String::new();
+    |                                                                        ^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+300 |                 a::Expr::Call { callee, args } => { head = raw(&caller, caller.tree.exprs[*callee].span)?; arguments = args.clone(); }
+    |                                                     ---- `head` is overwritten here before the previous value is read
+
+warning: unused variable: `begin`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/structure_refactor.rs:546:38
+    |
+546 |                         if let Some((begin, end)) = label(&unit, node.span, unit.tree.exprs[*value].span, field) {
+    |                                      ^^^^^ help: if this is intentional, prefix it with an underscore: `_begin`
+
+warning: unused variable: `end`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/structure_refactor.rs:546:45
+    |
+546 |                         if let Some((begin, end)) = label(&unit, node.span, unit.tree.exprs[*value].span, field) {
+    |                                             ^^^ help: if this is intentional, prefix it with an underscore: `_end`
+
+warning: unused variable: `raw`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/semantic.rs:477:24
+    |
+477 |     for (index, (path, raw)) in inputs.iter().enumerate() { by_path.insert(path.clone(), index); }
+    |                        ^^^ help: if this is intentional, prefix it with an underscore: `_raw`
+
+warning: unused variable: `ty`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/semantic_facts.rs:230:17
+    |
+230 |     for (index, ty) in program.types.iter().enumerate() {
+    |                 ^^ help: if this is intentional, prefix it with an underscore: `_ty`
+
+warning: function `assert_reference_capture` is never used
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate.rs:5120:15
+     |
+5120 | pub(crate) fn assert_reference_capture() {
+     |               ^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variants `ForeignCommand`, `Image`, `Channel`, and `NullDevice` are never constructed
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/capabilities.rs:21:5
+   |
+ 5 | pub(super) enum Value {
+   |                 ----- variants in this enum
+...
+21 |     ForeignCommand,
+   |     ^^^^^^^^^^^^^^
+22 |     ForeignSession,
+23 |     Image,
+   |     ^^^^^
+24 |     Channel,
+   |     ^^^^^^^
+...
+29 |     NullDevice,
+   |     ^^^^^^^^^^
+   |
+   = note: `Value` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: variant `Projected` is never constructed
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/definition_types.rs:29:5
+   |
+24 | enum Shape {
+   |      ----- variant in this enum
+...
+29 |     Projected(a::DeclarationId, String),
+   |     ^^^^^^^^^
+   |
+   = note: `Shape` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: function `assert_reference_capture_recording` is never used
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/definition_types.rs:2765:15
+     |
+2765 | pub(super) fn assert_reference_capture_recording(
+     |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `assert_reference_capture_deferred` is never used
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/definition_types.rs:2778:15
+     |
+2778 | pub(super) fn assert_reference_capture_deferred(source: &a::Program, index: usize) {
+     |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `origin` is never used
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/definition_types/semantic.rs:21:19
+   |
+11 | impl SourceBindings {
+   | ------------------- method in this implementation
+...
+21 |     pub(super) fn origin(&self, name: &str) -> Option<LocalTarget> {
+   |                   ^^^^^^
+
+warning: method `declare_parameters` is never used
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/generic_check.rs:441:19
+    |
+367 | impl Compiler<'_> {
+    | ----------------- method in this implementation
+...
+441 |     pub(super) fn declare_parameters(
+    |                   ^^^^^^^^^^^^^^^^^^
+
+warning: methods `contains_qualified_type`, `qualified_associated_type`, and `associated_type_for_trait` are never used
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/qualified_paths.rs:9:8
+    |
+  8 | impl Compiler<'_> {
+    | ----------------- methods in this implementation
+  9 |     fn contains_qualified_type(&self, first: a::TypeId) -> bool {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^
+...
+112 |     pub(super) fn qualified_associated_type(
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+124 |     pub(super) fn associated_type_for_trait(&mut self, receiver: usize, owner: usize, name: &str, span: a::Span) -> Result<usize> {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `assume_where_parameters` is never used
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/where_predicates.rs:56:19
+   |
+ 6 | impl Compiler<'_> {
+   | ----------------- method in this implementation
+...
+56 |     pub(super) fn assume_where_parameters(
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `reference_probe_checked` is never used
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/interpreter.rs:2815:4
+     |
+2815 | fn reference_probe_checked<T>(value: Result<T, RunError>) -> T {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `assert_reference_reuse` is never used
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/interpreter.rs:2819:15
+     |
+2819 | pub(crate) fn assert_reference_reuse() {
+     |               ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_function` is never used
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/ir_text.rs:1150:15
+     |
+1150 | pub(crate) fn write_function(function: &Function) -> String {
+     |               ^^^^^^^^^^^^^^
+
+warning: function `cache_contracts` is never used
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/native.rs:16:15
+   |
+16 | pub(crate) fn cache_contracts() { cache::contracts(); }
+   |               ^^^^^^^^^^^^^^^
+
+warning: function `fixture` is never used
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/native/cache.rs:272:4
+    |
+272 | fn fixture(padding: usize, existing: bool) -> (Assembler, Label, Label, BTreeMap<Vec<u8>, Label>) {
+    |    ^^^^^^^
+
+warning: function `fixture_body` is never used
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/native/cache.rs:290:4
+    |
+290 | fn fixture_body(
+    |    ^^^^^^^^^^^^
+
+warning: function `fixture_finish` is never used
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/native/cache.rs:341:4
+    |
+341 | fn fixture_finish(mut a: Assembler, symbols: &BTreeMap<Vec<u8>, Label>) -> (Vec<u8>, Vec<(usize, u8)>, Vec<crate::x86::CopySite>) {
+    |    ^^^^^^^^^^^^^^
+
+warning: function `contracts` is never used
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/native/cache.rs:350:15
+    |
+350 | pub(super) fn contracts() {
+    |               ^^^^^^^^^
+
+warning: associated function `fallible` is never used
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/native/entry.rs:52:19
+   |
+51 | impl Plan {
+   | --------- associated function in this implementation
+52 |     pub(super) fn fallible(grant: &EntryGrant) -> bool {
+   |                   ^^^^^^^^
+
+warning: field `lock` is never read
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/structure_write.rs:65:5
+   |
+59 | pub struct Writer {
+   |            ------ field in this struct
+...
+65 |     lock: File,
+   |     ^^^^
+
+warning: function `item_key` is never used
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/semantic/origins/macros.rs:15:15
+   |
+15 | pub(crate) fn item_key(item: a::Item) -> (usize, usize) {
+   |               ^^^^^^^^
+
+warning: unnecessary parentheses around method argument
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/host_network/broker.lkj:684:20
+    |
+684 |     a.immediate(C, (!0x800u64));
+    |                    ^         ^
+    |
+    = note: `#[warn(unused_parens)]` (part of `#[warn(unused)]`) on by default
+help: remove these parentheses
+    |
+684 -     a.immediate(C, (!0x800u64));
+684 +     a.immediate(C, !0x800u64);
+    |
+
+warning: unnecessary parentheses around block return value
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/store.rs:1164:37
+     |
+1164 |         None => { *overflow = true; (!0usize) }
+     |                                     ^       ^
+     |
+help: remove these parentheses
+     |
+1164 -         None => { *overflow = true; (!0usize) }
+1164 +         None => { *overflow = true; !0usize }
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/store.rs:1188:68
+     |
+1188 |     assert!(io_interval(0usize, Some(20usize), (!0usize) - 5usize, (!0usize)).is_none());
+     |                                                                    ^       ^
+     |
+help: remove these parentheses
+     |
+1188 -     assert!(io_interval(0usize, Some(20usize), (!0usize) - 5usize, (!0usize)).is_none());
+1188 +     assert!(io_interval(0usize, Some(20usize), (!0usize) - 5usize, !0usize).is_none());
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/store.rs:1191:20
+     |
+1191 |     assert!(io_add((!0usize), 1usize, &mut overflow) == (!0usize) && overflow);
+     |                    ^       ^
+     |
+help: remove these parentheses
+     |
+1191 -     assert!(io_add((!0usize), 1usize, &mut overflow) == (!0usize) && overflow);
+1191 +     assert!(io_add(!0usize, 1usize, &mut overflow) == (!0usize) && overflow);
+     |
+
+warning: unnecessary parentheses around function argument
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/test_generators/reduction.lkj:294:26
+    |
+294 |     let mut pairs = vec![(!0usize); tokens.len()];
+    |                          ^       ^
+    |
+help: remove these parentheses
+    |
+294 -     let mut pairs = vec![(!0usize); tokens.len()];
+294 +     let mut pairs = vec![!0usize; tokens.len()];
+    |
+
+warning: unused variable: `p`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/host_network/unix.lkj:107:28
+    |
+107 | fn wait(a: &mut Assembler, p: UnixCode, ready: Label) {
+    |                            ^ help: if this is intentional, prefix it with an underscore: `_p`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `p`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/host_network/unix.lkj:126:35
+    |
+126 | fn socket_kind(a: &mut Assembler, p: UnixCode, valid: Label) {
+    |                                   ^ help: if this is intentional, prefix it with an underscore: `_p`
+
+warning: unused variable: `code`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/test_generators.rs:559:29
+    |
+559 | ...   } else if let Some((code, diagnostic, message)) = driver::native_trap(path, selection.native().program(), runtime, &capture.r...
+    |                           ^^^^ help: if this is intentional, prefix it with an underscore: `_code`
+
+warning: unused variable: `message`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness-macros-temporaryfiles/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/test_generators.rs:559:47
+    |
+559 | ...   } else if let Some((code, diagnostic, message)) = driver::native_trap(path, selection.native().program(), runtime, &capture.r...
+    |                                             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_message`
+
+77695785a3c15da46bd9a3a794e81a2edf4c0155a891ff0cef2084d7bc3659d8  target/lkjscript
+77695785a3c15da46bd9a3a794e81a2edf4c0155a891ff0cef2084d7bc3659d8  target/witness-macros-temporaryfiles/compiler-output
+Independent Rust compiler source build reproduces the exact native compiler output.

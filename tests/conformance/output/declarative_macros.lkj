@@ -1,0 +1,73 @@
+// expect: output 6d6163726f73206f6b0a
+// Root-crate Rust comparison is in tools/declarative-macro-test.sh ($crate keeps its real meaning).
+macro_rules! error_position {
+    ($input:expr, $code:expr $(,)?) => ({ $crate::make_error($input, $code) });
+}
+fn make_error(input: usize, code: u8) -> (usize, u8) { (input, code) }
+macro_rules! hygienic { ($value:expr) => {{ let hidden = 7i32; ($value, hidden) }}; }
+macro_rules! nested { ($value:expr) => {{ let hidden = 3i32; hygienic!($value + hidden) }}; }
+macro_rules! bind { ($name:ident, $value:expr) => {{ let $name = $value; $name }}; }
+macro_rules! classify { (3) => { 30i32 }; ($value:expr) => { $value + 1i32 }; }
+macro_rules! forward { ($value:expr) => { classify!($value) }; }
+macro_rules! global_call { () => { helper() }; }
+fn helper() -> i32 { 41 }
+macro_rules! succ {
+    (0, $sub:ident ! ($($rest:tt)*)) => ($sub!(1, $($rest)*));
+    (1, $sub:ident ! ($($rest:tt)*)) => ($sub!(2, $($rest)*));
+}
+macro_rules! fields {
+    ($it:tt, $self:expr, (), $head:ident $($tail:ident)+) => {{
+        let value = $self.$it;
+        succ!($it, fields!($self, (value), $($tail)+))
+    }};
+    ($it:tt, $self:expr, ($($parsed:tt)*), $head:ident) => {{
+        let value = $self.$it;
+        ($($parsed)*, value)
+    }};
+}
+trait Parser<I> { type Output; fn parse(&mut self, input: I) -> (I, Self::Output); }
+struct Add { amount: usize }
+impl Parser<usize> for Add {
+    type Output = usize;
+    fn parse(&mut self, input: usize) -> (usize, usize) { (input + self.amount, input) }
+}
+macro_rules! impl_parser_for_tuple {
+    ($($parser:ident $output:ident),+) => (
+        impl<I, $($parser: Parser<I, Output = $output>, $output),+> Parser<I> for ($($parser),+,) {
+            type Output = ($($output),+,);
+            fn parse(&mut self, input: I) -> (I, Self::Output) {
+                let ($(ref mut $parser),+,) = *self;
+                $(let (input, $output) = $parser.parse(input);)+
+                (input, ($($output),+,))
+            }
+        }
+    );
+}
+macro_rules! impl_parser_for_tuples {
+    ($parser1:ident $output1:ident, $($parser:ident $output:ident),+) => {
+        impl_parser_for_tuples!(__impl $parser1 $output1; $($parser $output),+);
+    };
+    (__impl $($parser:ident $output:ident),+; $parser1:ident $output1:ident $(,$parser2:ident $output2:ident)*) => {
+        impl_parser_for_tuple!($($parser $output),+);
+        impl_parser_for_tuples!(__impl $($parser $output),+, $parser1 $output1; $($parser2 $output2),*);
+    };
+    (__impl $($parser:ident $output:ident),+;) => { impl_parser_for_tuple!($($parser $output),+); };
+}
+impl_parser_for_tuples!(P1 O1, P2 O2, P3 O3);
+pub fn main(mut world: World) {
+    assert_eq!(error_position!(2usize + 3usize, 4u8,), (5usize, 4u8));
+    let hidden = 11i32;
+    assert_eq!(hygienic!(hidden), (11i32, 7i32));
+    assert_eq!(nested!(hidden), (14i32, 7i32));
+    assert_eq!(bind!(hidden, hidden + 2i32), 13i32);
+    assert_eq!(hidden, 11i32);
+    assert_eq!(classify!(3), 30i32);
+    assert_eq!(forward!(3), 4i32);
+    let helper = || -> i32 { 90i32 };
+    assert_eq!(helper(), 90i32);
+    assert_eq!(global_call!(), 41i32);
+    assert_eq!(fields!(0, (8i32, 13i32), (), first second), (8i32, 13i32));
+    let mut parser = (Add { amount: 2usize }, Add { amount: 3usize }, Add { amount: 5usize });
+    assert_eq!(parser.parse(10usize), (20usize, (10usize, 12usize, 15usize)));
+    world.stdout().write(b"macros ok\n");
+}

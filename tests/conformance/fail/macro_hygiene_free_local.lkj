@@ -1,0 +1,4 @@
+// expect: reject E_NAME
+// witness: {"rustAccept":false,"rustCode":"E0425"}
+macro_rules! read_secret { () => { secret }; }
+fn probe() -> i32 { let secret = 4i32; read_secret!() }

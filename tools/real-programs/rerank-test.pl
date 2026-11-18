@@ -63,7 +63,8 @@ my $receipt = { schema => 1, kind => 'unmodified_real_program_root_observations'
 for my $route ('original_suffix', 'suffix_projection') {
     push @{$receipt->{observations}}, { route => $route, upstream_entry => 'src/lib.rs',
         entry_sha256 => sha256_hex($source), entry_bytes => length($source), exit_status => 1,
-        launcher_signal => 0, command => ['/compiler', 'check', $route eq 'original_suffix' ? 'src/lib.rs' : 'src/lib.lkj'],
+        launcher_signal => 0, command => ['/compiler', 'check', $route eq 'original_suffix' ? 'src/lib.rs' : 'src/lib.lkj',
+            '--source-dir', $route eq 'original_suffix' ? "$temporary/source" : "$temporary/projected"],
         stdout => captured(''), stderr => captured($route eq 'original_suffix'
             ? "src/lib.rs: E_SOURCE_EXTENSION source files use .lkj\n" : join("\n", @diagnostics) . "\n"),
         time_report => captured("0\n") };
@@ -87,6 +88,51 @@ check($report->{inherited_recovery_unique_diagnostics} == 1 && $report->{raw_by_
     'recovery and E_BLOCKED stay separate');
 check(!grep({ $_->{state} ne 'exact_diagnostic_survives' } @{$report->{baseline_site_comparison}}),
     'both old sites survive unchanged');
+
+
+# Macro expansion can retain an absolute location. Only the projection source-dir
+# recorded before the producer change may translate it to a tracked alias.
+my $absolute = clone($receipt);
+$absolute->{observations}[1]{stderr} = captured(join("\n",
+    map { "$temporary/projected/$_" } @diagnostics) . "\n");
+($status, $report, $error) = invoke($absolute);
+check($status == 0, "authenticated absolute projected aliases failed: $error");
+check($report->{observed_classified_sites} == 2
+    && !$report->{unclassified_unique_diagnostics}
+    && $report->{inherited_recovery_unique_diagnostics} == 1
+    && !grep({ $_->{state} ne 'exact_diagnostic_survives' } @{$report->{baseline_site_comparison}}),
+    'absolute aliases retain exact primary and recovery identity');
+for my $path (
+    "$temporary/projected-other/src/lib.lkj",
+    "$temporary/projected/../projected/src/lib.lkj",
+    "$temporary/source/src/lib.rs",
+    "$temporary/projected/src/untracked.lkj",
+) {
+    my $outside = clone($receipt);
+    $outside->{observations}[1]{stderr} = captured("$path:1:11: E_UNSUPPORTED unsupported construct: impl\n");
+    ($status, $report, $error) = invoke($outside);
+    check($status != 0 && !defined($report) && $error =~ /outside the tracked original source/,
+        "absolute root, traversal or untracked path must refuse: $path: $error");
+}
+my $changed_root = clone($absolute);
+$changed_root->{observations}[1]{command}[4] = "$temporary/forged-projection";
+($status, $report, $error) = invoke($changed_root);
+check($status != 0 && !defined($report) && $error =~ /command changed/,
+    'an after receipt cannot replace the authenticated source-dir');
+
+my $no_root = clone($receipt);
+splice @{$no_root->{observations}[1]{command}}, 3, 2;
+write_json("$temporary/before.json", $no_root);
+my $no_root_table = clone($table);
+$no_root_table->{current_verification}{receipt_sha256} = sha256_hex(bytes("$temporary/before.json"));
+write_json("$temporary/baseline.json", $no_root_table);
+my $unproven_absolute = clone($absolute);
+$unproven_absolute->{observations}[1]{command} = clone($no_root->{observations}[1]{command});
+($status, $report, $error) = invoke($unproven_absolute);
+check($status != 0 && !defined($report) && $error =~ /outside the tracked original source/,
+    'a legacy receipt without a captured source-dir cannot authenticate an absolute path');
+write_json("$temporary/before.json", $receipt);
+write_json("$temporary/baseline.json", $table);
 
 my $after = clone($receipt);
 $after->{observations}[1]{stderr} = captured("$diagnostics[1]\n$diagnostics[3]\n");

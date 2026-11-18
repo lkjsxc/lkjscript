@@ -1,0 +1,199 @@
+//! Macro source declarations and replay-validated expansion projections.
+use super::*;
+
+fn invocation_parent(catalog: &Catalog, program: &a::Program, invocation: &a::MacroInvocation) -> String {
+    if let Some(parent) = invocation.parent { return origins::macros::expansion_identity(parent); }
+    let mut found: Option<(usize, usize)> = None;
+    if let Some(input) = &program.macro_input {
+        for (index, function) in input.functions.iter().enumerate() {
+            let span = function.span;
+            if span.file == invocation.span.file && span.start <= invocation.span.start && invocation.span.end <= span.end {
+                let width = span.end - span.start;
+                if found.is_none_or(|(_, previous)| width < previous) { found = Some((index, width)); }
+            }
+        }
+    }
+    if let Some((index, _)) = found { return catalog.function_ids[index].clone(); }
+    root_parent(&program.scopes[invocation.scope].path)
+}
+
+pub(super) fn append_entries(catalog: &mut Catalog, files: &[SourceText], program: &a::Program)
+    -> Result<(), String> {
+    for (index, definition) in program.macro_definitions.iter().enumerate() {
+        let identity = origins::macros::definition_identity(program, index);
+        append(catalog, files, identity.clone(), root_parent(&program.scopes[definition.scope].path),
+            "macro-definition", &definition.name, definition.span, None, "macro_rules".to_string(), true)?;
+        let item = *catalog.by_identity.get(&identity).unwrap();
+        catalog.items[item].references_complete = false;
+    }
+    for (index, invocation) in program.macro_invocations.iter().enumerate() {
+        let identity = origins::macros::invocation_identity(index);
+        let parent = invocation_parent(catalog, program, invocation);
+        append(catalog, files, identity.clone(), parent, "macro-invocation", &invocation.name,
+            invocation.span, None, format!("{}!", invocation.name), false)?;
+        if let Some(expansion) = invocation.parent {
+            generated_projection(catalog, files, program, &identity,
+                origins::Origin { declaration: None, expansion: origins::Expansion::Macro(expansion) },
+                format!("{}!", invocation.name), false)?;
+        }
+        let item = *catalog.by_identity.get(&identity).unwrap();
+        catalog.items[item].references_complete = false;
+    }
+    for (index, expansion) in program.macro_expansions.iter().enumerate() {
+        let invocation = &program.macro_invocations[expansion.invocation];
+        let identity = origins::macros::expansion_identity(index);
+        let parent = origins::macros::invocation_identity(expansion.invocation);
+        let definition = origins::macros::definition_identity(program, expansion.definition);
+        append(catalog, files, identity.clone(), parent.clone(), "macro-expansion", "",
+            invocation.span, None, format!("{}!", invocation.name), false)?;
+        generated_projection(catalog, files, program, &identity,
+            origins::Origin { declaration: None, expansion: origins::Expansion::Macro(index) },
+            format!("{}! expansion", invocation.name), true)?;
+        generated_reference(catalog, files, &identity, Some(definition), invocation.name_span, "macro-definition");
+        // The invocation itself is the authored dependency of the expanded code.
+        generated_reference(catalog, files, &identity, Some(parent), invocation.span, "macro-invocation");
+    }
+    Ok(())
+}
+
+pub(super) fn epoch(epoch: &mut Vec<u8>, files: &[SourceText], program: &a::Program, mut expansion: usize) {
+    loop {
+        let value = &program.macro_expansions[expansion];
+        let definition = &program.macro_definitions[value.definition];
+        let invocation = &program.macro_invocations[value.invocation];
+        let file = &files[definition.span.file];
+        let start = preceding(&file.tokens, definition.span.start);
+        bytes(epoch, origins::macros::definition_identity(program, value.definition).as_bytes());
+        bytes(epoch, token_digest(&file.tokens, start, definition.span.end).as_bytes());
+        bytes(epoch, format!("{}:{}", definition.exported, definition.local_inner).as_bytes());
+        let file = &files[invocation.span.file];
+        bytes(epoch, token_digest(&file.tokens, invocation.span.start, invocation.span.end).as_bytes());
+        match value.parent { Some(parent) => expansion = parent, None => break }
+    }
+    for (path, input) in &program.macro_inputs {
+        bytes(epoch, path.as_bytes());
+        bytes(epoch, sha256::hex_digest(input).as_bytes());
+    }
+}
+
+// Authored derives retain their existing epoch exactly. A derive emitted by a
+// macro also depends on the authenticated template that created its nominal.
+pub(super) fn derived_epoch(epoch: &mut Vec<u8>, files: &[SourceText], program: &a::Program,
+    origin: origins::Origin) {
+    let Some(declaration) = origin.declaration else { return; };
+    let mut selected = None;
+    for (index, expansion) in program.macro_expansions.iter().enumerate() {
+        let included = match program.declarations[declaration].item {
+            a::Item::Struct(id) => expansion.start.structs <= id && id < expansion.end.structs,
+            a::Item::Enum(id) => expansion.start.enums <= id && id < expansion.end.enums,
+            _ => false,
+        };
+        if included { selected = Some(index); }
+    }
+    if let Some(expansion) = selected { self::epoch(epoch, files, program, expansion); }
+}
+
+fn item_from_key(kind: usize, index: usize) -> a::Item {
+    match kind {
+        0usize => a::Item::Function(index), 1usize => a::Item::Struct(index),
+        2usize => a::Item::Enum(index), 3usize => a::Item::Trait(index),
+        4usize => a::Item::Impl(index), 5usize => a::Item::Use(index),
+        6usize => a::Item::Module(index), 7usize => a::Item::Alias(index),
+        _ => a::Item::Constant(index),
+    }
+}
+pub(super) fn project_items(catalog: &mut Catalog, files: &[SourceText], program: &a::Program,
+    origins: &origins::Origins) -> Result<(), String> {
+    for ((kind, index), origin) in &origins.macros.items {
+        if *kind == 5usize { continue; }
+        let identity = item_identity(program, item_from_key(*kind, *index), &catalog.function_ids);
+        let item = match catalog.by_identity.get(&identity) { Some(item) => *item, None => continue };
+        if !catalog.items[item].generated_from.is_empty() { continue; }
+        let signature = format!("{} {}: {}", catalog.items[item].kind, identity, catalog.items[item].type_name);
+        generated_projection(catalog, files, program, &identity, *origin, signature, false)?;
+    }
+    // Fields, variants, parameters and associated members inherit their actual
+    // expansion owner even when their parent was appended later in the catalog.
+    loop {
+        let mut changed = false;
+        for index in 0usize..catalog.items.len() {
+            if !catalog.items[index].generated_from.is_empty() { continue; }
+            let parent = catalog.items[index].parent.clone();
+            let parent = match catalog.by_identity.get(&parent) { Some(parent) => *parent, None => continue };
+            if catalog.items[parent].generated_from.is_empty() { continue; }
+            let from = catalog.items[parent].generated_from.clone();
+            let expansion = catalog.items[parent].generated_expansion.clone();
+            let item = &mut catalog.items[index];
+            item.generated_from = from; item.generated_expansion = expansion;
+            item.signature = item.type_name.clone();
+            item.signature_digest = normalized_digest(&item.signature)?;
+            item.text.clear(); item.text_digest = sha256::hex_digest(b"");
+            item.name_start = item.start; item.name_end = item.start;
+            item.body = None; item.body_digest.clear(); item.references_complete = false;
+            changed = true;
+        }
+        if !changed { break; }
+    }
+    Ok(())
+}
+
+// A transcribed import has no authored use-tree spelling. Resolve its actual
+// namespace and value dependencies from the replayed AST, retaining only the
+// invocation anchor and expansion owner. Prefix dependencies prevent a module
+// rename from pretending the template's qualification is editable.
+pub(super) fn generated_imports(catalog: &mut Catalog, files: &[SourceText], program: &a::Program,
+    resolver: &resolve::Resolver<'_>, origins: &origins::Origins) {
+    for (index, imported) in program.uses.iter().enumerate() {
+        let Some(origin) = origins.macros.items.get(&(5usize, index)) else { continue; };
+        let origins::Expansion::Macro(expansion) = origin.expansion else { continue; };
+        let owner = origins::macros::expansion_identity(expansion);
+        let scope = resolve::module(program, &imported.module);
+        let mut parts: Vec<String> = Vec::new();
+        for part in imported.path.as_str().split("::") { if !part.is_empty() { parts.push(part.to_string()); } }
+        let mut prefix = String::new();
+        for (position, part) in parts.iter().enumerate() {
+            if !prefix.is_empty() { prefix.push_str("::"); }
+            prefix.push_str(part);
+            let terminal = position + 1usize == parts.len();
+            let mut target: Option<String> = None;
+            if terminal && !imported.glob {
+                let path = a::Path { qualification: None, bindings: Vec::new(), declaration: None,
+                    name: prefix.clone(), args: Vec::new() };
+                if let Ok(resolved) = resolver.value_path(scope, &path, imported.span) {
+                    target = value_identity(program, &resolved, &catalog.function_ids);
+                }
+            }
+            if target.is_none() {
+                if let Ok(path) = resolve::semantic_type_path(resolver, scope, &prefix, imported.span) {
+                    if let Some(declaration) = path.declaration {
+                        target = declaration_identity(program, declaration, &catalog.function_ids);
+                    }
+                }
+            }
+            let kind = if terminal { if imported.glob { "glob-import" } else { "import" } }
+                else { "import-qualification" };
+            generated_reference(catalog, files, &owner, target, imported.span, kind);
+        }
+    }
+}
+
+pub(super) fn generated_nodes(catalog: &mut Catalog, files: &[SourceText], program: &a::Program,
+    resolver: &resolve::Resolver<'_>, origins: &origins::Origins,
+    calls: &mut BTreeMap<String, usize>, evidence: &Option<crate::elaborate::semantic::Evidence>)
+    -> Result<(), String> {
+    for (expression, expansion) in &origins.macros.expressions {
+        if origins.expressions.contains_key(expression) || !origins.macros.live_expressions.contains(expression) { continue; }
+        let owner = origins::macros::expansion_identity(*expansion);
+        generated_expression_owned(catalog, files, program, resolver, *expression, &owner, None, true, calls, evidence)?;
+    }
+    for (pattern, expansion) in &origins.macros.patterns {
+        if origins.patterns.contains_key(pattern) || !origins.macros.live_patterns.contains(pattern) { continue; }
+        let node = &program.patterns[*pattern];
+        if let a::Pattern::Path(path) | a::Pattern::Variant { path, .. } | a::Pattern::Struct { path, .. } = &node.kind {
+            let owner = origins::macros::expansion_identity(*expansion);
+            let target = value_identity(program, path, &catalog.function_ids);
+            generated_reference(catalog, files, &owner, target, node.span, "pattern");
+        }
+    }
+    Ok(())
+}

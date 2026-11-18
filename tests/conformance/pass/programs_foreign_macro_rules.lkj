@@ -1,0 +1,7 @@
+// expect: value 1
+// witness: {}
+// Reduced from nom 8.0.0 src/internal.rs:526-527, src/character/streaming.rs:650-651.
+// The original reduced declaration and function body are unchanged. This focused
+// regression is uncredited and does not establish whole-root or own-test admission.
+macro_rules! passthrough { ($value:expr) => { $value }; }
+pub fn probe() -> usize { passthrough!(1usize) }

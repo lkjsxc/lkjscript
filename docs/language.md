@@ -827,3 +827,55 @@ Read interest reports half-close; drain readable final bytes. Write-only interes
 ForeignCommand admits one immutable initial image, then borrows a read/execute subtree and explicit null device under kernel confinement: no sockets/descendants, credential changes or filesystem metadata mutation syscalls; parent death and deadline kill the child; reexec keeps confinement. Private read/write/seekable output memfds can supply reexecuted anonymous code under the same confinement. Preexisting special files and mutable runtime code inside the root remain available, and outside metadata/clock/entropy remain observable. This is not an authenticated lkjscript child. The exact fixed environment and limits are in docs/ir.md.
 Generated programs have no ambient filesystem/environment/process imports or source-declared host imports. std::time::http_date formats supplied time; it grants no ambient clock. std::text supplies source-only utf8_lossy (maximal ill-formed subparts), form_decode, escape_html, Unicode whitespace trim and Unicode 17 scalar lowercase_chars (expansions, no contextual final sigma); it grants no effects.
 Normal destructor order matches the supported Rust intersection; outputs/statuses stay distinct from traps. witness/bridge/output.rs observes bytes/status/trap kind separately.
+
+### Declarative source macros
+
+Module-scoped `macro_rules!` definitions produce ordinary source expressions or
+items. Matchers accept literal token trees and `expr`, `ident`, and `tt`
+fragments. `*`, `+`, and `?` repetitions preserve nesting and require matching
+capture lengths when several repeated names are emitted together. Separators,
+optional trailing commas, recursive item producers, and nested macro calls are
+supported. Expression captures remain opaque when forwarded, so substitution
+preserves precedence and a later literal-token arm cannot inspect an expression
+fragment. Literal forms follow the ordinary source lexer; unsupported literal
+prefixes fail before matching. Literal matcher tokens retain their exact spelling, including raw
+string delimiters and byte escapes. Unused expression captures do not expand
+nested macros or read includes; each emitted occurrence gets independent
+ordinary type inference and evaluation. Empty nested repetitions retain their
+outer iteration counts.
+
+Captured identifiers and expressions retain their caller context. Introduced
+local bindings have a separate syntax context for each expansion; repeating a
+binding in one expansion preserves ordinary lexical shadowing. Unqualified
+item names use the invocation namespace, while `$crate` names the defining
+source crate. Module `#[macro_use]` and `#[macro_export]` expose declarative
+macros through source-module scope; exported qualified calls and
+`macro_export(local_inner_macros)` retain the defining crate. All resulting
+ownership, generic, capability and effect obligations use the normal frontend
+and independent IR checker. Expansion adds no runtime operation or checker
+privilege.
+
+The current fragment set is deliberate. Other fragment kinds, procedural
+macros, block-local or generated macro definitions, selective `macro_use`
+imports, attributes on invocations, and expansion that discovers external
+source modules have located refusals. Built-in macro names remain reserved.
+Type, pattern, and multi-statement invocation positions are not admitted by this
+slice. Repetition heads must determine continuation without overlapping the
+following matcher. Fragment ambiguity has a located diagnostic; pure literal
+overlaps that Rust can disambiguate with its matcher automaton remain explicitly
+unsupported. A repeated active invocation has a located recursion diagnostic;
+ordinary allocation and representation rules govern expansion storage.
+
+When expansion fails, source reports continue at independent invocation boundaries.
+Each failed attempt rolls back its temporary syntax, generated items and capture
+materializations, while the report retains its located error and blocked region.
+Malformed definitions do not manufacture additional matcher errors at their calls.
+Unused captures remain unexpanded during recovery, including their nested includes.
+The partial tree retains the original refusal and is marked incomplete; it cannot
+enter name resolution, checked lowering or an accepted semantic index.
+
+The frontend delta-checkpoint format does not yet encode expansion dependency
+and hygiene identities. Programs with actual macro expansions therefore receive
+fresh frontend admission. Authenticated checked artifacts and source-unit
+linkage retain their normal checks. A macro definition or capture edit must
+reexpand the affected source before its checked result can be published.

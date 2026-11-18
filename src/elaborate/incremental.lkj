@@ -57,6 +57,9 @@ pub fn fingerprint(source: &a::Program, inputs: &[(String, Vec<u8>)]) -> Option<
     // current delta catalog saves fixed signatures, so these inputs take the
     // normal source-bound path until opaque dependencies have their own format.
     if source.impl_traits.values().any(|form| form.result.is_some()) { return None; }
+    // Expansion contexts/captures are not part of this delta-checkpoint schema.
+    // Fresh source admission preserves hygiene and provenance after every macro edit.
+    if !source.macro_expansions.is_empty() { return None; }
     let mut data = b"lkjscript-front-topology-2"[..].to_vec();
     let mut bodies = vec![String::new(); source.functions.len()];
     // Locate each path once without changing the first-match input contract.

@@ -21,6 +21,7 @@ fn lifetime_identity(program: &a::Program, catalog: &Catalog, function: usize, n
 pub(super) fn lifetime_predicate_references(result: &mut Catalog, files: &[SourceText], program: &a::Program) {
     for (index, function) in program.functions.iter().enumerate() {
         let owner = result.function_ids[index].clone();
+        if result.by_identity.get(&owner).is_some_and(|item| !result.items[*item].generated_from.is_empty()) { continue; }
         for predicate in &function.outlives {
             let mut names = vec![predicate.target.clone()];
             names.extend_from_slice(&predicate.bounds);
@@ -372,12 +373,13 @@ pub(super) fn path_qualifications(result: &mut Catalog, files: &[SourceText], pr
 }
 
 pub(super) fn import_qualifications(result: &mut Catalog, files: &[SourceText], program: &a::Program,
-    resolver: &resolve::Resolver<'_>) {
+    resolver: &resolve::Resolver<'_>, origins: &origins::Origins) {
     // One scan per use tree, retaining inherited group prefixes. Each Use span
     // starts at the same use keyword and ends at its particular leaf or alias.
     let mut trees: BTreeMap<(usize, usize), (usize, a::ModuleId, String)> = BTreeMap::new();
     let mut self_values: BTreeSet<(usize, usize)> = BTreeSet::new();
-    for imported in &program.uses {
+    for (index, imported) in program.uses.iter().enumerate() {
+        if origins.macros.items.contains_key(&(5usize, index)) { continue; }
         let scope = resolve::module(program, &imported.module);
         if !imported.glob {
             if let Some((at, inherited)) = import_token(&files[imported.span.file], imported) {

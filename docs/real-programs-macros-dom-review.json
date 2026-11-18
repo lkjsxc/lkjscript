@@ -1,0 +1,564 @@
+{
+   "inputs" : {
+      "bank" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/review-bank-through-macros-recovery.json",
+         "sha256" : "5fca2d45462d8662ddf27a70780d1d2de118ab6d4d9258b612bcca4bcd800140"
+      },
+      "before" : {
+         "compiler" : {
+            "path" : "/home/coder/workspace/lkjscript-programs-20261115/target/lkjscript",
+            "sha256" : "eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f"
+         },
+         "path" : "/home/coder/workspace/lkjscript-specimens/evidence/dom_query-0.28.0-unmodified-units-eb08fbaa.json",
+         "sha256" : "1e6e0b9eab83c826e041888e067a4e4029f6f7de733ebec4a93d32da22509abb"
+      },
+      "projection" : {
+         "path" : "/home/coder/workspace/lkjscript-specimens/projections/dom_query-0.28.0/projection.json",
+         "sha256" : "7eef776218daecb22822d613a609a00039600c34cea05a6047216111148272c9",
+         "source" : {
+            "commit" : "186c02d9359762404054fbc8af3a5b07cdf795a9",
+            "object_format" : "sha1",
+            "origin" : "https://github.com/niklak/dom_query.git",
+            "root" : "/home/coder/workspace/lkjscript-specimens/dom_query-0.28.0"
+         }
+      },
+      "receipt" : {
+         "compiler" : {
+            "path" : "/home/coder/workspace/lkjscript-programs-20261115/target/lkjscript",
+            "sha256" : "77695785a3c15da46bd9a3a794e81a2edf4c0155a891ff0cef2084d7bc3659d8"
+         },
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/macros-temporaryfiles-final/census/dom-probe.json",
+         "sha256" : "0e7282040fde6d8770fdec9c434c6ee1e89dfa70a3947a605eb50d4eecc89b24"
+      },
+      "unreviewed_report" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/macros-temporaryfiles-final/census/dom-unreviewed.json",
+         "sha256" : "75a0960b5cf41b7cc4ece73189af9de1b43dd96433dcc341c883be613cba8c2c"
+      }
+   },
+   "interpretation" : "Previously reviewed exact diagnostic identities only; every recovery parent was revalidated earlier in every current root. Unmatched or parentless entries remain unclassified.",
+   "kind" : "explicit_foreign_diagnostic_site_review",
+   "package" : "dom",
+   "schema" : 1,
+   "sites" : [
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 33,
+         "disposition" : "primary",
+         "file_sha256" : "825093383717021e0003e3bf9a86ad07cfa6ae003b87a0755ed2afd9a969b096",
+         "line" : 74,
+         "message" : "unsupported macro: ns!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/document.rs",
+         "reason" : "The unchanged source calls ns!(html) as an argument to QualName::new. This file imports the macro name from html5ever at line 11; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 2361,
+            "file_bytes" : 17554,
+            "file_physical_lines" : 510,
+            "file_sha256" : "825093383717021e0003e3bf9a86ad07cfa6ae003b87a0755ed2afd9a969b096",
+            "line_sha256" : "24d207197c2886028d03f8609a77ed962e2734eef59d5d6c02ce60b87f4e11df",
+            "line_text" : "            QualName::new(None, ns!(html), local_name!(\"body\")),"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 44,
+         "disposition" : "primary",
+         "file_sha256" : "825093383717021e0003e3bf9a86ad07cfa6ae003b87a0755ed2afd9a969b096",
+         "line" : 74,
+         "message" : "unsupported macro: local_name!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/document.rs",
+         "reason" : "The unchanged source calls local_name!(\"body\") as an argument to QualName::new. This file imports the macro name from html5ever at line 11; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 2372,
+            "file_bytes" : 17554,
+            "file_physical_lines" : 510,
+            "file_sha256" : "825093383717021e0003e3bf9a86ad07cfa6ae003b87a0755ed2afd9a969b096",
+            "line_sha256" : "24d207197c2886028d03f8609a77ed962e2734eef59d5d6c02ce60b87f4e11df",
+            "line_text" : "            QualName::new(None, ns!(html), local_name!(\"body\")),"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 40,
+         "disposition" : "primary",
+         "file_sha256" : "45d039636ca7089903cba492baf370592fdec3a6fea1b2f8d574984f45c0aa4d",
+         "line" : 42,
+         "message" : "unsupported macro: ns!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/dom_tree/tree.rs",
+         "reason" : "The unchanged source calls ns!(html) as the namespace argument to QualName::new. This file imports the macro name from html5ever at line 7; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 1104,
+            "file_bytes" : 24632,
+            "file_physical_lines" : 692,
+            "file_sha256" : "45d039636ca7089903cba492baf370592fdec3a6fea1b2f8d574984f45c0aa4d",
+            "line_sha256" : "917c5d87b68bd1ac020113074e3be78907bc4648b04c4c2f34d8223703121e12",
+            "line_text" : "        let name = QualName::new(None, ns!(html), LocalName::from(name));"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 49,
+         "disposition" : "primary",
+         "file_sha256" : "45d039636ca7089903cba492baf370592fdec3a6fea1b2f8d574984f45c0aa4d",
+         "line" : 604,
+         "message" : "unsupported macro: ns!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/dom_tree/tree.rs",
+         "reason" : "The unchanged source calls ns!() as the namespace argument to QualName::new. This file imports the macro name from html5ever at line 7; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 21781,
+            "file_bytes" : 24632,
+            "file_physical_lines" : 692,
+            "file_sha256" : "45d039636ca7089903cba492baf370592fdec3a6fea1b2f8d574984f45c0aa4d",
+            "line_sha256" : "8de361c9c3184b430408992d410ec42b66ede58f6b33c0a360da696172de2f5a",
+            "line_text" : "                            QualName::new(None, ns!(), LocalName::from(\"div\")),"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 33,
+         "disposition" : "primary",
+         "file_sha256" : "45d039636ca7089903cba492baf370592fdec3a6fea1b2f8d574984f45c0aa4d",
+         "line" : 629,
+         "message" : "unsupported macro: ns!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/dom_tree/tree.rs",
+         "reason" : "The unchanged source calls ns!() as the namespace argument to QualName::new. This file imports the macro name from html5ever at line 7; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 22556,
+            "file_bytes" : 24632,
+            "file_physical_lines" : 692,
+            "file_sha256" : "45d039636ca7089903cba492baf370592fdec3a6fea1b2f8d574984f45c0aa4d",
+            "line_sha256" : "fca2efea4057561130c7bdf26765507f28f16cd597c0c37b8d4f4aac3c21c023",
+            "line_text" : "            QualName::new(None, ns!(), LocalName::from(\"p\")),"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 33,
+         "disposition" : "primary",
+         "file_sha256" : "45d039636ca7089903cba492baf370592fdec3a6fea1b2f8d574984f45c0aa4d",
+         "line" : 635,
+         "message" : "unsupported macro: ns!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/dom_tree/tree.rs",
+         "reason" : "The unchanged source calls ns!() as the namespace argument to QualName::new. This file imports the macro name from html5ever at line 7; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 22761,
+            "file_bytes" : 24632,
+            "file_physical_lines" : 692,
+            "file_sha256" : "45d039636ca7089903cba492baf370592fdec3a6fea1b2f8d574984f45c0aa4d",
+            "line_sha256" : "fca2efea4057561130c7bdf26765507f28f16cd597c0c37b8d4f4aac3c21c023",
+            "line_text" : "            QualName::new(None, ns!(), LocalName::from(\"p\")),"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 33,
+         "disposition" : "primary",
+         "file_sha256" : "45d039636ca7089903cba492baf370592fdec3a6fea1b2f8d574984f45c0aa4d",
+         "line" : 673,
+         "message" : "unsupported macro: ns!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/dom_tree/tree.rs",
+         "reason" : "The unchanged source calls ns!() as the namespace argument to QualName::new. This file imports the macro name from html5ever at line 7; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 24039,
+            "file_bytes" : 24632,
+            "file_physical_lines" : 692,
+            "file_sha256" : "45d039636ca7089903cba492baf370592fdec3a6fea1b2f8d574984f45c0aa4d",
+            "line_sha256" : "ca70e5ed6bb7e98d0a0c0203ed077411be5e207445d6cf58cc574f90bc7b2c28",
+            "line_text" : "            QualName::new(None, ns!(), LocalName::from(\"div\")),"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 33,
+         "disposition" : "primary",
+         "file_sha256" : "45d039636ca7089903cba492baf370592fdec3a6fea1b2f8d574984f45c0aa4d",
+         "line" : 679,
+         "message" : "unsupported macro: ns!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/dom_tree/tree.rs",
+         "reason" : "The unchanged source calls ns!() as the namespace argument to QualName::new. This file imports the macro name from html5ever at line 7; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 24245,
+            "file_bytes" : 24632,
+            "file_physical_lines" : 692,
+            "file_sha256" : "45d039636ca7089903cba492baf370592fdec3a6fea1b2f8d574984f45c0aa4d",
+            "line_sha256" : "b857e6cd5482a51b1406327f5df5b4922c836f1ffbd5c711ab57cd16eeb4a48a",
+            "line_text" : "            QualName::new(None, ns!(), LocalName::from(\"span\")),"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 39,
+         "disposition" : "primary",
+         "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+         "line" : 107,
+         "message" : "unsupported macro: local_name!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/node/node_data.rs",
+         "reason" : "The unchanged source calls local_name!(\"class\") as an HTML atom construction or comparison in element attribute code. This file imports the macro name from html5ever at line 6; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 3092,
+            "file_bytes" : 8763,
+            "file_physical_lines" : 275,
+            "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+            "line_sha256" : "fbe850d25d2be54f13d4a18f1cb0d81cf05cad6638031c84f298b875a88a9b22",
+            "line_text" : "            .find(|a| a.name.local == local_name!(\"class\"))"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 39,
+         "disposition" : "primary",
+         "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+         "line" : 115,
+         "message" : "unsupported macro: local_name!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/node/node_data.rs",
+         "reason" : "The unchanged source calls local_name!(\"id\") as an HTML atom construction or comparison in element attribute code. This file imports the macro name from html5ever at line 6; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 3337,
+            "file_bytes" : 8763,
+            "file_physical_lines" : 275,
+            "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+            "line_sha256" : "3dae3d3d93f2549ddd393749ad16666007e8d5f7b5f8835079a3dafddd506feb",
+            "line_text" : "            .find(|a| a.name.local == local_name!(\"id\"))"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 23,
+         "disposition" : "primary",
+         "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+         "line" : 121,
+         "message" : "unsupported macro: local_name!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/node/node_data.rs",
+         "reason" : "The unchanged source calls local_name!(\"class\") as an HTML atom construction or comparison in element attribute code. This file imports the macro name from html5ever at line 6; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 3537,
+            "file_bytes" : 8763,
+            "file_physical_lines" : 275,
+            "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+            "line_sha256" : "ca43d2c11d9a7f6b12b214a32c0ecf8f3c6c00113b7f4ee22a1022012d838246",
+            "line_text" : "        self.attr_ref(local_name!(\"class\"))"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 23,
+         "disposition" : "primary",
+         "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+         "line" : 127,
+         "message" : "unsupported macro: local_name!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/node/node_data.rs",
+         "reason" : "The unchanged source calls local_name!(\"class\") as an HTML atom construction or comparison in element attribute code. This file imports the macro name from html5ever at line 6; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 3800,
+            "file_bytes" : 8763,
+            "file_physical_lines" : 275,
+            "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+            "line_sha256" : "ca43d2c11d9a7f6b12b214a32c0ecf8f3c6c00113b7f4ee22a1022012d838246",
+            "line_text" : "        self.attr_ref(local_name!(\"class\"))"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 45,
+         "disposition" : "primary",
+         "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+         "line" : 144,
+         "message" : "unsupported macro: local_name!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/node/node_data.rs",
+         "reason" : "The unchanged source calls local_name!(\"class\") as an HTML atom construction or comparison in element attribute code. This file imports the macro name from html5ever at line 6; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 4291,
+            "file_bytes" : 8763,
+            "file_physical_lines" : 275,
+            "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+            "line_sha256" : "0c0f1ed3dbdfed9961b8027a04f6647f2d58d7042e73d354fe86f2c69fff3e58",
+            "line_text" : "            .find(|attr| attr.name.local == local_name!(\"class\"));"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 44,
+         "disposition" : "primary",
+         "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+         "line" : 153,
+         "message" : "unsupported macro: ns!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/node/node_data.rs",
+         "reason" : "The unchanged source calls ns!() as an HTML atom construction or comparison in element attribute code. This file imports the macro name from html5ever at line 6; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 4734,
+            "file_bytes" : 8763,
+            "file_physical_lines" : 275,
+            "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+            "line_sha256" : "3ed50227d71e836b1aea2e09e6bf7463583c90345c76ecdeff6320bd61b4d735",
+            "line_text" : "            let name = QualName::new(None, ns!(), local_name!(\"class\"));"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 51,
+         "disposition" : "primary",
+         "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+         "line" : 153,
+         "message" : "unsupported macro: local_name!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/node/node_data.rs",
+         "reason" : "The unchanged source calls local_name!(\"class\") as an HTML atom construction or comparison in element attribute code. This file imports the macro name from html5ever at line 6; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 4741,
+            "file_bytes" : 8763,
+            "file_physical_lines" : 275,
+            "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+            "line_sha256" : "3ed50227d71e836b1aea2e09e6bf7463583c90345c76ecdeff6320bd61b4d735",
+            "line_text" : "            let name = QualName::new(None, ns!(), local_name!(\"class\"));"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 45,
+         "disposition" : "primary",
+         "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+         "line" : 170,
+         "message" : "unsupported macro: local_name!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/node/node_data.rs",
+         "reason" : "The unchanged source calls local_name!(\"class\") as an HTML atom construction or comparison in element attribute code. This file imports the macro name from html5ever at line 6; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 5177,
+            "file_bytes" : 8763,
+            "file_physical_lines" : 275,
+            "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+            "line_sha256" : "4d36406bd246f824c3d4143937a33c950334542c75b360133d9c7d3241c3244a",
+            "line_text" : "            .find(|attr| attr.name.local == local_name!(\"class\"))"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 44,
+         "disposition" : "primary",
+         "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+         "line" : 194,
+         "message" : "unsupported macro: ns!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/node/node_data.rs",
+         "reason" : "The unchanged source calls ns!() as an HTML atom construction or comparison in element attribute code. This file imports the macro name from html5ever at line 6; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 6219,
+            "file_bytes" : 8763,
+            "file_physical_lines" : 275,
+            "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+            "line_sha256" : "2d14729d094ed4e2413967865a4adfdb6b41afd3ae21985543303215226ef2fc",
+            "line_text" : "            let name = QualName::new(None, ns!(), LocalName::from(name));"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 44,
+         "disposition" : "primary",
+         "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+         "line" : 261,
+         "message" : "unsupported macro: ns!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/node/node_data.rs",
+         "reason" : "The unchanged source calls ns!() as an HTML atom construction or comparison in element attribute code. This file imports the macro name from html5ever at line 6; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 8386,
+            "file_bytes" : 8763,
+            "file_physical_lines" : 275,
+            "file_sha256" : "7f5a58be9ffe057619c21515c2f9d6393482320d0ce8484b8f269a133034ba46",
+            "line_sha256" : "1acbebea734e2766fd15060965a251422decd7bb1176834b750bd6ca7935ac65",
+            "line_text" : "        let new_name = QualName::new(None, ns!(), LocalName::from(name));"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 40,
+         "disposition" : "primary",
+         "file_sha256" : "64ddf365e224fde342c457d8c0543d3851a01cb3112bd730db730500755a2798",
+         "line" : 178,
+         "message" : "unsupported macro: local_name!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/node/selector.rs",
+         "reason" : "The unchanged source calls local_name!(\"id\") as an attribute-name comparison in selector code. This file imports the macro name from html5ever at line 3; the retained package manifest declares html5ever as a dependency. The authenticated dom_query-only projection contains no html5ever source, and the retained package has no macro_rules! definition for ns or local_name. This is a substantive dependency macro/source-loading requirement at this exact expression, not recovery from an earlier syntax or interior-mutation error. It neither demonstrates a failure to expand a visible local declarative definition nor establishes admission of html5ever or the enclosing method.",
+         "source_anchor" : {
+            "byte_offset" : 5609,
+            "file_bytes" : 6908,
+            "file_physical_lines" : 222,
+            "file_sha256" : "64ddf365e224fde342c457d8c0543d3851a01cb3112bd730db730500755a2798",
+            "line_sha256" : "e0b7b65bcdebd1c1dcde9bd0b77ab1f3adfe8c8b41516581b1c47a77cd835793",
+            "line_text" : "                    attr.name.local == local_name!(\"id\")"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      },
+      {
+         "cause" : "foreign_atom_macros",
+         "code" : "E_UNSUPPORTED_MACRO",
+         "column" : 37,
+         "disposition" : "primary",
+         "file_sha256" : "64ddf365e224fde342c457d8c0543d3851a01cb3112bd730db730500755a2798",
+         "line" : 73,
+         "message" : "unsupported macro: ns!; no visible declarative definition",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "dom",
+         "path" : "src/node/selector.rs",
+         "reason" : "The unchanged selector imports html5ever::{local_name, ns} at lines 2-3 and uses ns!(html) in is_html_element_in_html_document at this exact expression. The current macro engine reports no visible declarative definition for the dependency-provided atom macro. This is a substantive dependency macro/source-loading barrier, not recovery from the surrounding selector or shared-interior-mutation barriers; it does not establish admission of html5ever or this method.",
+         "source_anchor" : {
+            "byte_offset" : 2065,
+            "file_bytes" : 6908,
+            "file_physical_lines" : 222,
+            "file_sha256" : "64ddf365e224fde342c457d8c0543d3851a01cb3112bd730db730500755a2798",
+            "line_sha256" : "a34b90e78177b1fa9a86af1674357234f2199a18f0e3b2a88d711cbc622b29a5",
+            "line_text" : "                return e.name.ns == ns!(html);"
+         },
+         "source_review" : "macros",
+         "title" : "Dependency-provided atom macros in expressions and patterns"
+      }
+   ]
+}

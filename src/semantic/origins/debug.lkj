@@ -241,7 +241,7 @@ pub(super) fn validate(program: &a::Program, resolver: &crate::resolve::Resolver
         }
         _ => return Err(failure("Debug", "generated Debug target changed kind")),
     }
-    let origin = Origin { declaration, expansion: Expansion::Debug };
+    let origin = Origin { declaration: Some(declaration), expansion: Expansion::Debug };
     origins.functions[function] = Some(origin);
     Ok(origin)
 }

@@ -1,0 +1,1188 @@
+{
+   "inputs" : {
+      "bank" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/review-bank-through-macros-recovery.json",
+         "sha256" : "5fca2d45462d8662ddf27a70780d1d2de118ab6d4d9258b612bcca4bcd800140"
+      },
+      "before" : {
+         "compiler" : {
+            "path" : "/home/coder/workspace/lkjscript-programs-20261115/target/lkjscript",
+            "sha256" : "eb08fbaa3532b3255f2f8d5ff12a5052db1ec449b55f7c99c4251ce231dc938f"
+         },
+         "path" : "/home/coder/workspace/lkjscript-specimens/evidence/nom-8.0.0-unmodified-units-eb08fbaa.json",
+         "sha256" : "5c61766cf5f33b2bf13e9028686b2d5b938a0be1907ffbab45457f917b74b41c"
+      },
+      "projection" : {
+         "path" : "/home/coder/workspace/lkjscript-specimens/projections/nom-8.0.0/projection.json",
+         "sha256" : "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
+         "source" : {
+            "commit" : "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
+            "object_format" : "sha1",
+            "origin" : "https://github.com/rust-bakery/nom.git",
+            "root" : "/home/coder/workspace/lkjscript-specimens/nom-8.0.0"
+         }
+      },
+      "receipt" : {
+         "compiler" : {
+            "path" : "/home/coder/workspace/lkjscript-programs-20261115/target/lkjscript",
+            "sha256" : "77695785a3c15da46bd9a3a794e81a2edf4c0155a891ff0cef2084d7bc3659d8"
+         },
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/macros-temporaryfiles-final/census/nom-probe.json",
+         "sha256" : "4a79bae0c96df918da8f9e04de6b6971fe6f54b3fffbb3b7e6e49668d5d9ca95"
+      },
+      "unreviewed_report" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/macros-temporaryfiles-final/census/nom-unreviewed.json",
+         "sha256" : "e9b5b88b80cc1c051ef6e5a6cd5278b8bdfa8cd4238b8ffbeef22bc27d83af3e"
+      }
+   },
+   "interpretation" : "Previously reviewed exact diagnostic identities only; every recovery parent was revalidated earlier in every current root. Unmatched or parentless entries remain unclassified.",
+   "kind" : "explicit_foreign_diagnostic_site_review",
+   "package" : "nom",
+   "schema" : 1,
+   "sites" : [
+      {
+         "cause" : "multi_statement_macro_expansion",
+         "code" : "E_MACRO_EXPANSION",
+         "column" : 1,
+         "disposition" : "primary",
+         "file_sha256" : "f99d29c4b001b500cc5226ccff5c13a250da06cc7428e76b3bc61125fb11c5d1",
+         "line" : 350,
+         "message" : "macro expansion must be one complete expression",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/branch/mod.rs",
+         "reason" : "The unchanged permutation_trait! item chain emits Parser implementations through permutation_trait_impl! (lines 279-322). Each generated process body invokes permutation_trait_inner! at line 302. Its template at lines 325-346 emits an if expression followed by a separate succ!(..., permutation_trait_inner!(...)); statement, without an enclosing block; its terminal arm emits no expression. The expression-position expansion reader therefore sees tokens after the first complete if expression and reports E_MACRO_EXPANSION at the projected outer invocation. Statement-list splicing is an explicit current macro boundary, distinct from the supported item and single-expression forms. This is a primary requirement for the actual permutation implementation, not evidence that the promised tuple/error macro forms regressed or that the whole crate is admitted.",
+         "source_anchor" : {
+            "byte_offset" : 10613,
+            "file_bytes" : 10846,
+            "file_physical_lines" : 372,
+            "file_sha256" : "f99d29c4b001b500cc5226ccff5c13a250da06cc7428e76b3bc61125fb11c5d1",
+            "line_sha256" : "0a97890f377ad2d939560f82cb89564bb1f61599c468310fcfef084e87e2e4ab",
+            "line_text" : "permutation_trait!("
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Statement-list macro expansion"
+      },
+      {
+         "cause" : "type_outlives_where",
+         "code" : "E_UNSUPPORTED",
+         "column" : 46,
+         "disposition" : "primary",
+         "file_sha256" : "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+         "line" : 424,
+         "message" : "type-outlives where predicates are not implemented",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/bytes/complete.rs",
+         "reason" : "The original escaped function declares `I: Clone + crate::traits::Offset + Input + 'a` in its ordinary where clause. The current parser explicitly rejects the lifetime bound on type parameter I at its exact span. This is a real type-outlives contract, outside named lifetime-to-lifetime support; there is no recovery parent or surrounding-function admission.",
+         "source_anchor" : {
+            "byte_offset" : 14826,
+            "file_bytes" : 19430,
+            "file_physical_lines" : 566,
+            "file_sha256" : "40682a06b92fcbd3f4e7c8b266b12dcfc797b715cc55d5f5c5073616a55efe1b",
+            "line_sha256" : "505e8b9b4a3a3780011ecb2db0d302bf1a7b6a5272947aa6420ec29f8c6c3fed",
+            "line_text" : "  I: Clone + crate::traits::Offset + Input + 'a,"
+         },
+         "source_review" : "lifetime-where-type-outlives-source-review",
+         "title" : "Type-outlives where predicates"
+      },
+      {
+         "cause" : "higher_ranked_trait_bounds",
+         "code" : "E_UNSUPPORTED",
+         "column" : 6,
+         "disposition" : "primary",
+         "file_sha256" : "1d0c6a7f9cfc97164f17c87e9125981c2a0814904d0de2a7ba6f4019d3d30ca0",
+         "line" : 737,
+         "message" : "unsupported construct: for",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/character/complete.rs",
+         "reason" : "The unchanged where clause at this exact source anchor requires T: for<'a> Compare<&'a [u8]>, The for<'a> binder universally quantifies the reference argument lifetime of Compare, beyond an ordinary named lifetime parameter. This is a primary higher-ranked trait-bound requirement, not an ordinary loop or recovery from an earlier declaration; the containing function or impl remains unadmitted.",
+         "source_anchor" : {
+            "byte_offset" : 23908,
+            "file_bytes" : 42805,
+            "file_physical_lines" : 1303,
+            "file_sha256" : "1d0c6a7f9cfc97164f17c87e9125981c2a0814904d0de2a7ba6f4019d3d30ca0",
+            "line_sha256" : "75ecaba39c94474ace1d46c6a3c52f3fd3f2e14da8054946695a178e7b92ab5a",
+            "line_text" : "  T: for<'a> Compare<&'a [u8]>,"
+         },
+         "source_review" : "macros",
+         "title" : "Higher-ranked lifetime trait bounds"
+      },
+      {
+         "cause" : "higher_ranked_trait_bounds",
+         "code" : "E_UNSUPPORTED",
+         "column" : 1,
+         "disposition" : "primary",
+         "file_sha256" : "1d0c6a7f9cfc97164f17c87e9125981c2a0814904d0de2a7ba6f4019d3d30ca0",
+         "line" : 820,
+         "message" : "unsupported construct: for",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/character/complete.rs",
+         "reason" : "The unchanged ints! invocation expands the local macro_rules! template declared at lines 753-818. Its generated function where clause at line 763 requires T: for<'a> Compare<&'a [u8]>. The diagnostic is projected to this invocation span by expansion. The macro now reaches an unsupported higher-ranked lifetime trait bound; the ordinary for loops in the body are unrelated. This is a primary generated-source contract barrier, not a recovery duplicate of the separately authored sign bound at line 737, and it does not imply that the generated functions are admitted.",
+         "source_anchor" : {
+            "byte_offset" : 26964,
+            "file_bytes" : 42805,
+            "file_physical_lines" : 1303,
+            "file_sha256" : "1d0c6a7f9cfc97164f17c87e9125981c2a0814904d0de2a7ba6f4019d3d30ca0",
+            "line_sha256" : "eafdd1bf38e0846e73d06d83fcbc92db25da93240875be2bde79af2a5cac0b07",
+            "line_text" : "ints! { i8 i16 i32 i64 i128 isize }"
+         },
+         "source_review" : "macros",
+         "title" : "Higher-ranked lifetime trait bounds"
+      },
+      {
+         "cause" : "higher_ranked_trait_bounds",
+         "code" : "E_UNSUPPORTED",
+         "column" : 6,
+         "disposition" : "primary",
+         "file_sha256" : "b883f3d745d16b0ec163c5d14feae1e255f2809da540eb507c2d63e0ac146e10",
+         "line" : 634,
+         "message" : "unsupported construct: for",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/character/streaming.rs",
+         "reason" : "The unchanged where clause at this exact source anchor requires T: for<'a> Compare<&'a [u8]>, The for<'a> binder universally quantifies the reference argument lifetime of Compare, beyond an ordinary named lifetime parameter. This is a primary higher-ranked trait-bound requirement, not an ordinary loop or recovery from an earlier declaration; the containing function or impl remains unadmitted.",
+         "source_anchor" : {
+            "byte_offset" : 23359,
+            "file_bytes" : 43112,
+            "file_physical_lines" : 1256,
+            "file_sha256" : "b883f3d745d16b0ec163c5d14feae1e255f2809da540eb507c2d63e0ac146e10",
+            "line_sha256" : "75ecaba39c94474ace1d46c6a3c52f3fd3f2e14da8054946695a178e7b92ab5a",
+            "line_text" : "  T: for<'a> Compare<&'a [u8]>,"
+         },
+         "source_review" : "macros",
+         "title" : "Higher-ranked lifetime trait bounds"
+      },
+      {
+         "cause" : "higher_ranked_trait_bounds",
+         "code" : "E_UNSUPPORTED",
+         "column" : 1,
+         "disposition" : "primary",
+         "file_sha256" : "b883f3d745d16b0ec163c5d14feae1e255f2809da540eb507c2d63e0ac146e10",
+         "line" : 717,
+         "message" : "unsupported construct: for",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/character/streaming.rs",
+         "reason" : "The unchanged ints! invocation expands the local macro_rules! template at lines 650-715. The generated function's where clause at line 660 requires T: for<'a> Compare<&'a [u8]>, universally quantifying the reference argument lifetime. Expansion projects that higher-ranked trait-bound refusal to the invocation. The ordinary for loops in the generated body are unrelated. This is an independent generated-source language requirement, not a recovery duplicate of the separately authored sign bound at line 634; the generated functions remain unadmitted.",
+         "source_anchor" : {
+            "byte_offset" : 26389,
+            "file_bytes" : 43112,
+            "file_physical_lines" : 1256,
+            "file_sha256" : "b883f3d745d16b0ec163c5d14feae1e255f2809da540eb507c2d63e0ac146e10",
+            "line_sha256" : "eafdd1bf38e0846e73d06d83fcbc92db25da93240875be2bde79af2a5cac0b07",
+            "line_text" : "ints! { i8 i16 i32 i64 i128 isize }"
+         },
+         "source_review" : "macros-recovery",
+         "title" : "Higher-ranked lifetime trait bounds"
+      },
+      {
+         "cause" : "qualified_attribute_path",
+         "code" : "E_PARSE",
+         "column" : 10,
+         "disposition" : "primary",
+         "file_sha256" : "4a73ae2a2743b3dd029ad76ebed264af73fef875d061189abdaabf026acb89a8",
+         "line" : 253,
+         "message" : "expected `]`, found `::`",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/error.rs",
+         "reason" : "The exact original anchor is the namespaced tool attribute #[rustfmt::skip]. Its :: path separator is rejected while parsing the attribute. The surrounding enum, function, or method is a separate declaration, so this is a primary qualified-attribute syntax barrier rather than recovery from a prior source error. No claim about the containing declaration's semantic admission follows from classifying this metadata syntax.",
+         "source_anchor" : {
+            "byte_offset" : 7335,
+            "file_bytes" : 23356,
+            "file_physical_lines" : 802,
+            "file_sha256" : "4a73ae2a2743b3dd029ad76ebed264af73fef875d061189abdaabf026acb89a8",
+            "line_sha256" : "b4573a85b16da6eb1bb4dc16b25e4ae830b262082a7a86014a80d5dcb5293bfa",
+            "line_text" : "#[rustfmt::skip]"
+         },
+         "source_review" : "macros",
+         "title" : "Namespaced rustfmt attribute"
+      },
+      {
+         "cause" : "qualified_attribute_path",
+         "code" : "E_PARSE",
+         "column" : 10,
+         "disposition" : "primary",
+         "file_sha256" : "4a73ae2a2743b3dd029ad76ebed264af73fef875d061189abdaabf026acb89a8",
+         "line" : 316,
+         "message" : "expected `]`, found `::`",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/error.rs",
+         "reason" : "The exact original anchor is the namespaced tool attribute #[rustfmt::skip]. Its :: path separator is rejected while parsing the attribute. The surrounding enum, function, or method is a separate declaration, so this is a primary qualified-attribute syntax barrier rather than recovery from a prior source error. No claim about the containing declaration's semantic admission follows from classifying this metadata syntax.",
+         "source_anchor" : {
+            "byte_offset" : 8127,
+            "file_bytes" : 23356,
+            "file_physical_lines" : 802,
+            "file_sha256" : "4a73ae2a2743b3dd029ad76ebed264af73fef875d061189abdaabf026acb89a8",
+            "line_sha256" : "b4573a85b16da6eb1bb4dc16b25e4ae830b262082a7a86014a80d5dcb5293bfa",
+            "line_text" : "#[rustfmt::skip]"
+         },
+         "source_review" : "macros",
+         "title" : "Namespaced rustfmt attribute"
+      },
+      {
+         "cause" : "qualified_attribute_path",
+         "code" : "E_PARSE",
+         "column" : 12,
+         "disposition" : "primary",
+         "file_sha256" : "4a73ae2a2743b3dd029ad76ebed264af73fef875d061189abdaabf026acb89a8",
+         "line" : 382,
+         "message" : "expected `]`, found `::`",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/error.rs",
+         "reason" : "The exact original anchor is the namespaced tool attribute #[rustfmt::skip]. Its :: path separator is rejected while parsing the attribute. The surrounding enum, function, or method is a separate declaration, so this is a primary qualified-attribute syntax barrier rather than recovery from a prior source error. No claim about the containing declaration's semantic admission follows from classifying this metadata syntax.",
+         "source_anchor" : {
+            "byte_offset" : 11013,
+            "file_bytes" : 23356,
+            "file_physical_lines" : 802,
+            "file_sha256" : "4a73ae2a2743b3dd029ad76ebed264af73fef875d061189abdaabf026acb89a8",
+            "line_sha256" : "b1c15b37dd6f521b2f30603361bf1d4f26aac406fc9e5e7b84eb8a7b1997cde5",
+            "line_text" : "  #[rustfmt::skip]"
+         },
+         "source_review" : "macros",
+         "title" : "Namespaced rustfmt attribute"
+      },
+      {
+         "cause" : "default_generic_arguments",
+         "code" : "E_UNSUPPORTED",
+         "column" : 29,
+         "disposition" : "primary",
+         "file_sha256" : "c3df969cc76196d2f9903d9ff2c0ce8a58c766efbf92216f4797d945a6f980ee",
+         "line" : 101,
+         "message" : "unsupported construct: default generic arguments",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/internal.rs",
+         "reason" : "The unchanged Err enum declares Error = Failure, defaulting its second type parameter to the first. The exact default declaration is rejected. This is an independent nominal generic-default contract, not recovery from derive expansion or another declaration; classifying it does not admit the enum or its error variants.",
+         "source_anchor" : {
+            "byte_offset" : 4009,
+            "file_bytes" : 25819,
+            "file_physical_lines" : 859,
+            "file_sha256" : "c3df969cc76196d2f9903d9ff2c0ce8a58c766efbf92216f4797d945a6f980ee",
+            "line_sha256" : "a2b5ef30504bf86ee749f355604d323a70e9b8b34c6706840cf434e27634fee2",
+            "line_text" : "pub enum Err<Failure, Error = Failure> {"
+         },
+         "source_review" : "macros",
+         "title" : "Default generic type arguments"
+      },
+      {
+         "cause" : "default_generic_arguments",
+         "code" : "E_UNSUPPORTED",
+         "column" : 26,
+         "disposition" : "primary",
+         "file_sha256" : "c3df969cc76196d2f9903d9ff2c0ce8a58c766efbf92216f4797d945a6f980ee",
+         "line" : 19,
+         "message" : "unsupported construct: default generic arguments",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/internal.rs",
+         "reason" : "The unchanged IResult alias declares E = error::Error<I> as an omitted type argument default, referring to the earlier I parameter. The exact default declaration is rejected. This is an independent nominal/alias generic-default contract, not recovery from the alias body or preceding errors; the review does not replace the alias or claim its uses are admitted.",
+         "source_anchor" : {
+            "byte_offset" : 722,
+            "file_bytes" : 25819,
+            "file_physical_lines" : 859,
+            "file_sha256" : "c3df969cc76196d2f9903d9ff2c0ce8a58c766efbf92216f4797d945a6f980ee",
+            "line_sha256" : "84e44b6e2371238c6edc3fe9ec9272567652d8e0fdc685800b1c9053e0b13707",
+            "line_text" : "pub type IResult<I, O, E = error::Error<I>> = Result<(I, O), Err<E>>;"
+         },
+         "source_review" : "macros",
+         "title" : "Default generic type arguments"
+      },
+      {
+         "cause" : "type_outlives_where",
+         "code" : "E_UNSUPPORTED",
+         "column" : 29,
+         "disposition" : "primary",
+         "file_sha256" : "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+         "line" : 964,
+         "message" : "type-outlives where predicates are not implemented",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/multi/mod.rs",
+         "reason" : "The original fill function declares `F: Parser<I, Error = E> + 'a` in its ordinary where clause. The current parser explicitly rejects the lifetime bound on type parameter F at its exact span. This remains independent of the unsupported positional Parser contract and is not recovery from the accepted opaque-result syntax.",
+         "source_anchor" : {
+            "byte_offset" : 28970,
+            "file_bytes" : 53630,
+            "file_physical_lines" : 1870,
+            "file_sha256" : "6426717e34019ef32c00cc86d8b2683f7c4510e2c056e7762cce7595dab14bce",
+            "line_sha256" : "b8d858c0aa21a35edcbf7f0cd9e7976fb774262a32d2254a81b6fa7663974473",
+            "line_text" : "  F: Parser<I, Error = E> + 'a,"
+         },
+         "source_review" : "lifetime-where-type-outlives-source-review",
+         "title" : "Type-outlives where predicates"
+      },
+      {
+         "cause" : "function_pointer_types",
+         "code" : "E_UNSUPPORTED",
+         "column" : 71,
+         "disposition" : "primary",
+         "file_sha256" : "63ad29969e4f20dcfd7acc6fc08e60f9e3d90b1c3e574267ef274f56468464d7",
+         "line" : 1120,
+         "message" : "unsupported construct: function pointer",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/complete.rs",
+         "reason" : "The original function explicitly returns fn(I) -> IResult<I, f32, E>, selecting a concrete endian parser function in its match. The reported function-pointer type is a substantive source callable-type barrier. The separate match-arm cfg diagnostic in the same body is also retained as primary; neither error establishes support for the other's contract, and this later diagnostic is not treated as a recovery parent.",
+         "source_anchor" : {
+            "byte_offset" : 33943,
+            "file_bytes" : 57485,
+            "file_physical_lines" : 1970,
+            "file_sha256" : "63ad29969e4f20dcfd7acc6fc08e60f9e3d90b1c3e574267ef274f56468464d7",
+            "line_sha256" : "705b4857cb2bbc06ddb49e6d1ecf66b2fe2a9cf91b7647a163c1541b3db73704",
+            "line_text" : "pub fn f32<I, E: ParseError<I>>(endian: crate::number::Endianness) -> fn(I) -> IResult<I, f32, E>"
+         },
+         "source_review" : "macros",
+         "title" : "Function-pointer result types"
+      },
+      {
+         "cause" : "match_arm_cfg_attribute",
+         "code" : "E_PARSE",
+         "column" : 5,
+         "disposition" : "primary",
+         "file_sha256" : "63ad29969e4f20dcfd7acc6fc08e60f9e3d90b1c3e574267ef274f56468464d7",
+         "line" : 1127,
+         "message" : "expected an identifier",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/complete.rs",
+         "reason" : "The original match on endian has ordinary Big and Little arms followed by #[cfg(target_endian = \"big\")] on the Native arm at this exact anchor, with a little-endian alternative immediately afterward. Parsing the next pattern encounters # where it expects an identifier; the missing match-arm attribute/configuration route is substantive. The separate function-pointer-result diagnostic for the enclosing function occurs later in the recorded diagnostic stream and cannot be an earlier recovery parent; the same match-arm syntax also fails independently in src/number/mod.rs. Keep this primary barrier visible without inferring any Cargo-equivalent target configuration.",
+         "source_anchor" : {
+            "byte_offset" : 34118,
+            "file_bytes" : 57485,
+            "file_physical_lines" : 1970,
+            "file_sha256" : "63ad29969e4f20dcfd7acc6fc08e60f9e3d90b1c3e574267ef274f56468464d7",
+            "line_sha256" : "5c762f55a56668a2a665e4ea5a1594998c3995eb8a869bd1a4640a693cce875d",
+            "line_text" : "    #[cfg(target_endian = \"big\")]"
+         },
+         "source_review" : "macros",
+         "title" : "Configuration attributes on match arms"
+      },
+      {
+         "cause" : "function_pointer_types",
+         "code" : "E_UNSUPPORTED",
+         "column" : 71,
+         "disposition" : "primary",
+         "file_sha256" : "63ad29969e4f20dcfd7acc6fc08e60f9e3d90b1c3e574267ef274f56468464d7",
+         "line" : 1159,
+         "message" : "unsupported construct: function pointer",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/complete.rs",
+         "reason" : "The original function explicitly returns fn(I) -> IResult<I, f64, E>, selecting a concrete endian parser function in its match. The reported function-pointer type is a substantive source callable-type barrier. The separate match-arm cfg diagnostic in the same body is also retained as primary; neither error establishes support for the other's contract, and this later diagnostic is not treated as a recovery parent.",
+         "source_anchor" : {
+            "byte_offset" : 35336,
+            "file_bytes" : 57485,
+            "file_physical_lines" : 1970,
+            "file_sha256" : "63ad29969e4f20dcfd7acc6fc08e60f9e3d90b1c3e574267ef274f56468464d7",
+            "line_sha256" : "9f1485901109ef101dc3a6d7de6193b93801492975bd616e87177d78629e40f7",
+            "line_text" : "pub fn f64<I, E: ParseError<I>>(endian: crate::number::Endianness) -> fn(I) -> IResult<I, f64, E>"
+         },
+         "source_review" : "macros",
+         "title" : "Function-pointer result types"
+      },
+      {
+         "cause" : "match_arm_cfg_attribute",
+         "code" : "E_PARSE",
+         "column" : 5,
+         "disposition" : "primary",
+         "file_sha256" : "63ad29969e4f20dcfd7acc6fc08e60f9e3d90b1c3e574267ef274f56468464d7",
+         "line" : 1166,
+         "message" : "expected an identifier",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/complete.rs",
+         "reason" : "The original match on endian has ordinary Big and Little arms followed by #[cfg(target_endian = \"big\")] on the Native arm at this exact anchor, with a little-endian alternative immediately afterward. Parsing the next pattern encounters # where it expects an identifier; the missing match-arm attribute/configuration route is substantive. The separate function-pointer-result diagnostic for the enclosing function occurs later in the recorded diagnostic stream and cannot be an earlier recovery parent; the same match-arm syntax also fails independently in src/number/mod.rs. Keep this primary barrier visible without inferring any Cargo-equivalent target configuration.",
+         "source_anchor" : {
+            "byte_offset" : 35511,
+            "file_bytes" : 57485,
+            "file_physical_lines" : 1970,
+            "file_sha256" : "63ad29969e4f20dcfd7acc6fc08e60f9e3d90b1c3e574267ef274f56468464d7",
+            "line_sha256" : "5c762f55a56668a2a665e4ea5a1594998c3995eb8a869bd1a4640a693cce875d",
+            "line_text" : "    #[cfg(target_endian = \"big\")]"
+         },
+         "source_review" : "macros",
+         "title" : "Configuration attributes on match arms"
+      },
+      {
+         "cause" : "qualified_attribute_path",
+         "code" : "E_PARSE",
+         "column" : 10,
+         "disposition" : "primary",
+         "file_sha256" : "63ad29969e4f20dcfd7acc6fc08e60f9e3d90b1c3e574267ef274f56468464d7",
+         "line" : 1244,
+         "message" : "expected `]`, found `::`",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/complete.rs",
+         "reason" : "The exact original anchor is the namespaced tool attribute #[rustfmt::skip]. Its :: path separator is rejected while parsing the attribute. The surrounding enum, function, or method is a separate declaration, so this is a primary qualified-attribute syntax barrier rather than recovery from a prior source error. No claim about the containing declaration's semantic admission follows from classifying this metadata syntax.",
+         "source_anchor" : {
+            "byte_offset" : 37530,
+            "file_bytes" : 57485,
+            "file_physical_lines" : 1970,
+            "file_sha256" : "63ad29969e4f20dcfd7acc6fc08e60f9e3d90b1c3e574267ef274f56468464d7",
+            "line_sha256" : "b4573a85b16da6eb1bb4dc16b25e4ae830b262082a7a86014a80d5dcb5293bfa",
+            "line_text" : "#[rustfmt::skip]"
+         },
+         "source_review" : "macros",
+         "title" : "Namespaced rustfmt attribute"
+      },
+      {
+         "cause" : "higher_ranked_trait_bounds",
+         "code" : "E_UNSUPPORTED",
+         "column" : 6,
+         "disposition" : "primary",
+         "file_sha256" : "63ad29969e4f20dcfd7acc6fc08e60f9e3d90b1c3e574267ef274f56468464d7",
+         "line" : 1309,
+         "message" : "unsupported construct: for",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/complete.rs",
+         "reason" : "The unchanged where clause at this exact source anchor requires T: for<'a> Compare<&'a [u8]>, The for<'a> binder universally quantifies the reference argument lifetime of Compare, beyond an ordinary named lifetime parameter. This is a primary higher-ranked trait-bound requirement, not an ordinary loop or recovery from an earlier declaration; the containing function or impl remains unadmitted.",
+         "source_anchor" : {
+            "byte_offset" : 39567,
+            "file_bytes" : 57485,
+            "file_physical_lines" : 1970,
+            "file_sha256" : "63ad29969e4f20dcfd7acc6fc08e60f9e3d90b1c3e574267ef274f56468464d7",
+            "line_sha256" : "75ecaba39c94474ace1d46c6a3c52f3fd3f2e14da8054946695a178e7b92ab5a",
+            "line_text" : "  T: for<'a> Compare<&'a [u8]>,"
+         },
+         "source_review" : "macros",
+         "title" : "Higher-ranked lifetime trait bounds"
+      },
+      {
+         "cause" : "higher_ranked_trait_bounds",
+         "code" : "E_UNSUPPORTED",
+         "column" : 6,
+         "disposition" : "primary",
+         "file_sha256" : "63ad29969e4f20dcfd7acc6fc08e60f9e3d90b1c3e574267ef274f56468464d7",
+         "line" : 1415,
+         "message" : "unsupported construct: for",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/complete.rs",
+         "reason" : "The unchanged where clause at this exact source anchor requires T: for<'a> Compare<&'a [u8]>, The for<'a> binder universally quantifies the reference argument lifetime of Compare, beyond an ordinary named lifetime parameter. This is a primary higher-ranked trait-bound requirement, not an ordinary loop or recovery from an earlier declaration; the containing function or impl remains unadmitted.",
+         "source_anchor" : {
+            "byte_offset" : 42400,
+            "file_bytes" : 57485,
+            "file_physical_lines" : 1970,
+            "file_sha256" : "63ad29969e4f20dcfd7acc6fc08e60f9e3d90b1c3e574267ef274f56468464d7",
+            "line_sha256" : "75ecaba39c94474ace1d46c6a3c52f3fd3f2e14da8054946695a178e7b92ab5a",
+            "line_text" : "  T: for<'a> Compare<&'a [u8]>,"
+         },
+         "source_review" : "macros",
+         "title" : "Higher-ranked lifetime trait bounds"
+      },
+      {
+         "cause" : "higher_ranked_trait_bounds",
+         "code" : "E_UNSUPPORTED",
+         "column" : 6,
+         "disposition" : "primary",
+         "file_sha256" : "63ad29969e4f20dcfd7acc6fc08e60f9e3d90b1c3e574267ef274f56468464d7",
+         "line" : 1465,
+         "message" : "unsupported construct: for",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/complete.rs",
+         "reason" : "The unchanged where clause at this exact source anchor requires T: for<'a> Compare<&'a [u8]>, The for<'a> binder universally quantifies the reference argument lifetime of Compare, beyond an ordinary named lifetime parameter. This is a primary higher-ranked trait-bound requirement, not an ordinary loop or recovery from an earlier declaration; the containing function or impl remains unadmitted.",
+         "source_anchor" : {
+            "byte_offset" : 43711,
+            "file_bytes" : 57485,
+            "file_physical_lines" : 1970,
+            "file_sha256" : "63ad29969e4f20dcfd7acc6fc08e60f9e3d90b1c3e574267ef274f56468464d7",
+            "line_sha256" : "75ecaba39c94474ace1d46c6a3c52f3fd3f2e14da8054946695a178e7b92ab5a",
+            "line_text" : "  T: for<'a> Compare<&'a [u8]>,"
+         },
+         "source_review" : "macros",
+         "title" : "Higher-ranked lifetime trait bounds"
+      },
+      {
+         "cause" : "match_arm_cfg_attribute",
+         "code" : "E_PARSE",
+         "column" : 5,
+         "disposition" : "primary",
+         "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+         "line" : 1028,
+         "message" : "expected an identifier",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/mod.rs",
+         "reason" : "The original match on endian has ordinary Big and Little arms followed by #[cfg(target_endian = \"big\")] on the Native arm at this exact anchor, with a little-endian alternative immediately afterward. Parsing the next pattern encounters # where it expects an identifier; the missing match-arm attribute/configuration route is substantive. The enclosing function uses an impl Parser result and has no function-pointer diagnostic at this header. Keep this primary barrier visible without inferring any Cargo-equivalent target configuration.",
+         "source_anchor" : {
+            "byte_offset" : 30480,
+            "file_bytes" : 44892,
+            "file_physical_lines" : 1482,
+            "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+            "line_sha256" : "5c762f55a56668a2a665e4ea5a1594998c3995eb8a869bd1a4640a693cce875d",
+            "line_text" : "    #[cfg(target_endian = \"big\")]"
+         },
+         "source_review" : "macros",
+         "title" : "Configuration attributes on match arms"
+      },
+      {
+         "cause" : "match_arm_cfg_attribute",
+         "code" : "E_PARSE",
+         "column" : 5,
+         "disposition" : "primary",
+         "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+         "line" : 1069,
+         "message" : "expected an identifier",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/mod.rs",
+         "reason" : "The original match on endian has ordinary Big and Little arms followed by #[cfg(target_endian = \"big\")] on the Native arm at this exact anchor, with a little-endian alternative immediately afterward. Parsing the next pattern encounters # where it expects an identifier; the missing match-arm attribute/configuration route is substantive. The enclosing function uses an impl Parser result and has no function-pointer diagnostic at this header. Keep this primary barrier visible without inferring any Cargo-equivalent target configuration.",
+         "source_anchor" : {
+            "byte_offset" : 32034,
+            "file_bytes" : 44892,
+            "file_physical_lines" : 1482,
+            "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+            "line_sha256" : "5c762f55a56668a2a665e4ea5a1594998c3995eb8a869bd1a4640a693cce875d",
+            "line_text" : "    #[cfg(target_endian = \"big\")]"
+         },
+         "source_review" : "macros",
+         "title" : "Configuration attributes on match arms"
+      },
+      {
+         "cause" : "match_arm_cfg_attribute",
+         "code" : "E_PARSE",
+         "column" : 5,
+         "disposition" : "primary",
+         "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+         "line" : 1110,
+         "message" : "expected an identifier",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/mod.rs",
+         "reason" : "The original match on endian has ordinary Big and Little arms followed by #[cfg(target_endian = \"big\")] on the Native arm at this exact anchor, with a little-endian alternative immediately afterward. Parsing the next pattern encounters # where it expects an identifier; the missing match-arm attribute/configuration route is substantive. The enclosing function uses an impl Parser result and has no function-pointer diagnostic at this header. Keep this primary barrier visible without inferring any Cargo-equivalent target configuration.",
+         "source_anchor" : {
+            "byte_offset" : 33702,
+            "file_bytes" : 44892,
+            "file_physical_lines" : 1482,
+            "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+            "line_sha256" : "5c762f55a56668a2a665e4ea5a1594998c3995eb8a869bd1a4640a693cce875d",
+            "line_text" : "    #[cfg(target_endian = \"big\")]"
+         },
+         "source_review" : "macros",
+         "title" : "Configuration attributes on match arms"
+      },
+      {
+         "cause" : "match_arm_cfg_attribute",
+         "code" : "E_PARSE",
+         "column" : 5,
+         "disposition" : "primary",
+         "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+         "line" : 1239,
+         "message" : "expected an identifier",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/mod.rs",
+         "reason" : "The original match on endian has ordinary Big and Little arms followed by #[cfg(target_endian = \"big\")] on the Native arm at this exact anchor, with a little-endian alternative immediately afterward. Parsing the next pattern encounters # where it expects an identifier; the missing match-arm attribute/configuration route is substantive. The enclosing function uses an impl Parser result and has no function-pointer diagnostic at this header. Keep this primary barrier visible without inferring any Cargo-equivalent target configuration.",
+         "source_anchor" : {
+            "byte_offset" : 37868,
+            "file_bytes" : 44892,
+            "file_physical_lines" : 1482,
+            "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+            "line_sha256" : "5c762f55a56668a2a665e4ea5a1594998c3995eb8a869bd1a4640a693cce875d",
+            "line_text" : "    #[cfg(target_endian = \"big\")]"
+         },
+         "source_review" : "macros",
+         "title" : "Configuration attributes on match arms"
+      },
+      {
+         "cause" : "match_arm_cfg_attribute",
+         "code" : "E_PARSE",
+         "column" : 5,
+         "disposition" : "primary",
+         "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+         "line" : 1280,
+         "message" : "expected an identifier",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/mod.rs",
+         "reason" : "The original match on endian has ordinary Big and Little arms followed by #[cfg(target_endian = \"big\")] on the Native arm at this exact anchor, with a little-endian alternative immediately afterward. Parsing the next pattern encounters # where it expects an identifier; the missing match-arm attribute/configuration route is substantive. The enclosing function uses an impl Parser result and has no function-pointer diagnostic at this header. Keep this primary barrier visible without inferring any Cargo-equivalent target configuration.",
+         "source_anchor" : {
+            "byte_offset" : 39398,
+            "file_bytes" : 44892,
+            "file_physical_lines" : 1482,
+            "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+            "line_sha256" : "5c762f55a56668a2a665e4ea5a1594998c3995eb8a869bd1a4640a693cce875d",
+            "line_text" : "    #[cfg(target_endian = \"big\")]"
+         },
+         "source_review" : "macros",
+         "title" : "Configuration attributes on match arms"
+      },
+      {
+         "cause" : "qualified_attribute_path",
+         "code" : "E_PARSE",
+         "column" : 10,
+         "disposition" : "primary",
+         "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+         "line" : 1304,
+         "message" : "expected `]`, found `::`",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/mod.rs",
+         "reason" : "The exact original anchor is the namespaced tool attribute #[rustfmt::skip]. Its :: path separator is rejected while parsing the attribute. The surrounding enum, function, or method is a separate declaration, so this is a primary qualified-attribute syntax barrier rather than recovery from a prior source error. No claim about the containing declaration's semantic admission follows from classifying this metadata syntax.",
+         "source_anchor" : {
+            "byte_offset" : 40250,
+            "file_bytes" : 44892,
+            "file_physical_lines" : 1482,
+            "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+            "line_sha256" : "b4573a85b16da6eb1bb4dc16b25e4ae830b262082a7a86014a80d5dcb5293bfa",
+            "line_text" : "#[rustfmt::skip]"
+         },
+         "source_review" : "macros",
+         "title" : "Namespaced rustfmt attribute"
+      },
+      {
+         "cause" : "higher_ranked_trait_bounds",
+         "code" : "E_UNSUPPORTED",
+         "column" : 6,
+         "disposition" : "primary",
+         "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+         "line" : 1356,
+         "message" : "unsupported construct: for",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/mod.rs",
+         "reason" : "The unchanged where clause at this exact source anchor requires T: for<'a> Compare<&'a [u8]>, The for<'a> binder universally quantifies the reference argument lifetime of Compare, beyond an ordinary named lifetime parameter. This is a primary higher-ranked trait-bound requirement, not an ordinary loop or recovery from an earlier declaration; the containing function or impl remains unadmitted.",
+         "source_anchor" : {
+            "byte_offset" : 41883,
+            "file_bytes" : 44892,
+            "file_physical_lines" : 1482,
+            "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+            "line_sha256" : "75ecaba39c94474ace1d46c6a3c52f3fd3f2e14da8054946695a178e7b92ab5a",
+            "line_text" : "  T: for<'a> Compare<&'a [u8]>,"
+         },
+         "source_review" : "macros",
+         "title" : "Higher-ranked lifetime trait bounds"
+      },
+      {
+         "cause" : "higher_ranked_trait_bounds",
+         "code" : "E_UNSUPPORTED",
+         "column" : 6,
+         "disposition" : "primary",
+         "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+         "line" : 1371,
+         "message" : "unsupported construct: for",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/mod.rs",
+         "reason" : "The unchanged where clause at this exact source anchor requires T: for<'a> Compare<&'a [u8]>, The for<'a> binder universally quantifies the reference argument lifetime of Compare, beyond an ordinary named lifetime parameter. This is a primary higher-ranked trait-bound requirement, not an ordinary loop or recovery from an earlier declaration; the containing function or impl remains unadmitted.",
+         "source_anchor" : {
+            "byte_offset" : 42259,
+            "file_bytes" : 44892,
+            "file_physical_lines" : 1482,
+            "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+            "line_sha256" : "75ecaba39c94474ace1d46c6a3c52f3fd3f2e14da8054946695a178e7b92ab5a",
+            "line_text" : "  T: for<'a> Compare<&'a [u8]>,"
+         },
+         "source_review" : "macros",
+         "title" : "Higher-ranked lifetime trait bounds"
+      },
+      {
+         "cause" : "higher_ranked_trait_bounds",
+         "code" : "E_UNSUPPORTED",
+         "column" : 6,
+         "disposition" : "primary",
+         "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+         "line" : 1391,
+         "message" : "unsupported construct: for",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/mod.rs",
+         "reason" : "The unchanged where clause at this exact source anchor requires I: for<'a> Compare<&'a [u8]>, The for<'a> binder universally quantifies the reference argument lifetime of Compare, beyond an ordinary named lifetime parameter. This is a primary higher-ranked trait-bound requirement, not an ordinary loop or recovery from an earlier declaration; the containing function or impl remains unadmitted.",
+         "source_anchor" : {
+            "byte_offset" : 42639,
+            "file_bytes" : 44892,
+            "file_physical_lines" : 1482,
+            "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+            "line_sha256" : "ea79ea068cf99514807028de1c69605649fbf45848b5f2fd245190aad81daf2c",
+            "line_text" : "  I: for<'a> Compare<&'a [u8]>,"
+         },
+         "source_review" : "macros",
+         "title" : "Higher-ranked lifetime trait bounds"
+      },
+      {
+         "cause" : "match_arm_cfg_attribute",
+         "code" : "E_PARSE",
+         "column" : 5,
+         "disposition" : "primary",
+         "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+         "line" : 721,
+         "message" : "expected an identifier",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/mod.rs",
+         "reason" : "The original match on endian has ordinary Big and Little arms followed by #[cfg(target_endian = \"big\")] on the Native arm at this exact anchor, with a little-endian alternative immediately afterward. Parsing the next pattern encounters # where it expects an identifier; the missing match-arm attribute/configuration route is substantive. The enclosing function uses an impl Parser result and has no function-pointer diagnostic at this header. Keep this primary barrier visible without inferring any Cargo-equivalent target configuration.",
+         "source_anchor" : {
+            "byte_offset" : 19448,
+            "file_bytes" : 44892,
+            "file_physical_lines" : 1482,
+            "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+            "line_sha256" : "5c762f55a56668a2a665e4ea5a1594998c3995eb8a869bd1a4640a693cce875d",
+            "line_text" : "    #[cfg(target_endian = \"big\")]"
+         },
+         "source_review" : "macros",
+         "title" : "Configuration attributes on match arms"
+      },
+      {
+         "cause" : "match_arm_cfg_attribute",
+         "code" : "E_PARSE",
+         "column" : 5,
+         "disposition" : "primary",
+         "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+         "line" : 761,
+         "message" : "expected an identifier",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/mod.rs",
+         "reason" : "The original match on endian has ordinary Big and Little arms followed by #[cfg(target_endian = \"big\")] on the Native arm at this exact anchor, with a little-endian alternative immediately afterward. Parsing the next pattern encounters # where it expects an identifier; the missing match-arm attribute/configuration route is substantive. The enclosing function uses an impl Parser result and has no function-pointer diagnostic at this header. Keep this primary barrier visible without inferring any Cargo-equivalent target configuration.",
+         "source_anchor" : {
+            "byte_offset" : 20847,
+            "file_bytes" : 44892,
+            "file_physical_lines" : 1482,
+            "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+            "line_sha256" : "5c762f55a56668a2a665e4ea5a1594998c3995eb8a869bd1a4640a693cce875d",
+            "line_text" : "    #[cfg(target_endian = \"big\")]"
+         },
+         "source_review" : "macros",
+         "title" : "Configuration attributes on match arms"
+      },
+      {
+         "cause" : "match_arm_cfg_attribute",
+         "code" : "E_PARSE",
+         "column" : 5,
+         "disposition" : "primary",
+         "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+         "line" : 801,
+         "message" : "expected an identifier",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/mod.rs",
+         "reason" : "The original match on endian has ordinary Big and Little arms followed by #[cfg(target_endian = \"big\")] on the Native arm at this exact anchor, with a little-endian alternative immediately afterward. Parsing the next pattern encounters # where it expects an identifier; the missing match-arm attribute/configuration route is substantive. The enclosing function uses an impl Parser result and has no function-pointer diagnostic at this header. Keep this primary barrier visible without inferring any Cargo-equivalent target configuration.",
+         "source_anchor" : {
+            "byte_offset" : 22259,
+            "file_bytes" : 44892,
+            "file_physical_lines" : 1482,
+            "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+            "line_sha256" : "5c762f55a56668a2a665e4ea5a1594998c3995eb8a869bd1a4640a693cce875d",
+            "line_text" : "    #[cfg(target_endian = \"big\")]"
+         },
+         "source_review" : "macros",
+         "title" : "Configuration attributes on match arms"
+      },
+      {
+         "cause" : "match_arm_cfg_attribute",
+         "code" : "E_PARSE",
+         "column" : 5,
+         "disposition" : "primary",
+         "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+         "line" : 841,
+         "message" : "expected an identifier",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/mod.rs",
+         "reason" : "The original match on endian has ordinary Big and Little arms followed by #[cfg(target_endian = \"big\")] on the Native arm at this exact anchor, with a little-endian alternative immediately afterward. Parsing the next pattern encounters # where it expects an identifier; the missing match-arm attribute/configuration route is substantive. The enclosing function uses an impl Parser result and has no function-pointer diagnostic at this header. Keep this primary barrier visible without inferring any Cargo-equivalent target configuration.",
+         "source_anchor" : {
+            "byte_offset" : 23719,
+            "file_bytes" : 44892,
+            "file_physical_lines" : 1482,
+            "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+            "line_sha256" : "5c762f55a56668a2a665e4ea5a1594998c3995eb8a869bd1a4640a693cce875d",
+            "line_text" : "    #[cfg(target_endian = \"big\")]"
+         },
+         "source_review" : "macros",
+         "title" : "Configuration attributes on match arms"
+      },
+      {
+         "cause" : "match_arm_cfg_attribute",
+         "code" : "E_PARSE",
+         "column" : 5,
+         "disposition" : "primary",
+         "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+         "line" : 881,
+         "message" : "expected an identifier",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/mod.rs",
+         "reason" : "The original match on endian has ordinary Big and Little arms followed by #[cfg(target_endian = \"big\")] on the Native arm at this exact anchor, with a little-endian alternative immediately afterward. Parsing the next pattern encounters # where it expects an identifier; the missing match-arm attribute/configuration route is substantive. The enclosing function uses an impl Parser result and has no function-pointer diagnostic at this header. Keep this primary barrier visible without inferring any Cargo-equivalent target configuration.",
+         "source_anchor" : {
+            "byte_offset" : 25293,
+            "file_bytes" : 44892,
+            "file_physical_lines" : 1482,
+            "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+            "line_sha256" : "5c762f55a56668a2a665e4ea5a1594998c3995eb8a869bd1a4640a693cce875d",
+            "line_text" : "    #[cfg(target_endian = \"big\")]"
+         },
+         "source_review" : "macros",
+         "title" : "Configuration attributes on match arms"
+      },
+      {
+         "cause" : "match_arm_cfg_attribute",
+         "code" : "E_PARSE",
+         "column" : 5,
+         "disposition" : "primary",
+         "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+         "line" : 946,
+         "message" : "expected an identifier",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/mod.rs",
+         "reason" : "The original match on endian has ordinary Big and Little arms followed by #[cfg(target_endian = \"big\")] on the Native arm at this exact anchor, with a little-endian alternative immediately afterward. Parsing the next pattern encounters # where it expects an identifier; the missing match-arm attribute/configuration route is substantive. The enclosing function uses an impl Parser result and has no function-pointer diagnostic at this header. Keep this primary barrier visible without inferring any Cargo-equivalent target configuration.",
+         "source_anchor" : {
+            "byte_offset" : 27480,
+            "file_bytes" : 44892,
+            "file_physical_lines" : 1482,
+            "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+            "line_sha256" : "5c762f55a56668a2a665e4ea5a1594998c3995eb8a869bd1a4640a693cce875d",
+            "line_text" : "    #[cfg(target_endian = \"big\")]"
+         },
+         "source_review" : "macros",
+         "title" : "Configuration attributes on match arms"
+      },
+      {
+         "cause" : "match_arm_cfg_attribute",
+         "code" : "E_PARSE",
+         "column" : 5,
+         "disposition" : "primary",
+         "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+         "line" : 987,
+         "message" : "expected an identifier",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/mod.rs",
+         "reason" : "The original match on endian has ordinary Big and Little arms followed by #[cfg(target_endian = \"big\")] on the Native arm at this exact anchor, with a little-endian alternative immediately afterward. Parsing the next pattern encounters # where it expects an identifier; the missing match-arm attribute/configuration route is substantive. The enclosing function uses an impl Parser result and has no function-pointer diagnostic at this header. Keep this primary barrier visible without inferring any Cargo-equivalent target configuration.",
+         "source_anchor" : {
+            "byte_offset" : 28974,
+            "file_bytes" : 44892,
+            "file_physical_lines" : 1482,
+            "file_sha256" : "353111b0cadc422ee4b89ac4881262187276a39f5a65d0f391fb3f2df7c9d35b",
+            "line_sha256" : "5c762f55a56668a2a665e4ea5a1594998c3995eb8a869bd1a4640a693cce875d",
+            "line_text" : "    #[cfg(target_endian = \"big\")]"
+         },
+         "source_review" : "macros",
+         "title" : "Configuration attributes on match arms"
+      },
+      {
+         "cause" : "function_pointer_types",
+         "code" : "E_UNSUPPORTED",
+         "column" : 71,
+         "disposition" : "primary",
+         "file_sha256" : "a18ff0a3aaa79d68956c0dae1ecd6bc997edc0ea2b568208a6a2542acd80bfe5",
+         "line" : 1090,
+         "message" : "unsupported construct: function pointer",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/streaming.rs",
+         "reason" : "The original function explicitly returns fn(I) -> IResult<I, f32, E>, selecting a concrete endian parser function in its match. The reported function-pointer type is a substantive source callable-type barrier. The separate match-arm cfg diagnostic in the same body is also retained as primary; neither error establishes support for the other's contract, and this later diagnostic is not treated as a recovery parent.",
+         "source_anchor" : {
+            "byte_offset" : 34300,
+            "file_bytes" : 62592,
+            "file_physical_lines" : 2066,
+            "file_sha256" : "a18ff0a3aaa79d68956c0dae1ecd6bc997edc0ea2b568208a6a2542acd80bfe5",
+            "line_sha256" : "705b4857cb2bbc06ddb49e6d1ecf66b2fe2a9cf91b7647a163c1541b3db73704",
+            "line_text" : "pub fn f32<I, E: ParseError<I>>(endian: crate::number::Endianness) -> fn(I) -> IResult<I, f32, E>"
+         },
+         "source_review" : "macros",
+         "title" : "Function-pointer result types"
+      },
+      {
+         "cause" : "match_arm_cfg_attribute",
+         "code" : "E_PARSE",
+         "column" : 5,
+         "disposition" : "primary",
+         "file_sha256" : "a18ff0a3aaa79d68956c0dae1ecd6bc997edc0ea2b568208a6a2542acd80bfe5",
+         "line" : 1097,
+         "message" : "expected an identifier",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/streaming.rs",
+         "reason" : "The original match on endian has ordinary Big and Little arms followed by #[cfg(target_endian = \"big\")] on the Native arm at this exact anchor, with a little-endian alternative immediately afterward. Parsing the next pattern encounters # where it expects an identifier; the missing match-arm attribute/configuration route is substantive. The separate function-pointer-result diagnostic for the enclosing function occurs later in the recorded diagnostic stream and cannot be an earlier recovery parent; the same match-arm syntax also fails independently in src/number/mod.rs. Keep this primary barrier visible without inferring any Cargo-equivalent target configuration.",
+         "source_anchor" : {
+            "byte_offset" : 34475,
+            "file_bytes" : 62592,
+            "file_physical_lines" : 2066,
+            "file_sha256" : "a18ff0a3aaa79d68956c0dae1ecd6bc997edc0ea2b568208a6a2542acd80bfe5",
+            "line_sha256" : "5c762f55a56668a2a665e4ea5a1594998c3995eb8a869bd1a4640a693cce875d",
+            "line_text" : "    #[cfg(target_endian = \"big\")]"
+         },
+         "source_review" : "macros",
+         "title" : "Configuration attributes on match arms"
+      },
+      {
+         "cause" : "function_pointer_types",
+         "code" : "E_UNSUPPORTED",
+         "column" : 71,
+         "disposition" : "primary",
+         "file_sha256" : "a18ff0a3aaa79d68956c0dae1ecd6bc997edc0ea2b568208a6a2542acd80bfe5",
+         "line" : 1129,
+         "message" : "unsupported construct: function pointer",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/streaming.rs",
+         "reason" : "The original function explicitly returns fn(I) -> IResult<I, f64, E>, selecting a concrete endian parser function in its match. The reported function-pointer type is a substantive source callable-type barrier. The separate match-arm cfg diagnostic in the same body is also retained as primary; neither error establishes support for the other's contract, and this later diagnostic is not treated as a recovery parent.",
+         "source_anchor" : {
+            "byte_offset" : 35738,
+            "file_bytes" : 62592,
+            "file_physical_lines" : 2066,
+            "file_sha256" : "a18ff0a3aaa79d68956c0dae1ecd6bc997edc0ea2b568208a6a2542acd80bfe5",
+            "line_sha256" : "9f1485901109ef101dc3a6d7de6193b93801492975bd616e87177d78629e40f7",
+            "line_text" : "pub fn f64<I, E: ParseError<I>>(endian: crate::number::Endianness) -> fn(I) -> IResult<I, f64, E>"
+         },
+         "source_review" : "macros",
+         "title" : "Function-pointer result types"
+      },
+      {
+         "cause" : "match_arm_cfg_attribute",
+         "code" : "E_PARSE",
+         "column" : 5,
+         "disposition" : "primary",
+         "file_sha256" : "a18ff0a3aaa79d68956c0dae1ecd6bc997edc0ea2b568208a6a2542acd80bfe5",
+         "line" : 1136,
+         "message" : "expected an identifier",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/streaming.rs",
+         "reason" : "The original match on endian has ordinary Big and Little arms followed by #[cfg(target_endian = \"big\")] on the Native arm at this exact anchor, with a little-endian alternative immediately afterward. Parsing the next pattern encounters # where it expects an identifier; the missing match-arm attribute/configuration route is substantive. The separate function-pointer-result diagnostic for the enclosing function occurs later in the recorded diagnostic stream and cannot be an earlier recovery parent; the same match-arm syntax also fails independently in src/number/mod.rs. Keep this primary barrier visible without inferring any Cargo-equivalent target configuration.",
+         "source_anchor" : {
+            "byte_offset" : 35913,
+            "file_bytes" : 62592,
+            "file_physical_lines" : 2066,
+            "file_sha256" : "a18ff0a3aaa79d68956c0dae1ecd6bc997edc0ea2b568208a6a2542acd80bfe5",
+            "line_sha256" : "5c762f55a56668a2a665e4ea5a1594998c3995eb8a869bd1a4640a693cce875d",
+            "line_text" : "    #[cfg(target_endian = \"big\")]"
+         },
+         "source_review" : "macros",
+         "title" : "Configuration attributes on match arms"
+      },
+      {
+         "cause" : "qualified_attribute_path",
+         "code" : "E_PARSE",
+         "column" : 10,
+         "disposition" : "primary",
+         "file_sha256" : "a18ff0a3aaa79d68956c0dae1ecd6bc997edc0ea2b568208a6a2542acd80bfe5",
+         "line" : 1211,
+         "message" : "expected `]`, found `::`",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/streaming.rs",
+         "reason" : "The exact original anchor is the namespaced tool attribute #[rustfmt::skip]. Its :: path separator is rejected while parsing the attribute. The surrounding enum, function, or method is a separate declaration, so this is a primary qualified-attribute syntax barrier rather than recovery from a prior source error. No claim about the containing declaration's semantic admission follows from classifying this metadata syntax.",
+         "source_anchor" : {
+            "byte_offset" : 37947,
+            "file_bytes" : 62592,
+            "file_physical_lines" : 2066,
+            "file_sha256" : "a18ff0a3aaa79d68956c0dae1ecd6bc997edc0ea2b568208a6a2542acd80bfe5",
+            "line_sha256" : "b4573a85b16da6eb1bb4dc16b25e4ae830b262082a7a86014a80d5dcb5293bfa",
+            "line_text" : "#[rustfmt::skip]"
+         },
+         "source_review" : "macros",
+         "title" : "Namespaced rustfmt attribute"
+      },
+      {
+         "cause" : "higher_ranked_trait_bounds",
+         "code" : "E_UNSUPPORTED",
+         "column" : 6,
+         "disposition" : "primary",
+         "file_sha256" : "a18ff0a3aaa79d68956c0dae1ecd6bc997edc0ea2b568208a6a2542acd80bfe5",
+         "line" : 1276,
+         "message" : "unsupported construct: for",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/streaming.rs",
+         "reason" : "The unchanged where clause at this exact source anchor requires T: for<'a> Compare<&'a [u8]>, The for<'a> binder universally quantifies the reference argument lifetime of Compare, beyond an ordinary named lifetime parameter. This is a primary higher-ranked trait-bound requirement, not an ordinary loop or recovery from an earlier declaration; the containing function or impl remains unadmitted.",
+         "source_anchor" : {
+            "byte_offset" : 40028,
+            "file_bytes" : 62592,
+            "file_physical_lines" : 2066,
+            "file_sha256" : "a18ff0a3aaa79d68956c0dae1ecd6bc997edc0ea2b568208a6a2542acd80bfe5",
+            "line_sha256" : "75ecaba39c94474ace1d46c6a3c52f3fd3f2e14da8054946695a178e7b92ab5a",
+            "line_text" : "  T: for<'a> Compare<&'a [u8]>,"
+         },
+         "source_review" : "macros",
+         "title" : "Higher-ranked lifetime trait bounds"
+      },
+      {
+         "cause" : "higher_ranked_trait_bounds",
+         "code" : "E_UNSUPPORTED",
+         "column" : 6,
+         "disposition" : "primary",
+         "file_sha256" : "a18ff0a3aaa79d68956c0dae1ecd6bc997edc0ea2b568208a6a2542acd80bfe5",
+         "line" : 1383,
+         "message" : "unsupported construct: for",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/streaming.rs",
+         "reason" : "The unchanged where clause at this exact source anchor requires T: for<'a> Compare<&'a [u8]>, The for<'a> binder universally quantifies the reference argument lifetime of Compare, beyond an ordinary named lifetime parameter. This is a primary higher-ranked trait-bound requirement, not an ordinary loop or recovery from an earlier declaration; the containing function or impl remains unadmitted.",
+         "source_anchor" : {
+            "byte_offset" : 42919,
+            "file_bytes" : 62592,
+            "file_physical_lines" : 2066,
+            "file_sha256" : "a18ff0a3aaa79d68956c0dae1ecd6bc997edc0ea2b568208a6a2542acd80bfe5",
+            "line_sha256" : "75ecaba39c94474ace1d46c6a3c52f3fd3f2e14da8054946695a178e7b92ab5a",
+            "line_text" : "  T: for<'a> Compare<&'a [u8]>,"
+         },
+         "source_review" : "macros",
+         "title" : "Higher-ranked lifetime trait bounds"
+      },
+      {
+         "cause" : "higher_ranked_trait_bounds",
+         "code" : "E_UNSUPPORTED",
+         "column" : 6,
+         "disposition" : "primary",
+         "file_sha256" : "a18ff0a3aaa79d68956c0dae1ecd6bc997edc0ea2b568208a6a2542acd80bfe5",
+         "line" : 1433,
+         "message" : "unsupported construct: for",
+         "observed_roots" : [
+            "src/lib.rs"
+         ],
+         "owner" : "language",
+         "package" : "nom",
+         "path" : "src/number/streaming.rs",
+         "reason" : "The unchanged where clause at this exact source anchor requires T: for<'a> Compare<&'a [u8]>, The for<'a> binder universally quantifies the reference argument lifetime of Compare, beyond an ordinary named lifetime parameter. This is a primary higher-ranked trait-bound requirement, not an ordinary loop or recovery from an earlier declaration; the containing function or impl remains unadmitted.",
+         "source_anchor" : {
+            "byte_offset" : 44263,
+            "file_bytes" : 62592,
+            "file_physical_lines" : 2066,
+            "file_sha256" : "a18ff0a3aaa79d68956c0dae1ecd6bc997edc0ea2b568208a6a2542acd80bfe5",
+            "line_sha256" : "75ecaba39c94474ace1d46c6a3c52f3fd3f2e14da8054946695a178e7b92ab5a",
+            "line_text" : "  T: for<'a> Compare<&'a [u8]>,"
+         },
+         "source_review" : "macros",
+         "title" : "Higher-ranked lifetime trait bounds"
+      }
+   ]
+}

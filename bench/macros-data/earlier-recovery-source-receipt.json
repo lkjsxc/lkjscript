@@ -1,0 +1,100 @@
+{
+  "source": "120ec741475d66087ff05fb5ffb5ce084497f236",
+  "base": "d8d72a5d9ec3bed4e2df1af63c3dae6696cbf214",
+  "producer": {
+    "path": "/home/coder/workspace/lkjscript-programs-next-macro-recovery-20261118/target/lkjscript-macro-recovery",
+    "sha256": "44ed0a2d59aed9530d63c2d292610ba9952ea48ce6d4c6d4a6d97a8aa841b172",
+    "self_sha256": "44ed0a2d59aed9530d63c2d292610ba9952ea48ce6d4c6d4a6d97a8aa841b172",
+    "bootstrap": "/home/coder/workspace/lkjscript-programs-next-macro-integration-20261118/target/lkjscript",
+    "bootstrap_sha256": "5d8792757af98fa373f17520f1ed21fbece3c2194f2bf6b68bcc8ef4936312d1",
+    "self_path": "/home/coder/workspace/lkjscript-programs-next-macro-recovery-20261118/target/lkjscript-macro-recovery-self"
+  },
+  "proofs": {
+    "source_core_contracts": 735,
+    "source_core_failures": 0,
+    "macro_cases": 24,
+    "engine_routes": 48,
+    "rust_values_or_outputs": 3,
+    "rust_verdicts": 17,
+    "separate_rust_root_outputs": [
+      "declarative_macros",
+      "nom_tuple_macros"
+    ],
+    "separate_rust_module_witness": true,
+    "nom_parser_fixture_sha256": "32bab69f78fbcda89e5e7b8e69bb2d4e9c1bdda5300b458ff64611a43312cf71"
+  },
+  "logs": [
+    {
+      "path": "/home/coder/workspace/lkjscript-programs-next-macro-recovery-20261118/target/macro-recovery-before.log",
+      "sha256": "25c5b75b847b2b25824c5d7fa6f0d5117ad850652ec643a339a9910595bddb54"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript-programs-next-macro-recovery-20261118/target/macro-recovery-after-02.log",
+      "sha256": "4ddf2f18ede191a8ce9759eaf568a5624e32bcd90ee4d2e5cd46e5ea250e75a9"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript-programs-next-macro-recovery-20261118/target/macro-recovery-build-02.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript-programs-next-macro-recovery-20261118/target/macro-recovery-self-01.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript-programs-next-macro-recovery-20261118/target/macro-recovery-semantic-build-01.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript-programs-next-macro-recovery-20261118/target/macro-recovery-semantic-01.log",
+      "sha256": "ded709f87fb89b732330dc3324989f09a2ba0a23acea2e5c8dabbcac8a4fb081"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript-programs-next-macro-recovery-20261118/target/macro-recovery-focused-01.log",
+      "sha256": "edab15f1c540c33dddf11eceda6a73370afe336652e9f6af1fb3d01ede917edf"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript-programs-next-macro-recovery-20261118/target/macro-recovery-rust-01.log",
+      "sha256": "620481cf0bd59bc57a15086d8bdf8f933f78e287a25d4684921a1d8347105479"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript-programs-next-macro-recovery-20261118/target/macro-recovery-declarative-01.log",
+      "sha256": "bf83035624a49a43f2694e02c23a812e9c48bfe32551c5f475dd566cea4edb3f"
+    },
+    {
+      "path": "/home/coder/workspace/lkjscript-programs-next-macro-recovery-20261118/target/macro-recovery-origin-01.log",
+      "sha256": "2b24cadc0dd583621f968e5e19635d87bf1934ff214a76664c154bf14dbe8083"
+    }
+  ],
+  "census": "Parent retakes with this producer",
+  "full_gate": "Parent only; not run in this tree",
+  "macro_origin": {
+    "result": "passed",
+    "duration_seconds": 296.956,
+    "malformed_origins": 25,
+    "engines": [
+      "native",
+      "interpreter"
+    ],
+    "fixture": "/home/coder/workspace/lkjscript-programs-next-macro-recovery-20261118/target/macro-origins.CjvMKH",
+    "log": "/home/coder/workspace/lkjscript-programs-next-macro-recovery-20261118/target/macro-recovery-origin-01.log",
+    "log_sha256": "2b24cadc0dd583621f968e5e19635d87bf1934ff214a76664c154bf14dbe8083",
+    "request_id": "programs-deadline-macro-recovery-origin-proof-450"
+  },
+  "migration": "Parent fixture-only f4ff2b8e9977b817a2161bcbcaf590cce4711211 is intentionally separate",
+  "initial_receipt": {
+    "path": "/home/coder/workspace/lkjscript-programs-next-macro-recovery-20261118/target/macro-recovery-receipt.json",
+    "sha256": "359543c2f1c0f830576bc31c6e2c55e582b927279f4beb619911ca144ac198b0"
+  },
+  "working_tree_clean": true,
+  "repeat_commands": [
+    "BOOTSTRAP build src/main.lkj --library-dir library --runtime-source library/runtime.lkj --inline-limit 64 --no-store -o target/lkjscript-macro-recovery",
+    "./target/lkjscript-macro-recovery build src/main.lkj --library-dir library --runtime-source library/runtime.lkj --inline-limit 64 --no-store -o target/lkjscript-macro-recovery-self",
+    "cmp target/lkjscript-macro-recovery target/lkjscript-macro-recovery-self",
+    "./target/lkjscript-macro-recovery build src/semantic_main.lkj --library-dir library --runtime-source library/runtime.lkj --no-store -o target/macro-recovery-semantic",
+    "./target/macro-recovery-semantic closed-report",
+    "./target/lkjscript-macro-recovery test target/macro-recovery-cases --jobs 1 --stats",
+    "./target/lkjscript-macro-recovery test target/macro-recovery-cases --jobs 1 --witness RUSTC",
+    "bash tools/declarative-macro-test.sh target/lkjscript-macro-recovery --witness RUSTC",
+    "LKJSCRIPT_MACRO_KEEP=1 bash tools/macro-origin-test.sh target/lkjscript-macro-recovery"
+  ]
+}

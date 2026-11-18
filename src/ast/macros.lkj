@@ -1,0 +1,104 @@
+//! Declarative expansion is producer data; none of these identities enter checked IR.
+use super::{ExprId, FileId, Item, ModuleId, Span};
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct MacroToken {
+    pub kind: u8,
+    pub text: String,
+    /// Undecoded literal token spelling; empty for other token kinds.
+    pub literal_spelling: String,
+    /// A real source anchor (usually the invocation for template tokens).
+    pub span: Span,
+    /// The exact spelling that supplied this token, before expansion projection.
+    pub origin: Span,
+    pub context: usize,
+    /// Index into Program.macro_captures; expressions stay opaque and materialize lazily.
+    pub expression: Option<usize>,
+}
+#[derive(Clone, PartialEq, Eq)]
+pub struct MacroDefinition {
+    pub name: String,
+    pub scope: ModuleId,
+    pub span: Span,
+    pub name_span: Span,
+    pub body: Vec<MacroToken>,
+    pub exported: bool,
+    pub local_inner: bool,
+}
+#[derive(Clone, PartialEq, Eq)]
+pub struct MacroInvocation {
+    pub name: String,
+    pub scope: ModuleId,
+    pub span: Span,
+    pub name_span: Span,
+    pub tokens: Vec<MacroToken>,
+    pub self_context: Option<usize>,
+    pub parent: Option<usize>,
+    pub item: bool,
+}
+#[derive(Clone, PartialEq, Eq)]
+pub struct MacroExpansion {
+    pub start: MacroInventory,
+    pub end: MacroInventory,
+    pub definition: usize,
+    pub invocation: usize,
+    pub context: usize,
+    pub parent: Option<usize>,
+    pub types: Vec<usize>,
+    pub expressions: Vec<usize>,
+    pub patterns: Vec<usize>,
+    pub functions: Vec<usize>,
+    pub implementations: Vec<usize>,
+    pub items: Vec<Item>,
+}
+
+/// The marker cannot be spelled by a source identifier. Captures keep their old context.
+/// Its first character is not the dollar sign reserved for internal temporaries.
+pub fn local_name(name: &str, context: usize) -> String {
+    if context == 0usize || name == "self" { name.to_string() }
+    else { format!("__macro${context}${name}") }
+}
+/// Only global name resolution removes a mark; local lookup always uses the whole key.
+pub fn source_name(name: &str) -> &str {
+    if !name.starts_with("__macro$") { return name; }
+    let tail = &name[8usize..];
+    match tail.find('$') { Some(at) => &tail[at + 1usize..], None => name }
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct MacroCapture {
+    pub materializations: Vec<ExprId>,
+    pub name: String,
+    pub path: Vec<usize>,
+    pub invocation: usize,
+    pub tokens: Vec<MacroToken>,
+    pub scope: ModuleId,
+    pub span: Span,
+    pub self_context: Option<usize>,
+    pub parent: Option<usize>,
+    pub expression: Option<ExprId>,
+}
+#[derive(Clone, PartialEq, Eq)]
+pub struct MacroAlias {
+    pub expression: ExprId,
+    pub original: super::ExprNode,
+    pub expanded: ExprId,
+    pub invocation: usize,
+}
+#[derive(Clone, Default, PartialEq, Eq)]
+pub struct MacroInventory {
+    pub types: usize, pub exprs: usize, pub patterns: usize, pub blocks: usize,
+    pub functions: usize, pub structs: usize, pub enums: usize, pub traits: usize,
+    pub impls: usize, pub uses: usize, pub modules: usize, pub aliases: usize,
+    pub constants: usize, pub scopes: usize, pub macro_invocations: usize,
+    pub macro_captures: usize, pub attrs: usize, pub macro_definitions: usize,
+}
+pub fn inventory(program: &super::Program) -> MacroInventory {
+    MacroInventory { types: program.types.len(), exprs: program.exprs.len(),
+        patterns: program.patterns.len(), blocks: program.blocks.len(), functions: program.functions.len(),
+        structs: program.structs.len(), enums: program.enums.len(), traits: program.traits.len(),
+        impls: program.impls.len(), uses: program.uses.len(), modules: program.modules.len(),
+        aliases: program.aliases.len(), constants: program.constants.len(), scopes: program.scopes.len(),
+        macro_invocations: program.macro_invocations.len(), macro_captures: program.macro_captures.len(),
+        attrs: program.attrs.len(), macro_definitions: program.macro_definitions.len() }
+}

@@ -2,6 +2,7 @@
 mod assignment;
 mod associated_bindings;
 mod borrow_cleanup;
+mod borrow_order;
 mod capabilities;
 mod closures;
 mod constructors;
@@ -126,6 +127,7 @@ struct Compiler<'a> {
     applications: BTreeMap<usize, (String, Vec<usize>)>,
     destructors: Vec<(usize, usize)>,
     uses: BTreeMap<(a::FileId, String), Vec<usize>>,
+    expanded_order: Option<borrow_order::Order>,
     contracts: Option<generic_check::Contracts>,
     method_selections: generic_check::MethodSelections,
     definition_types: BTreeMap<usize, definition_types::DefinitionTypes>,
@@ -708,6 +710,7 @@ impl<'a> Compiler<'a> {
             applications: BTreeMap::new(),
             destructors: Vec::new(),
             uses: BTreeMap::new(),
+            expanded_order: borrow_order::expanded(source),
             contracts: None,
             method_selections: BTreeMap::new(),
             definition_types: BTreeMap::new(),
@@ -722,21 +725,23 @@ impl<'a> Compiler<'a> {
             diagnostic_functions: None,
         };
         c.initialize_primitive_names();
-        for node in &source.exprs {
-            if let a::Expr::Path(path) = &node.kind {
-                let key = (node.span.file, path.name.clone());
-                if !c.uses.contains_key(&key) {
-                    c.uses.insert(key.clone(), Vec::new());
+        if c.expanded_order.is_none() {
+            for node in &source.exprs {
+                if let a::Expr::Path(path) = &node.kind {
+                    let key = (node.span.file, path.name.clone());
+                    if !c.uses.contains_key(&key) {
+                        c.uses.insert(key.clone(), Vec::new());
+                    }
+                    c.uses.get_mut(&key).unwrap().push(node.span.start);
                 }
-                c.uses.get_mut(&key).unwrap().push(node.span.start);
             }
+            let mut sorted_uses = BTreeMap::new();
+            for (key, mut positions) in c.uses {
+                positions.sort();
+                sorted_uses.insert(key, positions);
+            }
+            c.uses = sorted_uses;
         }
-        let mut sorted_uses = BTreeMap::new();
-        for (key, mut positions) in c.uses {
-            positions.sort();
-            sorted_uses.insert(key, positions);
-        }
-        c.uses = sorted_uses;
         c
     }
 }
@@ -2176,7 +2181,14 @@ impl Builder<'_, '_> {
             Ok(ir::Place::local(v.0))
         }
     }
-    fn end_unused_borrows(&mut self, start: usize, position: usize, end: usize, line: usize) {
+    fn end_unused_borrows(&mut self, start: usize, block: usize, statement: usize, position: usize, end: usize, line: usize) {
+        let (position, end) = match &self.compiler.expanded_order {
+            Some(order) => match order.boundary(block, statement) {
+                Some(boundary) => boundary,
+                None => return,
+            },
+            None => (position, end),
+        };
         // Each named reference is scheduled at its last lexical use in this
         // block. Changed bindings and restored branch states invalidate only
         // their own entry; a statement never rescans all live references.
@@ -2192,7 +2204,11 @@ impl Builder<'_, '_> {
                 continue;
             }
             let name = &self.function.locals[local].name;
-            let last = match self.compiler.uses.get(&(self.file, name.clone())) {
+            let positions = match &self.compiler.expanded_order {
+                Some(order) => order.uses.get(name),
+                None => self.compiler.uses.get(&(self.file, name.clone())),
+            };
+            let last = match positions {
                 Some(positions) => {
                     let mut at = 0;
                     let mut limit = positions.len();
@@ -2384,7 +2400,7 @@ impl Builder<'_, '_> {
         let start = self.live.len();
         let bindings = self.bindings.len();
         let mut checking_dead = false;
-        for stmt in block.statements {
+        for (statement, stmt) in block.statements.into_iter().enumerate() {
             if !self.reachable {
                 checking_dead = true;
                 self.reachable = true;
@@ -2464,7 +2480,7 @@ impl Builder<'_, '_> {
                 self.reachable = false;
             }
             if self.reachable {
-                self.end_unused_borrows(start, end, block.span.end, block.span.line);
+                self.end_unused_borrows(start, id, statement, end, block.span.end, block.span.line);
             }
         }
         if !self.reachable {
@@ -2823,7 +2839,10 @@ impl Builder<'_, '_> {
                     return self.read(place, line);
                 }
                 if path.declaration.is_none() && path.args.is_empty() {
-                    let constant = self.sub.get(&path.name).copied();
+                    let constant = if path.name.starts_with("__macro$") {
+                        let name = crate::ast::macros::source_name(&path.name).to_string();
+                        self.sub.get(&name).copied()
+                    } else { self.sub.get(&path.name).copied() };
                     if let Some(constant) = constant {
                         if let Some(value) = crate::generics::const_arguments::value(&self.compiler.types, constant) {
                             let count = match value { crate::generics::const_arguments::Value::Known(value) => value,

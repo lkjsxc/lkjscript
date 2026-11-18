@@ -1,0 +1,4 @@
+// expect: reject E_MACRO_RULE
+// witness: {"rustAccept":false}
+macro_rules! empty {}
+fn probe() -> i32 { 0i32 }

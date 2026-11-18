@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false,"rustCode":"E0530"}
+struct Unit;
+macro_rules! invalid { () => {{ let mut Unit = Unit; 1i32 }}; }
+fn probe() -> i32 { invalid!() }

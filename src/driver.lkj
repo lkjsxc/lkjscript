@@ -2501,6 +2501,14 @@ fn compile_snapshot(
     for index in 0..memo.source_inputs.len() {
         memo.source_inputs[index].0 = diagnostic_source_path(&memo.source_inputs[index].0, options);
     }
+    for index in 0usize..loaded.program.macro_inputs.len() {
+        loaded.program.macro_inputs[index].0 = diagnostic_source_path(&loaded.program.macro_inputs[index].0, options);
+    }
+    if loaded.program.macro_input.is_some() {
+        let files = loaded.program.files.clone();
+        let modules = loaded.program.loaded_modules.clone();
+        if let Some(input) = loaded.program.macro_input.as_mut() { input.files = files; input.loaded_modules = modules; }
+    }
     stats.mark("load_parse")?;
     if !loaded.diagnostics.is_empty() {
         return Err(analysis_failure(&options.path, &mut loaded, Vec::new(), ""));

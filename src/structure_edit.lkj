@@ -245,7 +245,9 @@ fn finish(inputs: &[(String, Vec<u8>)], patches: Vec<Patch>) -> Result<Draft, St
 pub(crate) fn one_item(identity: &str, source: &str, body: bool) -> Result<(), String> {
     let wrapped = if body { format!("fn __lkjscript_transaction_body() {source}") }
         else { format!("mod __lkjscript_transaction_scope {{ {source} }}") };
-    let parsed = syntax::parse(&wrapped).map_err(|problem| error(identity, "SYNTAX", &problem.message))?;
+    // Shape validation retains invocations; the complete candidate expands them
+    // in their real source scope and must pass the ordinary semantic checks.
+    let parsed = syntax::parse_unexpanded(&wrapped).map_err(|problem| error(identity, "SYNTAX", &problem.message))?;
     let count = if body { parsed.items.len() } else if parsed.items.len() == 1usize {
         match parsed.items[0usize] {
             crate::ast::Item::Module(index) => parsed.modules[index].items.len(),
@@ -361,14 +363,23 @@ pub fn plan(catalog: &semantic::Catalog,
         if let Some(index) = catalog.by_identity.get(&operation.identity) {
             let selected = &catalog.items[*index];
             if !selected.generated_from.is_empty() { validate_item(selected, inputs, &operation.expected)?; }
-            if selected.kind == "function" && matches!(operation.kind.as_str(),
+            if matches!(operation.kind.as_str(),
                 "rename" | "move" | "change-signature" | "inline-function" | "remove-item") {
                 for site in &catalog.generated_references {
-                    if site.kind == "call" && site.target == selected.identity {
+                    if site.target == selected.identity {
                         let owner = item(catalog, &site.owner)?;
+                        let macro_definition = catalog.by_identity.get(&owner.generated_from)
+                            .is_some_and(|definition| !catalog.items[*definition].generated_from.is_empty());
+                        let macro_reference = owner.generated_expansion == "macro-rules" || macro_definition;
+                        // Authored Default/Debug declarations reconstruct their
+                        // nominal, field and bound references after a source edit.
+                        // Their helper calls retain the established refusal.
+                        // A derive emitted by a macro still has no editable
+                        // defining declaration and receives the macro refusal.
+                        if !macro_reference && !(selected.kind == "function" && site.kind == "call") { continue; }
                         return Err(error(&selected.identity, "GENERATED_REFERENCE",
-                            &format!("call from {} has no editable source; edit defining item {}",
-                                semantic::quote(&site.owner), semantic::quote(&owner.generated_from))));
+                            &format!("{} from {} has no editable source; edit defining item {}",
+                                site.kind, semantic::quote(&site.owner), semantic::quote(&owner.generated_from))));
                     }
                 }
             }

@@ -1594,8 +1594,11 @@ impl Infer<'_, '_> {
             a::Expr::Path(path) => {
                 if path.qualification.is_none() { self.capture_path(id, &path.name); }
                 let local = if path.qualification.is_none() { self.bindings.entry(&path.name) } else { None };
-                let constant_parameter = self.environment.get(&path.name).is_some_and(|value|
-                    matches!(self.shape(*value), Some(Shape::Constant(_) | Shape::ConstantRigid(_))));
+                let constant_value = if path.name.starts_with("__macro$") {
+                    let name = crate::ast::macros::source_name(&path.name).to_string(); self.environment.get(&name).copied()
+                } else { self.environment.get(&path.name).copied() };
+                let constant_parameter = constant_value.is_some_and(|value|
+                    matches!(self.shape(value), Some(Shape::Constant(_) | Shape::ConstantRigid(_))));
                 if let Some((entry, value)) = local {
                     if self.capture_references {
                         self.definition.local_paths.push((id, self.bindings.origin_at(entry)));

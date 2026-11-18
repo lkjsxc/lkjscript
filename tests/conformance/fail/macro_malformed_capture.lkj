@@ -1,0 +1,4 @@
+// expect: reject E_PARSE
+// witness: {"rustAccept":false}
+macro_rules! discard { ($value:expr) => { 1i32 }; }
+fn probe() -> i32 { discard!({ let = 1i32; 2i32 }) }

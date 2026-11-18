@@ -1,0 +1,4 @@
+// expect: reject E_PARSE
+// witness: {"rustAccept":false}
+macro_rules! split { ($prefix:ident $value:expr) => { 1i32 }; }
+fn probe() -> i32 { split!(unknown"prefix") }

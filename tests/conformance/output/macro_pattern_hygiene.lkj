@@ -1,0 +1,80 @@
+// expect: output 7061747465726e73206f6b0a
+// witness: {}
+struct Unit;
+struct lower;
+#[derive(Clone, Copy)]
+enum Choice { First, Second }
+use Choice::First;
+fn Upper() -> i32 { 99i32 }
+macro_rules! locals {
+    ($captured:ident) => {{ let UPPER = 5i32; let $captured = 7i32; let Upper = 11i32; (UPPER, $captured, Upper) }};
+}
+macro_rules! constructors { ($first:expr, $second:expr) => {{ let Unit = $first; let lower = $second; 23i32 }}; }
+macro_rules! variant { ($value:expr) => { match $value { First => 3i32, Choice::Second => 8i32 } }; }
+macro_rules! captured_type { ($captured:ident) => { fn identity<T>(input: $captured) -> T { input } }; }
+captured_type!(T);
+macro_rules! borrowed_locals { ($value:expr) => {{
+    let reference = &mut $value;
+    *reference += 2i32;
+    let next = &mut $value;
+    *next += 4i32;
+    *next
+}}; }
+macro_rules! borrowed_parameter { () => {
+    fn increment(input: &mut i32) {
+        let reference = &mut *input;
+        *reference += 1i32;
+        let next = &mut *input;
+        *next += 2i32;
+    }
+}; }
+borrowed_parameter!();
+macro_rules! write_reference { ($reference:expr, $amount:expr) => { *$reference += $amount }; }
+macro_rules! ordered_references { ($name:ident, $first:expr, $second:expr) => {{
+    let mut storage = 1i32;
+    let $name = &mut storage;
+    $second;
+    $first;
+    $second;
+    storage
+}}; }
+macro_rules! branch_references { ($initial:expr) => {{
+    let mut storage = $initial;
+    let reference = &mut storage;
+    let extra = 2i32;
+    if *reference > 0i32 { write_reference!(reference, extra); }
+    else { write_reference!(reference, -extra); }
+    let mut step = 0usize;
+    while step < 3usize {
+        write_reference!(reference, 1i32);
+        step += 1usize;
+    }
+    let next = &mut storage;
+    *next += 4i32;
+    *next
+}}; }
+macro_rules! closure_reference { () => {{
+    let mut storage = 17i32;
+    let reference = &mut storage;
+    let read = || -> i32 { *reference };
+    let extra = 2i32;
+    read() + extra
+}}; }
+pub fn main(mut world: World) {
+    assert_eq!(identity::<u8>(7u8), 7u8);
+    let mut borrowed = 3i32;
+    assert_eq!(borrowed_locals!(borrowed), 9i32);
+    increment(&mut borrowed);
+    assert_eq!(borrowed, 12i32);
+    assert_eq!(ordered_references!(carried, *carried += 2i32, *carried *= 3i32), 15i32);
+    assert_eq!(branch_references!(1i32), 10i32);
+    assert_eq!(branch_references!(-1i32), 4i32);
+    assert_eq!(closure_reference!(), 19i32);
+    let carried = 19i32;
+    assert_eq!(locals!(carried), (5i32, 7i32, 11i32));
+    assert_eq!(carried, 19i32);
+    assert_eq!(Upper(), 99i32);
+    assert_eq!(constructors!(Unit, lower), 23i32);
+    assert_eq!((variant!(First), variant!(Choice::Second)), (3i32, 8i32));
+    world.stdout().write(b"patterns ok\n");
+}

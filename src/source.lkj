@@ -258,6 +258,69 @@ fn expand_includes<F: FnMut(&str) -> Result<Option<Vec<u8>>, String>>(
     }
 }
 
+fn capture_macro_includes<F: FnMut(&str) -> Result<Option<Vec<u8>>, String>>(
+    program: &mut Program, read: &mut F, diagnostics: &mut Vec<Diagnostic>,
+) {
+    let mut inputs: Vec<(String, Vec<u8>)> = Vec::new();
+    {
+        let mut captured = |path: &str| -> Result<Option<Vec<u8>>, String> {
+            match read(path) {
+                Ok(Some(bytes)) => {
+                    let mut found = false;
+                    for input in &inputs {
+                        if input.0.as_str() == path {
+                            if input.1 != bytes { return Err("macro include input changed during expansion".to_string()); }
+                            found = true;
+                        }
+                    }
+                    if !found { inputs.push((path.to_string(), bytes.clone())); }
+                    Ok(Some(bytes))
+                }
+                other => other,
+            }
+        };
+        expand_includes(program, 0usize, &mut captured, diagnostics);
+    }
+    program.macro_inputs = inputs;
+}
+
+/// Replay only immutable include receipts, never ambient filesystem access.
+pub(crate) fn replay_macro_includes(program: &mut Program, inputs: &[(String, Vec<u8>)]) -> Result<(), Diagnostic> {
+    let span = program.macro_invocations.first().map(|invocation| invocation.span).unwrap_or(Span::default());
+    let mut paths: std::collections::BTreeSet<String> = std::collections::BTreeSet::new();
+    for input in inputs {
+        if !paths.insert(input.0.clone()) {
+            return Err(Diagnostic::new(span, "E_IDENTITY_ORIGIN", "duplicate macro include receipt"));
+        }
+    }
+    let mut seen = vec![false; inputs.len()];
+    let mut diagnostics = Vec::new();
+    {
+        let mut captured = |path: &str| -> Result<Option<Vec<u8>>, String> {
+            let mut at = 0usize;
+            while at < inputs.len() {
+                if inputs[at].0.as_str() == path {
+                    seen[at] = true;
+                    return Ok(Some(inputs[at].1.clone()));
+                }
+                at += 1usize;
+            }
+            Err("macro include read has no captured receipt".to_string())
+        };
+        expand_includes(program, 0usize, &mut captured, &mut diagnostics);
+    }
+    if !diagnostics.is_empty() {
+        let mut diagnostic = diagnostics[0usize].clone();
+        diagnostic.code = "E_IDENTITY_ORIGIN".to_string();
+        return Err(diagnostic);
+    }
+    for read in seen {
+        if !read { return Err(Diagnostic::new(span, "E_IDENTITY_ORIGIN", "unused macro include receipt")); }
+    }
+    program.macro_inputs = inputs.to_vec();
+    Ok(())
+}
+
 /// Both bundle compilation and the bootstrap CLI use this module interpretation.
 /// `read` supplies bytes only; it does not resolve source names or select modules.
 pub fn load<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String>>(
@@ -541,6 +604,13 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String
             pending.push((selected, module.scope, Some(index), alternate));
         }
     }
+    let (expansion_errors, expansion_blocked) = syntax::macros::expand_report(&mut program);
+    for mut diagnostic in expansion_errors {
+        if diagnostic.path.is_empty() { diagnostic.path = program.files[diagnostic.file].path.clone(); }
+        diagnostics.push(diagnostic);
+    }
+    for region in expansion_blocked { blocked.push(region); }
+    if !program.macro_expansions.is_empty() { capture_macro_includes(&mut program, read, &mut diagnostics); }
     if !diagnostics.is_empty() {
         blocked.push(BlockedRegion {
             path: root.to_string(),

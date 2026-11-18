@@ -1,0 +1,115 @@
+//! Failed expansion is reporting data only. Every attempt owns its arena changes.
+use super::*;
+
+struct Recovery {
+    expander: Expander,
+    failed: BTreeSet<usize>,
+    diagnostics: Vec<Diagnostic>,
+    blocked: Vec<BlockedRegion>,
+}
+impl Recovery {
+    fn record(&mut self, program: &Program, mut problem: Diagnostic) {
+        if problem.path.is_empty() { problem.path = program.files[problem.file].path.clone(); }
+        if !self.diagnostics.contains(&problem) { self.diagnostics.push(problem); }
+    }
+    fn block(&mut self, program: &Program, span: Span, kind: &str, code: &str) {
+        self.blocked.push(BlockedRegion { path: program.files[span.file].path.clone(), span,
+            kind: kind.to_string(), reason: format!("not analyzed after {code}") });
+    }
+    fn failed_call(&mut self, program: &Program, call: usize, problem: Diagnostic) {
+        if self.failed.insert(call) {
+            let invocation = &program.macro_invocations[call];
+            let kind = if invocation.item { "item" } else { "statement" };
+            self.block(program, invocation.span, kind, &problem.code);
+            self.record(program, problem);
+        }
+    }
+    fn items(&mut self, program: &mut Program, input: Vec<Item>) -> Vec<Item> {
+        let mut output = Vec::new();
+        for item in input {
+            if let Item::MacroInvocation(call) = item {
+                if self.failed.contains(&call) { output.push(item); continue; }
+                // Keep the original invocation when matching or parsing fails.
+                // Discarded captures and partially emitted items never enter the scan.
+                let saved = program.clone();
+                match self.expander.item(program, call) {
+                    Ok(expanded) => {
+                        for item in self.items(program, expanded) { output.push(item); }
+                    }
+                    Err(problem) => {
+                        *program = saved;
+                        self.failed_call(program, call, problem);
+                        output.push(item);
+                    }
+                }
+            } else { output.push(item); }
+        }
+        output
+    }
+}
+
+pub(super) fn run(program: &mut Program, first: Diagnostic) -> (Vec<Diagnostic>, Vec<BlockedRegion>) {
+    let input = program.clone();
+    program.macro_input = Some(Box::new(input));
+    let mut recovery = Recovery { expander: Expander { rules: Vec::new(), invalid_rules: BTreeMap::new(),
+        expressions: BTreeMap::new() }, failed: BTreeSet::new(), diagnostics: Vec::new(), blocked: Vec::new() };
+    // The ordinary pass has already refused this input. Even an unexpected
+    // difference in the recovery traversal cannot turn that refusal into success.
+    recovery.record(program, first);
+    let mut exports: BTreeMap<(usize, String), usize> = BTreeMap::new();
+    for id in 0usize..program.macro_definitions.len() {
+        let definition = &program.macro_definitions[id];
+        if definition.exported {
+            let key = (program.scopes[definition.scope].crate_root, definition.name.clone());
+            if exports.contains_key(&key) {
+                let previous = *exports.get(&key).unwrap();
+                let problem = error(definition.name_span, "E_MACRO_RULE", "duplicate exported macro name");
+                recovery.expander.invalid_rules.insert(previous, problem.clone());
+                recovery.expander.invalid_rules.insert(id, problem.clone());
+                recovery.block(program, definition.span, "item", &problem.code);
+                recovery.record(program, problem);
+            } else { exports.insert(key, id); }
+        }
+        match matcher::rules(definition) {
+            Ok(rules) => recovery.expander.rules.push(rules),
+            Err(problem) => {
+                recovery.expander.rules.push(Vec::new());
+                recovery.expander.invalid_rules.insert(id, problem.clone());
+                recovery.block(program, definition.span, "item", &problem.code);
+                recovery.record(program, problem);
+            }
+        }
+    }
+    let original = std::mem::replace(&mut program.items, Vec::new());
+    program.items = recovery.items(program, original);
+    let mut module = 0usize;
+    while module < program.modules.len() {
+        let items = std::mem::replace(&mut program.modules[module].items, Vec::new());
+        program.modules[module].items = recovery.items(program, items);
+        module += 1usize;
+    }
+    let mut at = 0usize;
+    while at < program.exprs.len() {
+        if let Expr::MacroInvocation(call) = program.exprs[at].kind {
+            if !recovery.failed.contains(&call) {
+                let saved = program.clone();
+                let expressions = recovery.expander.expressions.clone();
+                match recovery.expander.expression(program, call) {
+                    Ok(id) => {
+                        program.macro_aliases.push(MacroAlias { expression: at, original: program.exprs[at].clone(), expanded: id, invocation: call });
+                        program.exprs[at] = program.exprs[id].clone();
+                    }
+                    Err(problem) => {
+                        *program = saved;
+                        recovery.expander.expressions = expressions;
+                        recovery.failed_call(program, call, problem);
+                    }
+                }
+            }
+        }
+        at += 1usize;
+    }
+    // No caller can mistake this partial tree for a completed expansion.
+    program.macros_expanded = false;
+    (recovery.diagnostics, recovery.blocked)
+}

@@ -1,0 +1,3 @@
+// expect: reject E_UNSUPPORTED_MACRO
+macro_rules! type_name { ($name:ty) => { 0i32 }; }
+fn probe() {}

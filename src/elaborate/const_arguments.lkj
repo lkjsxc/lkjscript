@@ -43,6 +43,7 @@ impl Compiler<'_> {
     }
 
     pub(super) fn constant_length(&mut self, text: &str, substitutions: &BTreeMap<String, usize>, span: a::Span) -> Result<usize> {
+        let text = crate::ast::macros::source_name(text);
         if let Some(count) = const_generics::literal(text) { return Ok(self.constant(count)); }
         if let Some(value) = substitutions.get(&text.to_string()) {
             if const_generics::value(&self.types, *value).is_some() { return Ok(*value); }

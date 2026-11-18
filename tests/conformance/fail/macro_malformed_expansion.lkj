@@ -1,0 +1,4 @@
+// expect: reject E_PARSE
+// witness: {"rustAccept":false}
+macro_rules! malformed { () => {{ let = 1i32; 2i32 }}; }
+fn probe() -> i32 { malformed!() }

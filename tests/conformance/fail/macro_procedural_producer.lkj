@@ -1,0 +1,3 @@
+// expect: reject E_UNSUPPORTED_MACRO
+#[proc_macro]
+fn generate() {}

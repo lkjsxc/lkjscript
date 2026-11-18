@@ -79,8 +79,9 @@ pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, 
         &format!("source={} items={} unresolved={} freshness=not-asserted", catalog.input_digest, catalog.items.len(), catalog.unresolved.len())));
     result.empty("outline", "crate"); result.empty("@outline", "crate");
     for item in &catalog.items {
+        let anchor = if item.generated_expansion == "macro-rules" { "invocation-anchor" } else { "definition-anchor" };
         let origin = if item.generated_from.is_empty() { String::new() } else {
-            format!(" origin=generated definition={} source-projection=false span=definition-anchor", semantic::quote(&item.generated_from))
+            format!(" origin=generated definition={} source-projection=false span={anchor}", semantic::quote(&item.generated_from))
         };
         result.add("meta", &item.identity, fact(&item.identity, "source-claim", "item",
             &format!("kind={} parent={} file={} start={} end={} file-sha256={} item-sha256={} references-complete={}{}",
@@ -92,7 +93,7 @@ pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, 
                     item.signature_digest, item.body_digest)));
         } else {
             result.add("meta", &item.identity, fact(&item.identity, "source-claim", "origin",
-                &format!("origin=generated definition={} expansion={} source-projection=false span=definition-anchor",
+                &format!("origin=generated definition={} expansion={} source-projection=false span={anchor}",
                     semantic::quote(&item.generated_from), item.generated_expansion)));
             result.add("meta", &item.identity, fact(&item.identity, "source-claim", "identity",
                 &format!("signature={} derived-epoch={} scope=semantic-path body-locals=derived-declaration-epoch epoch-domain={}",

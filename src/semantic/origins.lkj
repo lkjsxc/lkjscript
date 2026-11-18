@@ -5,24 +5,35 @@ use crate::{ast as a, names};
 use std::collections::{BTreeMap, BTreeSet};
 
 mod debug;
+pub(super) mod macros;
 
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) enum Expansion { Default, Debug }
+pub(super) enum Expansion { Default, Debug, Macro(usize) }
 impl Expansion {
     pub fn name(self) -> &'static str {
-        match self { Self::Default => "derive-default", Self::Debug => "derive-debug" }
+        match self { Self::Default => "derive-default", Self::Debug => "derive-debug", Self::Macro(_) => "macro-rules" }
     }
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub(super) struct Origin { pub declaration: usize, pub expansion: Expansion }
+pub(super) struct Origin { pub declaration: Option<usize>, pub expansion: Expansion }
 impl Origin {
     pub fn identity(self, program: &a::Program) -> String {
-        let definition = &program.declarations[self.declaration];
+        if let Expansion::Macro(index) = self.expansion {
+            return macros::invocation_identity(program.macro_expansions[index].invocation);
+        }
+        let definition = &program.declarations[self.declaration.unwrap()];
         names::qualified(&program.scopes[definition.scope].path, &definition.name)
+    }
+    pub fn span(self, program: &a::Program) -> a::Span {
+        if let Expansion::Macro(index) = self.expansion {
+            return program.macro_invocations[program.macro_expansions[index].invocation].span;
+        }
+        program.declarations[self.declaration.unwrap()].span
     }
 }
 
 pub(super) struct Origins {
+    pub macros: macros::MacroOrigins,
     pub functions: Vec<Option<Origin>>,
     pub implementations: Vec<Option<Origin>>,
     pub types: BTreeMap<usize, usize>,
@@ -240,7 +251,7 @@ fn derived_default(program: &a::Program, resolver: &crate::resolve::Resolver<'_>
     }
     mark(&mut origins.expressions, tail, function)?;
     mark(&mut origins.blocks, block, function)?;
-    let origin = Origin { declaration: target_name.declaration.unwrap(), expansion: Expansion::Default };
+    let origin = Origin { declaration: target_name.declaration, expansion: Expansion::Default };
     origins.functions[function] = Some(origin);
     Ok(origin)
 }
@@ -248,6 +259,9 @@ pub(super) fn collect(program: &a::Program, resolver: &crate::resolve::Resolver<
     if !program.resolved || program.function_owners.len() != program.functions.len() {
         return Err(failure("source", "generated origin requires a complete resolved ownership relation"));
     }
+    crate::syntax::macros::provenance::validate(program)
+        .map_err(|problem| failure("macro", &problem.message))?;
+    let macro_origins = macros::collect(program)?;
     let mut written = Written { functions: BTreeSet::new(), implementations: BTreeSet::new(),
         traits: BTreeSet::new(), structures: BTreeSet::new(), enumerations: BTreeSet::new() };
     for item in &program.items { remember(program, &mut written, *item)?; }
@@ -259,7 +273,7 @@ pub(super) fn collect(program: &a::Program, resolver: &crate::resolve::Resolver<
             if let a::Stmt::Item(item) = statement { remember(program, &mut written, *item)?; }
         }
     }
-    let mut result = Origins { functions: vec![None; program.functions.len()],
+    let mut result = Origins { macros: macro_origins, functions: vec![None; program.functions.len()],
         implementations: vec![None; program.impls.len()], types: BTreeMap::new(),
         expressions: BTreeMap::new(), blocks: BTreeMap::new(), patterns: BTreeMap::new() };
     for index in 0usize..program.impls.len() {
@@ -271,6 +285,14 @@ pub(super) fn collect(program: &a::Program, resolver: &crate::resolve::Resolver<
             let owner = if debug { debug::validate(program, resolver, &written, index, &mut result)? }
                 else { derived_default(program, resolver, &written, index, &mut result)? };
             result.implementations[index] = Some(owner);
+        }
+    }
+    for ((kind, index), origin) in &result.macros.items {
+        if *kind == 0usize && result.functions[*index].is_none() {
+            result.functions[*index] = Some(*origin);
+        }
+        if *kind == 4usize && result.implementations[*index].is_none() {
+            result.implementations[*index] = Some(*origin);
         }
     }
     for (index, function) in program.functions.iter().enumerate() {

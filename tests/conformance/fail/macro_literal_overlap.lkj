@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED_MACRO
+// witness: {"rustAccept":true}
+macro_rules! choose { ($(a)* a) => { 1i32 }; ($($rest:tt)*) => { 2i32 }; }
+fn probe() -> i32 { choose!(a) }

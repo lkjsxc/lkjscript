@@ -112,8 +112,8 @@ Generated reference edges retain their actual expansion owner and defining
 identity in a separate uneditable collection. Shared authored field type nodes
 and generic bounds remain ordinary editable references. Direct edits of a
 generated item, including use as an insertion parent, refuse with
-`E_EDIT_GENERATED_SOURCE`. A function rename, move, signature change, inline or
-removal that would rewrite a generated call refuses with
+`E_EDIT_GENERATED_SOURCE`. A rename, move, signature change, inline or
+removal that would rewrite a proven generated reference refuses with
 `E_EDIT_GENERATED_REFERENCE`. Edit the defining declaration instead; candidate
 elaboration regenerates and checks the expansion. Replay selects authored
 declarations. Existing historical snapshots retain the producing compiler's
@@ -121,6 +121,41 @@ facts, including an older incorrect projection; rebuilding publishes the
 repaired origin contract.
 
 Debug-generated local bindings and enum patterns also remain outside authored spelling references. Explicit-argument formatting participates in ordinary function rename and body replacement. Implicit format captures retain a located `E_EDIT_REFERENCES` refusal when their decoded literal has no independently recorded editable byte span; the compiler does not guess an edit inside that string. [Debug query and mutation controls](../tools/debug-format-test.sh) cover both engines, unchanged source on refused transactions, and ten malformed generated-origin cases.
+
+Declarative macros also expose source definitions, invocations and expansion
+identities. A definition is named `macro-definition:N:PATH`, an invocation
+`macro-invocation:N`, and its expansion `macro-expansion:N`. Definition and
+authored-invocation queries retain their real text. Expanded declarations,
+parameters, fields, patterns and call sites have `expansion=macro-rules`,
+`source-projection=false` and an invocation anchor; they never present
+transcribed bytes as writable source. Expansion references name both the
+definition and invocation. Only reachable expanded expressions become reference
+or call-site facts; unused arena copies are still classified as generated.
+
+This classification is validated by reparsing the authenticated input byte map
+into the exact original source program, then replaying token matching,
+transcription, fresh opaque-capture materialization, immutable include reads and
+name resolution. The complete resolved AST and topology receipts must agree.
+The proof covers source scopes, export attributes, literal spelling, capture
+contexts, parent expansions, allocation ranges and alias replacement. Replay
+uses no ambient filesystem reads. These checks run while constructing an index;
+bounded queries read the authenticated published facts. Missing or inconsistent
+origin evidence refuses with `E_IDENTITY_ORIGIN`.
+
+Macro expansion epochs hash the definition and invocation token streams along
+the parent chain and the immutable included bytes. A same-length include change
+therefore invalidates expanded call identities. A Default or Debug derive
+created by a macro keeps its strict derive validator and identity, with the
+macro's authenticated inputs added to its epoch. Authored Default and Debug
+declarations retain their previous epoch construction exactly.
+
+Checked authored function-body changes re-expand and recheck macro calls.
+Direct generated-item changes refuse with `E_EDIT_GENERATED_SOURCE`;
+renaming a helper or field with a proven generated reference refuses with
+`E_EDIT_GENERATED_REFERENCE`. Unavailable targets remain partial claims.
+[Macro origin controls](../tools/macro-origin-test.sh) cover indexed item,
+expression and nested expansions, both engines, source-preserving refusals,
+template/include epoch changes and 25 malformed-origin cases.
 
 `references-complete=false` and unresolved-reference facts are explicit limits,
 not evidence that an item has no uses. Declaration-only capture deliberately

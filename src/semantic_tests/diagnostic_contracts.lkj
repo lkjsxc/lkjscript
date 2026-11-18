@@ -59,6 +59,148 @@ fn recovery_reaches_independent_statements_items_and_nested_methods() {
             .any(|region| region.kind == "semantic phase")
     );
     assert!(compiler::check_bundle(&input).is_err());
+    assert!(!report.program.macros_expanded);
+    for name in vec!["mystery!".to_string(), "other!".to_string(), "third!".to_string()] {
+        assert_eq!(diagnostic_message_count(&report, name.as_str()), 1usize);
+    }
+    macro_recovery_rules_and_calls();
+    macro_recovery_modules_and_discarded_captures();
+    macro_recovery_rolls_back_failed_items();
+}
+
+fn diagnostic_code_count(report: &source::SourceReport, code: &str) -> usize {
+    let mut count = 0usize;
+    for problem in &report.diagnostics { if problem.code == code { count += 1usize; } }
+    count
+}
+fn diagnostic_message_count(report: &source::SourceReport, message: &str) -> usize {
+    let mut count = 0usize;
+    for problem in &report.diagnostics { if problem.message.contains(message) { count += 1usize; } }
+    count
+}
+
+fn macro_recovery_rules_and_calls() {
+    let input = one(r#"
+        macro_rules! malformed { ($value:expr) { $value }; }
+        macro_rules! repeat { ($($name:ident),+) => { 0i64 }; }
+        macro_rules! cycle { () => { cycle!() }; }
+        macro_rules! invalid_output { () => { let = 1 }; }
+        macro_rules! good { () => { 41i64 }; }
+        fn broken() {
+            malformed!(not_materialized!());
+            repeat!();
+            cycle!();
+            invalid_output!();
+            missing!();
+        }
+        fn independent() -> i64 { good!() + 1i64 }
+    "#);
+    let report = source::parse_bundle_report(&input);
+    assert_eq!(report.diagnostics.len(), 5usize);
+    for code in vec!["E_MACRO_RULE".to_string(), "E_MACRO_MATCH".to_string(), "E_MACRO_RECURSION".to_string(), "E_PARSE".to_string(), "E_UNSUPPORTED_MACRO".to_string()] {
+        assert_eq!(diagnostic_code_count(&report, code.as_str()), 1usize);
+    }
+    assert!(report.diagnostics.iter().all(|problem| problem.path == "case/main.lkj"));
+    assert_eq!(blocked_count(&report.blocked, "statement"), 5usize);
+    assert_eq!(blocked_count(&report.blocked, "item"), 1usize);
+    assert!(!report.program.macros_expanded);
+    assert_eq!(report.program.macro_expansions.len(), 1usize);
+    assert_eq!(report.program.macro_definitions[report.program.macro_expansions[0usize].definition].name, "good");
+    assert_eq!(report.program.macro_aliases.len(), 1usize);
+    assert!(report.program.macro_captures.is_empty());
+    assert!(!report.program.macro_invocations.iter().any(|call| call.name == "not_materialized"));
+    assert!(syntax::macros::provenance::validate(&report.program).is_err());
+    assert!(compiler::check_bundle(&input).is_err());
+}
+
+fn macro_recovery_modules_and_discarded_captures() {
+    let input = bundle(&vec![
+        ("case/main.lkj".to_string(), r#"
+            #[macro_use] mod definitions;
+            macro_rules! discard { ($value:expr) => { 0i64 }; }
+            macro_rules! generated {
+                () => {
+                    mod generated {
+                        pub fn first() { missing_left!(); }
+                        pub fn second() { missing_right!(); }
+                        pub fn text() -> &'static str { include_str!("payload.txt") }
+                        pub fn ignored() -> i64 { discard!(not_materialized!(include_str!("absent.txt"))) }
+                    }
+                };
+            }
+            generated!();
+            fn root() { missing_root!(); }
+            fn valid() -> i64 { imported!() }
+        "#.to_string()),
+        ("case/definitions.lkj".to_string(), r#"
+            macro_rules! imported { () => { 42i64 }; }
+            fn broken() { missing_file!(); }
+        "#.to_string()),
+        ("case/payload.txt".to_string(), "kept payload".to_string()),
+    ]);
+    let report = source::parse_bundle_report(&input);
+    assert_eq!(report.diagnostics.len(), 4usize);
+    assert!(report.diagnostics.iter().all(|problem| problem.code == "E_UNSUPPORTED_MACRO"));
+    for name in vec!["missing_left!".to_string(), "missing_right!".to_string(), "missing_root!".to_string(), "missing_file!".to_string()] {
+        assert_eq!(diagnostic_message_count(&report, name.as_str()), 1usize);
+    }
+    assert!(report.diagnostics.iter().any(|problem| problem.path == "case/definitions.lkj" && problem.message.contains("missing_file!")));
+    assert_eq!(blocked_count(&report.blocked, "statement"), 4usize);
+    assert!(!report.program.macros_expanded);
+    assert_eq!(report.program.files.len(), 2usize);
+    assert_eq!(report.program.macro_inputs.len(), 1usize);
+    assert_eq!(report.program.macro_inputs[0usize].0, "case/payload.txt");
+    assert_eq!(report.program.macro_inputs[0usize].1, b"kept payload"[..].to_vec());
+    assert_eq!(report.program.macro_captures.len(), 1usize);
+    assert!(report.program.macro_captures[0usize].materializations.is_empty());
+    assert!(!report.program.macro_invocations.iter().any(|call| call.name == "not_materialized"));
+    assert!(report.program.functions.iter().any(|function| function.module == "generated" && function.name == "second"));
+    assert!(report.program.functions.iter().any(|function| function.name == "valid"));
+    assert!(compiler::check_bundle(&input).is_err());
+}
+
+fn macro_recovery_rolls_back_failed_items() {
+    let input = one(r#"
+        macro_rules! failed {
+            () => {
+                #[derive(Default, Debug)] struct Transient { code: i64 }
+                mod transient { pub fn hidden() -> i64 { 1i64 } }
+                use transient::hidden;
+                fn broken(value:) {}
+            };
+        }
+        macro_rules! generated_definition { () => { macro_rules! escaped { () => { 1i64 }; } }; }
+        macro_rules! external { () => { mod hidden_external; }; }
+        macro_rules! kept { () => { struct Kept; }; }
+        failed!();
+        generated_definition!();
+        external!();
+        missing_item!();
+        kept!();
+        fn good() -> i64 { 42i64 }
+    "#);
+    let report = source::parse_bundle_report(&input);
+    assert_eq!(report.diagnostics.len(), 4usize);
+    assert_eq!(blocked_count(&report.blocked, "item"), 4usize);
+    assert!(report.diagnostics.iter().any(|problem| problem.message.contains("generated macro definitions")));
+    assert!(report.diagnostics.iter().any(|problem| problem.message.contains("external source module")));
+    assert_eq!(report.program.files.len(), 1usize);
+    assert_eq!(report.program.macro_definitions.len(), 4usize);
+    assert!(!report.program.macro_definitions.iter().any(|definition| definition.name == "escaped"));
+    assert!(!report.program.macros_expanded);
+    assert_eq!(report.program.structs.len(), 1usize);
+    assert_eq!(report.program.structs[0usize].name, "Kept");
+    assert!(report.program.modules.is_empty());
+    assert!(report.program.uses.is_empty());
+    assert!(report.program.impls.is_empty());
+    assert!(report.program.attrs.is_empty());
+    assert_eq!(report.program.functions.len(), 1usize);
+    assert_eq!(report.program.functions[0usize].name, "good");
+    assert_eq!(report.program.macro_expansions.len(), 1usize);
+    assert_eq!(report.program.macro_definitions[report.program.macro_expansions[0usize].definition].name, "kept");
+    assert!(report.program.macro_captures.is_empty());
+    assert!(report.program.macro_aliases.is_empty());
+    assert!(compiler::check_bundle(&input).is_err());
 }
 
 fn loading_continues_independent_modules_after_missing_and_invalid_sources() {

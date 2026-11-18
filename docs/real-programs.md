@@ -229,7 +229,7 @@ schema. The comparison separates an exact surviving
 diagnostic, a different diagnostic at the old coordinate, and an old site no longer
 observed. The last is not proof that the surrounding program admits or runs.
 Counts re-rank the observed frontier; implementation priority is a separate
-decision. The required offline gate runs 30 controls for this accounting,
+decision. The required offline gate runs 38 controls for this accounting,
 including all three table schemas, repeated-root de-duplication, changed recovery
 parents, source substitution and receipt corruption.
 
@@ -250,34 +250,94 @@ still under `target/` is a temporary candidate observation, not a durable eviden
 link. Fresh observations additionally require the original/projected trees to pass
 `project.pl --verify`; use `probe.pl --help` for its exact entry and package options.
 
-#### Current Debug frontier
+#### Current operational-macro frontier
 
-The current producer b8bb6e90...3183c6 adds source Debug formatting and
-authenticated derived implementations. The ?/#? modes use ordinary Formatter,
-DebugStruct, DebugTuple and DebugList contracts; field order, alternate
-indentation and formatting errors remain observable source behavior.
+The current producer 77695785...3659d8 expands operational declarative macros
+through ordinary checked source, preserving capture hygiene, definition/export
+scope, include authority and authenticated source operations. Borrow cleanup
+follows semantic occurrence order when expansion reorders or repeats source
+spans. Transactional reporting-only recovery retains independent diagnostics
+after an invalid expansion without accepting the failed program.
 
-All 18 focused cases pass 36 native/interpreter routes, with independent Rust
-verification of ten values/output cases and eight recorded Rust verdicts. Queries, checked
-renames/body edits and ten malformed-origin controls pass. The complete GAT
-cohort passes 56 cases / 112 routes; a partly overlapping earlier trait cohort
-passes 77 cases / 154 routes. [Validation](../bench/debug.md) records exact
-producer/seed identities, fixed point and the publication gates.
+This faithful replay exposes later barriers that an earlier first-error return
+masked. The larger counts include unavailable external macro providers and
+explicit standard-library, fragment and statement-list boundaries. Every new
+identity is source-reviewed; disappearance elsewhere does not prove root admission.
 
-The twelve fresh unchanged-source observations give nom 17->17, DOM 61->37,
-and Sozu 448->427 classified sites, with its 34 prior-unclassified sites
-retained and zero new unclassified diagnostics. The 24 original DOM Debug
-format refusals disappear. No original large root or nom own test admits.
+The focused suite passes 24 cases / 48 engine routes,
+with independent Rust verification of 3 values/output
+cases and 17 verdicts. Two further exact output cases, declarative_macros and nom_tuple_macros, pass separate actual-root Rust comparisons in the declarative-source suite, preserving $crate. Two explicit unsupported producer/fragment boundaries remain unpaired. A separate module/include fixture also has an independent Rust route and is not added to the 24-case cohort. Source questions, checked edits
+and refusal controls pass; [validation](../bench/macros.md) records the exact
+producer/seed identities, fixed point and publication gates.
 
-Current exact source-hashed reviews are [nom](real-programs-debug-nom-review.json),
-[DOM](real-programs-debug-dom-review.json) and
-[Sozu](real-programs-debug-sozu-review.json). Raw receipts retain the actual
+The twelve fresh unchanged-source observations give nom 17->49, DOM 37->39 and Sozu 427->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
+No original large root or nom own test is admitted by these observations.
+The current classified causes are ranked below; the separately retained prior
+unclassified Sozu population is not folded into these counts.
+
+| Specimen | Rank | Observed cause | Sites |
+| --- | ---: | --- | ---: |
+| nom | 1 | Configuration attributes on match arms | 16 |
+| nom | 2 | Higher-ranked lifetime trait bounds | 13 |
+| nom | 3 | Namespaced rustfmt attribute | 6 |
+| nom | 4 | Function-pointer result types | 4 |
+| nom | 5 | Documentation cfg predicates | 3 |
+| nom | 6 | Default generic type arguments | 2 |
+| nom | 7 | Type-outlives where predicates | 2 |
+| nom | 8 | Unsafe block surface | 2 |
+| nom | 9 | Statement-list macro expansion | 1 |
+| DOM | 1 | Dependency-provided atom macros in expressions and patterns | 24 |
+| DOM | 2 | Shared interior mutation and borrow guards | 9 |
+| DOM | 3 | Macro-valued documentation attribute | 1 |
+| DOM | 4 | Boxed dyn Iterator | 1 |
+| DOM | 5 | Namespaced rustfmt attribute | 1 |
+| DOM | 6 | Attribute on an expression statement | 1 |
+| DOM | 7 | Immutable static test data | 1 |
+| DOM | 8 | std::io data/type facade | 1 |
+| Sozu | 1 | Macro calls without a visible declarative definition | 478 |
+| Sozu | 2 | External prettytable declarative macro provider | 121 |
+| Sozu | 3 | ambient effect calls | 96 |
+| Sozu | 4 | unsafe or raw pointer | 65 |
+| Sozu | 5 | trait object dispatch | 44 |
+| Sozu | 6 | pure standard data types | 38 |
+| Sozu | 7 | Borrowed formatting-arguments macro surface | 20 |
+| Sozu | 8 | RefCell-based interior mutation | 18 |
+| Sozu | 9 | Error-derive helper attributes on enum variants | 12 |
+| Sozu | 10 | Standard unimplemented macro surface | 10 |
+| Sozu | 11 | standard io traits | 9 |
+| Sozu | 12 | Source-information and token-string macros | 8 |
+| Sozu | 13 | standard os imports | 8 |
+| Sozu | 14 | associated constants | 6 |
+| Sozu | 15 | external crate binding | 5 |
+| Sozu | 16 | Thread-local declaration macro surface | 4 |
+| Sozu | 17 | Namespaced source attributes | 3 |
+| Sozu | 18 | Target-environment cfg predicates | 3 |
+| Sozu | 19 | Compile-time environment macro input | 2 |
+| Sozu | 20 | Global static state | 2 |
+| Sozu | 21 | same process thread api | 2 |
+| Sozu | 22 | Standard todo macro surface | 2 |
+| Sozu | 23 | async block | 1 |
+| Sozu | 24 | at pattern lexing | 1 |
+| Sozu | 25 | build generated source | 1 |
+| Sozu | 26 | Configuration expression macro surface | 1 |
+| Sozu | 27 | Unsupported declarative fragment kind | 1 |
+| Sozu | 28 | Declarative macro statement sequences | 1 |
+| Sozu | 29 | Type fragments in declarative macro matchers | 1 |
+| Sozu | 30 | External nix ancillary-data macro provider | 1 |
+| Sozu | 31 | macro token lexing | 1 |
+| Sozu | 32 | Reserved gen spelling used as a callable identifier | 1 |
+| Sozu | 33 | shared heap ownership | 1 |
+| Sozu | 34 | Tuple destructuring in a function parameter | 1 |
+
+
+Current exact source-hashed reviews are [nom](real-programs-macros-nom-review.json),
+[DOM](real-programs-macros-dom-review.json) and
+[Sozu](real-programs-macros-sozu-review.json). Raw receipts retain the actual
 producer/library inventory and original source/projection command paths.
-The preceding type-family frontier and its complete proof remain in
-[the prior accounting](../bench/debug-data/previous-frontier.json) and
-[the family report](../bench/gat.md). Its two vanished DOM parse refusals were
-lifetime-family definitions; later root barriers still hide that unsupported
-semantic form. Debug support does not change that boundary.
+The preceding frontier remains in [the prior accounting](../bench/macros-data/previous-frontier.json)
+and [its proof](../bench/debug.md). A vanished diagnostic is not
+evidence that a surrounding root admits, nor that a masked later form is
+supported.
 
 #### Earlier lifetime-where frontier
 

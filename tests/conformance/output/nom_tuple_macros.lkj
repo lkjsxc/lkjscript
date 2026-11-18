@@ -1,0 +1,136 @@
+// expect: output 6e6f6d206d6163726f73206f6b0a
+// Exact macro definitions from nom 8.0.0, commit 2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1.
+// Copyright (c) 2014-2019 Geoffroy Couprie; MIT license: tests/fixtures/nom-macro-LICENSE.
+// The small Parser implementation below supplies observations of the unchanged macro producers.
+type IResult<I, O, E> = Result<(I, O), E>;
+trait ParseError<I> {}
+impl ParseError<usize> for u8 {}
+trait Parser<I> {
+    type Output;
+    type Error: ParseError<I>;
+    fn parse(&mut self, input: I) -> IResult<I, Self::Output, Self::Error>;
+}
+trait Tuple<I, O, E> { fn parse_tuple(&mut self, input: I) -> IResult<I, O, E>; }
+struct Add { amount: usize, calls: usize }
+impl Parser<usize> for Add {
+    type Output = usize;
+    type Error = u8;
+    fn parse(&mut self, input: usize) -> IResult<usize, usize, u8> {
+        self.calls += 1usize;
+        if self.amount == 0usize { return Err(7u8); }
+        Ok((input + self.amount, input))
+    }
+}
+mod error {
+    pub fn make_error(input: usize, code: u8) -> (usize, u8) { (input, code) }
+    pub fn append_error(input: usize, code: u8, next: (usize, u8)) -> (usize, u8) {
+        (input + next.0, code + next.1)
+    }
+}
+// nom-source: succ begin
+macro_rules! succ (
+  (0, $submac:ident ! ($($rest:tt)*)) => ($submac!(1, $($rest)*));
+  (1, $submac:ident ! ($($rest:tt)*)) => ($submac!(2, $($rest)*));
+  (2, $submac:ident ! ($($rest:tt)*)) => ($submac!(3, $($rest)*));
+  (3, $submac:ident ! ($($rest:tt)*)) => ($submac!(4, $($rest)*));
+  (4, $submac:ident ! ($($rest:tt)*)) => ($submac!(5, $($rest)*));
+  (5, $submac:ident ! ($($rest:tt)*)) => ($submac!(6, $($rest)*));
+  (6, $submac:ident ! ($($rest:tt)*)) => ($submac!(7, $($rest)*));
+  (7, $submac:ident ! ($($rest:tt)*)) => ($submac!(8, $($rest)*));
+  (8, $submac:ident ! ($($rest:tt)*)) => ($submac!(9, $($rest)*));
+  (9, $submac:ident ! ($($rest:tt)*)) => ($submac!(10, $($rest)*));
+  (10, $submac:ident ! ($($rest:tt)*)) => ($submac!(11, $($rest)*));
+  (11, $submac:ident ! ($($rest:tt)*)) => ($submac!(12, $($rest)*));
+  (12, $submac:ident ! ($($rest:tt)*)) => ($submac!(13, $($rest)*));
+  (13, $submac:ident ! ($($rest:tt)*)) => ($submac!(14, $($rest)*));
+  (14, $submac:ident ! ($($rest:tt)*)) => ($submac!(15, $($rest)*));
+  (15, $submac:ident ! ($($rest:tt)*)) => ($submac!(16, $($rest)*));
+  (16, $submac:ident ! ($($rest:tt)*)) => ($submac!(17, $($rest)*));
+  (17, $submac:ident ! ($($rest:tt)*)) => ($submac!(18, $($rest)*));
+  (18, $submac:ident ! ($($rest:tt)*)) => ($submac!(19, $($rest)*));
+  (19, $submac:ident ! ($($rest:tt)*)) => ($submac!(20, $($rest)*));
+  (20, $submac:ident ! ($($rest:tt)*)) => ($submac!(21, $($rest)*));
+);
+// nom-source: succ end
+// nom-source: tuple-chain begin
+macro_rules! tuple_trait(
+  ($name1:ident $ty1:ident, $name2: ident $ty2:ident, $($name:ident $ty:ident),*) => (
+    tuple_trait!(__impl $name1 $ty1, $name2 $ty2; $($name $ty),*);
+  );
+  (__impl $($name:ident $ty: ident),+; $name1:ident $ty1:ident, $($name2:ident $ty2:ident),*) => (
+    tuple_trait_impl!($($name $ty),+);
+    tuple_trait!(__impl $($name $ty),+ , $name1 $ty1; $($name2 $ty2),*);
+  );
+  (__impl $($name:ident $ty: ident),+; $name1:ident $ty1:ident) => (
+    tuple_trait_impl!($($name $ty),+);
+    tuple_trait_impl!($($name $ty),+, $name1 $ty1);
+  );
+);
+
+macro_rules! tuple_trait_impl(
+  ($($name:ident $ty: ident),+) => (
+    #[allow(deprecated)]
+    impl<
+      Input: Clone, $($ty),+ , Error: ParseError<Input>,
+      $($name: Parser<Input, Output = $ty, Error = Error>),+
+    > Tuple<Input, ( $($ty),+ ), Error> for ( $($name),+ ) {
+      fn parse_tuple(&mut self, input: Input) -> IResult<Input, ( $($ty),+ ), Error> {
+        tuple_trait_inner!(0, self, input, (), $($name)+)
+
+      }
+    }
+  );
+);
+
+macro_rules! tuple_trait_inner(
+  ($it:tt, $self:expr, $input:expr, (), $head:ident $($id:ident)+) => ({
+    let (i, o) = $self.$it.parse($input)?;
+
+    succ!($it, tuple_trait_inner!($self, i, ( o ), $($id)+))
+  });
+  ($it:tt, $self:expr, $input:expr, ($($parsed:tt)*), $head:ident $($id:ident)+) => ({
+    let (i, o) = $self.$it.parse($input)?;
+
+    succ!($it, tuple_trait_inner!($self, i, ($($parsed)* , o), $($id)+))
+  });
+  ($it:tt, $self:expr, $input:expr, ($($parsed:tt)*), $head:ident) => ({
+    let (i, o) = $self.$it.parse($input)?;
+
+    Ok((i, ($($parsed)* , o)))
+  });
+);
+
+tuple_trait!(FnA A, FnB B, FnC C, FnD D, FnE E, FnF F, FnG G, FnH H, FnI I, FnJ J, FnK K, FnL L,
+  FnM M, FnN N, FnO O, FnP P, FnQ Q, FnR R, FnS S, FnT T, FnU U);
+// nom-source: tuple-chain end
+// nom-source: error-helpers begin
+#[allow(unused_variables)]
+#[macro_export(local_inner_macros)]
+macro_rules! error_position(
+  ($input:expr, $code:expr $(,)?) => ({
+    $crate::error::make_error($input, $code)
+  });
+);
+
+/// Creates a parse error from a `nom::ErrorKind`,
+/// the position in the input and the next error in
+/// the parsing tree
+#[allow(unused_variables)]
+#[macro_export(local_inner_macros)]
+macro_rules! error_node_position(
+  ($input:expr, $code:expr, $next:expr $(,)?) => ({
+    $crate::error::append_error($input, $code, $next)
+  });
+);
+// nom-source: error-helpers end
+pub fn main(mut world: World) {
+    assert_eq!(error_position!(2usize + 3usize, 4u8,), (5usize, 4u8));
+    assert_eq!(error_node_position!(5usize, 2u8, (3usize, 4u8),), (8usize, 6u8));
+    let mut parser = (Add { amount: 2usize, calls: 0usize }, Add { amount: 3usize, calls: 0usize }, Add { amount: 5usize, calls: 0usize });
+    assert_eq!(parser.parse_tuple(10usize), Ok((20usize, (10usize, 12usize, 15usize))));
+    assert_eq!((parser.0.calls, parser.1.calls, parser.2.calls), (1usize, 1usize, 1usize));
+    let mut failing = (Add { amount: 2usize, calls: 0usize }, Add { amount: 0usize, calls: 0usize }, Add { amount: 5usize, calls: 0usize });
+    assert_eq!(failing.parse_tuple(10usize), Err(7u8));
+    assert_eq!((failing.0.calls, failing.1.calls, failing.2.calls), (1usize, 1usize, 0usize));
+    world.stdout().write(b"nom macros ok\n");
+}

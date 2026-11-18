@@ -1,0 +1,182 @@
+//! Ownership of replay-validated macro syntax, including captures and aliases.
+use super::{a, failure, Origin, Expansion};
+use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(Default)]
+pub(crate) struct MacroOrigins {
+    pub items: BTreeMap<(usize, usize), Origin>,
+    pub types: BTreeMap<usize, usize>,
+    pub expressions: BTreeMap<usize, usize>,
+    pub patterns: BTreeMap<usize, usize>,
+    pub blocks: BTreeMap<usize, usize>,
+    pub live_expressions: BTreeSet<usize>,
+    pub live_patterns: BTreeSet<usize>,
+}
+pub(crate) fn item_key(item: a::Item) -> (usize, usize) {
+    match item {
+        a::Item::Function(id) => (0usize, id), a::Item::Struct(id) => (1usize, id),
+        a::Item::Enum(id) => (2usize, id), a::Item::Trait(id) => (3usize, id),
+        a::Item::Impl(id) => (4usize, id), a::Item::Use(id) => (5usize, id),
+        a::Item::Module(id) => (6usize, id), a::Item::Alias(id) => (7usize, id),
+        a::Item::Constant(id) => (8usize, id), a::Item::MacroInvocation(id) => (9usize, id),
+    }
+}
+pub(crate) fn definition_identity(program: &a::Program, index: usize) -> String {
+    let definition = &program.macro_definitions[index];
+    let scope = &program.scopes[definition.scope];
+    format!("macro-definition:{index}:{}", crate::names::qualified(&scope.path, &definition.name))
+}
+pub(crate) fn invocation_identity(index: usize) -> String { format!("macro-invocation:{index}") }
+pub(crate) fn expansion_identity(index: usize) -> String { format!("macro-expansion:{index}") }
+
+fn nodes(program: &a::Program) -> Result<(BTreeSet<usize>, BTreeSet<usize>, BTreeSet<usize>), String> {
+    let mut expressions = BTreeSet::new();
+    let mut blocks = BTreeSet::new();
+    let mut patterns = BTreeSet::new();
+    let mut pending: Vec<(usize, usize)> = Vec::new();
+    for function in &program.functions {
+        if let Some(body) = function.body { pending.push((1usize, body)); }
+    }
+    for constant in &program.constants { pending.push((0usize, constant.value)); }
+    for definition in &program.enums {
+        for variant in &definition.variants {
+            if let Some(value) = variant.discriminant { pending.push((0usize, value)); }
+        }
+    }
+    while let Some((kind, index)) = pending.pop() {
+        if kind == 0usize {
+            if !expressions.insert(index) { continue; }
+            let Some(node) = program.exprs.get(index) else {
+                return Err(failure("macro", "expanded expression edge is absent"));
+            };
+            match &node.kind {
+                a::Expr::Tuple(values) | a::Expr::Array(values) | a::Expr::Macro { args: values, .. } => {
+                    for value in values { pending.push((0usize, *value)); }
+                }
+                a::Expr::Repeat { value, count } => { pending.push((0usize, *value)); pending.push((0usize, *count)); }
+                a::Expr::Unary { value, .. } | a::Expr::Borrow { value, .. } | a::Expr::Cast { value, .. }
+                | a::Expr::Field { value, .. } | a::Expr::Try(value) | a::Expr::Diverge(value) => pending.push((0usize, *value)),
+                a::Expr::Binary { left, right, .. } => { pending.push((0usize, *left)); pending.push((0usize, *right)); }
+                a::Expr::Assign { place, value, .. } => { pending.push((0usize, *place)); pending.push((0usize, *value)); }
+                a::Expr::Index { value, index } => { pending.push((0usize, *value)); pending.push((0usize, *index)); }
+                a::Expr::Call { callee, args } => {
+                    pending.push((0usize, *callee)); for value in args { pending.push((0usize, *value)); }
+                }
+                a::Expr::Method { receiver, args, .. } => {
+                    pending.push((0usize, *receiver)); for value in args { pending.push((0usize, *value)); }
+                }
+                a::Expr::Struct { fields, base, .. } => {
+                    for (_, value) in fields { pending.push((0usize, *value)); }
+                    if let Some(value) = base { pending.push((0usize, *value)); }
+                }
+                a::Expr::Block(body) | a::Expr::Loop { body } => pending.push((1usize, *body)),
+                a::Expr::If { condition, then_block, otherwise } => {
+                    pending.push((0usize, *condition)); pending.push((1usize, *then_block));
+                    if let Some(value) = otherwise { pending.push((0usize, *value)); }
+                }
+                a::Expr::IfLet { pattern, value, then_block, otherwise } => {
+                    pending.push((2usize, *pattern)); pending.push((0usize, *value)); pending.push((1usize, *then_block));
+                    if let Some(value) = otherwise { pending.push((0usize, *value)); }
+                }
+                a::Expr::While { condition, body } => { pending.push((0usize, *condition)); pending.push((1usize, *body)); }
+                a::Expr::WhileLet { pattern, value, body } => {
+                    pending.push((2usize, *pattern)); pending.push((0usize, *value)); pending.push((1usize, *body));
+                }
+                a::Expr::For { pattern, iterator, body } => {
+                    pending.push((2usize, *pattern)); pending.push((0usize, *iterator)); pending.push((1usize, *body));
+                }
+                a::Expr::Match { value, arms } => {
+                    pending.push((0usize, *value));
+                    for arm in arms {
+                        pending.push((2usize, arm.pattern)); pending.push((0usize, arm.value));
+                        if let Some(guard) = arm.guard { pending.push((0usize, guard)); }
+                    }
+                }
+                a::Expr::Closure { patterns, body, .. } => {
+                    for pattern in patterns { pending.push((2usize, *pattern)); }
+                    pending.push((0usize, *body));
+                }
+                a::Expr::Return(value) | a::Expr::Break(value) => {
+                    if let Some(value) = value { pending.push((0usize, *value)); }
+                }
+                a::Expr::Range { start, end, .. } => {
+                    if let Some(value) = start { pending.push((0usize, *value)); }
+                    if let Some(value) = end { pending.push((0usize, *value)); }
+                }
+                a::Expr::MacroInvocation(_) => return Err(failure("macro", "an invocation remains in the expanded expression graph")),
+                a::Expr::Int(_) | a::Expr::Float(_) | a::Expr::Bool(_) | a::Expr::String(_)
+                | a::Expr::Char(_) | a::Expr::Bytes(_) | a::Expr::Path(_) | a::Expr::Continue => {}
+            }
+        } else if kind == 1usize {
+            if !blocks.insert(index) { continue; }
+            let Some(block) = program.blocks.get(index) else { return Err(failure("macro", "expanded block edge is absent")); };
+            if let Some(value) = block.tail { pending.push((0usize, value)); }
+            for statement in &block.statements {
+                match statement {
+                    a::Stmt::Let { pattern, value, .. } => {
+                        pending.push((2usize, *pattern)); if let Some(value) = value { pending.push((0usize, *value)); }
+                    }
+                    a::Stmt::Expr { value, .. } => pending.push((0usize, *value)),
+                    a::Stmt::Item(_) => {}
+                }
+            }
+        } else {
+            if !patterns.insert(index) { continue; }
+            let Some(pattern) = program.patterns.get(index) else { return Err(failure("macro", "expanded pattern edge is absent")); };
+            match &pattern.kind {
+                a::Pattern::Literal(value) => pending.push((0usize, *value)),
+                a::Pattern::Range { start, end, .. } => {
+                    if let Some(value) = start { pending.push((0usize, *value)); }
+                    if let Some(value) = end { pending.push((0usize, *value)); }
+                }
+                a::Pattern::Tuple(values) | a::Pattern::Variant { fields: values, .. } | a::Pattern::Or(values) => {
+                    for value in values { pending.push((2usize, *value)); }
+                }
+                a::Pattern::Struct { fields, .. } => { for (_, value) in fields { pending.push((2usize, *value)); } }
+                a::Pattern::Ref { inner, .. } => pending.push((2usize, *inner)),
+                a::Pattern::Wild | a::Pattern::Rest | a::Pattern::Bind { .. } | a::Pattern::Path(_) => {}
+            }
+        }
+    }
+    Ok((expressions, blocks, patterns))
+}
+fn range(map: &mut BTreeMap<usize, usize>, start: usize, end: usize, expansion: usize) {
+    for index in start..end { map.insert(index, expansion); }
+}
+fn items(map: &mut BTreeMap<(usize, usize), Origin>, kind: usize, start: usize, end: usize, expansion: usize) {
+    for index in start..end {
+        map.insert((kind, index), Origin { declaration: None, expansion: Expansion::Macro(expansion) });
+    }
+}
+pub(crate) fn collect(program: &a::Program) -> Result<MacroOrigins, String> {
+    let mut result = MacroOrigins::default();
+    if program.macro_expansions.is_empty() { return Ok(result); }
+    let (expressions, _, patterns) = nodes(program)?;
+    result.live_expressions = expressions;
+    result.live_patterns = patterns;
+    for (index, expansion) in program.macro_expansions.iter().enumerate() {
+        let start = &expansion.start;
+        let end = &expansion.end;
+        range(&mut result.types, start.types, end.types, index);
+        // All allocated syntax is unwritten, including unreachable alias copies.
+        // Only reachable nodes become references or call sites.
+        range(&mut result.expressions, start.exprs, end.exprs, index);
+        range(&mut result.blocks, start.blocks, end.blocks, index);
+        range(&mut result.patterns, start.patterns, end.patterns, index);
+        items(&mut result.items, 0usize, start.functions, end.functions, index);
+        items(&mut result.items, 1usize, start.structs, end.structs, index);
+        items(&mut result.items, 2usize, start.enums, end.enums, index);
+        items(&mut result.items, 3usize, start.traits, end.traits, index);
+        items(&mut result.items, 4usize, start.impls, end.impls, index);
+        items(&mut result.items, 5usize, start.uses, end.uses, index);
+        items(&mut result.items, 6usize, start.modules, end.modules, index);
+        items(&mut result.items, 7usize, start.aliases, end.aliases, index);
+        items(&mut result.items, 8usize, start.constants, end.constants, index);
+    }
+    for alias in &program.macro_aliases {
+        let expansion = program.macro_expansions.iter().position(|entry| entry.invocation == alias.invocation)
+            .ok_or_else(|| failure("macro", "an expanded alias has no invocation receipt"))?;
+        result.expressions.insert(alias.expression, expansion);
+    }
+    Ok(result)
+}

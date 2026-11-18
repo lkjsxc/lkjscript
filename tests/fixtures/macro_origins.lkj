@@ -1,0 +1,191 @@
+// Exact macro origins are replayed from source, never authorized by receipts.
+mod ast; mod diagnostic; mod names; mod syntax; mod resolve; mod source; mod origins;
+mod diagnostics {
+    #[derive(Clone)]
+    pub struct BlockedRegion { pub path: String, pub span: crate::ast::Span, pub kind: String, pub reason: String }
+}
+fn inputs() -> Vec<(String, Vec<u8>)> {
+    let text = r#"
+#[macro_export(local_inner_macros)]
+macro_rules! exported { () => { 9i64 }; }
+macro_rules! emit { ($name:ident, $value:expr) => { fn $name() -> i64 { $value } }; }
+macro_rules! twice { ($value:expr) => { ($value, $value) }; }
+macro_rules! nested { ($value:expr) => { twice!($value) }; }
+macro_rules! text { () => { include_str!("payload.txt") }; }
+macro_rules! discard { ($value:expr) => { 0i64 }; }
+fn helper(value: i64) -> i64 { value + 1i64 }
+emit!(generated, helper(5i64));
+fn source() -> i64 {
+    let pair = nested!(helper(7i64));
+    let label = text!();
+    let ignored = discard!(missing!());
+    pair.0 + pair.1 + generated()
+}
+"#;
+    vec![("main.lkj".to_string(), text.as_bytes().to_vec()),
+        ("payload.txt".to_string(), b"retained input"[..].to_vec()),
+        ("$std/lib.lkj".to_string(), b"pub mod marker { pub struct Value; }"[..].to_vec())]
+}
+fn parsed(inputs: &[(String, Vec<u8>)]) -> ast::Program {
+    let program = source::load("main.lkj", Some("$std/lib.lkj"), &mut |path: &str| {
+        Ok(inputs.iter().find(|(name, _)| name == path).map(|(_, bytes)| bytes.clone()))
+    }).unwrap();
+    resolve::resolve(&program).unwrap()
+}
+fn refused(program: &ast::Program) -> usize {
+    let resolver = resolve::Resolver::new(program).unwrap();
+    match origins::collect(program, &resolver) {
+        Err(message) => assert!(message.contains("E_IDENTITY_ORIGIN")),
+        Ok(_) => panic!("unexplained macro origin accepted"),
+    }
+    1usize
+}
+fn unauthenticated(program: &ast::Program, inputs: &[(String, Vec<u8>)]) -> usize {
+    match syntax::macros::provenance::validate_inputs(program, inputs) {
+        Err(problem) => assert!(problem.code == "E_IDENTITY_ORIGIN"),
+        Ok(()) => panic!("macro snapshot was not bound to its actual input bytes"),
+    }
+    1usize
+}
+fn normalized(path: &str) -> String {
+    if path.starts_with("$std/") { format!("/mounted/library/{}", &path[5usize..]) }
+    else { format!("/project/{path}") }
+}
+fn main() {
+    let inputs = inputs();
+    let program = parsed(&inputs);
+    syntax::macros::provenance::validate_inputs(&program, &inputs).unwrap();
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    let relation = origins::collect(&program, &resolver).unwrap();
+    let generated = program.functions.iter().position(|function| function.name == "generated").unwrap();
+    assert!(relation.functions[generated].is_some());
+    assert!(relation.functions[generated].unwrap().expansion.name() == "macro-rules");
+    assert!(!relation.macros.expressions.is_empty());
+    let mut unreachable_copy = false;
+    for alias in &program.macro_aliases {
+        if !relation.macros.live_expressions.contains(&alias.expanded) {
+            assert!(relation.macros.expressions.contains_key(&alias.expanded));
+            unreachable_copy = true;
+        }
+    }
+    assert!(unreachable_copy);
+    assert!(program.macro_inputs.len() == 1usize);
+    assert!(program.macro_invocations.iter().all(|invocation| invocation.name != "missing"));
+    let repeated = program.macro_captures.iter().position(|capture| capture.materializations.len() > 1usize).unwrap();
+    assert!(program.macro_captures[repeated].materializations[0usize]
+        != program.macro_captures[repeated].materializations[1usize]);
+    let integer = relation.macros.expressions.keys().find(|index|
+        matches!(program.exprs[**index].kind, ast::Expr::Int(_))).copied().unwrap();
+    let included = relation.macros.expressions.keys().find(|index|
+        matches!(&program.exprs[**index].kind, ast::Expr::String(value) if value == "retained input")).copied().unwrap();
+
+    // Driver-normalized source and library mounts retain the same exact proof.
+    let mut mounted = program.clone();
+    for index in 0usize..mounted.files.len() { mounted.files[index].path = normalized(&mounted.files[index].path); }
+    for index in 0usize..mounted.loaded_modules.len() {
+        if !mounted.loaded_modules[index].alternate.is_empty() {
+            mounted.loaded_modules[index].alternate = normalized(&mounted.loaded_modules[index].alternate);
+        }
+    }
+    for index in 0usize..mounted.macro_inputs.len() { mounted.macro_inputs[index].0 = normalized(&mounted.macro_inputs[index].0); }
+    let files = mounted.files.clone();
+    let modules = mounted.loaded_modules.clone();
+    {
+        let original = mounted.macro_input.as_mut().unwrap();
+        original.files = files;
+        original.loaded_modules = modules;
+    }
+    let mut mounted_inputs = Vec::new();
+    for (path, bytes) in &inputs { mounted_inputs.push((normalized(path), bytes.clone())); }
+    syntax::macros::provenance::validate_inputs(&mounted, &mounted_inputs).unwrap();
+    let resolver = resolve::Resolver::new(&mounted).unwrap();
+    origins::collect(&mounted, &resolver).unwrap();
+
+    let mut count = 0usize;
+    let mut literal = program.clone();
+    literal.exprs[integer].kind = ast::Expr::Int("99i64".to_string());
+    count += refused(&literal);
+    let mut capture = program.clone();
+    capture.macro_captures[repeated].tokens[0usize].text = "invented".to_string();
+    count += refused(&capture);
+    let mut materializations = program.clone();
+    let first = materializations.macro_captures[repeated].materializations[0usize];
+    materializations.macro_captures[repeated].materializations.push(first);
+    count += refused(&materializations);
+    let mut spelling = program.clone();
+    spelling.macro_definitions[0usize].body[0usize].origin.start += 1usize;
+    count += refused(&spelling);
+    let mut context = program.clone();
+    context.macro_expansions[0usize].context += 1usize;
+    count += refused(&context);
+    let mut parent = program.clone();
+    parent.macro_expansions[0usize].parent = Some(0usize);
+    count += refused(&parent);
+    let mut definition = program.clone();
+    definition.macro_expansions[0usize].definition = 0usize;
+    count += refused(&definition);
+    let mut invocation = program.clone();
+    invocation.macro_invocations[0usize].name = "invented".to_string();
+    count += refused(&invocation);
+    let mut extent = program.clone();
+    extent.macro_expansions[0usize].end.exprs += 1usize;
+    count += refused(&extent);
+    let mut alias = program.clone();
+    alias.macro_aliases[0usize].expanded = integer;
+    count += refused(&alias);
+    let mut original = program.clone();
+    original.macro_aliases[0usize].original.kind = ast::Expr::Bool(true);
+    count += refused(&original);
+    let mut owner = program.clone();
+    let body = owner.functions[generated].body.unwrap();
+    owner.blocks[body].tail = None;
+    count += refused(&owner);
+    let mut snapshot = program.clone();
+    snapshot.macro_input = None;
+    count += refused(&snapshot);
+    let mut expanded_input = program.clone();
+    expanded_input.macro_input.as_mut().unwrap().macros_expanded = true;
+    count += refused(&expanded_input);
+    let mut absent_include = program.clone();
+    absent_include.macro_inputs.clear();
+    count += refused(&absent_include);
+    let mut duplicate_include = program.clone();
+    let receipt = duplicate_include.macro_inputs[0usize].clone();
+    duplicate_include.macro_inputs.push(receipt);
+    count += refused(&duplicate_include);
+    let mut unused_include = program.clone();
+    unused_include.macro_inputs.push(("unused.txt".to_string(), b"unused"[..].to_vec()));
+    count += refused(&unused_include);
+    let mut token_context = program.clone();
+    token_context.macro_definitions[0usize].body[0usize].context = 1usize;
+    count += refused(&token_context);
+
+    // Coordinated receipt/output changes still cannot change authenticated bytes.
+    let mut include_forgery = program.clone();
+    include_forgery.macro_inputs[0usize].1 = b"forged"[..].to_vec();
+    for index in 0usize..include_forgery.exprs.len() {
+        if matches!(&include_forgery.exprs[index].kind, ast::Expr::String(value) if value == "retained input") {
+            include_forgery.exprs[index].kind = ast::Expr::String("forged".to_string());
+        }
+    }
+    count += unauthenticated(&include_forgery, &inputs);
+    let mut flags = program.clone();
+    flags.macro_input.as_mut().unwrap().macro_definitions[0usize].exported = false;
+    count += unauthenticated(&flags, &inputs);
+    let mut inner = program.clone();
+    inner.macro_input.as_mut().unwrap().macro_definitions[0usize].local_inner = false;
+    count += unauthenticated(&inner, &inputs);
+    let mut empty = program.clone();
+    empty.macro_input.as_mut().unwrap().macro_definitions[0usize].body.clear();
+    count += unauthenticated(&empty, &inputs);
+    let mut scope = program.clone();
+    scope.macro_input.as_mut().unwrap().scopes[0usize].path = "forged".to_string();
+    count += unauthenticated(&scope, &inputs);
+    let mut source_token = program.clone();
+    source_token.macro_input.as_mut().unwrap().macro_invocations[0usize].tokens[0usize].text = "invented".to_string();
+    count += unauthenticated(&source_token, &inputs);
+    let mut wrong_span = program.clone();
+    wrong_span.exprs[included].span.start += 1usize;
+    count += refused(&wrong_span);
+    assert!(count == 25usize);
+}

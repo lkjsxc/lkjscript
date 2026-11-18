@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false,"rustCode":"E0308"}
+struct lower;
+macro_rules! invalid { ($value:expr) => {{ let lower = $value; 1i32 }}; }
+fn probe() -> i32 { invalid!(9i32) }

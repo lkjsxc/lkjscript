@@ -1,0 +1,153 @@
+//! Lexical occurrence order for early cleanup after source expansion.
+//! Diagnostic projections are not an execution order: repeated captures may
+//! retain earlier spans, and all template statements may share one anchor.
+//! These counters schedule optional drops only; ordinary IR checks every drop.
+use crate::ast as a;
+use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(Default)]
+pub(super) struct Order {
+    pub(super) uses: BTreeMap<String, Vec<usize>>,
+    statements: BTreeMap<(usize, usize), usize>,
+    blocks: BTreeMap<usize, usize>,
+    repeated: BTreeSet<usize>,
+}
+impl Order {
+    pub(super) fn boundary(&self, block: usize, statement: usize) -> Option<(usize, usize)> {
+        // A shared block has more than one structural occurrence. Do not infer
+        // an early end from one of them; normal scope cleanup remains valid.
+        if self.repeated.contains(&block) { return None; }
+        let position = self.statements.get(&(block, statement)).copied()?;
+        let end = self.blocks.get(&block).copied()?;
+        Some((position, end))
+    }
+}
+
+enum Visit { Expression(usize), Block(usize), StatementEnd(usize, usize), BlockEnd(usize) }
+fn expressions(pending: &mut Vec<Visit>, values: &[usize]) {
+    let mut remaining = values.len();
+    while remaining > 0usize { remaining -= 1usize; pending.push(Visit::Expression(values[remaining])); }
+}
+
+pub(super) fn expanded(source: &a::Program) -> Option<Order> {
+    if source.macro_expansions.is_empty() { return None; }
+    let mut order = Order::default();
+    let mut seen: BTreeSet<usize> = BTreeSet::new();
+    let mut pending: Vec<Visit> = Vec::new();
+    // Reverse root insertion preserves the source arenas' stable root order.
+    let mut remaining = source.constants.len();
+    while remaining > 0usize { remaining -= 1usize; pending.push(Visit::Expression(source.constants[remaining].value)); }
+    let mut remaining = source.functions.len();
+    while remaining > 0usize {
+        remaining -= 1usize;
+        if let Some(body) = source.functions[remaining].body { pending.push(Visit::Block(body)); }
+    }
+    let mut position = 0usize;
+    while let Some(visit) = pending.pop() {
+        match visit {
+            Visit::StatementEnd(block, statement) => {
+                position += 1usize;
+                order.statements.insert((block, statement), position);
+            }
+            Visit::BlockEnd(block) => {
+                position += 1usize;
+                order.blocks.insert(block, position);
+            }
+            Visit::Block(id) => {
+                if !seen.insert(id) { order.repeated.insert(id); }
+                let block = &source.blocks[id];
+                pending.push(Visit::BlockEnd(id));
+                if let Some(tail) = block.tail { pending.push(Visit::Expression(tail)); }
+                let mut statement = block.statements.len();
+                while statement > 0usize {
+                    statement -= 1usize;
+                    pending.push(Visit::StatementEnd(id, statement));
+                    match &block.statements[statement] {
+                        a::Stmt::Let { value: Some(value), .. } | a::Stmt::Expr { value, .. } => {
+                            pending.push(Visit::Expression(*value));
+                        }
+                        a::Stmt::Let { value: None, .. } | a::Stmt::Item(_) => {}
+                    }
+                }
+            }
+            Visit::Expression(id) => {
+                match &source.exprs[id].kind {
+                    a::Expr::Path(path) => {
+                        position += 1usize;
+                        if !order.uses.contains_key(&path.name) { order.uses.insert(path.name.clone(), Vec::new()); }
+                        order.uses.get_mut(&path.name).unwrap().push(position);
+                    }
+                    a::Expr::Tuple(values) | a::Expr::Array(values) | a::Expr::Macro { args: values, .. } => {
+                        expressions(&mut pending, values);
+                    }
+                    a::Expr::Repeat { value, count } => {
+                        pending.push(Visit::Expression(*count)); pending.push(Visit::Expression(*value));
+                    }
+                    a::Expr::Unary { value, .. } | a::Expr::Borrow { value, .. } | a::Expr::Cast { value, .. }
+                    | a::Expr::Field { value, .. } | a::Expr::Try(value) | a::Expr::Diverge(value) => pending.push(Visit::Expression(*value)),
+                    a::Expr::Binary { left, right, .. } => {
+                        pending.push(Visit::Expression(*right)); pending.push(Visit::Expression(*left));
+                    }
+                    a::Expr::Assign { place, value, .. } => {
+                        // The builder evaluates the right-hand side before its destination.
+                        pending.push(Visit::Expression(*place)); pending.push(Visit::Expression(*value));
+                    }
+                    a::Expr::Index { value, index } => {
+                        pending.push(Visit::Expression(*index)); pending.push(Visit::Expression(*value));
+                    }
+                    a::Expr::Call { callee, args } => {
+                        expressions(&mut pending, args);
+                        pending.push(Visit::Expression(*callee));
+                    }
+                    a::Expr::Method { receiver, args, .. } => {
+                        expressions(&mut pending, args);
+                        pending.push(Visit::Expression(*receiver));
+                    }
+                    a::Expr::Struct { fields, base, .. } => {
+                        if let Some(base) = base { pending.push(Visit::Expression(*base)); }
+                        let mut remaining = fields.len();
+                        while remaining > 0usize { remaining -= 1usize; pending.push(Visit::Expression(fields[remaining].1)); }
+                    }
+                    a::Expr::Block(body) | a::Expr::Loop { body } => pending.push(Visit::Block(*body)),
+                    a::Expr::If { condition, then_block, otherwise } => {
+                        if let Some(otherwise) = otherwise { pending.push(Visit::Expression(*otherwise)); }
+                        pending.push(Visit::Block(*then_block)); pending.push(Visit::Expression(*condition));
+                    }
+                    a::Expr::IfLet { value, then_block, otherwise, .. } => {
+                        if let Some(otherwise) = otherwise { pending.push(Visit::Expression(*otherwise)); }
+                        pending.push(Visit::Block(*then_block)); pending.push(Visit::Expression(*value));
+                    }
+                    a::Expr::While { condition, body } => {
+                        pending.push(Visit::Block(*body)); pending.push(Visit::Expression(*condition));
+                    }
+                    a::Expr::WhileLet { value, body, .. } => {
+                        pending.push(Visit::Block(*body)); pending.push(Visit::Expression(*value));
+                    }
+                    a::Expr::For { iterator, body, .. } => {
+                        pending.push(Visit::Block(*body)); pending.push(Visit::Expression(*iterator));
+                    }
+                    a::Expr::Match { value, arms } => {
+                        let mut remaining = arms.len();
+                        while remaining > 0usize {
+                            remaining -= 1usize;
+                            pending.push(Visit::Expression(arms[remaining].value));
+                            if let Some(guard) = arms[remaining].guard { pending.push(Visit::Expression(guard)); }
+                        }
+                        pending.push(Visit::Expression(*value));
+                    }
+                    a::Expr::Closure { body, .. } => pending.push(Visit::Expression(*body)),
+                    a::Expr::Return(value) | a::Expr::Break(value) => {
+                        if let Some(value) = value { pending.push(Visit::Expression(*value)); }
+                    }
+                    a::Expr::Range { start, end, .. } => {
+                        if let Some(end) = end { pending.push(Visit::Expression(*end)); }
+                        if let Some(start) = start { pending.push(Visit::Expression(*start)); }
+                    }
+                    a::Expr::Int(_) | a::Expr::Float(_) | a::Expr::Bool(_) | a::Expr::String(_)
+                    | a::Expr::Char(_) | a::Expr::Bytes(_) | a::Expr::Continue | a::Expr::MacroInvocation(_) => {}
+                }
+            }
+        }
+    }
+    Some(order)
+}

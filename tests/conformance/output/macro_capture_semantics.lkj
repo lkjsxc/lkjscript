@@ -1,0 +1,43 @@
+// expect: output 6361707475726573206f6b0a
+// witness: {}
+macro_rules! discard { ($value:expr) => { 17i32 }; }
+macro_rules! widths { ($value:expr) => {{ let small: u8 = $value; let wide: u16 = $value; (small, wide) }}; }
+macro_rules! twice { ($value:expr) => { ($value, $value) }; }
+macro_rules! forward { ($value:expr) => { twice!($value) }; }
+macro_rules! literal_identity {
+    ("a") => { 1i32 }; ("\x61") => { 2i32 }; (r"a") => { 3i32 };
+    ('a') => { 4i32 }; ('\x61') => { 5i32 }; (b"a") => { 6i32 }; (b"\x61") => { 7i32 };
+    (01) => { 8i32 }; (1) => { 9i32 }; (b'a') => { 10i32 }; (b'\x61') => { 11i32 };
+    (97u8) => { 12i32 }; ($value:tt) => { 0i32 };
+}
+macro_rules! nested_groups { ($(($($value:expr),*));*) => { ($( (0usize $(+ $value)*), )*) }; }
+macro_rules! ident_or_tree { ($value:ident) => { 1i32 }; ($value:tt) => { 2i32 }; }
+macro_rules! literal_separator { ($($name:ident)"*"*) => { 0usize $(+ { let $name = 1usize; $name })* }; }
+macro_rules! const_count { () => { N }; }
+fn count<const N: usize>() -> usize { const_count!() }
+fn bump(value: &mut i32) -> i32 { *value += 1; *value }
+pub fn main(mut world: World) {
+    assert_eq!(discard!(missing_macro!()), 17i32);
+    assert_eq!(discard!(missing::call::<UnknownType>()), 17i32);
+    assert_eq!(discard!(std::fs::read("unopened-file")), 17i32);
+    assert_eq!(discard!(std::env::args()), 17i32);
+    assert_eq!(discard!(include_str!("not-a-real-file.txt")), 17i32);
+    assert_eq!(discard!(format!(unknown_format_argument)), 17i32);
+    assert_eq!(discard!(println!("unexpanded {}", unknown_value)), 17i32);
+    assert_eq!(widths!(1), (1u8, 1u16));
+    assert_eq!(count::<7>(), 7usize);
+    assert_eq!((literal_identity!("a"), literal_identity!("\x61"), literal_identity!(r"a")), (1i32, 2i32, 3i32));
+    assert_eq!((literal_identity!('a'), literal_identity!('\x61')), (4i32, 5i32));
+    assert_eq!((literal_identity!(b"a"), literal_identity!(b"\x61")), (6i32, 7i32));
+    assert_eq!((literal_identity!(01), literal_identity!(1)), (8i32, 9i32));
+    assert_eq!((literal_identity!(b'a'), literal_identity!(b'\x61'), literal_identity!(97u8)), (10i32, 11i32, 12i32));
+    assert_eq!(nested_groups!((); (); ()), (0usize, 0usize, 0usize));
+    assert_eq!(nested_groups!((); (1usize, 2usize); ()), (0usize, 3usize, 0usize));
+    assert_eq!(ident_or_tree!(_), 2i32);
+    assert_eq!(ident_or_tree!(self), 1i32);
+    assert_eq!(literal_separator!(one "*" two), 2usize);
+    let mut value = 0i32;
+    assert_eq!(twice!(bump(&mut value)), (1i32, 2i32));
+    assert_eq!(forward!(bump(&mut value)), (3i32, 4i32));
+    world.stdout().write(b"captures ok\n");
+}

@@ -1,0 +1,195 @@
+#!/usr/bin/env bash
+# Declarative expansions expose replayed facts and refuse invented edit spans.
+set -euo pipefail
+cd "$(dirname "$0")/.."
+compiler=$(realpath "${1:-target/lkjscript}")
+library="$PWD/library"
+mkdir -p target
+fixture=$(mktemp -d "$PWD/target/macro-origins.XXXXXX")
+trap 'if [[ ${LKJSCRIPT_MACRO_KEEP:-0} == 1 ]]; then printf "retained_fixture=%s\n" "$fixture" >&2; else rm -rf -- "$fixture"; fi' EXIT HUP INT TERM
+umask 077
+mkdir "$fixture/project" "$fixture/store" "$fixture/contracts"
+head -c 32 /dev/urandom > "$fixture/key"
+fail() { printf 'macro-origins: %s\n' "$*" >&2; exit 1; }
+common=(main.lkj --source-dir "$fixture/project" --library-dir "$library" --store "$fixture/store" --store-key "$fixture/key")
+publish() {
+    "$compiler" build "${common[@]}" --index -o "$fixture/image" > "$fixture/index" 2> "$fixture/error" || { cat "$fixture/error" >&2; fail build; }
+    snapshot=$(awk '$1=="LKJSCRIPT_SNAPSHOT" { print $2 }' "$fixture/index")
+    [[ ${#snapshot} == 64 ]] || fail 'missing indexed snapshot'
+}
+query() {
+    "$compiler" query "${common[@]}" --snapshot "$snapshot" --kind "$1" --id "$2" --depth 2 --limit 128 --bytes 65536
+}
+value() {
+    for engine in native interpreter; do
+        actual=$("$compiler" run main.lkj --source-dir "$fixture/project" --library-dir "$library" --no-store --engine "$engine")
+        [[ $actual == "$1" ]] || fail "$engine returned $actual, expected $1"
+    done
+}
+edit() {
+    "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/plan" 2> "$fixture/error" || { cat "$fixture/error" >&2; fail edit; }
+    grep -q 'mode=apply' "$fixture/plan" || fail 'edit was not applied'
+}
+refuse() {
+    local expected=$1
+    cp "$fixture/project/main.lkj" "$fixture/unchanged"
+    if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/refused" 2> "$fixture/refused-error"; then fail 'unsafe projection edit accepted'; fi
+    grep -Fq "$expected" "$fixture/refused-error" || { cat "$fixture/refused-error" >&2; fail "missing $expected"; }
+    cmp "$fixture/unchanged" "$fixture/project/main.lkj" || fail 'refusal wrote source'
+    [[ ! -e $fixture/project/.lkjscript-edit.pending ]] || fail 'refusal left pending state'
+    { cat "$fixture/request"; cat "$fixture/refused-error"; } >> "$fixture/refusals"
+}
+epoch() {
+    sed -n 's/.*derived-epoch=\([0-9a-f]*\).*/\1/p' "$1" | head -1
+}
+cat > "$fixture/project/main.lkj" <<'SOURCE'
+macro_rules! make {
+    ($name:ident) => {
+        #[derive(Default, Debug)]
+        struct Packet { code: i64 }
+        fn $name() -> i64 { helper(40i64) }
+    };
+}
+macro_rules! combine { ($value:expr) => { helper($value) }; }
+macro_rules! relay { ($value:expr) => { combine!($value) }; }
+macro_rules! read_code { ($input:expr) => { $input.code }; }
+macro_rules! label { () => { include_str!("payload.txt") }; }
+macro_rules! import_values {
+    () => { use crate::imported::amount as imported_amount; use crate::borrowed::*; };
+}
+make!(generated);
+import_values!();
+mod imported { pub fn amount() -> i64 { 0i64 } }
+mod borrowed { pub fn bonus() -> i64 { 0i64 } }
+struct Input { code: i64 }
+fn helper(value: i64) -> i64 { value + 1i64 }
+fn field_value(input: &Input) -> i64 { read_code!(input) }
+fn value() -> i64 { generated() + relay!(0i64) }
+fn spare() -> i64 { 0i64 }
+fn main() -> i64 {
+    assert_eq!(format!("{:?}", Packet::default()), "Packet { code: 0 }");
+    assert_eq!(label!().len(), 7usize);
+    value() + spare() + field_value(&Input { code: 0i64 }) + imported_amount() + bonus()
+}
+SOURCE
+printf 'payload' > "$fixture/project/payload.txt"
+publish
+value 42
+query text 'macro-definition:0:make' > "$fixture/definition-text"
+grep -Fq 'macro_rules!' "$fixture/definition-text" || fail 'macro definition lost authored text'
+query text 'macro-invocation:0' > "$fixture/invocation-text"
+grep -Fq 'make!(generated)' "$fixture/invocation-text" || fail 'macro invocation lost authored text'
+query meta generated > "$fixture/generated-meta"
+grep -Fq 'expansion=macro-rules source-projection=false span=invocation-anchor' "$fixture/generated-meta" || fail 'macro projection origin'
+initial_epoch=$(epoch "$fixture/generated-meta")
+[[ ${#initial_epoch} == 64 ]] || fail 'macro expansion epoch missing'
+query uses helper > "$fixture/helper-uses"
+grep -Fq 'origin=generated expansion=macro-rules' "$fixture/helper-uses" || fail 'generated helper dependency missing'
+query uses 'Input::field:code' > "$fixture/field-uses"
+grep -Fq 'origin=generated expansion=macro-rules' "$fixture/field-uses" || fail 'generated typed field dependency missing'
+for entry in 'imported:import-qualification' 'imported::amount:import' 'borrowed:glob-import'; do
+    identity=${entry%:*}
+    kind=${entry##*:}
+    query uses "$identity" > "$fixture/import-uses"
+    grep -Eq "origin=generated expansion=macro-rules .*kind=$kind([[:space:]]|$)" "$fixture/import-uses" \
+        || { cat "$fixture/import-uses" >&2; fail "generated $kind dependency missing"; }
+    if grep -Eq 'owner="crate".*kind=import' "$fixture/import-uses"; then
+        fail 'generated import invented an authored use-tree spelling'
+    fi
+done
+query references 'macro-expansion:0' > "$fixture/expansion-references"
+grep -Fq 'macro-definition:0:make' "$fixture/expansion-references" || fail 'macro definition edge missing'
+grep -Fq 'macro-invocation:0' "$fixture/expansion-references" || fail 'macro invocation edge missing'
+query outline 'macro-expansion:0' > "$fixture/expansion-outline"
+grep -Fq 'kind=call-site' "$fixture/expansion-outline" || fail 'generated call identity missing'
+for id in generated Packet 'Packet::field:code' '<Packet as std::fmt::Debug>::fmt'; do
+    query text "$id" > "$fixture/projected-text"
+    grep -Fq 'fact=text-unavailable' "$fixture/projected-text" || fail "generated $id claims source text"
+done
+query meta '<Packet as std::fmt::Debug>::fmt' > "$fixture/debug-meta"
+grep -Fq 'expansion=derive-debug source-projection=false' "$fixture/debug-meta" || fail 'macro-generated derive lost its strict Debug origin'
+
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-body","id":"spare","source":"{ 1i64 }"}]}
+REQUEST
+edit
+value 43
+publish
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"rename","id":"spare","name":"offset"}]}
+REQUEST
+edit
+grep -Fq 'offset()' "$fixture/project/main.lkj" || fail 'authored caller rename missing'
+value 43
+publish
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-body","id":"value","source":"{ generated() + relay!(1i64) }"}]}
+REQUEST
+edit
+value 44
+publish
+query meta generated > "$fixture/after-body-meta"
+[[ $(epoch "$fixture/after-body-meta") == "$initial_epoch" ]] || fail 'unrelated authored body changed generated item epoch'
+
+# Fragment shape checking keeps tokens unexpanded, but publication must still
+# expand and check them in this project's real macro scope.
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-body","id":"value","source":"{ generated() + relay!(1i64, 2i64) }"}]}
+REQUEST
+refuse E_EDIT_CHECK
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-body","id":"value","source":"{ generated() + relay!(true) }"}]}
+REQUEST
+refuse E_EDIT_CHECK
+value 44
+
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-body","id":"generated","source":"{ 0i64 }"}]}
+REQUEST
+refuse E_EDIT_GENERATED_SOURCE
+for id in Packet 'Packet::field:code' 'macro-expansion:0'; do
+    printf '{"version":1,"operations":[{"op":"rename","id":"%s","name":"invented"}]}\n' "$id" > "$fixture/request"
+    refuse E_EDIT_GENERATED_SOURCE
+done
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"rename","id":"helper","name":"renamed"}]}
+REQUEST
+refuse E_EDIT_GENERATED_REFERENCE
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"rename","id":"Input::field:code","name":"renamed"}]}
+REQUEST
+refuse E_EDIT_GENERATED_REFERENCE
+for identity in imported 'imported::amount' borrowed; do
+    printf '{"version":1,"operations":[{"op":"rename","id":"%s","name":"changed_import"}]}\n' "$identity" > "$fixture/request"
+    refuse E_EDIT_GENERATED_REFERENCE
+done
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-body","id":"<Packet as std::fmt::Debug>::fmt","source":"{ std::Result::Ok(()) }"}]}
+REQUEST
+refuse E_EDIT_GENERATED_SOURCE
+
+# A real template change and a changed immutable include receipt both affect
+# expanded identities; same-length data must not reuse an old body epoch.
+perl -0pi -e 's/helper\(40i64\)/helper(41i64)/' "$fixture/project/main.lkj"
+publish
+value 45
+query meta generated > "$fixture/changed-template-meta"
+template_epoch=$(epoch "$fixture/changed-template-meta")
+[[ ${#template_epoch} == 64 && $template_epoch != "$initial_epoch" ]] || fail 'template content did not affect macro epoch'
+query meta '<Packet as std::fmt::Debug>::fmt' > "$fixture/changed-debug-meta"
+[[ $(epoch "$fixture/changed-debug-meta") != "$(epoch "$fixture/debug-meta")" ]] || fail 'macro-created derive epoch omitted its template'
+printf 'changed' > "$fixture/project/payload.txt"
+publish
+value 45
+query meta generated > "$fixture/changed-input-meta"
+[[ $(epoch "$fixture/changed-input-meta") != "$template_epoch" ]] || fail 'include content did not affect macro epoch'
+
+for source in ast diagnostic names syntax resolve source; do cp "src/$source.lkj" "$fixture/contracts/$source.lkj"; done
+cp -R src/ast src/syntax src/resolve "$fixture/contracts/"
+cp src/semantic/origins.lkj "$fixture/contracts/origins.lkj"
+cp -R src/semantic/origins "$fixture/contracts/"
+cp tests/fixtures/macro_origins.lkj "$fixture/contracts/main.lkj"
+"$compiler" build main.lkj --source-dir "$fixture/contracts" --library-dir "$library" --no-store -o "$fixture/contracts-image" > "$fixture/contracts-out" 2> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract build'; }
+"$fixture/contracts-image" >> "$fixture/contracts-out" 2>> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract execution'; }
+"$compiler" run main.lkj --source-dir "$fixture/contracts" --library-dir "$library" --no-store --engine interpreter >> "$fixture/contracts-out" 2>> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'interpreted origin contracts'; }
+printf 'ok declarative macro origins: authenticated source/topology and include replay; generated item, field, import, call and strict derive queries; checked authored rename/body edits; projection/reference refusals; template/include epochs; 25 malformed origins; both engines\n'

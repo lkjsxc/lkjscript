@@ -1,0 +1,4 @@
+// expect: reject E_MACRO_AMBIGUITY
+// witness: {"rustAccept":false}
+macro_rules! choose { ($($a:ident)* $b:ident) => { 1i32 }; ($($rest:tt)*) => { 2i32 }; }
+fn probe() -> i32 { choose!(name) }

@@ -1,0 +1,4 @@
+// expect: reject E_MACRO_MATCH
+// witness: {"rustAccept":false}
+macro_rules! only { (one) => { 1i32 }; }
+fn probe() -> i32 { only!(two) }

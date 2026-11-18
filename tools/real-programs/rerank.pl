@@ -48,13 +48,48 @@ sub diagnostic_key { json([@{$_[0]}{qw(path line column code message)}]) }
 sub observation_key { json([@{$_[0]}{qw(route upstream_entry)}]) }
 sub unique { my %seen; return grep { !$seen{$_}++ } @_ }
 
+# Absolute macro-origin locations are meaningful only within the source-dir
+# captured by the authenticated baseline command. Offline source restoration
+# must not consult or invent a new projection root.
+sub projection_prefixes {
+    my ($receipt) = @_;
+    my %prefixes;
+    for my $observation (@{$receipt->{observations}}) {
+        next unless $observation->{route} eq 'suffix_projection';
+        my $command = $observation->{command};
+        fail('missing captured probe command') unless ref($command) eq 'ARRAY';
+        my @roots;
+        for (my $index = 0; $index < @$command; ++$index) {
+            next unless $command->[$index] eq '--source-dir';
+            fail('captured source-dir is missing its value') if ++$index >= @$command;
+            push @roots, $command->[$index];
+        }
+        fail('ambiguous captured source-dir') if @roots > 1;
+        next unless @roots;
+        my $root = $roots[0];
+        next unless $root =~ m{\A/} && $root !~ m{(?:\A|/)\.\.?(?:/|\z)|\x00|//};
+        $root =~ s{/\z}{} unless $root eq '/';
+        $prefixes{$root eq '/' ? '/' : "$root/"} = 1;
+    }
+    return [sort { length($b) <=> length($a) || $a cmp $b } keys %prefixes];
+}
+
 sub source_reader {
-    my ($manifest, $root) = @_;
+    my ($manifest, $root, $projection_prefixes) = @_;
     my %files = map { $_->{path} => $_ } @{$manifest->{files}};
     my %aliases = map { $_->{to} => $_->{from} } @{$manifest->{aliases}};
     my %cache;
     return sub {
         my ($path, $line, $column) = @_;
+        if ($path =~ m{\A/}) {
+            for my $prefix (@$projection_prefixes) {
+                next unless index($path, $prefix) == 0;
+                $path = substr($path, length($prefix));
+                last;
+            }
+        }
+        fail("diagnostic is outside the tracked original source: $path")
+            if $path =~ m{\A/|(?:\A|/)\.\.?(?:/|\z)|\x00};
         $path = $aliases{$path} if exists($aliases{$path});
         fail("diagnostic is outside the tracked original source: $path")
             unless exists($files{$path}) && $path !~ m{\A/|(?:\A|/)\.\.?(?:/|\z)|\x00};
@@ -247,6 +282,8 @@ Usage: perl rerank.pl --baseline docs/real-programs-nom.json
 The original per-site classifications are joined to complete baseline diagnostics,
 then inherited only by byte-identical code/message at the same original coordinate.
 Source line/column anchors are verified against the projection's complete file hash.
+Absolute projected locations require the baseline command's exact source-dir prefix;
+new roots, traversal and untracked paths are refused.
 Unknown and changed diagnostics remain unclassified. No keyword classifier runs.
 Pass the same before/after receipt first to reproduce the published baseline.
 
@@ -273,7 +310,7 @@ HELP
     fail('before receipt is not the baseline table current verification')
         unless $table->{current_verification}{receipt_sha256} eq $before_sha;
     $source_root //= $manifest->{source}{root};
-    my $source = source_reader($manifest, $source_root);
+    my $source = source_reader($manifest, $source_root, projection_prefixes($before));
     my $old = read_observations($before, $manifest, $manifest_sha, $source);
     my $new = read_observations($after, $manifest, $manifest_sha, $source);
     fail('probe root/route scope changed') unless json([sort keys %{$old->{observations}}])

@@ -1,0 +1,4 @@
+// expect: reject E_MACRO_EXPANSION
+// witness: {"rustAccept":false}
+macro_rules! zip { (($($a:ident),*); ($($b:ident),*)) => { ($(($a, $b)),*) }; }
+fn probe() { let a = 1; let b = 2; let c = 3; let result = zip!((a,b);(c)); }

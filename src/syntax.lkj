@@ -1,6 +1,7 @@
 //! Rust-compatible surface reader. The syntax tree is an arena, not a recursive tree.
 mod default;
 mod debug;
+pub(crate) mod macros;
 mod impl_trait;
 pub(crate) mod formatting;
 use crate::ast::*;
@@ -16,13 +17,17 @@ enum TokenKind {
     Bytes,
     Lifetime,
     Symbol,
+    Expression(usize),
     End,
 }
 #[derive(Clone)]
 struct Token {
     kind: TokenKind,
     text: String,
+    literal_spelling: String,
     span: Span,
+    origin: Span,
+    context: usize,
 }
 
 fn ident_start(b: u8) -> bool {
@@ -353,6 +358,9 @@ impl Lexer<'_> {
                 }
                 kind = TokenKind::Ident;
                 text = self.source[span.start..self.at].to_string();
+                if self.byte(0) == b'"' || self.byte(0) == b'\'' || self.byte(0) == b'#' {
+                    return Err(Diagnostic::new(span, "E_PARSE", "unsupported reserved literal or identifier prefix"));
+                }
             } else if b.is_ascii_digit() {
                 self.advance();
                 while self.at < self.source.len() {
@@ -434,6 +442,7 @@ impl Lexer<'_> {
                         | b'='
                         | b'<'
                         | b'>'
+                        | b'$'
                 ) {
                     return Err(self.error("unsupported character in source"));
                 }
@@ -446,18 +455,31 @@ impl Lexer<'_> {
                 text = self.source[span.start..self.at].to_string();
             }
             span.end = self.at;
-            tokens.push(Token { kind, text, span });
+            let literal_spelling = if matches!(kind, TokenKind::Number | TokenKind::String | TokenKind::Char | TokenKind::Bytes) {
+                self.source[span.start..span.end].to_string()
+            } else { String::new() };
+            tokens.push(Token { kind, text, literal_spelling, span, origin: span, context: 0usize });
         }
         tokens.push(Token {
             kind: TokenKind::End,
             text: String::new(),
+            literal_spelling: String::new(),
             span: self.here(),
+            origin: self.here(),
+            context: 0usize,
         });
         Ok(tokens)
     }
 }
 
 pub fn parse(source: &str) -> Result<Program, Diagnostic> {
+    let mut program = parse_unexpanded(source)?;
+    macros::expand(&mut program)?;
+    Ok(program)
+}
+
+/// Isolated edit fragments have no defining module; their full candidate is expanded later.
+pub(crate) fn parse_unexpanded(source: &str) -> Result<Program, Diagnostic> {
     let mut program = Program::default();
     program.scopes.push(ModuleScope {
         path: String::new(),
@@ -498,6 +520,7 @@ pub fn semantic_tokens(source: &str) -> Result<Vec<SemanticToken>, Diagnostic> {
             TokenKind::String => 2u8, TokenKind::Char => 3u8,
             TokenKind::Bytes => 4u8, TokenKind::Lifetime => 5u8,
             TokenKind::Symbol => 6u8, TokenKind::End => continue,
+            TokenKind::Expression(_) => unreachable!(),
         };
         result.push(SemanticToken { kind, text: token.text, span: token.span });
     }
@@ -555,6 +578,7 @@ pub fn parse_file_report(
     let mut token_index = 0;
     while token_index < tokens.len() {
         tokens[token_index].span.file = file;
+        tokens[token_index].origin.file = file;
         token_index += 1;
     }
     let mut parser = Parser {
@@ -566,6 +590,10 @@ pub fn parse_file_report(
         diagnostics: Vec::new(),
         blocked: Vec::new(),
         diagnostic_keys: BTreeSet::new(),
+        self_context: None,
+        expansion: None,
+        probing: false,
+        fragment: false,
     };
     if parser.program.types.is_empty() {
         parser.add_type(Type::Infer, Span::default());
@@ -722,6 +750,10 @@ struct Parser {
     diagnostics: Vec<Diagnostic>,
     blocked: Vec<BlockedRegion>,
     diagnostic_keys: BTreeSet<(FileId, usize, usize, String, String)>,
+    self_context: Option<usize>,
+    expansion: Option<usize>,
+    probing: bool,
+    fragment: bool,
 }
 
 enum BlockPart {
@@ -902,6 +934,7 @@ impl Parser {
             span,
             scope: self.scope,
         });
+        if let Some(expansion) = self.expansion { self.program.macro_expansions[expansion].types.push(id); }
         id
     }
     fn add_expr(&mut self, kind: Expr, span: Span) -> ExprId {
@@ -911,6 +944,7 @@ impl Parser {
             span,
             scope: self.scope,
         });
+        if let Some(expansion) = self.expansion { self.program.macro_expansions[expansion].expressions.push(id); }
         id
     }
     fn add_pattern(&mut self, kind: Pattern, span: Span) -> PatternId {
@@ -920,6 +954,7 @@ impl Parser {
             span,
             scope: self.scope,
         });
+        if let Some(expansion) = self.expansion { self.program.macro_expansions[expansion].patterns.push(id); }
         id
     }
     fn add_finished_type(&mut self, kind: Type, span: Span) -> TypeId {
@@ -1165,6 +1200,9 @@ impl Parser {
 
     fn next_item(&mut self, disabled: &mut bool) -> Result<Option<Item>, Diagnostic> {
         let attrs = self.attrs()?;
+        if attrs.iter().any(|attribute| attribute.name.starts_with("proc_macro")) {
+            return Err(Diagnostic::new(self.token().span, "E_UNSUPPORTED_MACRO", "procedural macros require an explicit untrusted source producer"));
+        }
         if !self.enabled(&attrs)? {
             self.remember_test_exclusion(&attrs);
             self.skip_disabled()?;
@@ -1175,6 +1213,11 @@ impl Parser {
             return Ok(None);
         }
         let public = self.visibility()?;
+        if self.token().kind == TokenKind::Ident && self.is("macro_rules") {
+            self.macro_definition(&attrs, &public)?;
+            *disabled = true;
+            return Ok(None);
+        }
         let item = self.item(attrs, public)?;
         Ok(Some(item))
     }
@@ -1203,6 +1246,20 @@ impl Parser {
         Ok(items)
     }
     fn item(&mut self, attrs: Vec<Attribute>, public: Visibility) -> Result<Item, Diagnostic> {
+        if self.macro_item_ahead() {
+            let span = self.token().span;
+            if !matches!(public, Visibility::Private) { return Err(Diagnostic::new(span, "E_MACRO_RULE", "macro item visibility belongs to the expanded declarations")); }
+            if attrs.iter().any(|attribute| !matches!(attribute.name.as_str(), "allow" | "cfg")) {
+                return Err(Diagnostic::new(span, "E_UNSUPPORTED_MACRO", "attributes on declarative macro invocations are not supported"));
+            }
+            let path = self.value_path()?;
+            let name_span = self.tokens[self.at - 1usize].span;
+            self.expect("!")?;
+            let braces = self.is("{");
+            let invocation = self.macro_invocation(path.name, span, name_span, true)?;
+            self.macro_terminator(braces)?;
+            return Ok(Item::MacroInvocation(invocation));
+        }
         if self.is("fn") || (self.is("const") && self.tokens[self.at + 1].text == "fn") {
             return Ok(Item::Function(self.function(attrs, public)?));
         }
@@ -1237,7 +1294,14 @@ impl Parser {
                 parent: Some(parent_scope),
                 crate_root: self.program.scopes[parent_scope].crate_root,
             });
+            if attrs.iter().any(|attribute| attribute.name == "macro_use" && !attribute.args.is_empty()) {
+                return Err(Diagnostic::new(span, "E_UNSUPPORTED_MACRO", "selective macro_use imports are not supported"));
+            }
+            if attrs.iter().any(|attribute| attribute.name == "macro_use") {
+                self.program.macro_use_modules.insert(scope);
+            }
             let external = self.take(";");
+            if external && self.fragment { return Err(Diagnostic::new(span, "E_UNSUPPORTED_MACRO", "macro expansion cannot discover an external source module")); }
             let mut items = Vec::new();
             if !external {
                 self.expect("{")?;
@@ -1567,6 +1631,7 @@ impl Parser {
         })
     }
     fn capability_path(&self, name: &str) -> Result<(), Diagnostic> {
+        if self.probing { return Ok(()); }
         if name == "std::thread::scope" || name == "std::time" || name == "std::time::http_date"
             || name == "std::time::local_minute" || name == "std::time::timezone_offset" || name == "std::io::errno_name"
             || name == "std::io::directory_identity" {
@@ -2022,6 +2087,7 @@ impl Parser {
         let mut generics = self.generics()?;
         self.expect("(")?;
         let mut params = Vec::new();
+        let mut method_context = None;
         while !self.is(")") {
             let start = self.token().span;
             let reference = self.take("&");
@@ -2033,7 +2099,9 @@ impl Parser {
                 String::new()
             };
             let mutable = self.take("mut");
+            let param_context = self.token().context;
             let param_name = self.ident()?;
+            if param_name == "self" { method_context = Some(param_context); }
             let mut ty: TypeId;
             if param_name == "self" && !self.is(":") {
                 ty = self.add_type(
@@ -2063,7 +2131,7 @@ impl Parser {
                 ty = self.ty()?;
             }
             params.push(Param {
-                name: param_name,
+                name: crate::ast::macros::local_name(&param_name, param_context),
                 ty,
                 mutable: mutable && !reference,
                 span: self.finish_span(start),
@@ -2076,11 +2144,11 @@ impl Parser {
         let result = if self.take("->") { self.ty()? } else { 1 };
         let mut outlives = Vec::new();
         let predicates = self.function_where_clause(&mut generics, &mut outlives)?;
-        let body = if self.take(";") {
-            None
-        } else {
-            Some(self.block()?)
-        };
+        let previous_self = self.self_context;
+        self.self_context = method_context;
+        let body = if self.take(";") { Ok(None) } else { self.block().map(|body: usize| -> Option<usize> { Some(body) }) };
+        self.self_context = previous_self;
+        let body = body?;
         self.argument_impl_traits(&params, &mut generics);
         let id = self.program.functions.len();
         if let Some(form) = self.program.impl_traits.get_mut(&result) {
@@ -2972,6 +3040,9 @@ impl Parser {
     }
     fn atom(&mut self, allow_struct: bool) -> Result<ExprId, Diagnostic> {
         let span = self.token().span;
+        let context = self.token().context;
+        let captured = self.tokens[self.at].kind.clone();
+        if let TokenKind::Expression(id) = captured { self.at += 1usize; return self.macro_capture_expression(id); }
         if self.token().kind == TokenKind::Number
             || self.token().kind == TokenKind::String
             || self.token().kind == TokenKind::Char
@@ -3297,8 +3368,22 @@ impl Parser {
         if self.token().kind != TokenKind::Ident && !self.is("::") && !self.at_lt() {
             return Err(self.err("expected an expression"));
         }
+        if self.token().kind == TokenKind::Ident && matches!(self.token().text.as_str(),
+            "as" | "else" | "extern" | "fn" | "in" | "let" | "mod" | "mut" | "pub" | "ref"
+            | "static" | "struct" | "trait" | "type" | "use" | "where" | "enum" | "impl" | "dyn"
+            | "abstract" | "become" | "box" | "do" | "final" | "macro" | "override" | "priv"
+            | "typeof" | "unsized" | "virtual" | "try" | "gen" | "await") {
+            return Err(self.err("keyword cannot begin this expression"));
+        }
         let path = self.value_path()?;
-        if self.take("!") {
+        if self.token().kind == TokenKind::Symbol && self.take("!") {
+            // Fragment matching recognizes syntax without executing any nested producer.
+            if self.probing {
+                let name_span = self.tokens[self.at - 2usize].span;
+                let invocation = self.macro_invocation(path.name, span, name_span, false)?;
+                return Ok(self.add_finished_expr(Expr::MacroInvocation(invocation), span));
+            }
+            if path.name == "macro_rules" { return Err(Diagnostic::new(span, "E_UNSUPPORTED_MACRO", "block-local macro definitions are not supported")); }
             if path.name == "println"
                 || path.name == "print"
                 || path.name == "eprintln"
@@ -3334,11 +3419,9 @@ impl Parser {
                 || path.name == "include_str"
                 || path.name == "include_bytes";
             if !known {
-                return Err(Diagnostic::new(
-                    span,
-                    "E_UNSUPPORTED_MACRO",
-                    &format!("unsupported macro: {}!", path.name),
-                ));
+                let name_span = self.tokens[self.at - 2usize].span;
+                let invocation = self.macro_invocation(path.name, span, name_span, false)?;
+                return Ok(self.add_finished_expr(Expr::MacroInvocation(invocation), span));
             }
             let end = if self.take("(") {
                 ")"
@@ -3417,6 +3500,7 @@ impl Parser {
                     break;
                 }
                 let field_span = self.token().span;
+                let field_context = self.token().context;
                 let name = self.ident()?;
                 let value = if self.take(":") {
                     self.expr(true)?
@@ -3425,7 +3509,7 @@ impl Parser {
                         Expr::Path(Path {
                             qualification: None, bindings: Vec::new(),
                             declaration: None,
-                            name: name.clone(),
+                            name: crate::ast::macros::local_name(&name, field_context),
                             args: Vec::new(),
                         }),
                         field_span,
@@ -3438,6 +3522,14 @@ impl Parser {
             }
             self.expect("}")?;
             return Ok(self.add_finished_expr(Expr::Struct { path, fields, base }, span));
+        }
+        let mut path = path;
+        if path.qualification.is_none() && !path.name.contains("::") {
+            if !self.probing && path.name == "self" && (self.fragment || self.expansion.is_some() || context != 0usize)
+                && self.self_context != Some(context) {
+                return Err(Diagnostic::new(span, "E_MACRO_HYGIENE", "self belongs to a different macro syntax context"));
+            }
+            path.name = crate::ast::macros::local_name(&path.name, context);
         }
         Ok(self.add_finished_expr(Expr::Path(path), span))
     }
@@ -3733,6 +3825,7 @@ impl Parser {
         }
         let by_ref = self.take("ref");
         let mutable = self.take("mut");
+        let context = self.token().context;
         let path = self.value_path()?;
         if self.is("..") || self.is("..=") {
             if by_ref || mutable {
@@ -3764,13 +3857,14 @@ impl Parser {
                 let start = self.token().span;
                 let ref_field = self.take("ref");
                 let mut_field = self.take("mut");
+                let field_context = self.token().context;
                 let name = self.ident()?;
                 let value = if self.take(":") {
                     self.pattern()?
                 } else {
                     self.add_pattern(
                         Pattern::Bind {
-                            name: name.clone(),
+                            name: crate::ast::macros::local_name(&name, field_context),
                             mutable: mut_field && !ref_field,
                             by_ref: ref_field,
                             ref_mut: mut_field && ref_field,
@@ -3794,12 +3888,16 @@ impl Parser {
             Pattern::Path(path)
         } else {
             Pattern::Bind {
-                name: path.name,
+                name: crate::ast::macros::local_name(&path.name, context),
                 mutable: mutable && !by_ref,
                 by_ref,
                 ref_mut: mutable && by_ref,
             }
         };
-        Ok(self.add_finished_pattern(kind, span))
+        let id = self.add_finished_pattern(kind, span);
+        if self.expansion.is_some() || self.fragment {
+            self.program.macro_pattern_bindings.insert(id, (context, mutable, by_ref));
+        }
+        Ok(id)
     }
 }
