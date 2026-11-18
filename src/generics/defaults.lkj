@@ -1,0 +1,320 @@
+//! Named type defaults are declaration-scoped source substitutions. The graph
+//! rejects recursive omissions before any producer starts normalizing a type.
+use super::*;
+
+pub(crate) fn parameters(source: &Program, declaration: DeclarationId) -> Vec<GenericParam> {
+    match source.declarations[declaration].item {
+        Item::Struct(index) => source.structs[index].generics.clone(),
+        Item::Enum(index) => source.enums[index].generics.clone(),
+        Item::Alias(index) => source.aliases[index].generics.clone(),
+        _ => Vec::new(),
+    }
+}
+
+pub(crate) fn arguments(source: &Program, path: &Path) -> Vec<TypeId> {
+    let mut arguments = Vec::new();
+    for argument in &path.args {
+        if !matches!(&source.types[*argument].kind, Type::Path(path) if path.name.starts_with('\'')) {
+            arguments.push(*argument);
+        }
+    }
+    arguments
+}
+
+// Only written parameter references establish dependence. Following an alias
+// body here would capture unrelated same-spelled parameters in that declaration.
+pub(crate) fn dependent(source: &Program, first: TypeId,
+    parameters: &[GenericParam], except: &str) -> bool {
+    let mut pending = vec![first];
+    while let Some(id) = pending.pop() {
+        let name = match &source.types[id].kind {
+            Type::Path(path) if path.qualification.is_none() && path.declaration.is_none() =>
+                Some(path.name.as_str().split("::").next().unwrap()),
+            Type::Array { len, .. } => Some(len.as_str()),
+            Type::Ref { lifetime, .. } => Some(lifetime.as_str()),
+            _ => None,
+        };
+        if let Some(name) = name {
+            for parameter in parameters {
+                if parameter.name.as_str() != except && parameter.name.as_str() == name { return true; }
+            }
+        }
+        pending.extend_from_slice(&type_children(source, id));
+    }
+    false
+}
+
+pub(crate) fn deferred_obligation(problem: &Diagnostic) -> bool {
+    problem.code == "E_TRAIT" || (problem.code == "E_TYPE" && problem.message.contains("Sized"))
+}
+
+pub(super) fn templates(source: &Program) -> BTreeMap<String, Vec<GenericParam>> {
+    let mut templates = BTreeMap::new();
+    for item in &source.structs {
+        if item.generics.iter().any(|parameter| parameter.default.is_some()) {
+            templates.insert(qualified(&item.module, &item.name), item.generics.clone());
+        }
+    }
+    for item in &source.enums {
+        if item.generics.iter().any(|parameter| parameter.default.is_some()) {
+            templates.insert(qualified(&item.module, &item.name), item.generics.clone());
+        }
+    }
+    for item in &source.aliases {
+        if item.generics.iter().any(|parameter| parameter.default.is_some()) {
+            templates.insert(qualified(&item.module, &item.name), item.generics.clone());
+        }
+    }
+    templates
+}
+
+pub(super) fn application(source: &Program, first: TypeId) -> bool {
+    let mut pending = vec![first];
+    let mut seen = BTreeSet::new();
+    while let Some(id) = pending.pop() {
+        if !seen.insert(id) { continue; }
+        if let Type::Path(path) = &source.types[id].kind {
+            if let Some(declaration) = path.declaration {
+                let parameters = parameters(source, declaration);
+                let defaults = parameters.iter().any(|parameter| parameter.default.is_some());
+                let supplied = arguments(source, path).len();
+                let count = parameters.iter().filter(|parameter| !parameter.lifetime).count();
+                if defaults && (supplied < count || matches!(source.declarations[declaration].item, Item::Alias(_))) {
+                    return true;
+                }
+                if let Item::Alias(index) = source.declarations[declaration].item {
+                    pending.push(source.aliases[index].ty);
+                }
+            }
+        }
+        pending.extend_from_slice(&type_children(source, id));
+    }
+    false
+}
+
+// The ordinary matcher keeps its direct path for applications without defaults.
+// A default-bearing pattern is first normalized by the same source equations as
+// coherence and signatures, then matched without forgetting nominal identity.
+pub(super) fn impl_arguments(source: &Program, types: &[crate::ir::Type],
+    applications: &BTreeMap<usize, (String, Vec<usize>)>, implementation: &Impl,
+    patterns: &[(TypeId, usize)]) -> Option<BTreeMap<String, usize>> {
+    use crate::ir::TypeKind;
+    let mut terms = Vec::new();
+    let mut symbolic = BTreeMap::new();
+    for index in 0..implementation.generics.len() {
+        let parameter = &implementation.generics[index];
+        if parameter.lifetime { continue; }
+        let term = if parameter.constant { Term::ConstantVariable(index) } else { Term::Variable(index) };
+        symbolic.insert(parameter.name.clone(), push(&mut terms, term));
+    }
+    let mut pending = Vec::new();
+    for (pattern, actual) in patterns {
+        let normalized = signature_type(source, *pattern, &symbolic, &mut terms).ok()?;
+        pending.push((normalized, *actual));
+    }
+    let mut environment = BTreeMap::new();
+    while let Some((pattern, actual)) = pending.pop() {
+        let actual_type = types.get(actual)?;
+        match terms[pattern].clone() {
+            Term::Variable(index) | Term::ConstantVariable(index) => {
+                let parameter = &implementation.generics[index];
+                if parameter.constant != crate::generics::const_arguments::value(types, actual).is_some() { return None; }
+                if let Some(previous) = environment.insert(parameter.name.clone(), actual) {
+                    if previous != actual { return None; }
+                }
+            }
+            Term::Constant(value) => {
+                if crate::generics::const_arguments::value(types, actual)
+                    != Some(crate::generics::const_arguments::Value::Known(value)) { return None; }
+            }
+            Term::Named(name, children) => {
+                let mut arguments = Vec::new();
+                for child in children {
+                    if !matches!(&terms[child], Term::Named(name, _) if name == "lifetime") { arguments.push(child); }
+                }
+                if let Some((actual_name, actual_arguments)) = applications.get(&actual) {
+                    if *actual_name != name || actual_arguments.len() != arguments.len() { return None; }
+                    for index in 0..arguments.len() { pending.push((arguments[index], actual_arguments[index])); }
+                    continue;
+                }
+                match (name.as_str(), &actual_type.kind) {
+                    ("Vec", TypeKind::Vec { inner }) | ("Box", TypeKind::Box { inner })
+                    | ("[]", TypeKind::Slice { inner, .. }) => {
+                        if arguments.len() != 1usize { return None; }
+                        pending.push((arguments[0usize], *inner));
+                    }
+                    ("&", TypeKind::Ref { mutable: false, inner })
+                    | ("&mut", TypeKind::Ref { mutable: true, inner }) => {
+                        if arguments.len() != 1usize { return None; }
+                        pending.push((arguments[0usize], *inner));
+                    }
+                    ("$array", TypeKind::Array { inner, .. }) => {
+                        if arguments.len() != 2usize { return None; }
+                        let length = crate::generics::const_arguments::array_length(types, actual)?;
+                        let length = crate::generics::const_arguments::handle(types, length)?;
+                        pending.push((arguments[0usize], *inner));
+                        pending.push((arguments[1usize], length));
+                    }
+                    ("tuple", TypeKind::Unit) if arguments.is_empty() => {}
+                    ("tuple", TypeKind::Struct { fields, .. }) if actual_type.name.starts_with('(')
+                        && actual_type.name.ends_with(')') && fields.len() == arguments.len() => {
+                        for index in 0..arguments.len() {
+                            if fields[index].name != format!("{index}") { return None; }
+                            pending.push((arguments[index], fields[index].ty));
+                        }
+                    }
+                    _ if arguments.is_empty() && actual_type.name == name => {}
+                    _ => return None,
+                }
+            }
+            _ => return None,
+        }
+    }
+    Some(environment)
+}
+
+fn unsupported(parameters: &[GenericParam]) -> Result<(), Diagnostic> {
+    for parameter in parameters {
+        if parameter.default.is_some() {
+            return Err(Diagnostic::new(parameter.span, "E_UNSUPPORTED",
+                "type argument defaults are supported only on named structs, enums, and type aliases"));
+        }
+    }
+    Ok(())
+}
+
+fn prior_parameter(parameters: &[GenericParam], position: usize, name: &str, span: Span)
+    -> Result<(), Diagnostic> {
+    for later in position..parameters.len() {
+        if parameters[later].name.as_str() == name {
+            return Err(Diagnostic::new(span, "E_TYPE", "type argument default refers to itself or a later parameter"));
+        }
+    }
+    Ok(())
+}
+
+fn header(source: &Program, parameters: &[GenericParam]) -> Result<(), Diagnostic> {
+    if parameters.iter().any(|parameter| parameter.default.is_some()) {
+        if let Some(parameter) = parameters.iter().find(|parameter| parameter.lifetime) {
+            return Err(Diagnostic::new(parameter.span, "E_UNSUPPORTED",
+                "type defaults with declaration lifetime parameters require region-aware substitution"));
+        }
+    }
+    let mut defaulted = false;
+    for position in 0..parameters.len() {
+        let parameter = &parameters[position];
+        let Some(default) = parameter.default else {
+            if defaulted {
+                return Err(Diagnostic::new(parameter.span, "E_TYPE", "a required generic parameter follows a type argument default"));
+            }
+            continue;
+        };
+        defaulted = true;
+        if parameter.lifetime || parameter.constant {
+            return Err(Diagnostic::new(parameter.span, "E_UNSUPPORTED", "lifetime and const generic defaults are not supported"));
+        }
+        let mut pending = vec![default];
+        while let Some(id) = pending.pop() {
+            let node = &source.types[id];
+            match &node.kind {
+                Type::Path(path) if path.qualification.is_none() && path.declaration.is_none() => {
+                    let root = path.name.as_str().split("::").next().unwrap();
+                    prior_parameter(parameters, position, root, node.span)?;
+                }
+                Type::Array { len, .. } => prior_parameter(parameters, position, len, node.span)?,
+                Type::Ref { lifetime, .. } => prior_parameter(parameters, position, lifetime, node.span)?,
+                _ => {}
+            }
+            pending.extend_from_slice(&type_children(source, id));
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
+    for function in &source.functions { unsupported(&function.generics)?; }
+    for implementation in &source.impls {
+        unsupported(&implementation.generics)?;
+        for member in &implementation.associated { unsupported(&member.generics)?; }
+    }
+    for declaration in &source.traits {
+        unsupported(&declaration.generics)?;
+        for member in &declaration.associated { unsupported(&member.generics)?; }
+    }
+    let mut roots: Vec<TypeId> = Vec::new();
+    let mut defaults: BTreeMap<(DeclarationId, usize), usize> = BTreeMap::new();
+    let mut aliases: BTreeMap<usize, usize> = BTreeMap::new();
+    for declaration in 0..source.declarations.len() {
+        let parameters = parameters(source, declaration);
+        header(source, &parameters)?;
+        if parameters.iter().any(|parameter| parameter.default.is_some()) {
+            if matches!(source.declarations[declaration].item, Item::Alias(_)) {
+                if let Some(parameter) = parameters.iter().find(|parameter| !parameter.bounds.is_empty()) {
+                    return Err(Diagnostic::new(parameter.span, "E_UNSUPPORTED",
+                        "type alias defaults with parameter bounds require deferred well-formedness"));
+                }
+            }
+            let predicates = match source.declarations[declaration].item {
+                Item::Struct(index) => source.structs[index].predicates.clone(),
+                Item::Enum(index) => source.enums[index].predicates.clone(),
+                Item::Alias(index) => source.aliases[index].predicates.clone(),
+                _ => Vec::new(),
+            };
+            if let Some(predicate) = predicates.first() {
+                return Err(Diagnostic::new(predicate.span, "E_UNSUPPORTED",
+                    "type defaults with nonparameter where predicates require default implication checking"));
+            }
+        }
+        for position in 0..parameters.len() {
+            if let Some(default) = parameters[position].default {
+                defaults.insert((declaration, position), roots.len());
+                roots.push(default);
+            }
+        }
+        if let Item::Alias(index) = source.declarations[declaration].item {
+            aliases.insert(index, roots.len());
+            roots.push(source.aliases[index].ty);
+        }
+    }
+    if defaults.is_empty() { return Ok(()); }
+    let mut edges = Vec::new();
+    for from in 0..roots.len() {
+        let mut pending = vec![roots[from]];
+        let mut seen = BTreeSet::new();
+        while let Some(id) = pending.pop() {
+            if !seen.insert(id) { continue; }
+            let node = &source.types[id];
+            if let Type::Path(path) = &node.kind {
+                if let Some(declaration) = path.declaration {
+                    if path.qualification.is_none() && path.name == source.declarations[declaration].name {
+                        if let Item::Alias(index) = source.declarations[declaration].item {
+                            edges.push(Edge { from, to: *aliases.get(&index).unwrap(),
+                                expanding: false, unknown: false, span: node.span });
+                        }
+                        let supplied = arguments(source, path).len();
+                        let parameters = parameters(source, declaration);
+                        let mut position = 0;
+                        for index in 0..parameters.len() {
+                            if parameters[index].lifetime { continue; }
+                            if position >= supplied {
+                                if let Some(to) = defaults.get(&(declaration, index)) {
+                                    edges.push(Edge { from, to: *to, expanding: false,
+                                        unknown: false, span: node.span });
+                                }
+                            }
+                            position += 1;
+                        }
+                    }
+                }
+            }
+            pending.extend_from_slice(&type_children(source, id));
+        }
+    }
+    let groups = components(roots.len(), &edges);
+    for edge in edges {
+        if groups[edge.from] == groups[edge.to] {
+            return Err(Diagnostic::new(edge.span, "E_TYPE", "type argument defaults and aliases form a recursive expansion"));
+        }
+    }
+    Ok(())
+}

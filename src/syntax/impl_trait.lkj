@@ -25,7 +25,7 @@ impl Parser {
                 let Type::Path(path) = &node.kind else { unreachable!() };
                 generics.push(GenericParam {
                     name: path.name.clone(), bounds: form.bounds.clone(),
-                    lifetime: false, constant: false, implicit: true, span: node.span,
+                    default: None, lifetime: false, constant: false, implicit: true, span: node.span,
                 });
                 // A second impl Trait inside these bounds is not an argument
                 // position. It remains unbound and receives its own diagnostic.

@@ -1,0 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// witness: {}
+struct Selected<T> { value: T }
+impl<T = i64> Selected<T> { fn value(self) -> T { self.value } }
+pub fn probe() -> i64 { 42 }

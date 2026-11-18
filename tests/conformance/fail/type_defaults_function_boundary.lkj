@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {}
+fn selected<T = i64>(value: T) -> T { value }
+pub fn probe() -> i64 { 42 }

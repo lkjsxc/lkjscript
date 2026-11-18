@@ -1,0 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {}
+struct Selected<T, U: Copy = T> { left: T, right: U }
+fn unused<T>(value: T) { let pair: Selected<T> = loop {}; let _ = (value, pair); }
+pub fn probe() -> i64 { 42 }

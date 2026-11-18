@@ -86,7 +86,7 @@ impl Compiler<'_> {
         self.contracts.as_mut().unwrap().active_scope = form.result.unwrap();
         let name = format!("$result:{ty}");
         let parameter = a::GenericParam { name: name.clone(), bounds: form.bounds,
-            lifetime: false, constant: false, implicit: true, span: self.source.types[ty].span };
+            default: None, lifetime: false, constant: false, implicit: true, span: self.source.types[ty].span };
         let mut environment = substitutions.clone();
         environment.insert(name, value);
         let result = self.assume_parameter_bounds(&[parameter], &environment);
@@ -253,7 +253,7 @@ impl Compiler<'_> {
         }
         let name = format!("$result:{ty}");
         let parameter = a::GenericParam { name: name.clone(), bounds,
-            lifetime: false, constant: false, implicit: true, span: self.source.types[ty].span };
+            default: None, lifetime: false, constant: false, implicit: true, span: self.source.types[ty].span };
         let mut environment = substitutions.clone();
         environment.insert(name, result);
         self.bounds(&[parameter], &environment)

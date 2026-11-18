@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+struct Pair<T = i64, U = T> { left: T, right: U }
+enum Failure<E, Recoverable = E> { Fatal(E), Recoverable(Recoverable) }
+fn explicit(value: Pair) -> Pair<i64, i64> { value }
+fn same_error(value: Failure<i64>) -> Failure<i64, i64> { value }
+pub fn probe() -> i64 {
+    let pair: Pair = Pair { left: 19, right: 23 };
+    let pair = explicit(pair);
+    match same_error(Failure::Recoverable(pair.right)) {
+        Failure::Fatal(value) | Failure::Recoverable(value) => pair.left + value,
+    }
+}

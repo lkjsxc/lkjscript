@@ -24,6 +24,12 @@ enum Work {
         alias_environment: usize,
         caller_environment: usize,
     },
+    AliasDefaults {
+        parameters: Vec<a::GenericParam>,
+        supplied: usize,
+        environment: usize,
+        span: a::Span,
+    },
 }
 
 impl Compiler<'_> {
@@ -136,6 +142,31 @@ impl Compiler<'_> {
         }];
         while let Some(work) = pending.pop() {
             match work {
+                Work::AliasDefaults { parameters, supplied, environment, span } => {
+                    let mut position = 0usize;
+                    for parameter in parameters {
+                        if parameter.lifetime { continue; }
+                        if position >= supplied {
+                            let default = match parameter.default {
+                                Some(default) => default,
+                                None => return Err(err(span, "E_TYPE", "wrong number of alias type arguments")),
+                            };
+                            let bindings = environments[environment].clone();
+                            let expected = match self.resolve_if_known(default, &bindings)? {
+                                Some(expected) => expected,
+                                None => return Err(err(span, "E_TYPE", "alias type argument default needs an earlier argument")),
+                            };
+                            let actual = match environments[environment].get(&parameter.name) {
+                                Some(actual) => Some(*actual),
+                                None => None,
+                            };
+                            if let Some(actual) = actual {
+                                if actual != expected { return Ok(false); }
+                            } else { environments[environment].insert(parameter.name, expected); }
+                        }
+                        position += 1usize;
+                    }
+                }
                 Work::AliasArguments {
                     arguments,
                     parameters,
@@ -203,7 +234,14 @@ impl Compiler<'_> {
                                         parameters.push(parameter.name.clone());
                                     }
                                 }
-                                if arguments.len() != parameters.len() {
+                                let mut valid = arguments.len() <= parameters.len();
+                                let mut position = 0usize;
+                                for parameter in &alias.generics {
+                                    if parameter.lifetime { continue; }
+                                    if position >= arguments.len() && parameter.default.is_none() { valid = false; }
+                                    position += 1usize;
+                                }
+                                if !valid {
                                     return Err(err(
                                         node.span,
                                         "E_TYPE",
@@ -219,12 +257,15 @@ impl Compiler<'_> {
                                 }
                                 let alias_environment = environments.len();
                                 environments.push(bindings);
+                                let supplied = arguments.len();
                                 pending.push(Work::AliasArguments {
                                     arguments,
                                     parameters,
                                     alias_environment,
                                     caller_environment: environment,
                                 });
+                                pending.push(Work::AliasDefaults { parameters: alias.generics,
+                                    supplied, environment: alias_environment, span: node.span });
                                 pending.push(Work::Match {
                                     pattern: alias.ty,
                                     actual,
@@ -233,12 +274,35 @@ impl Compiler<'_> {
                                 });
                                 continue;
                             }
-                            if let Some((name, actual_arguments)) = self.applications.get(&actual) {
-                                let actual_declaration = self.declaration_names.get(name).copied();
+                            let application = match self.applications.get(&actual) {
+                                Some((name, arguments)) => Some((name.clone(), arguments.clone())),
+                                None => None,
+                            };
+                            if let Some((name, actual_arguments)) = application {
+                                let actual_declaration = self.declaration_names.get(&name).copied();
                                 if path.declaration.is_some()
                                     && path.declaration == actual_declaration
-                                    && arguments.len() == actual_arguments.len()
                                 {
+                                    let parameters = crate::generics::defaults::parameters(self.source, path.declaration.unwrap());
+                                    let mut declared = BTreeMap::new();
+                                    let mut position = 0usize;
+                                    if arguments.len() > actual_arguments.len() { return Ok(false); }
+                                    for index in 0..parameters.len() {
+                                        let parameter = &parameters[index];
+                                        if parameter.lifetime { continue; }
+                                        if position >= actual_arguments.len() { return Ok(false); }
+                                        if position >= arguments.len() {
+                                            let default = match parameter.default {
+                                                Some(default) => default,
+                                                None => return Err(err(node.span, "E_TYPE", "wrong number of type arguments")),
+                                            };
+                                            self.prepare_parameter_associated(&parameters[..index], &mut declared)?;
+                                            if self.resolve(default, &declared)? != actual_arguments[position] { return Ok(false); }
+                                        }
+                                        declared.insert(parameter.name.clone(), actual_arguments[position]);
+                                        position += 1usize;
+                                    }
+                                    if position != actual_arguments.len() { return Ok(false); }
                                     let mut index = arguments.len();
                                     while index != 0 {
                                         index -= 1;

@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {}
+struct Selected<T = Alias> { value: T }
+type Alias = Selected;
+pub fn probe() -> i64 { 42 }

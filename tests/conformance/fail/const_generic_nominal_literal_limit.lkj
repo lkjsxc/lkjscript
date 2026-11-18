@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+struct Buffer<const N: usize> { data: [u8; N] }
+pub fn probe() -> i64 { let value: Buffer<2> = Buffer { data: [19u8, 23u8] }; value.data[0usize] as i64 + value.data[1usize] as i64 }

@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+struct Selected<T = i64> { value: T }
+trait Extract<T> { fn extract(self) -> T; }
+struct Reader {}
+impl Extract<Selected> for Reader { fn extract(self) -> Selected<i64> { Selected { value: 42 } } }
+fn read<R: Extract<Selected>>(value: R) -> i64 { value.extract().value }
+pub fn probe() -> i64 { read(Reader {}) }

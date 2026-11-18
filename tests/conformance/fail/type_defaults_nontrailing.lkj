@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {}
+struct Required<T = i64, U> { left: T, right: U }
+pub fn probe() -> i64 { 42 }

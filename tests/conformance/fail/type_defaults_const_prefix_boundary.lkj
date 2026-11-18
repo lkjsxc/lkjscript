@@ -1,0 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+struct DefaultArray<const N: usize, T = [u8; N]> { value: T }
+fn array<const N: usize>(value: [u8; N]) -> DefaultArray<N> { DefaultArray { value } }
+pub fn probe() -> i64 { let value: DefaultArray<2> = array([19u8, 23u8]); value.value[0usize] as i64 + value.value[1usize] as i64 }

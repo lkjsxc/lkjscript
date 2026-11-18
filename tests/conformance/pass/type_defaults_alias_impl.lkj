@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+trait Read { fn read(self) -> i64; }
+struct Selected<T> { value: T }
+type Alias<T = i64> = Selected<T>;
+impl Read for Alias { fn read(self) -> i64 { self.value } }
+fn read<R: Read>(value: R) -> i64 { value.read() }
+pub fn probe() -> i64 { let value: Selected<i64> = Selected { value: 42 }; read(value) }

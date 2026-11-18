@@ -1484,12 +1484,14 @@ impl Parser {
             } else {
                 Vec::new()
             };
-            if self.is("=") {
-                return Err(self.unsupported("default generic arguments"));
-            }
+            let default = if self.take("=") {
+                if lifetime || constant { return Err(self.unsupported("lifetime and const generic defaults")); }
+                Some(self.ty()?)
+            } else { None };
             params.push(GenericParam {
                 name,
                 bounds,
+                default,
                 lifetime,
                 constant,
                 implicit: false,
@@ -2023,6 +2025,18 @@ impl Parser {
                             }),
                             lifetime_span,
                         ));
+                        parsed = true;
+                    } else if self.token().kind == TokenKind::Number {
+                        if !path.bindings.is_empty() {
+                            return Err(self.err("positional type arguments must precede associated-type equality bindings"));
+                        }
+                        let argument_span = self.token().span;
+                        let text = self.token().text.clone();
+                        self.at += 1;
+                        let argument = self.add_type(Type::Path(Path { qualification: None,
+                            declaration: None, name: text.clone(), args: Vec::new(), bindings: Vec::new() }), argument_span);
+                        self.program.constant_arguments.insert(argument, text);
+                        path.args.push(argument);
                         parsed = true;
                     } else if !self.at_gt() {
                         let equality = self.tokens.get(self.at + 1)

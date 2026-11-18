@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {}
+struct Forward<T = U, U = i64> { left: T, right: U }
+pub fn probe() -> i64 { 42 }

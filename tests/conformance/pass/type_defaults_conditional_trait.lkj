@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+trait Marker<T> {}
+struct Thing { value: i64 }
+impl Marker<bool> for Thing {}
+struct Selected<T = bool, U: Marker<T> = Thing> { first: T, second: U }
+pub fn probe() -> i64 { let selected: Selected = Selected { first: true, second: Thing { value: 42 } }; selected.second.value }

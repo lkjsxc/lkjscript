@@ -1,0 +1,10 @@
+// expect: reject E_TYPE
+// witness: {}
+struct Error<I> { input: I }
+enum Failure<F, E = F> { Fatal(F), Recoverable(E) }
+type IResult<I, O, E = Error<I>> = Result<(I, O), Failure<E>>;
+fn read<I>(value: IResult<I, i64>) -> i64 { match value { Ok((_, value)) => value, Err(_) => 0 } }
+pub fn probe() -> i64 {
+    let value: Result<(bool, i64), Failure<u8, u8>> = Ok((true, 42));
+    read(value)
+}

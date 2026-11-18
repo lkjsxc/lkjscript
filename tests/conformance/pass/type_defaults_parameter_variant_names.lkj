@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {}
+enum Response<Failure, Error = Failure> { Error(Error), Failure(Failure) }
+fn same<E>(value: Response<E>) -> Response<E, E> { value }
+fn output<E>(value: Response<E>, fallback: i64) -> i64 {
+    match value { Response::Error(value) | Response::Failure(value) => { drop(value); fallback } }
+}
+pub fn probe() -> i64 {
+    let recoverable = same::<i64>(Response::Error(41));
+    let fatal = same::<bool>(Response::Failure(true));
+    output(recoverable, 40) + output(fatal, 2)
+}

@@ -101,19 +101,24 @@ pub(super) fn family_parameter_reference(result: &mut Catalog, files: &[SourceTe
     path: &a::Path, span: a::Span) -> bool {
     if path.declaration.is_some() || path.qualification.is_some() { return false; }
     let first = path.name.as_str().split("::").next().unwrap_or("");
-    let mut selected: Option<(String, String)> = None;
+    if first.starts_with('\'') { return false; }
+    let mut selected: Option<(String, String, String)> = None;
     for item in &result.items {
-        if item.kind != "associated-type" || item.file != files[span.file].path
+        if !matches!(item.kind.as_str(), "associated-type" | "struct" | "enum" | "alias")
+            || item.file != files[span.file].path
             || span.start < item.start || span.end > item.end { continue; }
         let target = format!("{}::generic:{first}", item.identity);
-        if result.by_identity.contains_key(&target) { selected = Some((item.identity.clone(), target)); }
+        if result.by_identity.contains_key(&target) {
+            let kind = if item.kind == "associated-type" { "family-type-parameter" } else { "nominal-type-parameter" };
+            selected = Some((item.identity.clone(), target, kind.to_string()));
+        }
     }
-    let Some((owner, target)) = selected else { return false; };
+    let Some((owner, target, kind)) = selected else { return false; };
     let file = &files[span.file];
     let at = path_start(file, span);
     let Some(token) = file.tokens.get(at) else { return false; };
     if token.text.as_str() != first || token.span.end > span.end { return false; }
-    record_site(result, files, owner, target, a::Span { file: span.file, ..token.span }, "family-type-parameter", true);
+    record_site(result, files, owner, target, a::Span { file: span.file, ..token.span }, &kind, true);
     !path.name.contains("::")
 }
 

@@ -1,0 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {}
+struct Required<T: Copy> { value: T }
+struct Selected<T = Required<Vec<i64>>> { value: T }
+pub fn probe() -> i64 { 42 }

@@ -132,7 +132,12 @@ impl Builder<'_, '_> {
         }
         let parameters = filtered;
         let arguments = self.constructor_type_arguments(arguments);
-        if arguments.len() != parameters.len() && !(infer_omitted && arguments.is_empty()) {
+        if infer_omitted && arguments.is_empty() { return Ok(BTreeMap::new()); }
+        let mut valid = arguments.len() <= parameters.len();
+        for index in arguments.len()..parameters.len() {
+            if parameters[index].default.is_none() { valid = false; }
+        }
+        if !valid {
             return Err(err(
                 span,
                 "E_TYPE",
@@ -140,8 +145,14 @@ impl Builder<'_, '_> {
             ));
         }
         let mut bindings = BTreeMap::new();
-        for (parameter, argument) in parameters.iter().zip(arguments) {
-            if let Some(ty) = self.compiler.resolve_if_known(argument, environment)? {
+        for index in 0..parameters.len() {
+            let parameter = &parameters[index];
+            let value = if index < arguments.len() {
+                self.compiler.resolve_if_known(arguments[index], environment)?
+            } else {
+                self.compiler.resolve_if_known(parameter.default.unwrap(), &bindings)?
+            };
+            if let Some(ty) = value {
                 bindings.insert(parameter.name.clone(), ty);
             }
         }
@@ -324,19 +335,14 @@ impl Builder<'_, '_> {
         target: ConstructorTarget,
         span: a::Span,
     ) -> Result<usize> {
-        let name = self.compiler.source.declarations[target.declaration]
-            .name
-            .clone();
-        let ty = self.compiler.named_type(
-            &a::Path {
-                qualification: None, bindings: Vec::new(),
-                declaration: Some(target.declaration),
-                name,
-                args: Vec::new(),
-            },
-            &target.substitutions,
-            span,
-        )?;
+        let mut arguments = Vec::new();
+        for parameter in parameters(self.compiler.source, target.declaration) {
+            if parameter.lifetime { continue; }
+            let argument = target.substitutions.get(&parameter.name).copied()
+                .ok_or_else(|| err(span, "E_TYPE", "constructor type argument needs an annotation"))?;
+            arguments.push(argument);
+        }
+        let ty = self.compiler.nominal_type(target.declaration, arguments, span)?;
         if target.expected.is_some_and(|expected| expected != ty) {
             return Err(err(
                 span,

@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {}
+struct Left<T = Box<Right>> { value: T }
+struct Right<T = Box<Left>> { value: T }
+pub fn probe() -> i64 { 42 }

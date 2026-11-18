@@ -245,8 +245,14 @@ impl Compiler<'_> {
                             environment.insert(parameter.name, values[arguments[index]]); index += 1;
                         }
                         if index != arguments.len() { return Err(err(span, "E_GENERIC", "checked nominal trait argument count differs")); }
-                        self.named_type(&a::Path { qualification: None, declaration, name: name.clone(),
-                            args: Vec::new(), bindings: Vec::new() }, &environment, span)?
+                        if let Some(declaration) = declaration {
+                            let mut applied = Vec::new();
+                            for argument in arguments { applied.push(values[*argument]); }
+                            self.nominal_type(declaration, applied, span)?
+                        } else {
+                            self.named_type(&a::Path { qualification: None, declaration, name: name.clone(),
+                                args: Vec::new(), bindings: Vec::new() }, &environment, span)?
+                        }
                     }
                 }
                 Argument::Reference(mutable, inner) => self.reference(values[*inner], *mutable),

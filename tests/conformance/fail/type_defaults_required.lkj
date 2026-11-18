@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {}
+struct Selected<T, U = i64> { left: T, right: U }
+fn unused(value: Selected) { let _ = value; }
+pub fn probe() -> i64 { 42 }

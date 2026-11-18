@@ -142,16 +142,11 @@ pub(super) fn validate(compiler: &mut Compiler<'_>) -> Result<()> {
                         ));
                     }
                 }
-                let ty = compiler.named_type(
-                    &a::Path {
-                        qualification: None, bindings: Vec::new(),
-                        declaration: Some(declaration),
-                        name: item.name.clone(),
-                        args: Vec::new(),
-                    },
-                    &substitutions,
-                    attr.span,
-                )?;
+                let mut arguments = Vec::new();
+                for parameter in &parameters {
+                    if !parameter.lifetime { arguments.push(*substitutions.get(&parameter.name).unwrap()); }
+                }
+                let ty = compiler.nominal_type(declaration, arguments, attr.span)?;
                 for parent in crate::generics::builtin_parents(bound) {
                     if !compiler.satisfies_bound(ty, &parent) {
                         return Err(err(

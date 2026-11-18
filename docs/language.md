@@ -187,6 +187,31 @@ Direct IR can express mixed per-leaf maps. [Static view](../tests/reference/stat
 
 ## Inference, generics and traits
 
+**Default type arguments.** Named structs, enums, and type aliases may give
+trailing type parameters defaults, including earlier parameter references:
+`struct Pair<T = i64, U = T> { left: T, right: U }`. Omitted arguments expand in
+the declaration's scope before type interning, alias normalization, inference,
+coherence, and implementation selection. `Pair`, `Pair<i64>`, and
+`Pair<i64, i64>` therefore have one application identity. A caller's unrelated
+parameter with the same spelling cannot replace a declared default.
+Concrete nominal defaults check their well-formedness and concrete input bounds
+even on unused declarations. A default or bound depending on another parameter
+retains its obligations at each actual application; `struct Pair<T, U: Copy = T>`
+does not imply `T: Copy`, and omitting `U` still requires that concrete argument
+to satisfy `Copy`. Self/forward parameter references, nontrailing defaults, and recursive expansion through
+nominal defaults or aliases are located errors; explicit arguments that break
+an omission cycle remain finite. The source AST retains each written default
+for signatures, references, and checked edits. Generated implementation binders
+clear those defaults. Struct/enum/alias parameter renames use exact declaration
+scope references and refuse capture. This is frontend substitution into the
+existing checked types and calls; the independent IR checker is unchanged.
+Default syntax on functions, implementations, traits, or associated families,
+const/lifetime defaults, and named defaults combined with const/lifetime binders or
+nonparameter where predicates remain explicit `E_UNSUPPORTED` boundaries.
+Dependent defaults that require deferred nested well-formedness and bounded or
+unsized alias defaults also retain located `E_UNSUPPORTED` boundaries.
+[Default argument cases](../tests/conformance/pass/type_defaults_nominal.lkj).
+
 Definition checking solves structural constraints over lexical binding/expression identities using rigid generic parameters and declared assumptions; specialization uses the checked plan.
 Assignments/returns, signatures, composite literals, fields, aliases, projections and scalar patterns check. Expected types flow inward; unsuffixed integers default after known constraints propagate.
 Unequal byte-string branches passed to &[u8] need &b"..."[..] views. Generic/receiver context may require annotations: use BTreeSet::<String>::new() for owned text before later insert calls.

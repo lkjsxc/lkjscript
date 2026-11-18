@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+type Selected<T: Copy = Vec<i64>> = T;
+pub fn probe() -> i64 { 42 }

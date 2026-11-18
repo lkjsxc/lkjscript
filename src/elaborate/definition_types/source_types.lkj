@@ -14,6 +14,7 @@ enum Work {
         environment: usize,
         arguments: usize,
     },
+    Default { id: a::TypeId, path: a::Path, environment: usize, arguments: Vec<Variable> },
     Qualified { id: a::TypeId, qualification: a::QualifiedPath, name: String, args: Vec<a::TypeId>, environment: usize },
     Reference(bool),
     Slice,
@@ -231,6 +232,28 @@ impl Infer<'_, '_> {
                             continue;
                         }
                         let item = self.source.declarations[declaration].item;
+                        let generics = crate::generics::defaults::parameters(self.source, declaration);
+                        let mut declared = BTreeMap::new();
+                        let mut position = 0;
+                        let mut next: Option<(usize, a::TypeId)> = None;
+                        for index in 0..generics.len() {
+                            let parameter = &generics[index];
+                            if parameter.lifetime { continue; }
+                            if position == arguments.len() {
+                                if let Some(default) = parameter.default { next = Some((index, default)); }
+                                break;
+                            }
+                            declared.insert(parameter.name.clone(), arguments[position]);
+                            position += 1;
+                        }
+                        if let Some((index, default)) = next {
+                            self.parameter_equations(&generics[..index], &mut declared, false)?;
+                            let default_environment = environments.len() + 1usize;
+                            environments.push(declared);
+                            pending.push(Work::Default { id, path, environment, arguments });
+                            pending.push(Work::Source { id: default, environment: default_environment });
+                            continue;
+                        }
                         if let a::Item::Alias(index) = item {
                             let mut aliases = if environment == 0 {
                                 base_environment.clone()
@@ -273,6 +296,12 @@ impl Infer<'_, '_> {
                         }
                     }
                     values.push(self.shaped(Shape::Source(id)));
+                }
+                Work::Default { id, path, environment, mut arguments } => {
+                    arguments.push(values.pop().expect("inferred type argument default"));
+                    let count = arguments.len();
+                    values.extend_from_slice(&arguments);
+                    pending.push(Work::Path { id, path, environment, arguments: count });
                 }
             }
         }

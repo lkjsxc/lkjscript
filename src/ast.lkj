@@ -111,6 +111,7 @@ pub struct LifetimePredicate {
 pub struct GenericParam {
     pub name: String,
     pub bounds: Vec<TypeId>,
+    pub default: Option<TypeId>,
     pub lifetime: bool,
     /// Const usize parameters inhabit the value namespace, not the type namespace.
     pub constant: bool,

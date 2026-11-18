@@ -4,6 +4,7 @@ mod bound_solver;
 mod signature_bounds;
 mod associated_bindings;
 mod type_families;
+pub(crate) mod defaults;
 mod const_functions;
 pub(crate) use const_functions::const_data_constructor;
 pub(crate) mod const_arguments;
@@ -1326,6 +1327,7 @@ pub fn validate(source: &Program) -> Result<(), Diagnostic> {
     type_families::validate(source)?;
     const_functions::validate(source)?;
     alias_cycles(source)?;
+    defaults::validate(source)?;
     crate::generics::const_arguments::validate(source)?;
     associated_bindings::validate(source)?;
     lifetime_predicates::validate(source)?;
@@ -1349,6 +1351,11 @@ fn impl_arguments(
     mut work: Vec<(TypeId, usize)>,
 ) -> Option<BTreeMap<String, usize>> {
     use crate::ir::TypeKind;
+    for (pattern, _) in &work {
+        if defaults::application(source, *pattern) {
+            return defaults::impl_arguments(source, types, applications, implementation, &work);
+        }
+    }
     let mut env = BTreeMap::new();
     let mut aliases = BTreeMap::new();
     while let Some((pattern, actual)) = work.pop() {
@@ -2361,6 +2368,7 @@ fn normalize(source: &Program, term: usize, terms: &mut Vec<Term>) -> Result<usi
     let mut done = BTreeMap::new();
     let mut tasks = vec![Normalize::Enter(term)];
     let mut families: Vec<(String, Vec<usize>)> = Vec::new();
+    let defaults = defaults::templates(source);
     while let Some(task) = tasks.pop() {
         match task {
             Normalize::Enter(id) => {
@@ -2388,6 +2396,23 @@ fn normalize(source: &Program, term: usize, terms: &mut Vec<Term>) -> Result<usi
                             tasks.push(Normalize::Family(id, expanded));
                             tasks.push(Normalize::Enter(expanded));
                             continue;
+                        }
+                        if let Some(parameters) = defaults.get(&name) {
+                            if kids.len() < parameters.len() {
+                                if let Some(default) = parameters[kids.len()].default {
+                                    let mut environment = BTreeMap::new();
+                                    for position in 0..kids.len() {
+                                        environment.insert(parameters[position].name.clone(), kids[position]);
+                                    }
+                                    parameter_projection_terms(source, &parameters[..kids.len()], &mut environment, terms);
+                                    let mut arguments = kids;
+                                    arguments.push(type_term(source, default, &environment, terms));
+                                    let expanded = push(terms, Term::Named(name, arguments));
+                                    tasks.push(Normalize::Alias(id, expanded));
+                                    tasks.push(Normalize::Enter(expanded));
+                                    continue;
+                                }
+                            }
                         }
                         let mut alias = None;
                         for a in &source.aliases {

@@ -194,6 +194,7 @@ fn derived_default(program: &a::Program, resolver: &crate::resolve::Resolver<'_>
         if argument != expected || path.name != parameter.name || path.declaration.is_some()
             || !path.args.is_empty() || !same_span(node.span, parameter.span)
             || copied.name != parameter.name || copied.lifetime != parameter.lifetime
+            || copied.default.is_some()
             || !same_span(copied.span, parameter.span) {
             return Err(failure(&identity, "generated parameter argument or copied generic differs"));
         }

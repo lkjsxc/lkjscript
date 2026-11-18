@@ -33,6 +33,17 @@ enum Work {
         span: a::Span,
         arguments: usize,
     },
+    Instantiated {
+        declaration: a::DeclarationId,
+        arguments: Vec<usize>,
+        span: a::Span,
+    },
+    Default {
+        path: a::Path,
+        environment: usize,
+        span: a::Span,
+        arguments: Vec<usize>,
+    },
     Reference {
         mutable: bool,
         span: a::Span,
@@ -96,6 +107,19 @@ impl Resolution {
 }
 
 impl Compiler<'_> {
+    // Inference and witness replay already know every nominal argument. These
+    // are not written omissions and must never pick a declaration's defaults.
+    pub(super) fn nominal_type(&mut self, declaration: a::DeclarationId,
+        arguments: Vec<usize>, span: a::Span) -> Result<usize> {
+        let parameters = crate::generics::defaults::parameters(self.source, declaration);
+        let mut count = 0usize;
+        for parameter in parameters { if !parameter.lifetime { count += 1usize; } }
+        if arguments.len() != count {
+            return Err(err(span, "E_TYPE", "instantiated nominal arguments differ from the declaration"));
+        }
+        self.resolve_work(Work::Instantiated { declaration, arguments, span }, &BTreeMap::new())
+    }
+
     pub(super) fn resolve(
         &mut self,
         id: a::TypeId,
@@ -321,6 +345,16 @@ impl Compiler<'_> {
                 } => {
                     let args = work.take_values(arguments);
                     self.apply_named_type(path, args, environment, span, &mut work)?;
+                }
+                Work::Instantiated { declaration, arguments, span } => {
+                    let path = a::Path { qualification: None, bindings: Vec::new(),
+                        declaration: Some(declaration), name: self.source.declarations[declaration].name.clone(),
+                        args: Vec::new() };
+                    self.apply_named_type(path, arguments, 0, span, &mut work)?;
+                }
+                Work::Default { path, environment, span, mut arguments } => {
+                    arguments.push(work.values.pop().expect("type argument default"));
+                    self.apply_named_type(path, arguments, environment, span, &mut work)?;
                 }
                 Work::Reference { mutable, span } => {
                     let inner = work.values.pop().expect("reference child");
@@ -577,13 +611,15 @@ impl Compiler<'_> {
             .filter(|id| self.source.declarations[*id].name == path.name)
             .or_else(|| self.declaration_names.get(&path.name).copied());
         let item = declaration.map(|id| self.source.declarations[id].item);
-        if args.is_empty() {
-            let parameters: Vec<a::GenericParam> = match item {
-                Some(a::Item::Struct(index)) => self.source.structs[index].generics.clone(),
-                Some(a::Item::Enum(index)) => self.source.enums[index].generics.clone(),
-                _ => Vec::new(),
-            };
-            for parameter in parameters {
+        let parameters: Vec<a::GenericParam> = match item {
+            Some(a::Item::Struct(index)) => self.source.structs[index].generics.clone(),
+            Some(a::Item::Enum(index)) => self.source.enums[index].generics.clone(),
+            Some(a::Item::Alias(index)) => self.source.aliases[index].generics.clone(),
+            _ => Vec::new(),
+        };
+        if args.is_empty() && !parameters.iter().any(|parameter| parameter.default.is_some())
+            && matches!(item, Some(a::Item::Struct(_)) | Some(a::Item::Enum(_))) {
+            for parameter in &parameters {
                 if !parameter.lifetime {
                     if let Some(ty) = work.environments[environment].get(&parameter.name) {
                         args.push(*ty);
@@ -593,17 +629,32 @@ impl Compiler<'_> {
         }
         let declaration = declaration
             .ok_or_else(|| err(span, "E_TYPE", &format!("unknown type {}", path.name)))?;
+        if !matches!(item, Some(a::Item::Struct(_)) | Some(a::Item::Enum(_)) | Some(a::Item::Alias(_))) {
+            return Err(err(span, "E_TYPE", &format!("unknown type {}", path.name)));
+        }
+        let mut position = 0;
+        let mut declared = BTreeMap::new();
+        for index in 0..parameters.len() {
+            let parameter = &parameters[index];
+            if parameter.lifetime { continue; }
+            if position == args.len() {
+                if let Some(default) = parameter.default {
+                    self.prepare_parameter_associated(&parameters[..index], &mut declared)?;
+                    let default_environment = work.environment(declared);
+                    work.pending.push(Work::Default { path, environment, span, arguments: args });
+                    work.pending.push(Work::Source { id: default, environment: default_environment });
+                    return Ok(());
+                }
+                break;
+            }
+            declared.insert(parameter.name.clone(), args[position]);
+            position += 1;
+        }
         let key = TypeKey::Nominal(declaration, args.clone());
         if let Some(id) = self.type_keys.get(&key) {
             work.values.push(*id);
             return Ok(());
         }
-        let parameters: Vec<a::GenericParam> = match item {
-            Some(a::Item::Struct(index)) => self.source.structs[index].generics.clone(),
-            Some(a::Item::Enum(index)) => self.source.enums[index].generics.clone(),
-            Some(a::Item::Alias(index)) => self.source.aliases[index].generics.clone(),
-            _ => return Err(err(span, "E_TYPE", &format!("unknown type {}", path.name))),
-        };
         let mut type_parameters: Vec<String> = Vec::new();
         for parameter in &parameters {
             if !parameter.lifetime {
@@ -625,8 +676,14 @@ impl Compiler<'_> {
         for (parameter, argument) in type_parameters.iter().zip(&args) {
             bindings.insert(parameter.clone(), *argument);
         }
-        self.bounds(&parameters, &bindings)
-            .map_err(|problem| super::at_use_site(problem, span))?;
+        self.bounds(&parameters, &bindings).map_err(|problem| {
+            if matches!(item, Some(a::Item::Alias(_)))
+                && parameters.iter().any(|parameter| parameter.default.is_some())
+                && crate::generics::defaults::deferred_obligation(&problem) {
+                err(span, "E_UNSUPPORTED", &format!(
+                    "type alias default application requires deferred well-formedness: {}", problem.message))
+            } else { super::at_use_site(problem, span) }
+        })?;
         let predicates = match item {
             Some(a::Item::Struct(index)) => self.source.structs[index].predicates.clone(),
             Some(a::Item::Enum(index)) => self.source.enums[index].predicates.clone(),

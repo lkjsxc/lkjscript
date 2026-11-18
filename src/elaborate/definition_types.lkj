@@ -360,26 +360,7 @@ impl DefinitionTypes {
                     }
                 }
                 Shape::Nominal(declaration, _) => {
-                    let mut arguments = substitutions.clone();
-                    let mut index = 0;
-                    for parameter in parameters(compiler.source, declaration) {
-                        if index >= values.len() {
-                            break;
-                        }
-                        arguments.insert(parameter, values[index]);
-                        index += 1;
-                    }
-                    let name = compiler.source.declarations[declaration].name.clone();
-                    Some(compiler.named_type(
-                        &a::Path {
-                            qualification: None, bindings: Vec::new(),
-                            declaration: Some(declaration),
-                            name,
-                            args: Vec::new(),
-                        },
-                        &arguments,
-                        span,
-                    )?)
+                    Some(compiler.nominal_type(declaration, values, span)?)
                 }
                 Shape::Closure(expression, _) => {
                     let closure = self.closures.get(&expression).unwrap();
@@ -1090,6 +1071,21 @@ impl Infer<'_, '_> {
         if arguments.is_empty() {
             for _ in &params {
                 arguments.push(self.unknown());
+            }
+        } else if arguments.len() < params.len() {
+            let generics = crate::generics::defaults::parameters(self.source, declaration);
+            let mut declared = BTreeMap::new();
+            let mut position = 0usize;
+            for index in 0..generics.len() {
+                let parameter = &generics[index];
+                if parameter.lifetime { continue; }
+                if position >= arguments.len() {
+                    let Some(default) = parameter.default else { return Ok(None); };
+                    self.parameter_equations(&generics[..index], &mut declared, false)?;
+                    arguments.push(self.source_type(default, &declared)?);
+                }
+                declared.insert(parameter.name.clone(), arguments[position]);
+                position += 1usize;
             }
         }
         if arguments.len() != params.len() {

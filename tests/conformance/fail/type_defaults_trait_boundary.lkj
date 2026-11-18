@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Selected<T = i64> { fn value(self) -> T; }
+pub fn probe() -> i64 { 42 }

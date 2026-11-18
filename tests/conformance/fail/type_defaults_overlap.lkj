@@ -1,0 +1,7 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Marker {}
+struct Selected<T = i64> { value: T }
+impl Marker for Selected {}
+impl Marker for Selected<i64> {}
+pub fn probe() -> i64 { 42 }

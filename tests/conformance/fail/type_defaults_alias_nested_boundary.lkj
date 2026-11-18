@@ -1,0 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+struct Required<T: Copy> { value: T }
+type Selected<T = Required<Vec<i64>>> = T;
+pub fn probe() -> i64 { 42 }

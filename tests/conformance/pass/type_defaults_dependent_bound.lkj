@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+struct Pair<T: Copy = i64, U: Copy = T> { left: T, right: U }
+fn duplicate<T: Copy>(value: T) -> Pair<T> { Pair { left: value, right: value } }
+pub fn probe() -> i64 { let pair = duplicate(21i64); pair.left + pair.right }

@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+struct Selected<'a, T = &'a str> { anchor: &'a str, value: T }
+pub fn probe() -> i64 { 42 }

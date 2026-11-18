@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {}
+struct Pair<T, U = T> { left: T, right: U }
+fn read<T>(value: Pair<T>) -> i64 { let _ = value; 42 }
+pub fn probe() -> i64 { let value: Pair<i64, bool> = Pair { left: 42, right: true }; read(value) }

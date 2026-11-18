@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Marker {}
+impl<T> Marker for Vec<T> {}
+struct Selected<T = i64> where Vec<T>: Marker { value: T }
+pub fn probe() -> i64 { 42 }

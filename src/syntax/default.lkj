@@ -38,6 +38,7 @@ impl Parser {
         let mut parameter_index = 0;
         while parameter_index < generics.len() {
             let parameter = &mut generics[parameter_index];
+            parameter.default = None;
             if !parameter.lifetime {
                 parameter.bounds.push(bound);
             }

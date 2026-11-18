@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+#[derive(Default)]
+struct Selected<T = i64> { value: T }
+pub fn probe() -> i64 { let value: Selected = Selected::default(); value.value + 42 }

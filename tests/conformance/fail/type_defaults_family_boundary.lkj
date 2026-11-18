@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {}
+trait Selected { type Value<T = i64>; }
+pub fn probe() -> i64 { 42 }

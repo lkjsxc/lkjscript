@@ -6,6 +6,42 @@ use crate::generics::TraitIdentity;
 use std::collections::BTreeMap;
 
 impl Compiler<'_> {
+    fn validate_parameter_defaults(&mut self, parameters: &[a::GenericParam],
+        environment: &BTreeMap<String, usize>, alias: bool) -> Result<()> {
+        for parameter in parameters {
+            let Some(default) = parameter.default else { continue; };
+            let dependent = crate::generics::defaults::dependent(self.source, default, parameters, "");
+            let span = self.source.types[default].span;
+            let value = self.resolve(default, environment).map_err(|problem| {
+                if (dependent || alias) && crate::generics::defaults::deferred_obligation(&problem) {
+                    err(span, "E_UNSUPPORTED", &format!(
+                        "type argument default requires deferred well-formedness: {}", problem.message))
+                } else { problem }
+            })?;
+            // An earlier parameter is still abstract even when it has a default
+            // of its own. Its default-dependent bounds are obligations at each
+            // actual omission, not universal bounds on the earlier parameter.
+            if dependent { continue; }
+            let mut declared = environment.clone();
+            declared.insert(parameter.name.clone(), value);
+            let mut bounds = Vec::new();
+            for bound in &parameter.bounds {
+                if !crate::generics::defaults::dependent(self.source, *bound, parameters, &parameter.name) {
+                    bounds.push(*bound);
+                }
+            }
+            let mut concrete = parameter.clone();
+            concrete.bounds = bounds;
+            self.bounds(&vec![concrete], &declared).map_err(|problem| {
+                if alias && crate::generics::defaults::deferred_obligation(&problem) {
+                    err(span, "E_UNSUPPORTED", &format!(
+                        "type alias default requires deferred well-formedness: {}", problem.message))
+                } else { super::at_use_site(problem, span) }
+            })?;
+        }
+        Ok(())
+    }
+
     fn contains_qualified_type(&self, first: a::TypeId) -> bool {
         let mut pending = vec![first];
         while let Some(ty) = pending.pop() {
@@ -29,8 +65,10 @@ impl Compiler<'_> {
 
     pub(super) fn validate_qualified_headers(&mut self) -> Result<()> {
         // Declaration signatures are obligations even when no body or concrete
-        // instantiation is demanded. Type aliases keep their existing lazy rule.
+        // instantiation is demanded. Alias bodies keep their existing lazy rule;
+        // dependent default obligations remain with actual applications.
         for index in 0..self.source.declarations.len() {
+            let alias = matches!(self.source.declarations[index].item, a::Item::Alias(_));
             let (parameters, predicates, fields) = match self.source.declarations[index].item {
                 a::Item::Struct(index) => {
                     let item = &self.source.structs[index];
@@ -42,11 +80,18 @@ impl Compiler<'_> {
                     for variant in &item.variants { fields.extend_from_slice(&variant.fields); }
                     (item.generics.clone(), item.predicates.clone(), fields)
                 }
+                a::Item::Alias(index) if self.source.aliases[index].generics.iter()
+                    .any(|parameter| parameter.default.is_some()) => {
+                    let item = &self.source.aliases[index];
+                    let fields: Vec<a::Field> = Vec::new();
+                    (item.generics.clone(), item.predicates.clone(), fields)
+                }
                 _ => continue,
             };
             // Storage obligations apply to unused nominal declarations too.
             let mut environment = BTreeMap::new();
             self.declare_parameters_with_predicates(&parameters, &predicates, &mut environment)?;
+            self.validate_parameter_defaults(&parameters, &environment, alias)?;
             for field in &fields {
                 let ty = self.resolve(field.ty, &environment)?;
                 self.require_source_sized(ty, field.span)?;

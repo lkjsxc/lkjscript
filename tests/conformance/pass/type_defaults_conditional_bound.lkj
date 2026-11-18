@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+struct Selected<T, U: Copy = T> { left: T, right: U }
+pub fn probe() -> i64 { let pair: Selected<i64> = Selected { left: 19, right: 23 }; pair.left + pair.right }

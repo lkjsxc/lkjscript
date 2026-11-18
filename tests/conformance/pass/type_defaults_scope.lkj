@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+struct Selected<T = i64> { value: T }
+fn independent<T>(unrelated: T, value: Selected) -> Selected<i64> { let _ = unrelated; value }
+pub fn probe() -> i64 { let value: Selected = Selected { value: 42 }; independent(true, value).value }

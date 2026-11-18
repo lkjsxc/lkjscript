@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+struct Error<I> { input: I }
+enum Failure<F, E = F> { Fatal(F), Recoverable(E) }
+type IResult<I, O, E = Error<I>> = Result<(I, O), Failure<E>>;
+fn parse<I>(input: I, value: i64) -> IResult<I, i64> { Ok((input, value)) }
+fn explicit<I>(value: IResult<I, i64>) -> Result<(I, i64), Failure<Error<I>, Error<I>>> { value }
+pub fn probe() -> i64 {
+    match explicit(parse(true, 42)) { Ok((_, value)) => value, Err(_) => 0 }
+}

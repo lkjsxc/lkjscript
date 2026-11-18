@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {}
+struct Recursive<T = T> { value: T }
+pub fn probe() -> i64 { 42 }

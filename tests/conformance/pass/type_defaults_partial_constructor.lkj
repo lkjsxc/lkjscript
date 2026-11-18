@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {}
+struct Pair<T, U = T> { left: T, right: U }
+enum Choice<T, U = T> { First(T), Second(U) }
+pub fn probe() -> i64 {
+    let pair = Pair::<i64> { left: 19, right: 23 };
+    let choice = Choice::<i64>::Second(pair.right);
+    match choice { Choice::First(value) | Choice::Second(value) => pair.left + value }
+}

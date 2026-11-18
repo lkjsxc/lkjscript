@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+struct Left<T = Right<u8>> { value: T }
+struct Right<T = Left<u8>> { value: T }
+pub fn probe() -> i64 { let value: Left = Left { value: Right { value: 42u8 } }; value.value.value as i64 }
