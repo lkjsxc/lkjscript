@@ -363,10 +363,32 @@ fn one_expression(identity: &str, source: &str, call: bool) -> Result<String, St
     let tokens = syntax::semantic_tokens(source)
         .map_err(|problem| error(identity, rule, &problem.message))?;
     if tokens.is_empty() { return Err(error(identity, rule, "source is empty; expected one expression")); }
+    // Delimiters must close inside the supplied fragment, independently of the
+    // wrapper. Otherwise "1) + 2 + (3" could escape the replacement's grouping.
+    let mut delimiters: Vec<u8> = Vec::new();
+    for token in &tokens {
+        if token.kind != 6u8 { continue; }
+        let opening = match token.text.as_str() {
+            "(" => b')', "[" => b']', "{" => b'}',
+            ")" | "]" | "}" => {
+                if delimiters.pop() != Some(token.text.as_bytes()[0usize]) {
+                    return Err(error(identity, rule, "source closes a bracket it did not open; expected one self-contained expression"));
+                }
+                0u8
+            }
+            _ => 0u8,
+        };
+        if opening != 0u8 { delimiters.push(opening); }
+    }
+    if !delimiters.is_empty() {
+        return Err(error(identity, rule, "source does not stay inside its wrapper (unbalanced bracket or unclosed comment); expected one self-contained expression"));
+    }
     // Parentheses retain this expression's precedence; newlines keep trailing
     // line comments from swallowing the closing delimiter or surrounding code.
     let expression = format!("(\n{source}\n)");
-    let wrapped = format!("fn __lkjscript_transaction_expression() {{ {expression} }}");
+    // Validate the raw fragment without the projection parentheses: otherwise
+    // a bare comma list could acquire tuple syntax from those parentheses.
+    let wrapped = format!("fn __lkjscript_transaction_expression() {{\n{source}\n}}");
     // Macro invocations are shape-checked here and expanded only in real scope.
     let parsed = syntax::parse_unexpanded(&wrapped)
         .map_err(|problem| error(identity, rule, &problem.message))?;

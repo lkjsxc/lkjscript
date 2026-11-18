@@ -71,8 +71,8 @@ request() { printf '{"version":1,"operations":[%s]}\n' "$1" > "$fixture/request.
 snapshot() {
     (
         cd "$project"
-        find . -name '*.lkj' -printf '%y %P %l\n'
-        find . -type f -name '*.lkj' -exec sha256sum {} +
+        find . \( -name '*.lkj' -o -name '.lkjscript-edit.generation' \) -printf '%y %P %l\n'
+        find . -type f \( -name '*.lkj' -o -name '.lkjscript-edit.generation' \) -exec sha256sum {} +
     ) | LC_ALL=C sort > "$1"
 }
 edit() {
@@ -182,6 +182,9 @@ let value = 1i64;
 fn escaped() -> i64 { 9i64 }
 1i64 } // escaped wrapper
 1i64) } // escaped parenthesized wrapper
+1i64) + 2i64 + (3i64
+(1i64
+{ 1i64 } ) + (2i64
 FRAGMENTS
 # A token edit elsewhere in the same function invalidates the old body epoch.
 perl -0pi -e 's/left::run\(\)/left::run() + 0i64/' "$project/main.lkj"
@@ -222,6 +225,20 @@ outer=$(call_id main 'step(step(1i64))')
 inner=$(call_id main 'step(1i64)')
 request "$(operation "$outer" '8i64'),$(operation "$inner" '4i64')"
 refuse E_EDIT_OVERLAP
+
+# Projection parentheses must not turn a bare comma list into a tuple expression.
+setup tuple
+cat > "$project/main.lkj" <<'SOURCE'
+fn pair() -> (i64, i64) { (1i64, 2i64) }
+fn main() -> i64 { let values = pair(); values.0 + values.1 }
+SOURCE
+index
+selected=$(call_id main 'pair()')
+request "$(operation "$selected" '40i64, 2i64')"
+refuse E_EDIT_EXPRESSION
+request "$(operation "$selected" '(40i64, 2i64)')"
+apply
+value 42
 
 # The parser's grouping-free AST must not authorize an incomplete written span.
 setup grouped

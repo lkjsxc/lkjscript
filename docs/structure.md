@@ -223,7 +223,8 @@ identity-addressed `E_EDIT_*` refusals.
 
 The basic operations are `replace-body`, `replace-item`, `replace-call`, `add-item`,
 `remove-item`, `rename` and `move`. Replacement source must parse as exactly
-one body or one item and is elaborated in its real surrounding scope, including
+one body, one item or one expression as the operation requires, and is elaborated
+in its real surrounding scope, including
 visibility, generics and imports. `add-item` names a module; `before` is an
 optional existing child identity. The basic move planner only changes position
 within the same module. Refactor planners extend these forms; their supported
