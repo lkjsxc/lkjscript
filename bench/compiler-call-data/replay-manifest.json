@@ -1,0 +1,415 @@
+{
+   "allowed_fixed_paths" : [
+      "prompt.txt",
+      "initial-files.json",
+      "state.json",
+      "agent-trace.jsonl",
+      "agent-stderr.txt",
+      "agent-final.txt",
+      "gate-01-files.json",
+      "final-files.json",
+      "summary.json"
+   ],
+   "allowed_tool_log_pattern" : "logs/tool-[0-9]+.json",
+   "archive_policy" : "Exact allowlisted regular files only; archive names, types, sizes and SHA-256 values were verified against original files.",
+   "exclusions" : "Compiler binaries, stores, private keys, configurations and source/desired directories are excluded. No excluded file was read.",
+   "provenance" : "Each trial remains bound to its recorded producer, runner and adapter hashes. No claim that later compiler revisions were replayed.",
+   "scope" : "All three retained unfamiliar command attempts, including exploratory and final failures; no population comparison or rerun.",
+   "trials" : [
+      {
+         "absent_optional_files" : [],
+         "adapter_sha256" : "241d108dbc565ae0a8cdf2a235e2e8610e15a52c03084cadec783797173ac178",
+         "archive" : {
+            "bytes" : 19581,
+            "member_count" : 19,
+            "members" : [
+               {
+                  "bytes" : 271,
+                  "path" : "agent-final.txt",
+                  "sha256" : "e855a8924305c249933106d2ab09ea4565f14f5bda2c616cc39c210f8a68f8f4"
+               },
+               {
+                  "bytes" : 0,
+                  "path" : "agent-stderr.txt",
+                  "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+               },
+               {
+                  "bytes" : 33993,
+                  "path" : "agent-trace.jsonl",
+                  "sha256" : "b5252b9a1d799c2b20f1470ab946dd62a983001d8ba056bcda6c062350c0a01e"
+               },
+               {
+                  "bytes" : 342,
+                  "path" : "final-files.json",
+                  "sha256" : "41cea0f43ab9fd963051a0c1a03d1e336b3b66818eb601a7b6217fa9cfd3cd4e"
+               },
+               {
+                  "bytes" : 342,
+                  "path" : "gate-01-files.json",
+                  "sha256" : "41cea0f43ab9fd963051a0c1a03d1e336b3b66818eb601a7b6217fa9cfd3cd4e"
+               },
+               {
+                  "bytes" : 363,
+                  "path" : "initial-files.json",
+                  "sha256" : "b9fd41b817de26bcaaddf84cb46e453b6433733371815578b786ee6329987204"
+               },
+               {
+                  "bytes" : 4846,
+                  "path" : "logs/tool-001.json",
+                  "sha256" : "0d05f98eb9fa3f80abb307f565aab0374571807ab2b7befe2359282304433979"
+               },
+               {
+                  "bytes" : 3514,
+                  "path" : "logs/tool-002.json",
+                  "sha256" : "c9cf5b4fad1ca697be2ea33d1ff2a85ec0c44dea1aecd2f0421e0ed79b127105"
+               },
+               {
+                  "bytes" : 7984,
+                  "path" : "logs/tool-003.json",
+                  "sha256" : "2ddf500a6f65430cbd809632795e5e9b087caefe2b34fac8fd2f6ff725d67056"
+               },
+               {
+                  "bytes" : 479,
+                  "path" : "logs/tool-004.json",
+                  "sha256" : "ca019855b4f08b14d27bc6aa6e870535f00f0c127e31fef0a435056cd427cbe7"
+               },
+               {
+                  "bytes" : 4433,
+                  "path" : "logs/tool-005.json",
+                  "sha256" : "1f6f4655f8c237d3c5971c4be559b6e638df37ec444545e4fec72e8a1814fc30"
+               },
+               {
+                  "bytes" : 2208,
+                  "path" : "logs/tool-006.json",
+                  "sha256" : "5fa35d4dbdc9ddf2aa7bfc6dc6adde25b14f9631142aa82a8a7a9a813b794c5f"
+               },
+               {
+                  "bytes" : 684,
+                  "path" : "logs/tool-007.json",
+                  "sha256" : "03d62674b5ada12e93f1af39b6164517a6b2fef1a37abe9b520975d75ff99b3e"
+               },
+               {
+                  "bytes" : 1649,
+                  "path" : "logs/tool-008.json",
+                  "sha256" : "fb9c80e7c326aa2d3142d7b345dfad452199a87b7447ca471ff8f23b14f24d23"
+               },
+               {
+                  "bytes" : 1617,
+                  "path" : "logs/tool-009.json",
+                  "sha256" : "11159604d2ccf6a2178d555ced3e5c8490bea7debe53732d0e6fdfdf27e2335a"
+               },
+               {
+                  "bytes" : 568,
+                  "path" : "logs/tool-010.json",
+                  "sha256" : "08e9920e58af32afb72350d39a464b85b5cbfc94a3fc4c3229e3c4bf6a8d2c01"
+               },
+               {
+                  "bytes" : 1465,
+                  "path" : "prompt.txt",
+                  "sha256" : "58b07e07b2c2df2ad249007a6b1207c22fc2cb0840ee812a15517b96627df88f"
+               },
+               {
+                  "bytes" : 3544,
+                  "path" : "state.json",
+                  "sha256" : "9c6a252a45e46a940d476e7749e707fdf709488c80298e3e43e5620149b5077a"
+               },
+               {
+                  "bytes" : 2614,
+                  "path" : "summary.json",
+                  "sha256" : "40e8b83f2bcea5a3b6e38884183571d370f6aa7df58663dddc4a5d1beb3123de"
+               }
+            ],
+            "path" : "replay-exploratory.tar.gz",
+            "sha256" : "877c2ee244f71f5eb361ababd74163c59aba9ca351a5be33b2470c254f613d6c"
+         },
+         "calls" : 10,
+         "initial_snapshot" : "bee791c32976ac83bf50b46aa2060404d966baffc7ddfcca23a561d34284583c",
+         "model" : "gpt-6-luna",
+         "originating_directory" : "/home/coder/workspace/lkjscript-semantic-operations-20261118/target/semantic-operations/unfamiliar-command",
+         "producer_sha256" : "8dca1f43b61235595bf83c0dde4a6ab29da7ebff020f1dfbf7c55f490786431e",
+         "result" : {
+            "agent_exit" : 0,
+            "checked_meaning_equal_first" : false,
+            "checker_first" : true,
+            "full_repository_gate" : "not-run",
+            "native_interpreter_execution" : "not-run",
+            "setup_error" : null,
+            "timed_out" : false
+         },
+         "runner_sha256" : "695cef84ea997e8199b3f75d2e873463702e301b2fa22470a2e1acf88dd06101",
+         "summary_copy" : {
+            "bytes" : 2614,
+            "path" : "replay-exploratory-summary.json",
+            "sha256" : "40e8b83f2bcea5a3b6e38884183571d370f6aa7df58663dddc4a5d1beb3123de"
+         },
+         "trial" : "exploratory"
+      },
+      {
+         "absent_optional_files" : [],
+         "adapter_sha256" : "241d108dbc565ae0a8cdf2a235e2e8610e15a52c03084cadec783797173ac178",
+         "archive" : {
+            "bytes" : 20015,
+            "member_count" : 20,
+            "members" : [
+               {
+                  "bytes" : 239,
+                  "path" : "agent-final.txt",
+                  "sha256" : "d772b32f56801963bb34b27f09927df825b9c69a8beb9933d79442ffa2b06d3f"
+               },
+               {
+                  "bytes" : 0,
+                  "path" : "agent-stderr.txt",
+                  "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+               },
+               {
+                  "bytes" : 35136,
+                  "path" : "agent-trace.jsonl",
+                  "sha256" : "06af3e985bece225bfce756a9e2f5e591009f4fb73602e2fa3d824f358252d7d"
+               },
+               {
+                  "bytes" : 342,
+                  "path" : "final-files.json",
+                  "sha256" : "41cea0f43ab9fd963051a0c1a03d1e336b3b66818eb601a7b6217fa9cfd3cd4e"
+               },
+               {
+                  "bytes" : 342,
+                  "path" : "gate-01-files.json",
+                  "sha256" : "41cea0f43ab9fd963051a0c1a03d1e336b3b66818eb601a7b6217fa9cfd3cd4e"
+               },
+               {
+                  "bytes" : 363,
+                  "path" : "initial-files.json",
+                  "sha256" : "b9fd41b817de26bcaaddf84cb46e453b6433733371815578b786ee6329987204"
+               },
+               {
+                  "bytes" : 4846,
+                  "path" : "logs/tool-001.json",
+                  "sha256" : "566d0277a74d4f8eeffdd46e9635e6ea03e0027c9e5fb8f18bce0cfa09a71088"
+               },
+               {
+                  "bytes" : 3514,
+                  "path" : "logs/tool-002.json",
+                  "sha256" : "11fea78f1142f49945f04332c70b7e3327efe9be25f1e7b39397b4248a915860"
+               },
+               {
+                  "bytes" : 8286,
+                  "path" : "logs/tool-003.json",
+                  "sha256" : "97ca48e656151ff4db59fb031e8d90c58733003aba33cd90898c2477a3097b18"
+               },
+               {
+                  "bytes" : 479,
+                  "path" : "logs/tool-004.json",
+                  "sha256" : "d32667cc5db27287aa32989daa12041f11b80b8d446775d26ae7b74a810ae3bd"
+               },
+               {
+                  "bytes" : 4433,
+                  "path" : "logs/tool-005.json",
+                  "sha256" : "649277a8e2cbbb89bdf9e85b17de2697c2ae2c418342da0ff50fda5872dbc082"
+               },
+               {
+                  "bytes" : 2200,
+                  "path" : "logs/tool-006.json",
+                  "sha256" : "8c5c9d4eeb3a0a9bac3e71de978212d53cc2315571baeb99f1380b03501cc6fc"
+               },
+               {
+                  "bytes" : 684,
+                  "path" : "logs/tool-007.json",
+                  "sha256" : "0a392a6e5f69733dc337fd462aaf2e151a45d4e40862383b36b89b61248cf0a8"
+               },
+               {
+                  "bytes" : 1642,
+                  "path" : "logs/tool-008.json",
+                  "sha256" : "7221af145ea185acf8aa56fccf4d98cf42b7b15abd1958f4ec66a0c81e64e968"
+               },
+               {
+                  "bytes" : 383,
+                  "path" : "logs/tool-009.json",
+                  "sha256" : "ac1912971a182e1d3b95d3c7c9460f1dad39269642a890e2fb7e1a163a6b8cb4"
+               },
+               {
+                  "bytes" : 1618,
+                  "path" : "logs/tool-010.json",
+                  "sha256" : "9072ec0fcb36e9e8cd3890ded8198c311a22299b7739dc553274563082046eff"
+               },
+               {
+                  "bytes" : 551,
+                  "path" : "logs/tool-011.json",
+                  "sha256" : "272a5556d0a1078e0dd7a10546d36b33f556adaa9d54026e3272f5ab8e939422"
+               },
+               {
+                  "bytes" : 1465,
+                  "path" : "prompt.txt",
+                  "sha256" : "bff39c7da49d8aa3cab790aa366c460c50db8e117ebf737f1e65ea71189b6bcc"
+               },
+               {
+                  "bytes" : 3519,
+                  "path" : "state.json",
+                  "sha256" : "ddb74f294ed1e5359c3097061212c39588448df36133811e8976718e09247a35"
+               },
+               {
+                  "bytes" : 2598,
+                  "path" : "summary.json",
+                  "sha256" : "f6b0eff3f223df8e27a22f4cb953f02d9045b86cb593f2e3f10c20aa932a6cbd"
+               }
+            ],
+            "path" : "replay-final-luna.tar.gz",
+            "sha256" : "34657ed2586a3675dc54a5daa28714103b0df4458e34fbd74c74d7b4b565b8c4"
+         },
+         "calls" : 11,
+         "initial_snapshot" : "8459e38b397d227ba78d49831897f49c4ad83a967bbbef16ae50b1958d6af312",
+         "model" : "gpt-6-luna",
+         "originating_directory" : "/home/coder/workspace/lkjscript-semantic-operations-20261118/target/semantic-operations/final-luna",
+         "producer_sha256" : "f76ae4393e5469b1c522aa5a5e619b6be9bbb4e673889c6b5ef8aac7daea6d4b",
+         "result" : {
+            "agent_exit" : 0,
+            "checked_meaning_equal_first" : false,
+            "checker_first" : true,
+            "full_repository_gate" : "not-run",
+            "native_interpreter_execution" : "not-run",
+            "setup_error" : null,
+            "timed_out" : false
+         },
+         "runner_sha256" : "695cef84ea997e8199b3f75d2e873463702e301b2fa22470a2e1acf88dd06101",
+         "summary_copy" : {
+            "bytes" : 2598,
+            "path" : "replay-final-luna-summary.json",
+            "sha256" : "f6b0eff3f223df8e27a22f4cb953f02d9045b86cb593f2e3f10c20aa932a6cbd"
+         },
+         "trial" : "final-luna"
+      },
+      {
+         "absent_optional_files" : [],
+         "adapter_sha256" : "241d108dbc565ae0a8cdf2a235e2e8610e15a52c03084cadec783797173ac178",
+         "archive" : {
+            "bytes" : 19332,
+            "member_count" : 20,
+            "members" : [
+               {
+                  "bytes" : 187,
+                  "path" : "agent-final.txt",
+                  "sha256" : "a43ee154b9c3485419385d560197915cfd716370e2a1fe5066f2cb71c4a1b097"
+               },
+               {
+                  "bytes" : 0,
+                  "path" : "agent-stderr.txt",
+                  "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+               },
+               {
+                  "bytes" : 36710,
+                  "path" : "agent-trace.jsonl",
+                  "sha256" : "8530e16fe29ea39e5fc200d7853746a18efbb1b781d4bf2bf674983cc430e466"
+               },
+               {
+                  "bytes" : 359,
+                  "path" : "final-files.json",
+                  "sha256" : "3a23bbc70c81e14a091bb9d68e0cdd13a2e9df4534ccb21b110613a72b06f52d"
+               },
+               {
+                  "bytes" : 359,
+                  "path" : "gate-01-files.json",
+                  "sha256" : "3a23bbc70c81e14a091bb9d68e0cdd13a2e9df4534ccb21b110613a72b06f52d"
+               },
+               {
+                  "bytes" : 363,
+                  "path" : "initial-files.json",
+                  "sha256" : "b9fd41b817de26bcaaddf84cb46e453b6433733371815578b786ee6329987204"
+               },
+               {
+                  "bytes" : 4846,
+                  "path" : "logs/tool-001.json",
+                  "sha256" : "2260afae09ed1331a3fd1505baaa798c2c04f91d1c38d776ae89893f87524a0e"
+               },
+               {
+                  "bytes" : 3514,
+                  "path" : "logs/tool-002.json",
+                  "sha256" : "c64144ec14f1d9e1b54b4867fecf1a899ec1a6fe51df7c5ffce7b9c12bdeb9ad"
+               },
+               {
+                  "bytes" : 8286,
+                  "path" : "logs/tool-003.json",
+                  "sha256" : "aaac9d6c2a5a1e0c58809720a894198d86fdb0ed9ae9cce88d407d06532ce01d"
+               },
+               {
+                  "bytes" : 2365,
+                  "path" : "logs/tool-004.json",
+                  "sha256" : "508f131e08f82e42da0418b196533dd28c7ef77a5d2830e9750b644e36101196"
+               },
+               {
+                  "bytes" : 1777,
+                  "path" : "logs/tool-005.json",
+                  "sha256" : "a398efb67b166d68446307805445d6d917527dc8667c33f7f8d7e059fd3476ab"
+               },
+               {
+                  "bytes" : 1881,
+                  "path" : "logs/tool-006.json",
+                  "sha256" : "24f441f0e0c98ede2797f9f3ffeda60de61247e70595ec12433853e84bd15fef"
+               },
+               {
+                  "bytes" : 2227,
+                  "path" : "logs/tool-007.json",
+                  "sha256" : "b0f2a155a9f5a674d5235af241ad6c9f16ee6873939e50f6de92730e638bffd5"
+               },
+               {
+                  "bytes" : 2227,
+                  "path" : "logs/tool-008.json",
+                  "sha256" : "2e5f1988ca973c411c40a854dcf8816aff7b3e28353993a2c76256fd982df5c4"
+               },
+               {
+                  "bytes" : 1725,
+                  "path" : "logs/tool-009.json",
+                  "sha256" : "766d280a177399105f8744779b965f2b09fafbc0232945e4b16179819f792e5a"
+               },
+               {
+                  "bytes" : 1378,
+                  "path" : "logs/tool-010.json",
+                  "sha256" : "cbc1f76c894a5c9df53fc91bc8724f18e2c5287912637a6001fa705df657474a"
+               },
+               {
+                  "bytes" : 498,
+                  "path" : "logs/tool-011.json",
+                  "sha256" : "7ccc10a597126b68e316f686356ee22c2ef6e47b551c2f3378f9db5f855e1909"
+               },
+               {
+                  "bytes" : 1465,
+                  "path" : "prompt.txt",
+                  "sha256" : "e337762741d18b317f9c539ab4913ff0311283cb866909b9af77faf8e2683d2f"
+               },
+               {
+                  "bytes" : 3226,
+                  "path" : "state.json",
+                  "sha256" : "b23ed969ef464ab14241cb360bac6b9d448f9c3da7b8c03a1dc9c8646852dfcd"
+               },
+               {
+                  "bytes" : 2435,
+                  "path" : "summary.json",
+                  "sha256" : "6ad2599b550df5d61c8a11b82f3987cd61dbd313a402a38d6b4455e210db0e04"
+               }
+            ],
+            "path" : "replay-final-astra.tar.gz",
+            "sha256" : "b820fa6b2a4632959fa8017b8a307302649932a18b6253e8408e7692e3fe7c52"
+         },
+         "calls" : 11,
+         "initial_snapshot" : "3c6e24f3cb7d38f70e2fd23ea46f280f90cd2dd519493e21536cae48941fedd3",
+         "model" : "gpt-6-astra",
+         "originating_directory" : "/home/coder/workspace/lkjscript-semantic-operations-20261118/target/semantic-operations/final-astra",
+         "producer_sha256" : "f76ae4393e5469b1c522aa5a5e619b6be9bbb4e673889c6b5ef8aac7daea6d4b",
+         "result" : {
+            "agent_exit" : 0,
+            "checked_meaning_equal_first" : true,
+            "checker_first" : true,
+            "full_repository_gate" : "not-run",
+            "native_interpreter_execution" : "not-run",
+            "setup_error" : null,
+            "timed_out" : false
+         },
+         "runner_sha256" : "695cef84ea997e8199b3f75d2e873463702e301b2fa22470a2e1acf88dd06101",
+         "summary_copy" : {
+            "bytes" : 2435,
+            "path" : "replay-final-astra-summary.json",
+            "sha256" : "6ad2599b550df5d61c8a11b82f3987cd61dbd313a402a38d6b4455e210db0e04"
+         },
+         "trial" : "final-astra"
+      }
+   ],
+   "version" : 1
+}

@@ -1,0 +1,196 @@
+{
+   "bootstrap" : {
+      "fixed_point" : "byte-identical",
+      "log" : "final-bootstrap.log",
+      "max_rss_kib" : 1560032,
+      "result" : "pass",
+      "scope" : "whole bootstrap script; no isolated checking-cost claim",
+      "store_condition" : "reused after the recorded failed helper build; full repository gate has a distinct initially absent store",
+      "system_seconds" : 1.3,
+      "time" : "final-bootstrap.time",
+      "user_seconds" : 107.75,
+      "wall_seconds" : 110.74
+   },
+   "ci" : "not run for unpublished slice",
+   "controlled_edit" : {
+      "authority_delta" : "none",
+      "checked_instances" : 4,
+      "edited_and_desired_meaning" : "250cfd42b58054221c7774132ebc0b95892b5cdedd57170751eba7a274fac4c2",
+      "edited_file_sha256" : "6d51fab3f0db5a3cc435ad54a99b9dba6c864fa3429765cbec57673508602e6c",
+      "final_producer_recheck" : "reviewer/ecd0ff6d0-exact-apply.out",
+      "fixture" : "tests/conformance/pass/const_function_calls.lkj",
+      "fresh_checked" : 2,
+      "interpreter" : 43,
+      "native" : 43,
+      "original_file_sha256" : "873487978dc8d0891080042a90d5148f51181eb99da889b1b5720f5ced44df4c",
+      "original_meaning" : "e207108def576597aaa549a750e6f45129202ce28987e0be9790605d4442d1c6",
+      "proof_reused" : 2,
+      "selected_item_sha256" : "1cf0a9ca71a6ca86882b1649e0d493667549af2ee2492a73d023b1e36bb0b715",
+      "selected_span" : [
+         237,
+         247
+      ],
+      "source" : "add(self.get(), 1i64)",
+      "source_utf8_bytes" : 21
+   },
+   "feature" : "replace-call",
+   "focused" : {
+      "log" : "final-focused.log",
+      "max_rss_kib" : 153848,
+      "result" : "pass",
+      "suites" : [
+         "structure-call",
+         "structure-help"
+      ],
+      "system_seconds" : 0.59,
+      "time" : "final-focused.time",
+      "user_seconds" : 18.25,
+      "wall_seconds" : 19.28
+   },
+   "implementation_credit" : {
+      "baseline_blocker" : "E_IDENTITY duplicate source identity syntax::macros::expand",
+      "operation_produced_lines" : 0,
+      "route" : "lead-approved guarded source edits"
+   },
+   "independent_review" : {
+      "equal_pairs" : 13,
+      "expression_pairs" : 13,
+      "full_gate_by_reviewer" : "not run",
+      "manifest" : "reviewer/SHA256SUMS",
+      "producer_sha256" : "103557eddf30d24e046cb09f6a881e549829283495c8648c0ac9dcd1d72a5d35",
+      "report" : "reviewer/review.md",
+      "result" : "pass",
+      "reviewer" : "lkj-semantic-review",
+      "source" : "ecd0ff6d0e2210be5b7eaed9770b675b7c070554"
+   },
+   "independent_rust_witness" : {
+      "cargo_build_jobs" : 1,
+      "cargo_release_codegen_units" : 1,
+      "compiler_bytes_equal" : true,
+      "generated_native_sha256" : "103557eddf30d24e046cb09f6a881e549829283495c8648c0ac9dcd1d72a5d35",
+      "log" : "landing/witness.log",
+      "max_rss_kib" : 1630836,
+      "native_test_jobs_default" : 1,
+      "rust_host_compiler_sha256" : "fbebd08a32c9823642625e240164c2590ce4fdb443b8f886230b963ab36f4ac6",
+      "script" : "bash witness/check.sh",
+      "status" : "pass",
+      "system_seconds" : 9.6,
+      "user_seconds" : 144.03,
+      "values_output_cases" : 499,
+      "verdicts" : 652,
+      "wall_seconds" : 156.87
+   },
+   "landing_packet" : "landing/manifest.json",
+   "limits" : [
+      "Full catalog and original/candidate program compilation remain",
+      "No unit-local total-cost or memory bound",
+      "No performance comparison or repeated 10M experiment",
+      "Grouped incomplete spans and generated call anchors refuse",
+      "No publication, seed refresh or CI claim"
+   ],
+   "producer" : {
+      "baseline_sha256" : "77695785a3c15da46bd9a3a794e81a2edf4c0155a891ff0cef2084d7bc3659d8",
+      "final_bytes" : 40989463,
+      "final_sha256" : "103557eddf30d24e046cb09f6a881e549829283495c8648c0ac9dcd1d72a5d35",
+      "seed_gzip_sha256" : "9327f64a3c9a5c37146ca6c91a6926a8707d9fef3d9fd67398125909f4b5f612"
+   },
+   "publication_order" : "held by lead after public parent macro-origins CI watchdog failure; Programs owns that diagnosis; no type-defaults bundle",
+   "real_programs" : {
+      "evidence" : "gate-details/real-programs.log",
+      "inside_full_gate" : "pass",
+      "standalone_evidence" : "landing/standalone.log",
+      "standalone_outside_gate" : "pass after full gate; lead-requested landing check",
+      "standalone_wall_seconds" : 4.02
+   },
+   "repository_gate" : {
+      "case_requests_rerun" : 6575,
+      "case_requests_reused" : 0,
+      "case_reuse_scope" : "case request skips only; authenticated instance/object reuse within commands stays enabled",
+      "conformance" : {
+         "cases" : 1357,
+         "pending_reported" : 2,
+         "route_checks" : 2712
+      },
+      "docs_at_start" : {
+         "encoding" : "gzip",
+         "file" : "gate/docs-at-start.patch.gz",
+         "reason" : "Exact raw diff contains required blank context markers; gzip preserves those bytes without treating them as new Markdown whitespace.",
+         "uncompressed_sha256" : "744d42cec89df778875a738ee0f66036a81fc7437fdeb8f95e57e3b8fca4e244"
+      },
+      "exit" : 0,
+      "finished_utc" : "2026-11-18T15:53:03Z",
+      "gate_wall_seconds" : 1260.372,
+      "input" : "gate/input.txt",
+      "load_after" : 3.79,
+      "load_before" : 2.69,
+      "lock_released" : true,
+      "log" : "gate/full-gate.log",
+      "max_rss_kib" : 1576788,
+      "mutation" : {
+         "checked_reuses" : 12,
+         "did_not_terminate" : 1,
+         "emitted_reuses" : 5,
+         "findings" : 0,
+         "mutants" : 128,
+         "rejected" : 104,
+         "resources" : 0,
+         "traps" : 1,
+         "values" : 22
+      },
+      "optimized_conformance" : {
+         "cases" : 1357,
+         "pending_reported" : 2,
+         "route_checks" : 2712
+      },
+      "pinned_inputs" : "src library tools tests witness seed; separate docs/report provenance retained",
+      "producer_unchanged" : true,
+      "provenance" : "gate/provenance.txt",
+      "seed_unchanged" : true,
+      "source_inputs_unchanged" : true,
+      "started_utc" : "2026-11-18T15:32:03Z",
+      "status" : "pass",
+      "store_initial" : "absent",
+      "system_seconds" : 82.25,
+      "time_wall_seconds" : 1260.37,
+      "user_seconds" : 3160.62,
+      "workers" : 4
+   },
+   "seed_proposal" : {
+      "artifact_path" : "/home/coder/workspace/lkjscript-semantic-operations-20261118/target/semantic-operations/landing/proposed-lkjscript.gz",
+      "command" : "gzip -n -9 -c target/semantic-operations/raw-expression > target/semantic-operations/landing/proposed-lkjscript.gz",
+      "current" : {
+         "gzip_bytes" : 8192800,
+         "gzip_sha256" : "9327f64a3c9a5c37146ca6c91a6926a8707d9fef3d9fd67398125909f4b5f612",
+         "image_bytes" : 40929908,
+         "image_sha256" : "a2d0d8581c73ceb937addb5ea986ba708fa06c2505161d8745353cf123a9bc8f"
+      },
+      "gzip_size_delta" : 12039,
+      "proposal_seed_full_gate" : "not run; no new full gate authorized",
+      "proposed" : {
+         "gzip_bytes" : 8204839,
+         "gzip_sha256" : "65408daa78849909a0a3ddcf0a2cab29120b9ddfc095ffb2095c422261f6a6ee",
+         "image_bytes" : 40989463,
+         "image_sha256" : "103557eddf30d24e046cb09f6a881e549829283495c8648c0ac9dcd1d72a5d35"
+      },
+      "repository_path" : "seed/lkjscript.gz",
+      "separate_compiler_owned_commit_required" : true,
+      "status" : "proposed-not-applied",
+      "tracked_seed_changed" : false
+   },
+   "source" : {
+      "baseline" : "d6401d43812c224ceb03d9775057386375444d0e",
+      "publication" : "not performed",
+      "published_parent" : "739c8cde24f8df4644274451d5f39c23302a8af6",
+      "seed_refresh" : false,
+      "tested" : "ecd0ff6d0e2210be5b7eaed9770b675b7c070554"
+   },
+   "unfamiliar" : {
+      "manifest" : "replay-manifest.json",
+      "population_claim" : false,
+      "predeclared_pair" : 2,
+      "repeated_on_final_producer" : false,
+      "summary" : "Both Luna trials checker pass and target miss; Astra checker and target pass. Each trial has zero outside-tool calls. Full repository gate and separate engines not run inside trials.",
+      "total_trials" : 3
+   },
+   "version" : 1
+}

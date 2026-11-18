@@ -1,0 +1,10 @@
+{
+  "original_source_commit": "739c8cde24f8df4644274451d5f39c23302a8af6",
+  "original_macro_origin_script_sha256": "b19f2c461cc426a63edbc513c3741f8b7d699b9c3c999450d5f5b87c9023b206",
+  "diagnostic_v1_macro_origin_script_sha256": "126c6ad36215f95df5c00e84aa6f685383d664d66fa545face013496de617f8e",
+  "final_macro_origin_script_sha256": "176abd1b8247914c2bd8fdfea27f8d9f01bb5f550c38caa3fc7f92353d5f9d70",
+  "assertions_and_commands": "All original bytes are identical after removing only the added instrumentation/cleanup block and four phase calls.",
+  "gate_change": "Only the macro-origins finite watchdog changes from600s to1800s, with its explanatory comment.",
+  "comparison_semantics": "The local pair ran frozen v1 instrumentation. Final v2 changes only cleanup/status handling and the comment; focused semantic inputs and execution commands are unchanged.",
+  "cleanup_controls": "Fresh final-v2 controls passed for default failure, default TERM and explicit KEEP TERM. Default fixtures are removed; retained fixtures have no key."
+}

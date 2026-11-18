@@ -6,7 +6,41 @@ compiler=$(realpath "${1:-target/lkjscript}")
 library="$PWD/library"
 mkdir -p target
 fixture=$(mktemp -d "$PWD/target/macro-origins.XXXXXX")
-trap 'if [[ ${LKJSCRIPT_MACRO_KEEP:-0} == 1 ]]; then printf "retained_fixture=%s\n" "$fixture" >&2; else rm -rf -- "$fixture"; fi' EXIT HUP INT TERM
+macro_started=$SECONDS
+macro_phase=setup
+macro_phase_started=$SECONDS
+phase() {
+    printf 'macro-origins phase=%s status=0 seconds=%s\n' "$macro_phase" "$((SECONDS - macro_phase_started))"
+    macro_phase=$1
+    macro_phase_started=$SECONDS
+    printf 'macro-origins phase=%s started\n' "$macro_phase"
+}
+cleanup() {
+    local status=$?
+    set +e
+    trap - EXIT HUP INT TERM
+    printf 'macro-origins phase=%s status=%s seconds=%s total_seconds=%s\n' \
+        "$macro_phase" "$status" "$((SECONDS - macro_phase_started))" "$((SECONDS - macro_started))"
+    if ((status)); then
+        # Only the synthetic contract output is exported, never the fixture key.
+        for log in contracts-out contracts-error; do
+            if [[ -s "$fixture/$log" ]]; then
+                printf 'macro-origins diagnostic=%s\n' "$log" >&2
+                cat "$fixture/$log" >&2
+            fi
+        done
+    fi
+    if [[ ${LKJSCRIPT_MACRO_KEEP:-0} == 1 ]] && rm -f -- "$fixture/key" && [[ ! -e "$fixture/key" ]]; then
+        printf 'retained_fixture=%s\n' "$fixture" >&2
+    else
+        rm -rf -- "$fixture"
+    fi
+    exit "$status"
+}
+trap cleanup EXIT
+trap 'exit 130' INT
+trap 'exit 129' HUP
+trap 'exit 143' TERM
 umask 077
 mkdir "$fixture/project" "$fixture/store" "$fixture/contracts"
 head -c 32 /dev/urandom > "$fixture/key"
@@ -42,6 +76,7 @@ refuse() {
 epoch() {
     sed -n 's/.*derived-epoch=\([0-9a-f]*\).*/\1/p' "$1" | head -1
 }
+phase source-queries
 cat > "$fixture/project/main.lkj" <<'SOURCE'
 macro_rules! make {
     ($name:ident) => {
@@ -184,12 +219,15 @@ value 45
 query meta generated > "$fixture/changed-input-meta"
 [[ $(epoch "$fixture/changed-input-meta") != "$template_epoch" ]] || fail 'include content did not affect macro epoch'
 
+phase contract-build
 for source in ast diagnostic names syntax resolve source; do cp "src/$source.lkj" "$fixture/contracts/$source.lkj"; done
 cp -R src/ast src/syntax src/resolve "$fixture/contracts/"
 cp src/semantic/origins.lkj "$fixture/contracts/origins.lkj"
 cp -R src/semantic/origins "$fixture/contracts/"
 cp tests/fixtures/macro_origins.lkj "$fixture/contracts/main.lkj"
 "$compiler" build main.lkj --source-dir "$fixture/contracts" --library-dir "$library" --no-store -o "$fixture/contracts-image" > "$fixture/contracts-out" 2> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract build'; }
+phase contracts-native
 "$fixture/contracts-image" >> "$fixture/contracts-out" 2>> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract execution'; }
+phase contracts-interpreter
 "$compiler" run main.lkj --source-dir "$fixture/contracts" --library-dir "$library" --no-store --engine interpreter >> "$fixture/contracts-out" 2>> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'interpreted origin contracts'; }
 printf 'ok declarative macro origins: authenticated source/topology and include replay; generated item, field, import, call and strict derive queries; checked authored rename/body edits; projection/reference refusals; template/include epochs; 26 malformed origins; both engines\n'

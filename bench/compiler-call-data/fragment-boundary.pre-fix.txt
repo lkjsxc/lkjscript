@@ -1,0 +1,7 @@
+"probe::body:261514722673a050289feb054cdc423a41f8362c66acfe8a7dfb425ab12480e6::call:0" level=source-claim operation-target
+"target/semantic-operations/fragment-boundary/source/main.lkj" level=source-claim file before=2a8c07e89023bde441b4dc4eee724e3351362eff43f72ce3ec98481633deff03 after=e1324c9a38f0139a68b79688dbc2f332d31d92259348d02bb6f7b3df31643057
+transaction sites=1 files=1 identities=1
+"probe" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=561eb67998b4f8348ad1fe2a66752347567f664e90fbd6e319c970068e4eed9f after=2302a027074abf567ce9af4f5e223a76dc3ff03e58bac2da1951ccb4a883825d checked-instances=2 fresh-checked=2 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=a065a8bcca1a33723664eadd0bbd1724b1455e3688d09d5cb9160e42e21b34e7 source-after=dc82f28ffae4061bb8873132a174c14add0598b26b0b51e9ac55cb2166f19a53 mode=dry-run

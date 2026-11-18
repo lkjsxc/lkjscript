@@ -1,0 +1,3 @@
+mod shared { pub fn value() -> i64 { 42i64 } }
+fn shared() -> i64 { shared::value() }
+pub fn probe() -> i64 { shared() }

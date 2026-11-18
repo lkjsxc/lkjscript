@@ -264,7 +264,7 @@ cases and 17 verdicts. Source questions, checked edits
 and refusal controls pass; [validation](../bench/type-outlives.md) records the exact
 producer/seed identities, fixed point and publication gates.
 
-The twelve fresh unchanged-source observations give nom 49->47, DOM 39->39 and Sozu 968->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
+The twelve fresh unchanged-source observations give nom 47->47, DOM 39->39 and Sozu 968->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
 No original large root or nom own test is admitted by these observations.
 The current classified causes are ranked below; the separately retained prior
 unclassified Sozu population is not folded into these counts.

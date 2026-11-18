@@ -1,0 +1,6 @@
+ src/driver/help.lkj          |   4 +-
+ src/structure_edit.lkj       |  72 ++++++++-
+ src/syntax.lkj               |  27 ++++
+ tools/check.sh               |   1 +
+ tools/structure-call-test.sh | 350 +++++++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 451 insertions(+), 3 deletions(-)

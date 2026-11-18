@@ -239,9 +239,10 @@ The optional request `snapshot` is the source-input digest printed as
 scope, incomplete required references and overlapping writes produce
 identity-addressed `E_EDIT_*` refusals.
 
-The basic operations are `replace-body`, `replace-item`, `add-item`,
+The basic operations are `replace-body`, `replace-item`, `replace-call`, `add-item`,
 `remove-item`, `rename` and `move`. Replacement source must parse as exactly
-one body or one item and is elaborated in its real surrounding scope, including
+one body, one item or one expression as the operation requires, and is elaborated
+in its real surrounding scope, including
 visibility, generics and imports. `add-item` names a module; `before` is an
 optional existing child identity. The basic move planner only changes position
 within the same module. Refactor planners extend these forms; their supported
@@ -311,6 +312,54 @@ replacement, but do not make its total cost independent of program size.
 Recorded signature dependents are conservative source relations, not yet a
 complete per-definition interface reuse boundary. Scale costs and the first
 resource refusal are in [the ladder](../bench/scale.md).
+
+### Replacing one authored call
+
+`replace-call` selects the existing `call-site` identity returned by a function's
+outline, including its token-normalized body epoch and call ordinal. It replaces
+that one authored call or method-call expression. It does not require the agent
+to reproduce the enclosing function, and two identically spelled calls retain
+distinct addresses.
+
+```json
+{"version":1,"operations":[
+  {"op":"replace-call","id":"main::body:BODY_DIGEST::call:0",
+   "source":"value + 2","expect":"CALL_ITEM_TEXT_DIGEST"}
+]}
+```
+
+The optional `expect` is the selected call's `item-sha256` from `meta`, with the
+same meaning as other operations. The request's optional `snapshot` still pins
+the complete original input digest. A token-changing body edit invalidates its
+old call IDs; a trivia-only edit retains them, but exact-text expectations remain
+exact. All operations in a request address the original catalog, so two disjoint
+calls can change together. Nested overlapping selections refuse before publication.
+
+Replacement source must be one value expression. The raw source is parsed with
+the existing expression grammar to the end of input, with no recovered errors,
+before adding projection delimiters. Block-, `if`- and `match`-led arithmetic,
+block casts and explicitly written tuples retain their value-expression meaning;
+a bare comma list cannot acquire tuple syntax from the projection.
+The projected bytes are an opening parenthesis, newline, supplied source, newline
+and closing parenthesis. Parentheses preserve expression precedence and the
+newlines isolate trailing line comments. Shape validation retains macro
+invocations; the complete candidate expands and independently checks them in the
+actual source scope. Replacement may intentionally change behavior and authority;
+the ordinary plan reports both. It does not claim equivalence to the old program.
+
+The current catalog must prove an authored call within an authored function body.
+Generated macro/derive anchors remain uneditable. Some grouped callees or
+receivers have an incomplete recorded written span, such as `helper)(x)` from
+`(helper)(x)`; these refuse with `E_EDIT_CALL_SITE` rather than guessing surrounding
+bytes. Replace the authored owning body in that case. This slice changes neither
+parser span provenance nor snapshot identities.
+
+Call IDs require full catalog capture. Checking still covers the whole original
+and candidate program, with existing authenticated instance reuse and explicit
+library promotion. The existing source validation, writer, intent, recovery and
+precommit refusal rules apply unchanged. [Focused controls](../tools/structure-call-test.sh)
+prove exact source bytes, checked-meaning agreement with an independent desired
+tree, both execution engines and multi-file refusal atomicity.
 
 ## Replaying a checked target
 

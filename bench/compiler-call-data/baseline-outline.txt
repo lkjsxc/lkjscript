@@ -1,0 +1,26 @@
+"crate"	level=protocol	fact=query	version=3 producer=77695785a3c15da46bd9a3a794e81a2edf4c0155a891ff0cef2084d7bc3659d8 validation=authenticated-producing-compiler current-check=not-performed snapshot=5b46870672a32e5fddbb7b9f901077f32dc3fdf51b82b21341a372d68aea2bed source=057b965886017e5e0594efaadfd8f123842d3482b0e5123470595f71e540c2c8 checked-ir=5742c1cb607a5f9922a6893a984794f2ebc168b2d089b5cdc71e35a481422158 kind=outline depth=4 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=stored-pointer
+"Number"	level=source-claim	fact=signature	kind=struct text="struct Number { value: i64 }" bytes=28 complete=true
+"add"	level=source-claim	fact=signature	kind=function text="const fn add(left: i64, right: i64) -> i64" bytes=42 complete=true
+"impl:Number#cd19e823f37f5bd8"	level=source-claim	fact=signature	kind=implementation text="impl Number" bytes=11 complete=true
+"probe"	level=source-claim	fact=signature	kind=function text="pub fn probe() -> i64" bytes=21 complete=true
+"Number::field:value"	level=source-claim	fact=signature	kind=field text="value: i64" bytes=10 complete=true
+"Number::field:value"	level=protocol	fact=empty-indexed-result	kind=outline claim=recorded-facts-only
+"add::param:left"	level=source-claim	fact=signature	kind=parameter text="left: i64" bytes=9 complete=true
+"add::param:right"	level=source-claim	fact=signature	kind=parameter text="right: i64" bytes=10 complete=true
+"add::param:left"	level=protocol	fact=empty-indexed-result	kind=outline claim=recorded-facts-only
+"add::param:right"	level=protocol	fact=empty-indexed-result	kind=outline claim=recorded-facts-only
+"Number::doubled"	level=source-claim	fact=signature	kind=function text="const fn doubled(&self) -> i64" bytes=30 complete=true
+"Number::get"	level=source-claim	fact=signature	kind=function text="const fn get(&self) -> i64" bytes=26 complete=true
+"Number::doubled::body:ec137f7a510637b9d9ad8186ee99e09a45bb6a3acabb217e7b686995937be607::call:0"	level=source-claim	fact=signature	kind=call-site text="self.get()" bytes=10 complete=true
+"Number::doubled::body:ec137f7a510637b9d9ad8186ee99e09a45bb6a3acabb217e7b686995937be607::call:1"	level=source-claim	fact=signature	kind=call-site text="self.get()" bytes=10 complete=true
+"Number::doubled::body:ec137f7a510637b9d9ad8186ee99e09a45bb6a3acabb217e7b686995937be607::call:2"	level=source-claim	fact=signature	kind=call-site text="add(self.get(), self.get())" bytes=27 complete=true
+"Number::doubled::param:self"	level=source-claim	fact=signature	kind=parameter text="&self" bytes=5 complete=true
+"Number::doubled::body:ec137f7a510637b9d9ad8186ee99e09a45bb6a3acabb217e7b686995937be607::call:0"	level=protocol	fact=empty-indexed-result	kind=outline claim=recorded-facts-only
+"Number::doubled::body:ec137f7a510637b9d9ad8186ee99e09a45bb6a3acabb217e7b686995937be607::call:1"	level=protocol	fact=empty-indexed-result	kind=outline claim=recorded-facts-only
+"Number::doubled::body:ec137f7a510637b9d9ad8186ee99e09a45bb6a3acabb217e7b686995937be607::call:2"	level=protocol	fact=empty-indexed-result	kind=outline claim=recorded-facts-only
+"Number::doubled::param:self"	level=protocol	fact=empty-indexed-result	kind=outline claim=recorded-facts-only
+"Number::get::param:self"	level=source-claim	fact=signature	kind=parameter text="&self" bytes=5 complete=true
+"Number::get::param:self"	level=protocol	fact=empty-indexed-result	kind=outline claim=recorded-facts-only
+"probe::body:4181de0ea2b9eff51519d6bf013fdd9abb74b91ceea47c0399b0a009201413e9::call:0"	level=source-claim	fact=signature	kind=call-site text="Number { value: 21i64 }.doubled()" bytes=33 complete=true
+"probe::body:4181de0ea2b9eff51519d6bf013fdd9abb74b91ceea47c0399b0a009201413e9::call:0"	level=protocol	fact=empty-indexed-result	kind=outline claim=recorded-facts-only
+"crate"	level=protocol	fact=continuation	cursor=none facts=24 pages-read=16 traversal-steps=66

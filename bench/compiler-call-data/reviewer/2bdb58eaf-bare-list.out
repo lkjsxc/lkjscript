@@ -1,0 +1,7 @@
+"tuple_context::body:0c8941e9236db86a7fb90ed2a70d854ac9e018d26c27923c201b11b62d223893::call:0" level=source-claim operation-target
+"/tmp/lkj-call-candidate-review.8t9b4hdr/tuple/main.lkj" level=source-claim file before=13187e3b43ad12bd872f0ed025aa39c63e6b6f0ffbfb904c8e3b3a0ba681f5e4 after=6e5fef5a24e744bd3e4866c619173e019803685203919fb119877d7ec9a536f2
+transaction sites=1 files=1 identities=1
+"tuple_context" level=source-claim changed=body
+program level=checked-ir authority-delta=none
+program level=checked-ir before=40554adf413428f175ee5aeafbf9f0a9e69d665840eaa9426de82b70324f15d7 after=551f72db36fe1b1c2431848234382e33147e21ad727fa2f91dc03151063823e4 checked-instances=19 fresh-checked=9 proof-reused=10 frontend-resumed=0 library-validation=demanded
+transaction source-before=1a7bdf81a09f7872243e4a9777369e4d7e943d95af9b6ba45370249c8353870f source-after=28f79c4d6e4c4771253c30cb9ad80085603c947568c05c7bdf18550fb6c5f780 mode=dry-run

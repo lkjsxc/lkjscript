@@ -1,0 +1,9 @@
+duplicate call bytes, old pin ABI, both engines and stale retry passed
+main.lkj: OK
+other.lkj: OK
+mixed two-file precommit refusal passed
+tuple/main.lkj: OK
+raw comma, mismatched group, statements and explicit tuple passed
+origins/main.lkj: OK
+generated/grouped refusal and real-scope macro precedence passed
+closure call and delimiter characters inside trivia passed
