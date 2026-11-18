@@ -47,14 +47,17 @@ cat > "$fixture/project/main.lkj" <<'SOURCE'
 struct Authored<T = i64, U = T> { first: T, second: U }
 macro_rules! relay { ($($source:tt)*) => { $($source)* }; }
 macro_rules! emit_defaults {
-    ($name:ident, $type:tt) => {
-        relay! { #[derive(Default, Debug)] struct $name<T = $type, U = T> { first: T, second: U } }
+    ($name:ident, $factory:ident, $type:tt) => {
+        relay! {
+            #[derive(Default, Debug)] struct $name<T = $type, U = T> { first: T, second: U }
+            fn $factory() -> $name { $name::default() }
+        }
     };
 }
-emit_defaults!(Generated, i64);
+emit_defaults!(Generated, generated_default, i64);
 fn main() -> i64 {
     let authored: Authored = Authored::default();
-    let generated: Generated = Generated::default();
+    let generated: Generated = generated_default();
     assert_eq!(format!("{:?}", authored), "Authored { first: 0, second: 0 }");
     assert_eq!(format!("{:?}", generated), "Generated { first: 0, second: 0 }");
     authored.first as i64 + authored.second as i64 + generated.first as i64 + generated.second as i64 + 42
@@ -85,7 +88,7 @@ edit
 value
 publish
 binding_type authored 'Authored<u64, u64>'
-query meta Generated > "$fixture/before-meta"
+query meta generated_default > "$fixture/before-meta"
 before_epoch=$(epoch "$fixture/before-meta")
 [[ ${#before_epoch} == 64 ]]
 cp "$fixture/project/main.lkj" "$fixture/before"
@@ -95,11 +98,11 @@ REQUEST
 if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/refused" 2> "$fixture/error"; then fail 'generated declaration became editable'; fi
 grep -Fq E_EDIT_GENERATED_SOURCE "$fixture/error"
 cmp "$fixture/before" "$fixture/project/main.lkj"
-sed -i 's/emit_defaults!(Generated, i64);/emit_defaults!(Generated, u64);/' "$fixture/project/main.lkj"
+sed -i 's/emit_defaults!(Generated, generated_default, i64);/emit_defaults!(Generated, generated_default, u64);/' "$fixture/project/main.lkj"
 publish
 value
 binding_type generated 'Generated<u64, u64>'
-query meta Generated > "$fixture/after-meta"
+query meta generated_default > "$fixture/after-meta"
 after_epoch=$(epoch "$fixture/after-meta")
 [[ ${#after_epoch} == 64 && $before_epoch != "$after_epoch" ]] || fail 'default capture edit kept the previous macro epoch'
 if [[ -n $witness ]]; then
