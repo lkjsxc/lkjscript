@@ -22,6 +22,16 @@ pub(super) fn lifetime_predicate_references(result: &mut Catalog, files: &[Sourc
     for (index, function) in program.functions.iter().enumerate() {
         let owner = result.function_ids[index].clone();
         if result.by_identity.get(&owner).is_some_and(|item| !result.items[*item].generated_from.is_empty()) { continue; }
+        for parameter in &function.generics {
+            if parameter.lifetime { continue; }
+            for bound in &parameter.bounds {
+                let Some(name) = crate::generics::type_outlives::lifetime(program, *bound) else { continue; };
+                let target = lifetime_identity(program, result, index, &name);
+                let known = target.as_ref().is_some_and(|target| result.by_identity.contains_key(target));
+                record_site(result, files, owner.clone(), target.unwrap_or(name), program.types[*bound].span,
+                    "type-outlives-bound", known);
+            }
+        }
         for predicate in &function.outlives {
             let mut names = vec![predicate.target.clone()];
             names.extend_from_slice(&predicate.bounds);

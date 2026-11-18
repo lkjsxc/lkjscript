@@ -1,0 +1,10 @@
+// expect: reject E_BORROW
+// witness: {}
+fn accept<'a, T, F>(value: T, callback: F) -> i64
+where T: 'a, F: Fn(&'a i64) -> i64 { let _ = value; let _ = callback; 42i64 }
+fn caller<'a, F>(callback: F) -> i64
+where F: Fn(&'a i64) -> i64 {
+    let local = 7i64;
+    accept(&local, callback)
+}
+pub fn probe() -> i64 { 42i64 }

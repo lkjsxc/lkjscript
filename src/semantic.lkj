@@ -303,6 +303,21 @@ fn function_signature(program: &a::Program, function: &a::Function) -> String {
             out.push_str(&bound.name);
         }
     }
+    let mut predicates = !function.outlives.is_empty();
+    for parameter in &function.generics {
+        if parameter.lifetime { continue; }
+        let mut bounds = Vec::new();
+        for bound in &parameter.bounds {
+            if let Some(name) = crate::generics::type_outlives::lifetime(program, *bound) { bounds.push(name); }
+        }
+        if bounds.is_empty() { continue; }
+        out.push_str(if predicates { ", " } else { " where " }); predicates = true;
+        out.push_str(&parameter.name); out.push_str(": ");
+        for (index, bound) in bounds.iter().enumerate() {
+            if index != 0usize { out.push_str(" + "); }
+            out.push_str(bound);
+        }
+    }
     out
 }
 fn leaf_name(path: &str) -> &str {

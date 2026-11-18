@@ -1,0 +1,10 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+fn repeat<'a, T>(value: T) -> impl Fn() -> T + 'a
+where T: Clone + 'a { move || value.clone() }
+pub fn probe() -> i64 {
+    let value = 21i64;
+    let copy = repeat(value);
+    let view = repeat(&value);
+    copy() + *view()
+}

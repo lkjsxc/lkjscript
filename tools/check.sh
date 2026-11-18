@@ -148,6 +148,7 @@ parallel_step 1 outlives-where timeout --kill-after=10s 600s bash tools/outlives
 parallel_step 1 debug-format timeout --kill-after=10s 600s bash tools/debug-format-test.sh "$check_binary"
 parallel_step 1 declarative-macros timeout --kill-after=10s 600s bash tools/declarative-macro-test.sh "$check_binary"
 parallel_step 1 macro-origins timeout --kill-after=10s 600s bash tools/macro-origin-test.sh "$check_binary"
+parallel_step 1 type-outlives timeout --kill-after=10s 600s bash tools/type-outlives-test.sh "$check_binary"
 parallel_step 1 query-signature timeout --kill-after=10s 600s bash tools/query-signature-test.sh "$check_binary"
 parallel_step 1 generated-source timeout --kill-after=10s 600s bash tools/generated-source-test.sh "$check_binary"
 parallel_step 1 query-store timeout --kill-after=10s 600s bash tools/query-store-test.sh "$check_binary"

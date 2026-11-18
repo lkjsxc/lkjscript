@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+struct Maker;
+impl Maker {
+    fn repeat<'a, T>(value: T) -> impl Fn() -> T + 'a
+    where T: Clone + 'a { move || value.clone() }
+}
+pub fn probe() -> i64 { Maker::repeat(42i64)() }

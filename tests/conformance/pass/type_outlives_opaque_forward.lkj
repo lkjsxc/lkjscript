@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+fn inner<'a, T: Clone>(value: T) -> impl Fn() -> T + 'a
+where T: 'a { move || value.clone() }
+fn outer<'a, T: Clone>(value: T) -> impl Fn() -> T + 'a
+where T: 'a { inner(value) }
+pub fn probe() -> i64 { outer(42i64)() }

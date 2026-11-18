@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+fn keep<'a, T: Clone, const N: usize>(value: [T; N]) -> impl Fn() -> [T; N] + 'a
+where T: 'a { move || value.clone() }
+pub fn probe() -> i64 { let values = keep([20i64, 22i64])(); values[0usize] + values[1usize] }

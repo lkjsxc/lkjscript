@@ -188,6 +188,24 @@ frontend constructor-routing refusal; this evidence extension does not change
 language admission. `uses` and `references` include the source claims, while
 `callers` and `callees` continue to describe checked monomorphic calls only.
 
+## Type-outlives source identities
+
+Named type-outlives bounds on admitted free functions and inherent methods retain
+the type parameter and lifetime declaration identities. Function type summaries
+show `where T: 'a`; signature queries retain the written inline or where form and
+the ordinary trait bounds beside it. A `type-outlives-bound` reference selects
+only the exact lifetime token. An enclosing implementation lifetime points to its
+implementation binder, independently of a method's own lifetime parameters.
+
+Checked body edits and function renames preserve those predicates. Replacing an
+item to remove a bound needed by an opaque result fails complete candidate
+checking, including for an otherwise unused generic body. A transaction containing
+that invalid replacement publishes none of its operations. The original source
+and authenticated snapshot remain reusable. These source claims do not add a
+region opcode or change the independent checked-IR contract.
+`tools/type-outlives-test.sh` exercises the scoped references, both execution
+engines, rename/body edits, atomic bound-removal refusal and warm snapshots.
+
 ## One checked request
 
 ```sh

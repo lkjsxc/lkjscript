@@ -34,6 +34,7 @@ mod scoped_locals;
 mod sequences;
 pub mod semantic;
 mod static_lifetimes;
+mod type_outlives;
 mod sugars;
 mod text_format;
 mod trait_proofs;

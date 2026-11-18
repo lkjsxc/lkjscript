@@ -470,6 +470,8 @@ impl Compiler<'_> {
         match (input, output) {
             (Label::Lifetime(long), Label::Lifetime(short)) =>
                 self.declared_outlives(source_index, long, short),
+            (Label::Parameter(name, _), Label::Lifetime(short)) =>
+                self.declared_type_outlives(source_index, name, short),
             _ => false,
         }
     }

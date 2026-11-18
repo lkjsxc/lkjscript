@@ -106,6 +106,7 @@ pub(super) type MethodSelections = BTreeMap<a::ExprId, MethodSelection>;
 pub(super) struct Contracts {
     pub(super) active_scope: usize,
     pub(super) rigid: BTreeMap<usize, BTreeSet<TraitIdentity>>,
+    pub(super) type_outlives: BTreeMap<usize, BTreeSet<crate::check::scoped::Region>>,
     pub(super) active_where_predicates: BTreeSet<a::TypeId>,
     // (rigid receiver, resolved trait declaration) -> associated-type identities.
     pub(super) traits: BTreeMap<(usize, TraitIdentity), BTreeMap<String, usize>>,
@@ -660,6 +661,7 @@ impl Compiler<'_> {
                 }
             };
             if path.name.starts_with('\'') {
+                self.assume_type_outlives(ty, &path.name);
                 continue;
             }
             let identity = self.trait_identity(&path, &inherited_substitutions, node.span)?;
@@ -785,6 +787,7 @@ impl Compiler<'_> {
             substitutions = self.trait_parameters(owner.index)?;
         }
         self.declare_parameters_with_predicates(&function.generics, &function.predicates, &mut substitutions)?;
+        self.assume_input_type_outlives(index, &substitutions);
         Ok(substitutions)
     }
 

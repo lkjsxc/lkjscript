@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+fn repeat<'a, T: Clone + 'a>(value: T) -> impl Fn() -> T + 'a { move || value.clone() }
+pub fn probe() -> i64 { repeat(42i64)() }

@@ -1,0 +1,400 @@
+warning: unused import: `FileId`
+ --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/ast/macros.rs:2:21
+  |
+2 | use super::{ExprId, FileId, Item, ModuleId, Span};
+  |                     ^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused import: `SymbolReference`
+ --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/x86.rs:4:48
+  |
+4 | pub(crate) use units::{displacement, Linkable, SymbolReference, ImmediateReference};
+  |                                                ^^^^^^^^^^^^^^^
+
+warning: variable does not need to be mutable
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/definition_types/source_types.rs:170:70
+    |
+170 |                     let value = if let Some((declaration, arguments, mut bindings)) = application {
+    |                                                                      ----^^^^^^^^
+    |                                                                      |
+    |                                                                      help: remove this `mut`
+    |
+    = note: `#[warn(unused_mut)]` (part of `#[warn(unused)]`) on by default
+
+warning: variable does not need to be mutable
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate.rs:5136:13
+     |
+5136 |         let mut definitions = infer_resolved_report_with_capture(&source, false, capture_references).unwrap();
+     |             ----^^^^^^^^^^^
+     |             |
+     |             help: remove this `mut`
+
+warning: variable does not need to be mutable
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/native/units.rs:845:15
+    |
+845 |     fn finish(mut self, expected: [u8; 32]) -> Result<(), Diagnostic> {
+    |               ----^^^^
+    |               |
+    |               help: remove this `mut`
+
+warning: unused variable: `fd`
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/native/diagnostics.rs:25:44
+   |
+25 | fn literal(a: &mut Assembler, p: Platform, fd: u32, value: &str) {
+   |                                            ^^ help: if this is intentional, prefix it with an underscore: `_fd`
+   |
+   = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `index`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/structure_refactor.rs:323:18
+    |
+323 |             for (index, parameter) in parameters.iter().enumerate() {
+    |                  ^^^^^ help: if this is intentional, prefix it with an underscore: `_index`
+
+warning: value assigned to `arguments` is never read
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/structure_refactor.rs:297:45
+    |
+297 |             let mut arguments: Vec<usize> = Vec::new(); let mut head = String::new();
+    |                                             ^^^^^^^^^^ this value is reassigned later and never used
+...
+300 |                 a::Expr::Call { callee, args } => { head = raw(&caller, caller.tree.exprs[*callee].span)?; arguments = args.clone(); }
+    |                                                                                                            --------- `arguments` is overwritten here before the previous value is read
+    |
+    = note: `#[warn(unused_assignments)]` (part of `#[warn(unused)]`) on by default
+
+warning: value assigned to `head` is never read
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/structure_refactor.rs:297:72
+    |
+297 |             let mut arguments: Vec<usize> = Vec::new(); let mut head = String::new();
+    |                                                                        ^^^^^^^^^^^^^ this value is reassigned later and never used
+...
+300 |                 a::Expr::Call { callee, args } => { head = raw(&caller, caller.tree.exprs[*callee].span)?; arguments = args.clone(); }
+    |                                                     ---- `head` is overwritten here before the previous value is read
+
+warning: unused variable: `begin`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/structure_refactor.rs:546:38
+    |
+546 |                         if let Some((begin, end)) = label(&unit, node.span, unit.tree.exprs[*value].span, field) {
+    |                                      ^^^^^ help: if this is intentional, prefix it with an underscore: `_begin`
+
+warning: unused variable: `end`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/structure_refactor.rs:546:45
+    |
+546 |                         if let Some((begin, end)) = label(&unit, node.span, unit.tree.exprs[*value].span, field) {
+    |                                             ^^^ help: if this is intentional, prefix it with an underscore: `_end`
+
+warning: unused variable: `raw`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/semantic.rs:492:24
+    |
+492 |     for (index, (path, raw)) in inputs.iter().enumerate() { by_path.insert(path.clone(), index); }
+    |                        ^^^ help: if this is intentional, prefix it with an underscore: `_raw`
+
+warning: unused variable: `ty`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/semantic_facts.rs:230:17
+    |
+230 |     for (index, ty) in program.types.iter().enumerate() {
+    |                 ^^ help: if this is intentional, prefix it with an underscore: `_ty`
+
+warning: function `assert_reference_capture` is never used
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate.rs:5121:15
+     |
+5121 | pub(crate) fn assert_reference_capture() {
+     |               ^^^^^^^^^^^^^^^^^^^^^^^^
+     |
+     = note: `#[warn(dead_code)]` (part of `#[warn(unused)]`) on by default
+
+warning: variants `ForeignCommand`, `Image`, `Channel`, and `NullDevice` are never constructed
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/capabilities.rs:21:5
+   |
+ 5 | pub(super) enum Value {
+   |                 ----- variants in this enum
+...
+21 |     ForeignCommand,
+   |     ^^^^^^^^^^^^^^
+22 |     ForeignSession,
+23 |     Image,
+   |     ^^^^^
+24 |     Channel,
+   |     ^^^^^^^
+...
+29 |     NullDevice,
+   |     ^^^^^^^^^^
+   |
+   = note: `Value` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: variant `Projected` is never constructed
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/definition_types.rs:29:5
+   |
+24 | enum Shape {
+   |      ----- variant in this enum
+...
+29 |     Projected(a::DeclarationId, String),
+   |     ^^^^^^^^^
+   |
+   = note: `Shape` has a derived impl for the trait `Clone`, but this is intentionally ignored during dead code analysis
+
+warning: function `assert_reference_capture_recording` is never used
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/definition_types.rs:2765:15
+     |
+2765 | pub(super) fn assert_reference_capture_recording(
+     |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `assert_reference_capture_deferred` is never used
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/definition_types.rs:2778:15
+     |
+2778 | pub(super) fn assert_reference_capture_deferred(source: &a::Program, index: usize) {
+     |               ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `origin` is never used
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/definition_types/semantic.rs:21:19
+   |
+11 | impl SourceBindings {
+   | ------------------- method in this implementation
+...
+21 |     pub(super) fn origin(&self, name: &str) -> Option<LocalTarget> {
+   |                   ^^^^^^
+
+warning: method `declare_parameters` is never used
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/generic_check.rs:442:19
+    |
+368 | impl Compiler<'_> {
+    | ----------------- method in this implementation
+...
+442 |     pub(super) fn declare_parameters(
+    |                   ^^^^^^^^^^^^^^^^^^
+
+warning: methods `contains_qualified_type`, `qualified_associated_type`, and `associated_type_for_trait` are never used
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/qualified_paths.rs:9:8
+    |
+  8 | impl Compiler<'_> {
+    | ----------------- methods in this implementation
+  9 |     fn contains_qualified_type(&self, first: a::TypeId) -> bool {
+    |        ^^^^^^^^^^^^^^^^^^^^^^^
+...
+112 |     pub(super) fn qualified_associated_type(
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+...
+124 |     pub(super) fn associated_type_for_trait(&mut self, receiver: usize, owner: usize, name: &str, span: a::Span) -> Result<usize> {
+    |                   ^^^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: method `assume_where_parameters` is never used
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/elaborate/where_predicates.rs:56:19
+   |
+ 6 | impl Compiler<'_> {
+   | ----------------- method in this implementation
+...
+56 |     pub(super) fn assume_where_parameters(
+   |                   ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `reference_probe_checked` is never used
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/interpreter.rs:2815:4
+     |
+2815 | fn reference_probe_checked<T>(value: Result<T, RunError>) -> T {
+     |    ^^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `assert_reference_reuse` is never used
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/interpreter.rs:2819:15
+     |
+2819 | pub(crate) fn assert_reference_reuse() {
+     |               ^^^^^^^^^^^^^^^^^^^^^^
+
+warning: function `write_function` is never used
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/ir_text.rs:1150:15
+     |
+1150 | pub(crate) fn write_function(function: &Function) -> String {
+     |               ^^^^^^^^^^^^^^
+
+warning: function `cache_contracts` is never used
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/native.rs:16:15
+   |
+16 | pub(crate) fn cache_contracts() { cache::contracts(); }
+   |               ^^^^^^^^^^^^^^^
+
+warning: function `fixture` is never used
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/native/cache.rs:272:4
+    |
+272 | fn fixture(padding: usize, existing: bool) -> (Assembler, Label, Label, BTreeMap<Vec<u8>, Label>) {
+    |    ^^^^^^^
+
+warning: function `fixture_body` is never used
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/native/cache.rs:290:4
+    |
+290 | fn fixture_body(
+    |    ^^^^^^^^^^^^
+
+warning: function `fixture_finish` is never used
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/native/cache.rs:341:4
+    |
+341 | fn fixture_finish(mut a: Assembler, symbols: &BTreeMap<Vec<u8>, Label>) -> (Vec<u8>, Vec<(usize, u8)>, Vec<crate::x86::CopySite>) {
+    |    ^^^^^^^^^^^^^^
+
+warning: function `contracts` is never used
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/native/cache.rs:350:15
+    |
+350 | pub(super) fn contracts() {
+    |               ^^^^^^^^^
+
+warning: associated function `fallible` is never used
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/native/entry.rs:52:19
+   |
+51 | impl Plan {
+   | --------- associated function in this implementation
+52 |     pub(super) fn fallible(grant: &EntryGrant) -> bool {
+   |                   ^^^^^^^^
+
+warning: field `lock` is never read
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/structure_write.rs:65:5
+   |
+59 | pub struct Writer {
+   |            ------ field in this struct
+...
+65 |     lock: File,
+   |     ^^^^
+
+warning: function `item_key` is never used
+  --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/semantic/origins/macros.rs:15:15
+   |
+15 | pub(crate) fn item_key(item: a::Item) -> (usize, usize) {
+   |               ^^^^^^^^
+
+warning: unnecessary parentheses around method argument
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/host_network/broker.lkj:684:20
+    |
+684 |     a.immediate(C, (!0x800u64));
+    |                    ^         ^
+    |
+    = note: `#[warn(unused_parens)]` (part of `#[warn(unused)]`) on by default
+help: remove these parentheses
+    |
+684 -     a.immediate(C, (!0x800u64));
+684 +     a.immediate(C, !0x800u64);
+    |
+
+warning: unnecessary parentheses around block return value
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/store.rs:1164:37
+     |
+1164 |         None => { *overflow = true; (!0usize) }
+     |                                     ^       ^
+     |
+help: remove these parentheses
+     |
+1164 -         None => { *overflow = true; (!0usize) }
+1164 +         None => { *overflow = true; !0usize }
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/store.rs:1188:68
+     |
+1188 |     assert!(io_interval(0usize, Some(20usize), (!0usize) - 5usize, (!0usize)).is_none());
+     |                                                                    ^       ^
+     |
+help: remove these parentheses
+     |
+1188 -     assert!(io_interval(0usize, Some(20usize), (!0usize) - 5usize, (!0usize)).is_none());
+1188 +     assert!(io_interval(0usize, Some(20usize), (!0usize) - 5usize, !0usize).is_none());
+     |
+
+warning: unnecessary parentheses around function argument
+    --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/store.rs:1191:20
+     |
+1191 |     assert!(io_add((!0usize), 1usize, &mut overflow) == (!0usize) && overflow);
+     |                    ^       ^
+     |
+help: remove these parentheses
+     |
+1191 -     assert!(io_add((!0usize), 1usize, &mut overflow) == (!0usize) && overflow);
+1191 +     assert!(io_add(!0usize, 1usize, &mut overflow) == (!0usize) && overflow);
+     |
+
+warning: unnecessary parentheses around function argument
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/test_generators/reduction.lkj:294:26
+    |
+294 |     let mut pairs = vec![(!0usize); tokens.len()];
+    |                          ^       ^
+    |
+help: remove these parentheses
+    |
+294 -     let mut pairs = vec![(!0usize); tokens.len()];
+294 +     let mut pairs = vec![!0usize; tokens.len()];
+    |
+
+warning: unused variable: `p`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/host_network/unix.lkj:107:28
+    |
+107 | fn wait(a: &mut Assembler, p: UnixCode, ready: Label) {
+    |                            ^ help: if this is intentional, prefix it with an underscore: `_p`
+    |
+    = note: `#[warn(unused_variables)]` (part of `#[warn(unused)]`) on by default
+
+warning: unused variable: `p`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/host_network/unix.lkj:126:35
+    |
+126 | fn socket_kind(a: &mut Assembler, p: UnixCode, valid: Label) {
+    |                                   ^ help: if this is intentional, prefix it with an underscore: `_p`
+
+warning: unused variable: `code`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/test_generators.rs:559:29
+    |
+559 | ...   } else if let Some((code, diagnostic, message)) = driver::native_trap(path, selection.native().program(), runtime, &capture.r...
+    |                           ^^^^ help: if this is intentional, prefix it with an underscore: `_code`
+
+warning: unused variable: `message`
+   --> /home/coder/workspace/lkjscript-programs-20261115/target/witness/release/build/lkjscript-f0684fdc4ecd6195/out/source/src/test_generators.rs:559:47
+    |
+559 | ...   } else if let Some((code, diagnostic, message)) = driver::native_trap(path, selection.native().program(), runtime, &capture.r...
+    |                                             ^^^^^^^ help: if this is intentional, prefix it with an underscore: `_message`
+
+ok Rust witness: 499 values/output cases, 652 verdicts
+ok directory rename_new native: absent success, 7 occupied destinations, public/raw basenames, UTF-8/raw bytes, regular-only read and readonly File
+ok directory boundary: destination created at renameat2 entry was never overwritten
+ok directory boundary: read retained inode after pathname replacement
+ok directory rename_new native: ENOSYS/EOPNOTSUPP propagate without a replacing fallback
+ok directory rename_new interpreter: absent success, 7 occupied destinations, public/raw basenames, UTF-8/raw bytes, regular-only read and readonly File
+ok directory boundary: destination created at renameat2 entry was never overwritten
+ok directory boundary: read retained inode after pathname replacement
+ok directory rename_new interpreter: ENOSYS/EOPNOTSUPP propagate without a replacing fallback
+ok directory rename_new witness: absent success, 7 occupied destinations, public/raw basenames, UTF-8/raw bytes, regular-only read and readonly File
+ok directory boundary: destination created at renameat2 entry was never overwritten
+ok directory boundary: read retained inode after pathname replacement
+ok directory rename_new witness: ENOSYS/EOPNOTSUPP propagate without a replacing fallback
+ok directory rename_new: independent checked-IR mutable authority, ReadDirectory refusal, arity, byte-view and result signatures
+ok directory rename_new suite: 3 routes, 3.466 s, load 4.40 3.38 3.77 2/6075 3797559 -> 4.13 3.34 3.76 3/6035 3798773
+ok directory identity: exact dev/ino, same-inode alias and retained parent after pathname replacement
+ok directory identity native: lengths 0/15/17 refuse without changes; raw/helper metadata EIO preserves caller bytes
+ok directory identity: exact dev/ino, same-inode alias and retained parent after pathname replacement
+ok directory identity interpreter: lengths 0/15/17 refuse without changes; raw/helper metadata EIO preserves caller bytes
+ok directory identity: exact dev/ino, same-inode alias and retained parent after pathname replacement
+ok directory identity witness: lengths 0/15/17 refuse without changes; raw/helper metadata EIO preserves caller bytes
+ok directory identity: checked-IR mutable Directory and mutable byte-view boundary, arity and result
+ok directory identity suite: 3 routes, 1.359 s, load 4.13 3.34 3.76 3/6035 3798780 -> 4.13 3.34 3.76 3/6023 3799080
+ok connect deadline native timeout: bounded wait, exact errno, owned cleanup
+ok connect deadline interpreter timeout: bounded wait, exact errno, owned cleanup
+ok connect deadline witness timeout: bounded wait, exact errno, owned cleanup
+ok connect deadline native reply: bounded wait, exact errno, owned cleanup
+ok connect deadline interpreter reply: bounded wait, exact errno, owned cleanup
+ok connect deadline witness reply: bounded wait, exact errno, owned cleanup
+ok connect deadline native: preserves closed stdin/stderr while promoting its socket
+ok connect deadline: cold/warm source units retain the checked platform feature
+ok tcp port native: run-time numeric host, immutable grant port, no World
+ok tcp port interpreter: run-time numeric host, immutable grant port, no World
+ok tcp port witness: run-time numeric host, immutable grant port, no World
+ok tcp port: empty/zero/overflow/negative/list/environment/address/missing/duplicate grants refuse before publication or execution
+ok tcp port: cold/warm authenticated units preserve port authority across interfaces
+ok tcp port: unsupported child transfer has a located refusal
+ok declarative macros: unchanged nom 8.0.0 succ, tuple chain and error producers
+ok declarative macros native: lexical scope, shadowing, exports, defining crate and include origin
+ok declarative macros interpreter: lexical scope, shadowing, exports, defining crate and include origin
+ok declarative macros: cold/warm units match; a template edit rechecks dependent source
+ok declarative macros Rust root-crate witness: declarative_macros
+ok declarative macros Rust root-crate witness: nom_tuple_macros
+ok declarative macros Rust witness: source module scope and include origin
+ok temporary files native: independent writable Files, grant can end first, ordinary sealing
+ok temporary files interpreter: independent writable Files, grant can end first, ordinary sealing
+ok temporary files Rust witness: same writable-file contract and output
+ok temporary files: missing, duplicate, unknown and every defined payload control refuse before execution or publication
+ok temporary files: cold/warm authenticated units preserve the narrow grant and returned File
+ok temporary files: unsupported child transfer refuses without image or admission publication
+ok temporary files: existing World anonymous/stdin/stdout/stderr/executable selectors remain unchanged
+ok optional real-program Rust witness: exact original source/tests, 8 tests and 7,239 corpus rows at opt-level 0 and 3; 15 Rust-valid reduced forms (14 refusal kernels and the promoted macro kernel)
+ok optional Rust witness and compiler byte identity

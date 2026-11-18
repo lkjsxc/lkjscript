@@ -1,0 +1,7 @@
+// expect: reject E_BORROW
+// witness: {}
+fn boxed<'a, T>(value: T) -> impl FnOnce() -> i64 + 'a {
+    let held = Box::new(value);
+    move || { drop(held); 42i64 }
+}
+pub fn probe() -> i64 { 42i64 }
