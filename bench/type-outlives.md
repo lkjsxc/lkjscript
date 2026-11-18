@@ -54,6 +54,10 @@ All twelve original-source observations were repeated with this producer. Every
 inherited source identity and recovery parent was revalidated against the exact
 original files; no new unclassified diagnostics remain.
 
+The complete local Rust witness passes 499 values/output cases and 652 verdicts,
+including exact compiler byte identity and all registered runtime, macro and
+original Levenshtein proofs. Both reviewed CI harness corrections are retained.
+
 The refreshed-seed four-worker full gate and separate real-program regression are pending; the focused proofs and fresh source census are complete.
 
 Twelve fresh unchanged-source observations give nom 49->47, DOM 39->39 and Sozu 968->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
