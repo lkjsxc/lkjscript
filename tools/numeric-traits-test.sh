@@ -106,7 +106,7 @@ fi
 grep -q 'E_EDIT_GENERATED_REFERENCE' "$fixture/error"
 cmp "$fixture/before" "$fixture/project/main.lkj"
 cat > "$fixture/request" <<'REQUEST'
-{"version":1,"operations":[{"op":"rename","id":"Word","name":"Number"}]}
+{"version":1,"operations":[{"op":"rename","id":"Word","name":"NumericWordRenamed"}]}
 REQUEST
 edit
 value 42
