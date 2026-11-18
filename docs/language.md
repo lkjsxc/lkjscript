@@ -719,7 +719,7 @@ enumerate/skip/take/zip are source adapters; chain currently needs identical
 iterator types to prove Item equality. map/filter/filter_map/inspect store the
 iterator/callable. filter/inspect borrow fresh items; map/filter_map transfer them.
 Adapters follow next even after a previous None and do not silently fuse.
-fold/for_each/count stop at first None and consume in order; fold owns its accumulator. collect returns Vec<I::Item>, preserving ownership and order; general FromIterator destinations remain unsupported. An open-ended range value, start.., calls the ordinary std::iter::range_from(start: usize) declaration. Its start executes once; iterator methods and open-ended for loops use the same source Iterator/IntoIterator implementations. This value form accepts usize, advances with checked arithmetic, and needs the iter library module. Range indexing keeps its existing borrowed-view rules, and closed numeric for ranges keep their endpoint semantics. [Consumer cases](../tests/reference/iterator_consumers.lkj).
+fold/for_each/count stop at first None and consume in order; fold owns its accumulator. collect returns Vec<I::Item>, preserving ownership and order; general FromIterator destinations remain unsupported. Range values call ordinary source constructors in std::range, with each written endpoint evaluated once. Range, RangeFrom and RangeInclusive implement source Iterator/IntoIterator for all ten integer types; each advances with checked arithmetic, and an inclusive maximum is returned once before exhaustion. Range indexing keeps its existing borrowed-view rules, and directly bounded numeric for ranges keep their endpoint semantics. [Consumer cases](../tests/reference/iterator_consumers.lkj).
 any/all borrow the iterator mutably, pass items by value to FnMut and stop at a
 decisive result/None; empty answers are false/true. Iteration resumes after that
 consumed item; callbacks/captures drop on return and remaining items stay owned.
@@ -728,6 +728,79 @@ consumes and returns an index. Receiver evaluation precedes callback constructio
 Owned temporary receivers, including projected/indexed values, are writable without
 making named bindings or shared references mutable.
 [Iterator/Option case](../tests/reference/iterator_options.lkj).
+
+### Core facade and integer contracts
+
+An unshadowed external `core` root selects the source core facade. Lexically
+declared modules, aliases and generic parameters keep their own identities.
+The facade reexports `borrow`, `cmp`, `fmt`, `iter`, `marker`, `mem`,
+`num`, `option`, `result`, `slice`, `str` and its prelude; its `ops`
+module exposes the admitted range contracts. This namespace is a source graph
+over the same library declarations used by `std`.
+
+`Borrow<T>` and `BorrowMut<T>` provide same-value borrowed projections.
+`cmp::min/max` use the ordinary `Ord` contract. `mem::drop/replace/take`
+compose the existing ownership operations, with `take` requiring `Default`.
+The facade does not introduce a public layout-inspection or raw-memory API.
+`NonZeroUsize::new` rejects zero and `get` returns its stored value; its field
+is private. Copy, Clone, comparisons, Display and Debug use that checked value.
+Its source representation carries no Rust niche or external ABI claim.
+
+Primitive `MIN/MAX` paths for the ten integer types select typed constants
+from the source integer module. The primitive must be written directly; general
+type-alias or user-associated constants are separate source boundaries. A local
+module or generic parameter named `usize` prevents the primitive shortcut.
+An absent integer library refuses the spelling rather than supplying a hidden
+value. The source `SaturatingArithmetic::saturating_add` implementations use
+checked addition and the corresponding typed limit on overflow.
+
+`Bound`, `Range`, `RangeFrom`, `RangeTo`, `RangeToInclusive`,
+`RangeFull` and `RangeInclusive` are ordinary source values. All six range
+forms implement `RangeBounds<T>`. This initial `contains` contract compares
+the same `T: PartialOrd`; heterogeneous comparisons need a separate contract.
+Inclusive iteration retains its exhaustion state, so bounds and containment
+reflect an exhausted range. Integer iterators remain checked at their numeric
+limits.
+
+`core::slice::Iter<'a, T>` names the existing shared slice iterator.
+`Copied<Iter<'a, T>>` requires `T: Copy`; `Cloned<Iter<'a, T>>` invokes
+`Clone` for each yielded element. Both adapters retain the source borrow.
+The current adapters cover this concrete iterator family; arbitrary borrowed-item
+iterator families need their own proof. `str::CharIndices` reports UTF-8 byte
+offsets paired with Unicode scalar values. `str::FromStr` has an associated
+error type and admits user implementations; the ten integer implementations
+share checked decimal decoding.
+
+### Phantom ownership markers
+
+The frontend authenticates the canonical zero-field `PhantomData<T: ?Sized>`
+declaration and its unconditional derived value traits. Its nominal application
+retains `T` in source inference, generic obligations and type-outlives analysis.
+Copy, Clone and comparisons do not require those traits on `T`; Send and Sync
+require the corresponding proof for `T`. A marker does not contain or destroy
+a value of `T`.
+
+Storage uses a distinctly named instance of the existing zero-length
+`[(); 0]` representation. The existing native and independent unit layouts
+therefore give it zero bytes and alignment one, independently of `T`.
+No trusted IR type, operation, layout rule or runtime field is added. Source
+construction, pattern coverage, matching and coercion preserve the nominal
+application: an array literal, array method, array trait implementation, index
+or slice coercion cannot acquire a marker or its source contracts.
+
+Reference-bearing marker arguments currently receive located `E_UNSUPPORTED`
+diagnostics, including inferred arguments and completed recursive nominal
+arguments. Written lifetime-bearing applications and phantom-only covariance
+proofs remain explicit boundaries. The frontend does not erase those regions
+or claim a stored reference which is absent at runtime. Abstract `T: 'a`
+dependencies still apply when a marker is captured into an opaque callable.
+
+The [core facade proof](../tools/core-facade-test.sh) covers exact source queries,
+checked edits, declaration-shape invalidation, nominal unit boundaries and the
+actual emitted marker types through both production layout calculations.
+The conformance cases distinguish non-Copy element types, absent Send/Sync
+obligations, whole-value outlives requirements, destruction, region boundaries
+and attempts to use the physical array representation as source authority.
 
 ## Checked IR and execution
 

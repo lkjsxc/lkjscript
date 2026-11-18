@@ -206,6 +206,29 @@ region opcode or change the independent checked-IR contract.
 `tools/type-outlives-test.sh` exercises the scoped references, both execution
 engines, rename/body edits, atomic bound-removal refusal and warm snapshots.
 
+## Core facade source identities
+
+Primitive `usize::MAX` and the other admitted integer limits resolve to ordinary
+source constants. Their reference facts select the exact written `MAX/MIN`
+token and use `alias-value` to retain that stable spelling. A lexically
+shadowing module or alias selects its own declaration and ordinary reference
+kind. Renaming that authored constant updates only its resolved references.
+
+A named source type that uses existing array storage keeps its declared nominal
+name in query keys and type identities. Structural array spellings still display
+as arrays. Thus `PhantomData<u8>` and `PhantomData<String>` remain separate
+source and checked-type names even though each has zero bytes and alignment one.
+The representation ID continues to bind the actual checked type and layout;
+the label does not establish an ownership, region or transfer proof.
+
+Checked edits reconstruct the complete candidate and reject an array literal
+where a marker is required. A changed library marker declaration invalidates
+its prior authenticated source input. Cold/warm unit builds preserve the
+nominal argument in admitted headers, reject mismatched arguments and recheck
+a changed marker application. `tools/core-facade-test.sh` exercises these
+facts together with source-signature queries, shadow renames, body edits and
+atomic refusal.
+
 ## One checked request
 
 ```sh

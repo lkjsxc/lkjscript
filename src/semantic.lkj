@@ -433,6 +433,11 @@ pub fn ir_type_name(program: &ir::Program, ty: usize) -> String {
         ir::TypeKind::Slice { inner, mutable } => format!("[{}{}]", if *mutable { "mut " } else { "" }, ir_type_name(program, *inner)),
         ir::TypeKind::Vec { inner } => format!("Vec<{}>", ir_type_name(program, *inner)),
         ir::TypeKind::Box { inner } => format!("Box<{}>", ir_type_name(program, *inner)),
+        // Named source values can use existing array storage without acquiring
+        // a structural array identity. Keep that declared name in query keys;
+        // the checked type facts still expose the exact representation ID.
+        ir::TypeKind::Array { .. } if !value.name.starts_with('[') =>
+            nominal_ir_name(program, &value.name),
         ir::TypeKind::Array { inner, len } => format!("[{};{}]", ir_type_name(program, *inner), len),
         ir::TypeKind::Struct { fields, .. } if value.name.starts_with('(') => {
             let mut out = "(".to_string();

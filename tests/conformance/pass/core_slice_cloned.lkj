@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+use core::iter::Cloned;
+use core::slice::Iter;
+fn cloned<'a>(input: &'a [String]) -> Cloned<Iter<'a, String>> { input.iter().cloned() }
+pub fn probe() -> i64 {
+    let values = [String::from("left"), String::from("right")];
+    let mut copies = cloned(&values[..]);
+    assert_eq!(copies.next().unwrap(), "left");
+    assert_eq!(copies.next().unwrap(), "right");
+    assert!(copies.next().is_none());
+    assert_eq!(values[0], "left");
+    42
+}

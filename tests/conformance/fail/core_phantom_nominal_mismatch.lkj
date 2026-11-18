@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+use core::marker::PhantomData;
+fn require(_value: PhantomData<i64>) -> i64 { 42 }
+pub fn probe() -> i64 { require(PhantomData::<()>) }

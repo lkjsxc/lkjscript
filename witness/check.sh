@@ -21,6 +21,7 @@ else
     witness_rustc=$(command -v rustc)
 fi
 target/lkjscript test tests/conformance --witness "$witness_rustc"
+RUSTC="$witness_rustc" bash tools/core-facade-test.sh target/lkjscript --witness
 bash tools/directory-rename-new-test.sh target/lkjscript --witness "$witness_rustc"
 bash tools/directory-identity-test.sh target/lkjscript --witness "$witness_rustc"
 bash tools/connect-deadline-test.sh target/lkjscript --witness "$witness_rustc"

@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+use core::marker::PhantomData;
+struct Borrowed<'a> { value: &'a i64 }
+fn marked<T>(value: T) -> PhantomData<T> { drop(value); PhantomData }
+pub fn probe() -> i64 { let value = 1i64; drop(marked(Borrowed { value: &value })); 42 }

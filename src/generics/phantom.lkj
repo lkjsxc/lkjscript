@@ -1,0 +1,65 @@
+//! PhantomData is a source ownership marker with an authenticated zero-field shape.
+use super::*;
+pub(crate) fn is_name(name: &str) -> bool { name == "$std::marker::PhantomData" }
+pub(crate) fn argument(applications: &BTreeMap<usize, (String, Vec<usize>)>, ty: usize) -> Option<usize> {
+    let (name, arguments) = applications.get(&ty)?;
+    if is_name(name) && arguments.len() == 1usize { Some(arguments[0]) } else { None }
+}
+pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
+    for definition in &source.structs {
+        if !is_name(&qualified(&definition.module, &definition.name)) { continue; }
+        let valid_parameter = definition.generics.len() == 1usize
+            && !definition.generics[0].lifetime && !definition.generics[0].constant
+            && !definition.generics[0].implicit && definition.generics[0].bounds.len() == 1usize
+            && source.relaxed_bounds.contains(&definition.generics[0].bounds[0]);
+        let valid_bound = valid_parameter && matches!(&source.types[definition.generics[0].bounds[0]].kind,
+            Type::Path(path) if path.name == "Sized" && path.declaration.is_none()
+                && path.qualification.is_none() && path.args.is_empty() && path.bindings.is_empty());
+        let mut derives: BTreeSet<String> = BTreeSet::new();
+        for attribute in &definition.attrs {
+            if attribute.name == "derive" { for name in &attribute.args { derives.insert(name.clone()); } }
+        }
+        if !valid_bound || !definition.unit || definition.tuple || !definition.fields.is_empty()
+            || !definition.predicates.is_empty() || definition.public != Visibility::Public
+            || definition.attrs.len() != 1usize || definition.attrs[0].args.len() != 6usize || derives.len() != 6usize
+            || !derives.contains(&"Copy".to_string()) || !derives.contains(&"Clone".to_string())
+            || !derives.contains(&"Eq".to_string()) || !derives.contains(&"PartialEq".to_string())
+            || !derives.contains(&"Ord".to_string()) || !derives.contains(&"PartialOrd".to_string()) {
+            return Err(Diagnostic::new(definition.span, "E_TYPE",
+                "PhantomData requires its zero-field library declaration and unconditional derived traits"));
+        }
+    }
+    // Written regions cannot disappear into a zero-field value. This first
+    // source subset has no phantom-only region carrier, so it refuses them.
+    for node in &source.types {
+        let Type::Path(path) = &node.kind else { continue; };
+        if !is_name(&path.name) { continue; }
+        let mut pending = path.args.clone();
+        while let Some(id) = pending.pop() {
+            let syntax = &source.types[id];
+            match &syntax.kind {
+                Type::Ref { .. } => return Err(Diagnostic::new(syntax.span, "E_UNSUPPORTED",
+                    "reference-bearing PhantomData requires a phantom region proof")),
+                Type::Path(path) => {
+                    if path.name.starts_with('\'') {
+                        return Err(Diagnostic::new(syntax.span, "E_UNSUPPORTED",
+                            "written PhantomData lifetimes require a phantom region proof"));
+                    }
+                    pending.extend_from_slice(&path.args);
+                    for binding in &path.bindings { pending.push(binding.value); }
+                    if let Some(qualification) = &path.qualification {
+                        pending.push(qualification.receiver);
+                        if let Some(trait_ty) = qualification.trait_ty { pending.push(trait_ty); }
+                    }
+                }
+                Type::Tuple(fields) => pending.extend_from_slice(fields),
+                Type::Slice(inner) | Type::Array { inner, .. } => pending.push(*inner),
+                Type::Function { params, result } => {
+                    pending.extend_from_slice(params); pending.push(*result);
+                }
+                Type::Infer | Type::Never => {}
+            }
+        }
+    }
+    Ok(())
+}

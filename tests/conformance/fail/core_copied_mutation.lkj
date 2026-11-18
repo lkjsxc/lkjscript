@@ -1,0 +1,8 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+pub fn probe() -> i64 {
+    let mut values = vec![20u8, 22u8];
+    let mut copied = values.iter().copied();
+    values[0] = 10u8;
+    copied.next().unwrap() as i64
+}

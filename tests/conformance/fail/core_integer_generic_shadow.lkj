@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+fn wrong<usize>() -> i64 { usize::MAX }
+pub fn probe() -> i64 { 42 }

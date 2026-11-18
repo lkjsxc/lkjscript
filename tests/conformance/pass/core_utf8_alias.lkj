@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+use core::str::from_utf8 as decode;
+pub fn probe() -> i64 {
+    let bytes = [65u8, 0xc3u8, 0xa9u8];
+    assert_eq!(decode(&bytes[..]).unwrap(), "Aé");
+    let bad = [0xc0u8, 0x80u8];
+    assert!(decode(&bad[..]).is_err());
+    42
+}

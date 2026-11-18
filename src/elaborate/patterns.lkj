@@ -615,19 +615,13 @@ impl Builder<'_, '_> {
                     }
                 } else {
                     self.check_struct_pattern(&path, ty, node.span)?;
-                    let ir::TypeKind::Struct { fields, .. } = &self.compiler.types[ty].kind else {
-                        return Err(err(
-                            node.span,
-                            "E_TYPE",
-                            "unit pattern requires a unit constructor",
-                        ));
-                    };
-                    if !fields.is_empty() {
-                        return Err(err(
-                            node.span,
-                            "E_TYPE",
-                            "constructor pattern requires its fields",
-                        ));
+                    if crate::generics::phantom::argument(&self.compiler.applications, ty).is_none() {
+                        let ir::TypeKind::Struct { fields, .. } = &self.compiler.types[ty].kind else {
+                            return Err(err(node.span, "E_TYPE", "unit pattern requires a unit constructor"));
+                        };
+                        if !fields.is_empty() {
+                            return Err(err(node.span, "E_TYPE", "constructor pattern requires its fields"));
+                        }
                     }
                     PatternKind::Product(Vec::new())
                 }
@@ -698,15 +692,14 @@ impl Builder<'_, '_> {
                         (Some(tag), variants[tag].fields.clone())
                     } else {
                         self.check_struct_pattern(&path, ty, node.span)?;
-                        let ir::TypeKind::Struct { fields, .. } = &self.compiler.types[ty].kind
-                        else {
-                            return Err(err(
-                                node.span,
-                                "E_TYPE",
-                                "named pattern requires a struct or enum",
-                            ));
-                        };
-                        (None, fields.clone())
+                        if crate::generics::phantom::argument(&self.compiler.applications, ty).is_some() {
+                            (None, Vec::new())
+                        } else {
+                            let ir::TypeKind::Struct { fields, .. } = &self.compiler.types[ty].kind else {
+                                return Err(err(node.span, "E_TYPE", "named pattern requires a struct or enum"));
+                            };
+                            (None, fields.clone())
+                        }
                     };
                 let mut indices: BTreeMap<String, usize> = BTreeMap::new();
                 for (index, field) in declared.iter().enumerate() {
@@ -1506,6 +1499,9 @@ impl Builder<'_, '_> {
                 vec![(None, vec![(ir::Projection::Deref, *inner)])]
             }
             ir::TypeKind::Unit => vec![(None, Vec::new())],
+            ir::TypeKind::Array { .. }
+                if crate::generics::phantom::argument(&self.compiler.applications, ty).is_some() =>
+            { vec![(None, Vec::new())] }
             _ => Vec::new(),
         };
         if !constructors.is_empty() {

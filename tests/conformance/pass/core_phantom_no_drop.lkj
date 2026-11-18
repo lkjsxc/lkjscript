@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+use core::marker::PhantomData;
+struct Bomb;
+impl Drop for Bomb { fn drop(&mut self) { panic!("phantom must not destroy T"); } }
+pub fn probe() -> i64 {
+    let marker: PhantomData<Bomb> = PhantomData;
+    let copied = marker;
+    drop(marker); drop(copied);
+    42
+}

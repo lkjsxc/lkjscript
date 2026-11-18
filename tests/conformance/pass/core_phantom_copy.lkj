@@ -1,0 +1,15 @@
+// expect: value 42
+// witness: {}
+use core::marker::PhantomData;
+struct NoCopy { value: String }
+fn repeat<T: ?Sized>(value: PhantomData<T>) -> i64 {
+    let first = value;
+    let second = value.clone();
+    assert!(first == second);
+    drop(value); drop(first); drop(second);
+    42
+}
+pub fn probe() -> i64 {
+    let marker: PhantomData<NoCopy> = PhantomData;
+    repeat(marker)
+}

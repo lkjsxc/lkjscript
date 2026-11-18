@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+use core::marker::PhantomData;
+pub fn probe() -> i64 { let () = PhantomData::<u8>; 42 }

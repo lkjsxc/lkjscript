@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+use core::marker::PhantomData;
+fn takes_slice(_value: &[()]) {}
+pub fn probe() -> i64 { takes_slice(&PhantomData::<u8>); 42 }

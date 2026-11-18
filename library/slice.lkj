@@ -1,0 +1,2 @@
+//! The concrete shared slice iterator is the ordinary source iterator.
+pub use crate::iter::Iter;

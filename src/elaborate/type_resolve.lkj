@@ -433,10 +433,15 @@ impl Compiler<'_> {
                     {
                         return Err(err(span, "E_TYPE", "Copy requires Copy fields"));
                     }
-                    self.types[id].kind = ir::TypeKind::Struct {
-                        fields,
-                        copy: requested_copy && fields_copy,
-                    };
+                    if crate::generics::phantom::is_name(&super::qualified(&definition.module, &definition.name)) {
+                        // Existing [(); 0] storage has size zero and alignment one.
+                        // The nominal TypeKey/applications retain source identity
+                        // and ownership arguments; no array operation is exposed.
+                        self.types[id].kind = ir::TypeKind::Array { inner: ir::UNIT, len: 0usize };
+                        self.phantom_spans.insert(id, span);
+                    } else {
+                        self.types[id].kind = ir::TypeKind::Struct { fields, copy: requested_copy && fields_copy };
+                    }
                     self.applications.insert(
                         id,
                         (super::qualified(&definition.module, &definition.name), args),
@@ -649,6 +654,9 @@ impl Compiler<'_> {
             }
             declared.insert(parameter.name.clone(), args[position]);
             position += 1;
+        }
+        if crate::generics::phantom::is_name(&path.name) && args.len() == 1usize {
+            self.check_phantom_argument(args[0], span)?;
         }
         let key = TypeKey::Nominal(declaration, args.clone());
         if let Some(id) = self.type_keys.get(&key) {

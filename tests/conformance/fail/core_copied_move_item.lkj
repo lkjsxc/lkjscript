@@ -1,0 +1,7 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+pub fn probe() -> i64 {
+    let values = vec![String::from("move")];
+    let mut copied = values.iter().copied();
+    drop(copied.next()); 42
+}

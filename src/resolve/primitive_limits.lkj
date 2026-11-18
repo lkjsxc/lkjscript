@@ -1,0 +1,29 @@
+//! Primitive limit spellings select ordinary source constants, with lexical shadowing.
+use super::*;
+impl Resolver<'_> {
+    pub(super) fn primitive_limit(&self, scope: ModuleId, path: &str, parts: &[String],
+        namespace: Namespace, span: Span) -> Result<Option<Resolved>> {
+        if namespace != Namespace::Value || parts.len() != 2usize || path.starts_with("::") {
+            return Ok(None);
+        }
+        if !matches!(parts[0].as_str(), "u8" | "u16" | "u32" | "u64" | "usize"
+            | "i8" | "i16" | "i32" | "i64" | "isize") { return Ok(None); }
+        let suffix = match parts[1].as_str() { "MIN" => "min", "MAX" => "max", _ => return Ok(None) };
+        if self.lookup_lexical(scope, parts[0].as_str(), Namespace::Type, span).is_some()
+            || self.generic(span, parts[0].as_str()) { return Ok(None); }
+        let owner = self.modules.get(&"$std::integer".to_string()).copied()
+            .ok_or_else(|| Diagnostic::new(span, "E_UNSUPPORTED", "primitive limits require the source integer library"))?;
+        let helper = format!("__lkjscript_{}_{}", parts[0], suffix);
+        let mut binding = self.lookup(owner, &helper, Namespace::Value)
+            .ok_or_else(|| Diagnostic::new(span, "E_NAME", "source integer limit declaration is missing"))?;
+        if !matches!(self.declarations[binding.declaration].item, Item::Constant(_)) {
+            return Err(Diagnostic::new(span, "E_TYPE", "primitive limit provider must be an ordinary constant"));
+        }
+        self.access(&binding, scope, span)?;
+        // MAX/MIN is a stable source spelling, just like an explicit import
+        // alias. Query records its exact token without pretending it spells
+        // the provider's declaration name.
+        binding.semantic_alias = true;
+        Ok(Some(Resolved::item(binding)))
+    }
+}

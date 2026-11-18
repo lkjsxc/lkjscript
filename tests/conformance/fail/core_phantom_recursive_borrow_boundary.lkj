@@ -1,0 +1,9 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+use core::marker::PhantomData;
+struct Node<T> { marker: PhantomData<Node<T>>, value: T }
+pub fn probe() -> i64 {
+    let value = 42i64;
+    let node = Node { marker: PhantomData, value: &value };
+    drop(node); 42
+}

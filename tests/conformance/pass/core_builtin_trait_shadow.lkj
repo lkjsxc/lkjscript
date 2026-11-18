@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+mod core { pub mod marker { pub trait Send { fn value(&self) -> i64; } } }
+struct Local;
+impl core::marker::Send for Local { fn value(&self) -> i64 { 42i64 } }
+fn obey<T: core::marker::Send>(value: T) -> i64 { value.value() }
+pub fn probe() -> i64 { obey(Local) }

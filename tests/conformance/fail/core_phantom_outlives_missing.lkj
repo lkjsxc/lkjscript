@@ -1,0 +1,9 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+use core::marker::PhantomData;
+fn bad<'a, T>(anchor: &'a (), value: T) -> impl Fn() -> i64 + 'a {
+    let _ = anchor; drop(value);
+    let marker: PhantomData<T> = PhantomData;
+    move || { drop(marker); 42i64 }
+}
+pub fn probe() -> i64 { 42 }
