@@ -250,27 +250,21 @@ still under `target/` is a temporary candidate observation, not a durable eviden
 link. Fresh observations additionally require the original/projected trees to pass
 `project.pl --verify`; use `probe.pl --help` for its exact entry and package options.
 
-#### Current operational-macro frontier
+#### Current type-outlives frontier
 
-The current producer 77695785...3659d8 expands operational declarative macros
-through ordinary checked source, preserving capture hygiene, definition/export
-scope, include authority and authenticated source operations. Borrow cleanup
-follows semantic occurrence order when expansion reorders or repeats source
-spans. Transactional reporting-only recovery retains independent diagnostics
-after an invalid expansion without accepting the failed program.
+The current producer a2d0d858...123a9bc8f checks named type-outlives predicates
+for function-owned type parameters across unused definitions and calls. Whole-type
+proof follows rigid dependencies, owned containers and closure/opaque captures
+through existing region obligations. Source operations preserve the exact bound
+references and refuse unsupported edits atomically.
 
-This faithful replay exposes later barriers that an earlier first-error return
-masked. The larger counts include unavailable external macro providers and
-explicit standard-library, fragment and statement-list boundaries. Every new
-identity is source-reviewed; disappearance elsewhere does not prove root admission.
-
-The focused suite passes 24 cases / 48 engine routes,
-with independent Rust verification of 3 values/output
-cases and 17 verdicts. Two further exact output cases, declarative_macros and nom_tuple_macros, pass separate actual-root Rust comparisons in the declarative-source suite, preserving $crate. Two explicit unsupported producer/fragment boundaries remain unpaired. A separate module/include fixture also has an independent Rust route and is not added to the 24-case cohort. Source questions, checked edits
-and refusal controls pass; [validation](../bench/macros.md) records the exact
+The focused suite passes 31 cases / 62 engine routes,
+with independent Rust verification of 14 values/output
+cases and 17 verdicts. Source questions, checked edits
+and refusal controls pass; [validation](../bench/type-outlives.md) records the exact
 producer/seed identities, fixed point and publication gates.
 
-The twelve fresh unchanged-source observations give nom 17->49, DOM 37->39 and Sozu 427->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
+The twelve fresh unchanged-source observations give nom 49->47, DOM 39->39 and Sozu 968->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
 No original large root or nom own test is admitted by these observations.
 The current classified causes are ranked below; the separately retained prior
 unclassified Sozu population is not folded into these counts.
@@ -283,9 +277,8 @@ unclassified Sozu population is not folded into these counts.
 | nom | 4 | Function-pointer result types | 4 |
 | nom | 5 | Documentation cfg predicates | 3 |
 | nom | 6 | Default generic type arguments | 2 |
-| nom | 7 | Type-outlives where predicates | 2 |
-| nom | 8 | Unsafe block surface | 2 |
-| nom | 9 | Statement-list macro expansion | 1 |
+| nom | 7 | Unsafe block surface | 2 |
+| nom | 8 | Statement-list macro expansion | 1 |
 | DOM | 1 | Dependency-provided atom macros in expressions and patterns | 24 |
 | DOM | 2 | Shared interior mutation and borrow guards | 9 |
 | DOM | 3 | Macro-valued documentation attribute | 1 |
@@ -330,12 +323,12 @@ unclassified Sozu population is not folded into these counts.
 | Sozu | 34 | Tuple destructuring in a function parameter | 1 |
 
 
-Current exact source-hashed reviews are [nom](real-programs-macros-nom-review.json),
-[DOM](real-programs-macros-dom-review.json) and
-[Sozu](real-programs-macros-sozu-review.json). Raw receipts retain the actual
+Current exact source-hashed reviews are [nom](real-programs-type-outlives-nom-review.json),
+[DOM](real-programs-type-outlives-dom-review.json) and
+[Sozu](real-programs-type-outlives-sozu-review.json). Raw receipts retain the actual
 producer/library inventory and original source/projection command paths.
-The preceding frontier remains in [the prior accounting](../bench/macros-data/previous-frontier.json)
-and [its proof](../bench/debug.md). A vanished diagnostic is not
+The preceding frontier remains in [the prior accounting](../bench/type-outlives-data/previous-frontier.json)
+and [its proof](../bench/macros.md). A vanished diagnostic is not
 evidence that a surrounding root admits, nor that a masked later form is
 supported.
 
