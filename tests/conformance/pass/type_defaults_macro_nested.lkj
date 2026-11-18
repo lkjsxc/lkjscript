@@ -1,0 +1,18 @@
+// expect: value 42
+// witness: {}
+macro_rules! relay { ($($source:tt)*) => { $($source)* }; }
+macro_rules! declare {
+    ($name:ident, $default:ty) => {
+        relay! { #[derive(Default, Debug)] struct $name<T = $default, U = T> { first: T, second: U } }
+    };
+}
+#[derive(Default, Debug)]
+struct Payload { value: i64 }
+declare!(Generated, Payload);
+pub fn probe() -> i64 {
+    let mut value: Generated = Generated::default();
+    value.first.value = 19;
+    value.second.value = 23;
+    assert_eq!(format!("{:?}", value), "Generated { first: Payload { value: 19 }, second: Payload { value: 23 } }");
+    value.first.value + value.second.value
+}

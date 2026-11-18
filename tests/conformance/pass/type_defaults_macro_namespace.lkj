@@ -1,0 +1,23 @@
+// expect: value 42
+// Rust root-crate witness is in tools/type-defaults-origins-test.sh; $crate retains its real meaning.
+#[derive(Default, Debug)]
+pub struct RootValue { pub value: i64 }
+macro_rules! declaration {
+    ($name:ident, $caller:ty) => {
+        #[derive(Default, Debug)]
+        pub struct $name<T = $caller, U = $crate::RootValue> { pub first: T, pub second: U }
+    };
+}
+mod caller {
+    #[derive(Default, Debug)]
+    pub struct RootValue { pub value: bool }
+    declaration!(Selected, RootValue);
+    pub fn value() -> i64 {
+        let mut result: Selected = Selected::default();
+        assert!(!result.first.value);
+        result.second.value = 42;
+        assert_eq!(format!("{:?}", result), "Selected { first: RootValue { value: false }, second: RootValue { value: 42 } }");
+        result.second.value
+    }
+}
+pub fn probe() -> i64 { caller::value() }

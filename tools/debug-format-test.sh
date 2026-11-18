@@ -119,4 +119,4 @@ cp -R src/semantic/origins "$fixture/contracts/"
 cp tests/fixtures/debug_origins.lkj "$fixture/contracts/main.lkj"
 "$compiler" build main.lkj --source-dir "$fixture/contracts" --library-dir "$library" --no-store -o "$fixture/contracts-image" > "$fixture/contracts-out" 2> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract build'; }
 "$fixture/contracts-image" >> "$fixture/contracts-out" 2>> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract execution'; }
-printf 'ok Debug formatting: trait/type/implementation and concrete/generic struct/enum generated-origin queries; checked rename/body edit; capture and generated-edit refusals; ten malformed origins rejected; both engines\n'
+printf 'ok Debug formatting: trait/type/implementation and concrete/generic struct/enum generated-origin queries; checked rename/body edit; capture and generated-edit refusals; twelve malformed origins rejected; both engines\n'

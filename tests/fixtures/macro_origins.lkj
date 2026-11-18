@@ -13,8 +13,11 @@ macro_rules! twice { ($value:expr) => { ($value, $value) }; }
 macro_rules! nested { ($value:expr) => { twice!($value) }; }
 macro_rules! text { () => { include_str!("payload.txt") }; }
 macro_rules! discard { ($value:expr) => { 0i64 }; }
+macro_rules! defaults { ($name:ident) => { struct $name<T = i64, U = T> { first: T, second: U } }; }
 fn helper(value: i64) -> i64 { value + 1i64 }
 emit!(generated, helper(5i64));
+defaults!(GeneratedDefaults);
+fn type_anchor(_value: bool) {}
 fn source() -> i64 {
     let pair = nested!(helper(7i64));
     let label = text!();
@@ -187,5 +190,11 @@ fn main() {
     let mut wrong_span = program.clone();
     wrong_span.exprs[included].span.start += 1usize;
     count += refused(&wrong_span);
-    assert!(count == 25usize);
+    // A different existing TypeId is still an unauthenticated default recipe.
+    let generated_type = program.structs.iter().position(|definition| definition.name == "GeneratedDefaults").unwrap();
+    let anchor = program.functions.iter().position(|function| function.name == "type_anchor").unwrap();
+    let mut changed_default = program.clone();
+    changed_default.structs[generated_type].generics[0usize].default = Some(program.functions[anchor].params[0usize].ty);
+    count += refused(&changed_default);
+    assert!(count == 26usize);
 }

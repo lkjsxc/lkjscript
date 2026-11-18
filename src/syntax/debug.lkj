@@ -75,6 +75,7 @@ impl Parser {
         let mut arguments = Vec::new();
         let mut parameter_index = 0usize;
         while parameter_index < generics.len() {
+            generics[parameter_index].default = None;
             if !generics[parameter_index].lifetime && !generics[parameter_index].constant {
                 generics[parameter_index].bounds.push(bound);
             }

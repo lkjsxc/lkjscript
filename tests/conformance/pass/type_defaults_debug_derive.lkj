@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {}
+#[derive(Default, Debug)]
+struct Selected<T = i64, U = T> { first: T, second: U }
+#[derive(Debug, Clone, PartialEq)]
+enum Response<Failure, Error = Failure> { Error(Error), Failure(Failure) }
+pub fn probe() -> i64 {
+    let mut value: Selected = Selected::default();
+    value.first = 19;
+    value.second = 23;
+    assert_eq!(format!("{:?}", value), "Selected { first: 19, second: 23 }");
+    let error: Response<i64> = Response::Error(42);
+    assert_eq!(format!("{:?}", error.clone()), "Error(42)");
+    assert_eq!(error, Response::<i64, i64>::Error(42));
+    value.first + value.second
+}

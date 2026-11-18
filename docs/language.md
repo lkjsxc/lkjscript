@@ -202,7 +202,13 @@ to satisfy `Copy`. Self/forward parameter references, nontrailing defaults, and 
 nominal defaults or aliases are located errors; explicit arguments that break
 an omission cycle remain finite. The source AST retains each written default
 for signatures, references, and checked edits. Generated implementation binders
-clear those defaults. Struct/enum/alias parameter renames use exact declaration
+clear those defaults, and strict Default/Debug origin validation rejects copied
+default metadata on those binders. Nested declarative macros retain captured
+default types and the distinction between caller names and `$crate` paths;
+authenticated replay includes the exact default TypeIds. Generated declarations
+keep generated query origins and refuse source-projection edits. Authored
+defaults remain editable, and changing a macro's captured default invalidates
+its derived epoch. Struct/enum/alias parameter renames use exact declaration
 scope references and refuse capture. This is frontend substitution into the
 existing checked types and calls; the independent IR checker is unchanged.
 Default syntax on functions, implementations, traits, or associated families,

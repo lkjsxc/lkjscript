@@ -5,8 +5,16 @@ mod diagnostics {
     pub struct BlockedRegion { pub path: String, pub span: crate::ast::Span, pub kind: String, pub reason: String }
 }
 fn parsed() -> ast::Program {
-    let root = "#[derive(Debug)] struct Packet<T> { value:T } #[derive(Debug)] enum Choice { Empty, One(i64), Named { value:i64 } } fn free() {}";
+    let root = "#[derive(Debug)] struct Packet<T = i64> { value:T } #[derive(Debug)] enum Choice { Empty, One(i64), Named { value:i64 } } fn free() {}";
     let standard = "pub mod fmt { pub struct Formatter; pub struct Result; pub trait Debug { fn fmt(&self, f:&mut Formatter)->Result; } pub trait Other {} }";
+    let report = source::load_report("main.lkj", Some("$std/lib.lkj"), &mut |path:&str| -> Result<Option<Vec<u8>>,String> {
+        Ok(match path { "main.lkj"=>Some(root.as_bytes().to_vec()), "$std/lib.lkj"=>Some(standard.as_bytes().to_vec()), _=>None })
+    });
+    resolve::resolve(&report.into_result().unwrap()).unwrap()
+}
+fn defaulted() -> ast::Program {
+    let root = "#[derive(Default)] struct Defaults<T = i64> { value:T }";
+    let standard = "pub mod default { pub trait Default { fn default() -> Self; } }";
     let report = source::load_report("main.lkj", Some("$std/lib.lkj"), &mut |path:&str| -> Result<Option<Vec<u8>>,String> {
         Ok(match path { "main.lkj"=>Some(root.as_bytes().to_vec()), "$std/lib.lkj"=>Some(standard.as_bytes().to_vec()), _=>None })
     });
@@ -88,4 +96,18 @@ fn main() {
     let block=body.functions[generated[0usize]].body.unwrap();
     body.blocks[block].tail=None;
     refused(&body);
+    // Declaration defaults cannot leak into generated implementation binders.
+    let mut debug_default = program.clone();
+    let implementation = derived_impl.unwrap();
+    assert!(debug_default.impls[implementation].generics[0usize].default.is_none());
+    debug_default.impls[implementation].generics[0usize].default = program.structs[0usize].generics[0usize].default;
+    refused(&debug_default);
+    let defaults = defaulted();
+    let resolver = resolve::Resolver::new(&defaults).unwrap();
+    let relation = origins::collect(&defaults, &resolver).unwrap();
+    let implementation = relation.implementations.iter().position(|origin| origin.is_some()).unwrap();
+    let mut copied_default = defaults.clone();
+    assert!(copied_default.impls[implementation].generics[0usize].default.is_none());
+    copied_default.impls[implementation].generics[0usize].default = defaults.structs[0usize].generics[0usize].default;
+    refused(&copied_default);
 }

@@ -191,7 +191,8 @@ pub(super) fn validate(program: &a::Program, resolver: &crate::resolve::Resolver
             && argument_path.name == parameter.name && argument_path.declaration.is_none()
             && argument_path.args.is_empty() && argument_path.bindings.is_empty() && argument_path.qualification.is_none()
             && copied.name == parameter.name && copied.lifetime == parameter.lifetime && copied.constant == parameter.constant
-            && copied.implicit == parameter.implicit && same_span(copied.span, parameter.span)
+            && copied.implicit == parameter.implicit && copied.default.is_none()
+            && same_span(copied.span, parameter.span)
             && copied.bounds.len() == parameter.bounds.len() + extra, "generated generic argument or contract differs")?;
         for (at, original) in parameter.bounds.iter().enumerate() {
             ensure(*original < bound && copied.bounds[at] == *original, "generated bound aliases or changes an authored bound")?;
