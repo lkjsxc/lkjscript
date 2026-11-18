@@ -1,0 +1,31 @@
+Date: 2026-11-18 UTC
+[12:35:19.361] weston 13.0.0
+               https://wayland.freedesktop.org
+               Bug reports to: https://gitlab.freedesktop.org/wayland/weston/issues/
+               Build: 13.0.0
+[12:35:19.361] Command line: /home/coder/workspace/lkjbrowser/.deps/root/usr/bin/weston --backend=headless --renderer=pixman --width=320 --height=240 --shell=/home/coder/workspace/lkjbrowser/.deps/root/usr/lib/x86_64-linux-gnu/weston/kiosk-shell.so --modules=/tmp/lkjscript-anonymous-frame.cbfQpt/weston-input.so --socket=anonymous-frame --idle-time=0 --no-config --debug --log=/home/coder/workspace/lkjscript-programs-anonymous-20261118/bench/anonymous-files-data/weston-native/weston.log
+[12:35:19.361] OS: Linux, 7.3.4-arch1-1, #1 SMP PREEMPT_DYNAMIC Wed, 11 Nov 2026 19:02:39 +0000, x86_64
+[12:35:19.361] Flight recorder: enabled
+[12:35:19.361] Starting with no config file.
+[12:35:19.361] Output repaint window is 7 ms maximum.
+[12:35:19.361] Loading module '/home/coder/workspace/lkjbrowser/.deps/root/usr/lib/x86_64-linux-gnu/libweston-13/headless-backend.so'
+[12:35:19.363] Using Pixman renderer
+[12:35:19.363] Registered plugin API 'weston_windowed_output_api_v2' of size 16
+[12:35:19.363] Color manager: no-op
+[12:35:19.363] Output 'headless' attempts EOTF mode: SDR
+[12:35:19.363] Output 'headless' using color profile: stock sRGB color profile
+[12:35:19.363] Output 'headless' enabled with head(s) headless
+[12:35:19.363] Compositor capabilities:
+               arbitrary surface rotation: yes
+               screen capture uses y-flip: no
+               cursor planes: no
+               arbitrary resolutions: no
+               view mask clipping: yes
+               explicit sync: no
+               color operations: no
+               presentation clock: CLOCK_MONOTONIC_RAW, id 4
+               presentation clock resolution: 0.000000001 s
+[12:35:19.363] Loading module '/home/coder/workspace/lkjbrowser/.deps/root/usr/lib/x86_64-linux-gnu/weston/kiosk-shell.so'
+[12:35:19.363] Loading module '/tmp/lkjscript-anonymous-frame.cbfQpt/weston-input.so'
+[12:35:19.363] Detected a monitor change on head 'headless', not bothering to do anything about it.
+[12:35:19.486] caught signal 15

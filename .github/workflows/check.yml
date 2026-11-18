@@ -18,6 +18,10 @@ jobs:
           ! command -v node
           test ! -d target/store
           bash tools/check.sh
+      - name: Record compiler identities
+        run: |
+          git rev-parse HEAD
+          sha256sum target/lkjscript seed/lkjscript.gz
   witness:
     runs-on: ubuntu-latest
     continue-on-error: true
@@ -29,3 +33,7 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - run: sh tools/bootstrap.sh
       - run: bash witness/check.sh
+      - name: Record compiler identities
+        run: |
+          git rev-parse HEAD
+          sha256sum target/lkjscript seed/lkjscript.gz

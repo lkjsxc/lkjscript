@@ -7,6 +7,13 @@ use std::os::unix::ffi::OsStrExt;
 use std::rc::Rc;
 
 pub struct TcpPort { port: u16 }
+/// Private affine entry authority; Rc also keeps the witness non-Send/non-Sync.
+pub struct TemporaryFiles { _seal: Rc<()> }
+impl TemporaryFiles {
+    pub fn temporary_file(&mut self) -> Result<File, i64> {
+        Ok(File { handle: files::world_file(0)? })
+    }
+}
 
 pub struct World {
     arguments: Vec<Vec<u8>>,
@@ -773,6 +780,14 @@ pub fn observe(entry: impl FnOnce() -> u8) {
     if status != 0 {
         std::process::exit(i32::from(status));
     }
+}
+
+/// Oracle-only grant provisioning, separate from the tested source entry.
+pub fn enter_temporary_files(entry: fn(TemporaryFiles, Stdout)) {
+    observe(|| {
+        entry(TemporaryFiles { _seal: Rc::new(()) }, Stdout { _seal: () });
+        0
+    });
 }
 
 pub fn enter(entry: fn(World)) {

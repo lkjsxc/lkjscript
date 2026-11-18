@@ -49,7 +49,7 @@ fn closed_sources(shard: usize) {
     assert!(errors.is_empty());
     assert_eq!(count, 134usize);
 }
-pub fn closed_core() { assert_eq!(semantic_tests::core(), 199usize); }
+pub fn closed_core() { assert_eq!(semantic_tests::core(), 200usize); }
 pub fn closed_source_0() { closed_sources(0usize); }
 pub fn closed_source_1() { closed_sources(1usize); }
 pub fn closed_source_2() { closed_sources(2usize); }

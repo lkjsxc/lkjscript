@@ -1,0 +1,420 @@
+//! Retained protocol proof copied from lkjbrowser 2d37da55ffd5b881b2d441b049c72642f8ef4b52.
+//! Explicit owned Unix File transport; wl_output model carries harness TCP input.
+//! Protocol sources: Wayland XML and stable xdg-shell XML, not client libraries.
+#[derive(Clone, Copy)]
+pub enum Event {
+    Scroll(i32), Key(u32, bool), Click(i32, i32), Release(i32, i32), Motion(i32, i32),
+    Leave, Resize(i32, i32), Close,
+}
+pub struct Wayland {
+    socket: File, backing: Option<File>, ready: Readiness, clock: Clock, incoming: Vec<u8>,
+    next_id: u32, registry: u32, sync: u32, synced: bool,
+    compositor: u32, shm: u32, wm: u32, seat: u32, output: u32,
+    pub runtime_address: String,
+    frame_callback: u32, presented: bool,
+    surface: u32, xdg: u32, top: u32, pool: u32,
+    first: u32, second: u32, pointer: u32, keyboard: u32, cursor_surface: u32, cursor_buffer: u32,
+    first_free: bool, second_free: bool, configured: bool, closed: bool,
+    px: i32, py: i32, width: i32, height: i32, press_serial: u32,
+    pub sent_messages: usize, pub received_messages: usize, pub committed_frames: usize,
+}
+fn word(bytes: &mut Vec<u8>, n: u32) {
+    bytes.push((n & 255u32) as u8);
+    bytes.push(((n >> 8u32) & 255u32) as u8);
+    bytes.push(((n >> 16u32) & 255u32) as u8);
+    bytes.push((n >> 24u32) as u8);
+}
+fn number(bytes: &[u8], at: usize) -> u32 {
+    if at + 4usize > bytes.len() { return 0u32; }
+    bytes[at] as u32 | ((bytes[at + 1usize] as u32) << 8u32)
+      | ((bytes[at + 2usize] as u32) << 16u32)
+      | ((bytes[at + 3usize] as u32) << 24u32)
+}
+fn wire_string(bytes: &mut Vec<u8>, value: &str) {
+    word(bytes, (value.len() + 1usize) as u32);
+    bytes.extend_from_slice(value.as_bytes());
+    bytes.push(0u8);
+    while bytes.len() % 4usize != 0usize { bytes.push(0u8); }
+}
+fn modifiers_up(events: &mut Vec<Event>) {
+    events.push(Event::Key(42u32, false)); events.push(Event::Key(54u32, false));
+    events.push(Event::Key(29u32, false)); events.push(Event::Key(97u32, false));
+}
+fn failure(step: &str, errno: i64) -> String { format!("Wayland {}: errno {}", step, errno) }
+fn io(result: Result<(), i64>, step: &str) -> Result<(), String> {
+    match result { Ok(()) => Ok(()), Err(e) => Err(failure(step, e)) }
+}
+impl Wayland {
+    pub fn now(&mut self) -> usize { self.clock.nanoseconds().unwrap() }
+    pub fn is_closed(&self) -> bool { self.closed }
+    pub fn frame_presented(&self) -> bool { self.presented }
+    pub fn set_title(&mut self,title:&str)->Result<(),String>{
+        let mut bytes=Vec::new();wire_string(&mut bytes,title);
+        let top=self.top;self.send(top,2u32,bytes,false)
+    }
+    /// Ask the compositor to move the window with the pointer, as answer to the last button press.
+    pub fn start_move(&mut self)->Result<(),String>{
+        if self.seat==0u32 || self.press_serial==0u32{return Ok(());}
+        let top=self.top;let seat=self.seat;let serial=self.press_serial;
+        self.request(top,5u32,vec![seat,serial],false)
+    }
+    pub fn open(mut socket: File, backing: File, mut ready: Readiness, clock: Clock, width: i32, height: i32, title: &str) -> Result<Wayland, String> {
+        if width < 1i32 || height < 1i32 || width > 8192i32 || height > 8192i32 {
+            return Err("Wayland: viewport outside 1..8192".to_string());
+        }
+        io(ready.watch_file(&mut socket, 1usize, 1u8), "watch")?;
+        let mut client = Wayland {
+            socket, backing: Some(backing), ready, clock, incoming: Vec::new(), next_id: 4u32,
+            registry: 2u32, sync: 3u32, synced: false,
+            compositor: 0u32, shm: 0u32, wm: 0u32, seat: 0u32, output: 0u32,
+            runtime_address: String::new(), frame_callback: 0u32, presented: false,
+            surface: 0u32, xdg: 0u32, top: 0u32, pool: 0u32,
+            first: 0u32, second: 0u32, pointer: 0u32, keyboard: 0u32, cursor_surface: 0u32, cursor_buffer: 0u32,
+            first_free: true, second_free: true, configured: false, closed: false,
+            px: 0i32, py: 0i32, width, height, press_serial: 0u32,
+            sent_messages: 0usize, received_messages: 0usize, committed_frames: 0usize,
+        };
+        client.request(1u32, 1u32, vec![2u32], false)?;
+        client.request(1u32, 0u32, vec![3u32], false)?;
+        let mut rounds = 0usize;
+        while !client.synced && rounds < 100usize {
+            let _events = client.poll(100usize)?;
+            rounds += 1usize;
+        }
+        if !client.synced || client.compositor == 0u32 || client.shm == 0u32 || client.wm == 0u32 {
+            return Err("Wayland: compositor, wl_shm and xdg_wm_base are required".to_string());
+        }
+        client.surface = client.allocate();
+        let object = client.compositor;
+        let surface = client.surface;
+        client.request(object, 0u32, vec![surface], false)?;
+        client.xdg = client.allocate();
+        let xdg = client.xdg;
+        let wm = client.wm;
+        client.request(wm, 2u32, vec![xdg, surface], false)?;
+        client.top = client.allocate();
+        let top = client.top;
+        client.request(xdg, 1u32, vec![top], false)?;
+        let mut title_bytes = Vec::new();
+        wire_string(&mut title_bytes, title);
+        client.send(top, 2u32, title_bytes, false)?;
+        let mut app = Vec::new();
+        wire_string(&mut app, "lkjbrowser");
+        client.send(top, 3u32, app, false)?;
+        client.request(top, 7u32, vec![width as u32, height as u32], false)?;
+        client.request(top, 8u32, vec![width as u32, height as u32], false)?;
+        client.pool = client.allocate();
+        let pool = client.pool;
+        let shm = client.shm;
+        let size = (width as u32) * (height as u32) * 8u32;
+        client.request(shm, 0u32, vec![pool, size + 2304u32], true)?;
+        client.first = client.allocate();
+        let first = client.first;
+        client.request(pool, 0u32, vec![first, 0u32, width as u32, height as u32, (width * 4i32) as u32, 1u32], false)?;
+        client.second = client.allocate();
+        let second = client.second;
+        client.request(pool, 0u32, vec![second, size / 2u32, width as u32, height as u32, (width * 4i32) as u32, 1u32], false)?;
+        client.cursor_surface = client.allocate();
+        let cs = client.cursor_surface;
+        client.request(object, 0u32, vec![cs], false)?;
+        client.cursor_buffer = client.allocate();
+        let cb = client.cursor_buffer;
+        client.request(pool, 0u32, vec![cb, size, 24u32, 24u32, 96u32, 0u32], false)?;
+        client.request(cs, 1u32, vec![cb, 0u32, 0u32], false)?;
+        client.request(cs, 2u32, vec![0u32, 0u32, 24u32, 24u32], false)?;
+        client.request(cs, 6u32, Vec::new(), false)?;
+        client.request(surface, 6u32, Vec::new(), false)?;
+        rounds = 0usize;
+        while !client.configured && rounds < 100usize {
+            let _events = client.poll(100usize)?;
+            rounds += 1usize;
+        }
+        if !client.configured { return Err("Wayland: initial configure timed out".to_string()); }
+        Ok(client)
+    }
+    fn allocate(&mut self) -> u32 { let id = self.next_id; self.next_id += 1u32; id }
+    fn send(&mut self, object: u32, opcode: u32, args: Vec<u8>, attach: bool) -> Result<(), String> {
+        let size = args.len() + 8usize;
+        if size > 65535usize || size % 4usize != 0usize {
+            return Err("Wayland: invalid outgoing message length".to_string());
+        }
+        let mut packet = Vec::new();
+        word(&mut packet, object);
+        word(&mut packet, ((size as u32) << 16u32) | opcode);
+        packet.extend_from_slice(&args);
+        let mut files: Vec<File> = Vec::new();
+        if attach { files.push(self.backing.take().unwrap()); }
+        let deadline = self.clock.nanoseconds().unwrap() + 1_000_000_000usize;
+        let mut at = match self.socket.send_message(&packet, files, deadline) {
+            Ok(n) => n, Err(e) => return Err(failure("Unix send", e)),
+        };
+        while at < packet.len() {
+            let empty: Vec<File> = Vec::new();
+            let count = match self.socket.send_message(&packet[at..], empty, deadline) {
+                Ok(n) => n, Err(e) => return Err(failure("Unix short send", e)),
+            };
+            if count == 0usize { return Err("Wayland: closed Unix writer".to_string()); }
+            at += count;
+        }
+        self.sent_messages += 1usize;
+        Ok(())
+    }
+    fn request(&mut self, object: u32, opcode: u32, values: Vec<u32>, attach: bool) -> Result<(), String> {
+        let mut bytes = Vec::new();
+        for v in values { word(&mut bytes, v); }
+        self.send(object, opcode, bytes, attach)
+    }
+    fn bind(&mut self, global: u32, interface: &str, version: u32) -> Result<u32, String> {
+        let id = self.allocate();
+        let mut bytes = Vec::new();
+        word(&mut bytes, global);
+        wire_string(&mut bytes, interface);
+        word(&mut bytes, version);
+        word(&mut bytes, id);
+        let registry = self.registry;
+        self.send(registry, 0u32, bytes, false)?;
+        Ok(id)
+    }
+    pub fn slot_len(&self) -> usize { self.width as usize * self.height as usize * 4usize }
+    pub fn available(&self, slot: u32) -> bool {
+        if slot == 0u32 { self.first_free } else if slot == 1u32 { self.second_free } else { false }
+    }
+    pub fn present(&mut self, slot: u32) -> Result<(), String> {
+        if !self.available(slot) { return Err("Wayland: buffer has not been released".to_string()); }
+        if self.closed { return Err("Wayland: surface is closed".to_string()); }
+        let buffer = if slot == 0u32 { self.first } else { self.second };
+        let surface = self.surface;
+        let width = self.width as u32;
+        let height = self.height as u32;
+        self.request(surface, 1u32, vec![buffer, 0u32, 0u32], false)?;
+        self.request(surface, 2u32, vec![0u32, 0u32, width, height], false)?;
+        self.frame_callback = self.allocate();
+        let callback = self.frame_callback;
+        self.request(surface, 3u32, vec![callback], false)?;
+        self.request(surface, 6u32, Vec::new(), false)?;
+        if slot == 0u32 { self.first_free = false; } else { self.second_free = false; }
+        self.committed_frames += 1usize;
+        Ok(())
+    }
+    pub fn poll(&mut self, timeout_ms: usize) -> Result<Vec<Event>, String> {
+        let now = match self.clock.nanoseconds() { Ok(n) => n, Err(e) => return Err(failure("clock", e)) };
+        match self.ready.wait(&mut self.clock, now + timeout_ms * 1000000usize) {
+            Ok(_events) => (), Err(e) => return Err(failure("wait", e)),
+        }
+        let mut scratch = [0u8; 8192];
+        loop {
+            let deadline = self.clock.nanoseconds().unwrap();
+            match self.socket.receive_message(&mut scratch, 8usize, deadline) {
+                Ok((n, files)) => {
+                    // This frame proof does not interpret keymaps; owned rights still close.
+                    drop(files);
+                    if n == 0usize { self.closed = true; break; }
+                    self.incoming.extend_from_slice(&scratch[..n]);
+                },
+                Err(110i64) => break,
+                Err(e) => return Err(failure("read", e)),
+            }
+        }
+        let mut events = Vec::new();
+        let mut consumed = 0usize;
+        while self.incoming.len() - consumed >= 8usize {
+            let h = number(&self.incoming, consumed + 4usize);
+            let size = (h >> 16u32) as usize;
+            if size < 8usize || size % 4usize != 0usize {
+                return Err("Wayland: malformed event size".to_string());
+            }
+            if size > self.incoming.len() - consumed { break; }
+            let object = number(&self.incoming, consumed);
+            let args = self.incoming[consumed + 8usize..consumed + size].to_vec();
+            self.dispatch(object, h & 65535u32, &args, &mut events)?;
+            self.received_messages += 1usize;
+            consumed += size;
+        }
+        if consumed != 0usize { self.incoming = { let owned = self.incoming[consumed..].to_vec(); owned }; }
+        if self.closed { events.push(Event::Close); }
+        Ok(events)
+    }
+    fn dispatch(&mut self, object: u32, opcode: u32, data: &[u8], events: &mut Vec<Event>) -> Result<(), String> {
+        if object == 1u32 && opcode == 0u32 {
+            let id = number(data, 0usize);
+            let code = number(data, 4usize);
+            let n = number(data, 8usize) as usize;
+            let mut message = "invalid error payload".to_string();
+            if n > 0usize && 12usize + n <= data.len() {
+                message = std::text::utf8_lossy(&data[12usize..12usize + n - 1usize]);
+            }
+            return Err(format!("Wayland protocol error {} on object {}: {}", code, id, message));
+        }
+        if object == self.sync && opcode == 0u32 { self.synced = true; }
+        if object == self.frame_callback && opcode == 0u32 { self.presented = true; }
+        if object == self.registry && opcode == 0u32 {
+            let global = number(data, 0usize);
+            let n = number(data, 4usize) as usize;
+            let aligned = (n + 3usize) / 4usize * 4usize;
+            if n == 0usize || 8usize + aligned + 4usize > data.len() {
+                return Err("Wayland: malformed registry global".to_string());
+            }
+            let name = std::text::utf8_lossy(&data[8usize..8usize + n - 1usize]);
+            let version = number(data, 8usize + aligned);
+            if name == "wl_compositor" && self.compositor == 0u32 {
+                self.compositor = self.bind(global, "wl_compositor", if version > 4u32 { 4u32 } else { version })?;
+            } else if name == "wl_shm" && self.shm == 0u32 {
+                self.shm = self.bind(global, "wl_shm", 1u32)?;
+            } else if name == "xdg_wm_base" && self.wm == 0u32 {
+                self.wm = self.bind(global, "xdg_wm_base", 1u32)?;
+            } else if name == "wl_output" && self.output == 0u32 {
+                self.output = self.bind(global, "wl_output", 1u32)?;
+            } else if name == "wl_seat" && self.seat == 0u32 {
+                self.seat = self.bind(global, "wl_seat", if version > 5u32 { 5u32 } else { version })?;
+            }
+        }
+        if object == self.output && opcode == 0u32 {
+            // wl_output.geometry: five words, make string, model string, transform.
+            if data.len() < 24usize { return Err("Wayland: short output geometry".to_string()); }
+            let make_len = number(data, 20usize) as usize;
+            if make_len == 0usize || make_len > data.len() - 24usize { return Err("Wayland: invalid output make".to_string()); }
+            let model_at = 24usize + (make_len + 3usize) / 4usize * 4usize;
+            if model_at + 4usize > data.len() { return Err("Wayland: missing output model".to_string()); }
+            let model_len = number(data, model_at) as usize;
+            if model_len == 0usize || model_len > data.len() - model_at - 4usize { return Err("Wayland: invalid output model".to_string()); }
+            if data[model_at + 4usize + model_len - 1usize] != 0u8 { return Err("Wayland: unterminated output model".to_string()); }
+            self.runtime_address = std::text::utf8_lossy(&data[model_at + 4usize..model_at + 4usize + model_len - 1usize]);
+        }
+        if object == self.wm && opcode == 0u32 {
+            self.request(object, 3u32, vec![number(data, 0usize)], false)?;
+        }
+        if object == self.xdg && opcode == 0u32 {
+            self.request(object, 4u32, vec![number(data, 0usize)], false)?;
+            self.configured = true;
+        }
+        if object == self.top && opcode == 1u32 { self.closed = true; }
+        if object == self.top && opcode == 0u32 && data.len() >= 8usize {
+            let w = number(data, 0usize) as i32;
+            let h = number(data, 4usize) as i32;
+            if w > 0i32 && h > 0i32 && (w != self.width || h != self.height) {
+                events.push(Event::Resize(w, h));
+            }
+        }
+        if object == self.first && opcode == 0u32 { self.first_free = true; }
+        if object == self.second && opcode == 0u32 { self.second_free = true; }
+        if object == self.seat && opcode == 0u32 {
+            let caps = number(data, 0usize);
+            if caps & 1u32 != 0u32 && self.pointer == 0u32 {
+                self.pointer = self.allocate();
+                let id = self.pointer;
+                self.request(object, 0u32, vec![id], false)?;
+            }
+            if caps & 2u32 == 0u32 && self.keyboard != 0u32 { modifiers_up(events); }
+            if caps & 2u32 != 0u32 && self.keyboard == 0u32 {
+                self.keyboard = self.allocate();
+                let id = self.keyboard;
+                self.request(object, 1u32, vec![id], false)?;
+            }
+        }
+        if object == self.pointer {
+            if opcode == 0u32 && data.len() >= 16usize {
+                let cs = self.cursor_surface;
+                if cs != 0u32 { self.request(object, 0u32, vec![number(data, 0usize), cs, 1u32, 1u32], false)?; }
+                self.px = (number(data, 8usize) as i32) / 256i32;
+                self.py = (number(data, 12usize) as i32) / 256i32;
+            } else if opcode == 1u32 {
+                events.push(Event::Leave);
+            } else if opcode == 2u32 && data.len() >= 12usize {
+                self.px = (number(data, 4usize) as i32) / 256i32;
+                self.py = (number(data, 8usize) as i32) / 256i32;
+                events.push(Event::Motion(self.px, self.py));
+            } else if opcode == 3u32 && data.len() >= 16usize {
+                if number(data, 8usize) == 272u32 {
+                    if number(data, 12usize) == 1u32 {
+                        self.press_serial = number(data, 0usize);
+                        events.push(Event::Click(self.px, self.py));
+                    } else { events.push(Event::Release(self.px, self.py)); }
+                }
+            } else if opcode == 4u32 && data.len() >= 12usize {
+                if number(data, 4usize) == 0u32 {
+                    events.push(Event::Scroll((number(data, 8usize) as i32) / 256i32));
+                }
+            }
+        }
+        if object == self.keyboard && (opcode == 1u32 || opcode == 2u32) {
+            // Enter/leave describe focus state, not fresh ordinary key presses.
+            // Restore modifiers without retyping held letters or firing shortcuts.
+            modifiers_up(events);
+            if opcode == 1u32 {
+                if data.len() < 12usize { return Err("Wayland: malformed keyboard enter".to_string()); }
+                let n = number(data, 8usize) as usize;
+                if n % 4usize != 0usize || n > data.len() - 12usize {
+                    return Err("Wayland: malformed keyboard key array".to_string());
+                }
+                let mut at = 12usize;
+                while at < 12usize + n {
+                    let key = number(data, at);
+                    if key == 42u32 || key == 54u32 || key == 29u32 || key == 97u32 {
+                        events.push(Event::Key(key, true));
+                    }
+                    at += 4usize;
+                }
+            }
+        }
+        if object == self.keyboard && opcode == 3u32 && data.len() >= 16usize {
+            events.push(Event::Key(number(data, 8usize), number(data, 12usize) != 0u32));
+        }
+        Ok(())
+    }
+}
+
+/// First-slice US physical key map. XKB interpretation/IME is explicitly absent.
+pub fn key_ascii(key: u32, shift: bool) -> u8 {
+    let normal = b"1234567890-=";
+    let shifted = b"!@#$%^&*()_+";
+    if key >= 2u32 && key <= 13u32 {
+        let at = (key - 2u32) as usize;
+        return if shift { shifted[at] } else { normal[at] };
+    }
+    let a = b"qwertyuiop";
+    let b = b"asdfghjkl";
+    let c = b"zxcvbnm";
+    let mut ch = 0u8;
+    if key >= 16u32 && key <= 25u32 { ch = a[(key - 16u32) as usize]; }
+    if key >= 30u32 && key <= 38u32 { ch = b[(key - 30u32) as usize]; }
+    if key >= 44u32 && key <= 50u32 { ch = c[(key - 44u32) as usize]; }
+    if ch != 0u8 { return if shift { ch - 32u8 } else { ch }; }
+    match key {
+        26u32 => if shift { b'{' } else { b'[' },
+        27u32 => if shift { b'}' } else { b']' },
+        39u32 => if shift { b':' } else { b';' },
+        40u32 => if shift { b'"' } else { b'\'' },
+        41u32 => if shift { b'~' } else { b'`' },
+        43u32 => if shift { b'|' } else { b'\\' },
+        51u32 => if shift { b'<' } else { b',' },
+        52u32 => if shift { b'>' } else { b'.' },
+        53u32 => if shift { b'?' } else { b'/' },
+        57u32 => b' ',
+        _ => 0u8,
+    }
+}
+
+/// Append these 2304 bytes after the two viewport slots before opening Wayland.
+pub fn cursor_bytes() -> Vec<u8> {
+    let mut bytes = Vec::new();
+    let mut y = 0i32;
+    while y < 24i32 {
+        let mut x = 0i32;
+        while x < 24i32 {
+            let triangle = y >= 1i32 && y < 19i32 && x >= 1i32 && x <= 1i32 + y / 2i32;
+            let stem = y >= 13i32 && y < 23i32 && x >= 5i32 && x <= 7i32;
+            let inside = triangle || stem;
+            let white = (y >= 4i32 && y < 17i32 && x > 1i32 && x < y / 2i32)
+                || (y >= 14i32 && y < 22i32 && x == 6i32);
+            let c = if white { 255u8 } else { 20u8 };
+            bytes.push(if inside { c } else { 0u8 });
+            bytes.push(if inside { c } else { 0u8 });
+            bytes.push(if inside { c } else { 0u8 });
+            bytes.push(if inside { 255u8 } else { 0u8 });
+            x += 1i32;
+        }
+        y += 1i32;
+    }
+    bytes
+}
+pub fn frame_file_size(width: usize, height: usize) -> usize { width * height * 8usize + 2304usize }

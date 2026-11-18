@@ -1,0 +1,7 @@
+UTC 2026-11-18T12:26:15Z
+published-compiler-source ca749bd44e1cece139fe5f875adc57b27bcfadd8
+published-seed-sha256 c1563abbe755c994dc5e9baf2170b384db7b1390ff21dbcc7fe32cbfe27e446a  -
+3d2fc84dfc880cdd52aee6ca9a16dbef6025500e8453cd7ab75f45f336fda353  /home/coder/workspace/lkjscript-programs-anonymous-20261118/target/anonymous-baseline/lkjscript
+4db859f85fdd18a82a3ce00b80221b4116a5146b3350ad360cef793ba7b5d780  /home/coder/workspace/lkjscript-programs-anonymous-20261118/bench/anonymous-files-data/image-buffer/main.lkj
+6801d618ebf00d51d141fdbf6a9fdd93421aaeba73b2c10e3024fd9a83f6d628  /home/coder/workspace/lkjscript-programs-anonymous-20261118/bench/anonymous-files-data/image-buffer/child.lkj
+2e88507db513d28d4dd6b73550f908e50d973e90589ab28cd8b0649d14ad55bf  /tmp/lkjscript-sealed-frame.5xDoAU/source/wayland.lkj

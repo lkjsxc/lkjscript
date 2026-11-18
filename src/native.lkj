@@ -1706,6 +1706,7 @@ fn grant_matches(kind: &TypeKind, grant: &ir::EntryGrant, parameters: usize) -> 
         ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
         ir::EntryGrant::Connector(_) => matches!(kind, TypeKind::Connector),
         ir::EntryGrant::TcpPort(port) => matches!(kind, TypeKind::TcpPort) && *port != 0u16,
+        ir::EntryGrant::TemporaryFiles => matches!(kind, TypeKind::TemporaryFiles),
         ir::EntryGrant::Readiness => matches!(kind, TypeKind::Readiness),
         ir::EntryGrant::Entropy => matches!(kind, TypeKind::Entropy),
         ir::EntryGrant::Stop => matches!(kind, TypeKind::Stop),

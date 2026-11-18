@@ -1996,7 +1996,8 @@ fn trait_requirements(
             | TypeKind::Entropy
             | TypeKind::Stop
             | TypeKind::Connector
-            | TypeKind::TcpPort => return None,
+            | TypeKind::TcpPort
+            | TypeKind::TemporaryFiles => return None,
             TypeKind::Ref { inner, .. }
             | TypeKind::Slice { inner, .. }
             | TypeKind::Vec { inner }
@@ -2074,7 +2075,8 @@ fn trait_requirements(
             | TypeKind::Entropy
             | TypeKind::Stop
             | TypeKind::Connector
-            | TypeKind::TcpPort => {
+            | TypeKind::TcpPort
+            | TypeKind::TemporaryFiles => {
                 return None;
             }
             TypeKind::Vec { inner } | TypeKind::Box { inner } | TypeKind::Array { inner, .. } => {

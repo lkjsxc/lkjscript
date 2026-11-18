@@ -122,6 +122,7 @@ impl Infer<'_, '_> {
                                         | "Listener"
                                         | "Connector"
                                         | "TcpPort"
+                                        | "TemporaryFiles"
                                         | "Readiness"
                                         | "Entropy"
                                         | "Stop"

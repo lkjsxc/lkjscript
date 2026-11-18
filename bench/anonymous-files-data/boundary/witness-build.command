@@ -1,0 +1,1 @@
+/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc --edition=2024 --crate-name temporary_files_boundary -C opt-level=0 /home/coder/workspace/lkjscript-programs-anonymous-20261118/target/temporary-files.PmTFUN/witness.rs -o /home/coder/workspace/lkjscript-programs-anonymous-20261118/target/temporary-files.PmTFUN/rust 

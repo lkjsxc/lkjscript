@@ -1,0 +1,16 @@
+UTC 2026-11-18T12:35:18Z
+compiler-source-commit 6f6236afecbf72e093bc3f132bad1becb3f74220
+compiler-source-diff-sha256 aa503c55ef9d6a6467875e6ddf1c3f9776f2d7597531c472a710517d6975050d  -
+f1d74833f8d17bd9c4939bd4c2a04065827c800bd9f9399a3775e6cb1c145788  /home/coder/workspace/lkjscript-programs-anonymous-20261118/target/lkjscript
+ed8d6893519aacad88ce7edac5fff8c34af625401b40155488aa227cdefcfaa5  /home/coder/workspace/lkjscript-programs-anonymous-20261118/docs/proofs/anonymous-wayland-20261118/main.lkj
+a6530bf61ff1f911992b49249a3a887dc05017b3187d183d1e6d65bf1adf5f1b  /home/coder/workspace/lkjscript-programs-anonymous-20261118/docs/proofs/anonymous-wayland-20261118/wayland.lkj
+c9feb1080514989fb22974bbbeed7b559c0c6506da896c07859988ede13ab284  /home/coder/workspace/lkjscript-programs-anonymous-20261118/docs/proofs/anonymous-wayland-20261118/weston-input.c
+91aa6ee2237377ea7c2d729abb764ba04fa455c9322ed3efc6569dfa91f17038  /home/coder/workspace/lkjscript-programs-anonymous-20261118/tools/connect-deadline-peer.c
+8aa21c9e59baf8777a4946a9d35139f316704a617bdf011399dbb9f499acdeb9  /home/coder/workspace/lkjscript-programs-anonymous-20261118/docs/proofs/unix-wayland-20261118/verify-png.js
+engine native
+runtime-address-input wl_output.geometry.model
+compositor-dependencies /home/coder/workspace/lkjbrowser/.deps/root
+baseline-protocol-source-commit 375fcc629
+c2a2a952333d4e56472364a0de72aa15e22e6cc9afcf3eec9077ba84b04e05a0  /tmp/lkjscript-anonymous-frame.cbfQpt/client
+65993867f249f9105ed8de9801c6b5c8f60416754a8322d926fed7bb832a3948  /tmp/lkjscript-anonymous-frame.cbfQpt/weston-input.so
+310f28992d4fe19c43af4a2af8a19ec8d40300d6998a09586503fc0d04ded2c5  /tmp/lkjscript-anonymous-frame.cbfQpt/peer

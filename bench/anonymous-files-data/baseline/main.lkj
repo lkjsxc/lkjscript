@@ -1,0 +1,6 @@
+pub fn main(mut storage: TemporaryFiles) {
+    let mut frame = storage.temporary_file().unwrap();
+    frame.write_all(b"anonymous frame bytes").unwrap();
+    frame.rewind().unwrap();
+    assert_eq!(frame.read_to_end().unwrap(), b"anonymous frame bytes"[..].to_vec());
+}

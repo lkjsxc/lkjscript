@@ -110,6 +110,7 @@ fn non_scalar_result_rejects_before_acquisition() {
 }
 fn connector_grants_are_exact_and_unforgeable() {
     tcp_port_grants_are_exact_and_unforgeable();
+    temporary_files_grants_are_narrow_and_unforgeable();
     let checked = check::check(ir_text::read(include_str!(
         "../../tests/fixtures/authority/connector_entry.lkjir"
     )).unwrap()).unwrap();
@@ -141,6 +142,36 @@ fn connector_grants_are_exact_and_unforgeable() {
     assert!(native::encode_granted(&checked, &runtime, 0, &mismatched, None, None).is_err());
     assert!(host.0.is_empty());
 }
+fn temporary_files_grants_are_narrow_and_unforgeable() {
+    let checked = check::check(ir_text::read(include_str!(
+        "../../tests/fixtures/authority/temporary_files_entry.lkjir"
+    )).unwrap()).unwrap();
+    let runtime = prepared();
+    let mut host = FailingHost(Vec::new());
+    let grants = crate::entry_grants::prepare(checked.program(), 0usize, &["storage".to_string()]).unwrap();
+    assert!(matches!(grants[0usize], ir::EntryGrant::TemporaryFiles));
+    interpreter::run_granted(checked.program(), 0usize, &grants, &mut host).unwrap();
+    native::encode_granted(&checked, &runtime, 0usize, &grants, None, None).unwrap();
+    assert!(host.0.is_empty(), "grant provisioning does not create storage");
+    for supplied in vec![Vec::<String>::new(), vec!["storage=".to_string()],
+        vec!["storage=0".to_string()], vec!["storage=1".to_string()],
+        vec!["storage=/tmp".to_string()], vec!["storage=env:TEMP".to_string()],
+        vec!["storage".to_string(), "storage".to_string()]] {
+        assert!(crate::entry_grants::prepare(checked.program(), 0usize, &supplied).is_err());
+    }
+    for value in vec![0u64, 1u64, 65535u64] {
+        assert!(interpreter::run(checked.program(), 0usize, &[value], &mut host).is_err());
+        let selected = native::Entry { function: 0usize, arguments: vec![value as i64], result_fd: None };
+        assert_eq!(native::encode(&checked, &runtime, selected).err().unwrap().code, "E_ENTRY");
+    }
+    for wrong in vec![ir::EntryGrant::World, ir::EntryGrant::Clock, ir::EntryGrant::Entropy,
+        ir::EntryGrant::TcpPort(80u16), directory(), listener()] {
+        assert!(interpreter::run_granted(checked.program(), 0usize, &[wrong.clone()], &mut host).is_err());
+        assert!(native::encode_granted(&checked, &runtime, 0usize, &[wrong], None, None).is_err());
+    }
+    assert!(host.0.is_empty(), "wrong kinds refuse before host acquisition");
+}
+
 fn tcp_port_grants_are_exact_and_unforgeable() {
     let checked = check::check(ir_text::read(include_str!(
         "../../tests/fixtures/authority/tcp_port_entry.lkjir"

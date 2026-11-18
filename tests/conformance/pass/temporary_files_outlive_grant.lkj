@@ -1,0 +1,10 @@
+// expect: check
+fn allocate(mut storage: TemporaryFiles) -> File {
+    storage.temporary_file().unwrap()
+}
+pub fn main(storage: TemporaryFiles) {
+    let mut file = allocate(storage);
+    file.write_all(b"outlives grant").unwrap();
+    file.rewind().unwrap();
+    assert_eq!(file.read_to_end().unwrap(), b"outlives grant"[..].to_vec());
+}

@@ -1,0 +1,7 @@
+// expect: reject E_MOVE
+// witness: {"rustAccept":false,"rustCode":"E0382","world":true}
+fn consume(_storage: TemporaryFiles) {}
+fn probe(mut storage: TemporaryFiles) {
+    consume(storage);
+    let _file = storage.temporary_file();
+}

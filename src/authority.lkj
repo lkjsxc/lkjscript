@@ -58,6 +58,7 @@ fn capability(kind: &TypeKind) -> Option<(&'static str, bool)> {
         TypeKind::Listener => Some(("Listener", true)),
         TypeKind::Connector => Some(("Connector", true)),
         TypeKind::TcpPort => Some(("TcpPort", true)),
+        TypeKind::TemporaryFiles => Some(("TemporaryFiles", false)),
         TypeKind::Readiness => Some(("Readiness", false)),
         TypeKind::Entropy => Some(("Entropy", false)),
         TypeKind::Stop => Some(("Stop", false)),

@@ -57,7 +57,7 @@ The first seven types must match this primitive prefix exactly, including names.
 | `array TYPE LENGTH` | Fixed-length owned elements. |
 | `vec TYPE`, `box TYPE` | Owned growable sequence or owned indirection. |
 | `str` | Unsized immutable UTF-8 text; values require a shared reference. |
-| `world`, `arguments`, `environment`, `exit_status`, `stdout`, `stdin`, `stderr`, `directory`, `read_directory`, `file`, `read_file`, `foreign_command`, `foreign_session`, `image`, `channel`, `worker`, `read_region`, `null_device`, `process`, `clock`, `child`, `listener`, `connector`, `tcp_port`, `readiness`, `entropy`, `stop` | Affine authority-bearing values. |
+| `world`, `arguments`, `environment`, `exit_status`, `stdout`, `stdin`, `stderr`, `directory`, `read_directory`, `file`, `read_file`, `foreign_command`, `foreign_session`, `image`, `channel`, `worker`, `read_region`, `null_device`, `process`, `clock`, `child`, `listener`, `connector`, `tcp_port`, `temporary_files`, `readiness`, `entropy`, `stop` | Affine authority-bearing values. |
 
 All type indices must exist. Recursive by-value layouts reject; introduce Box or
 another indirection. Unsized text cannot be stored by value or as a container
@@ -173,7 +173,7 @@ The intrinsic signatures are checked in `src/check.lkj` and `src/check/io.lkj`:
 | `foreign_image` | `(&mut foreign_command) -> Result<read_file,i64>`: fresh read view of immutable transformed initial ELF; checked code can hash these exact bytes. |
 | `foreign_start` | `(&mut foreign_command, &mut read_directory, &mut null_device, &[u8], usize duration_ns) -> Result<foreign_session,i64>`: attached confined session; explicit argv encoding and retained read-only root. |
 | `foreign_exchange foreign_finish` | `(&mut foreign_session, &[u8], &mut [u8], usize duration_ns) -> i64` exchanges exact framed bytes transactionally; `(&mut foreign_session, usize duration_ns) -> i64` sends input EOF and returns cached raw wait status. Negative results are errno; [full lifecycle](programs-foreign-session-contract.md). |
-| `world_file` | World plus u8 selector: 0 anonymous file, 1/2/3 owned stdin/stdout/stderr, 4 running executable. Return Result<File, i64>; closed standard streams produce closed Files. |
+| `world_file` | `(&mut world, u8 selector) -> Result<file,i64>`: 0 anonymous file, 1/2/3 owned stdin/stdout/stderr, 4 running executable; closed standard streams produce closed Files. The narrow one-operand form `(&mut temporary_files) -> Result<file,i64>` can only create an anonymous read/write file using existing selector 0. A selector-bearing narrow form, missing World selector, shared receiver or different authority type is invalid IR. |
 | `world_listen` | `(&mut world, &[u8]) -> Result<listener, i64>`: bind and listen on an exact IPv4 socket address. |
 | `listener_accept listener_accept_nodelay` | `(&mut listener) -> Result<file, i64>`: accept an owned TCP byte stream; the second disables Nagle before returning it, closing on configuration failure. |
 | `world_connector` | `(&mut world, &[u8]) -> Result<connector, i64>`: authorize one exact numeric IPv4 TCP destination. |

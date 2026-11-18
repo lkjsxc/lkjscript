@@ -422,6 +422,7 @@ enum Value {
     Listener(u64),
     Connector(Vec<u8>),
     TcpPort(u16),
+    TemporaryFiles,
     Readiness(u64),
     Entropy,
     Stop(u64),
@@ -1068,7 +1069,8 @@ impl<H: Host> Interpreter<'_, H> {
             | (TypeKind::Stderr, Value::Stderr)
             | (TypeKind::Process, Value::Process)
             | (TypeKind::Clock, Value::Clock)
-            | (TypeKind::Entropy, Value::Entropy) => true,
+            | (TypeKind::Entropy, Value::Entropy)
+            | (TypeKind::TemporaryFiles, Value::TemporaryFiles) => true,
             (TypeKind::Directory, Value::Directory(handle))
             | (TypeKind::ReadDirectory, Value::ReadDirectory(handle))
             | (TypeKind::ReadFile, Value::ReadFile(handle))
@@ -2606,6 +2608,7 @@ fn run_inner<'a, H: Host>(
                 ir::EntryGrant::TcpPort(port) => matches!(kind, TypeKind::TcpPort) && *port != 0u16,
                 ir::EntryGrant::Readiness => matches!(kind, TypeKind::Readiness),
                 ir::EntryGrant::Entropy => matches!(kind, TypeKind::Entropy),
+                ir::EntryGrant::TemporaryFiles => matches!(kind, TypeKind::TemporaryFiles),
                 ir::EntryGrant::Stop => matches!(kind, TypeKind::Stop),
             };
             if !valid { return Err(interpreter.invalid("entry grant does not match its owned capability parameter")); }
@@ -2632,6 +2635,7 @@ fn run_inner<'a, H: Host>(
                 ir::EntryGrant::Clock => Ok(Value::Clock),
                 ir::EntryGrant::Process => Ok(Value::Process),
                 ir::EntryGrant::Entropy => Ok(Value::Entropy),
+                ir::EntryGrant::TemporaryFiles => Ok(Value::TemporaryFiles),
                 ir::EntryGrant::Stop => match interpreter.host.create_stop() {
                     Ok(handle) if handle != 0 => Ok(Value::Stop(handle)),
                     Ok(_) => Err(0),

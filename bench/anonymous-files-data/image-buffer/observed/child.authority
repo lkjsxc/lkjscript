@@ -1,0 +1,2 @@
+"child" level=checked-ir target=linux-x86_64 abi=51e6f9c1c9ada7d0e421340f946a83d1a70271439e47da6ca9e8346255e28941 result=unit manifest=d51bde349cd0fb92276511faf1a9450cfc7a5aa82687b1f1c8fe470d9af2d0c8 image-bytes=37918 image-sha256=401fedfff7b1067eec3eb81b0102f5e983140b9837df088e265a688acd7950bb
+"child" slot=0 name="channel" kind=Channel code=17 transport=fd:8

@@ -1,0 +1,25 @@
+mod wayland;
+pub fn main(socket: File, mut image: Image, ready: Readiness, clock: Clock, mut output: Stdout) {
+    let mut pixels: Vec<u8> = Vec::new();
+    for y in 0usize..240usize { for x in 0usize..320usize {
+        pixels.push((40usize + y / 2usize) as u8);
+        pixels.push((20usize + x / 2usize) as u8);
+        pixels.push((30usize + y / 2usize) as u8);
+        pixels.push(255u8);
+    } }
+    let mut bytes = pixels.clone();
+    bytes.extend_from_slice(&pixels);
+    bytes.extend_from_slice(&wayland::cursor_bytes());
+    let mut frame = image.buffer(&bytes).unwrap();
+    assert_eq!(frame.seek(0i64, 2u8).unwrap(), wayland::frame_file_size(320usize, 240usize));
+    assert!(frame.write(b"x").is_err());
+    frame.rewind().unwrap();
+    output.write(b"sealed Image.buffer frame created; writable alias refused\n");
+    let mut client = match wayland::Wayland::open(socket, frame, ready, clock, 320i32, 240i32, "anonymous Image.buffer control") {
+        Ok(client) => client,
+        Err(error) => { output.write(error.as_bytes()); output.write(b"\n"); panic!("sealed frame refused"); }
+    };
+    client.present(0u32).unwrap();
+    output.write(b"committed\n");
+    for _round in 0usize..20usize { let _events = client.poll(100usize).unwrap(); }
+}

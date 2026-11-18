@@ -25,7 +25,7 @@ pub fn validate(program: &Program, entry: usize) -> Result<(), String> {
         if matches!(ty.kind, TypeKind::ReadFile) {
             return Err(problem(&format!("File parameter {} cannot be granted; accept Directory and open the file inside the entry", local.name)));
         }
-        if !matches!(ty.kind, TypeKind::File | TypeKind::Arguments | TypeKind::Environment | TypeKind::ExitStatus | TypeKind::Stdout | TypeKind::Stdin | TypeKind::Stderr | TypeKind::Clock | TypeKind::Process | TypeKind::Directory | TypeKind::ReadDirectory | TypeKind::ForeignCommand | TypeKind::Image | TypeKind::NullDevice | TypeKind::Listener | TypeKind::Connector | TypeKind::TcpPort | TypeKind::Readiness | TypeKind::Entropy | TypeKind::Stop) {
+        if !matches!(ty.kind, TypeKind::File | TypeKind::Arguments | TypeKind::Environment | TypeKind::ExitStatus | TypeKind::Stdout | TypeKind::Stdin | TypeKind::Stderr | TypeKind::Clock | TypeKind::Process | TypeKind::Directory | TypeKind::ReadDirectory | TypeKind::ForeignCommand | TypeKind::Image | TypeKind::NullDevice | TypeKind::Listener | TypeKind::Connector | TypeKind::TcpPort | TypeKind::TemporaryFiles | TypeKind::Readiness | TypeKind::Entropy | TypeKind::Stop) {
             return Err(problem(&format!("parameter {} requires an owned grantable capability; World must be the only parameter", local.name)));
         }
         if !valid_name(&local.name) || names.contains(&local.name) {
@@ -194,6 +194,7 @@ pub fn prepare(program: &Program, entry: usize, supplied: &[String]) -> Result<V
                     TypeKind::Clock => EntryGrant::Clock,
                     TypeKind::Process => EntryGrant::Process,
                     TypeKind::Readiness => EntryGrant::Readiness,
+                    TypeKind::TemporaryFiles => EntryGrant::TemporaryFiles,
                     TypeKind::Entropy => EntryGrant::Entropy,
                     TypeKind::Stop => EntryGrant::Stop,
                     TypeKind::NullDevice => EntryGrant::NullDevice,

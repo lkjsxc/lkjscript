@@ -1,0 +1,30 @@
+fn fresh(storage: &mut TemporaryFiles) -> File {
+    storage.temporary_file().unwrap()
+}
+pub fn main(mut storage: TemporaryFiles, mut output: Stdout) {
+    let mut first = fresh(&mut storage);
+    let mut second = fresh(&mut storage);
+    assert_eq!(first.seek(0i64, 2u8).unwrap(), 0usize);
+    assert_eq!(second.seek(0i64, 2u8).unwrap(), 0usize);
+    first.write_all(b"first").unwrap();
+    second.write_all(b"second").unwrap();
+    drop(storage);
+    first.seek(1i64, 0u8).unwrap();
+    first.write_all(b"IRST").unwrap();
+    first.rewind().unwrap();
+    assert_eq!(first.read_to_end().unwrap(), b"fIRST"[..].to_vec());
+    first.truncate(3usize).unwrap();
+    first.rewind().unwrap();
+    assert_eq!(first.read_to_end().unwrap(), b"fIR"[..].to_vec());
+    second.write_all(b"-tail").unwrap();
+    second.rewind().unwrap();
+    assert_eq!(second.read_to_end().unwrap(), b"second-tail"[..].to_vec());
+    first.seal().unwrap();
+    match first.write(b"x") { Err(error) => assert_eq!(error, 1i64), Ok(_) => panic!("sealed file accepted write") }
+    match first.truncate(0usize) { Err(error) => assert_eq!(error, 1i64), Ok(_) => panic!("sealed file accepted truncation") }
+    first.rewind().unwrap();
+    assert_eq!(first.read_to_end().unwrap(), b"fIR"[..].to_vec());
+    drop(first);
+    drop(second);
+    output.write(b"temporary files boundary ok\n");
+}

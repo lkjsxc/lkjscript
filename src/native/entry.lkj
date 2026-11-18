@@ -26,6 +26,7 @@ fn description(grant: &EntryGrant) -> String {
         EntryGrant::Listener(_) => format!("Listener {}", crate::entry_grants::endpoint(grant).unwrap_or("<invalid endpoint>".to_string())),
         EntryGrant::Connector(_) => format!("Connector {}", crate::entry_grants::endpoint(grant).unwrap_or("<invalid endpoint>".to_string())),
         EntryGrant::TcpPort(port) => format!("TcpPort {port}"),
+        EntryGrant::TemporaryFiles => "TemporaryFiles anonymous read/write storage".to_string(),
         EntryGrant::Readiness => "Readiness epoll".to_string(),
         EntryGrant::Stop => "Stop SIGTERM".to_string(),
         EntryGrant::Environment(name) => format!("Environment {}", path_value(name)),
@@ -50,7 +51,7 @@ pub struct Plan {
 impl Plan {
     pub(super) fn fallible(grant: &EntryGrant) -> bool {
         !matches!(grant, EntryGrant::World | EntryGrant::Stdout | EntryGrant::Stdin
-            | EntryGrant::Stderr | EntryGrant::Clock | EntryGrant::Process | EntryGrant::Entropy)
+            | EntryGrant::Stderr | EntryGrant::Clock | EntryGrant::Process | EntryGrant::Entropy | EntryGrant::TemporaryFiles)
     }
     pub fn new(a: &mut Assembler, grants: &[EntryGrant], site: Span) -> Self {
         let values = a.label();
@@ -144,6 +145,7 @@ impl Plan {
                 }
                 EntryGrant::NullDevice => { a.call(p.null_open); },
                 EntryGrant::TcpPort(port) => { a.immediate(A, *port as u64); },
+                EntryGrant::TemporaryFiles => { a.immediate(A, 1); },
                 EntryGrant::Connector(address) => {
                     a.address(DI, self.paths[index]);
                     a.immediate(SI, address.len() as u64);

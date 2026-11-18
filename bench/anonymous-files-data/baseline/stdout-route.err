@@ -1,0 +1,2 @@
+bench/anonymous-files-data/baseline/stdout.lkj:2:21: E_UNSUPPORTED method temporary_file on Stdout has 0 applicable implementations; help: use an implemented method or write an explicit loop
+bench/anonymous-files-data/baseline/stdout.lkj:1:1: E_BLOCKED remaining semantic analysis: failed bodies are blocked; independent typed bodies were constructed and checked

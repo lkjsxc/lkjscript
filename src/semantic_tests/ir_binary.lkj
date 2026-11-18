@@ -21,7 +21,7 @@ fn rich() -> ir::Program {
         ir::TypeKind::Box { inner: 12 }, ir::TypeKind::Str, ir::TypeKind::World,
         ir::TypeKind::Stdout, ir::TypeKind::Stdin, ir::TypeKind::Stderr, ir::TypeKind::Directory,
         ir::TypeKind::File, ir::TypeKind::Process, ir::TypeKind::Clock, ir::TypeKind::Child,
-        ir::TypeKind::Listener, ir::TypeKind::Connector, ir::TypeKind::TcpPort, ir::TypeKind::Readiness,
+        ir::TypeKind::Listener, ir::TypeKind::Connector, ir::TypeKind::TcpPort, ir::TypeKind::TemporaryFiles, ir::TypeKind::Readiness,
         ir::TypeKind::Entropy, ir::TypeKind::Stop, ir::TypeKind::Arguments,
         ir::TypeKind::Environment, ir::TypeKind::ExitStatus,
         ir::TypeKind::ReadDirectory, ir::TypeKind::ReadFile,

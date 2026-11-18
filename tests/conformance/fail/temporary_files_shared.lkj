@@ -1,0 +1,5 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false,"rustCode":"E0596","world":true}
+fn probe(storage: &TemporaryFiles) {
+    let _file = storage.temporary_file();
+}

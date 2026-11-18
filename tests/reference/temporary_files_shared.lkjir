@@ -1,0 +1,22 @@
+lkjscript-ir 1
+# expect: reject E_TYPE
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "Authority" temporary_files
+type "Borrow" ref shared 7
+type "Opened" file
+type "Result" enum move
+variant "Ok" "file" 9
+variant "Err" "error" 3
+endtype
+fn "probe" 1 10
+local "authority" 8 let
+local "opened" 10 let
+@1 intrinsic 1 "world_file" 0
+@1 return 1
+endfn

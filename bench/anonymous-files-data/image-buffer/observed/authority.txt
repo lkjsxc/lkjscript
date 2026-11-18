@@ -1,0 +1,113 @@
+entry main
+declared authority:
+  socket: File Unix stream (--grant socket=unix:/PATH|unix:env:NAME)
+  image: Image (--grant image=PATH)
+  ready: Readiness (--grant ready)
+  clock: Clock (--grant clock)
+  output: Stdout (--grant output)
+reachable operations (conservative checked-IR branches and owned cleanup):
+  main:
+    image_buffer
+    file_seek
+    stdout_write
+    readiness_close [structural cleanup]
+    file_close [structural cleanup]
+    image_close [structural cleanup]
+  $std::prelude::unwrap$f772<E=t3;Self=t65;T=t15;>:
+    file_close [structural cleanup]
+  $std::io::__lkjscript_file_write:
+    file_write
+  $std::io::__lkjscript_file_rewind:
+    file_rewind
+  wayland::open$f9<Self=t14;>:
+    readiness_close [structural cleanup]
+    file_close [structural cleanup]
+    readiness_watch_file
+  wayland::poll$f17<Self=t14;>:
+    readiness_wait
+    file_receive_message
+    file_close [structural cleanup]
+  wayland::send$f11<Self=t14;>:
+    file_send_message
+  $std::io::__lkjscript_clock_nanoseconds:
+    clock_read
+  $std::prelude::unwrap$f763<Self=t16;T=t15;>:
+    file_close [structural cleanup]
+reachable functions (76; each listed once):
+  main
+  $std::sequence::__lkjscript_vec_clone<T=t5;>
+  $std::sequence::extend_from_slice$f63<Self=t19;T=t5;>
+  wayland::cursor_bytes
+  $std::prelude::unwrap$f772<E=t3;Self=t65;T=t15;>
+  $std::prelude::unwrap$f772<E=t3;Self=t66;T=t4;>
+  wayland::frame_file_size
+  $std::io::__lkjscript_file_write
+  $std::prelude::is_err$f771<E=t3;Self=t66;T=t4;>
+  $std::io::__lkjscript_file_rewind
+  $std::prelude::unwrap$f772<E=t3;Self=t61;T=t0;>
+  wayland::open$f9<Self=t14;>
+  $std::string::as_bytes$f118<Self=t20;>
+  wayland::present$f16<Self=t14;>
+  $std::prelude::unwrap$f772<E=t20;Self=t62;T=t0;>
+  wayland::poll$f17<Self=t14;>
+  $std::prelude::unwrap$f772<E=t20;Self=t77;T=t59;>
+  $std::io::count_result
+  $std::prelude::is_ok$f770<E=t3;Self=t66;T=t4;>
+  $std::io::unit_result
+  $std::string::from_str$f100<Self=t20;>
+  wayland::io
+  wayland::request$f12<Self=t14;>
+  wayland::allocate$f10<Self=t14;>
+  wayland::wire_string
+  wayland::send$f11<Self=t14;>
+  wayland::available$f15<Self=t14;>
+  $std::io::__lkjscript_clock_nanoseconds
+  wayland::failure
+  wayland::number
+  $std::sequence::to_vec$f80<Self=t55;T=t5;>
+  wayland::dispatch$f18<Self=t14;>
+  $std::string::new$f97<Self=t20;>
+  $std::string::push_str$f101<Self=t20;>
+  $std::iter::__lkjscript_into_iter<I=t99;I::IntoIter=t117;>
+  $std::iter::__lkjscript_next<I=t117;I::Item=t10;>
+  wayland::word
+  $std::iter::drop$f359<Self=t117;T=t10;> [custom Drop]
+  $std::prelude::take$f764<Self=t16;T=t15;>
+  $std::prelude::unwrap$f763<Self=t16;T=t15;>
+  $std::io::word
+  $std::string::__lkjscript_new
+  $std::fmt::__lkjscript_new
+  $std::fmt::__lkjscript_success
+  $std::fmt::__lkjscript_literal
+  $std::fmt::__lkjscript_settings
+  $std::fmt::__lkjscript_display_str<T=t57;>
+  $std::fmt::__lkjscript_display<T=t3;>
+  $std::text::utf8_lossy
+  $std::fmt::__lkjscript_display<T=t10;>
+  $std::fmt::__lkjscript_display<T=t20;>
+  $std::string::__lkjscript_as_str
+  $std::str::__lkjscript_eq
+  wayland::bind$f13<Self=t14;>
+  wayland::modifiers_up
+  $std::bytes::append_bytes
+  $std::iter::into_iter$f358<Self=t99;Self::IntoIter=t117;T=t10;>
+  $std::iter::next$f356<Self=t117;Self::Item=t10;T=t10;>
+  $std::fmt::write_str$f490<Self=t86;>
+  $std::fmt::pad$f498<Self=t86;>
+  $std::fmt::fmt$f555<Self=t3;>
+  $std::string::push$f102<Self=t20;>
+  $std::prelude::unwrap$f763<Self=t129;T=t13;>
+  $std::fmt::fmt$f525<Self=t10;>
+  $std::fmt::fmt$f501<Self=t20;>
+  $std::string::as_str$f115<Self=t20;>
+  $std::str::matches_bytes
+  $std::iter::owned<T=t10;>
+  $std::prelude::unwrap$f763<Self=t119;T=t10;>
+  $std::fmt::padding$f497<Self=t86;>
+  $std::fmt::number$f499<Self=t86;>
+  $std::prelude::unwrap$f772<E=t131;Self=t132;T=t58;>
+  $std::fmt::sign_plus$f493<Self=t86;>
+  $std::fmt::alternate$f494<Self=t86;>
+  $std::string::len$f116<Self=t20;>
+  $std::fmt::sign_aware_zero_pad$f495<Self=t86;>
+checked-closure-sha256 5206ca7193fdcff4388e351377d88cb9a04b7750b3fef33d24233b694cb5a7fb

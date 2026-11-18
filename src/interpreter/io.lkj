@@ -510,11 +510,16 @@ impl<H: Host> Interpreter<'_, H> {
                 }
                 value
             }
-            ir::IntrinsicOp::WorldFile if values.len() == 2 => {
-                self.io_authority(values, TypeKind::World)?;
+            ir::IntrinsicOp::WorldFile if values.len() == 1 || values.len() == 2 => {
+                let kind = if values.len() == 1 {
+                    self.io_authority(values, TypeKind::TemporaryFiles)?;
+                    0u8
+                } else {
+                    self.io_authority(values, TypeKind::World)?;
+                    self.io_number(values, 1, ir::U8)? as u8
+                };
                 let types = self.io_open_types(result, TypeKind::File)?;
-                let kind = self.io_number(values, 1, ir::U8)?;
-                let opened = self.host.world_file(kind as u8);
+                let opened = self.host.world_file(kind);
                 self.io_open_result(types, opened, TypeKind::File)?
             }
             ir::IntrinsicOp::WorldListen if values.len() == 2 => {

@@ -1,0 +1,2 @@
+bench/anonymous-files-data/baseline/main.lkj:1:26: E_NAME unresolved name TemporaryFiles
+bench/anonymous-files-data/baseline/main.lkj:1:1: E_BLOCKED remaining semantic analysis: declaration resolution failed; dependent definition and IR analysis was not attempted

@@ -120,6 +120,7 @@ pub fn is_data(types: &[Type], ty: usize) -> bool {
             | TypeKind::Listener
             | TypeKind::Connector
             | TypeKind::TcpPort
+            | TypeKind::TemporaryFiles
             | TypeKind::Readiness
             | TypeKind::Entropy
             | TypeKind::Stop => return false,

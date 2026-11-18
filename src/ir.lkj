@@ -73,6 +73,8 @@ pub enum TypeKind {
     Connector,
     /// Affine authority to choose numeric IPv4 destinations on one outbound port.
     TcpPort,
+    /// Affine authority to create anonymous read/write Files, without named storage.
+    TemporaryFiles,
     /// Affine readiness set; destruction closes only its kernel event handle.
     Readiness,
     /// Affine authority to obtain kernel random bytes.
@@ -122,6 +124,7 @@ pub enum EntryGrant {
     UnixStreamEnvironment(Vec<u8>),
     UnixStreamEnvironmentValue(Vec<u8>, Option<Vec<u8>>),
     TcpPort(u16),
+    TemporaryFiles,
     Readiness,
     Entropy,
     Stop,

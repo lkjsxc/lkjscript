@@ -384,7 +384,11 @@ impl Body<'_> {
                 return Ok(true);
             }
             IntrinsicOp::WorldFile => {
-                self.read(args[1], DI);
+                if args.len() == 1 {
+                    self.a.immediate(DI, 0); // Checked TemporaryFiles form has no selector.
+                } else {
+                    self.read(args[1], DI);
+                }
                 self.a.call(self.platform.world_file);
                 self.intrinsic_open_result(dst);
                 return Ok(true);

@@ -525,6 +525,7 @@ impl Compiler<'_> {
                     | "Listener"
                     | "Connector"
                     | "TcpPort"
+                    | "TemporaryFiles"
                     | "Readiness"
                     | "Entropy"
                     | "Stop"
@@ -562,6 +563,7 @@ impl Compiler<'_> {
                 "Listener" => ir::TypeKind::Listener,
                 "Connector" => ir::TypeKind::Connector,
                 "TcpPort" => ir::TypeKind::TcpPort,
+                "TemporaryFiles" => ir::TypeKind::TemporaryFiles,
                 "Readiness" => ir::TypeKind::Readiness,
                 "Entropy" => ir::TypeKind::Entropy,
                 "Stop" => ir::TypeKind::Stop,

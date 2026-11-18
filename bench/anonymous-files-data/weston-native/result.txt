@@ -1,0 +1,1 @@
+ok anonymous frame native: six grants, 320x240, 76800 exact Weston pixels, runtime IPv4 TcpPort R/Q exchange; evidence /home/coder/workspace/lkjscript-programs-anonymous-20261118/bench/anonymous-files-data/weston-native

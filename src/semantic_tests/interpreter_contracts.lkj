@@ -948,6 +948,79 @@ fn range_views_validate_types_loans_and_utf8_without_the_checker() {
     }
 }
 
+fn temporary_files_intrinsics_reject_selector_and_wrong_authority() {
+    let checked = compiled("fn main(mut storage: TemporaryFiles) { let _file = storage.temporary_file(); }");
+    let entry = function_index(checked.program(), "main");
+    let grants = vec![ir::EntryGrant::TemporaryFiles];
+    let mut host = FailingHost(Vec::new());
+    interpreter::run_granted(checked.program(), entry, &grants, &mut host).unwrap();
+    assert_eq!(host.0.as_slice(), b"FC");
+
+    // Even selector zero is invalid on the narrow receiver. Selectors 1..4 must
+    // never reach inherited streams or the running executable in the host.
+    for selector in 0u8..5u8 {
+        let mut program = checked.program().clone();
+        let function = &mut program.functions[entry];
+        let selector_local = function.locals.len();
+        function.locals.push(ir::Local {
+            name: "forged selector".to_string(), ty: ir::U8, mutable: false,
+        });
+        let mut body = Vec::new();
+        let mut changed = 0usize;
+        for instruction in &function.body {
+            if let ir::Op::Intrinsic { dst, name, args } = &instruction.op {
+                if *name == ir::IntrinsicOp::WorldFile {
+                    let mut selected = args.clone();
+                    selected.push(selector_local);
+                    body.push(ir::Instruction {
+                        op: ir::Op::Int { dst: selector_local, value: selector as i64 },
+                        file: instruction.file, line: instruction.line, column: instruction.column,
+                    });
+                    let mut altered = instruction.clone();
+                    altered.op = ir::Op::Intrinsic { dst: *dst, name: *name, args: selected };
+                    body.push(altered);
+                    changed += 1;
+                    continue;
+                }
+            }
+            body.push(instruction.clone());
+        }
+        function.body = body;
+        assert_eq!(changed, 1usize);
+        assert_eq!(crate::check::check(program.clone()).err().unwrap().code, "E_TYPE");
+        let mut host = FailingHost(Vec::new());
+        // Deliberately bypass the checker: dynamic authority is independently enforced.
+        let failure = interpreter::run_granted(&program, entry, &grants, &mut host).err().unwrap();
+        assert!(failure.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr), "{}", failure.message);
+        assert!(host.0.is_empty(), "selector reached a host operation");
+    }
+
+    for mode in 0usize..2usize {
+        let mut program = checked.program().clone();
+        let grant = if mode == 0 {
+            for index in 0usize..program.types.len() {
+                if matches!(program.types[index].kind, ir::TypeKind::TemporaryFiles) {
+                    program.types[index].kind = ir::TypeKind::Clock;
+                }
+            }
+            ir::EntryGrant::Clock
+        } else {
+            for index in 0usize..program.functions[entry].body.len() {
+                if let ir::Op::Intrinsic { name, args, .. } = &mut program.functions[entry].body[index].op {
+                    if *name == ir::IntrinsicOp::WorldFile { args.clear(); }
+                }
+            }
+            ir::EntryGrant::TemporaryFiles
+        };
+        assert_eq!(crate::check::check(program.clone()).err().unwrap().code, "E_TYPE");
+        let mut host = FailingHost(Vec::new());
+        let failure = interpreter::run_granted(&program, entry, &[grant], &mut host).err().unwrap();
+        let expected = if mode == 0 { InterpreterError::InvalidIr } else { InterpreterError::Unsupported };
+        assert!(failure.kind == ErrorKind::Interpreter(expected), "{}", failure.message);
+        assert!(host.0.is_empty(), "wrong authority or arity reached a host operation");
+    }
+}
+
 fn storage_intrinsics_validate_before_host_effects() {
     let cases = vec![
         ("fn main(mut world: World) { let mut directory = world.directory(\".\").unwrap(); let _result = directory.create_new(\"record\"); }".to_string(), ir::IntrinsicOp::DirectoryCreateNew, b'O'),
@@ -1194,7 +1267,8 @@ pub fn run() -> usize {
     range_views_validate_types_loans_and_utf8_without_the_checker();
     listener_intrinsics_reject_wrong_signatures_without_host_effects();
     readiness_wait_rejects_forged_event_shapes_before_waiting();
+    temporary_files_intrinsics_reject_selector_and_wrong_authority();
     storage_intrinsics_validate_before_host_effects();
     lifecycle_intrinsics_validate_before_host_effects();
-    19
+    20
 }

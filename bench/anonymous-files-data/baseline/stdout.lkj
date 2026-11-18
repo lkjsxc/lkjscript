@@ -1,0 +1,4 @@
+pub fn main(mut output: Stdout) {
+    let mut frame = output.temporary_file().unwrap();
+    frame.write_all(b"anonymous frame bytes").unwrap();
+}

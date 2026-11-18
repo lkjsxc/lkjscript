@@ -1,0 +1,4 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false,"rustCode":"E0277","world":true}
+fn require<T: Clone>(_value: T) {}
+fn probe(storage: TemporaryFiles) { require(storage); }

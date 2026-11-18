@@ -50,6 +50,7 @@ pub(super) fn grant_failure(grant: &ir::EntryGrant) -> HostFailure {
         ir::EntryGrant::Listener(address) => format!("Listener {}", endpoint(address)),
         ir::EntryGrant::Connector(address) => format!("Connector {}", endpoint(address)),
         ir::EntryGrant::TcpPort(port) => format!("TcpPort {port}"),
+        ir::EntryGrant::TemporaryFiles => "TemporaryFiles anonymous read/write storage".to_string(),
         ir::EntryGrant::Readiness => "Readiness epoll".to_string(),
         ir::EntryGrant::Stop => "Stop SIGTERM".to_string(),
         ir::EntryGrant::Environment(name) => format!("Environment {}", path_text(name)),

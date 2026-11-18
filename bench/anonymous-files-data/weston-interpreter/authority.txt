@@ -1,0 +1,128 @@
+entry main
+declared authority:
+  socket: File Unix stream (--grant socket=unix:/PATH|unix:env:NAME)
+  storage: TemporaryFiles (--grant storage)
+  tcp: TcpPort (--grant tcp=PORT)
+  ready: Readiness (--grant ready)
+  clock: Clock (--grant clock)
+  output: Stdout (--grant output)
+reachable operations (conservative checked-IR branches and owned cleanup):
+  main:
+    world_file
+    file_seek
+    readiness_close [structural cleanup]
+    file_close [structural cleanup]
+    stdout_write
+    tcp_port_connector
+    connector_connect_deadline
+  $std::prelude::unwrap$f827<$family::implementation:230=t65;E=t3;Self=t65;T=t15;>:
+    file_close [structural cleanup]
+  $std::io::__lkjscript_file_rewind:
+    file_rewind
+  $std::io::__lkjscript_file_read:
+    file_read
+  wayland::open$f12<$family::implementation:0=t14;Self=t14;>:
+    readiness_close [structural cleanup]
+    file_close [structural cleanup]
+    readiness_watch_file
+  wayland::poll$f20<$family::implementation:0=t14;Self=t14;>:
+    readiness_wait
+    file_receive_message
+    file_close [structural cleanup]
+  $std::io::__lkjscript_file_write:
+    file_write
+  wayland::send$f14<$family::implementation:0=t14;Self=t14;>:
+    file_send_message
+  $std::io::__lkjscript_clock_nanoseconds:
+    clock_read
+  $std::prelude::unwrap$f818<$family::implementation:229=t16;Self=t16;T=t15;>:
+    file_close [structural cleanup]
+reachable functions (87; each listed once):
+  main
+  $std::prelude::unwrap$f827<$family::implementation:230=t65;E=t3;Self=t65;T=t15;>
+  $std::io::__lkjscript_file_write_all
+  $std::prelude::unwrap$f827<$family::implementation:230=t62;E=t3;Self=t62;T=t0;>
+  wayland::cursor_bytes
+  $std::prelude::unwrap$f827<$family::implementation:230=t67;E=t3;Self=t67;T=t4;>
+  wayland::frame_file_size
+  $std::io::__lkjscript_file_rewind
+  $std::io::__lkjscript_file_read
+  $builtin:eq:t69
+  wayland::open$f12<$family::implementation:0=t14;Self=t14;>
+  $std::string::as_bytes$f121<$family::implementation:19=t20;Self=t20;>
+  $std::string::clone$f124<$family::implementation:20=t20;Self=t20;>
+  $std::string::is_empty$f120<$family::implementation:19=t20;Self=t20;>
+  $std::string::as_str$f118<$family::implementation:19=t20;Self=t20;>
+  $std::io::__lkjscript_ipv4_host
+  $std::prelude::unwrap$f827<$family::implementation:230=t76;E=t3;Self=t76;T=t75;>
+  wayland::now$f7<$family::implementation:0=t14;Self=t14;>
+  wayland::present$f19<$family::implementation:0=t14;Self=t14;>
+  $std::prelude::unwrap$f827<$family::implementation:230=t63;E=t20;Self=t63;T=t0;>
+  wayland::frame_presented$f9<$family::implementation:0=t14;Self=t14;>
+  wayland::poll$f20<$family::implementation:0=t14;Self=t14;>
+  $std::prelude::unwrap$f827<$family::implementation:230=t78;E=t20;Self=t78;T=t60;>
+  $std::string::__lkjscript_new
+  $std::fmt::__lkjscript_new
+  $std::fmt::__lkjscript_success
+  $std::fmt::__lkjscript_literal
+  $std::fmt::__lkjscript_settings
+  $std::fmt::__lkjscript_display<$family::bound:T:22:=t20;T=t20;>
+  wayland::is_closed$f8<$family::implementation:0=t14;Self=t14;>
+  $std::fmt::__lkjscript_display<$family::bound:T:22:=t4;T=t4;>
+  $std::io::__lkjscript_file_write
+  $std::io::unit_result
+  $std::io::count_result
+  $builtin:eq:t5
+  $std::string::from_str$f103<$family::implementation:19=t20;Self=t20;>
+  wayland::io
+  $std::string::new$f100<$family::implementation:19=t20;Self=t20;>
+  wayland::request$f15<$family::implementation:0=t14;Self=t14;>
+  wayland::allocate$f13<$family::implementation:0=t14;Self=t14;>
+  wayland::wire_string
+  wayland::send$f14<$family::implementation:0=t14;Self=t14;>
+  $std::bytes::append_bytes
+  $std::prelude::unwrap$f827<$family::implementation:230=t113;E=t112;Self=t113;T=t59;>
+  $std::io::__lkjscript_ipv4_address
+  $std::sequence::to_vec$f83<$family::implementation:11=t56;Self=t56;T=t5;>
+  $std::io::__lkjscript_clock_nanoseconds
+  wayland::available$f18<$family::implementation:0=t14;Self=t14;>
+  wayland::failure
+  $std::sequence::extend_from_slice$f66<$family::implementation:4=t19;Self=t19;T=t5;>
+  wayland::number
+  wayland::dispatch$f21<$family::implementation:0=t14;Self=t14;>
+  $std::fmt::write_str$f494<$family::implementation:119=t90;Self=t90;>
+  $std::fmt::fmt$f505<$family::implementation:121=t20;Self=t20;>
+  $std::fmt::fmt$f539<$family::implementation:145=t4;Self=t4;>
+  $std::string::push_str$f104<$family::implementation:19=t20;Self=t20;>
+  $std::iter::__lkjscript_into_iter<$family::bound:I:15:=t109;$family::bound:I::IntoIter:14:=t127;I=t109;I::IntoIter=t127;>
+  $std::iter::__lkjscript_next<$family::bound:I:14:=t127;I=t127;I::Item=t10;>
+  wayland::word
+  $std::iter::drop$f362<$family::implementation:102=t127;Self=t127;T=t10;> [custom Drop]
+  $std::prelude::take$f819<$family::implementation:229=t16;Self=t16;T=t15;>
+  $std::prelude::unwrap$f818<$family::implementation:229=t16;Self=t16;T=t15;>
+  $std::io::word
+  $std::fmt::__lkjscript_display_str<T=t58;>
+  $std::fmt::__lkjscript_display<$family::bound:T:22:=t3;T=t3;>
+  $std::text::utf8_lossy
+  $std::fmt::__lkjscript_display<$family::bound:T:22:=t10;T=t10;>
+  $std::string::__lkjscript_as_str
+  $std::str::__lkjscript_eq
+  wayland::bind$f16<$family::implementation:0=t14;Self=t14;>
+  wayland::modifiers_up
+  $std::fmt::pad$f502<$family::implementation:119=t90;Self=t90;>
+  $std::fmt::number$f503<$family::implementation:119=t90;Self=t90;>
+  $std::iter::into_iter$f361<$family::implementation:101=t109;Self=t109;Self::IntoIter=t127;T=t10;>
+  $std::iter::next$f359<$family::implementation:99=t127;Self=t127;Self::Item=t10;T=t10;>
+  $std::fmt::fmt$f559<$family::implementation:165=t3;Self=t3;>
+  $std::string::push$f105<$family::implementation:19=t20;Self=t20;>
+  $std::prelude::unwrap$f818<$family::implementation:229=t139;Self=t139;T=t13;>
+  $std::fmt::fmt$f529<$family::implementation:135=t10;Self=t10;>
+  $std::str::matches_bytes
+  $std::fmt::padding$f501<$family::implementation:119=t90;Self=t90;>
+  $std::fmt::sign_plus$f497<$family::implementation:119=t90;Self=t90;>
+  $std::fmt::alternate$f498<$family::implementation:119=t90;Self=t90;>
+  $std::string::len$f119<$family::implementation:19=t20;Self=t20;>
+  $std::fmt::sign_aware_zero_pad$f499<$family::implementation:119=t90;Self=t90;>
+  $std::iter::owned<T=t10;>
+  $std::prelude::unwrap$f818<$family::implementation:229=t129;Self=t129;T=t10;>
+checked-closure-sha256 16835b0c2a4627a6d2786b6b756418fff12dbf07be40e143f46888b04b24a16d

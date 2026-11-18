@@ -128,7 +128,7 @@ pub(crate) fn intrinsic_type_name(name: &str) -> bool {
             | "ReadDirectory" | "ReadFile" | "Image" | "Channel"
             | "Worker" | "ReadRegion" | "ForeignCommand" | "ForeignSession"
             | "NullDevice" | "File" | "Process" | "Clock"
-            | "Child" | "Listener" | "Connector" | "TcpPort" | "Readiness"
+            | "Child" | "Listener" | "Connector" | "TcpPort" | "TemporaryFiles" | "Readiness"
             | "Entropy" | "Stop")
 }
 fn builtin(name: &str) -> bool {

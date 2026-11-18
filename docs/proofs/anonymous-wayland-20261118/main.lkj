@@ -1,0 +1,47 @@
+//! Six grants: direct compositor socket, anonymous storage, one outbound port,
+//! readiness, time and output. The compositor supplies the runtime TCP address.
+mod wayland;
+pub fn main(socket: File, mut storage: TemporaryFiles, mut tcp: TcpPort, ready: Readiness, clock: Clock, mut output: Stdout) {
+    let mut frame = storage.temporary_file().unwrap();
+    drop(storage);
+    let mut pixels: Vec<u8> = Vec::new();
+    for y in 0usize..240usize { for x in 0usize..320usize {
+        pixels.push((40usize + y / 2usize) as u8);
+        pixels.push((20usize + x / 2usize) as u8);
+        pixels.push((30usize + y / 2usize) as u8);
+        pixels.push(255u8);
+    } }
+    assert_eq!(pixels.len(), 307_200usize);
+    frame.write_all(&pixels).unwrap();
+    frame.write_all(&pixels).unwrap();
+    frame.write_all(&wayland::cursor_bytes()).unwrap();
+    assert_eq!(frame.seek(0i64, 2u8).unwrap(), wayland::frame_file_size(320usize, 240usize));
+    frame.rewind().unwrap();
+    let mut sample = [0u8; 4];
+    assert_eq!(frame.read(&mut sample).unwrap(), 4usize);
+    assert_eq!(sample, [40u8, 20u8, 30u8, 255u8]);
+    let mut client = match wayland::Wayland::open(socket, frame, ready, clock, 320i32, 240i32, "anonymous frame and restricted TCP") {
+        Ok(client) => client,
+        Err(error) => { output.write(error.as_bytes()); output.write(b"\n"); panic!("Wayland initialization failed"); }
+    };
+    let address = client.runtime_address.clone();
+    assert!(!address.is_empty());
+    let mut connector = tcp.connector(address.as_str()).unwrap();
+    let mut network = connector.connect_deadline(client.now() + 5_000_000_000usize).unwrap();
+    let mut byte = [0u8; 1];
+    assert_eq!(network.read(&mut byte).unwrap(), 1usize);
+    assert_eq!(byte[0], b'R');
+    network.write_all(b"Q").unwrap();
+    assert_eq!(network.read(&mut byte).unwrap(), 0usize);
+    drop(network);
+    drop(connector);
+    drop(tcp);
+    client.present(0u32).unwrap();
+    while !client.frame_presented() { let _events = client.poll(1000usize).unwrap(); }
+    output.write(format!("anonymous frame committed: runtime_address={} tcp=RQ committed=1 frame_bytes=616704\n", address).as_bytes());
+    // The harness captures the compositor, then closes its private compositor.
+    // Its socket EOF acknowledges capture; no filesystem signalling is needed.
+    while !client.is_closed() { let _events = client.poll(1000usize).unwrap(); }
+    assert_eq!(client.committed_frames, 1usize);
+    output.write(format!("anonymous frame complete: sent={} received={} committed=1\n", client.sent_messages, client.received_messages).as_bytes());
+}

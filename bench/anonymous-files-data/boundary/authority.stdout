@@ -1,0 +1,41 @@
+entry main
+declared authority:
+  storage: TemporaryFiles (--grant storage)
+  output: Stdout (--grant output)
+reachable operations (conservative checked-IR branches and owned cleanup):
+  main:
+    file_seek
+    file_truncate
+    file_close [structural cleanup]
+    stdout_write
+  fresh:
+    world_file
+  $std::io::__lkjscript_file_rewind:
+    file_rewind
+  $std::io::__lkjscript_file_seal:
+    file_seal
+  $std::io::__lkjscript_file_write:
+    file_write
+  $std::prelude::unwrap$f804<$family::implementation:229=t51;E=t3;Self=t51;T=t18;>:
+    file_close [structural cleanup]
+  $std::io::__lkjscript_file_read:
+    file_read
+reachable functions (17; each listed once):
+  main
+  fresh
+  $std::prelude::unwrap$f804<$family::implementation:229=t52;E=t3;Self=t52;T=t4;>
+  $std::io::__lkjscript_file_write_all
+  $std::prelude::unwrap$f804<$family::implementation:229=t56;E=t3;Self=t56;T=t0;>
+  $std::io::__lkjscript_file_rewind
+  $std::io::__lkjscript_file_read_to_end
+  $std::prelude::unwrap$f804<$family::implementation:229=t63;E=t3;Self=t63;T=t15;>
+  $std::sequence::to_vec$f60<$family::implementation:10=t64;Self=t64;T=t5;>
+  $std::sequence::__lkjscript_vec_equal<T=t5;>
+  $std::io::__lkjscript_file_seal
+  $std::io::__lkjscript_file_write
+  $std::prelude::unwrap$f804<$family::implementation:229=t51;E=t3;Self=t51;T=t18;>
+  $std::io::unit_result
+  $std::io::__lkjscript_file_read
+  $std::bytes::append_bytes
+  $std::io::count_result
+checked-closure-sha256 5849911731efa77662e07eca0c9e8dfc396df22892e76bec5976bbf1e824cc96

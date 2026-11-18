@@ -316,9 +316,10 @@ pub(super) fn signature(
                     }
         }
         IntrinsicOp::WorldFile => {
-            args.len() == 2
-                && authority(types, args[0], &TypeKind::World)
-                && args[1] == U8
+            // The narrow grant has no selector: it can only create anonymous storage.
+            ((args.len() == 1 && authority(types, args[0], &TypeKind::TemporaryFiles))
+                || (args.len() == 2 && authority(types, args[0], &TypeKind::World)
+                    && args[1] == U8))
                 && opened(types, result, &TypeKind::File)
         }
         IntrinsicOp::ClockRead => {

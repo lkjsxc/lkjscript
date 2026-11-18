@@ -636,7 +636,7 @@ pub fn read(text: &str) -> Result<Program> {
                         TypeKind::Stdout
                     }
                     "stdin" | "stderr" | "directory" | "read_directory" | "read_file" | "image" | "channel" | "worker" | "read_region" | "foreign_command" | "foreign_session" | "null_device" | "file" | "process" | "clock" | "child"
-                    | "listener" | "connector" | "tcp_port" | "readiness" | "entropy" | "stop"
+                    | "listener" | "connector" | "tcp_port" | "temporary_files" | "readiness" | "entropy" | "stop"
                     | "arguments" | "environment" | "exit_status" => {
                         exact(&words, 3, line)?;
                         match words[2].as_str() {
@@ -661,6 +661,7 @@ pub fn read(text: &str) -> Result<Program> {
                             "listener" => TypeKind::Listener,
                             "connector" => TypeKind::Connector,
                             "tcp_port" => TypeKind::TcpPort,
+                            "temporary_files" => TypeKind::TemporaryFiles,
                             "readiness" => TypeKind::Readiness,
                             "entropy" => TypeKind::Entropy,
                             "stop" => TypeKind::Stop,
@@ -1040,6 +1041,7 @@ pub fn write(program: &Program) -> String {
             TypeKind::Listener => text.push_str("listener"),
             TypeKind::Connector => text.push_str("connector"),
             TypeKind::TcpPort => text.push_str("tcp_port"),
+            TypeKind::TemporaryFiles => text.push_str("temporary_files"),
             TypeKind::Readiness => text.push_str("readiness"),
             TypeKind::Entropy => text.push_str("entropy"),
             TypeKind::Stop => text.push_str("stop"),
