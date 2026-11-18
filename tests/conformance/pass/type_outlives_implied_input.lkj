@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+fn copy<'a, T: Clone>(value: &'a T) -> impl Fn() -> T + 'a {
+    let owned: T = value.clone();
+    move || owned.clone()
+}
+pub fn probe() -> i64 { let value = 42i64; copy(&value)() }

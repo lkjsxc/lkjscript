@@ -1,0 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+fn shorten<'long, 'middle, 'short, T>(value: T) -> impl Fn() -> T + 'short
+where T: Clone + 'long, 'long: 'middle, 'middle: 'short { move || value.clone() }
+pub fn probe() -> i64 { let value = 42i64; *shorten(&value)() }

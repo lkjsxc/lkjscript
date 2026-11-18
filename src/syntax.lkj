@@ -1540,12 +1540,6 @@ impl Parser {
             let target = self.ty()?;
             self.expect(":")?;
             let bounds = self.bounds()?;
-            for bound in &bounds {
-                if matches!(&self.program.types[*bound].kind, Type::Path(path) if path.name.starts_with('\'')) {
-                    return Err(Diagnostic::new(self.program.types[*bound].span, "E_UNSUPPORTED",
-                        "type-outlives where predicates are not implemented"));
-                }
-            }
             let name = match &self.program.types[target].kind {
                 Type::Path(path) if path.qualification.is_none() && path.args.is_empty() && path.bindings.is_empty() => Some(path.name.clone()),
                 _ => None,

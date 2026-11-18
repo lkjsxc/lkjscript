@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+fn accept<'a, T>(value: T) where T: 'a { let _ = value; }
+fn caller<T>(value: T) { accept(value); }
+pub fn probe() -> i64 { let value = 42i64; caller(&value); value }

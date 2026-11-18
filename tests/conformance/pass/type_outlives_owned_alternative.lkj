@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+fn optional<'a, T>(value: T) -> impl FnOnce() -> i64 + 'a
+where T: 'a {
+    let held = Some(value);
+    move || { drop(held); 42i64 }
+}
+pub fn probe() -> i64 { optional(7i64)() }

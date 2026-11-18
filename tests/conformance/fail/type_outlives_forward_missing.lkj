@@ -1,0 +1,6 @@
+// expect: reject E_BORROW
+// witness: {}
+fn inner<'a, T: Clone>(value: T) -> impl Fn() -> T + 'a
+where T: 'a { move || value.clone() }
+fn unused<'a, T: Clone>(value: T) -> impl Fn() -> T + 'a { inner(value) }
+pub fn probe() -> i64 { 42 }

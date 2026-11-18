@@ -55,6 +55,11 @@ impl Compiler<'_> {
         self.opaque.abstract_types.iter().find(|(_, value)| **value == ty).map(|(key, _)| key.clone())
     }
 
+    pub(super) fn opaque_storage(&self, ty: usize) -> Option<usize> {
+        let key = self.opaque_recipe(ty)?;
+        self.opaque.hidden.get(&key).copied()
+    }
+
     fn opaque_key(&self, ty: a::TypeId, substitutions: &BTreeMap<String, usize>) -> Key {
         let mut bindings = Vec::new();
         for name in capture_names(self.source, ty) {
@@ -232,6 +237,10 @@ impl Compiler<'_> {
         let form = self.source.impl_traits.get(&ty).cloned();
         let Some(form) = form else { return Ok(()); };
         if form.result != Some(index) { return Ok(()); }
+        if let Some(name) = result_lifetime(self.source, ty) {
+            self.type_dependencies_outlive(result, &super::type_outlives::region(index, &name),
+                self.source.types[ty].span)?;
+        }
         if self.has_view(result) && result_lifetime(self.source, ty).is_none() {
             return Err(err(self.source.types[ty].span, "E_UNSUPPORTED",
                 "a view-bearing impl Trait result requires an explicit result lifetime bound"));

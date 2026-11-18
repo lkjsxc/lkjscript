@@ -532,14 +532,53 @@ is implemented.
 Ordinary results preserve invariance through mutable storage. An opaque result
 lifetime instead requires its hidden references to outlive that lifetime,
 without equating their stored lifetimes to it. Trait-method and implementation-header lifetime
-predicates, anonymous or static lifetime predicates, type-outlives predicates
-and higher-ranked predicates remain located refusals. No IR, independent
+predicates, anonymous or static lifetime predicates and higher-ranked lifetime
+predicates remain located refusals. No IR, independent
 checker or runtime rule is added. These edges also apply to const-qualified
 functions with mixed lifetime, type and builtin-usize constant parameters, and
 to borrowed `T: ?Sized` referents. They preserve distinct opaque constant
 captures and mutable-storage invariance.
 [Lifetime where cases](../tests/conformance/pass/outlives_where_outer_impl.lkj)
 and [const-array opaque case](../tests/conformance/pass/outlives_const_array_opaque.lkj).
+
+### Named type-outlives bounds
+
+Free functions and inherent methods admit named bounds such as
+`where T: Clone + 'a` and inline `T: 'a`, including several bounds on one
+parameter. The subject is the function's own type parameter; the lifetime may
+belong to that function or its enclosing inherent implementation. Declaration
+scope and directed lifetime edges are retained. For example, `T: 'long` and
+`'long: 'short` establish `T: 'short`, without establishing the reverse edge.
+
+An abstract type may contain borrowed data even when its temporary definition
+layout has no fields. An opaque result with a lifetime bound therefore checks
+all captured type dependencies, including dependencies inside owned structures,
+enum alternatives, arrays and containers. It checks unused generic definitions
+as well as concrete calls. Forwarding another opaque result retains its verified
+hidden storage and declared type dependencies. Direct well-formed
+`&'a T` and `&'a mut T` inputs imply `T: 'a`; an output annotation creates
+no such assumption.
+
+At calls, fixed callable input regions constrain the callee's type-outlives
+obligations. Actual reference leaves must satisfy those regions, while an
+abstract caller type needs an established bound. A fresh, unconstrained callee
+lifetime may be chosen for that call. Existing reference-origin and mutable
+storage checks continue to apply independently of the whole-type proof.
+The [capture case](../tests/conformance/pass/type_outlives_capture.lkj) and
+[parser buffer case](../tests/conformance/pass/type_outlives_parser_fill.lkj)
+exercise these contracts on both engines; the latter uses explicit input type
+arguments because inference from a later opaque-callable use remains separate.
+
+This subset does not admit type-outlives bounds on nominal, alias, trait or
+implementation headers, trait methods, associated family parameters or
+nonparameter where targets. Static and anonymous type-outlives bounds remain
+located refusals. Written regions in nominal arguments, function-pointer inputs,
+invariant nested input storage and ordinary result lifetimes also remain
+located boundaries for functions with type-outlives predicates: those forms
+need caller-region instantiation. Direct outer reference inputs and direct
+opaque result lifetime bounds use the proven contracts above. Returning a
+reference through an opaque callable still requires the separately missing
+hidden result-origin inventory; a type-outlives bound does not supply it.
 
 Fixed callable inputs may retain loans independently of their result or callable
 destruction. Effects track source roots; descendant access requires checked

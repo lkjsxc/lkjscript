@@ -1,0 +1,29 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":true}
+trait Parser<I> { type Output; fn parse(&mut self, input: I) -> (I, Self::Output); }
+struct Counter { amount: i64 }
+impl Parser<i64> for Counter {
+    type Output = i64;
+    fn parse(&mut self, input: i64) -> (i64, i64) { (input + self.amount, input) }
+}
+fn fill<'a, I: Clone, F>(mut parser: F, output: &'a mut [<F as Parser<I>>::Output])
+    -> impl FnMut(I) -> I + 'a
+where F: Parser<I> + 'a {
+    move |mut input: I| {
+        let mut index = 0usize;
+        while index < output.len() {
+            let (remaining, value) = parser.parse(input);
+            input = remaining;
+            output[index] = value;
+            index += 1usize;
+        }
+        input
+    }
+}
+pub fn probe() -> i64 {
+    let mut output = [0i64, 0i64, 0i64];
+    let mut parse = fill(Counter { amount: 7i64 }, &mut output);
+    let remaining = parse(0i64);
+    drop(parse);
+    remaining + output[0usize] + output[1usize] + output[2usize]
+}
