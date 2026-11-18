@@ -1,0 +1,170 @@
+{
+   "gate" : {
+      "case_requests_rerun" : 6575,
+      "case_requests_reused" : 0,
+      "clean_tracked_and_untracked_tree_at_start_and_finish" : true,
+      "command" : "LKJSCRIPT_GATE_JOBS=4 LKJSCRIPT_STORE=target/replace-call-landing/fresh-store bash tools/check.sh",
+      "competing_full_gate_started" : false,
+      "exit_code" : 0,
+      "finished_at" : "2026-11-18T18:05:21Z",
+      "log" : "full-gate.log",
+      "mutants" : 128,
+      "mutation_findings" : 0,
+      "mutation_summary" : "ok mutation: 128 mutants, 104 rejected, 22 values, 1 traps, 1 did not terminate, 0 resources, 0 findings; 3033 mutants/minute (2.531 s, 4 workers); 22 checked reuses, 2 emitted reuses, 0 store rejects; inline default(0), 0 attempts, 0 accepted, 0 executed, 0 rejected, 0 candidate calls in 0 bodies, 0 local body proofs",
+      "optimized_conformance" : {
+         "cases" : 1357,
+         "pending_route_entries" : 2,
+         "route_checks" : 2712,
+         "wall_seconds" : 172.189
+      },
+      "ordinary_conformance" : {
+         "cases" : 1357,
+         "pending_route_entries" : 2,
+         "route_checks" : 2712,
+         "wall_seconds" : 165.824
+      },
+      "pending" : {
+         "distinct_source_cases" : 1,
+         "pending_route_entries_per_mode" : 2,
+         "reason" : "Callable impl Trait results are not yet elaborated; escaping a borrowed capture must be rejected.",
+         "source" : "tests/conformance/fail/borrowed_closure_escape.lkj"
+      },
+      "reported_seconds" : 1196.524,
+      "resource_note" : "GNU time maximum RSS is the script process-tree maximum, not summed simultaneous four-worker RSS.",
+      "resource_receipt" : {
+         "exit" : 0,
+         "max_rss_kib" : 1566576,
+         "system_seconds" : 82.94,
+         "user_seconds" : 3082.49,
+         "wall_seconds" : 1196.52
+      },
+      "reuse_note" : "Zero whole-case-request skips; internal authenticated instance/object reuse remains enabled.",
+      "shared_lock" : "released by the owning wrapper EXIT trap after standalone validation",
+      "started_at" : "2026-11-18T17:45:24Z",
+      "store_initial" : "absent",
+      "workers" : 4
+   },
+   "integrated_input" : "b38830634201d4a8974c6a2b7afc05bc76b3927a",
+   "integration_merge" : "db299790d539f75f5bc3cde25399628fd4952737",
+   "original_code_and_evidence" : "7f87d6d7b73365a6d9976c367823d48343a6b347",
+   "original_packet" : "../landing/manifest.json",
+   "preserved_evidence" : {
+      "historical_claims_remain_bound_to_original_inputs" : true,
+      "original_checksum_entries_passed" : 111,
+      "original_receipts_unchanged" : true,
+      "reviewer_checksum_entries_passed" : 15
+   },
+   "production" : {
+      "compiler_and_library_identical_to_reviewed_source" : true,
+      "gate_delta_from_public" : "Only the reviewed structure-call suite registration.",
+      "macro_origin_watchdog_seconds" : 1800,
+      "merge_conflicts" : 0,
+      "patch_sha256" : "9c90f2ed55346a356a919a1cedcaa6195524ddf8ba5867647aeb4f13b9b43bac",
+      "paths" : [
+         "src/driver/help.lkj",
+         "src/structure_edit.lkj",
+         "src/syntax.lkj"
+      ],
+      "public_macro_origin_harness_preserved" : true,
+      "public_programs_status_preserved" : true,
+      "reviewed_patch_unchanged" : true,
+      "unexpected_production_changes" : []
+   },
+   "public_parent_ci" : {
+      "conclusion" : "success",
+      "head" : "e414aeddbb2ec6985fd564c96a44a4f583b6ba1b",
+      "jobs" : [
+         {
+            "conclusion" : "success",
+            "job_id" : 134971007670,
+            "name" : "gate"
+         },
+         {
+            "conclusion" : "success",
+            "job_id" : 134971008164,
+            "name" : "witness"
+         }
+      ],
+      "new_candidate_ci" : "not run; candidate has not been pushed",
+      "run_id" : 44352321149,
+      "status" : "completed",
+      "url" : "https://github.com/lkjsxc/lkjscript/actions/runs/44352321149"
+   },
+   "publication" : {
+      "expected_public_main" : "e414aeddbb2ec6985fd564c96a44a4f583b6ba1b",
+      "owner" : "lead",
+      "performed" : false,
+      "remote" : "https://github.com/lkjsxc/lkjscript.git"
+   },
+   "reviewed_source" : "ecd0ff6d0e2210be5b7eaed9770b675b7c070554",
+   "rust_witness" : {
+      "binding_reason" : "No relevant source, library, witness, test, example or transitive invoked host-script input changed. Both corrected gate harness files are outside the witness command closure. Native compiler bytes reproduced from the newly approved seed are identical to the independent Rust output already witnessed.",
+      "current_compiler_sha256" : "103557eddf30d24e046cb09f6a881e549829283495c8648c0ac9dcd1d72a5d35",
+      "input_files" : 2508,
+      "input_manifest" : "witness-inputs.txt",
+      "input_paths" : [
+         "src",
+         "library",
+         "witness",
+         "tests",
+         "examples",
+         "tools/bootstrap.sh",
+         "tools/store-key.sh",
+         "tools/directory-rename-new-test.sh",
+         "tools/directory-identity-test.sh",
+         "tools/connect-deadline-test.sh",
+         "tools/tcp-port-test.sh",
+         "tools/declarative-macro-test.sh",
+         "tools/temporary-files-test.sh",
+         "tools/real-programs-rust.sh",
+         "tools/directory-rename-new-witness.c",
+         "tools/directory-identity-witness.c",
+         "tools/connect-deadline-peer.c",
+         "tools/real-programs/verify-levenshtein.pl"
+      ],
+      "integrated_input_manifest_sha256" : "a554d8b81b0acd9840efa481dd060589a1f36dc1c6ff04fbad320b390b52c17d",
+      "original_log" : "../landing/witness.log",
+      "original_output_identities" : "../landing/witness-output.sha256",
+      "original_time" : "../landing/witness.time",
+      "original_toolchain" : "../landing/toolchain.txt",
+      "rerun" : false,
+      "reviewed_compiler_sha256" : "103557eddf30d24e046cb09f6a881e549829283495c8648c0ac9dcd1d72a5d35",
+      "reviewed_input_manifest_sha256" : "a554d8b81b0acd9840efa481dd060589a1f36dc1c6ff04fbad320b390b52c17d",
+      "rust_host_compiler_sha256" : "fbebd08a32c9823642625e240164c2590ce4fdb443b8f886230b963ab36f4ac6",
+      "source" : "ecd0ff6d0e2210be5b7eaed9770b675b7c070554",
+      "status" : "historical-pass-bound-to-identical-inputs-and-current-bootstrap-bytes",
+      "values_output_cases" : 499,
+      "verdicts" : 652
+   },
+   "seed" : {
+      "bootstrap_byte_identical" : true,
+      "decoded_bytes" : 40989463,
+      "decoded_sha256" : "103557eddf30d24e046cb09f6a881e549829283495c8648c0ac9dcd1d72a5d35",
+      "gzip_bytes" : 8204839,
+      "gzip_sha256" : "65408daa78849909a0a3ddcf0a2cab29120b9ddfc095ffb2095c422261f6a6ee",
+      "original_proposal_verified_before_copy" : true,
+      "path" : "seed/lkjscript.gz"
+   },
+   "seed_only_commit" : "20935b4c66f87e9e52a68ce79bf5e60603b75198",
+   "standalone" : {
+      "command" : "bash tools/real-programs-test.sh target/lkjscript",
+      "exit_code" : 0,
+      "finished_at" : "2026-11-18T18:05:24Z",
+      "log" : "standalone.log",
+      "native_corpus_rows" : 7239,
+      "producer_sha256" : "103557eddf30d24e046cb09f6a881e549829283495c8648c0ac9dcd1d72a5d35",
+      "provenance_controls" : 18,
+      "resource_receipt" : {
+         "exit" : 0,
+         "max_rss_kib" : 63252,
+         "system_seconds" : 0.44,
+         "user_seconds" : 2.86,
+         "wall_seconds" : 3.45
+      },
+      "started_at" : "2026-11-18T18:05:21Z",
+      "summary" : "ok real programs: original library syntax, exact upstream hashes, 18 provenance controls, 8 tests on each engine, pure algorithm authority and 7,239 native corpus rows",
+      "tests_per_engine" : 8
+   },
+   "status" : "local-validation-passed-awaiting-lead-exact-candidate-review",
+   "version" : 1
+}
