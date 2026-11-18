@@ -1,0 +1,9 @@
+integrated_input=b38830634201d4a8974c6a2b7afc05bc76b3927a
+public_parent=e414aeddbb2ec6985fd564c96a44a4f583b6ba1b
+reviewed_source=ecd0ff6d0e2210be5b7eaed9770b675b7c070554
+expected_producer=103557eddf30d24e046cb09f6a881e549829283495c8648c0ac9dcd1d72a5d35
+seed_gzip=65408daa78849909a0a3ddcf0a2cab29120b9ddfc095ffb2095c422261f6a6ee
+workers=4
+store=/home/coder/workspace/lkjscript-replace-call-landing-20261118/target/replace-call-landing/fresh-store
+store_initial=absent
+lock=/home/coder/workspace/prompts/talk/lkjscript-gate.lock

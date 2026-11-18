@@ -2,21 +2,37 @@
 
 ## Current integration state
 
-The reviewed candidate is now merged locally with exact public parent
+The reviewed candidate is merged locally with exact public parent
 `e414aeddbb2ec6985fd564c96a44a4f583b6ba1b`, including its watchdog correction.
 Merge `db299790d539f75f5bc3cde25399628fd4952737` preserves both histories and
 unchanged reviewed compiler/library bytes. Separate seed-only commit
 `20935b4c66f87e9e52a68ce79bf5e60603b75198` applies the approved proposal.
-The reserved integrated full gate has not yet started; publication remains with
-lead. [Integrated-input evidence](compiler-call-data/integration/README.md)
-records this step separately.
+
+The exact clean integrated input
+`b38830634201d4a8974c6a2b7afc05bc76b3927a` passed the reserved four-worker
+fresh-store gate in **1,196.524 s**, rerunning **6,575 case requests with zero
+request reuse**. The 128-mutant slice had zero findings. Both ordinary and
+optimized conformance retain **two pending engine-route entries for the single
+borrowed-closure source case**. Bootstrap is byte-identical to the approved
+40,989,463-byte producer and decoded seed. The separate real-program script
+passed in **3.45 s**. The shared lock was released by the owning EXIT trap.
+
+The earlier passing Rust witness is bound to the integrated candidate through
+**2,508 identical relevant input files** and the exact newly bootstrapped compiler
+bytes. It was not rerun. Its 499 values/output cases, 652 verdicts and independent
+compiler-byte equality retain their original run and toolchain provenance.
+[Integrated validation](compiler-call-data/integration/README.md) and the
+[machine-readable receipt](compiler-call-data/integration/validation.json)
+record the new gate separately from that historical witness.
 
 The implementation experiments and verification below describe the original
-review and landing packet, before this integration and seed refresh. Their raw
-receipts, earlier published-parent identity and then-unapplied seed proposal are
-preserved as historical evidence. The public parent's watchdog failure has since
-been corrected in `e414aeddb`; that parent's gate and witness CI 44352321149
-passed. No type-defaults or namespace-collision implementation is included.
+review and landing packet, before integration and seed refresh. Their raw
+receipts, earlier published-parent identity and then-unapplied seed proposal
+remain unchanged historical evidence. The unfamiliar trials were not repeated
+on this integration. The public parent's earlier watchdog failure was corrected
+in `e414aeddb`; both jobs of its exact-head CI 44352321149 passed. Final exact
+candidate review and publication remain with lead; this stream has not pushed.
+Type defaults and namespace-collision implementation remain separate.
 
 ## Reviewed behavior
 
