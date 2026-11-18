@@ -1,4 +1,4 @@
-// expect: reject E_TYPE
+// expect: reject E_TRAIT
 // witness: {"rustAccept":true}
 use std::ops::Div;
 fn quotient<T: Div<Output = T>>(left: T, right: T) -> T { left / right }

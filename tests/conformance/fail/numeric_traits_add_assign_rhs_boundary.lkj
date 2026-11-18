@@ -1,4 +1,4 @@
-// expect: reject E_TYPE
+// expect: reject E_TRAIT
 // witness: {"rustAccept":true}
 use std::ops::AddAssign;
 struct Word { value: i64 }
