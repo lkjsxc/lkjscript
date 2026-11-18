@@ -68,10 +68,12 @@ impl Builder<'_, '_> {
             self.compiler.method_selections.get(&expression).cloned()
         } else { None };
         if matches!(&saved, Some(MethodSelection { target: MethodTarget::Builtin, .. })) { return Ok(None); }
-        let left_type = if operation.compound() { Some(self.assignment_type(left)?) }
-            else { self.inferred.expressions.get(&left).copied().or_else(|| self.hint(left)) };
+        let mut left_type = self.inferred.expressions.get(&left).copied();
+        if operation.compound() { left_type = Some(self.assignment_type(left)?); }
+        else if left_type.is_none() { left_type = self.hint(left); }
         let Some(base) = left_type else { return Ok(None); };
-        let right_type = self.inferred.expressions.get(&right).copied().or_else(|| self.hint(right));
+        let mut right_type = self.inferred.expressions.get(&right).copied();
+        if right_type.is_none() { right_type = self.hint(right); }
         let primitive = if operation.compound() { self.numeric_scalar(base) }
             else { self.numeric_scalar(self.primitive_value_type(base))
                 && right_type.is_some_and(|ty| self.numeric_scalar(self.primitive_value_type(ty))) };
