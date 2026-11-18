@@ -495,6 +495,33 @@ pub(crate) fn parse_unexpanded(source: &str) -> Result<Program, Diagnostic> {
     Ok(program)
 }
 
+/// Read exactly one authored value expression, without expanding its invocations.
+/// Its complete candidate supplies the real scope and all semantic checking.
+pub(crate) fn parse_expression_unexpanded(source: &str) -> Result<(Program, ExprId), Diagnostic> {
+    let mut lexer = Lexer { source, at: 0, line: 1, column: 1 };
+    let tokens = lexer.lex()?;
+    let mut program = Program::default();
+    program.scopes.push(ModuleScope {
+        path: String::new(), parent: None, crate_root: 0,
+    });
+    program.files.push(SourceFile {
+        path: "<source>".to_string(), crate_root: 0,
+    });
+    let mut parser = Parser {
+        tokens, at: 0, program, module: String::new(), scope: 0,
+        diagnostics: Vec::new(), blocked: Vec::new(), diagnostic_keys: BTreeSet::new(),
+        self_context: None, expansion: None, probing: false, fragment: false,
+    };
+    parser.add_type(Type::Infer, Span::default());
+    parser.add_type(Type::Tuple(Vec::new()), Span::default());
+    let expression = parser.expr(true)?;
+    if !parser.diagnostics.is_empty() { return Err(parser.diagnostics.remove(0usize)); }
+    if parser.token().kind != TokenKind::End {
+        return Err(parser.err("source holds more than one expression; expected exactly one"));
+    }
+    Ok((parser.program, expression))
+}
+
 /// Syntax recovery is for reporting only; diagnostics prevent source compilation.
 pub struct ParseReport {
     pub items: Vec<Item>,

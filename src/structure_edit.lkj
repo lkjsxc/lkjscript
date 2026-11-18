@@ -386,27 +386,10 @@ fn one_expression(identity: &str, source: &str, call: bool) -> Result<String, St
     // Parentheses retain this expression's precedence; newlines keep trailing
     // line comments from swallowing the closing delimiter or surrounding code.
     let expression = format!("(\n{source}\n)");
-    // Validate the raw fragment without the projection parentheses: otherwise
-    // a bare comma list could acquire tuple syntax from those parentheses.
-    let wrapped = format!("fn __lkjscript_transaction_expression() {{\n{source}\n}}");
+    // Validate the raw value expression to EOF before adding projection grouping.
     // Macro invocations are shape-checked here and expanded only in real scope.
-    let parsed = syntax::parse_unexpanded(&wrapped)
+    let (parsed, tail) = syntax::parse_expression_unexpanded(source)
         .map_err(|problem| error(identity, rule, &problem.message))?;
-    if parsed.items.len() != 1usize {
-        return Err(error(identity, rule, "source holds more than one expression; expected exactly one"));
-    }
-    let crate::ast::Item::Function(index) = parsed.items[0usize] else {
-        return Err(error(identity, rule, "source holds more than one expression; expected exactly one"));
-    };
-    let function = &parsed.functions[index];
-    if function.span.start != 0usize || function.span.end != wrapped.len() {
-        return Err(error(identity, rule, "source closes a bracket it did not open; expected one self-contained expression"));
-    }
-    let body = &parsed.blocks[function.body.unwrap()];
-    if !body.statements.is_empty() {
-        return Err(error(identity, rule, "source is a statement, not an expression; expected one expression"));
-    }
-    let tail = body.tail.ok_or_else(|| error(identity, rule, "source does not end in an expression (a trailing ';' makes it a statement); expected one expression"))?;
     if call && !matches!(parsed.exprs[tail].kind, crate::ast::Expr::Call { .. } | crate::ast::Expr::Method { .. }) {
         return Err(error(identity, rule, "call-site text is not one complete call expression; replace its owning body"));
     }

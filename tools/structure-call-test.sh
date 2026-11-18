@@ -178,6 +178,9 @@ while IFS= read -r fragment; do
 done <<'FRAGMENTS'
 
 1i64; 2i64
+1i64;
+1i64 2i64
+{ let broken = ; 1i64 }
 let value = 1i64;
 fn escaped() -> i64 { 9i64 }
 1i64 } // escaped wrapper
@@ -239,6 +242,29 @@ refuse E_EDIT_EXPRESSION
 request "$(operation "$selected" '(40i64, 2i64)')"
 apply
 value 42
+
+# A value slot admits block-led arithmetic and casts; statement parsing does not.
+while IFS='|' read -r name fragment; do
+    setup "expression_$name"
+    printf '%s\n' 'fn step() -> i64 { 0i64 }' 'fn main() -> i64 { step() }' > "$project/main.lkj"
+    index
+    selected=$(call_id main 'step()')
+    request "$(operation "$selected" "$fragment")"
+    apply
+    mkdir "$fixture/desired_$name"
+    printf 'fn step() -> i64 { 0i64 }\nfn main() -> i64 { (\n%s\n) }\n' "$fragment" > "$fixture/desired_$name/main.lkj"
+    cmp "$project/main.lkj" "$fixture/desired_$name/main.lkj"
+    "$compiler" compare "${common[@]}" --against main.lkj --against-source-dir "$fixture/desired_$name" \
+        --no-store > "$fixture/comparison"
+    grep -Fq 'verdict="text identical, checked IR identical"' "$fixture/comparison"
+    value 42
+done <<'EXPRESSIONS'
+block|{ 40i64 } + 2i64
+if|if true { 40i64 } else { 0i64 } + 2i64
+match|match 0i64 { 0i64 => 40i64, _ => 0i64 } + 2i64
+cast|{ 42i32 } as i64
+closure|(|value| value)(42i64)
+EXPRESSIONS
 
 # The parser's grouping-free AST must not authorize an incomplete written span.
 setup grouped
