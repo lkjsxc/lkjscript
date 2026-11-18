@@ -306,6 +306,18 @@ pub(super) fn typed_member(result: &mut Catalog, files: &[SourceText], program: 
     }
 }
 
+pub(super) fn operator_target(program: &a::Program, evidence: &Evidence,
+    expression: usize) -> Option<String> {
+    let operation = match &program.exprs[expression].kind {
+        a::Expr::Binary { op, .. } | a::Expr::Assign { op, .. } => op.as_str(),
+        _ => return None,
+    };
+    let operator = crate::elaborate::numeric_operators::Operator::parse(operation)?;
+    let MethodTarget::Trait(index) = evidence.methods.get(&expression)? else { return None; };
+    let declaration = &program.traits[*index];
+    Some(format!("{}::{}", qualified(&declaration.module, &declaration.name), operator.method_name()))
+}
+
 /// Operator punctuation denotes a checked canonical contract, but is not an
 /// editable spelling of the trait method. Retain the exact token as evidence.
 pub(super) fn operator_member(result: &mut Catalog, files: &[SourceText], program: &a::Program,
@@ -316,10 +328,7 @@ pub(super) fn operator_member(result: &mut Catalog, files: &[SourceText], progra
         a::Expr::Assign { op, place, value } => (op.as_str(), *place, *value),
         _ => return,
     };
-    let Some(operator) = crate::elaborate::numeric_operators::Operator::parse(operation) else { return; };
-    let Some(MethodTarget::Trait(index)) = evidence.methods.get(&expression) else { return; };
-    let declaration = &program.traits[*index];
-    let target = format!("{}::{}", qualified(&declaration.module, &declaration.name), operator.method_name());
+    let Some(target) = operator_target(program, evidence, expression) else { return; };
     if !result.by_identity.contains_key(&target) { return; }
     let mut span = a::Span { end: node.span.start, ..node.span };
     let start = program.exprs[left].span.end;

@@ -16,7 +16,19 @@ impl AddAssign for Word { fn add_assign(&mut self, rhs: Self) { self.value += rh
 impl Shl<usize> for Word { type Output = i64; fn shl(self, rhs: usize) -> i64 { self.value << rhs } }
 fn apply<T: Shl<usize, Output = i64>>(value: T) -> i64 { value << 1usize }
 fn append<T: AddAssign>(value: &mut T, rhs: T) { *value += rhs; }
-fn main() -> i64 { let mut value = Word { value: 20 }; append(&mut value, Word { value: 1 }); apply(value) }
+macro_rules! operators {
+    ($shift:ident, $append:ident) => {
+        fn $shift<T: Shl<usize, Output = i64>>(value: T) -> i64 { value << 1usize }
+        fn $append<T: AddAssign>(value: &mut T, rhs: T) { *value += rhs; }
+    };
+}
+operators!(generated_apply, generated_append);
+fn main() -> i64 {
+    let mut value = Word { value: 20 };
+    append(&mut value, Word { value: 1 });
+    generated_append(&mut value, Word { value: 0 });
+    apply(value) + generated_apply(Word { value: 0 })
+}
 SOURCE
 common=(main.lkj --source-dir "$fixture/project" --store "$fixture/store" --store-key "$fixture/key")
 publish() {
@@ -35,17 +47,52 @@ edit() {
     grep -q 'mode=apply' "$fixture/transaction"
     [[ ! -e $fixture/project/.lkjscript-edit.pending ]]
 }
+token_reference() {
+    perl -e '
+        use strict; use warnings;
+        open my $input, "<", $ARGV[0] or die $!;
+        my $source = do { local $/; <$input> }; close $input;
+        open my $references, "<", $ARGV[1] or die $!;
+        my $seen=0;
+        while (<$references>) {
+            next unless /kind=operator-contract/;
+            /fact=references\b/ && /\bstart=(\d+) end=(\d+) kind=operator-contract(?:\s|$)/
+                or die "operator reference is not an exact authored site";
+            substr($source, $1, $2-$1) eq $ARGV[2] or die "operator token differs";
+            $seen++;
+        }
+        die "operator reference count" unless $seen==1;
+    ' "$fixture/project/main.lkj" "$1" "$2"
+}
 references() {
     query references apply > "$fixture/shift-references"
     grep -F '"std::ops::Shl::shl"' "$fixture/shift-references" | grep -Fq 'kind=operator-contract'
     query references append > "$fixture/assign-references"
     grep -F '"std::ops::AddAssign::add_assign"' "$fixture/assign-references" | grep -Fq 'kind=operator-contract'
+    token_reference "$fixture/shift-references" '<<'
+    token_reference "$fixture/assign-references" '+='
+    query uses std::ops::Shl::shl > "$fixture/generated-shift-uses"
+    grep -F 'kind=operator-contract' "$fixture/generated-shift-uses" | grep -Fq 'origin=generated'
+    query uses std::ops::AddAssign::add_assign > "$fixture/generated-assign-uses"
+    grep -F 'kind=operator-contract' "$fixture/generated-assign-uses" | grep -Fq 'origin=generated'
 }
 publish
 value 42
 references
 query signature std::convert::From > "$fixture/conversion-signature"
 grep -Fq 'From<T>' "$fixture/conversion-signature"
+query text generated_apply > "$fixture/generated-text"
+grep -Fq 'fact=text-unavailable' "$fixture/generated-text"
+cp "$fixture/project/main.lkj" "$fixture/before-generated"
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"rename","id":"generated_apply","name":"changed"}]}
+REQUEST
+if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/rejected-generated" 2> "$fixture/error-generated"; then
+    printf 'generated operator function became editable\n' >&2
+    exit 1
+fi
+grep -q 'E_EDIT_GENERATED_SOURCE' "$fixture/error-generated"
+cmp "$fixture/before-generated" "$fixture/project/main.lkj"
 cp "$fixture/project/main.lkj" "$fixture/before"
 cat > "$fixture/request" <<'REQUEST'
 {"version":1,"operations":[{"op":"rename","id":"std::ops::Shl::shl","name":"shift"}]}
@@ -81,4 +128,4 @@ fi
 grep -q 'E_TRAIT' "$fixture/error"
 cmp "$fixture/before" "$fixture/project/main.lkj"
 value 84
-printf 'ok numeric traits: exact operator dependencies, noneditable protocol punctuation, nominal rename, body edits and atomic wrong-contract refusal on both engines\n'
+printf 'ok numeric traits: exact authored/generated operator dependencies, generated edit refusal, noneditable protocol punctuation, nominal rename, body edits and atomic wrong-contract refusal on both engines\n'

@@ -1093,6 +1093,13 @@ fn generated_expression_owned(catalog: &mut Catalog, files: &[SourceText], progr
             catalog.items[index].type_resolved = ty.is_some();
             catalog.items[index].body_digest = epoch;
         }
+        a::Expr::Binary { .. } | a::Expr::Assign { .. } => {
+            if let Some(evidence) = evidence {
+                if let Some(target) = operator_target(program, evidence, expression) {
+                    generated_reference(catalog, files, &owner, Some(target), node.span, "operator-contract");
+                }
+            }
+        }
         a::Expr::Field { name, .. } => {
             if evidence.as_ref().is_some_and(|value| value.builtin_fields.contains(&expression)) { return Ok(()); }
             let inferred = evidence.as_ref().and_then(|value| value.fields.get(&expression))

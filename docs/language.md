@@ -41,6 +41,8 @@ generic body later specializes to a primitive type. The independent checker
 still verifies the call, moves, borrows, and destruction. Operator query edges
 name the canonical trait method at the punctuation token; that token is not an
 editable method name. Checked body edits must prove the replacement contract.
+Macro-generated operator dependencies retain their expansion origin and
+invocation anchor, with the ordinary generated-source edit refusal.
 
 The source primitive implementations cover all ten integer types for
 `Shl<usize>`, `Shr<usize>`, same-type `Div`, and same-type `AddAssign`, plus `f64`
