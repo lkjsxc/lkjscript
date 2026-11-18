@@ -515,7 +515,7 @@ pub(crate) fn parse_expression_unexpanded(source: &str) -> Result<(Program, Expr
     parser.add_type(Type::Infer, Span::default());
     parser.add_type(Type::Tuple(Vec::new()), Span::default());
     let expression = parser.expr(true)?;
-    if !parser.diagnostics.is_empty() { return Err(parser.diagnostics.remove(0usize)); }
+    if let Some(problem) = parser.diagnostics.first().cloned() { return Err(problem); }
     if parser.token().kind != TokenKind::End {
         return Err(parser.err("source holds more than one expression; expected exactly one"));
     }
