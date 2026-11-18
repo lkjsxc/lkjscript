@@ -33,7 +33,8 @@ fn exclusions(report: &mut SourceReport) {
 }
 
 fn option_type(program: &a::Program, problem: &Diagnostic) -> Option<String> {
-    if !problem.message.contains("wrong number of type arguments") { return None; }
+    if !problem.message.contains("wrong number of type arguments")
+        && problem.message != "constructor type argument needs an annotation" { return None; }
     let names = crate::resolve::Resolver::new(program).ok()?;
     for node in &program.exprs {
         if !primary(problem, node.span) { continue; }
