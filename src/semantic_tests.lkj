@@ -56,6 +56,8 @@ fn complete_library(files: &mut Vec<source::SourceInput>) {
         "$std/num.lkj".to_string(),
         "$std/slice.lkj".to_string(),
         "$std/marker.lkj".to_string(),
+        "$std/convert.lkj".to_string(),
+        "$std/ops.lkj".to_string(),
         "$std/range.lkj".to_string(),
         "$std/text_debug.lkj".to_string(),
         "$std/arena.lkj".to_string(),

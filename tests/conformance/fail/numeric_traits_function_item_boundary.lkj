@@ -1,0 +1,18 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":true}
+// The result/argument inference shape of nom Err::convert and Err::map.
+use core::convert;
+struct Failure<T> { value: T }
+impl<E> Failure<E> {
+    fn map<E2, F>(self, f: F) -> Failure<E2>
+    where F: FnOnce(E) -> E2,
+    { Failure { value: f(self.value) } }
+
+    fn convert<F>(e: Failure<F>) -> Self
+    where E: From<F>,
+    { e.map(convert::Into::into) }
+}
+pub fn probe() -> i64 {
+    let result: Failure<i64> = Failure::convert(Failure { value: 42u8 });
+    result.value
+}

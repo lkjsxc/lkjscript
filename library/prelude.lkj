@@ -1,4 +1,5 @@
 //! The source prelude. These enums own their payloads and work with affine values.
+pub use crate::convert::{From, Into};
 pub use crate::integer::{ByteAscii, CheckedArithmetic, SaturatingArithmetic, ScalarOrder};
 pub use crate::iter::{IntoIterator, IterSource, Iterator, IteratorExt};
 pub use crate::sequence::{

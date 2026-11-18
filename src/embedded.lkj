@@ -33,6 +33,8 @@ pub fn library(path: &str) -> Option<Vec<u8>> {
         "$std/marker.lkj" => include_str!("../library/marker.lkj"),
         "$std/range.lkj" => include_str!("../library/range.lkj"),
         "$std/integer.lkj" => include_str!("../library/integer.lkj"),
+        "$std/convert.lkj" => include_str!("../library/convert.lkj"),
+        "$std/ops.lkj" => include_str!("../library/ops.lkj"),
         "$std/io.lkj" => include_str!("../library/io.lkj"),
         "$std/command.lkj" => include_str!("../library/command.lkj"),
         "$std/read_io.lkj" => include_str!("../library/read_io.lkj"),

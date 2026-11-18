@@ -1,0 +1,15 @@
+// expect: value 42
+// witness: {}
+use std::ops::{Div, Shl};
+struct Numerator { value: u64 }
+impl Div<u8> for Numerator {
+    type Output = u64;
+    fn div(self, rhs: u8) -> u64 { self.value / rhs as u64 }
+}
+fn quotient<L: Div<R>, R>(left: L, right: R) -> L::Output { left / right }
+fn shifted<T: Shl<usize>>(value: T) -> T::Output { value << 1usize }
+pub fn probe() -> i64 {
+    let value = quotient(Numerator { value: 84 }, 2u8);
+    assert_eq!(shifted(21u64), value);
+    value as i64
+}

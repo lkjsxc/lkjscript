@@ -1,0 +1,26 @@
+// expect: value 42
+// witness: {}
+use std::ops::Shl;
+struct Word { value: i64 }
+struct Amount<T> { value: T }
+impl Shl<usize> for Word {
+    type Output = i64;
+    fn shl(self, rhs: usize) -> i64 { self.value << rhs }
+}
+impl Shl<u8> for Word {
+    type Output = i64;
+    fn shl(self, rhs: u8) -> i64 { self.value + rhs as i64 }
+}
+impl Shl<Amount<u8>> for Word {
+    type Output = i64;
+    fn shl(self, rhs: Amount<u8>) -> i64 { self.value + rhs.value as i64 }
+}
+impl Word { fn shl(self, _rhs: usize) -> i64 { -100i64 } }
+fn shift<T: Shl<R, Output = i64>, Before, R>(value: T, rhs: R, _unrelated: Before) -> i64 { value << rhs }
+pub fn probe() -> i64 {
+    let first = shift(Word { value: 5 }, 3usize, 0usize);
+    let second = shift(Word { value: 1 }, 1u8, false);
+    assert_eq!(<Word as Shl<usize>>::shl(Word { value: 21 }, 1usize), 42);
+    assert_eq!(Word { value: 40 } << Amount { value: 2 }, 42);
+    first + second
+}

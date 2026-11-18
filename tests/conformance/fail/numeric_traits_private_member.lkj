@@ -1,0 +1,9 @@
+// expect: reject E_PRIVACY
+// witness: {}
+mod contracts {
+    trait Read { fn read(&self) -> i64 { 42 } }
+    pub struct Value;
+    impl Read for Value {}
+}
+use contracts::Read;
+pub fn probe() -> i64 { contracts::Value.read() }

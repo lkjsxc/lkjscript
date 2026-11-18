@@ -1,0 +1,147 @@
+//! Numeric trait syntax selects the canonical source-library contract. Its
+//! definition-site choice survives specialization as an ordinary call recipe.
+use super::{Builder, Result, a, err, ir, place_type};
+use super::generic_check::{MethodSelection, MethodTarget};
+use crate::generics::TraitIdentity;
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Operator { Shl, Shr, Div, AddAssign }
+impl Operator {
+    pub(crate) fn parse(operation: &str) -> Option<Self> {
+        match operation { "<<" => Some(Self::Shl), ">>" => Some(Self::Shr),
+            "/" => Some(Self::Div), "+=" => Some(Self::AddAssign), _ => None }
+    }
+    pub(super) fn trait_name(&self) -> &str {
+        match self { Self::Shl => "Shl", Self::Shr => "Shr", Self::Div => "Div", Self::AddAssign => "AddAssign" }
+    }
+    pub(crate) fn method_name(&self) -> &str {
+        match self { Self::Shl => "shl", Self::Shr => "shr", Self::Div => "div", Self::AddAssign => "add_assign" }
+    }
+    pub(super) fn compound(&self) -> bool { *self == Self::AddAssign }
+}
+
+pub(super) fn declaration(source: &a::Program, names: &crate::resolve::Resolver<'_>,
+    operation: Operator, span: a::Span) -> Result<(a::DeclarationId, usize)> {
+    let path = names.library_type("ops", operation.trait_name(), span)?;
+    let declaration = path.declaration.ok_or_else(|| err(span, "E_TRAIT", "operator requires its source-library trait"))?;
+    let a::Item::Trait(owner) = source.declarations[declaration].item else {
+        return Err(err(span, "E_TRAIT", "operator source-library contract is not a trait"));
+    };
+    let count = if operation.compound() { 0usize } else { 1usize };
+    if source.traits[owner].generics.len() != count {
+        return Err(err(span, "E_TRAIT", "operator source-library trait has the wrong argument count"));
+    }
+    Ok((declaration, owner))
+}
+
+impl Builder<'_, '_> {
+    fn operator_arguments_have_regions(&self, arguments: &[usize]) -> bool {
+        let mut pending = arguments.to_vec();
+        let mut seen = std::collections::BTreeSet::new();
+        while let Some(ty) = pending.pop() {
+            if !seen.insert(ty) { continue; }
+            if self.compiler.has_view(ty) { return true; }
+            // Nominal parameters retain identity even when their runtime
+            // layout has no fields, as with PhantomData.
+            if let Some((_, arguments)) = self.compiler.applications.get(&ty) {
+                pending.extend_from_slice(arguments);
+            }
+            match self.compiler.types[ty].kind {
+                ir::TypeKind::Vec { inner } | ir::TypeKind::Box { inner }
+                | ir::TypeKind::Array { inner, .. } => pending.push(inner),
+                _ => {}
+            }
+        }
+        false
+    }
+
+    fn numeric_scalar(&self, ty: usize) -> bool {
+        matches!(self.compiler.types[ty].kind,
+            ir::TypeKind::Bool | ir::TypeKind::Char | ir::TypeKind::Int { .. } | ir::TypeKind::F64)
+    }
+
+    /// Returning None emits nothing: the existing primitive path evaluates both
+    /// operands. A selected generic trait remains a call even on scalar instances.
+    pub(super) fn numeric_operator(&mut self, expression: a::ExprId, operation: Operator,
+        left: a::ExprId, right: a::ExprId, span: a::Span) -> Result<Option<(usize, usize)>> {
+        let saved = if self.compiler.contracts.is_none() {
+            self.compiler.method_selections.get(&expression).cloned()
+        } else { None };
+        if matches!(&saved, Some(MethodSelection { target: MethodTarget::Builtin, .. })) { return Ok(None); }
+        let mut left_type = self.inferred.expressions.get(&left).copied();
+        if operation.compound() { left_type = Some(self.assignment_type(left)?); }
+        else if left_type.is_none() { left_type = self.hint(left); }
+        let Some(base) = left_type else { return Ok(None); };
+        let mut right_type = self.inferred.expressions.get(&right).copied();
+        if right_type.is_none() { right_type = self.hint(right); }
+        // A constant initializer may expose its scalar receiver before its RHS
+        // block is typed. Ordinary primitive lowering still evaluates and checks
+        // both actual operand types; it cannot accept a nominal RHS as an integer.
+        // A known non-scalar RHS and every saved trait recipe keep source selection.
+        let primitive = if operation.compound() { self.numeric_scalar(base) }
+            else { self.numeric_scalar(self.primitive_value_type(base))
+                && (right_type.is_none()
+                    || right_type.is_some_and(|ty| self.numeric_scalar(self.primitive_value_type(ty)))) };
+        if saved.is_none() && primitive {
+            self.compiler.method_selections.insert(expression,
+                MethodSelection { dereferences: 0, target: MethodTarget::Builtin });
+            return Ok(None);
+        }
+        let (_, owner) = match declaration(self.compiler.source, &self.compiler.names, operation, span) {
+            Ok(value) => value,
+            Err(problem) => {
+                if self.compiler.depends_on_rigid(base) {
+                    return Err(err(span, "E_TRAIT", &format!("generic operator requires {}: {}", operation.trait_name(), problem.message)));
+                }
+                return Ok(None);
+            }
+        };
+        let identity = if let Some(saved) = &saved {
+            if saved.dereferences != 0 { return Err(err(span, "E_GENERIC", "operator witness changed its receiver")); }
+            match &saved.target {
+                MethodTarget::Trait(identity) => identity.clone(),
+                MethodTarget::AppliedTrait(owner, recipe) => {
+                    let arguments = self.compiler.instantiate_trait_recipe(recipe, &self.sub, span)?;
+                    TraitIdentity::application(*owner, arguments)
+                }
+                _ => return Err(err(span, "E_GENERIC", "operator witness is not an applied trait")),
+            }
+        } else if operation.compound() { TraitIdentity::Declared(owner) }
+        else {
+            let right = right_type.ok_or_else(|| err(span, "E_TYPE", "operator right operand needs a type annotation"))?;
+            TraitIdentity::application(owner, vec![right])
+        };
+        if self.operator_arguments_have_regions(&identity.arguments()) {
+            return Err(err(span, "E_UNSUPPORTED",
+                "reference-bearing operator trait arguments require a source region recipe"));
+        }
+        if identity.declaration() != Some(owner) {
+            return Err(err(span, "E_GENERIC", "operator witness names a different source-library trait"));
+        }
+        if !self.compiler.satisfies_identity(base, &identity) {
+            if self.compiler.depends_on_rigid(base) || saved.is_some() {
+                return Err(err(span, "E_TRAIT", &format!("generic operator requires its declared {} contract", operation.trait_name())));
+            }
+            return Ok(None);
+        }
+        // Operator receivers do not use method autoderef candidate traversal.
+        // The source goal is the exact left operand type and exact RHS identity.
+        let target = if operation.compound() { self.place_with_mutability(left, true)? }
+            else { self.addressable(left)? };
+        if place_type(&self.compiler.types, self.function, &target) != Some(base) {
+            return Err(err(span, "E_TYPE", "operator receiver differs from its inferred type"));
+        }
+        if operation.compound() { self.guard_write(&target, span)?; }
+        let instance = self.compiler.declared_associated_method(base, &identity, operation.method_name(),
+            expression, span, span, &self.sub);
+        // A concrete instance may make unrelated type parameters equal. Keep
+        // the definition's exact recipe, rather than rebuilding it from that
+        // incidental equality and changing later instances of this expression.
+        if let Some(saved) = saved { self.compiler.method_selections.insert(expression, saved); }
+        let value = self.source_method(&target, base, instance?, &[0usize; 0], &[right], span)?;
+        if operation.compound() && value.1 != ir::UNIT {
+            return Err(err(span, "E_TYPE", "compound operator must return unit"));
+        }
+        Ok(Some(value))
+    }
+}

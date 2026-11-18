@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {}
+fn unused<R>(rhs: R) -> u64 { 1u64 << { rhs } }
+pub fn probe() -> i64 { 42 }

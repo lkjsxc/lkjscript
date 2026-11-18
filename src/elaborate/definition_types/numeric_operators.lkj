@@ -1,0 +1,119 @@
+//! Operator headers provide conditional source equations. They do not prove an
+//! implementation or invert an associated output to choose an input type.
+use super::*;
+use super::super::numeric_operators::{self as contracts, Operator};
+
+impl Infer<'_, '_> {
+    fn numeric_scalar(&self, variable: Variable) -> bool {
+        match self.shape(variable) {
+            Some(Shape::Atom(name)) => integer_name(&name) || name == "f64" || name == "bool" || name == "char",
+            None => self.definition.nodes[self.definition.root(variable)].integer,
+            _ => false,
+        }
+    }
+
+    fn operator_arguments_match(&self, operation: Operator, right: Variable, arguments: &[Variable]) -> bool {
+        if operation.compound() { return arguments.is_empty(); }
+        if arguments.len() != 1usize { return false; }
+        let mut pending = vec![(right, arguments[0usize])];
+        let mut seen = std::collections::BTreeSet::new();
+        while let Some((left, right)) = pending.pop() {
+            let left = self.definition.root(left);
+            let right = self.definition.root(right);
+            if left == right || !seen.insert((left, right)) { continue; }
+            match (self.shape(left), self.shape(right)) {
+                (None, _) | (_, None) => {}
+                (Some(Shape::Vec(left)), Some(Shape::Vec(right)))
+                | (Some(Shape::Box(left)), Some(Shape::Box(right)))
+                | (Some(Shape::Slice(left)), Some(Shape::Slice(right))) => pending.push((left, right)),
+                (Some(Shape::Ref(lm, left)), Some(Shape::Ref(rm, right))) if lm == rm => pending.push((left, right)),
+                (Some(Shape::Array(left, ln)), Some(Shape::Array(right, rn))) => {
+                    pending.push((left, right)); pending.push((ln, rn));
+                }
+                (Some(Shape::Tuple(left)), Some(Shape::Tuple(right))) if left.len() == right.len() => {
+                    for index in 0..left.len() { pending.push((left[index], right[index])); }
+                }
+                (Some(Shape::Nominal(ld, left)), Some(Shape::Nominal(rd, right)))
+                    if ld == rd && left.len() == right.len() => {
+                    for index in 0..left.len() { pending.push((left[index], right[index])); }
+                }
+                (Some(left), Some(right)) if left == right => {}
+                _ => return false,
+            }
+        }
+        true
+    }
+
+    pub(super) fn solve_operator(&mut self, id: usize, operation: Operator,
+        left: Variable, right: Variable, left_value: Variable, right_value: Variable,
+        result: Variable, span: a::Span) -> Result<bool> {
+        if self.numeric_scalar(left_value) && self.numeric_scalar(right_value) {
+            if operation == Operator::Div || operation.compound() {
+                self.unify(left_value, right_value, span)?;
+            }
+            if operation.compound() {
+                let unit = self.atom("()"); self.unify(result, unit, span)?;
+            } else { self.unify(result, left_value, span)?; }
+            return Ok(true);
+        }
+        // A reference's outer shape may already be fixed while its referent or
+        // a forwarded primitive value is still waiting on another operation.
+        // Retry only after one of these actual input equations changes.
+        self.watch_shape(left, id); self.watch_shape(right, id);
+        self.watch_shape(left_value, id); self.watch_shape(right_value, id);
+        if self.shape(left).is_none() {
+            return Ok(false);
+        }
+        let (declaration, owner) = match contracts::declaration(self.source, self.names, operation, span) {
+            Ok(value) => value, Err(_) => return Ok(false),
+        };
+        let mut selected: Option<Vec<Variable>> = None;
+        for (receiver, bound, arguments, _) in self.trait_headers.clone() {
+            if !self.same_projection_receiver(receiver, left) { continue; }
+            let a::Type::Path(path) = self.source.types[bound].kind.clone() else { continue; };
+            if path.declaration != Some(declaration) || !self.operator_arguments_match(operation, right, &arguments) { continue; }
+            if let Some(previous) = &selected {
+                if self.same_trait_arguments(previous, &arguments) { continue; }
+                self.watch_shape(right, id); return Ok(false);
+            }
+            selected = Some(arguments);
+        }
+        if selected.is_none() {
+            let head = self.shape_head(left);
+            let head = match &head { Some(head) => Some(head.as_str()), None => None };
+            let candidates = self.implementations.trait_candidates_by_head(owner, head);
+            let mut candidate: Option<(usize, BTreeMap<String, Variable>, Vec<Variable>)> = None;
+            for index in candidates {
+                let environment = match self.implementation_environment(index, left)? {
+                    projection_equations::Match::No => continue,
+                    projection_equations::Match::Deferred => {
+                        self.watch_shape(left, id); self.watch_shape(right, id); return Ok(false);
+                    }
+                    projection_equations::Match::Yes(environment) => environment,
+                };
+                let bound = self.source.impls[index].trait_ty.unwrap();
+                let a::Type::Path(path) = self.source.types[bound].kind.clone() else { continue; };
+                let Some((_, arguments, _)) = self.trait_application(left, &path, &environment)? else { continue; };
+                if !self.operator_arguments_match(operation, right, &arguments) { continue; }
+                if candidate.is_some() { self.watch_shape(right, id); return Ok(false); }
+                candidate = Some((index, environment, arguments));
+            }
+            if let Some((index, mut environment, arguments)) = candidate {
+                let implementation = self.source.impls[index].clone();
+                self.parameter_equations(&implementation.generics, &mut environment, false)?;
+                self.predicate_equations(&implementation.predicates, &mut environment, false)?;
+                selected = Some(arguments);
+            }
+        }
+        let Some(arguments) = selected else { return Ok(false); };
+        if operation.compound() {
+            self.coerce(right, left, span)?;
+            let unit = self.atom("()"); self.unify(result, unit, span)?;
+        } else {
+            self.coerce(right, arguments[0usize], span)?;
+            let output = self.qualified_projection(left, declaration, &arguments, "Output", span);
+            self.unify(result, output, span)?;
+        }
+        Ok(true)
+    }
+}

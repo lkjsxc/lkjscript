@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+mod contracts {
+    pub trait Read { fn read(&self) -> i64 { 42 } }
+    pub struct Value;
+    impl Read for Value {}
+}
+use contracts::Read;
+fn generic<T: Read>(value: &T) -> i64 { value.read() }
+pub fn probe() -> i64 {
+    let value = contracts::Value;
+    generic(&value)
+}

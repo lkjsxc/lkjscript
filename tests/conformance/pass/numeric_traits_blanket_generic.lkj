@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+trait Produce<U> { fn produce(self) -> U; }
+impl<T, U: From<T>> Produce<U> for T {
+    fn produce(self) -> U { U::from(self) }
+}
+fn generic<T, U: From<T>>(value: T) -> U { value.produce() }
+pub fn probe() -> i64 {
+    let same: u8 = generic(42u8);
+    let wider: u64 = generic(same);
+    let repeated: u8 = generic(42u8);
+    assert_eq!(repeated, same);
+    wider as i64
+}

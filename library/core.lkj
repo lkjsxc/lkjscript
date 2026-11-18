@@ -1,9 +1,8 @@
 //! The core namespace exposes checked source declarations without ambient capabilities.
-pub use crate::{borrow, cmp, fmt, iter, marker, mem, num, option, result, slice, str};
-// Numeric operator and conversion modules are exported by their source provider.
-pub use crate::range as ops;
+pub use crate::{borrow, cmp, convert, fmt, iter, marker, mem, num, option, result, slice, str};
+pub use crate::ops;
 pub mod prelude {
-    pub use crate::prelude::{Default, Option, Result};
+    pub use crate::prelude::{Default, From, Into, Option, Result};
     pub use crate::iter::{IntoIterator, IterSource, Iterator, IteratorExt};
     pub use crate::str::TextView;
 }

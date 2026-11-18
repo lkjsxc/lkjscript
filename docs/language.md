@@ -23,6 +23,55 @@ then compound assignment reads the old value. Each operand executes once. Empty 
 Traps terminate without cleanup or recovery; there is no unwinding.
 Cases: [scalar bits](../tests/reference/scalar_bits.lkj), [evaluation order](../tests/reference/evaluation_order.lkj).
 
+`std::convert::{From<T>, Into<T>}` are ordinary source traits. Identity `From<T>`
+and the blanket `Into<U> for T where U: From<T>` retain the exact applied input
+type. Lossless `u8` conversions cover the wider integer types and `f64`.
+A unique trait implementation whose receiver is exactly its own type parameter
+can supply a conditional method header for a rigid generic receiver, after
+written bound methods have been considered. Argument and result context can
+then infer the complete applied implementation, as in `value.into()` under
+`U: From<T>`, while ordinary selection must still prove every prerequisite.
+Concrete receiver implementations cannot supply an undeclared generic
+interface, and competing blanket candidates remain unresolved. Trait function
+items written without their receiver type, such as `Into::into` in a higher-order
+argument, remain a separate located inference boundary.
+
+`std::ops::{Shl<Rhs>, Shr<Rhs>, Div<Rhs>, AddAssign}` provide source contracts for
+`<<`, `>>`, `/`, and `+=`. Generic bodies must establish the canonical library
+trait and its exact RHS and output types even when unused. A same-spelled local
+trait or inherent method cannot grant the operator. Primitive operations keep
+their checked scalar lowering; admitted source operators become ordinary checked
+calls. A generic definition's trait recipe survives specialization even if
+unrelated type arguments happen to be equal in one instance.
+
+Binary operator calls evaluate their left operand before the right operand.
+Source-trait compound assignment evaluates the destination expression before
+the RHS and retains its ordinary exclusive receiver borrow, including when a
+generic body later specializes to a primitive type. The independent checker
+still verifies the call, moves, borrows, and destruction. Operator query edges
+name the canonical trait method at the punctuation token; that token is not an
+editable method name. Checked body edits must prove the replacement contract.
+Macro-generated operator dependencies retain their expansion origin and
+invocation anchor, with the ordinary generated-source edit refusal.
+
+The source primitive implementations cover all ten integer types for
+`Shl<usize>`, `Shr<usize>`, same-type `Div`, and same-type `AddAssign`, plus `f64`
+division and addition assignment. This slice admits bare `AddAssign` with its
+standard `Self` RHS. General trait parameter defaults, bare `Div`/`Shl`/`Shr`,
+explicit heterogeneous `AddAssign<Rhs>`, and additional primitive conversion or
+operator trait applications remain located source boundaries. Reference-bearing
+operator trait arguments also require a source region recipe and are explicitly
+refused until that proof is available; their identity cannot be reconstructed
+from erased reference types. Primitive shared-reference forwarding and the
+existing primitive shift-count widths retain their ordinary scalar semantics.
+Constant blocks retain the existing primitive operand checks even when the RHS
+has no definition-wide inferred type. A known nominal RHS still requires its
+exact source operator application; generic recipes never become primitive
+operations merely because a later instance uses scalar types. Source operator
+calls remain outside the supported const-function contract.
+[Bit-accumulation case](../tests/conformance/pass/numeric_traits_bits.lkj),
+[evaluation-order case](../tests/conformance/pass/numeric_traits_compound_order.lkj).
+
 ## Statements, control and patterns
 
 Functions, structs, enums, module constants, aliases, generics, trait implementations,
@@ -699,7 +748,7 @@ Only borrowed_closure_escape remains pending; concurrency uses isolated processe
 | Option<&T>/Option<&mut T> | copied uses Copy without Clone; cloned invokes Clone once for Some, never None. | Owned clones may be independent, but nested views retain external origins. |
 | Vec/slice access | is_empty/get/first/last and mutable slice counterparts; invalid get returns None, including usize::MAX. contains borrows query/elements and uses eq in order without copying/consuming. | Returned references retain collection footprints. |
 | Collection copying/equality | extend_from_slice/to_vec clone in order; empty input does no clones. Vec Clone requires Clone; equality requires only PartialEq, checks length then element ==, and Vec ne negates the whole result. Nested types/floats/custom implementations follow selected traits. | Inherent clone/ne cannot replace generic contracts. Arrays use array[..].to_vec(); helper signatures and element constraints check independently. |
-| Slice/Vec helpers | starts_with borrows; copy_from_slice needs Copy and equal lengths, with array receivers written as array[..].copy_from_slice(source); predicate split retains empty groups at delimiters. clear/truncate destroy removed elements forward; stable sort/retain are source operations. | General From/Into, Sum/FromIterator and exclusive iter_mut need their own contracts. |
+| Slice/Vec helpers | starts_with borrows; copy_from_slice needs Copy and equal lengths, with array receivers written as array[..].copy_from_slice(source); predicate split retains empty groups at delimiters. clear/truncate destroy removed elements forward; stable sort/retain are source operations. | Further primitive conversions, Sum/FromIterator and exclusive iter_mut need their own contracts. |
 | Ordered maps/sets | BTreeMap uses an indexed AVL arena/free slots with logarithmic lookup/insertion/removal; BTreeSet reuses it. Sorted shared/owned iteration, map keys/values/first_key_value/pop_first/retain and set first/pop_first. Clear/drop and partially consumed iterators destroy in key order; Clone/Default/equality ignore arena shape. | Entirely source algorithms over existing storage, not new trusted primitives. |
 | Generational arenas | std::arena::Arena<T,Kind> owns graph nodes; Handle<Kind> stores owner namespace/index/generation. get/get_mut lend temporary checked views; remove moves the value and invalidates prior handles. Exhausted generations retire. | Caller assigns distinct same-Kind owner IDs while any handle survives. Handles are values, not authority; no heap views or new IR. [Million-node specimen](../examples/object_graph/README.md). |
 

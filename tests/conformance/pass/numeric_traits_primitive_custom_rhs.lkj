@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+use std::ops::Shl;
+struct Count { value: usize }
+impl Shl<Count> for u64 {
+    type Output = i64;
+    fn shl(self, rhs: Count) -> i64 { (self << rhs.value) as i64 }
+}
+fn shift<T: Shl<Count, Output = i64>>(value: T, rhs: Count) -> i64 { value << rhs }
+pub fn probe() -> i64 {
+    let direct = 3u64 << Count { value: 3 };
+    let block = 3u64 << { let amount = Count { value: 2 }; amount };
+    direct + block + shift(3u64, Count { value: 1 })
+}

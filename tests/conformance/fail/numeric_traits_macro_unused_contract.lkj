@@ -1,0 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+macro_rules! missing { ($name:ident) => { fn $name<T>(value: T) -> T { value << 1usize } }; }
+missing!(unused);
+pub fn probe() -> i64 { 42 }

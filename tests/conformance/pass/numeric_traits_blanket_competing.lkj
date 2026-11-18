@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {}
+trait Mark {}
+trait Chosen { fn select(self) -> i64; }
+trait Ineligible { fn select(self) -> bool; }
+impl<T: Copy> Chosen for T { fn select(self) -> i64 { 42 } }
+impl<T: Mark> Ineligible for T { fn select(self) -> bool { true } }
+fn generic<T: Copy>(value: T) -> i64 { value.select() }
+pub fn probe() -> i64 { generic(0u8) }

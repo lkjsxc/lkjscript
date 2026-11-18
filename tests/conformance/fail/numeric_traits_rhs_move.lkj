@@ -1,0 +1,9 @@
+// expect: reject E_MOVE
+// witness: {}
+use std::ops::AddAssign;
+fn unused<T: AddAssign>(mut left: T, right: T) -> T {
+    left += right;
+    drop(right);
+    left
+}
+pub fn probe() -> i64 { 42 }

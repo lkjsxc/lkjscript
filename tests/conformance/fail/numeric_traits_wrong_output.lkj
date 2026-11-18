@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {}
+use std::ops::Shl;
+fn unused<T: Shl<usize, Output = bool>>(value: T) -> T { value << 1usize }
+pub fn probe() -> i64 { 42 }
