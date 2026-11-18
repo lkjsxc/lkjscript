@@ -97,9 +97,17 @@ pub fn parse(bytes: &[u8]) -> Result<Request, String> {
             if key != "op" && key != "id" && key != "source" && key != "name"
                 && key != "parent" && key != "expect"
                 && !((key == "before" || key == "projection") && kind == "add-item")
-                && matches!(kind.as_str(), "replace-body" | "replace-item" | "add-item" | "remove-item" | "rename" | "move") {
+                && matches!(kind.as_str(), "replace-body" | "replace-item" | "replace-call" | "add-item" | "remove-item" | "rename" | "move") {
                 return Err(error("transaction", "REQUEST", &format!("unknown operation field {key}")));
             }
+        }
+        if kind == "replace-call" {
+            for (key, _) in fields {
+                if key != "op" && key != "id" && key != "source" && key != "expect" {
+                    return Err(error("transaction", "REQUEST", &format!("unknown operation field {key}")));
+                }
+            }
+            string(operation, "source", true)?;
         }
         let identity = string(operation, "id", true)?;
         let source = string(operation, "source", false)?;
@@ -350,6 +358,59 @@ fn projection(catalog: &semantic::Catalog, operation: &Operation) -> Result<Opti
     Ok(Some(Projection { identity, parent: operation.identity.clone(), path,
         source: string(projected, "source", true)?.as_bytes().to_vec() }))
 }
+fn one_expression(identity: &str, source: &str, call: bool) -> Result<String, String> {
+    let rule = if call { "CALL_SITE" } else { "EXPRESSION" };
+    let tokens = syntax::semantic_tokens(source)
+        .map_err(|problem| error(identity, rule, &problem.message))?;
+    if tokens.is_empty() { return Err(error(identity, rule, "source is empty; expected one expression")); }
+    // Parentheses retain this expression's precedence; newlines keep trailing
+    // line comments from swallowing the closing delimiter or surrounding code.
+    let expression = format!("(\n{source}\n)");
+    let wrapped = format!("fn __lkjscript_transaction_expression() {{ {expression} }}");
+    // Macro invocations are shape-checked here and expanded only in real scope.
+    let parsed = syntax::parse_unexpanded(&wrapped)
+        .map_err(|problem| error(identity, rule, &problem.message))?;
+    if parsed.items.len() != 1usize {
+        return Err(error(identity, rule, "source holds more than one expression; expected exactly one"));
+    }
+    let crate::ast::Item::Function(index) = parsed.items[0usize] else {
+        return Err(error(identity, rule, "source holds more than one expression; expected exactly one"));
+    };
+    let function = &parsed.functions[index];
+    if function.span.start != 0usize || function.span.end != wrapped.len() {
+        return Err(error(identity, rule, "source closes a bracket it did not open; expected one self-contained expression"));
+    }
+    let body = &parsed.blocks[function.body.unwrap()];
+    if !body.statements.is_empty() {
+        return Err(error(identity, rule, "source is a statement, not an expression; expected one expression"));
+    }
+    let tail = body.tail.ok_or_else(|| error(identity, rule, "source does not end in an expression (a trailing ';' makes it a statement); expected one expression"))?;
+    if call && !matches!(parsed.exprs[tail].kind, crate::ast::Expr::Call { .. } | crate::ast::Expr::Method { .. }) {
+        return Err(error(identity, rule, "call-site text is not one complete call expression; replace its owning body"));
+    }
+    Ok(expression)
+}
+
+fn call_replacement(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)],
+    target: &semantic::Item, source: &str) -> Result<String, String> {
+    if target.kind != "call-site" {
+        return Err(error(&target.identity, "CALL_SITE", "id is not an authored call site; find call-site IDs with query --kind outline"));
+    }
+    let owner = item(catalog, &target.parent)?;
+    validate_item(owner, inputs, "")?;
+    let (start, end) = owner.body.ok_or_else(|| error(&target.identity, "CALL_SITE", "the function containing this call site has no authored body"))?;
+    if owner.kind != "function" || owner.file != target.file
+        || target.start < start || target.start >= target.end || target.end > end {
+        return Err(error(&target.identity, "CALL_SITE", "internal: call site lies outside its function's body"));
+    }
+    // Grouped callees/receivers can have spans missing an opening parenthesis.
+    // Refuse such incomplete projections instead of guessing surrounding bytes.
+    if one_expression(&target.identity, &target.text, true).is_err() {
+        return Err(error(&target.identity, "CALL_SITE", "the text at this call site is not one complete call expression; use replace-body on its function instead"));
+    }
+    one_expression(&target.identity, source, false)
+}
+
 pub fn plan(catalog: &semantic::Catalog,
     inputs: &[(String, Vec<u8>)], request: &Request) -> Result<Draft, String> {
     if !request.snapshot.is_empty() && request.snapshot != catalog.input_digest {
@@ -400,6 +461,10 @@ pub fn plan(catalog: &semantic::Catalog,
         validate_item(target, inputs, &operation.expected)?;
         if crate::structure_refactor::plan(catalog, inputs, operation, &mut patches)? { continue; }
         match operation.kind.as_str() {
+            "replace-call" => {
+                let replacement = call_replacement(catalog, inputs, target, &operation.source)?;
+                patch(&mut patches, &operation.identity, &target.file, target.start, target.end, &replacement);
+            }
             "replace-body" => {
                 let (start, end) = target.body.ok_or_else(|| error(&operation.identity, "BODY", "identity has no source body"))?;
                 if operation.source.is_empty() { return Err(error(&operation.identity, "BODY", "replacement body is empty")); }
