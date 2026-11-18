@@ -128,7 +128,7 @@ grep -Eq '"build_reused":1' "$fixture/rollback.log"
 
 # An immutable snapshot cannot turn a modified marker declaration into the old ABI.
 cp "$fixture/library/marker.lkj" "$fixture/marker-original"
-for change in field bound derive predicate; do
+for change in field bound derive predicate default; do
     cp "$fixture/marker-original" "$fixture/library/marker.lkj"
     CORE_MARKER_CHANGE="$change" perl -0pi -e '
         my $change=$ENV{CORE_MARKER_CHANGE};
@@ -136,6 +136,8 @@ for change in field bound derive predicate; do
             s/pub struct PhantomData<T: \?Sized>;/pub struct PhantomData<T: ?Sized> { value: T }/ or die "field anchor";
         } elsif ($change eq "bound") {
             s/pub struct PhantomData<T: \?Sized>;/pub struct PhantomData<T>;/ or die "bound anchor";
+        } elsif ($change eq "default") {
+            s/pub struct PhantomData<T: \?Sized>;/pub struct PhantomData<T: ?Sized = u8>;/ or die "default anchor";
         } elsif ($change eq "derive") {
             s/Copy, Clone/Clone/ or die "derive anchor";
         } elsif ($change eq "predicate") {

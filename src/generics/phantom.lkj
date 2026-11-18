@@ -10,7 +10,8 @@ pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
         if !is_name(&qualified(&definition.module, &definition.name)) { continue; }
         let valid_parameter = definition.generics.len() == 1usize
             && !definition.generics[0].lifetime && !definition.generics[0].constant
-            && !definition.generics[0].implicit && definition.generics[0].bounds.len() == 1usize
+            && !definition.generics[0].implicit && definition.generics[0].default.is_none()
+            && definition.generics[0].bounds.len() == 1usize
             && source.relaxed_bounds.contains(&definition.generics[0].bounds[0]);
         let valid_bound = valid_parameter && matches!(&source.types[definition.generics[0].bounds[0]].kind,
             Type::Path(path) if path.name == "Sized" && path.declaration.is_none()
