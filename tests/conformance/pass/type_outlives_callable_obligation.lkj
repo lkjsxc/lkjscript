@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+fn accept<'a, T, F>(value: T, callback: F) -> i64
+where T: 'a, F: Fn(&'a i64) -> i64 { let _ = value; let _ = callback; 42i64 }
+fn caller<'a, T, F>(value: T, callback: F) -> i64
+where T: 'a, F: Fn(&'a i64) -> i64 { accept(value, callback) }
+pub fn probe() -> i64 { caller(7i64, |value: &i64| *value) }

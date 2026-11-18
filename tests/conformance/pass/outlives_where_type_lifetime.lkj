@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+fn unused<'a, T>(value: &'a T) where T: 'a { let _ = value; }
+pub fn probe() -> i64 { 42 }

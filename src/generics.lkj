@@ -10,6 +10,7 @@ pub(crate) mod const_arguments;
 mod sized_bounds;
 pub(crate) use sized_bounds::parameter_requires_sized;
 mod lifetime_predicates;
+pub(crate) mod type_outlives;
 use crate::ast::*;
 use crate::names::qualified;
 pub(crate) use bound_solver::{BoundContext, BoundSolver, BoundStep};
@@ -1328,6 +1329,7 @@ pub fn validate(source: &Program) -> Result<(), Diagnostic> {
     crate::generics::const_arguments::validate(source)?;
     associated_bindings::validate(source)?;
     lifetime_predicates::validate(source)?;
+    type_outlives::validate(source)?;
     sized_bounds::validate(source)?;
     constant_cycles(source)?;
     finite_data(source)?;

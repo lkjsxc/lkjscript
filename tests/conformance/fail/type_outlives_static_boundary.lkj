@@ -1,4 +1,4 @@
 // expect: reject E_UNSUPPORTED
 // witness: {"rustAccept":true}
-fn unused<'a, T>(value: &'a T) where T: 'a { let _ = value; }
+fn unused<T>(value: T) where T: 'static { let _ = value; }
 pub fn probe() -> i64 { 42 }

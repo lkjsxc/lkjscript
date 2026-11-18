@@ -1,0 +1,140 @@
+//! Whole-value type-region obligations for the disposable definition program.
+//! A rigid type's empty storage representation never proves an outlives bound.
+use super::{Compiler, Result, a, err, ir};
+use crate::check::scoped::Region;
+use std::collections::{BTreeMap, BTreeSet};
+
+pub(super) fn region(scope: usize, name: &str) -> Region {
+    Region { scope: if name == "'static" { 0usize } else { scope }, name: name.to_string() }
+}
+impl Compiler<'_> {
+    pub(super) fn assume_type_outlives(&mut self, ty: usize, name: &str) {
+        let contracts = self.contracts.as_mut().unwrap();
+        let required = region(contracts.active_scope, name);
+        if !contracts.type_outlives.contains_key(&ty) {
+            contracts.type_outlives.insert(ty, BTreeSet::new());
+        }
+        contracts.type_outlives.get_mut(&ty).unwrap().insert(required);
+    }
+    pub(super) fn declared_type_outlives(&self, index: usize, parameter: &str, short: &str) -> bool {
+        for (name, long, _) in crate::generics::type_outlives::declared(self.source, index) {
+            if name == parameter && (long == short || self.declared_outlives(index, &long, short)) {
+                return true;
+            }
+        }
+        let mut pending = Vec::new();
+        for input in &self.source.functions[index].params { pending.push(input.ty); }
+        while let Some(ty) = pending.pop() {
+            match &self.source.types[ty].kind {
+                a::Type::Ref { lifetime, inner, .. } => {
+                    if let a::Type::Path(path) = &self.source.types[*inner].kind {
+                        if path.declaration.is_none() && path.args.is_empty() && path.name == parameter
+                            && !lifetime.is_empty() && lifetime != "'_"
+                            && (lifetime == short || self.declared_outlives(index, lifetime, short)) {
+                            return true;
+                        }
+                    }
+                    pending.push(*inner);
+                }
+                a::Type::Tuple(fields) => pending.extend_from_slice(fields),
+                a::Type::Array { inner, .. } | a::Type::Slice(inner) => pending.push(*inner),
+                _ => {}
+            }
+        }
+        false
+    }
+    fn proves_type_region(&self, ty: usize, required: &Region) -> bool {
+        let Some(contracts) = &self.contracts else { return false; };
+        let Some(assumed) = contracts.type_outlives.get(&ty) else { return false; };
+        for long in assumed {
+            if long.name == "'static" || long == required { return true; }
+            if long.scope == required.scope && self.declared_outlives(long.scope, &long.name, &required.name) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// Reference regions have value-specific proofs in scoped_calls/origins.
+    /// This walk adds the missing abstract type dependencies without inventing
+    /// reference regions from erased IR types.
+    pub(super) fn type_dependencies_outlive(&self, ty: usize, required: &Region, span: a::Span) -> Result<()> {
+        let mut pending = vec![ty];
+        let mut seen: BTreeSet<usize> = BTreeSet::new();
+        while let Some(ty) = pending.pop() {
+            if !seen.insert(ty) { continue; }
+            if let Some((syntax, substitutions)) = self.opaque_recipe(ty) {
+                let owner = self.source.impl_traits.get(&syntax).unwrap().result.unwrap();
+                if let Some(lifetime) = super::opaque::result_lifetime(self.source, syntax) {
+                    for (name, long, _) in crate::generics::type_outlives::declared(self.source, owner) {
+                        if long != lifetime && !self.declared_outlives(owner, &long, &lifetime) { continue; }
+                        if let Some((_, actual)) = substitutions.iter().find(|(parameter, _)| parameter == &name) {
+                            pending.push(*actual);
+                        }
+                    }
+                }
+                let hidden = self.opaque_storage(ty).ok_or_else(|| err(span, "E_UNSUPPORTED",
+                    "opaque type-outlives proof requires its verified hidden storage"))?;
+                pending.push(hidden);
+                continue;
+            }
+            if self.contracts.as_ref().is_some_and(|contracts| contracts.rigid.contains_key(&ty)) {
+                if !self.proves_type_region(ty, required) {
+                    return Err(err(span, "E_BORROW", &format!(
+                        "{} has no declared type-outlives proof for {}", self.display_type(ty), required.name)));
+                }
+                continue;
+            }
+            match &self.types[ty].kind {
+                ir::TypeKind::Struct { fields, .. } => {
+                    for field in fields { pending.push(field.ty); }
+                }
+                ir::TypeKind::Enum { variants, .. } => {
+                    for variant in variants { for field in &variant.fields { pending.push(field.ty); } }
+                }
+                ir::TypeKind::Vec { inner } | ir::TypeKind::Box { inner }
+                | ir::TypeKind::Array { inner, .. } | ir::TypeKind::Slice { inner, .. } => pending.push(*inner),
+                // The scoped value proof visits reference leaves, including
+                // preserved references behind borrowed mutable storage.
+                ir::TypeKind::Ref { .. } => {}
+                _ => {}
+            }
+        }
+        Ok(())
+    }
+
+    /// Well-formed &'a T and &'a mut T inputs imply T: 'a independently of
+    /// predicates demanded by a call. No output annotation creates an assumption.
+    pub(super) fn assume_input_type_outlives(&mut self, index: usize,
+        substitutions: &BTreeMap<String, usize>) {
+        let mut pending = Vec::new();
+        let mut implied: Vec<(usize, String)> = Vec::new();
+        for parameter in &self.source.functions[index].params { pending.push(parameter.ty); }
+        while let Some(ty) = pending.pop() {
+            match &self.source.types[ty].kind {
+                a::Type::Ref { lifetime, inner, .. } => {
+                    let lifetime = lifetime.clone();
+                    let inner = *inner;
+                    if !lifetime.is_empty() && lifetime != "'_" {
+                        if let a::Type::Path(path) = &self.source.types[inner].kind {
+                            if path.declaration.is_none() && path.args.is_empty() && path.bindings.is_empty() {
+                                if let Some(actual) = substitutions.get(&path.name).copied() {
+                                    if self.contracts.as_ref().is_some_and(|contracts| contracts.rigid.contains_key(&actual)) {
+                                        implied.push((actual, lifetime.clone()));
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    pending.push(inner);
+                }
+                a::Type::Tuple(fields) => pending.extend_from_slice(fields),
+                a::Type::Array { inner, .. } | a::Type::Slice(inner) => pending.push(*inner),
+                // Function signatures and opaque/nominal applications are not
+                // unconditional well-formedness assumptions for their arguments.
+                _ => {}
+            }
+        }
+        for (ty, lifetime) in implied { self.assume_type_outlives(ty, &lifetime); }
+    }
+}

@@ -169,6 +169,7 @@ impl Compiler<'_> {
     }
     fn source_scope(&self, instance: &Instance, function: &ir::Function) -> Result<Scope> {
         let source = &self.source.functions[instance.source];
+        let type_bounds = crate::generics::type_outlives::declared(self.source, instance.source);
         let mut scope = Scope {
             outlives: self.region_edges(instance.source),
             ..Scope::default()
@@ -211,6 +212,14 @@ impl Compiler<'_> {
                         self.source.types[parameter.ty].span.column,
                     ),
                 );
+                if let Label::Parameter(name, _) = &leaf.label {
+                    for (parameter, long, _) in &type_bounds {
+                        if parameter == name {
+                            insert_outlives(&mut scope.outlives, region.clone(),
+                                super::type_outlives::region(instance.source, long));
+                        }
+                    }
+                }
                 scope.parameters.insert(input, region);
             }
         }
@@ -404,6 +413,17 @@ impl Compiler<'_> {
                 break;
             }
         }
+        let mut type_regions: BTreeMap<String, BTreeSet<Region>> = BTreeMap::new();
+        for (name, lifetime, span) in crate::generics::type_outlives::declared(self.source, instance.source) {
+            let required = bindings.get(&Label::Lifetime(lifetime)).cloned().unwrap_or(BTreeSet::new());
+            if !type_regions.contains_key(&name) { type_regions.insert(name.clone(), BTreeSet::new()); }
+            for region in required {
+                if let Some(ty) = instance.substitutions.get(&name) {
+                    self.type_dependencies_outlive(*ty, &region, span)?;
+                }
+                type_regions.get_mut(&name).unwrap().insert(region);
+            }
+        }
         let mut requirements = Vec::new();
         for (argument, parameter) in self.source.functions[instance.source]
             .params
@@ -413,16 +433,18 @@ impl Compiler<'_> {
             for leaf in
                 self.region_leaves(instance.source, parameter.ty, function.locals[argument].ty)
             {
-                let regions = if leaf.label == Label::Static {
+                let mut regions = if leaf.label == Label::Static {
                     let mut regions = BTreeSet::new();
                     regions.insert(region(0, "'static"));
                     regions
                 } else {
-                    bindings
-                        .get(&leaf.label)
-                        .cloned()
-                        .unwrap_or(BTreeSet::new())
+                    bindings.get(&leaf.label).cloned().unwrap_or(BTreeSet::new())
                 };
+                if let Label::Parameter(name, _) = &leaf.label {
+                    if let Some(required) = type_regions.get(name) {
+                        for region in required { regions.insert(region.clone()); }
+                    }
+                }
                 for region in regions {
                     requirements.push(Requirement {
                         argument,

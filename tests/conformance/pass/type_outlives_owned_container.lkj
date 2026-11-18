@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+fn boxed<'a, T>(value: T) -> impl FnOnce() -> i64 + 'a
+where T: 'a {
+    let held = Box::new(value);
+    move || { drop(held); 42i64 }
+}
+pub fn probe() -> i64 { boxed(7i64)() }

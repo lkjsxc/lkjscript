@@ -40,6 +40,9 @@ impl Compiler<'_> {
         let a::Type::Path(path) = node.kind else {
             return Err(err(span, "E_UNSUPPORTED", "trait bound needs a declared trait path"));
         };
+        // A lifetime is a region obligation, not a trait witness. Source
+        // validation restricts its owner; definition assumptions, whole-value
+        // opaque results and scoped call requirements prove it separately.
         if path.name.starts_with('\'') { return Ok(()); }
         if self.callable_bound(ty, &path, substitutions, span)? { return Ok(()); }
         let identity = self.trait_identity(&path, substitutions, node.span)?;

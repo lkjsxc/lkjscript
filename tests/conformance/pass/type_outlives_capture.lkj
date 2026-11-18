@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+fn repeat<'a, T>(value: T, number: i64) -> impl Fn() -> i64 + 'a
+where T: Clone + 'a { move || { drop(value.clone()); number } }
+pub fn probe() -> i64 {
+    let value = 21i64;
+    let copy = repeat(value, value);
+    let view = repeat(&value, value);
+    copy() + view()
+}

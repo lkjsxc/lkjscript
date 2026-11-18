@@ -1,0 +1,170 @@
+//! Named type-outlives predicates are source region obligations, not traits.
+use super::*;
+use std::collections::BTreeSet;
+
+pub(crate) fn lifetime(source: &Program, bound: TypeId) -> Option<String> {
+    match &source.types[bound].kind {
+        Type::Path(path) if path.name.starts_with('\'') => Some(path.name.clone()),
+        _ => None,
+    }
+}
+
+/// Each pair retains the function's own type binder and the exact bound span.
+/// Inherited implementation and associated-family predicates need their own
+/// substitution proof and are deliberately not collected here.
+pub(crate) fn declared(source: &Program, function: usize) -> Vec<(String, String, Span)> {
+    let mut result = Vec::new();
+    for parameter in &source.functions[function].generics {
+        if parameter.lifetime || parameter.constant { continue; }
+        for bound in &parameter.bounds {
+            if let Some(name) = lifetime(source, *bound) {
+                result.push((parameter.name.clone(), name, source.types[*bound].span));
+            }
+        }
+    }
+    result
+}
+fn unsupported(span: Span, context: &str) -> Diagnostic {
+    Diagnostic::new(span, "E_UNSUPPORTED", &format!(
+        "type-outlives predicates in {context} require a separate owner/region substitution proof"))
+}
+fn reject_parameters(source: &Program, parameters: &[GenericParam], context: &str) -> Result<(), Diagnostic> {
+    for parameter in parameters {
+        if parameter.lifetime { continue; }
+        for bound in &parameter.bounds {
+            if lifetime(source, *bound).is_some() { return Err(unsupported(source.types[*bound].span, context)); }
+        }
+    }
+    Ok(())
+}
+fn reject_predicates(source: &Program, predicates: &[WherePredicate], context: &str) -> Result<(), Diagnostic> {
+    for predicate in predicates {
+        for bound in &predicate.bounds {
+            if lifetime(source, *bound).is_some() { return Err(unsupported(source.types[*bound].span, context)); }
+        }
+    }
+    Ok(())
+}
+fn named(source: &Program, bound: TypeId, names: &BTreeSet<String>) -> Result<(), Diagnostic> {
+    let node = &source.types[bound];
+    let Type::Path(path) = &node.kind else { unreachable!() };
+    if path.name == "'static" || path.name == "'_" {
+        return Err(Diagnostic::new(node.span, "E_UNSUPPORTED",
+            "type-outlives predicates require named declaration lifetimes; static and anonymous bounds are not implemented"));
+    }
+    if path.qualification.is_some() || !path.args.is_empty() || !path.bindings.is_empty() {
+        return Err(Diagnostic::new(node.span, "E_TYPE", "type-outlives bound requires one named lifetime"));
+    }
+    if !names.contains(&path.name) {
+        return Err(Diagnostic::new(node.span, "E_TYPE",
+            &format!("undeclared lifetime {} in type-outlives predicate", path.name)));
+    }
+    Ok(())
+}
+
+fn fixed_region(source: &Program, ty: TypeId, result: bool) -> Option<Span> {
+    let mut pending = vec![(ty, result)];
+    while let Some((ty, fixed)) = pending.pop() {
+        let node = &source.types[ty];
+        match &node.kind {
+            Type::Ref { lifetime, mutable, inner } => {
+                if fixed && !lifetime.is_empty() && lifetime != "'_" { return Some(node.span); }
+                pending.push((*inner, fixed || *mutable));
+            }
+            Type::Path(path) => {
+                if path.name.starts_with('\'') && path.name != "'_" { return Some(node.span); }
+                // Named nominal lifetime arguments need a variance/owner proof.
+                for argument in &path.args { pending.push((*argument, true)); }
+                for binding in &path.bindings { pending.push((binding.value, true)); }
+                if let Some(qualification) = &path.qualification {
+                    pending.push((qualification.receiver, true));
+                    if let Some(trait_ty) = qualification.trait_ty { pending.push((trait_ty, true)); }
+                }
+            }
+            Type::Tuple(fields) => { for field in fields { pending.push((*field, fixed)); } }
+            Type::Array { inner, .. } | Type::Slice(inner) => pending.push((*inner, fixed)),
+            Type::Function { params, result } => {
+                for parameter in params { pending.push((*parameter, true)); }
+                pending.push((*result, true));
+            }
+            _ => {}
+        }
+    }
+    None
+}
+
+pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
+    for definition in &source.structs {
+        reject_parameters(source, &definition.generics, "struct headers")?;
+        reject_predicates(source, &definition.predicates, "struct headers")?;
+    }
+    for definition in &source.enums {
+        reject_parameters(source, &definition.generics, "enum headers")?;
+        reject_predicates(source, &definition.predicates, "enum headers")?;
+    }
+    for definition in &source.aliases {
+        reject_parameters(source, &definition.generics, "type aliases")?;
+        reject_predicates(source, &definition.predicates, "type aliases")?;
+    }
+    for definition in &source.traits {
+        reject_parameters(source, &definition.generics, "trait headers")?;
+        reject_predicates(source, &definition.predicates, "trait headers")?;
+        for member in &definition.associated {
+            for bound in &member.bounds {
+                if lifetime(source, *bound).is_some() {
+                    return Err(unsupported(source.types[*bound].span, "associated members"));
+                }
+            }
+        }
+    }
+    for definition in &source.impls {
+        reject_parameters(source, &definition.generics, "implementation headers")?;
+        reject_predicates(source, &definition.predicates, "implementation headers")?;
+    }
+    for (index, function) in source.functions.iter().enumerate() {
+        reject_predicates(source, &function.predicates, "nonparameter where targets")?;
+        let mut names: BTreeSet<String> = BTreeSet::new();
+        let supported = match source.function_owner(FunctionId { index }) {
+            FunctionOwner::Free => true,
+            FunctionOwner::Implementation(owner) => {
+                for parameter in &source.impls[owner.index].generics {
+                    if parameter.lifetime { names.insert(parameter.name.clone()); }
+                }
+                source.impls[owner.index].trait_ty.is_none()
+            }
+            FunctionOwner::Trait(_) => false,
+        };
+        for parameter in &function.generics {
+            if parameter.lifetime { names.insert(parameter.name.clone()); }
+        }
+        for parameter in &function.generics {
+            if parameter.lifetime { continue; }
+            for bound in &parameter.bounds {
+                if lifetime(source, *bound).is_none() { continue; }
+                if !supported {
+                    return Err(unsupported(source.types[*bound].span, "trait methods"));
+                }
+                if parameter.constant {
+                    return Err(Diagnostic::new(source.types[*bound].span, "E_TYPE",
+                        "a constant parameter cannot be the subject of a type-outlives bound"));
+                }
+                named(source, *bound, &names)?;
+            }
+        }
+        if !declared(source, index).is_empty() {
+            for parameter in &function.params {
+                if let Some(span) = fixed_region(source, parameter.ty, false) {
+                    return Err(Diagnostic::new(span, "E_UNSUPPORTED",
+                        "type-outlives obligations fixed by invariant, nominal or function-pointer input regions require caller-region instantiation"));
+                }
+            }
+            if !source.impl_traits.get(&function.result).is_some_and(|form| form.result == Some(index)) {
+                if let Some(span) = fixed_region(source, function.result, true) {
+                    return Err(Diagnostic::new(span, "E_UNSUPPORTED",
+                        "type-outlives obligations fixed by ordinary result lifetimes require caller-region instantiation; direct opaque results use the whole-value proof"));
+                }
+            }
+        }
+    }
+    Ok(())
+}

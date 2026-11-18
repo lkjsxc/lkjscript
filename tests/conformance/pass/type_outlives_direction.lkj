@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+fn shorten<'long, 'middle, 'short, T>(value: T) -> impl Fn() -> i64 + 'short
+where T: Clone + 'long, 'long: 'middle, 'middle: 'short {
+    move || { drop(value.clone()); 42i64 }
+}
+pub fn probe() -> i64 { let value = 0i64; shorten(&value)() }
