@@ -121,6 +121,7 @@ impl Infer<'_, '_> {
                                         | "Child"
                                         | "Listener"
                                         | "Connector"
+                                        | "TcpPort"
                                         | "Readiness"
                                         | "Entropy"
                                         | "Stop"

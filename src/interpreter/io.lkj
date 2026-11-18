@@ -649,6 +649,39 @@ impl<H: Host> Interpreter<'_, H> {
                 let events = self.host.readiness_wait(ready, deadline);
                 self.io_events_result(types, events)?
             }
+            ir::IntrinsicOp::WorldTcpPort if values.len() == 2 => {
+                self.io_authority(values, TypeKind::World)?;
+                let types = self.io_open_types(result, TypeKind::TcpPort)?;
+                if !matches!(self.kind(values[1].0)?, TypeKind::Int { bits: 16, signed: false }) {
+                    return Err(self.invalid("TCP port must be an unsigned 16-bit value"));
+                }
+                let port = self.io_number(values, 1, values[1].0)?;
+                let (tag, ty, value) = if port > 0 && port <= 65535 {
+                    (0usize, types.0, Value::TcpPort(port as u16))
+                } else { (1usize, types.1, Value::Bits(22)) };
+                let child = self.allocate(ty, Some(value), false)?;
+                Value::Aggregate { variant: Some(tag), fields: vec![child] }
+            }
+            ir::IntrinsicOp::TcpPortConnector if values.len() == 2 => {
+                let authority = self.io_authority(values, TypeKind::TcpPort)?;
+                let types = self.io_open_types(result, TypeKind::Connector)?;
+                let port = match self.value(authority.cell)? {
+                    Value::TcpPort(port) if *port != 0u16 => *port,
+                    _ => return Err(self.invalid("TCP authority has no granted port")),
+                };
+                let access = self.io_buffer(values, 1, false)?;
+                let host = self.bytes(&access)?;
+                let (tag, ty, value) = if host.len() == 4 {
+                    let mut address = vec![0u8; 16];
+                    address[0] = 2;
+                    address[2] = (port >> 8u64) as u8;
+                    address[3] = port as u8;
+                    address[4..8].copy_from_slice(&host);
+                    (0usize, types.0, Value::Connector(address))
+                } else { (1usize, types.1, Value::Bits(22)) };
+                let child = self.allocate(ty, Some(value), false)?;
+                Value::Aggregate { variant: Some(tag), fields: vec![child] }
+            }
             ir::IntrinsicOp::WorldConnector if values.len() == 2 => {
 
                 self.io_authority(values, TypeKind::World)?;

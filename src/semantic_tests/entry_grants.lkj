@@ -109,6 +109,7 @@ fn non_scalar_result_rejects_before_acquisition() {
     assert_eq!(error.code, "E_ENTRY");
 }
 fn connector_grants_are_exact_and_unforgeable() {
+    tcp_port_grants_are_exact_and_unforgeable();
     let checked = check::check(ir_text::read(include_str!(
         "../../tests/fixtures/authority/connector_entry.lkjir"
     )).unwrap()).unwrap();
@@ -138,6 +139,35 @@ fn connector_grants_are_exact_and_unforgeable() {
     let mismatched = vec![ir::EntryGrant::Listener(endpoint)];
     assert!(interpreter::run_granted(checked.program(), 0, &mismatched, &mut host).is_err());
     assert!(native::encode_granted(&checked, &runtime, 0, &mismatched, None, None).is_err());
+    assert!(host.0.is_empty());
+}
+fn tcp_port_grants_are_exact_and_unforgeable() {
+    let checked = check::check(ir_text::read(include_str!(
+        "../../tests/fixtures/authority/tcp_port_entry.lkjir"
+    )).unwrap()).unwrap();
+    let runtime = prepared();
+    let mut host = FailingHost(Vec::new());
+    for port in vec![1u16, 53u16, 80u16, 443u16, 65535u16] {
+        let grants = crate::entry_grants::prepare(checked.program(), 0, &[format!("target={port}")]).unwrap();
+        assert!(matches!(grants[0], ir::EntryGrant::TcpPort(value) if value == port));
+        interpreter::run_granted(checked.program(), 0, &grants, &mut host).unwrap();
+        native::encode_granted(&checked, &runtime, 0, &grants, None, None).unwrap();
+    }
+    assert!(host.0.is_empty(), "a port grant does not open any socket");
+    for text in vec!["target".to_string(), "target=".to_string(), "target=0".to_string(),
+        "target=65536".to_string(), "target=-1".to_string(), "target=80,443".to_string(),
+        "target=env:PORT".to_string(), "target=127.0.0.1:80".to_string()] {
+        assert!(crate::entry_grants::prepare(checked.program(), 0, &[text]).is_err());
+    }
+    for value in vec![0u64, 1u64, 80u64, 65535u64] {
+        assert!(interpreter::run(checked.program(), 0, &[value], &mut host).is_err());
+        let selected = native::Entry { function: 0, arguments: vec![value as i64], result_fd: None };
+        assert_eq!(native::encode(&checked, &runtime, selected).err().unwrap().code, "E_ENTRY");
+    }
+    for grant in vec![ir::EntryGrant::TcpPort(0u16), ir::EntryGrant::Clock] {
+        assert!(interpreter::run_granted(checked.program(), 0, &[grant.clone()], &mut host).is_err());
+        assert!(native::encode_granted(&checked, &runtime, 0, &[grant], None, None).is_err());
+    }
     assert!(host.0.is_empty());
 }
 fn readiness_grants_are_owned_and_unforgeable() {

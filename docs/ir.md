@@ -57,7 +57,7 @@ The first seven types must match this primitive prefix exactly, including names.
 | `array TYPE LENGTH` | Fixed-length owned elements. |
 | `vec TYPE`, `box TYPE` | Owned growable sequence or owned indirection. |
 | `str` | Unsized immutable UTF-8 text; values require a shared reference. |
-| `world`, `arguments`, `environment`, `exit_status`, `stdout`, `stdin`, `stderr`, `directory`, `read_directory`, `file`, `read_file`, `foreign_command`, `foreign_session`, `image`, `channel`, `worker`, `read_region`, `null_device`, `process`, `clock`, `child`, `listener`, `connector`, `readiness`, `entropy`, `stop` | Affine authority-bearing values. |
+| `world`, `arguments`, `environment`, `exit_status`, `stdout`, `stdin`, `stderr`, `directory`, `read_directory`, `file`, `read_file`, `foreign_command`, `foreign_session`, `image`, `channel`, `worker`, `read_region`, `null_device`, `process`, `clock`, `child`, `listener`, `connector`, `tcp_port`, `readiness`, `entropy`, `stop` | Affine authority-bearing values. |
 
 All type indices must exist. Recursive by-value layouts reject; introduce Box or
 another indirection. Unsized text cannot be stored by value or as a container
@@ -177,6 +177,8 @@ The intrinsic signatures are checked in `src/check.lkj` and `src/check/io.lkj`:
 | `world_listen` | `(&mut world, &[u8]) -> Result<listener, i64>`: bind and listen on an exact IPv4 socket address. |
 | `listener_accept listener_accept_nodelay` | `(&mut listener) -> Result<file, i64>`: accept an owned TCP byte stream; the second disables Nagle before returning it, closing on configuration failure. |
 | `world_connector` | `(&mut world, &[u8]) -> Result<connector, i64>`: authorize one exact numeric IPv4 TCP destination. |
+| `world_tcp_port` | `(&mut world, u16 port) -> Result<tcp_port,i64>`: nonzero outbound IPv4 TCP port authority, errno 22 for zero. No socket is opened. |
+| `tcp_port_connector` | `(&mut tcp_port, &[u8] host) -> Result<connector,i64>`: exactly four IPv4 octets, with the owned authority supplying the immutable port. Other lengths return 22; caller bytes cannot carry a different port. |
 | `connector_connect` | `(&mut connector) -> Result<file, i64>`: connect only to its authorized destination. |
 | `connector_connect_deadline` | `(&mut connector, usize deadline) -> Result<file, i64>`: same destination, absolute monotonic nanoseconds; nonblocking connect, readiness and SO_ERROR, returning a blocking owned File or the fresh positive errno. Expiry returns 110 and every unsuccessful attempt closes its private socket. |
 | `world_unix_connect directory_unix_connect` | `(&mut world/directory, &[u8] path) -> Result<file,i64>`: exactly one trailing NUL; absolute World path or confined Directory descendant. Returns a nonblocking close-on-exec stream. |

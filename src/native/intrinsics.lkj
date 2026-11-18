@@ -221,6 +221,43 @@ impl Body<'_> {
                 self.intrinsic_open_result(dst);
                 return Ok(true);
             }
+            IntrinsicOp::WorldTcpPort => {
+                self.read(args[1], A);
+                let valid = self.a.label();
+                self.a.test(A, true);
+                self.a.condition(5, valid);
+                self.a.immediate(A, (-22i64) as u64);
+                self.a.bind(valid);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
+            IntrinsicOp::TcpPortConnector => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.read_word(args[1], 0, SI);
+                self.read_word(args[1], 1, D);
+                let invalid = self.a.label();
+                let ready = self.a.label();
+                self.a.immediate(A, 4);
+                self.a.compare(D, A);
+                self.a.condition(5, invalid);
+                self.a.load_width(A, SI, 0, 4, false);
+                self.a.shift(A, 4, 16);
+                self.a.mov(C, DI);
+                self.a.shift(C, 4, 8);
+                self.a.mov(D, DI);
+                self.a.shift(D, 5, 8);
+                self.a.rr(0x09, C, D, true);
+                self.a.immediate(D, 65535);
+                self.a.rr(0x21, C, D, true);
+                self.a.rr(0x09, A, C, true);
+                self.a.jump(ready);
+                self.a.bind(invalid);
+                self.a.immediate(A, (-22i64) as u64);
+                self.a.bind(ready);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
             IntrinsicOp::WorldConnector => {
                 self.read_word(args[1], 0, DI);
                 self.read_word(args[1], 1, SI);

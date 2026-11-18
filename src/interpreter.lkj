@@ -421,6 +421,7 @@ enum Value {
     Child(u64),
     Listener(u64),
     Connector(Vec<u8>),
+    TcpPort(u16),
     Readiness(u64),
     Entropy,
     Stop(u64),
@@ -876,7 +877,8 @@ impl<H: Host> Interpreter<'_, H> {
             | Value::Listener(_)
             | Value::Readiness(_)
             | Value::Stop(_)
-            | Value::Connector(_) => Err(self.error(
+            | Value::Connector(_)
+            | Value::TcpPort(_) => Err(self.error(
                 InterpreterError::MissingDrop,
                 "owned value requires structural destruction",
             )),
@@ -1081,6 +1083,7 @@ impl<H: Host> Interpreter<'_, H> {
             | (TypeKind::Stop, Value::Stop(handle)) => *handle != 0,
             (TypeKind::ReadRegion,Value::ReadRegion {handle,bytes}) => *handle != 0 && self.element_types(bytes,ir::U8),
             (TypeKind::Connector, Value::Connector(address)) => valid_connector(address),
+            (TypeKind::TcpPort, Value::TcpPort(port)) => *port != 0u16,
             (TypeKind::Ref { inner, mutable }, Value::Reference(reference)) => {
                 *inner == reference.referent && *mutable == reference.mutable
             }
@@ -2600,6 +2603,7 @@ fn run_inner<'a, H: Host>(
             && value.as_ref().map_or(true, |bytes| !bytes.contains(&0u8)),
         ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
                 ir::EntryGrant::Connector(_) => matches!(kind, TypeKind::Connector),
+                ir::EntryGrant::TcpPort(port) => matches!(kind, TypeKind::TcpPort) && *port != 0u16,
                 ir::EntryGrant::Readiness => matches!(kind, TypeKind::Readiness),
                 ir::EntryGrant::Entropy => matches!(kind, TypeKind::Entropy),
                 ir::EntryGrant::Stop => matches!(kind, TypeKind::Stop),
@@ -2736,6 +2740,7 @@ fn run_inner<'a, H: Host>(
                     Ok(_) => Err(0),
                     Err(errno) => Err(errno),
                 },
+                ir::EntryGrant::TcpPort(port) => if *port != 0u16 { Ok(Value::TcpPort(*port)) } else { Err(22) },
                 ir::EntryGrant::Connector(address) => {
                     if valid_connector(address) { Ok(Value::Connector(address.clone())) } else { Err(22) }
                 },

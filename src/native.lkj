@@ -1705,6 +1705,7 @@ fn grant_matches(kind: &TypeKind, grant: &ir::EntryGrant, parameters: usize) -> 
             && value.as_ref().map_or(true, |bytes| !bytes.contains(&0u8)),
         ir::EntryGrant::Listener(_) => matches!(kind, TypeKind::Listener),
         ir::EntryGrant::Connector(_) => matches!(kind, TypeKind::Connector),
+        ir::EntryGrant::TcpPort(port) => matches!(kind, TypeKind::TcpPort) && *port != 0u16,
         ir::EntryGrant::Readiness => matches!(kind, TypeKind::Readiness),
         ir::EntryGrant::Entropy => matches!(kind, TypeKind::Entropy),
         ir::EntryGrant::Stop => matches!(kind, TypeKind::Stop),

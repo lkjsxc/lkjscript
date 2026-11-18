@@ -1129,6 +1129,8 @@ fn authority_cases() -> Vec<AuthorityCase> {
             "[custom Drop];stdout_write;directory_close [structural cleanup]", "world_"),
         authority_case("file_cleanup.lkj", include_str!("../tests/fixtures/authority/file_cleanup.lkj"), "main",
             "directory_open;file_close [structural cleanup];directory_close [structural cleanup]", "world_"),
+        authority_case("tcp_port.lkj", include_str!("../tests/fixtures/authority/tcp_port.lkj"), "main",
+            "tcp: TcpPort (--grant tcp=PORT);tcp_port_connector;connector_connect_deadline;file_close [structural cleanup]", "world_;listener_"),
         authority_case("connector_deadline.lkj", include_str!("../tests/fixtures/authority/connector_deadline.lkj"), "main",
             "target: Connector (--grant target=ADDRESS);connector_connect_deadline;file_close [structural cleanup]", "world_;listener_"),
         authority_case("connector.lkj", include_str!("../tests/fixtures/authority/connector.lkj"), "main",

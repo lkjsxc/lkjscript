@@ -25,7 +25,7 @@ fn concrete(program: &a::Program, root: usize) -> bool {
                 } else if !matches!(path.name.as_str(), "bool" | "char" | "u8" | "u16" | "u32" | "u64"
                     | "usize" | "i8" | "i16" | "i32" | "i64" | "isize" | "f64" | "Vec" | "Box"
                     | "World" | "Stdout" | "Stdin" | "Stderr" | "Directory" | "File" | "Process"
-                    | "Clock" | "Child" | "Listener" | "Connector" | "Readiness") { return false; }
+                    | "Clock" | "Child" | "Listener" | "Connector" | "TcpPort" | "Readiness") { return false; }
             }
             _ => return false,
         }

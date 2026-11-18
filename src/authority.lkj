@@ -57,6 +57,7 @@ fn capability(kind: &TypeKind) -> Option<(&'static str, bool)> {
         TypeKind::NullDevice => Some(("NullDevice", false)),
         TypeKind::Listener => Some(("Listener", true)),
         TypeKind::Connector => Some(("Connector", true)),
+        TypeKind::TcpPort => Some(("TcpPort", true)),
         TypeKind::Readiness => Some(("Readiness", false)),
         TypeKind::Entropy => Some(("Entropy", false)),
         TypeKind::Stop => Some(("Stop", false)),
@@ -463,6 +464,8 @@ pub fn render(checked: &CheckedProgram, report: &Report) -> String {
                 "=unix:/PATH|unix:env:NAME"
             } else if requirement.capability == "Environment" {
                 "=NAME"
+            } else if requirement.capability == "TcpPort" {
+                "=PORT"
             } else if requirement.capability == "Listener" || requirement.capability == "Connector" {
                 "=ADDRESS"
             } else {

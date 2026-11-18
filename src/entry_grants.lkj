@@ -25,7 +25,7 @@ pub fn validate(program: &Program, entry: usize) -> Result<(), String> {
         if matches!(ty.kind, TypeKind::ReadFile) {
             return Err(problem(&format!("File parameter {} cannot be granted; accept Directory and open the file inside the entry", local.name)));
         }
-        if !matches!(ty.kind, TypeKind::File | TypeKind::Arguments | TypeKind::Environment | TypeKind::ExitStatus | TypeKind::Stdout | TypeKind::Stdin | TypeKind::Stderr | TypeKind::Clock | TypeKind::Process | TypeKind::Directory | TypeKind::ReadDirectory | TypeKind::ForeignCommand | TypeKind::Image | TypeKind::NullDevice | TypeKind::Listener | TypeKind::Connector | TypeKind::Readiness | TypeKind::Entropy | TypeKind::Stop) {
+        if !matches!(ty.kind, TypeKind::File | TypeKind::Arguments | TypeKind::Environment | TypeKind::ExitStatus | TypeKind::Stdout | TypeKind::Stdin | TypeKind::Stderr | TypeKind::Clock | TypeKind::Process | TypeKind::Directory | TypeKind::ReadDirectory | TypeKind::ForeignCommand | TypeKind::Image | TypeKind::NullDevice | TypeKind::Listener | TypeKind::Connector | TypeKind::TcpPort | TypeKind::Readiness | TypeKind::Entropy | TypeKind::Stop) {
             return Err(problem(&format!("parameter {} requires an owned grantable capability; World must be the only parameter", local.name)));
         }
         if !valid_name(&local.name) || names.contains(&local.name) {
@@ -127,6 +127,12 @@ pub fn prepare(program: &Program, entry: usize, supplied: &[String]) -> Result<V
                     if !path.starts_with('/') || path.len() >= 108 { return Err(problem("Unix socket grant needs an absolute pathname shorter than 108 bytes")); }
                     let mut bytes = path.as_bytes().to_vec(); bytes.push(0); EntryGrant::UnixStream(bytes)
                 }
+            }
+            TypeKind::TcpPort => {
+                let value = value.as_ref().ok_or_else(|| problem(&format!("--grant {} requires one outbound TCP port", local.name)))?;
+                let port = decimal(value, 65535).map_err(|_| problem("TcpPort grant requires a decimal port from 1 to 65535"))?;
+                if port == 0 { return Err(problem("TcpPort grant requires a decimal port from 1 to 65535")); }
+                EntryGrant::TcpPort(port as u16)
             }
             TypeKind::Environment => {
                 let name = value.as_ref().ok_or_else(|| problem(&format!("--grant {} requires one environment name", local.name)))?;

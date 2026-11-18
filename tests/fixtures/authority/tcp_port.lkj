@@ -1,0 +1,5 @@
+// expect: check
+pub fn main(mut tcp: TcpPort) {
+    let mut target = tcp.connector("127.0.0.1").unwrap();
+    let _stream = target.connect_deadline(0usize);
+}

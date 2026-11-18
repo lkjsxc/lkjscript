@@ -1,0 +1,15 @@
+pub fn main(mut tcp: TcpPort, mut clock: Clock, mut arguments: Arguments, mut out: Stdout) {
+    let args = arguments.args();
+    assert_eq!(args.len(), 1usize);
+    let address = String::from_utf8(args[0].clone()).unwrap();
+    let mut target = tcp.connector(address.as_str()).unwrap();
+    drop(tcp);
+    match target.connect_deadline(0usize) { Err(error) => assert_eq!(error, 110), Ok(_) => panic!("expired connection") }
+    let mut file = target.connect_deadline(clock.nanoseconds().unwrap() + 5000000000usize).unwrap();
+    let mut byte = [0u8; 1];
+    assert_eq!(file.read(&mut byte).unwrap(), 1usize);
+    assert_eq!(byte[0], b'R');
+    file.write_all(b"Q").unwrap();
+    assert_eq!(file.read(&mut byte).unwrap(), 0usize);
+    out.write(b"tcp port boundary ok\n");
+}

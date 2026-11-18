@@ -517,6 +517,7 @@ impl Compiler<'_> {
                     | "Child"
                     | "Listener"
                     | "Connector"
+                    | "TcpPort"
                     | "Readiness"
                     | "Entropy"
                     | "Stop"
@@ -553,6 +554,7 @@ impl Compiler<'_> {
                 "Child" => ir::TypeKind::Child,
                 "Listener" => ir::TypeKind::Listener,
                 "Connector" => ir::TypeKind::Connector,
+                "TcpPort" => ir::TypeKind::TcpPort,
                 "Readiness" => ir::TypeKind::Readiness,
                 "Entropy" => ir::TypeKind::Entropy,
                 "Stop" => ir::TypeKind::Stop,

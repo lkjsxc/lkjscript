@@ -25,6 +25,7 @@ fn description(grant: &EntryGrant) -> String {
         EntryGrant::DirectoryEnvironment(name) | EntryGrant::DirectoryEnvironmentValue(name, _) => format!("Directory env:{}", path_value(name)),
         EntryGrant::Listener(_) => format!("Listener {}", crate::entry_grants::endpoint(grant).unwrap_or("<invalid endpoint>".to_string())),
         EntryGrant::Connector(_) => format!("Connector {}", crate::entry_grants::endpoint(grant).unwrap_or("<invalid endpoint>".to_string())),
+        EntryGrant::TcpPort(port) => format!("TcpPort {port}"),
         EntryGrant::Readiness => "Readiness epoll".to_string(),
         EntryGrant::Stop => "Stop SIGTERM".to_string(),
         EntryGrant::Environment(name) => format!("Environment {}", path_value(name)),
@@ -142,6 +143,7 @@ impl Plan {
                     a.call(p.foreign_open);
                 }
                 EntryGrant::NullDevice => { a.call(p.null_open); },
+                EntryGrant::TcpPort(port) => { a.immediate(A, *port as u64); },
                 EntryGrant::Connector(address) => {
                     a.address(DI, self.paths[index]);
                     a.immediate(SI, address.len() as u64);

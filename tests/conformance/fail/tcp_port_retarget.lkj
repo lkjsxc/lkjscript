@@ -1,0 +1,3 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false,"rustCode":"E0061","world":true}
+fn probe(mut tcp: TcpPort) { let _target = tcp.connector("127.0.0.1", 443u16); }

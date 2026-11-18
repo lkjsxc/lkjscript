@@ -188,6 +188,16 @@ pub(super) fn signature(
                 && bytes(types, args[1], false)
                 && opened(types, result, &TypeKind::Listener)
         }
+        IntrinsicOp::WorldTcpPort => {
+            args.len() == 2 && authority(types, args[0], &TypeKind::World)
+                && matches!(types[args[1]].kind, TypeKind::Int { bits: 16, signed: false })
+                && opened(types, result, &TypeKind::TcpPort)
+        }
+        IntrinsicOp::TcpPortConnector => {
+            args.len() == 2 && authority(types, args[0], &TypeKind::TcpPort)
+                && bytes(types, args[1], false)
+                && opened(types, result, &TypeKind::Connector)
+        }
         IntrinsicOp::WorldConnector => {
             args.len() == 2
                 && authority(types, args[0], &TypeKind::World)

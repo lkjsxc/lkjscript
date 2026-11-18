@@ -1,0 +1,4 @@
+// expect: reject E_MOVE
+// witness: {"rustAccept":false,"rustCode":"E0382","world":true}
+fn consume(_tcp: TcpPort) {}
+fn probe(mut tcp: TcpPort) { consume(tcp); let _target = tcp.connector("127.0.0.1"); }

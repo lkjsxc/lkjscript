@@ -29,6 +29,7 @@ impl Infer<'_, '_> {
             Value::Child => self.atom("Child"),
             Value::Listener => self.atom("Listener"),
             Value::Connector => self.atom("Connector"),
+            Value::TcpPort => self.atom("TcpPort"),
             Value::Readiness => self.atom("Readiness"),
             Value::Entropy => self.atom("Entropy"),
             Value::Stop => self.atom("Stop"),
@@ -86,6 +87,7 @@ impl Infer<'_, '_> {
             | Value::ResultReadRegion | Value::ResultWorker
             | Value::ResultListener
             | Value::ResultConnector
+            | Value::ResultTcpPort
             | Value::ResultReadiness
             | Value::ResultStop
             | Value::ResultBoolean
@@ -107,6 +109,7 @@ impl Infer<'_, '_> {
                     Value::ResultChild => self.capability_type(Value::Child, span)?,
                     Value::ResultListener => self.capability_type(Value::Listener, span)?,
                     Value::ResultConnector => self.capability_type(Value::Connector, span)?,
+                    Value::ResultTcpPort => self.capability_type(Value::TcpPort, span)?,
                     Value::ResultReadiness => self.capability_type(Value::Readiness, span)?,
                     Value::ResultStop => self.capability_type(Value::Stop, span)?,
                     Value::ResultBoolean => self.capability_type(Value::Boolean, span)?,

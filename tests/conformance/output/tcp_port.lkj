@@ -1,0 +1,38 @@
+// expect: output 74637020706f7274206f6b0a
+// witness: {}
+fn errno<T>(result: Result<T, i64>, expected: i64) {
+    match result { Err(error) => assert_eq!(error, expected), Ok(_) => panic!("expected an I/O error") }
+}
+fn exchange(target: &mut Connector, listener: &mut Listener, clock: &mut Clock) {
+    let mut stream = target.connect_deadline(clock.nanoseconds().unwrap() + 5000000000usize).unwrap();
+    let mut accepted = listener.accept().unwrap();
+    accepted.write_all(b"P").unwrap();
+    let mut byte = [0u8; 1];
+    assert_eq!(stream.read(&mut byte).unwrap(), 1usize);
+    assert_eq!(byte[0], b'P');
+}
+pub fn main(mut world: World) {
+    errno(world.tcp_port(0u16), 22);
+    for port in vec![1u16, 53u16, 80u16, 443u16, 65535u16] { assert!(world.tcp_port(port).is_ok()); }
+    let mut clock = world.clock();
+    let mut first = world.listen("127.0.0.1", 0u16).unwrap();
+    let port = first.port().unwrap();
+    let mut second = world.listen("127.0.0.2", port).unwrap();
+    let mut tcp = world.tcp_port(port).unwrap();
+    for address in vec!["".to_string(), "localhost".to_string(), "127.0.0".to_string(),
+        "127.0.0.1:80".to_string(), "127.0.0.1.2".to_string(), "256.0.0.1".to_string(),
+        "127.0.0.1\0".to_string(), "127..0.1".to_string()] { errno(tcp.connector(address.as_str()), 22); }
+    errno(tcp.__lkjscript_connector(&[127u8, 0, 0]), 22);
+    errno(tcp.__lkjscript_connector(&[127u8, 0, 0, 1, 80]), 22);
+    errno(tcp.__lkjscript_connector(&[2u8, 0, 0, 80, 127, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0]), 22);
+    let mut target = tcp.connector("127.000.000.001").unwrap();
+    exchange(&mut target, &mut first, &mut clock);
+    let mut other = tcp.connector("127.0.0.2").unwrap();
+    exchange(&mut other, &mut second, &mut clock);
+    let mut bytes = [127u8, 0, 0, 1];
+    let mut snapshot = tcp.__lkjscript_connector(&bytes).unwrap();
+    bytes[3] = 2;
+    drop(tcp);
+    exchange(&mut snapshot, &mut first, &mut clock);
+    world.stdout().write(b"tcp port ok\n");
+}

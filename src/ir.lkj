@@ -71,6 +71,8 @@ pub enum TypeKind {
     Listener,
     /// Affine authority to connect to one numeric IPv4 endpoint.
     Connector,
+    /// Affine authority to choose numeric IPv4 destinations on one outbound port.
+    TcpPort,
     /// Affine readiness set; destruction closes only its kernel event handle.
     Readiness,
     /// Affine authority to obtain kernel random bytes.
@@ -119,6 +121,7 @@ pub enum EntryGrant {
     UnixStream(Vec<u8>),
     UnixStreamEnvironment(Vec<u8>),
     UnixStreamEnvironmentValue(Vec<u8>, Option<Vec<u8>>),
+    TcpPort(u16),
     Readiness,
     Entropy,
     Stop,
@@ -341,6 +344,8 @@ pub enum IntrinsicOp {
     ListenerAccept,
     ListenerAcceptNoDelay,
     WorldConnector,
+    WorldTcpPort,
+    TcpPortConnector,
     ConnectorConnect,
     ConnectorConnectDeadline,
     WorldUnixConnect,
@@ -459,6 +464,8 @@ impl IntrinsicOp {
             "file_readonly" => Some(IntrinsicOp::FileReadOnly),
             "world_listen" => Some(IntrinsicOp::WorldListen),
             "world_connector" => Some(IntrinsicOp::WorldConnector),
+            "world_tcp_port" => Some(IntrinsicOp::WorldTcpPort),
+            "tcp_port_connector" => Some(IntrinsicOp::TcpPortConnector),
             "connector_connect" => Some(IntrinsicOp::ConnectorConnect),
             "connector_connect_deadline" => Some(IntrinsicOp::ConnectorConnectDeadline),
             "world_unix_connect" => Some(IntrinsicOp::WorldUnixConnect),
@@ -581,6 +588,8 @@ impl IntrinsicOp {
             IntrinsicOp::FileReadOnly => "file_readonly",
             IntrinsicOp::WorldListen => "world_listen",
             IntrinsicOp::WorldConnector => "world_connector",
+            IntrinsicOp::WorldTcpPort => "world_tcp_port",
+            IntrinsicOp::TcpPortConnector => "tcp_port_connector",
             IntrinsicOp::ConnectorConnect => "connector_connect",
             IntrinsicOp::ConnectorConnectDeadline => "connector_connect_deadline",
             IntrinsicOp::WorldUnixConnect => "world_unix_connect",

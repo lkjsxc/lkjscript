@@ -1,0 +1,12 @@
+ok Unix main native: Wayland byte wire, bidirectional owned rights, bounded cleanup
+ok Unix directory native: Wayland byte wire, bidirectional owned rights, bounded cleanup
+ok Unix world native: Wayland byte wire, bidirectional owned rights, bounded cleanup
+ok Unix environment grants native, closed stdin preserves descriptor sentinel
+ok Unix native: live path replacement stays pinned; TCP rights refusal closes consumed owners
+ok Unix main interpreter: Wayland byte wire, bidirectional owned rights, bounded cleanup
+ok Unix directory interpreter: Wayland byte wire, bidirectional owned rights, bounded cleanup
+ok Unix world interpreter: Wayland byte wire, bidirectional owned rights, bounded cleanup
+ok Unix environment grants interpreter, closed stdin preserves descriptor sentinel
+ok Unix interpreter: live path replacement stays pinned; TCP rights refusal closes consumed owners
+ok Unix standalone resolves only explicit environment selectors at startup
+ok Unix cold/warm unit-linked native images; no ambient grant, integer forge, read-only connect or sent-owner reuse

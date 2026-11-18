@@ -1,0 +1,281 @@
+{
+   "compiler" : {
+      "path" : "/home/coder/workspace/lkjscript-programs-20261115/target/lkjscript",
+      "sha256" : "38f8494e1a58fddbff8dc0af0950ea5056c80ec42cdf91d9793c569d17cb03ed"
+   },
+   "interpretation" : "Every source byte is unchanged. Suffix projection preserves tracked module/asset context. The compiler has no Cargo package/feature/test configuration here. A refusal is a root observation, not an exhaustive blocker count; acceptance would not establish Cargo-equivalent configuration or executed upstream tests. Exit status and launcher_signal belong to the time launcher; the complete separate time_report retains its abnormal-exit/signal diagnostic as well as peak RSS.",
+   "kind" : "unmodified_real_program_root_observations",
+   "library" : {
+      "files" : [
+         {
+            "bytes" : 5649,
+            "path" : "arena.lkj",
+            "sha256" : "1f9db54c4e8845aacc8d98e525bdd95c16c4bd064ad6aa92663d74607b9cbd84"
+         },
+         {
+            "bytes" : 2153,
+            "path" : "buffer.lkj",
+            "sha256" : "de444027870ae8382b3a137e625df00cc3b91774b3aa3280bfe25456b40c6e2d"
+         },
+         {
+            "bytes" : 968,
+            "path" : "bytes.lkj",
+            "sha256" : "8448ec831069dcb9af7255684f7cab55941450774d7207df05441e21da76c140"
+         },
+         {
+            "bytes" : 3050,
+            "path" : "char.lkj",
+            "sha256" : "a88b914c36fd02fa3513a6bd7d3b605c910a7d081fc73556e90f2f559b329c91"
+         },
+         {
+            "bytes" : 1092,
+            "path" : "command.lkj",
+            "sha256" : "ec475789a7f3953f16787781d020221e010077ce1f761fa807f1a3e971dff02b"
+         },
+         {
+            "bytes" : 14447,
+            "path" : "fmt.lkj",
+            "sha256" : "ac6ca7fd2494a691e749b49880a97c96f271445d3955a857d30a91a122ef6c98"
+         },
+         {
+            "bytes" : 2758,
+            "path" : "foreign.lkj",
+            "sha256" : "ba8b2d0bc38d83ea88794e1305542001d47dca467b3cb63bff5393fa3aa1b190"
+         },
+         {
+            "bytes" : 2313,
+            "path" : "foreign_session.lkj",
+            "sha256" : "07a4b69c352bfb9b79c4b949e99aacfc4af18e61350310475dbe56747561217b"
+         },
+         {
+            "bytes" : 1552,
+            "path" : "hmac.lkj",
+            "sha256" : "0b858ec07dea6ed77dbe2f1d2c7f5d82bb80fac22581fe2c4eacde6da0d0dc0a"
+         },
+         {
+            "bytes" : 3345,
+            "path" : "http_policy.lkj",
+            "sha256" : "828a8ac2268d7457dbbd899f845da47ebcb72ab05b706af4482c14207807ad71"
+         },
+         {
+            "bytes" : 22342,
+            "path" : "http_protocol.lkj",
+            "sha256" : "6e271d2712c55bdb2abe3e932ed19b341f9a2aedf02c3b4e147295a36c3b55b5"
+         },
+         {
+            "bytes" : 28337,
+            "path" : "http_server.lkj",
+            "sha256" : "a1eaa77fba55dd2a0881ff0c5c23f73541ad9d41ddf865e6817714c7dbba5864"
+         },
+         {
+            "bytes" : 11342,
+            "path" : "integer.lkj",
+            "sha256" : "4a6aee75de5f562487765f0ef10f21853082abeb79784692bdd4e870bf20dba9"
+         },
+         {
+            "bytes" : 16032,
+            "path" : "io.lkj",
+            "sha256" : "a6d0ab48376d35d0b092a93b6070a5e13296b68924cec2277faaff1a654bd0b0"
+         },
+         {
+            "bytes" : 16032,
+            "path" : "iter.lkj",
+            "sha256" : "a7e6e7e4dabbf75490bbbb03f704b3f086c1f0b9f2cdd9d7caa4dc77f2aa6755"
+         },
+         {
+            "bytes" : 16416,
+            "path" : "json.lkj",
+            "sha256" : "37ec8d2a45090c6baca53ddb841c34d87472c7d3829611aaab9014e5ee268c0a"
+         },
+         {
+            "bytes" : 1735,
+            "path" : "lib.lkj",
+            "sha256" : "f3a22089990f40ae34cf921efe417122e89fc7e360de63424123862b2ecfd1a8"
+         },
+         {
+            "bytes" : 15116,
+            "path" : "ordered_map.lkj",
+            "sha256" : "c307dfaf987976ce401a8404f5ddc23dbfd44f07f94d81eb627b95ce8bb339cb"
+         },
+         {
+            "bytes" : 2714,
+            "path" : "ordered_set.lkj",
+            "sha256" : "374842accfffca999a5ec91469653d2b853ce682d2d64a4e22843de5d0d3a4e7"
+         },
+         {
+            "bytes" : 12911,
+            "path" : "prelude.lkj",
+            "sha256" : "6838e80682187566eb03b27975e0ee9b0b92c0cd93ba48e4448de89ee6bff166"
+         },
+         {
+            "bytes" : 7863,
+            "path" : "process_model.lkj",
+            "sha256" : "d80022d5aeb0bf171d2bef171e322e39376835be4f61cc518c8fb0ae5b940b41"
+         },
+         {
+            "bytes" : 2291,
+            "path" : "read_io.lkj",
+            "sha256" : "1818cfbf170fca18aa35415498cd97f9c6c46eae326669ff8d091192fc49dd9b"
+         },
+         {
+            "bytes" : 7050,
+            "path" : "runtime.lkj",
+            "sha256" : "eeeb173d23c597d7b666aca949a32ba171fa5407be4173ad4626abe1ad295d14"
+         },
+         {
+            "bytes" : 12749,
+            "path" : "sequence.lkj",
+            "sha256" : "44b90b45b87dc95987a58967fa38c8d5788fc573d10fbbdb368e7854dd2cfb98"
+         },
+         {
+            "bytes" : 6245,
+            "path" : "sha256.lkj",
+            "sha256" : "1cc3ea4cdde49659c4acc438211b7913dc6a274519b07c43a33d56dc8b0ee75c"
+         },
+         {
+            "bytes" : 17153,
+            "path" : "str.lkj",
+            "sha256" : "6fd8f10faaddba5738a108e878590c20a36391fe0c93ab0dfa8bcfeac3588cb9"
+         },
+         {
+            "bytes" : 5748,
+            "path" : "string.lkj",
+            "sha256" : "2956a68eb4ae029e49a730359f4fa207f91651a42e8d0e7ae5f929773a9a94b6"
+         },
+         {
+            "bytes" : 4696,
+            "path" : "text.lkj",
+            "sha256" : "a3db91eb7293a2755c6d1001a3a59da3357a349985535d509a36f80a64f7ab3f"
+         },
+         {
+            "bytes" : 23643,
+            "path" : "text_lower.lkj",
+            "sha256" : "aa0e8391619ea7f700fccf5a073f19f28d56a62061e8011d018f1901f86a92a8"
+         },
+         {
+            "bytes" : 5328,
+            "path" : "time.lkj",
+            "sha256" : "fa4723f72c2ee85a8388543959c6a612c921cc3006a0e5b8c94d0480d5582507"
+         },
+         {
+            "bytes" : 4640,
+            "path" : "timers.lkj",
+            "sha256" : "bfec10692ce18268654d56ebc29e0eec52996f2aa1ef46d83467d09541bcc7a1"
+         },
+         {
+            "bytes" : 5022,
+            "path" : "workers.lkj",
+            "sha256" : "7ec1ce8104ecdc1aae563c839ca962c3248345ebe71729d516e63dce2c9ed36d"
+         }
+      ],
+      "manifest_sha256" : "8831f051df396cbf44028a9ab7d74df7a21f7fb3335cd7707d1c161e5215ea87",
+      "root" : "/home/coder/workspace/lkjscript-programs-20261115/library"
+   },
+   "observations" : [
+      {
+         "command" : [
+            "/home/coder/workspace/lkjscript-programs-20261115/target/lkjscript",
+            "check",
+            "src/lib.rs",
+            "--source-dir",
+            "/home/coder/workspace/lkjscript-specimens/nom-8.0.0",
+            "--library-dir",
+            "/home/coder/workspace/lkjscript-programs-20261115/library"
+         ],
+         "entry_bytes" : 15533,
+         "entry_sha256" : "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
+         "exit_status" : 1,
+         "launcher_signal" : 0,
+         "load_after" : "7.77",
+         "load_before" : "7.77",
+         "peak_rss_kib" : 4012,
+         "route" : "original_suffix",
+         "stderr" : {
+            "bytes" : 77,
+            "sha256" : "1170c98833b245d8181dc2850bcfc1d36d34bc83792f33ec55fd3787b0b748e1",
+            "text" : "src/lib.rs: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir\n"
+         },
+         "stdout" : {
+            "bytes" : 0,
+            "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "text" : ""
+         },
+         "time_report" : {
+            "bytes" : 43,
+            "sha256" : "09b15faa133cc43b51845901ca06c0b778df923263a45f7515f3b25bb95a08a7",
+            "text" : "Command exited with non-zero status 1\n4012\n"
+         },
+         "upstream_entry" : "src/lib.rs",
+         "wall_seconds" : 0.007435
+      },
+      {
+         "command" : [
+            "/home/coder/workspace/lkjscript-programs-20261115/target/lkjscript",
+            "check",
+            "src/lib.lkj",
+            "--source-dir",
+            "/home/coder/workspace/lkjscript-specimens/projections/nom-8.0.0",
+            "--library-dir",
+            "/home/coder/workspace/lkjscript-programs-20261115/library"
+         ],
+         "entry_bytes" : 15533,
+         "entry_sha256" : "6022ac91a16e3f00f458cac7a198a81fcd6bee5dc9e75903d3438f447eb70fd7",
+         "exit_status" : 1,
+         "launcher_signal" : 0,
+         "load_after" : "7.77",
+         "load_before" : "7.77",
+         "peak_rss_kib" : 29724,
+         "route" : "suffix_projection",
+         "stderr" : {
+            "bytes" : 2947,
+            "sha256" : "fd8e38ab4e1dc42b7c2e9616494de68978efe9e4bccb88fb1c3f5f05f1615550",
+            "text" : "src/lib.lkj:385:1: E_UNSUPPORTED cfg predicate doctest is not supported; help: use #[cfg(test)] for test-only declarations\nsrc/lib.lkj:388:1: E_UNSUPPORTED cfg predicate doctest is not supported; help: use #[cfg(test)] for test-only declarations\nsrc/lib.lkj:458:1: E_UNSUPPORTED cfg predicate doc is not supported; help: use #[cfg(test)] for test-only declarations\nsrc/number/mod.lkj:1420:6: E_LEX unsupported character in source\nsrc/character/streaming.lkj:651:6: E_LEX unsupported character in source\nsrc/character/complete.lkj:754:6: E_LEX unsupported character in source\nsrc/bytes/complete.lkj:424:46: E_UNSUPPORTED type-outlives where predicates are not implemented\nsrc/bits/streaming.lkj:76:24: E_UNSUPPORTED_MACRO unsupported macro: error_position!\nsrc/bits/complete.lkj:100:24: E_UNSUPPORTED_MACRO unsupported macro: error_position!\nsrc/traits.lkj:507:18: E_UNSUPPORTED unsupported construct: unsafe\nsrc/traits.lkj:542:18: E_UNSUPPORTED unsupported construct: unsafe\nsrc/sequence/mod.lkj:245:4: E_LEX unsupported character in source\nsrc/multi/mod.lkj:964:29: E_UNSUPPORTED type-outlives where predicates are not implemented\nsrc/internal.lkj:527:4: E_LEX unsupported character in source\nsrc/branch/mod.lkj:98:4: E_LEX unsupported character in source\nsrc/error.lkj:453:4: E_LEX unsupported character in source\nsrc/macros.lkj:2:7: E_LEX unsupported character in source\nsrc/lib.lkj:385:1: E_BLOCKED item: not analyzed after E_UNSUPPORTED\nsrc/lib.lkj:388:1: E_BLOCKED item: not analyzed after E_UNSUPPORTED\nsrc/lib.lkj:458:1: E_BLOCKED item: not analyzed after E_UNSUPPORTED\nsrc/number/mod.lkj:1420:6: E_BLOCKED file: lexing failed; remaining token boundaries are unknown\nsrc/character/streaming.lkj:651:6: E_BLOCKED file: lexing failed; remaining token boundaries are unknown\nsrc/character/complete.lkj:754:6: E_BLOCKED file: lexing failed; remaining token boundaries are unknown\nsrc/bytes/complete.lkj:418:1: E_BLOCKED item: not analyzed after E_UNSUPPORTED\nsrc/bits/streaming.lkj:76:9: E_BLOCKED statement: not analyzed after E_UNSUPPORTED_MACRO\nsrc/bits/complete.lkj:100:9: E_BLOCKED statement: not analyzed after E_UNSUPPORTED_MACRO\nsrc/traits.lkj:506:5: E_BLOCKED statement: not analyzed after E_UNSUPPORTED\nsrc/traits.lkj:540:5: E_BLOCKED statement: not analyzed after E_UNSUPPORTED\nsrc/sequence/mod.lkj:245:4: E_BLOCKED file: lexing failed; remaining token boundaries are unknown\nsrc/multi/mod.lkj:958:1: E_BLOCKED item: not analyzed after E_UNSUPPORTED\nsrc/internal.lkj:527:4: E_BLOCKED file: lexing failed; remaining token boundaries are unknown\nsrc/branch/mod.lkj:98:4: E_BLOCKED file: lexing failed; remaining token boundaries are unknown\nsrc/error.lkj:453:4: E_BLOCKED file: lexing failed; remaining token boundaries are unknown\nsrc/macros.lkj:2:7: E_BLOCKED file: lexing failed; remaining token boundaries are unknown\nsrc/lib.lkj:0:0: E_BLOCKED semantic phase: source errors prevent complete name resolution and semantic checking\n"
+         },
+         "stdout" : {
+            "bytes" : 0,
+            "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "text" : ""
+         },
+         "time_report" : {
+            "bytes" : 44,
+            "sha256" : "36283ebfa3755323e2fb850a8e24f81119363a7b40ab9afd69e7f331d68f1023",
+            "text" : "Command exited with non-zero status 1\n29724\n"
+         },
+         "upstream_entry" : "src/lib.rs",
+         "wall_seconds" : 0.139008
+      }
+   ],
+   "package" : {
+      "commit" : "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
+      "name" : "nom",
+      "object_format" : "sha1",
+      "origin" : "https://github.com/rust-bakery/nom.git",
+      "root" : "/home/coder/workspace/lkjscript-specimens/nom-8.0.0",
+      "version" : "8.0.0"
+   },
+   "projection_manifest_sha256" : "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
+   "schema" : 1,
+   "time_launcher" : {
+      "path" : "/usr/bin/time",
+      "sha256" : "3b11dec50514a8473e9f6efa7a34d584d0657538c09988f61b72d38ad4991a10"
+   },
+   "timestamp_utc" : "2026-11-18T07:28:53Z",
+   "verification_after" : {
+      "aliases" : 65,
+      "commit" : "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
+      "manifest" : "/home/coder/workspace/lkjscript-specimens/projections/nom-8.0.0/projection.json",
+      "manifest_sha256" : "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
+      "operation" : "verify",
+      "read_only" : true,
+      "tracked_files" : 106
+   },
+   "verification_before" : {
+      "aliases" : 65,
+      "commit" : "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
+      "manifest" : "/home/coder/workspace/lkjscript-specimens/projections/nom-8.0.0/projection.json",
+      "manifest_sha256" : "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
+      "operation" : "verify",
+      "read_only" : true,
+      "tracked_files" : 106
+   }
+}

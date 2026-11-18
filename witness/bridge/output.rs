@@ -6,6 +6,8 @@ use std::os::fd::AsRawFd;
 use std::os::unix::ffi::OsStrExt;
 use std::rc::Rc;
 
+pub struct TcpPort { port: u16 }
+
 pub struct World {
     arguments: Vec<Vec<u8>>,
     status: Rc<Cell<u8>>,
@@ -122,6 +124,9 @@ impl World {
     pub fn readiness(&mut self) -> Result<Readiness, i64> {
         Ok(Readiness { handle: files::create_readiness()? })
     }
+    pub fn tcp_port(&mut self, port: u16) -> Result<TcpPort, i64> {
+        if port == 0 { Err(22) } else { Ok(TcpPort { port }) }
+    }
     pub fn connector(&mut self, address: &str, port: u16) -> Result<Connector, i64> {
 
         let mut bytes = [0u8; 16];
@@ -206,6 +211,33 @@ impl Readiness {
     }
     pub fn wait(&mut self, _clock: &mut Clock, deadline_ns: usize) -> Result<Vec<(usize, u8)>, i64> {
         files::wait_events(self.handle.as_raw_fd(), deadline_ns)
+    }
+}
+impl TcpPort {
+    pub fn connector(&mut self, address: &str) -> Result<Connector, i64> {
+        let mut bytes = [0u8; 4];
+        let mut parts = address.split('.');
+        for part in 0..4 {
+            let text = parts.next().ok_or(22i64)?;
+            if text.is_empty() { return Err(22); }
+            let mut value = 0u16;
+            for byte in text.bytes() {
+                if !byte.is_ascii_digit() { return Err(22); }
+                value = value * 10 + u16::from(byte - b'0');
+                if value > 255 { return Err(22); }
+            }
+            bytes[part] = value as u8;
+        }
+        if parts.next().is_some() { return Err(22); }
+        self.__lkjscript_connector(&bytes)
+    }
+    pub fn __lkjscript_connector(&mut self, host: &[u8]) -> Result<Connector, i64> {
+        if host.len() != 4 { return Err(22); }
+        let mut address = [0u8; 16];
+        address[0] = 2;
+        address[2..4].copy_from_slice(&self.port.to_be_bytes());
+        address[4..8].copy_from_slice(host);
+        Ok(Connector { address })
     }
 }
 impl Connector {

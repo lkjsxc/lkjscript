@@ -298,6 +298,11 @@ pub fn __lkjscript_directory_list(directory: &mut Directory) -> Result<Vec<Vec<u
     Result::Ok(names)
 }
 
+pub fn __lkjscript_ipv4_host(address: &str) -> Vec<u8> {
+    let endpoint = __lkjscript_ipv4_address(address, 0u16);
+    if endpoint.len() == 16usize { endpoint[4usize..8usize].to_vec() } else { Vec::new() }
+}
+
 pub fn __lkjscript_ipv4_address(
     address: &str,
     port: u16,

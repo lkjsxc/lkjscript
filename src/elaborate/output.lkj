@@ -30,6 +30,7 @@ impl Builder<'_, '_> {
             Value::Child => self.compiler.intern(String::new(), ir::TypeKind::Child),
             Value::Listener => self.compiler.intern(String::new(), ir::TypeKind::Listener),
             Value::Connector => self.compiler.intern(String::new(), ir::TypeKind::Connector),
+            Value::TcpPort => self.compiler.intern(String::new(), ir::TypeKind::TcpPort),
             Value::Readiness => self.compiler.intern(String::new(), ir::TypeKind::Readiness),
             Value::Entropy => self.compiler.intern(String::new(), ir::TypeKind::Entropy),
             Value::Stop => self.compiler.intern(String::new(), ir::TypeKind::Stop),
@@ -106,6 +107,7 @@ impl Builder<'_, '_> {
             | Value::ResultReadRegion | Value::ResultWorker
             | Value::ResultListener
             | Value::ResultConnector
+            | Value::ResultTcpPort
             | Value::ResultReadiness
             | Value::ResultStop
             | Value::ResultBoolean
@@ -127,6 +129,7 @@ impl Builder<'_, '_> {
                     Value::ResultChild => self.capability_type(Value::Child, span)?,
                     Value::ResultListener => self.capability_type(Value::Listener, span)?,
                     Value::ResultConnector => self.capability_type(Value::Connector, span)?,
+                    Value::ResultTcpPort => self.capability_type(Value::TcpPort, span)?,
                     Value::ResultReadiness => self.capability_type(Value::Readiness, span)?,
                     Value::ResultStop => self.capability_type(Value::Stop, span)?,
                     Value::ResultBoolean => self.capability_type(Value::Boolean, span)?,
@@ -247,10 +250,11 @@ impl Builder<'_, '_> {
             }, span.line);
             return Ok((dst, result));
         }
-        if matches!(method, capabilities::Method::WorldConnector) {
+        if matches!(method, capabilities::Method::WorldConnector | capabilities::Method::TcpPortConnector) {
+            let restricted = matches!(method, capabilities::Method::TcpPortConnector);
             let address = self.source_library_call(
-                "io", "__lkjscript_ipv4_address", BTreeMap::new(),
-                vec![values[1], values[2]], span,
+                "io", if restricted { "__lkjscript_ipv4_host" } else { "__lkjscript_ipv4_address" }, BTreeMap::new(),
+                if restricted { vec![values[1]] } else { vec![values[1], values[2]] }, span,
             )?;
             let bytes = self.capability_type(capabilities::Value::Bytes, span)?;
             let borrowed = self.temp(bytes);
@@ -259,7 +263,7 @@ impl Builder<'_, '_> {
             }, span.line);
             let dst = self.temp(result);
             self.emit(ir::Op::Intrinsic {
-                dst, name: ir::IntrinsicOp::WorldConnector, args: vec![values[0], borrowed],
+                dst, name: if restricted { ir::IntrinsicOp::TcpPortConnector } else { ir::IntrinsicOp::WorldConnector }, args: vec![values[0], borrowed],
             }, span.line);
             return Ok((dst, result));
         }
