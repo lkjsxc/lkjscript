@@ -32,7 +32,7 @@ Seed gzip SHA-256:
 
     9327f64a3c9a5c37146ca6c91a6926a8707d9fef3d9fd67398125909f4b5f612
 
-The [bootstrap](type-outlives-data/bootstrap.log) starts from the published operational-macro seed at 5fe0ba9e4
+The [bootstrap](type-outlives-data/bootstrap.log) starts from the unchanged published type-outlives seed at 739c8cde2
 and reaches byte-identical current-emitter generations without a bridge.
 The [focused suite](type-outlives-data/cases-native.log) passes 31 cases /
 62 native/interpreter routes. The independent
@@ -44,23 +44,36 @@ The combined producer passes these source-command proofs:
 - [lifetime outlives](type-outlives-data/region-query.log)
 - [type outlives](type-outlives-data/query.log)
 
-The combined preflight includes the published TemporaryFiles/Unix/TcpPort runtime,
-corrected GAT inference, Debug and operational macros with transactional diagnostic
-recovery. Both type-outlives and existing lifetime-outlives query/edit suites pass.
-The earlier private type-outlives proof and its 210-case regression population are
-retained separately; they are not attributed to this producer.
+The integrated source includes the published TemporaryFiles, Unix and TcpPort
+runtime, corrected GAT inference, Debug and operational macros with transactional
+diagnostic recovery. Type-outlives and lifetime-outlives queries and checked edits
+pass. The earlier private type-outlives proof and its separate 210-case regression
+population remain retained and are not attributed to this producer.
 
-All twelve original-source observations were repeated with this producer. Every
-inherited source identity and recovery parent was revalidated against the exact
-original files; no new unclassified diagnostics remain.
+The original type-outlives step changes the classified nom frontier from 49 to 47
+sites. This harness correction repeats all twelve original-source observations
+with the identical compiler and leaves every diagnostic stream unchanged.
+Inherited source identities and recovery parents are revalidated against the
+exact original files; no new unclassified diagnostics remain.
 
 The complete local Rust witness passes 499 values/output cases and 652 verdicts,
 including exact compiler byte identity and all registered runtime, macro and
-original Levenshtein proofs. Both reviewed CI harness corrections are retained.
+original Levenshtein proofs. Those source, query and Rust receipts are retained
+with their original identities because their compiler and inputs are unchanged.
 
-The refreshed-seed four-worker [full gate](type-outlives-data/full-gate.log) passes in 1416.187 seconds with 6575 fresh case requests, zero reuse and 128 IR mutants with zero findings. The separate [real-program regression](type-outlives-data/standalone-real-programs.log) passes eight original Levenshtein tests per engine, eighteen provenance controls and all 7,239 native corpus rows. Producer and seed hashes remain unchanged.
+The original exact-commit CI 44332902680 failed at the macro-origin host suite's
+600-second watchdog; its witness passed. That failed run remains failed.
+The preceding successful CI host suite took 580.842 seconds. A controlled
+same-source local pair takes 288.54 seconds with the old producer and 289.42
+seconds with this producer; all 25 malformed-origin contracts execute on both
+engines. The corrective harness keeps every assertion, uses a finite 1800-second
+watchdog and reports phases/status while removing default fixtures and stripping
+keys before explicit retention. Its full gate, bootstrap, final phase proof and
+twelve original-source observations are separately fresh.
 
-Twelve fresh unchanged-source observations give nom 49->47, DOM 39->39 and Sozu 968->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
+The refreshed-seed four-worker [full gate](type-outlives-data/full-gate.log) passes in 1213.535 seconds with 6575 fresh case requests, zero reuse and 128 IR mutants with zero findings. The separate [real-program regression](type-outlives-data/standalone-real-programs.log) passes eight original Levenshtein tests per engine, eighteen provenance controls and all 7,239 native corpus rows. Producer and seed hashes remain unchanged.
+
+Twelve fresh unchanged-source observations give nom 47->47, DOM 39->39 and Sozu 968->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
 No original large root or nom own test admits. The
 [current frontier](../docs/real-programs-current.json), exact source-hashed
 reviews and [previous frontier](type-outlives-data/previous-frontier.json) retain
