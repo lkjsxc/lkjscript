@@ -55,6 +55,24 @@ impl Builder<'_, '_> {
         false
     }
 
+    // Constant initializers have no definition-wide inference graph. A scalar
+    // literal expression still belongs to the existing primitive path, whose
+    // contextual type/default rules choose its width during ordinary lowering.
+    fn scalar_literal_expression(&self, expression: a::ExprId) -> bool {
+        let mut pending = vec![expression];
+        while let Some(expression) = pending.pop() {
+            match &self.compiler.source.exprs[expression].kind {
+                a::Expr::Int(_) | a::Expr::Float(_) | a::Expr::Bool(_) | a::Expr::Char(_) => {}
+                a::Expr::Unary { op, value } if matches!(op.as_str(), "-" | "!") => pending.push(*value),
+                a::Expr::Binary { left, right, .. } => {
+                    pending.push(*left); pending.push(*right);
+                }
+                _ => return false,
+            }
+        }
+        true
+    }
+
     fn numeric_scalar(&self, ty: usize) -> bool {
         matches!(self.compiler.types[ty].kind,
             ir::TypeKind::Bool | ir::TypeKind::Char | ir::TypeKind::Int { .. } | ir::TypeKind::F64)
@@ -76,7 +94,8 @@ impl Builder<'_, '_> {
         if right_type.is_none() { right_type = self.hint(right); }
         let primitive = if operation.compound() { self.numeric_scalar(base) }
             else { self.numeric_scalar(self.primitive_value_type(base))
-                && right_type.is_some_and(|ty| self.numeric_scalar(self.primitive_value_type(ty))) };
+                && (right_type.is_some_and(|ty| self.numeric_scalar(self.primitive_value_type(ty)))
+                    || (right_type.is_none() && self.scalar_literal_expression(right))) };
         if saved.is_none() && primitive {
             self.compiler.method_selections.insert(expression,
                 MethodSelection { dereferences: 0, target: MethodTarget::Builtin });
