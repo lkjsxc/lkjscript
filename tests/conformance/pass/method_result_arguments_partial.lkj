@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+trait Relay<I> { fn relay<T>(&self, input: I, value: T) -> T; }
+struct Factory;
+impl<I: Copy> Relay<I> for Factory {
+    fn relay<T>(&self, input: I, value: T) -> T { drop(input); value }
+}
+pub fn probe() -> i64 {
+    let call = Factory.relay(1u8, || 42i64);
+    call()
+}

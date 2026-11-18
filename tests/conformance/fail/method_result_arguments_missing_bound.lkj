@@ -1,0 +1,9 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+trait Seed { fn seed() -> Self; }
+impl Seed for i64 { fn seed() -> Self { 42i64 } }
+trait Construct { fn make<T: Seed>(&self) -> T; }
+struct Factory;
+impl Construct for Factory { fn make<T: Seed>(&self) -> T { T::seed() } }
+fn missing<R>(factory: &Factory) -> R { factory.make() }
+pub fn probe() -> i64 { 42 }

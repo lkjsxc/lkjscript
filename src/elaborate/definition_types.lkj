@@ -209,7 +209,14 @@ impl DefinitionTypes {
             for (name, variable) in &application.arguments {
                 if let Some(ty) = self.materialize(*variable, compiler, substitutions, &mut known, span)? {
                     arguments.insert(name.clone(), ty);
-                } else { complete = false; break; }
+                } else if compiler.source.impls[application.implementation].generics.iter()
+                    .any(|parameter| !parameter.lifetime && parameter.name == *name) {
+                    // An incomplete implementation cannot establish eligibility.
+                    // A method-local argument may still be inferred when its
+                    // value expression is lowered; keep the complete impl proof.
+                    complete = false;
+                    break;
+                }
             }
             if complete {
                 result.method_applications.insert(*expression, MethodApplication {
@@ -1157,10 +1164,21 @@ impl Infer<'_, '_> {
         index: usize,
         type_args: &[a::TypeId],
         values: &[Variable],
-        mut environment: BTreeMap<String, Variable>,
+        environment: BTreeMap<String, Variable>,
         first: usize,
         span: a::Span,
     ) -> Result<Variable> {
+        Ok(self.header_signature_environment(index, type_args, values, environment, first, span)?.0)
+    }
+    fn header_signature_environment(
+        &mut self,
+        index: usize,
+        type_args: &[a::TypeId],
+        values: &[Variable],
+        mut environment: BTreeMap<String, Variable>,
+        first: usize,
+        span: a::Span,
+    ) -> Result<(Variable, BTreeMap<String, Variable>)> {
         let function = self.source.functions[index].clone();
         let outer = self.environment.clone();
         let mut type_index = 0;
@@ -1186,7 +1204,8 @@ impl Infer<'_, '_> {
             self.coerce(values[index], expected, span)?;
             index += 1;
         }
-        self.source_type(function.result, &environment)
+        let result = self.source_type(function.result, &environment)?;
+        Ok((result, environment))
     }
     fn constrain_pattern(&mut self, pattern: a::PatternId, mut subject: Variable) -> Result<()> {
         if matches!(

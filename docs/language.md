@@ -277,6 +277,11 @@ candidates do not become witnesses. The completed application supplies no new
 argument coercion site: an inferred mutable-reference argument still moves unless
 the source establishes a reborrow. Checked specialization, references, and method
 renames retain the same application. [Tuple dispatch](../tests/conformance/pass/positional_method_tuple.lkj).
+Recorded concrete applications also retain method-local type arguments fixed by
+result or chained-call context, such as `parse`'s `T` in `text.parse().ok()`.
+Final instantiation checks the method's written bounds. An unresolved method-local
+argument may still be inferred from its value expression without discarding an
+already complete implementation application. [Result context](../tests/conformance/pass/method_result_arguments_chain.lkj).
 
 **Generic associated types.** A declared family such as `Mode::Output<T>`
 keeps its receiver, complete trait application, member, and ordered family
