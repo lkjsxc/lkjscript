@@ -1,0 +1,1 @@
+struct Value<Element> { value: Element } fn main() -> i64 { Value { value: 7i64 }.value }

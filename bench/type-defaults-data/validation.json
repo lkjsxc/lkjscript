@@ -1,0 +1,146 @@
+{
+   "bootstrap" : {
+      "fixed_point" : "byte-identical current-emitter generations",
+      "receipt" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/bootstrap.log",
+         "sha256" : "c6bc7f83779c9e94b03627c7ee856122b7a3077213244998875a2b0811697463"
+      },
+      "status" : "passed"
+   },
+   "checked_ir" : "Declaration-owned defaults normalize into existing checked types and calls; no independent-checker, interpreter or runtime changes.",
+   "compiler_sha256" : "ef1f22d49ef4ce473dc49566f38ddbcf24f7000ce19ee86a37cfb1dc69073f92",
+   "focused" : {
+      "cases" : 43,
+      "engine_routes" : 86,
+      "native" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/cases-native.log",
+         "sha256" : "c17d560f335a9771b7ee2e4da9dd3bbafaf2603e28160507403d961c8da4cb9c"
+      },
+      "rust" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/cases-rust.log",
+         "sha256" : "08bd80c3cbf891362053c3557019df96e7d5bfe97b30e93df9fdec4c001badcf"
+      },
+      "rust_separate_optimization_levels" : [
+         0,
+         3
+      ],
+      "rust_separate_root_cases" : 1,
+      "rust_values_or_output" : 16,
+      "rust_verdicts" : 26,
+      "status" : "passed"
+   },
+   "frontier" : {
+      "changed_streams" : 1,
+      "fresh_observations" : 12,
+      "new_unclassified" : 0,
+      "observation_index" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/observation-index.json",
+         "sha256" : "22985081381efee4aa814ea3963184f927af67c9db8ddec5fd911461c6cafa66"
+      },
+      "projected_roots" : 6,
+      "rerank" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/rerank.log",
+         "sha256" : "8579b9bf3fd8cc482c2c874a2144e8d75c6c950de557a43ed240826fed2481a9"
+      },
+      "stage_delta" : {
+         "dom" : [
+            39,
+            39
+         ],
+         "nom" : [
+            47,
+            45
+         ],
+         "sozu" : [
+            968,
+            968
+         ]
+      }
+   },
+   "full_gate" : {
+      "finished_at_utc" : "2026-11-18T19:52:23Z",
+      "fresh_case_requests" : 6661,
+      "ir_findings" : 0,
+      "ir_mutants" : 128,
+      "receipt" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/full-gate.log",
+         "sha256" : "e011f38c145a4b671e30f16ae2f2913451b904436f0594650263e2c2879e835a"
+      },
+      "reused_case_requests" : 0,
+      "seconds" : 1283.412,
+      "started_at_utc" : "2026-11-18T19:31:00Z",
+      "status" : "passed"
+   },
+   "nom_own_tests_run_under_lkjscript" : 0,
+   "notes" : [
+      "The exact combined producer includes all published runtime slices, corrected GAT inference, Debug, operational macros and function-owned named type-outlives contracts.",
+      "The standard Rust witness covers 42 cases. The exact namespace case needs $crate at the actual root and separately passes at opt-levels 0 and 3; this route is registered in witness/check.sh.",
+      "Generated Default and Debug implementation binders clear default metadata. Twelve malformed Default/Debug origins and twenty-six malformed macro origins refuse, including valid but wrong default TypeIds.",
+      "Three failed fixture revisions remain in the external proof with their precise corrections; they did not justify changing the compiler semantics.",
+      "The earlier private defaults base predates the published GAT positive-expectation migration; the publication tree preserves the migrated tests and consumer Vec harness.",
+      "The canonical publication tree includes exact public replace-call327fa6c; no compiler, source or library path was edited to make the census comparison pass.",
+      "The precise new constructor-annotation diagnostic retains canonical None advice through the existing resolved library identity check. The first additional local-constructor refusal expectation was wrong; its source and successful first execution are retained separately from the corrected controls.",
+      "The earlier bff654 combined producer passed a complete local Rust witness before the diagnostic companion. It is historical evidence, not the current producer's complete witness claim; the current focused Rust routes and eventual exact-head hosted witness are recorded separately.",
+      "Current macro and Debug query receipts are retained from the exact final full gate.",
+      "The first full gate on d04 failed only the historical structural-rename refusal expectation; its complete fresh-store log remains under type-defaults-replace-call-final. The original fixture source and operation now assert equal checked meaning, and a separately proved function-owned generic rename still refuses atomically. Only the standalone test changed; compiler implementation, library, native and refreshed seed remain identical."
+   ],
+   "regressions" : [
+      {
+         "cases" : 7,
+         "engine_routes" : 14,
+         "name" : "canonical None diagnostic and resolved-identity controls",
+         "receipt" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/option-advice.log",
+            "sha256" : "ca25e7fe389e919800d88247fefa47b6131a36bcfcb41e02525be563b521f4ae"
+         },
+         "status" : "passed"
+      },
+      {
+         "compiler_versions" : 2,
+         "engine_routes" : 12,
+         "name" : "exact nominal generic rename and retained function-owned refusal",
+         "receipt" : {
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/rename-migration.log",
+            "sha256" : "72ba7593072f2932f40022dc41f0a4f6a0ec0f93955bae626970fbf1beb52212"
+         },
+         "source_programs" : 3,
+         "status" : "passed"
+      }
+   ],
+   "seed_gzip_sha256" : "5fc31ce964b2173300b230b28c2d0672a23e964da9723f899c6a572a83b49976",
+   "source_commands" : {
+      "debug_default_origins" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/debug-query.log",
+         "sha256" : "26079c05eff8c79c8e08f8e37fde8b0374ebfd6cec060db7095d7963f9870771"
+      },
+      "declaration_defaults" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/query.log",
+         "sha256" : "5e9d6bb5e2d10282fbd25c8ce743f3b83555af2ddd08b07ca57e890281f8b1d7"
+      },
+      "generated_defaults" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/origins-query.log",
+         "sha256" : "ca54832e146edd4ed841145212127e7623845503059e234e8df5c515c48cef75"
+      },
+      "macro_origins" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/macro-query.log",
+         "sha256" : "96658bf22ae38454812b8011d6d1da4c8ebb683ff851edf491c06e48fbee90f0"
+      },
+      "status" : "passed",
+      "structural_rename" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/structural-rename.log",
+         "sha256" : "09591a7e41614f96620bcb570df18f03abb52f3201d28400bb3866edeaef33d4"
+      }
+   },
+   "stage" : "nominal_type_defaults",
+   "standalone_real_programs" : {
+      "finished_at_utc" : "2026-11-18T19:52:27Z",
+      "levenshtein_tests_per_engine" : 8,
+      "native_corpus_rows" : 7239,
+      "provenance_controls" : 18,
+      "receipt" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/standalone-real-programs.log",
+         "sha256" : "bfe050316ba1664049ab530cb4ea400a72ef27a18a88620f0f19e8efe78c69bf"
+      },
+      "status" : "passed"
+   }
+}

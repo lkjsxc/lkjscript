@@ -250,21 +250,21 @@ still under `target/` is a temporary candidate observation, not a durable eviden
 link. Fresh observations additionally require the original/projected trees to pass
 `project.pl --verify`; use `probe.pl --help` for its exact entry and package options.
 
-#### Current type-outlives frontier
+#### Current type-defaults frontier
 
-The current producer a2d0d858...123a9bc8f checks named type-outlives predicates
-for function-owned type parameters across unused definitions and calls. Whole-type
-proof follows rigid dependencies, owned containers and closure/opaque captures
-through existing region obligations. Source operations preserve the exact bound
-references and refuse unsupported edits atomically.
+The current producer ef1f22d4...9073f92 resolves omitted nominal and alias type
+arguments in their declaring scope, checks definition/application obligations,
+and preserves exact default identities in macro and derive origins. The syntax
+required by nom's IResult and Err aliases is covered without treating a reduced
+fixture as admission of the actual module tree.
 
-The focused suite passes 31 cases / 62 engine routes,
-with independent Rust verification of 14 values/output
-cases and 17 verdicts. Source questions, checked edits
-and refusal controls pass; [validation](../bench/type-outlives.md) records the exact
+The focused suite passes 43 cases / 86 engine routes,
+with independent Rust verification of 16 values/output
+cases and 26 verdicts. These 42 standard cases are supplemented by the exact $crate namespace case at the actual crate root, which passes Rust optimization levels 0 and 3 in the generated-defaults suite. All 43 focused cases therefore have an independently recorded Rust route. Source questions, checked edits
+and refusal controls pass; [validation](../bench/type-defaults.md) records the exact
 producer/seed identities, fixed point and publication gates.
 
-The twelve fresh unchanged-source observations give nom 47->47, DOM 39->39 and Sozu 968->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
+The twelve fresh unchanged-source observations give nom 47->45, DOM 39->39 and Sozu 968->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
 No original large root or nom own test is admitted by these observations.
 The current classified causes are ranked below; the separately retained prior
 unclassified Sozu population is not folded into these counts.
@@ -276,9 +276,8 @@ unclassified Sozu population is not folded into these counts.
 | nom | 3 | Namespaced rustfmt attribute | 6 |
 | nom | 4 | Function-pointer result types | 4 |
 | nom | 5 | Documentation cfg predicates | 3 |
-| nom | 6 | Default generic type arguments | 2 |
-| nom | 7 | Unsafe block surface | 2 |
-| nom | 8 | Statement-list macro expansion | 1 |
+| nom | 6 | Unsafe block surface | 2 |
+| nom | 7 | Statement-list macro expansion | 1 |
 | DOM | 1 | Dependency-provided atom macros in expressions and patterns | 24 |
 | DOM | 2 | Shared interior mutation and borrow guards | 9 |
 | DOM | 3 | Macro-valued documentation attribute | 1 |
@@ -323,12 +322,12 @@ unclassified Sozu population is not folded into these counts.
 | Sozu | 34 | Tuple destructuring in a function parameter | 1 |
 
 
-Current exact source-hashed reviews are [nom](real-programs-type-outlives-nom-review.json),
-[DOM](real-programs-type-outlives-dom-review.json) and
-[Sozu](real-programs-type-outlives-sozu-review.json). Raw receipts retain the actual
+Current exact source-hashed reviews are [nom](real-programs-type-defaults-nom-review.json),
+[DOM](real-programs-type-defaults-dom-review.json) and
+[Sozu](real-programs-type-defaults-sozu-review.json). Raw receipts retain the actual
 producer/library inventory and original source/projection command paths.
-The preceding frontier remains in [the prior accounting](../bench/type-outlives-data/previous-frontier.json)
-and [its proof](../bench/macros.md). A vanished diagnostic is not
+The preceding frontier remains in [the prior accounting](../bench/type-defaults-data/previous-frontier.json)
+and [its proof](../bench/type-outlives.md). A vanished diagnostic is not
 evidence that a surrounding root admits, nor that a masked later form is
 supported.
 

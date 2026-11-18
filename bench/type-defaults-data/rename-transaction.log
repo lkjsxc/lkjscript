@@ -1,0 +1,11 @@
+"Value" level=source-claim operation-target
+"Value::generic:T" level=source-claim operation-target
+"/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/current-project/main.lkj" level=source-claim file before=4d738453373f43ba1cd71f1585e0830fba6c83e1327debceb8c827ae46d891fc after=3059e9c5eceafd4f55ee983434d5539c9334910a4a2b13e281d3992e1c20ecd2
+transaction sites=2 files=1 identities=2
+"Value" level=source-claim changed=signature
+"Value::field:value" level=source-claim changed=signature
+"Value::generic:Element" level=source-claim changed=added
+"Value::generic:T" level=source-claim changed=removed
+program level=checked-ir authority-delta=none
+program level=checked-ir before=72619fee8dff4891f617969749168168886784142e2c42f0fe014391c14478b0 after=72619fee8dff4891f617969749168168886784142e2c42f0fe014391c14478b0 checked-instances=1 fresh-checked=1 proof-reused=0 frontend-resumed=0 library-validation=demanded
+transaction source-before=0f2bc14df927faea31cbf55e1de11f2cf72c11348eccddcdfe8a944d049140f8 source-after=8956af4210b0ee0fd85e797fbcf06e238561535662cc20f47b33a9bc5d8f14f3 mode=apply

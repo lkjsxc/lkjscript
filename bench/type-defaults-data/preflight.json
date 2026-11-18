@@ -1,0 +1,177 @@
+{
+   "bootstrap" : {
+      "fixed_point" : "byte-identical current-emitter generations; unchanged refreshed seed",
+      "receipt" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/bootstrap.log",
+         "sha256" : "c6bc7f83779c9e94b03627c7ee856122b7a3077213244998875a2b0811697463"
+      },
+      "status" : "passed"
+   },
+   "census" : {
+      "changed_streams" : 1,
+      "command_library_root" : "/home/coder/workspace/lkjscript-programs-20261115/library",
+      "new_unclassified" : 0,
+      "observation_index" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/observation-index.json",
+         "sha256" : "22985081381efee4aa814ea3963184f927af67c9db8ddec5fd911461c6cafa66"
+      },
+      "observations" : 12,
+      "original_sources_unchanged" : true,
+      "rerank" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/rerank.log",
+         "sha256" : "8579b9bf3fd8cc482c2c874a2144e8d75c6c950de557a43ed240826fed2481a9"
+      },
+      "review" : {
+         "dom" : {
+            "final" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/dom-final.json",
+               "sha256" : "a6efda463e03a0a98dddda9ee59c736f164cdc558515680fd2e46381541abec9"
+            },
+            "genuinely_unreviewed" : 0,
+            "parent_revalidation_failures" : 0,
+            "pruning" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/dom-review-pruning.json",
+               "sha256" : "2a4443bc589f1d1fa8bac5c543d1a7631a6c4b2d9ee5f3b096323fc1420efed8"
+            }
+         },
+         "nom" : {
+            "final" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/nom-final.json",
+               "sha256" : "69b6dc3d30bbea8dee03297a8754d63e3034a399c3c79d46dd804752d5c76cdd"
+            },
+            "genuinely_unreviewed" : 0,
+            "parent_revalidation_failures" : 0,
+            "pruning" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/nom-review-pruning.json",
+               "sha256" : "eaaeb38d2b9ef8e4b56fee2f5b1fde00a02bdf56ccc5d950025e2397452a2073"
+            }
+         },
+         "sozu" : {
+            "final" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/sozu-final.json",
+               "sha256" : "2300ed5e3948ad9091ed7fd4c46dea049704ce0821fd2739e60ca7f9940b6aa1"
+            },
+            "genuinely_unreviewed" : 0,
+            "parent_revalidation_failures" : 0,
+            "pruning" : {
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/sozu-review-pruning.json",
+               "sha256" : "3b3eb47ed41f21ea50e18e9722b6204b05ca306aaa7a3c1b5ab16646cabef189"
+            }
+         }
+      },
+      "stage_delta" : {
+         "dom" : [
+            39,
+            39
+         ],
+         "nom" : [
+            47,
+            45
+         ],
+         "sozu" : [
+            968,
+            968
+         ]
+      }
+   },
+   "clean_gate_input" : "2e56c78c6663e3f2a8f2f07667c75268ba101443",
+   "clean_gate_tree" : "69bf4eebcc96d816971c67e2def9c814f645b239",
+   "compiler_sha256" : "ef1f22d49ef4ce473dc49566f38ddbcf24f7000ce19ee86a37cfb1dc69073f92",
+   "diagnostic_companion" : {
+      "controls" : 7,
+      "engine_routes" : 14,
+      "first_failure_explanation" : "The initial authored local-constructor negative was actually inferable; the unchanged original source/result remains preserved, with separate genuinely unconstrained negatives.",
+      "first_failure_preserved" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-replace-call-final/preflight-exit-status.txt",
+         "sha256" : "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+      },
+      "receipt" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/option-advice.log",
+         "sha256" : "ca25e7fe389e919800d88247fefa47b6131a36bcfcb41e02525be563b521f4ae"
+      },
+      "source_sha256" : "701f644668b18faf4ee43eec6741b95eb4cc0eb79408af63ca6141e571659a19",
+      "status" : "passed"
+   },
+   "focused" : {
+      "cases" : 43,
+      "engine_routes" : 86,
+      "native" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/cases-native.log",
+         "sha256" : "c17d560f335a9771b7ee2e4da9dd3bbafaf2603e28160507403d961c8da4cb9c"
+      },
+      "rust" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/cases-rust.log",
+         "sha256" : "08bd80c3cbf891362053c3557019df96e7d5bfe97b30e93df9fdec4c001badcf"
+      },
+      "rust_separate_root" : "The exact namespace case also passes at optimization levels 0 and 3 in origins-query.log.",
+      "rust_values" : 16,
+      "rust_verdicts" : 26,
+      "status" : "passed"
+   },
+   "full_gate" : {
+      "status" : "pending"
+   },
+   "kind" : "Canonical defaults preflight after the explicit structural-rename expectation migration; full publication gate remains pending",
+   "nom_original_tests_under_lkjscript" : 0,
+   "public_ci" : {
+      "status" : "pending"
+   },
+   "public_parent" : "327fa6c555f997dca721c6d56054cd55132618bb",
+   "public_parent_ci" : {
+      "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-replace-call-final/replace-call-publication/publication-validation.json",
+      "sha256" : "40f36c54857fd6897aaa495b8a407206d109d801c4bd6a190381f6cd1d833ea8"
+   },
+   "retained_failed_full_gate" : {
+      "details_directory" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-replace-call-final/gate-details-first",
+      "exit_status" : 1,
+      "log" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-replace-call-final/full-gate.log",
+         "sha256" : "a805b0ee4619b6a295071bf3ce7bcbccb1753b5c37ec2d8b1ce41313aa0476e9"
+      },
+      "source" : "d04ea3e26441a4f9a861dfe3cac1d9f3a92edfad"
+   },
+   "rust" : {
+      "after" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/rust-after.txt",
+         "sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+      },
+      "binary" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/rust-binary.sha256",
+         "sha256" : "6ec94287a3c41df889697a66b5d3d2324802be8e04f8b5587cf71eaf2d4bab3d"
+      },
+      "version" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/rust-before.txt",
+         "sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+      }
+   },
+   "seed_gzip_sha256" : "5fc31ce964b2173300b230b28c2d0672a23e964da9723f899c6a572a83b49976",
+   "source_commands" : {
+      "debug" : "Pending the corrected full gate",
+      "declaration_defaults" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/query.log",
+         "sha256" : "5e9d6bb5e2d10282fbd25c8ce743f3b83555af2ddd08b07ca57e890281f8b1d7"
+      },
+      "generated_defaults" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/origins-query.log",
+         "sha256" : "ca54832e146edd4ed841145212127e7623845503059e234e8df5c515c48cef75"
+      },
+      "macro_origins" : "Pending the corrected full gate",
+      "structural_rename" : {
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/structural-rename.log",
+         "sha256" : "09591a7e41614f96620bcb570df18f03abb52f3201d28400bb3866edeaef33d4"
+      }
+   },
+   "source_inputs" : {
+      "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/code-inputs.sha256",
+      "sha256" : "b88ed3f5110b8a5560b980e1eb0aadec96666564c69cf49e52bc7ab0b8b07dda"
+   },
+   "source_inputs_verified" : {
+      "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/code-inputs-verified.log",
+      "sha256" : "2b28f95cf508878b4f9d171f76659c029951aa46ad9921074b94260fb1a37b57"
+   },
+   "source_reference" : "2e56c78c6663e3f2a8f2f07667c75268ba101443",
+   "structural_rename_migration" : {
+      "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/receipt.json",
+      "sha256" : "1a657bf3ce30743ab17b709f70ea2ff498c0f17c07cf011f1a08c4645e612022"
+   }
+}

@@ -1,0 +1,3 @@
+Only the standalone structural refactor test changed from gate input d04; compiler implementation, library and the already refreshed seed are unchanged.
+ok bootstrap
+The unchanged refreshed seed decompresses to the reproduced current-emitter fixed point.

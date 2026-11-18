@@ -1,0 +1,795 @@
+{
+  "schema": 1,
+  "kind": "Independent defaults rename migration and refreshed preflight review",
+  "reviewer": "/root/trait_forms",
+  "reviewed_at_utc": "2026-11-18 19:27:24 UTC",
+  "conclusion": "No blocking source, evidence or census issue found. This review supports requesting the corrected full gate; it is not a successful full-gate or publication claim.",
+  "scope": {
+    "new_compiler_or_rust_jobs_launched_for_review": false,
+    "activity": "Read existing source and raw logs, compare commits and source bytes, hash referenced artifacts and immutable binaries, hash the existing decompressed seed, and compare fresh census streams.",
+    "corrected_full_gate": "pending",
+    "standalone_after_corrected_gate": "pending",
+    "public_ci_for_defaults": "pending",
+    "current_producer_macro_origins": "pending corrected full gate",
+    "current_producer_debug": "pending corrected full gate",
+    "nom_original_tests_under_lkjscript": 0
+  },
+  "input": {
+    "source_before": "d04ea3e26441a4f9a861dfe3cac1d9f3a92edfad",
+    "source_after": "2e56c78c6663e3f2a8f2f07667c75268ba101443",
+    "tree": "69bf4eebcc96d816971c67e2def9c814f645b239",
+    "public_parent": "327fa6c555f997dca721c6d56054cd55132618bb",
+    "compiler_sha256": "ef1f22d49ef4ce473dc49566f38ddbcf24f7000ce19ee86a37cfb1dc69073f92",
+    "seed_gzip_sha256": "5fc31ce964b2173300b230b28c2d0672a23e964da9723f899c6a572a83b49976",
+    "seed_decompressed_sha256": "ef1f22d49ef4ce473dc49566f38ddbcf24f7000ce19ee86a37cfb1dc69073f92",
+    "source_tree_clean_at_review": true
+  },
+  "receipts": {
+    "preflight": {
+      "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/preflight.json",
+      "sha256": "31424f9175007b821741d85eeaaad47b49d27c4155df8e71880e599008c8b5c8"
+    },
+    "migration": {
+      "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/receipt.json",
+      "sha256": "1a657bf3ce30743ab17b709f70ea2ff498c0f17c07cf011f1a08c4645e612022"
+    },
+    "first_preflight_independent_review": {
+      "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-replace-call-final/preflight-independent-review.json",
+      "sha256": "a2fec0901b5193cc5db534cbd432c2f614aa46ceca5e59b99eb573d53645a4cc"
+    },
+    "public_parent_validation": {
+      "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-replace-call-final/replace-call-publication/publication-validation.json",
+      "sha256": "40f36c54857fd6897aaa495b8a407206d109d801c4bd6a190381f6cd1d833ea8"
+    }
+  },
+  "fixture_migration": {
+    "changed_files": [
+      "src/structure_refactor_cases.lkj"
+    ],
+    "production_and_library_changes": [],
+    "diff": "The original nominal generic source and exact Value::generic:T rename operation are retained; the obsolete refusal expectation becomes same_meaning. A separate function-owned value::generic:T refusal is added, and the local case count increases from 14 to 15.",
+    "original_source": "struct Value<T> { value: T } fn main() -> i64 { Value { value: 7i64 }.value }",
+    "expected_after": "struct Value<Element> { value: Element } fn main() -> i64 { Value { value: 7i64 }.value }",
+    "operation": {
+      "version": 1,
+      "operations": [
+        {
+          "op": "rename",
+          "id": "Value::generic:T",
+          "name": "Element"
+        }
+      ]
+    },
+    "actual_after_matches_expected": true,
+    "source_sites_changed": 2,
+    "checked_meaning_before": "72619fee8dff4891f617969749168168886784142e2c42f0fe014391c14478b0",
+    "checked_meaning_after": "72619fee8dff4891f617969749168168886784142e2c42f0fe014391c14478b0",
+    "authority_delta": "none",
+    "old_nominal_rename": "E_EDIT_GENERIC_REFERENCES; original source unchanged",
+    "function_owned_boundary": {
+      "source": "fn value<T>(input: T) -> T { input } fn main() -> i64 { value(7i64) }",
+      "operation": {
+        "version": 1,
+        "operations": [
+          {
+            "op": "rename",
+            "id": "value::generic:T",
+            "name": "Element"
+          }
+        ]
+      },
+      "result": "Old and current compilers retain E_EDIT_GENERIC_REFERENCES atomically; source bytes unchanged."
+    },
+    "evidence": {
+      "engine_routes": 12,
+      "meaning": "Eight old/current before/after nominal routes and four old/current function-boundary source routes.",
+      "rust_unchanged_library_compiles": 6,
+      "rust_exact_body_wrapper_executions": 6,
+      "rust_optimization_levels": [
+        0,
+        3
+      ],
+      "structural_suite_cases": 142,
+      "structural_cli": "passed: seven kinds, exact checked results, untouched bytes and checked refusal",
+      "earlier_positive_only_suite_141": "retained separately"
+    }
+  },
+  "migration_hash_verification": {
+    "artifact_entries": 106,
+    "unique_referenced_files": 109,
+    "all_match": true,
+    "files": [
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/current-project/main.lkj",
+        "sha256": "3059e9c5eceafd4f55ee983434d5539c9334910a4a2b13e281d3992e1c20ecd2"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/structure_refactor_cases.with-boundary.lkj",
+        "sha256": "e5f146d397052b214d45d69c7f9673f651a00c7f7ca5fd71f175c26580c7550d"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/current-edit.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/current-edit.stdout",
+        "sha256": "fb87d111c75b5bdd6212af69cf569b91b4cdcd5d2663c3269a3473fc284e968e"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/defaults-compiler-expected-after-interpreter.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/defaults-compiler-expected-after-interpreter.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/defaults-compiler-expected-after-native.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/defaults-compiler-expected-after-native.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/defaults-compiler-original-interpreter.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/defaults-compiler-original-interpreter.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/defaults-compiler-original-native.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/defaults-compiler-original-native.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/exit-status.txt",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/expectation-migration.patch",
+        "sha256": "b443628904b7acd538835095f592f4ba86f3fc17649d6f7dc798025563573777"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/expectation-with-boundary.patch",
+        "sha256": "1a6acbdc628eaccab2f5097686e7d9be5fcaef6c16c8b77b89acbf65e368bceb"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/expected-after.lkj",
+        "sha256": "3059e9c5eceafd4f55ee983434d5539c9334910a4a2b13e281d3992e1c20ecd2"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/finished-at.txt",
+        "sha256": "afbb817953ef3319db4ea19d4d741f2e241cc2d77fce2ca1f82f0baea46fb0d5"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/first-failure.log",
+        "sha256": "87f8961ffac1a260d91e0957f3b424e18bac3be24d2da900a5879e4534bf8fdf"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/current-edit.stderr",
+        "sha256": "1e798656708a7cd74dfa7167b5398c09a3f2fd756939a4a664b5c04a565d98e9"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/current-edit.stdout",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/current-interpreter.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/current-interpreter.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/current-native.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/current-native.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/current/main.lkj",
+        "sha256": "7a8738face3f035c87e971a3648d15e494f75cf907e249ed31ab640fac236a31"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/exit-status.txt",
+        "sha256": "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/old-edit.stderr",
+        "sha256": "1e798656708a7cd74dfa7167b5398c09a3f2fd756939a4a664b5c04a565d98e9"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/old-edit.stdout",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/old-interpreter.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/old-interpreter.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/old-native.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/old-native.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/old/main.lkj",
+        "sha256": "7a8738face3f035c87e971a3648d15e494f75cf907e249ed31ab640fac236a31"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/original.lkj",
+        "sha256": "7a8738face3f035c87e971a3648d15e494f75cf907e249ed31ab640fac236a31"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/postmigration-original-manifest.stderr",
+        "sha256": "c21162752e0e9447063c54afadaabcd769aa943d1dc1e9641847e990d83020b9"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/postmigration-original-manifest.stdout",
+        "sha256": "530126fd7ca9bd390904a4c73f6f6c26f2cc272a3e5a42eed69d605da2649a9c"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/proof.log",
+        "sha256": "138756b7243f9b8b35e58fad887e117d7be4b12a5ecff52deed60d458fb921e9"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/request.json",
+        "sha256": "ce374afbe126e53447b30411abedf0d62d3db571f4157715554666784ead1851"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/rust/build-0.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/rust/build-0.stdout",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/rust/build-3.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/rust/build-3.stdout",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/rust/fixture.rs",
+        "sha256": "935d3c0cd746df7b102864da302c2912fd802d500049887ebd319eb8661e4766"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/rust/library-0.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/rust/library-0.stdout",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/rust/library-3.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/rust/library-3.stdout",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/rust/run-0.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/rust/run-0.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/rust/run-3.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/function-boundary/rust/run-3.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/inputs-verified.log",
+        "sha256": "e5a2de41e5c648b29c77f0672cac6fd9031a2262a6950c729e653b44f9f7b8ba"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/inputs.sha256",
+        "sha256": "a01f0967ddd23424e5ce72877cc0f0161ab6f5bfabb15e1059e9bbb9b473142e"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/old-edit.status",
+        "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/old-edit.stderr",
+        "sha256": "95e4758c0c55c3263af79d11d22c4e25b6f65fea8954e8417abb48753ea4e9ac"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/old-edit.stdout",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/old-project/main.lkj",
+        "sha256": "4d738453373f43ba1cd71f1585e0830fba6c83e1327debceb8c827ae46d891fc"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/original.lkj",
+        "sha256": "4d738453373f43ba1cd71f1585e0830fba6c83e1327debceb8c827ae46d891fc"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/prepare-receipt.pl",
+        "sha256": "bb93e7d3a4aaf35b6a3de1ad5879fa65f7c20cf37eeeb09c0e164c88f23f7801"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/producer-before-focused.sha256",
+        "sha256": "5c2f149451d2f1c8aec275e724759f5e493424a260f4625ffd755e618a7231ce"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/proof.log",
+        "sha256": "46db53acc2d9f7e6298dce73bc1b099a466147152a518accd20374ab2af88187"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/prove.sh",
+        "sha256": "8a01785ed3cca61299548b68bb3951400bb939a3d2e71bb5e840be2b91dc86c4"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/public-before-compiler-expected-after-interpreter.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/public-before-compiler-expected-after-interpreter.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/public-before-compiler-expected-after-native.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/public-before-compiler-expected-after-native.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/public-before-compiler-original-interpreter.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/public-before-compiler-original-interpreter.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/public-before-compiler-original-native.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/public-before-compiler-original-native.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/request.json",
+        "sha256": "a80a703ff6f6b9b0343e48d0406d94ddf17726183d739a5c70cc5e82d6689b7b"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust-after.txt",
+        "sha256": "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust-before.txt",
+        "sha256": "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/expected-after-build-0.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/expected-after-build-0.stdout",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/expected-after-build-3.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/expected-after-build-3.stdout",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/expected-after-lib-0.stderr",
+        "sha256": "d6dea13bcfade8641f0f1cc82d5dca345b8980b95af218bafb11d91c2901e704"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/expected-after-lib-0.stdout",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/expected-after-lib-3.stderr",
+        "sha256": "d6dea13bcfade8641f0f1cc82d5dca345b8980b95af218bafb11d91c2901e704"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/expected-after-lib-3.stdout",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/expected-after-run-0.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/expected-after-run-0.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/expected-after-run-3.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/expected-after-run-3.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/expected-after.rs",
+        "sha256": "2d02120f541a7c76804b54b6f80a178135cc3ed0b680deda13192bad4ec60861"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/original-build-0.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/original-build-0.stdout",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/original-build-3.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/original-build-3.stdout",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/original-lib-0.stderr",
+        "sha256": "e7a22c99ead002c6d584324499d48e9fdd61e4030eff6250e993b563b80193f2"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/original-lib-0.stdout",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/original-lib-3.stderr",
+        "sha256": "e7a22c99ead002c6d584324499d48e9fdd61e4030eff6250e993b563b80193f2"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/original-lib-3.stdout",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/original-run-0.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/original-run-0.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/original-run-3.stderr",
+        "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/original-run-3.stdout",
+        "sha256": "10159baf262b43a92d95db59dae1f72c645127301661e0a3ce4e38b295a97c58"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/rust/original.rs",
+        "sha256": "8b1889445d614a7e98009cd3185ff3b7bceaba314e932645b822fa398f59e482"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/started-at.txt",
+        "sha256": "afbb817953ef3319db4ea19d4d741f2e241cc2d77fce2ca1f82f0baea46fb0d5"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/structure-refactor-with-boundary.log",
+        "sha256": "09591a7e41614f96620bcb570df18f03abb52f3201d28400bb3866edeaef33d4"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/structure-refactor.log",
+        "sha256": "e659df5e1d7b18c678ab318c8b370a9633fd2eb68955299230a816963bd5d544"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/structure_refactor_cases.after.lkj",
+        "sha256": "b3ec24b6bfa936b7929c5e6809e582c93f961eddade43c0a19a9b409ba81bd5b"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/structure_refactor_cases.before.lkj",
+        "sha256": "189f53aa1005b9c829afdf4f7a9ea574bc5a746ca29c2bb1cccd0a12b16fbc47"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/unchanged-inputs-verified.log",
+        "sha256": "b6f9e64b2e4639d3cc264c4808ea518f46f46609f137f0a3df521a7813fe59f1"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/unchanged-inputs.sha256",
+        "sha256": "cce7be44bb9e4d6ced4fd24668b1972451bd111577b00cc4b51fef56dfbf674a"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-replace-call-final/full-gate.log",
+        "sha256": "a805b0ee4619b6a295071bf3ce7bcbccb1753b5c37ec2d8b1ce41313aa0476e9"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/defaults-compiler",
+        "sha256": "ef1f22d49ef4ce473dc49566f38ddbcf24f7000ce19ee86a37cfb1dc69073f92"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/public-before-compiler",
+        "sha256": "103557eddf30d24e046cb09f6a881e549829283495c8648c0ac9dcd1d72a5d35"
+      }
+    ]
+  },
+  "refreshed_preflight_hash_verification": {
+    "unique_referenced_files": 31,
+    "all_match": true,
+    "files": [
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/bootstrap.log",
+        "sha256": "c6bc7f83779c9e94b03627c7ee856122b7a3077213244998875a2b0811697463"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/observation-index.json",
+        "sha256": "22985081381efee4aa814ea3963184f927af67c9db8ddec5fd911461c6cafa66"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/rerank.log",
+        "sha256": "8579b9bf3fd8cc482c2c874a2144e8d75c6c950de557a43ed240826fed2481a9"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/dom-final.json",
+        "sha256": "a6efda463e03a0a98dddda9ee59c736f164cdc558515680fd2e46381541abec9"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/dom-review-pruning.json",
+        "sha256": "2a4443bc589f1d1fa8bac5c543d1a7631a6c4b2d9ee5f3b096323fc1420efed8"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/nom-final.json",
+        "sha256": "69b6dc3d30bbea8dee03297a8754d63e3034a399c3c79d46dd804752d5c76cdd"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/nom-review-pruning.json",
+        "sha256": "eaaeb38d2b9ef8e4b56fee2f5b1fde00a02bdf56ccc5d950025e2397452a2073"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/sozu-final.json",
+        "sha256": "2300ed5e3948ad9091ed7fd4c46dea049704ce0821fd2739e60ca7f9940b6aa1"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/sozu-review-pruning.json",
+        "sha256": "3b3eb47ed41f21ea50e18e9722b6204b05ca306aaa7a3c1b5ab16646cabef189"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-replace-call-final/preflight-exit-status.txt",
+        "sha256": "4355a46b19d348dc2f57c046f8ef63d4538ebb936000f3c9ee954a27460dd865"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/option-advice.log",
+        "sha256": "ca25e7fe389e919800d88247fefa47b6131a36bcfcb41e02525be563b521f4ae"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/cases-native.log",
+        "sha256": "c17d560f335a9771b7ee2e4da9dd3bbafaf2603e28160507403d961c8da4cb9c"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/cases-rust.log",
+        "sha256": "08bd80c3cbf891362053c3557019df96e7d5bfe97b30e93df9fdec4c001badcf"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-replace-call-final/replace-call-publication/publication-validation.json",
+        "sha256": "40f36c54857fd6897aaa495b8a407206d109d801c4bd6a190381f6cd1d833ea8"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-replace-call-final/full-gate.log",
+        "sha256": "a805b0ee4619b6a295071bf3ce7bcbccb1753b5c37ec2d8b1ce41313aa0476e9"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/rust-after.txt",
+        "sha256": "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/rust-binary.sha256",
+        "sha256": "6ec94287a3c41df889697a66b5d3d2324802be8e04f8b5587cf71eaf2d4bab3d"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/rust-before.txt",
+        "sha256": "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/query.log",
+        "sha256": "5e9d6bb5e2d10282fbd25c8ce743f3b83555af2ddd08b07ca57e890281f8b1d7"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/origins-query.log",
+        "sha256": "ca54832e146edd4ed841145212127e7623845503059e234e8df5c515c48cef75"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/structural-rename.log",
+        "sha256": "09591a7e41614f96620bcb570df18f03abb52f3201d28400bb3866edeaef33d4"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/code-inputs.sha256",
+        "sha256": "b88ed3f5110b8a5560b980e1eb0aadec96666564c69cf49e52bc7ab0b8b07dda"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/code-inputs-verified.log",
+        "sha256": "2b28f95cf508878b4f9d171f76659c029951aa46ad9921074b94260fb1a37b57"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/receipt.json",
+        "sha256": "1a657bf3ce30743ab17b709f70ea2ff498c0f17c07cf011f1a08c4645e612022"
+      },
+      {
+        "path": "/home/coder/workspace/lkjscript-programs-20261115/target/lkjscript",
+        "sha256": "ef1f22d49ef4ce473dc49566f38ddbcf24f7000ce19ee86a37cfb1dc69073f92"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-outlives-watchdog-final/census/nom-probe.json",
+        "sha256": "b9b0cd1e1344bdb1bd21adc2bec62b4ed25d1311a10f71e4464b19065413191f"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/nom-probe.json",
+        "sha256": "80931486bbfc0e19c4f3e97b372612d7b98dfa01b0b6e8f937b2e53ab1ef39a3"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-outlives-watchdog-final/census/dom-probe.json",
+        "sha256": "9431c3c7b507157da1dc66afe045330d39e217a6c94c33417ff366683bc740ad"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/dom-probe.json",
+        "sha256": "6225905d62c6236f34a40b99835c8710c8f2425c97934963a63d60bed65d4591"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-outlives-watchdog-final/census/sozu-probe.json",
+        "sha256": "762d48111ab7b56b8d1f1001a467d8e6a8ac41d96a513269ea38459059bfcaca"
+      },
+      {
+        "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/sozu-probe.json",
+        "sha256": "9192b72b576c1622b6ee927295f9d2187b3ae290eff0fba4d9032faaae59252d"
+      }
+    ]
+  },
+  "refreshed_proof": {
+    "bootstrap": "Raw log reports a successful current-emitter bootstrap. Direct hashing confirms target/lkjscript and the decompressed retained seed both equal the recorded ef1f producer; the gzip equals the recorded 5fc3 seed.",
+    "focused_cases": 43,
+    "focused_engine_routes": 86,
+    "focused_pending": 0,
+    "rust_values_or_output": 16,
+    "rust_verdicts": 26,
+    "separate_rust_namespace": "Raw origins-query.log confirms captured versus $crate default namespaces at optimization levels 0 and 3.",
+    "advice_controls": 7,
+    "advice_engine_routes": 14,
+    "source_commands": "Raw declaration-default and generated-origin query summaries pass, including both-engine and authored/generated edit checks.",
+    "compiler_and_seed_unchanged_from_failed_gate": true
+  },
+  "census": {
+    "observation_index": {
+      "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-final/census/observation-index.json",
+      "sha256": "22985081381efee4aa814ea3963184f927af67c9db8ddec5fd911461c6cafa66"
+    },
+    "raw_needs_source_review": true,
+    "raw_flag_meaning": "The raw index flags the changed nom projection stream. Completed source review and pruning supply the final disposition.",
+    "independent_comparison": {
+      "changed": [
+        {
+          "added": [],
+          "entry": "src/lib.rs",
+          "package": "nom",
+          "removed": [
+            "src/internal.lkj:100:1: E_BLOCKED item: not analyzed after E_UNSUPPORTED",
+            "src/internal.lkj:101:29: E_UNSUPPORTED unsupported construct: default generic arguments",
+            "src/internal.lkj:19:1: E_BLOCKED item: not analyzed after E_UNSUPPORTED",
+            "src/internal.lkj:19:26: E_UNSUPPORTED unsupported construct: default generic arguments"
+          ],
+          "route": "suffix_projection"
+        }
+      ],
+      "entry_hashes_equal": 12,
+      "packages": [
+        {
+          "before_after_identical": true,
+          "classified": 45,
+          "commit": "2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1",
+          "new_unclassified": 0,
+          "package": "nom",
+          "parent_failures": 0,
+          "prior_unclassified": 0,
+          "projection_manifest_sha256": "c2c65c9cf50e7d53786f505e70775e175da65b5934bd272698a1dca649d8a0b1",
+          "read_only_after": true,
+          "read_only_before": true,
+          "recovery": 0,
+          "unreviewed": 0
+        },
+        {
+          "before_after_identical": true,
+          "classified": 39,
+          "commit": "186c02d9359762404054fbc8af3a5b07cdf795a9",
+          "new_unclassified": 0,
+          "package": "dom",
+          "parent_failures": 0,
+          "prior_unclassified": 0,
+          "projection_manifest_sha256": "7eef776218daecb22822d613a609a00039600c34cea05a6047216111148272c9",
+          "read_only_after": true,
+          "read_only_before": true,
+          "recovery": 0,
+          "unreviewed": 0
+        },
+        {
+          "before_after_identical": true,
+          "classified": 968,
+          "commit": "c5ff06a12bd514e06ab28965052d0ad1e19c45b3",
+          "new_unclassified": 0,
+          "package": "sozu",
+          "parent_failures": 0,
+          "prior_unclassified": 34,
+          "projection_manifest_sha256": "3ad1b9efdc73fb42f61aa3cb5d0dfaf1edea4d5fecf68e4b48e4cedd01db38b0",
+          "read_only_after": true,
+          "read_only_before": true,
+          "recovery": 18,
+          "unreviewed": 0
+        }
+      ],
+      "unchanged_streams": 11
+    },
+    "stage_delta": {
+      "dom": [
+        39,
+        39
+      ],
+      "nom": [
+        47,
+        45
+      ],
+      "sozu": [
+        968,
+        968
+      ]
+    },
+    "library_manifest_sha256": "954555499c334d2a6e72564fa73f81046e4327e49c06a85518f8202f94e19ef2",
+    "pruning_schema": "Both parent_revalidation_failures and genuinely_unreviewed_diagnostics are arrays of length zero for every package.",
+    "new_unclassified": 0,
+    "prior_sozu_unclassified_retained": 34,
+    "parent_verified_sozu_recovery_retained": 18
+  },
+  "preserved_failure": {
+    "source": "d04ea3e26441a4f9a861dfe3cac1d9f3a92edfad",
+    "exit_status": 1,
+    "log": {
+      "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-replace-call-final/full-gate.log",
+      "sha256": "a805b0ee4619b6a295071bf3ce7bcbccb1753b5c37ec2d8b1ce41313aa0476e9"
+    },
+    "fixture_failure": {
+      "path": "/home/coder/workspace/prompts/reports/lkjscript-next/type-defaults-rename-migration/first-failure.log",
+      "sha256": "87f8961ffac1a260d91e0957f3b424e18bac3be24d2da900a5879e4534bf8fdf"
+    },
+    "receipt_reported_fresh_case_requests": 6661,
+    "receipt_reported_reused_case_requests": 0,
+    "full_gate_success": false,
+    "ir_mutation_reached": false,
+    "standalone_reached": false,
+    "meaning": "The initial full gate remains failed. Its raw log and failing fixture were retained and hash-verified; later preflight does not replace this failure."
+  },
+  "limitations": [
+    "Corrected full gate, standalone regression and defaults exact-head public CI remain pending.",
+    "No original large-root or original nom test admission is claimed.",
+    "This new review changes no source or existing receipt."
+  ]
+}
