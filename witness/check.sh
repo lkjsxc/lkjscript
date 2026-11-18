@@ -27,5 +27,6 @@ bash tools/connect-deadline-test.sh target/lkjscript --witness "$witness_rustc"
 bash tools/tcp-port-test.sh target/lkjscript --witness "$witness_rustc"
 bash tools/declarative-macro-test.sh target/lkjscript --witness "$witness_rustc"
 bash tools/temporary-files-test.sh target/lkjscript --witness "$witness_rustc"
+bash tools/type-defaults-origins-test.sh target/lkjscript --witness "$witness_rustc"
 bash tools/real-programs-rust.sh "$witness_rustc"
 printf 'ok optional Rust witness and compiler byte identity\n'

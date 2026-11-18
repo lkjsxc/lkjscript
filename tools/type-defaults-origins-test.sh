@@ -47,7 +47,7 @@ cat > "$fixture/project/main.lkj" <<'SOURCE'
 struct Authored<T = i64, U = T> { first: T, second: U }
 macro_rules! relay { ($($source:tt)*) => { $($source)* }; }
 macro_rules! emit_defaults {
-    ($name:ident, $type:ty) => {
+    ($name:ident, $type:tt) => {
         relay! { #[derive(Default, Debug)] struct $name<T = $type, U = T> { first: T, second: U } }
     };
 }

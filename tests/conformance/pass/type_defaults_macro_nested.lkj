@@ -2,7 +2,7 @@
 // witness: {}
 macro_rules! relay { ($($source:tt)*) => { $($source)* }; }
 macro_rules! declare {
-    ($name:ident, $default:ty) => {
+    ($name:ident, $default:tt) => {
         relay! { #[derive(Default, Debug)] struct $name<T = $default, U = T> { first: T, second: U } }
     };
 }

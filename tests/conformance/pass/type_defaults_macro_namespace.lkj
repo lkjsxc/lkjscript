@@ -3,7 +3,7 @@
 #[derive(Default, Debug)]
 pub struct RootValue { pub value: i64 }
 macro_rules! declaration {
-    ($name:ident, $caller:ty) => {
+    ($name:ident, $caller:tt) => {
         #[derive(Default, Debug)]
         pub struct $name<T = $caller, U = $crate::RootValue> { pub first: T, pub second: U }
     };
