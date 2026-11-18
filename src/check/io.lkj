@@ -173,6 +173,12 @@ pub(super) fn signature(
                 && bytes(types, args[1], false)
                 && opened(types, result, &TypeKind::Connector)
         }
+        IntrinsicOp::ConnectorConnectDeadline => {
+            args.len() == 2
+                && authority(types, args[0], &TypeKind::Connector)
+                && args[1] == U64
+                && opened(types, result, &TypeKind::File)
+        }
         IntrinsicOp::ConnectorConnect => {
             args.len() == 1
                 && authority(types, args[0], &TypeKind::Connector)

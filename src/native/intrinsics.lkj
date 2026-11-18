@@ -206,6 +206,14 @@ impl Body<'_> {
                 self.intrinsic_open_result(dst);
                 return Ok(true);
             }
+            IntrinsicOp::ConnectorConnectDeadline => {
+                self.read(args[0], DI);
+                self.a.load(DI, DI, 0);
+                self.read(args[1], SI);
+                self.a.call(self.platform.connector_connect_deadline);
+                self.intrinsic_open_result(dst);
+                return Ok(true);
+            }
             IntrinsicOp::ConnectorConnect => {
                 self.read(args[0], DI);
                 self.a.load(DI, DI, 0);

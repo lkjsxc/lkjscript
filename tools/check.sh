@@ -184,6 +184,7 @@ parallel_step 2 stop-interpreter timeout --kill-after=10s 600s sh tools/http-sto
 parallel_step 2 site timeout --kill-after=10s 600s sh tools/http-site-test.sh --compiler "$check_binary" --offline
 parallel_step 2 desk timeout --kill-after=10s 600s bash tools/http-desk-test.sh --compiler "$check_binary"
 parallel_step 2 desk-events timeout --kill-after=10s 600s bash tools/http-desk-events.sh --compiler "$check_binary"
+parallel_step 1 connect-deadline timeout --kill-after=10s 600s bash tools/connect-deadline-test.sh "$check_binary"
 parallel_step 1 child-image timeout --kill-after=10s 600s bash tools/child-image-test.sh "$check_binary"
 parallel_step 1 foreign-child timeout --kill-after=10s 600s bash tools/foreign-child-test.sh --compiler "$check_binary"
 parallel_step 2 foreign-session timeout --kill-after=10s 600s bash tools/programs-foreign-session-test.sh --compiler "$check_binary"

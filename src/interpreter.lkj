@@ -72,6 +72,7 @@ pub trait Host {
     fn world_file(&mut self, kind: u8) -> Result<u64, i64>;
     fn open_listener(&mut self, address: &[u8]) -> Result<u64, i64>;
     fn connect_socket(&mut self, address: &[u8]) -> Result<u64, i64>;
+    fn connect_socket_deadline(&mut self, _address: &[u8], _deadline: usize) -> Result<u64, i64> { Err(38) }
     fn fill_entropy(&mut self, bytes: &mut [u8]) -> Result<(), i64>;
     fn realtime_seconds(&mut self) -> Result<i64, i64>;
     fn realtime_nanoseconds(&mut self) -> Result<usize, i64>;

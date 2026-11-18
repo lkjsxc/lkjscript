@@ -209,6 +209,9 @@ impl Readiness {
     }
 }
 impl Connector {
+    pub fn connect_deadline(&mut self, deadline: usize) -> Result<File, i64> {
+        Ok(File { handle: Some(files::connect_deadline(&self.address, deadline)?) })
+    }
 
     pub fn connect(&mut self) -> Result<File, i64> {
         Ok(File { handle: Some(files::connect(&self.address)?) })
@@ -1137,6 +1140,50 @@ pub(crate) mod files {
             }
             return Ok(result);
         }
+    }
+    pub fn connect_deadline(address: &[u8], deadline: usize) -> Result<std::fs::File, i64> {
+        fn now() -> Result<u64, i64> {
+            let mut time = [0u8; 16];
+            monotonic_time(&mut time)?;
+            Ok(u64::from_le_bytes(time[..8].try_into().unwrap()) * 1_000_000_000
+                + u64::from_le_bytes(time[8..].try_into().unwrap()))
+        }
+        if address.len() != 16 || address[0] != 2 || address[1] != 0 { return Err(22); }
+        if now()? >= deadline as u64 { return Err(110); }
+        let handle = owned(retry(|| unsafe { syscall(41, 2_i64, 0x80801_i64, 0_i64) })?)?;
+        let status = unsafe { syscall(42, i64::from(handle.as_raw_fd()), address.as_ptr(), 16_i64) };
+        if status < 0 {
+            let error = i64::from(std::io::Error::last_os_error().raw_os_error().unwrap_or(5));
+            if error != 106 {
+                if !matches!(error, 4 | 114 | 115) { return Err(error); }
+                let mut poll = [0u8; 8];
+                poll[..4].copy_from_slice(&handle.as_raw_fd().to_le_bytes());
+                poll[4..6].copy_from_slice(&4u16.to_le_bytes());
+                loop {
+                    let current = now()?;
+                    if current >= deadline as u64 { return Err(110); }
+                    let left = deadline as u64 - current;
+                    let timeout = [(left / 1_000_000_000) as i64, (left % 1_000_000_000) as i64];
+                    let count = unsafe { syscall(271, poll.as_mut_ptr(), 1_i64, timeout.as_ptr(), 0_i64, 8_i64) };
+                    if count < 0 {
+                        let error = i64::from(std::io::Error::last_os_error().raw_os_error().unwrap_or(5));
+                        if error == 4 { continue; }
+                        return Err(error);
+                    }
+                    if count == 0 { return Err(110); }
+                    if u16::from_le_bytes(poll[6..].try_into().unwrap()) & 32 != 0 { return Err(9); }
+                    let mut error = 0u32;
+                    let mut size = 4u32;
+                    retry(|| unsafe { syscall(55, i64::from(handle.as_raw_fd()), 1_i64, 4_i64,
+                        &mut error as *mut u32, &mut size as *mut u32) })?;
+                    if size != 4 { return Err(5); }
+                    if error != 0 { return Err(i64::from(error)); }
+                    break;
+                }
+            }
+        }
+        set_nonblocking(handle.as_raw_fd(), false)?;
+        Ok(handle)
     }
     pub fn connect(address: &[u8]) -> Result<std::fs::File, i64> {
 

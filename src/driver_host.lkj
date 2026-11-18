@@ -411,6 +411,11 @@ impl interpreter::Host for Host<'_, '_> {
         }
     }
 
+    fn connect_socket_deadline(&mut self, address: &[u8], deadline: usize) -> Result<u64, i64> {
+        let descriptor = self.network.open_stream_deadline(self.world, address, deadline)?;
+        self.insert_handle(Handle::RemoteFile(descriptor))
+    }
+
     fn connect_socket(&mut self, address: &[u8]) -> Result<u64, i64> {
         let descriptor = self.network.open_stream(self.world, address)?;
         self.insert_handle(Handle::RemoteFile(descriptor))

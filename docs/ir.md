@@ -178,6 +178,7 @@ The intrinsic signatures are checked in `src/check.lkj` and `src/check/io.lkj`:
 | `listener_accept listener_accept_nodelay` | `(&mut listener) -> Result<file, i64>`: accept an owned TCP byte stream; the second disables Nagle before returning it, closing on configuration failure. |
 | `world_connector` | `(&mut world, &[u8]) -> Result<connector, i64>`: authorize one exact numeric IPv4 TCP destination. |
 | `connector_connect` | `(&mut connector) -> Result<file, i64>`: connect only to its authorized destination. |
+| `connector_connect_deadline` | `(&mut connector, usize deadline) -> Result<file, i64>`: same destination, absolute monotonic nanoseconds; nonblocking connect, readiness and SO_ERROR, returning a blocking owned File or the fresh positive errno. Expiry returns 110 and every unsuccessful attempt closes its private socket. |
 | `listener_address` | `(&mut listener, &mut [u8]) -> i64`: write its local socket address; zero or negative errno. |
 | `world_readiness` | `(&mut world) -> Result<readiness, i64>`: own a kernel readiness set. |
 | `world_stop` | `(&mut world) -> Result<stop, i64>`: claim SIGTERM and own a nonblocking signal descriptor. |

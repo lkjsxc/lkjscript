@@ -1,0 +1,38 @@
+// expect: output 636f6e6e65637420646561646c696e65206f6b0a
+// witness: {}
+fn errno<T>(result: Result<T, i64>, expected: i64) {
+    match result { Err(error) => assert_eq!(error, expected), Ok(_) => panic!("expected an I/O error") }
+}
+pub fn main(mut world: World) {
+    let mut clock = world.clock();
+    let mut listener = world.listen("127.0.0.1", 0u16).unwrap();
+    let port = listener.port().unwrap();
+    let mut target = world.connector("127.0.0.1", port).unwrap();
+    errno(target.connect_deadline(0usize), 110);
+    errno(target.connect_deadline(clock.nanoseconds().unwrap()), 110);
+    let mut stream = target.connect_deadline(clock.nanoseconds().unwrap() + 5000000000usize).unwrap();
+    let mut accepted = listener.accept().unwrap();
+    stream.set_nonblocking(true).unwrap();
+    let mut byte = [0u8; 1];
+    errno(stream.read(&mut byte), 11);
+    stream.set_nonblocking(false).unwrap();
+    accepted.write_all(b"R").unwrap();
+    assert_eq!(stream.read(&mut byte).unwrap(), 1usize);
+    assert_eq!(byte[0], b'R');
+    stream.write_all(b"Q").unwrap();
+    assert_eq!(accepted.read(&mut byte).unwrap(), 1usize);
+    assert_eq!(byte[0], b'Q');
+    drop(accepted);
+    assert_eq!(stream.read(&mut byte).unwrap(), 0usize);
+    drop(stream);
+    // A maximum representable deadline must not overflow when forming a wait.
+    let stream = target.connect_deadline(18446744073709551615usize).unwrap();
+    let accepted = listener.accept().unwrap();
+    drop(accepted);
+    drop(stream);
+    drop(listener);
+    for _index in 0usize..96usize {
+        errno(target.connect_deadline(clock.nanoseconds().unwrap() + 5000000000usize), 111);
+    }
+    world.stdout().write(b"connect deadline ok\n");
+}

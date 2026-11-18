@@ -670,6 +670,7 @@ All capability types, including World, File and Child, are affine, without const
 | World.listen(address,port) | Result<Listener,i64> binding a numeric IPv4 TCP endpoint. |
 | Listener.accept()/accept_nodelay(), port() | Result<File,i64> owning a connected stream (the second disables Nagle); Result<u16,i64> with the bound port. |
 | World.connector(address,port), Connector.connect() | Result<Connector,i64> authorizing one numeric IPv4 TCP destination; Result<File,i64> connecting only there. |
+| Connector.connect_deadline(deadline:usize) | Result<File,i64>; connect only to the same destination before an absolute monotonic nanosecond deadline, using nonblocking connection and kernel readiness. The returned File is blocking; callers may explicitly set_nonblocking(true). |
 | World.readiness() | Result<Readiness,i64> owning a wait set. |
 | File/Listener.set_nonblocking(bool) | Result<(),i64>; would-block reads, writes and accepts return errno 11. |
 | Readiness.watch_file(&mut File,token,interest) | Result<(),i64>; add/update a watch, usize token, u8 interests 1 read and 2 write; zero watches full close/error only. |
@@ -718,6 +719,8 @@ After a successful Stop claim, spawned children restore only the SIGTERM mask bi
 
 Captured process files share offsets; rewind before reading. Closed File returns EBADF, drops harmlessly and closes the assigned child stream. Spawn validates NUL-free arguments, chooses argv0 lkjscript, clears environment and executes the File with execveat, without PATH/shell fallback; exec failure returns errno. Direct children receive parent-death SIGKILL. No caller slice pointer survives I/O.
 File/ReadFile/Directory/ReadDirectory/ForeignCommand/Image/Channel/NullDevice/Listener/Readiness/Stop drops close once; ReadRegion unmaps/closes; Worker and ForeignSession kill/reap/close. Standard-stream drops leave inherited streams open; acquisition preserves inherited closed streams.
+Connector.connect_deadline checks expiry before opening its destination socket and returns ETIMEDOUT (110) when its deadline expires. One absolute deadline covers setup and every interrupted readiness wait; readiness is followed by SO_ERROR, so refusal returns ECONNREFUSED (111), never a falsely successful File. Every unsuccessful attempt closes its private socket once. It performs no name resolution and retains the exact Connector destination; a separate Clock grant is needed to observe monotonic time when constructing a deadline.
+
 Readiness drops only its wait set. Unwatch before closing a watched descriptor if aliases remain. Wait batches at most 64 events without limiting registrations; expired deadlines poll once.
 Read interest reports half-close; drain readable final bytes. Write-only interest does not report peer write-half closure repeatedly.
 

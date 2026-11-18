@@ -946,6 +946,7 @@ fn self_test(world: &mut World) -> Result<(), String> {
         "listener_accept_nodelay".to_string(),
         "world_connector".to_string(),
         "connector_connect".to_string(),
+        "connector_connect_deadline".to_string(),
         "world_readiness".to_string(),
         "readiness_wait".to_string(),
         "readiness_watch_file".to_string(),

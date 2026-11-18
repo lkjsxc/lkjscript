@@ -1,0 +1,191 @@
+//! A Connector waits for kernel writability under one absolute monotonic deadline.
+//! The owned socket is unpublished until SO_ERROR succeeds and blocking mode returns.
+use super::platform::Platform;
+use super::{epilogue, prologue};
+use crate::diagnostic::Span;
+use crate::x86::*;
+
+fn syscall(a: &mut Assembler, number: u64) {
+    let retry = a.label();
+    a.bind(retry);
+    super::diagnostics::operation(a, number);
+    a.immediate(A, number);
+    a.syscall();
+    a.immediate(C, (-4i64) as u64);
+    a.compare(A, C);
+    a.condition(4, retry);
+}
+
+fn now(a: &mut Assembler, failed: Label) {
+    a.immediate(DI, 1);
+    a.lea(SI, BP, -64);
+    syscall(a, 228);
+    a.test(A, true);
+    a.condition(8, failed);
+    a.load(A, BP, -64);
+    a.immediate(C, 1000000000);
+    a.imul(A, C);
+    a.load(C, BP, -56);
+    a.rr(0x01, A, C, true);
+}
+
+pub(super) fn emit(a: &mut Assembler, p: Platform) {
+    let failed = a.label();
+    let done = a.label();
+    let close_done = a.label();
+    let promoted = a.label();
+    let pending = a.label();
+    let waiting = a.label();
+    let connected = a.label();
+    let expired = a.label();
+    let invalid_socket = a.label();
+    let invalid_reply = a.label();
+    a.bind(p.connector_connect_deadline);
+    prologue(a, p, 96, Span::default());
+    a.store(BP, -24, SI);
+    a.mov(A, DI);
+    a.shift(A, 4, 16);
+    a.immediate(C, 2);
+    a.rr(0x09, A, C, true);
+    a.store(BP, -48, A);
+    a.immediate(A, 0);
+    a.store(BP, -40, A);
+    a.immediate(A, !0u64);
+    a.store(BP, -8, A);
+    now(a, failed);
+    a.load(C, BP, -24);
+    a.compare(C, A);
+    a.condition(6, expired);
+    a.immediate(DI, 2);
+    a.immediate(SI, 0x80801); // AF_INET, SOCK_STREAM | NONBLOCK | CLOEXEC.
+    a.immediate(D, 0);
+    syscall(a, 41);
+    a.test(A, true);
+    a.condition(8, done);
+    a.immediate(C, 3);
+    a.compare(A, C);
+    a.condition(3, promoted);
+    // Preserve inherited closed stdio, including on promotion failure.
+    a.store(BP, -8, A);
+    a.mov(DI, A);
+    a.immediate(SI, 1030);
+    a.immediate(D, 3);
+    syscall(a, 72);
+    a.store(BP, -16, A);
+    a.load(DI, BP, -8);
+    a.immediate(A, 3);
+    a.syscall();
+    a.load(A, BP, -16);
+    a.test(A, true);
+    a.condition(8, done);
+    a.bind(promoted);
+    a.store(BP, -8, A);
+    a.mov(DI, A);
+    a.lea(SI, BP, -48);
+    a.immediate(D, 16);
+    super::diagnostics::operation(a, 42);
+    a.immediate(A, 42);
+    a.syscall(); // EINTR means inspect this socket; never start another connect.
+    a.test(A, true);
+    a.condition(9, connected);
+    a.immediate(C, (-106i64) as u64);
+    a.compare(A, C);
+    a.condition(4, connected);
+    for error in vec![4i64, 114i64, 115i64] {
+        a.immediate(C, (-error) as u64);
+        a.compare(A, C);
+        a.condition(4, pending);
+    }
+    a.jump(failed);
+    a.bind(pending);
+    a.load(A, BP, -8);
+    a.immediate(C, 4u64 << 32); // pollfd.events = POLLOUT, revents = 0.
+    a.rr(0x09, A, C, true);
+    a.store(BP, -88, A);
+    a.bind(waiting);
+    now(a, failed);
+    a.load(R8, BP, -24);
+    a.compare(R8, A);
+    a.condition(6, expired);
+    a.rr(0x29, R8, A, true);
+    a.mov(A, R8);
+    a.immediate(D, 0);
+    a.immediate(C, 1000000000);
+    a.divide(C, false);
+    a.store(BP, -80, A);
+    a.store(BP, -72, D);
+    a.lea(DI, BP, -88);
+    a.immediate(SI, 1);
+    a.lea(D, BP, -80);
+    a.immediate(R10, 0);
+    a.immediate(R8, 8);
+    super::diagnostics::operation(a, 271);
+    a.immediate(A, 271); // ppoll; recompute remaining time after every interruption.
+    a.syscall();
+    a.immediate(C, (-4i64) as u64);
+    a.compare(A, C);
+    a.condition(4, waiting);
+    a.test(A, true);
+    a.condition(8, failed);
+    a.condition(4, expired);
+    a.load_width(A, BP, -82, 2, false);
+    a.immediate(C, 32); // POLLNVAL.
+    a.rr(0x21, A, C, true);
+    a.test(A, true);
+    a.condition(5, invalid_socket);
+    a.immediate(A, 4);
+    a.store_width(BP, -92, A, 4);
+    a.load(DI, BP, -8);
+    a.immediate(SI, 1); // SOL_SOCKET.
+    a.immediate(D, 4); // SO_ERROR, independent of writable readiness.
+    a.lea(R10, BP, -96);
+    a.lea(R8, BP, -92);
+    syscall(a, 55);
+    a.test(A, true);
+    a.condition(8, failed);
+    a.load_width(A, BP, -92, 4, false);
+    a.immediate(C, 4);
+    a.compare(A, C);
+    a.condition(5, invalid_reply);
+    a.load_width(C, BP, -96, 4, false);
+    a.immediate(A, 0);
+    a.rr(0x29, A, C, true);
+    a.test(A, true);
+    a.condition(5, failed);
+    a.bind(connected);
+    a.load(DI, BP, -8);
+    a.immediate(SI, 3); // F_GETFL.
+    a.immediate(D, 0);
+    syscall(a, 72);
+    a.test(A, true);
+    a.condition(8, failed);
+    a.mov(D, A);
+    a.immediate(C, !2048u64);
+    a.rr(0x21, D, C, true);
+    a.load(DI, BP, -8);
+    a.immediate(SI, 4); // F_SETFL: publish the usual blocking File.
+    syscall(a, 72);
+    a.test(A, true);
+    a.condition(8, failed);
+    a.load(A, BP, -8);
+    a.jump(done);
+    a.bind(invalid_socket);
+    a.immediate(A, (-9i64) as u64);
+    a.jump(failed);
+    a.bind(invalid_reply);
+    a.immediate(A, (-5i64) as u64);
+    a.jump(failed);
+    a.bind(expired);
+    a.immediate(A, (-110i64) as u64);
+    a.bind(failed);
+    a.store(BP, -16, A);
+    a.load(DI, BP, -8);
+    a.test(DI, true);
+    a.condition(8, close_done);
+    a.immediate(A, 3);
+    a.syscall(); // Consume once and preserve the actual connection error.
+    a.bind(close_done);
+    a.load(A, BP, -16);
+    a.bind(done);
+    epilogue(a);
+}

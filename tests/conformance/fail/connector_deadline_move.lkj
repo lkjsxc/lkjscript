@@ -1,0 +1,4 @@
+// expect: reject E_MOVE
+// witness: {"rustAccept":false,"rustCode":"E0382","world":true}
+fn consume(_target: Connector) {}
+fn probe(mut target: Connector) { consume(target); let _stream = target.connect_deadline(0usize); }

@@ -21,6 +21,7 @@ const STORAGE: u64 = 1u64 << 13u32;
 const NODELAY: u64 = 1u64 << 14u32;
 const WORKERS: u64 = 1u64 << 15u32;
 const REGION: u64 = 1u64 << 16u32;
+const CONNECT_DEADLINE: u64 = 1u64 << 17u32;
 
 fn error(message: &str) -> Diagnostic { Diagnostic::new(Span::default(), "E_UNIT_LINK", message) }
 fn io(operation: &str, errno: i64) -> Diagnostic { error(&format!("{operation}: errno {errno}")) }
@@ -145,6 +146,7 @@ fn features(program: &Program) -> u64 {
                         | IntrinsicOp::FileLockExclusive | IntrinsicOp::ReadDirectoryOpen | IntrinsicOp::DirectoryOpenRegular
                         | IntrinsicOp::FileSeek | IntrinsicOp::FileModifiedNanoseconds => STORAGE,
                     IntrinsicOp::ListenerAcceptNoDelay => NODELAY,
+                    IntrinsicOp::ConnectorConnectDeadline => CONNECT_DEADLINE,
                     _ => 0u64,
                 };
             }
@@ -258,7 +260,7 @@ impl Object {
         let stored_context = take_string(&bytes, &mut at)?;
         if stored_context != context.identity || take_word(&bytes, &mut at)? != source_base { return None; }
         let flags = take_word(&bytes, &mut at)? as u64;
-        if flags & !0x1ffffu64 != 0u64 { return None; }
+        if flags & !0x3ffffu64 != 0u64 { return None; }
         let count = take_word(&bytes, &mut at)?;
         if count != sources.len() || count > (bytes.len() - at) / 8usize { return None; }
         let mut own_sources = Vec::new();
@@ -992,6 +994,7 @@ fn support(runtime: &Runtime, program: &Program, selected: usize, binding: &str,
     if flags & WORKERS != 0u64 { workers::emit(&mut a, p); }
     if flags & REGION != 0u64 { read_region::emit(&mut a, p); }
     if flags & CONNECTOR != 0u64 { network::emit_connector(&mut a, p); }
+    if flags & CONNECT_DEADLINE != 0u64 { connect_deadline::emit(&mut a, p); }
     if flags & NODELAY != 0u64 { network::emit_accept_nodelay(&mut a, p); }
     if flags & READINESS != 0u64 { readiness::emit(&mut a, p); }
     if flags & NONBLOCKING != 0u64 { readiness::emit_nonblocking(&mut a, p); }

@@ -591,14 +591,18 @@ impl<H: Host> Interpreter<'_, H> {
                 let child = self.allocate(ty, Some(value), false)?;
                 Value::Aggregate { variant: Some(tag), fields: vec![child] }
             }
-            ir::IntrinsicOp::ConnectorConnect if values.len() == 1 => {
+            ir::IntrinsicOp::ConnectorConnect | ir::IntrinsicOp::ConnectorConnectDeadline
+                if values.len() == if name == ir::IntrinsicOp::ConnectorConnect { 1 } else { 2 } => {
                 let authority = self.io_authority(values, TypeKind::Connector)?;
                 let types = self.io_open_types(result, TypeKind::File)?;
                 let address = match self.value(authority.cell)? {
                     Value::Connector(address) => address.clone(),
                     _ => return Err(self.invalid("connector has no granted endpoint")),
                 };
-                let opened = self.host.connect_socket(&address);
+                let opened = if name == ir::IntrinsicOp::ConnectorConnectDeadline {
+                    let deadline = self.io_number(values, 1, ir::U64)? as usize;
+                    self.host.connect_socket_deadline(&address, deadline)
+                } else { self.host.connect_socket(&address) };
                 self.io_open_result(types, opened, TypeKind::File)?
             }
             ir::IntrinsicOp::ListenerAccept | ir::IntrinsicOp::ListenerAcceptNoDelay if values.len() == 1 => {

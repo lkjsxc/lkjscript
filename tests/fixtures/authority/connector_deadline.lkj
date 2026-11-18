@@ -1,0 +1,3 @@
+// expect: check
+// authority-expect: --grant target=ADDRESS; connector_connect_deadline; file_close
+pub fn main(mut target: Connector) { let _stream = target.connect_deadline(0usize); }

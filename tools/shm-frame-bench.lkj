@@ -1,0 +1,33 @@
+//! Reproduce the wl_shm backing-file path without writable mappings.
+//! Timings cover seek plus complete 1920x1080 XRGB8888 file writes only.
+//! They exclude rasterization, compositor mapping, presentation and release.
+pub fn main(mut world: World) {
+    let mut clock = world.clock();
+    let mut output = world.stdout();
+    let bytes = 1920usize * 1080usize * 4usize;
+    let pixels = vec![90u8; bytes];
+    let start = clock.nanoseconds().unwrap();
+    let mut frame = world.temporary_file().unwrap();
+    frame.truncate(bytes).unwrap();
+    let allocation = clock.nanoseconds().unwrap() - start;
+    output.write(format!("allocation {} {}\n", bytes, allocation).as_bytes());
+    for sample in 0usize..32usize {
+        let begin = clock.nanoseconds().unwrap();
+        assert_eq!(frame.seek(0i64, 0u8).unwrap(), 0usize);
+        frame.write_all(&pixels).unwrap();
+        let elapsed = clock.nanoseconds().unwrap() - begin;
+        output.write(format!("frame {} {} {}\n", sample, bytes, elapsed).as_bytes());
+    }
+    assert_eq!(frame.seek(0i64, 2u8).unwrap(), bytes);
+    let mut probe = [0u8; 16usize];
+    assert_eq!(frame.seek(0i64, 0u8).unwrap(), 0usize);
+    assert_eq!(frame.read(&mut probe).unwrap(), probe.len());
+    assert_eq!(probe, [90u8; 16usize]);
+    assert_eq!(frame.seek((bytes / 2usize) as i64, 0u8).unwrap(), bytes / 2usize);
+    assert_eq!(frame.read(&mut probe).unwrap(), probe.len());
+    assert_eq!(probe, [90u8; 16usize]);
+    assert_eq!(frame.seek(-16i64, 2u8).unwrap(), bytes - 16usize);
+    assert_eq!(frame.read(&mut probe).unwrap(), probe.len());
+    assert_eq!(probe, [90u8; 16usize]);
+    output.write(b"verified 8294400 bytes; first, middle and last samples\n");
+}

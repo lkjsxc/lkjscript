@@ -1,0 +1,25 @@
+pub fn main(mut target: Connector, mut clock: Clock, mut arguments: Arguments, mut out: Stdout) {
+    let args = arguments.args();
+    assert_eq!(args.len(), 1usize);
+    // This also initializes the independent interpreter's syscall broker.
+    match target.connect_deadline(0usize) { Err(error) => assert_eq!(error, 110), Ok(_) => panic!("expired connect") }
+    if args[0][0] == b't' {
+        for _index in 0usize..96usize {
+            let before = clock.nanoseconds().unwrap();
+            match target.connect_deadline(before + 20000000usize) {
+                Err(error) => assert_eq!(error, 110),
+                Ok(_) => panic!("full backlog connected"),
+            }
+            assert!(clock.nanoseconds().unwrap() - before >= 20000000usize);
+        }
+    } else {
+        let mut file = target.connect_deadline(clock.nanoseconds().unwrap() + 5000000000usize).unwrap();
+        let mut byte = [0u8; 1];
+        // The peer delays this byte: returning a nonblocking File would fail EAGAIN.
+        assert_eq!(file.read(&mut byte).unwrap(), 1usize);
+        assert_eq!(byte[0], b'R');
+        file.write_all(b"Q").unwrap();
+        assert_eq!(file.read(&mut byte).unwrap(), 0usize);
+    }
+    out.write(b"deadline boundary ok\n");
+}

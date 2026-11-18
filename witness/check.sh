@@ -23,5 +23,6 @@ fi
 target/lkjscript test tests/conformance --witness "$witness_rustc"
 bash tools/directory-rename-new-test.sh target/lkjscript --witness "$witness_rustc"
 bash tools/directory-identity-test.sh target/lkjscript --witness "$witness_rustc"
+bash tools/connect-deadline-test.sh target/lkjscript --witness "$witness_rustc"
 bash tools/real-programs-rust.sh "$witness_rustc"
 printf 'ok optional Rust witness and compiler byte identity\n'

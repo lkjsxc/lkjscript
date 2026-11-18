@@ -182,6 +182,7 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     let file_modified = a.label();
     let file_seal = a.label();
     let file_seals = a.label();
+    let connect_deadline = a.label();
     let beneath = a.label();
     let mut operations = Vec::new();
     for _index in 0usize..16usize { operations.push(a.label()); }
@@ -333,6 +334,7 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
         a.condition(4, operations[index]);
     }
     for index in 0usize..worker_operations.len() { a.immediate(C, 61 + index as u64); a.compare(A,C); a.condition(4,worker_operations[index]); }
+    a.immediate(C, 75); a.compare(A, C); a.condition(4, connect_deadline);
     a.immediate(C, 55); a.compare(A, C); a.condition(4, file_seal);
     a.immediate(C, 56); a.compare(A, C); a.condition(4, file_seals);
     a.immediate(C, 50);
@@ -386,6 +388,7 @@ pub(super) fn image(local: &[u8], address: &[u8], nonce: &[u8]) -> Result<Vec<u8
     directories::emit(&mut a, &directories, reply, invalid, bad, beneath);
     lifecycle::emit(&mut a, &lifecycle, reply, invalid, bad);
     emit_network(&mut a, &operations, reply, invalid, bad);
+    super::connect_deadline::emit(&mut a, connect_deadline, reply, invalid);
     emit_files(&mut a, &operations, reply, bad);
     emit_readiness(&mut a, &operations, reply, invalid, bad);
     process::emit(&mut a, &p, reply);

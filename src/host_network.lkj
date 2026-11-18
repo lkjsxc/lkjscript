@@ -2,6 +2,8 @@
 // Explicit paths also preserve child resolution when the Rust witness includes this file.
 #[path = "host_network/broker.lkj"]
 mod broker;
+#[path = "host_network/connect_deadline.lkj"]
+mod connect_deadline;
 #[path = "host_network/process.lkj"]
 mod process;
 #[path = "host_network/directories.lkj"]
@@ -141,6 +143,11 @@ impl Network {
     fn unit_request(&mut self, operation: u64, arguments: &[u64]) -> Result<(), i64> {
         self.request(operation, arguments, b"")?;
         Ok(())
+    }
+    pub fn open_stream_deadline(&mut self, world: &mut World, address: &[u8], deadline: usize) -> Result<u64, i64> {
+        self.ensure(world)?;
+        let (handle, _) = self.request(75, &[deadline as u64], address)?;
+        Ok(handle as u64)
     }
     pub fn open_stream(&mut self, world: &mut World, address: &[u8]) -> Result<u64, i64> {
         self.ensure(world)?;

@@ -1,0 +1,3 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false,"rustCode":"E0308","world":true}
+fn probe(mut target: Connector) { let _stream = target.connect_deadline(0i64); }

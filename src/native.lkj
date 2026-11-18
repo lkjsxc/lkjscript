@@ -30,6 +30,7 @@ mod foreign_session;
 mod workers;
 mod read_region;
 mod network;
+mod connect_deadline;
 mod readiness;
 mod storage;
 mod storage_plan;
@@ -1806,6 +1807,8 @@ fn prepare_program(
         matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::WorldListen, .. })))
         || grants.map_or(false, |provided| provided.iter().any(|grant| matches!(grant, ir::EntryGrant::Listener(_))));
     let connector = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Connector));
+    let connect_deadline = program.functions.iter().any(|function| function.body.iter().any(|instruction|
+        matches!(instruction.op, Op::Intrinsic { name: IntrinsicOp::ConnectorConnectDeadline, .. })));
     let readiness = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Readiness));
     let stop_signals = program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Stop));
     let entropy = program.functions.iter().any(|function| function.body.iter().any(|instruction|
@@ -1932,6 +1935,9 @@ fn prepare_program(
             symbols.push((p.file_lock_exclusive, "$platform::file_lock_exclusive".to_string()));
         }
 
+        if connect_deadline {
+            symbols.push((p.connector_connect_deadline, "$platform::connector_connect_deadline".to_string()));
+        }
         if connector {
             symbols.push((p.world_connector, "$platform::world_connector".to_string()));
             symbols.push((p.connector_connect, "$platform::connector_connect".to_string()));
@@ -1987,6 +1993,7 @@ fn prepare_program(
     if program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Image | TypeKind::Channel | TypeKind::Worker)) { workers::emit(&mut a, p); }
     if program.types.iter().any(|ty| matches!(ty.kind, TypeKind::Image | TypeKind::ReadRegion)) { read_region::emit(&mut a, p); }
     if connector { network::emit_connector(&mut a, p); }
+    if connect_deadline { connect_deadline::emit(&mut a, p); }
     if accept_nodelay { network::emit_accept_nodelay(&mut a, p); }
     if readiness { readiness::emit(&mut a, p); }
     if nonblocking { readiness::emit_nonblocking(&mut a, p); }
