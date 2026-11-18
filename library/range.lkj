@@ -76,392 +76,88 @@ pub fn range_to_inclusive<T>(end: T) -> RangeToInclusive<T> { RangeToInclusive {
 pub fn range_inclusive<T>(start: T, end: T) -> RangeInclusive<T> { RangeInclusive::new(start, end) }
 pub fn range_full() -> RangeFull { RangeFull }
 
-impl Iterator for Range<u8> {
-    type Item = u8;
-    fn next(&mut self) -> Option<u8> {
-        if self.start >= self.end { return Option::None; }
-        let value = self.start;
-        self.start += 1u8;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for Range<u8> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeInclusive<u8> {
-    type Item = u8;
-    fn next(&mut self) -> Option<u8> {
-        if self.exhausted || self.start > self.end { self.exhausted = true; return Option::None; }
-        let value = self.start;
-        if self.start == self.end { self.exhausted = true; } else { self.start += 1u8; }
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeInclusive<u8> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeFrom<u8> {
-    type Item = u8;
-    fn next(&mut self) -> Option<u8> {
-        let value = self.start;
-        self.start += 1u8;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeFrom<u8> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
+// One structural iterator header preserves Item = T before an unsuffixed
+// endpoint has a concrete integer type. Ordinary selection still proves this
+// private prerequisite; callers cannot provide a new stepping implementation.
+trait IntegerRangeStep: Copy + PartialOrd {
+    fn __range_advance(self) -> Self;
 }
 
-impl Iterator for Range<u16> {
-    type Item = u16;
-    fn next(&mut self) -> Option<u16> {
-        if self.start >= self.end { return Option::None; }
-        let value = self.start;
-        self.start += 1u16;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for Range<u16> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeInclusive<u16> {
-    type Item = u16;
-    fn next(&mut self) -> Option<u16> {
-        if self.exhausted || self.start > self.end { self.exhausted = true; return Option::None; }
-        let value = self.start;
-        if self.start == self.end { self.exhausted = true; } else { self.start += 1u16; }
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeInclusive<u16> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeFrom<u16> {
-    type Item = u16;
-    fn next(&mut self) -> Option<u16> {
-        let value = self.start;
-        self.start += 1u16;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeFrom<u16> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
+impl IntegerRangeStep for u8 {
+    fn __range_advance(self) -> u8 { self + 1u8 }
 }
 
-impl Iterator for Range<u32> {
-    type Item = u32;
-    fn next(&mut self) -> Option<u32> {
-        if self.start >= self.end { return Option::None; }
-        let value = self.start;
-        self.start += 1u32;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for Range<u32> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeInclusive<u32> {
-    type Item = u32;
-    fn next(&mut self) -> Option<u32> {
-        if self.exhausted || self.start > self.end { self.exhausted = true; return Option::None; }
-        let value = self.start;
-        if self.start == self.end { self.exhausted = true; } else { self.start += 1u32; }
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeInclusive<u32> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeFrom<u32> {
-    type Item = u32;
-    fn next(&mut self) -> Option<u32> {
-        let value = self.start;
-        self.start += 1u32;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeFrom<u32> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
+impl IntegerRangeStep for u16 {
+    fn __range_advance(self) -> u16 { self + 1u16 }
 }
 
-impl Iterator for Range<u64> {
-    type Item = u64;
-    fn next(&mut self) -> Option<u64> {
-        if self.start >= self.end { return Option::None; }
-        let value = self.start;
-        self.start += 1u64;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for Range<u64> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeInclusive<u64> {
-    type Item = u64;
-    fn next(&mut self) -> Option<u64> {
-        if self.exhausted || self.start > self.end { self.exhausted = true; return Option::None; }
-        let value = self.start;
-        if self.start == self.end { self.exhausted = true; } else { self.start += 1u64; }
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeInclusive<u64> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeFrom<u64> {
-    type Item = u64;
-    fn next(&mut self) -> Option<u64> {
-        let value = self.start;
-        self.start += 1u64;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeFrom<u64> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
+impl IntegerRangeStep for u32 {
+    fn __range_advance(self) -> u32 { self + 1u32 }
 }
 
-impl Iterator for Range<usize> {
-    type Item = usize;
-    fn next(&mut self) -> Option<usize> {
-        if self.start >= self.end { return Option::None; }
-        let value = self.start;
-        self.start += 1usize;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for Range<usize> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeInclusive<usize> {
-    type Item = usize;
-    fn next(&mut self) -> Option<usize> {
-        if self.exhausted || self.start > self.end { self.exhausted = true; return Option::None; }
-        let value = self.start;
-        if self.start == self.end { self.exhausted = true; } else { self.start += 1usize; }
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeInclusive<usize> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeFrom<usize> {
-    type Item = usize;
-    fn next(&mut self) -> Option<usize> {
-        let value = self.start;
-        self.start += 1usize;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeFrom<usize> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
+impl IntegerRangeStep for u64 {
+    fn __range_advance(self) -> u64 { self + 1u64 }
 }
 
-impl Iterator for Range<i8> {
-    type Item = i8;
-    fn next(&mut self) -> Option<i8> {
-        if self.start >= self.end { return Option::None; }
-        let value = self.start;
-        self.start += 1i8;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for Range<i8> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeInclusive<i8> {
-    type Item = i8;
-    fn next(&mut self) -> Option<i8> {
-        if self.exhausted || self.start > self.end { self.exhausted = true; return Option::None; }
-        let value = self.start;
-        if self.start == self.end { self.exhausted = true; } else { self.start += 1i8; }
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeInclusive<i8> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeFrom<i8> {
-    type Item = i8;
-    fn next(&mut self) -> Option<i8> {
-        let value = self.start;
-        self.start += 1i8;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeFrom<i8> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
+impl IntegerRangeStep for usize {
+    fn __range_advance(self) -> usize { self + 1usize }
 }
 
-impl Iterator for Range<i16> {
-    type Item = i16;
-    fn next(&mut self) -> Option<i16> {
-        if self.start >= self.end { return Option::None; }
-        let value = self.start;
-        self.start += 1i16;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for Range<i16> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeInclusive<i16> {
-    type Item = i16;
-    fn next(&mut self) -> Option<i16> {
-        if self.exhausted || self.start > self.end { self.exhausted = true; return Option::None; }
-        let value = self.start;
-        if self.start == self.end { self.exhausted = true; } else { self.start += 1i16; }
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeInclusive<i16> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeFrom<i16> {
-    type Item = i16;
-    fn next(&mut self) -> Option<i16> {
-        let value = self.start;
-        self.start += 1i16;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeFrom<i16> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
+impl IntegerRangeStep for i8 {
+    fn __range_advance(self) -> i8 { self + 1i8 }
 }
 
-impl Iterator for Range<i32> {
-    type Item = i32;
-    fn next(&mut self) -> Option<i32> {
-        if self.start >= self.end { return Option::None; }
-        let value = self.start;
-        self.start += 1i32;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for Range<i32> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeInclusive<i32> {
-    type Item = i32;
-    fn next(&mut self) -> Option<i32> {
-        if self.exhausted || self.start > self.end { self.exhausted = true; return Option::None; }
-        let value = self.start;
-        if self.start == self.end { self.exhausted = true; } else { self.start += 1i32; }
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeInclusive<i32> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeFrom<i32> {
-    type Item = i32;
-    fn next(&mut self) -> Option<i32> {
-        let value = self.start;
-        self.start += 1i32;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeFrom<i32> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
+impl IntegerRangeStep for i16 {
+    fn __range_advance(self) -> i16 { self + 1i16 }
 }
 
-impl Iterator for Range<i64> {
-    type Item = i64;
-    fn next(&mut self) -> Option<i64> {
-        if self.start >= self.end { return Option::None; }
-        let value = self.start;
-        self.start += 1i64;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for Range<i64> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeInclusive<i64> {
-    type Item = i64;
-    fn next(&mut self) -> Option<i64> {
-        if self.exhausted || self.start > self.end { self.exhausted = true; return Option::None; }
-        let value = self.start;
-        if self.start == self.end { self.exhausted = true; } else { self.start += 1i64; }
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeInclusive<i64> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
-}
-impl Iterator for RangeFrom<i64> {
-    type Item = i64;
-    fn next(&mut self) -> Option<i64> {
-        let value = self.start;
-        self.start += 1i64;
-        Option::Some(value)
-    }
-}
-impl IntoIterator for RangeFrom<i64> {
-    type IntoIter = Self;
-    fn into_iter(self) -> Self { self }
+impl IntegerRangeStep for i32 {
+    fn __range_advance(self) -> i32 { self + 1i32 }
 }
 
-impl Iterator for Range<isize> {
-    type Item = isize;
-    fn next(&mut self) -> Option<isize> {
+impl IntegerRangeStep for i64 {
+    fn __range_advance(self) -> i64 { self + 1i64 }
+}
+
+impl IntegerRangeStep for isize {
+    fn __range_advance(self) -> isize { self + 1isize }
+}
+
+impl<T: IntegerRangeStep> Iterator for Range<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
         if self.start >= self.end { return Option::None; }
         let value = self.start;
-        self.start += 1isize;
+        self.start = value.__range_advance();
         Option::Some(value)
     }
 }
-impl IntoIterator for Range<isize> {
+impl<T: IntegerRangeStep> IntoIterator for Range<T> {
     type IntoIter = Self;
     fn into_iter(self) -> Self { self }
 }
-impl Iterator for RangeInclusive<isize> {
-    type Item = isize;
-    fn next(&mut self) -> Option<isize> {
+impl<T: IntegerRangeStep> Iterator for RangeInclusive<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
         if self.exhausted || self.start > self.end { self.exhausted = true; return Option::None; }
         let value = self.start;
-        if self.start == self.end { self.exhausted = true; } else { self.start += 1isize; }
+        if self.start == self.end { self.exhausted = true; } else { self.start = value.__range_advance(); }
         Option::Some(value)
     }
 }
-impl IntoIterator for RangeInclusive<isize> {
+impl<T: IntegerRangeStep> IntoIterator for RangeInclusive<T> {
     type IntoIter = Self;
     fn into_iter(self) -> Self { self }
 }
-impl Iterator for RangeFrom<isize> {
-    type Item = isize;
-    fn next(&mut self) -> Option<isize> {
+impl<T: IntegerRangeStep> Iterator for RangeFrom<T> {
+    type Item = T;
+    fn next(&mut self) -> Option<T> {
         let value = self.start;
-        self.start += 1isize;
+        self.start = value.__range_advance();
         Option::Some(value)
     }
 }
-impl IntoIterator for RangeFrom<isize> {
+impl<T: IntegerRangeStep> IntoIterator for RangeFrom<T> {
     type IntoIter = Self;
     fn into_iter(self) -> Self { self }
 }
