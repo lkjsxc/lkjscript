@@ -335,10 +335,34 @@ released, and the native gate process exited zero.
 The real-programs suite passed **inside** this full gate; its
 [receipt](compiler-call-data/gate-details/real-programs.log) retains the original
 library/provenance controls, eight tests per engine and 7,239 native corpus rows.
-There was no extra standalone real-programs rerun, no independent Rust-witness run
-on this final producer and no CI run for this unpublished slice. Lead will decide
-a separate landing and seed handoff after the public parent's CI; this change is
-not bundled with the type-defaults publication.
+After the full gate, lead requested separate landing checks. The standalone
+real-programs script passed in **4.02 s** on the frozen reviewed producer. The
+complete documented `bash witness/check.sh` passed in **156.87 s**, including
+**499 values/output cases and 652 verdicts**, directory/network/macro/TemporaryFiles
+boundaries and the original real-program Rust profiles. Its independently
+Rust-built compiler emitted a byte-identical copy of the reviewed native compiler.
+The [standalone receipt](compiler-call-data/landing/standalone.log),
+[witness log](compiler-call-data/landing/witness.log),
+[time record](compiler-call-data/landing/witness.time) and
+[output identities](compiler-call-data/landing/witness-output.sha256) are retained.
+Cargo and its release code generation used one worker/unit; the native witness
+coordinator's default is one worker. There is no CI result for this unpublished
+slice. The published parent's separate CI hit its macro-origins watchdog; Programs
+owns that diagnosis, and lead has kept publication held. This change is not
+bundled with type defaults.
+
+The [local landing packet](compiler-call-data/landing/README.md) separates the
+three-file production delta from `739c8cde2`, the two-file test/gate delta and the
+documentation/evidence follow-up. The source, test and original full-gate receipt
+bytes remain unchanged. A deterministic seed candidate is prepared outside the
+tracked seed path: gzip SHA-256
+`65408daa78849909a0a3ddcf0a2cab29120b9ddfc095ffb2095c422261f6a6ee`,
+8,204,839 bytes, decoding exactly to native `103557eddf…a5d35`. The current tracked
+seed remains `9327f64a…5f612`, 8,192,800 bytes. Applying the proposal would change
+only `seed/lkjscript.gz` in a separate compiler-owned seed commit after lead's
+decision. No proposed-seed gate, tracked seed change or publication was performed.
+The [packet manifest](compiler-call-data/landing/manifest.json) records the exact
+artifact path, both seed identities and the reviewable delta.
 
 The normal reproduction in this checkout is:
 

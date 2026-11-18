@@ -1,0 +1,83 @@
+{
+   "documentation_patch" : {
+      "basis" : "current landing documentation delta from published parent",
+      "file" : "documentation.patch.gz",
+      "scope" : [
+         "docs/status.md",
+         "docs/structure.md"
+      ],
+      "uncompressed_sha256" : "32a4aa27b6fd347876d05f9345222a62a9138461fb484dea80c60018f78a4635"
+   },
+   "gate_receipts_preserved_from" : "513e13a80f6f1a7aad0054aa4c05dacfb36c8283",
+   "initial_evidence_commit" : "513e13a80f6f1a7aad0054aa4c05dacfb36c8283",
+   "production_patch" : {
+      "file" : "production-source.patch.gz",
+      "uncompressed_sha256" : "9c90f2ed55346a356a919a1cedcaa6195524ddf8ba5867647aeb4f13b9b43bac"
+   },
+   "production_paths" : [
+      "src/driver/help.lkj",
+      "src/structure_edit.lkj",
+      "src/syntax.lkj"
+   ],
+   "publication" : "held by lead after public parent macro-origins CI watchdog failure; Programs owns that diagnosis; no type-defaults bundle",
+   "published_parent" : "739c8cde24f8df4644274451d5f39c23302a8af6",
+   "seed_proposal" : {
+      "artifact_path" : "/home/coder/workspace/lkjscript-semantic-operations-20261118/target/semantic-operations/landing/proposed-lkjscript.gz",
+      "command" : "gzip -n -9 -c target/semantic-operations/raw-expression > target/semantic-operations/landing/proposed-lkjscript.gz",
+      "current" : {
+         "gzip_bytes" : 8192800,
+         "gzip_sha256" : "9327f64a3c9a5c37146ca6c91a6926a8707d9fef3d9fd67398125909f4b5f612",
+         "image_bytes" : 40929908,
+         "image_sha256" : "a2d0d8581c73ceb937addb5ea986ba708fa06c2505161d8745353cf123a9bc8f"
+      },
+      "gzip_size_delta" : 12039,
+      "proposal_seed_full_gate" : "not run; no new full gate authorized",
+      "proposed" : {
+         "gzip_bytes" : 8204839,
+         "gzip_sha256" : "65408daa78849909a0a3ddcf0a2cab29120b9ddfc095ffb2095c422261f6a6ee",
+         "image_bytes" : 40989463,
+         "image_sha256" : "103557eddf30d24e046cb09f6a881e549829283495c8648c0ac9dcd1d72a5d35"
+      },
+      "repository_path" : "seed/lkjscript.gz",
+      "separate_compiler_owned_commit_required" : true,
+      "status" : "proposed-not-applied",
+      "tracked_seed_changed" : false
+   },
+   "standalone" : {
+      "log" : "standalone.log",
+      "max_rss_kib" : 62336,
+      "producer_sha256" : "103557eddf30d24e046cb09f6a881e549829283495c8648c0ac9dcd1d72a5d35",
+      "status" : "pass",
+      "system_seconds" : 0.47,
+      "user_seconds" : 3.44,
+      "wall_seconds" : 4.02
+   },
+   "status" : "prepared-local-not-published",
+   "test_and_gate_paths" : [
+      "tools/check.sh",
+      "tools/structure-call-test.sh"
+   ],
+   "tested_source" : "ecd0ff6d0e2210be5b7eaed9770b675b7c070554",
+   "tests_and_gate_patch" : {
+      "file" : "tests-and-gate.patch.gz",
+      "uncompressed_sha256" : "6953f31c38fc1b17ec6bdf77fd6366ded2268df3b4d25d7c5042c45d6936061f"
+   },
+   "version" : 1,
+   "witness" : {
+      "cargo_build_jobs" : 1,
+      "cargo_release_codegen_units" : 1,
+      "compiler_bytes_equal" : true,
+      "generated_native_sha256" : "103557eddf30d24e046cb09f6a881e549829283495c8648c0ac9dcd1d72a5d35",
+      "log" : "witness.log",
+      "max_rss_kib" : 1630836,
+      "native_test_jobs_default" : 1,
+      "rust_host_compiler_sha256" : "fbebd08a32c9823642625e240164c2590ce4fdb443b8f886230b963ab36f4ac6",
+      "script" : "bash witness/check.sh",
+      "status" : "pass",
+      "system_seconds" : 9.6,
+      "user_seconds" : 144.03,
+      "values_output_cases" : 499,
+      "verdicts" : 652,
+      "wall_seconds" : 156.87
+   }
+}
