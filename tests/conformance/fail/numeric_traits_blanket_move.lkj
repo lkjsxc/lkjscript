@@ -1,0 +1,8 @@
+// expect: reject E_MOVE
+// witness: {}
+fn unused<T>(value: T) -> T {
+    let moved: T = value.into();
+    drop(moved);
+    value
+}
+pub fn probe() -> i64 { 42 }

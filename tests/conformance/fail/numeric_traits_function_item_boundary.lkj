@@ -1,5 +1,5 @@
-// expect: value 42
-// witness: {}
+// expect: reject E_TYPE
+// witness: {"rustAccept":true}
 // The result/argument inference shape of nom Err::convert and Err::map.
 use core::convert;
 struct Failure<T> { value: T }

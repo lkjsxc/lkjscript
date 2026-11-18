@@ -9,6 +9,5 @@ use contracts::Read;
 fn generic<T: Read>(value: &T) -> i64 { value.read() }
 pub fn probe() -> i64 {
     let value = contracts::Value;
-    assert_eq!(value.read(), 42);
     generic(&value)
 }

@@ -1,0 +1,9 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Mark {}
+trait Produce<U> { fn produce(self) -> U; }
+impl<T: Mark, U: From<T>> Produce<U> for T {
+    fn produce(self) -> U { U::from(self) }
+}
+fn unused<T, U: From<T>>(value: T) -> U { value.produce() }
+pub fn probe() -> i64 { 42 }

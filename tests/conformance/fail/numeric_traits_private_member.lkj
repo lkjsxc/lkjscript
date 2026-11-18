@@ -5,4 +5,5 @@ mod contracts {
     pub struct Value;
     impl Read for Value {}
 }
+use contracts::Read;
 pub fn probe() -> i64 { contracts::Value.read() }

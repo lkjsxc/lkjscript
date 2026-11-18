@@ -5,6 +5,8 @@ impl From<String> for Owned { fn from(text: String) -> Self { Self { text } } }
 fn convert<T, U: From<T>>(value: T) -> U { value.into() }
 fn identity<T>(value: T) -> T { value.into() }
 pub fn probe() -> i64 {
+    let unchanged: u8 = convert(42u8);
+    assert_eq!(unchanged, 42u8);
     let owned: Owned = convert("forty-two".to_string());
     let text: String = identity(owned.text);
     assert_eq!(text, "forty-two".to_string());
@@ -12,5 +14,7 @@ pub fn probe() -> i64 {
     let wide: u64 = convert(byte);
     let float: f64 = byte.into();
     assert_eq!(float, 42.0);
+    let unchanged_again: u8 = convert(42u8);
+    assert_eq!(unchanged_again, unchanged);
     wide as i64
 }
