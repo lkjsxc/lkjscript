@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {}
+trait Produce { fn produce(self) -> i64; }
+impl Produce for u8 { fn produce(self) -> i64 { self as i64 } }
+fn unused<T>(value: T) -> i64 { value.produce() }
+pub fn probe() -> i64 { 42 }

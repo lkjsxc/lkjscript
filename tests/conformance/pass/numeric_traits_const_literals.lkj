@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+const STACK_RESERVATION: u64 = 1u64 << 46;
+const NESTED: u64 = 1u64 << (5 + 1);
+const DIVISION: i64 = 84i64 / -(-2);
+pub fn probe() -> i64 {
+    assert_eq!(STACK_RESERVATION, 70368744177664u64);
+    assert_eq!(NESTED, 64u64);
+    DIVISION
+}

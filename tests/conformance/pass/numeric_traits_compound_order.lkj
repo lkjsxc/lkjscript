@@ -1,0 +1,31 @@
+// expect: value 42
+// witness: {}
+use std::ops::AddAssign;
+struct Word { value: i64 }
+impl From<u8> for Word { fn from(value: u8) -> Self { Self { value: value as i64 } } }
+impl AddAssign for Word { fn add_assign(&mut self, rhs: Self) { self.value += rhs.value; } }
+fn place<'a, T>(order: &mut i64, value: &'a mut T) -> &'a mut T {
+    *order = *order * 10 + 1;
+    value
+}
+fn operand(order: &mut i64) -> i64 { *order = *order * 10 + 2; 1 }
+fn generic<T: AddAssign + From<u8>>(order: &mut i64, value: &mut T) {
+    *place(order, value) += { *order = *order * 10 + 2; 1u8.into() };
+}
+pub fn probe() -> i64 {
+    let mut order = 0i64;
+    let mut primitive = 41i64;
+    *place(&mut order, &mut primitive) += operand(&mut order);
+    assert_eq!(order, 21);
+    assert_eq!(primitive, 42);
+    order = 0;
+    let mut specialized = 41i64;
+    generic(&mut order, &mut specialized);
+    assert_eq!(order, 12);
+    assert_eq!(specialized, 42);
+    order = 0;
+    let mut owned = Word { value: 41 };
+    generic(&mut order, &mut owned);
+    assert_eq!(order, 12);
+    owned.value
+}

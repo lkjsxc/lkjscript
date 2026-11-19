@@ -1,0 +1,11 @@
+// expect: reject E_TYPE
+// witness: {}
+use std::ops::Shl;
+struct Word { value: i64 }
+impl Shl<usize> for Word {
+    type Output = i64;
+    fn shl(self, amount: usize) -> i64 { self.value << amount }
+}
+const WORD: Word = Word { value: 21 };
+const ANSWER: i64 = WORD << 1usize;
+pub fn probe() -> i64 { ANSWER }

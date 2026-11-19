@@ -1,0 +1,10 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+// Operator witnesses must preserve source regions before this contract can be used.
+use std::ops::Shl;
+struct Number(i64);
+impl<'a> Shl<&'a usize> for Number {
+    type Output = Number;
+    fn shl(self, amount: &'a usize) -> Number { Number(self.0 << *amount) }
+}
+pub fn probe() -> i64 { let amount = 1usize; (Number(21) << &amount).0 }

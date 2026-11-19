@@ -1751,8 +1751,9 @@ impl super::Builder<'_, '_> {
         }
         let called = self
             .compiler
-            .instantiate(index, substitutions)
+            .instantiate(index, substitutions.clone())
             .map_err(|problem| super::at_use_site(problem, span))?;
+        self.compiler.record_static_contract(called, index, substitutions);
         let result = self.compiler.functions[called].result;
         let dst = self.temp(result);
         self.emit(

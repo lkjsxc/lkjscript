@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+pub fn probe() -> i64 {
+    let value = 84i64;
+    let divisor = 2i64;
+    let shift = 1usize;
+    let result = &value / &divisor;
+    assert_eq!(&value >> &shift, 42);
+    assert_eq!(&21i64 << &shift, 42);
+    result
+}

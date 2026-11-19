@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+const SHIFT: u64 = 1u64 << { let amount = 6; amount };
+const DIVISION: i64 = 84i64 / { let amount = 2i64; amount };
+pub fn probe() -> i64 {
+    assert_eq!(SHIFT, 64u64);
+    DIVISION
+}

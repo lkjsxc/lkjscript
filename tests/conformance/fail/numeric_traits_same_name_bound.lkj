@@ -1,0 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Shl<Rhs> { type Output; fn shl(self, rhs: Rhs) -> Self::Output; }
+fn unused<T: Shl<usize, Output = T>>(value: T) -> T { value << 1usize }
+pub fn probe() -> i64 { 42 }

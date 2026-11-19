@@ -1,0 +1,4 @@
+// expect: reject E_TRAIT
+// witness: {}
+fn unused<T>(value: T) -> T { value << 1usize }
+pub fn probe() -> i64 { 42 }

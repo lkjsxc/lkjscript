@@ -192,6 +192,19 @@ impl Infer<'_, '_> {
 }
 
 impl Infer<'_, '_> {
+    /// A blanket trait implementation covers an abstract receiver only when its
+    /// target is exactly one of its own type parameters. Concrete heads and
+    /// nested, repeated, alias or projection patterns cannot supply that fact.
+    fn universal_trait_receiver(&self, index: usize) -> bool {
+        let implementation = &self.source.impls[index];
+        if implementation.trait_ty.is_none() { return false; }
+        let a::Type::Path(path) = &self.source.types[implementation.target].kind else { return false; };
+        if path.declaration.is_some() || path.qualification.is_some()
+            || !path.args.is_empty() || !path.bindings.is_empty() { return false; }
+        implementation.generics.iter().any(|parameter|
+            !parameter.lifetime && !parameter.constant && parameter.name == path.name)
+    }
+
     /// A single visible structural candidate contributes conditional equations.
     /// Competing bounded headers stay unresolved: eligibility and inherent
     /// precedence still belong to the ordinary selector, not this graph.
@@ -205,9 +218,22 @@ impl Infer<'_, '_> {
         location: (usize, a::ExprId, a::ModuleId, a::Span),
     ) -> Result<bool> {
         let (id, expression, scope, span) = location;
-        if matches!(self.shape(receiver), None | Some(Shape::Rigid(_) | Shape::Opaque(..))) {
+        if self.shape(receiver).is_none() {
             self.watch(receiver, id);
             return Ok(false);
+        }
+        let abstract_receiver = matches!(self.shape(receiver), Some(Shape::Rigid(_) | Shape::Opaque(..)));
+        if abstract_receiver {
+            // A written interface retains precedence even when its own method
+            // header is ambiguous or still lacks an argument equation.
+            for (target, bound, _, _) in self.trait_headers.clone() {
+                if self.definition.root(target) != self.definition.root(receiver) { continue; }
+                let a::Type::Path(path) = &self.source.types[bound].kind else { continue; };
+                let Some(declaration) = path.declaration else { continue; };
+                let a::Item::Trait(owner) = self.source.declarations[declaration].item else { continue; };
+                if self.source.traits[owner].methods.iter().any(|method|
+                    self.source.functions[*method].name == name) { return Ok(false); }
+            }
         }
         let head = self.shape_head(receiver);
         let head_view = match &head {
@@ -220,6 +246,7 @@ impl Infer<'_, '_> {
         let mut selected: Option<(usize, usize, BTreeMap<String, Variable>)> = None;
         for candidate in candidates {
             let implementation = self.source.impls[candidate].clone();
+            if abstract_receiver && !self.universal_trait_receiver(candidate) { continue; }
             let trait_declaration =
                 implementation
                     .trait_ty

@@ -215,6 +215,10 @@ fn callers(catalog: &semantic::Catalog, target: &semantic::Item) -> Result<BTree
     let mut result: BTreeMap<String, Vec<semantic::Reference>> = BTreeMap::new();
     for site in &catalog.references {
         if site.target != target.identity || site.kind == "import" { continue; }
+        if site.kind == "operator-contract" {
+            return Err(at_site(&target.identity, "OPERATOR_REFERENCE", site,
+                "operator punctuation has no editable method-call spelling"));
+        }
         let owner = edit::item(catalog, &site.owner)?;
         if owner.kind != "function" && owner.kind != "constant" {
             return Err(at_site(&target.identity, "CALL_REFERENCE", site, "reference is not a directly editable call"));
@@ -1639,6 +1643,10 @@ pub mod relocation {
         capture(catalog, inputs, target, &targets, name, &mut cache)?;
         for site in &catalog.references {
             if !targets.contains(&site.target) || site.kind.starts_with("alias-") { continue; }
+            if site.kind == "operator-contract" {
+                return Err(at_site(&target.identity, "OPERATOR_REFERENCE", site,
+                    "operator punctuation has no editable trait-method name"));
+            }
             let item = edit::item(catalog, &site.target)?;
             let bytes = edit::input(inputs, &site.file)?;
             if site.start >= site.end || site.end > bytes.len() { return Err(at_site(&target.identity, "SPAN", site, "reference is outside its source")); }
@@ -1704,7 +1712,7 @@ pub fn scope(catalog: &semantic::Catalog, unit: &Unit, start: usize, end: usize,
         for site in &catalog.references {
             if site.owner != unit.owner.identity || site.file != unit.owner.file || !contains(start, end, site.start, site.end) { continue; }
             if matches!(site.kind.as_str(), "qualification" | "alias-qualification") { continue; }
-            if matches!(site.kind.as_str(), "local-value" | "field" | "method" | "constructor-field"
+            if matches!(site.kind.as_str(), "local-value" | "field" | "method" | "operator-contract" | "constructor-field"
                 | "field-shorthand" | "pattern-field" | "pattern-field-shorthand") { continue; }
             let target = edit::item(catalog, &site.target)?;
             if target.kind == "generic-parameter" && descendant(catalog, &unit.owner.identity, &target.parent) { continue; }

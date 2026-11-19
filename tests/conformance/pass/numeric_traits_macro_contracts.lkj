@@ -1,0 +1,21 @@
+// expect: value 42
+// witness: {}
+use std::ops::{AddAssign, Shl};
+macro_rules! operators {
+    ($shift:ident, $append:ident) => {
+        fn $shift<T: Shl<usize, Output = i64>>(value: T) -> i64 { value << 1usize }
+        fn $append<T: AddAssign>(value: &mut T, rhs: T) { *value += rhs; }
+    };
+}
+operators!(generated_shift, generated_append);
+struct Word { value: i64 }
+impl Shl<usize> for Word {
+    type Output = i64;
+    fn shl(self, amount: usize) -> i64 { self.value << amount }
+}
+impl AddAssign for Word { fn add_assign(&mut self, rhs: Self) { self.value += rhs.value; } }
+pub fn probe() -> i64 {
+    let mut value = Word { value: 20 };
+    generated_append(&mut value, Word { value: 1 });
+    generated_shift(value)
+}

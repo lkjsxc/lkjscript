@@ -1,0 +1,43 @@
+//! Source conversion contracts. The blanket Into implementation retains its
+//! exact From argument and proves it again at each ordinary source call.
+pub trait From<T>: Sized {
+    fn from(value: T) -> Self;
+}
+pub trait Into<T>: Sized {
+    fn into(self) -> T;
+}
+impl<T> From<T> for T {
+    fn from(value: T) -> T { value }
+}
+impl<T, U: From<T>> Into<U> for T {
+    fn into(self) -> U { U::from(self) }
+}
+
+// The lossless byte conversions used by source bit parsers.
+impl From<u8> for i16 {
+    fn from(value: u8) -> i16 { value as i16 }
+}
+impl From<u8> for i32 {
+    fn from(value: u8) -> i32 { value as i32 }
+}
+impl From<u8> for i64 {
+    fn from(value: u8) -> i64 { value as i64 }
+}
+impl From<u8> for isize {
+    fn from(value: u8) -> isize { value as isize }
+}
+impl From<u8> for u16 {
+    fn from(value: u8) -> u16 { value as u16 }
+}
+impl From<u8> for u32 {
+    fn from(value: u8) -> u32 { value as u32 }
+}
+impl From<u8> for u64 {
+    fn from(value: u8) -> u64 { value as u64 }
+}
+impl From<u8> for usize {
+    fn from(value: u8) -> usize { value as usize }
+}
+impl From<u8> for f64 {
+    fn from(value: u8) -> f64 { value as f64 }
+}
