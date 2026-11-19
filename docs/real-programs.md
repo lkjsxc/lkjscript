@@ -250,29 +250,17 @@ still under `target/` is a temporary candidate observation, not a durable eviden
 link. Fresh observations additionally require the original/projected trees to pass
 `project.pl --verify`; use `probe.pl --help` for its exact entry and package options.
 
-#### Current Core facade frontier
+#### Current ordinary numeric traits frontier
 
-<!-- corrected-core-evidence-v3 sha256:f43176b8ed929dfc346c407aa2daffd9b741a2c8881d41ae8056186032cd3bfe -->
+<!-- numeric-evidence-v1 sha256:53c52136581be3be25a96ff0bfa4e7077207da1e8f75548cc3aaa456e746a484 -->
 
-Bootstrap used private core parent b6cffddc6b, its seed 64b1dd2e and initial native bf5d322f. Published cf379914 is the source ancestor, not the bootstrap seed. The ordinary bootstrap logs record no automatic seed bridge. The first native (fd83ea00de8b) and final fixed-point native (fd83ea00de8b) remain separately labeled; validation retains their full identities and the refreshed seed hash.
+The actual source checkpoint, independent source review, completed unchanged-source census and review, and current full gate are bound by the canonical evidence digest above. Bootstrap starts from published core128 native fd83ea00de8b306e44534b50bdee0da47464e2c096a36c2567e2699a2cb1ec86 and seed 4bbd931edf8422044cb61acfc6c3c4fba580a0d61e7283474ba624b9696f90a3. The initial and refreshed logs record no automatic seed bridge. First and reproduced numeric generations are byte-identical; final acceptance accounting is bits: reused exact first-producer evidence, rhs: reused exact first-producer evidence, range: reused exact first-producer evidence. Core34/strict76 and parent CI are retained history, not fresh numeric proof.
 
-All 34 primary records are retained: 20 under frozen bf5 with the repaired library, 4 under the first native, and 10 under the final fixed-point native. The two expected nonzero records are Rust E0308 refusals. The 4-case/8-route repair cohort ran in both early and final phases. The early supplement records 76 LKJ routes, 14 Rust compiles and 4 positive Rust runs; its LKJ routes compare two exact libraries under bf5 and remain early-producer evidence. The local same_name_step_setup_positive setup passed 4 LKJ routes and 2 Rust runs before same_name_step_spoof_without_supertraits reached its body refusal. The original same_name_step_spoof (d9e8ff37) remains authenticated failed history outside these fresh counts. Its ten open-MAX traps establish only the LKJ checked-overflow comparison; its two private-helper checks are unpaired with Rust. The exact foreign RangeFrom<Custom> implementation returned 42 on the old library and received the located overlapping trait implementations refusal at corrected range.lkj:152:1. Rust rejects that foreign implementation for E0117 at its authored header; this is a separate boundary, not parity.
+The numeric form is limited to the exact ordinary source operator and conversion contracts proved by its authenticated numeric source checkpoint. Its declared RHS applications, selected implementation identities, provider behavior, focused cases, retained boundaries and query/unit evidence remain bound to that final producer and source library.
 
-The validation bundle binds the actual nested source checkpoint, independent review, completed census, full command audit and producer provenance. The failed b6 gate remains separate from the corrected full gate, standalone regression and eventual hosted CI.
+The focused numeric population passes 37 cases / 74 engine routes. Rust covers 13 values/output cases and 24 verdicts: 20 matching refusals and four Rust-accepted LKJ boundaries. The unchanged prior population passes 200 cases / 400 routes. First bits and RHS checks are one case / two routes each; the four range-repair cases are eight routes. The closed source proof contains 200 core and 536 source cases (736 total). Numeric query/edit evidence and retained core/defaults/origins proofs are separate; only the explicit core-unit artifacts establish cold/warm unit behavior.
 
-
-Twelve canonical unchanged-source observations used final producer fd83ea00de8b306e44534b50bdee0da47464e2c096a36c2567e2699a2cb1ec86 and the explicit MAIN library. 0 diagnostic streams changed; every resulting diagnostic identity is classified by source-hashed reviews. No original nom own tests or large-root admission is claimed.
-
-The focused suite passes 51 cases / 102 engine routes,
-with independent Rust verification of 24 values/output
-cases and 27 verdicts.The focused Rust route checks 24 values/output cases and 27 explicit verdict controls. Five reference-bearing PhantomData controls are accepted by Rust and conservatively refused here; the remaining 22 refusals match Rust. The separate repair witness has 3 values and 1 matching mismatch refusal at each optimization level. Strict supplemental Rust evidence has ten source-specific refusal compilations, two setup compilations/runs and two original signed compilations/runs. The original declaration-failure spoof is history only; private helper names and checked overflow are not paired. Source questions, checked edits
-and refusal controls pass; [validation](../bench/core-facade.md) records the exact
-producer/seed identities, fixed point and publication gates.
-
-The twelve fresh unchanged-source observations give nom 45->45, DOM 39->39 and Sozu 968->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
-No original large root or nom own test is admitted by these observations.
-The current classified causes are ranked below; the separately retained prior
-unclassified Sozu population is not folded into these counts.
+Twelve unchanged-source observations across six projected roots give nom 45 -> 45 classified, 0 prior-unclassified, 0 recovery; dom 39 -> 39 classified, 0 prior-unclassified, 0 recovery; sozu 968 -> 968 classified, 34 prior-unclassified, 18 recovery. The actual changed diagnostic-stream count is 0; new unclassified identities are zero. Original source/projection bytes are unchanged. These refusals do not admit a whole foreign root or execute nom's own tests.
 
 | Specimen | Rank | Observed cause | Sites |
 | --- | ---: | --- | ---: |
@@ -283,58 +271,50 @@ unclassified Sozu population is not folded into these counts.
 | nom | 5 | Documentation cfg predicates | 3 |
 | nom | 6 | Unsafe block surface | 2 |
 | nom | 7 | Statement-list macro expansion | 1 |
-| DOM | 1 | Dependency-provided atom macros in expressions and patterns | 24 |
-| DOM | 2 | Shared interior mutation and borrow guards | 9 |
-| DOM | 3 | Macro-valued documentation attribute | 1 |
-| DOM | 4 | Boxed dyn Iterator | 1 |
-| DOM | 5 | Namespaced rustfmt attribute | 1 |
-| DOM | 6 | Attribute on an expression statement | 1 |
-| DOM | 7 | Immutable static test data | 1 |
-| DOM | 8 | std::io data/type facade | 1 |
-| Sozu | 1 | Macro calls without a visible declarative definition | 478 |
-| Sozu | 2 | External prettytable declarative macro provider | 121 |
-| Sozu | 3 | ambient effect calls | 96 |
-| Sozu | 4 | unsafe or raw pointer | 65 |
-| Sozu | 5 | trait object dispatch | 44 |
-| Sozu | 6 | pure standard data types | 38 |
-| Sozu | 7 | Borrowed formatting-arguments macro surface | 20 |
-| Sozu | 8 | RefCell-based interior mutation | 18 |
-| Sozu | 9 | Error-derive helper attributes on enum variants | 12 |
-| Sozu | 10 | Standard unimplemented macro surface | 10 |
-| Sozu | 11 | standard io traits | 9 |
-| Sozu | 12 | Source-information and token-string macros | 8 |
-| Sozu | 13 | standard os imports | 8 |
-| Sozu | 14 | associated constants | 6 |
-| Sozu | 15 | external crate binding | 5 |
-| Sozu | 16 | Thread-local declaration macro surface | 4 |
-| Sozu | 17 | Namespaced source attributes | 3 |
-| Sozu | 18 | Target-environment cfg predicates | 3 |
-| Sozu | 19 | Compile-time environment macro input | 2 |
-| Sozu | 20 | Global static state | 2 |
-| Sozu | 21 | same process thread api | 2 |
-| Sozu | 22 | Standard todo macro surface | 2 |
-| Sozu | 23 | async block | 1 |
-| Sozu | 24 | at pattern lexing | 1 |
-| Sozu | 25 | build generated source | 1 |
-| Sozu | 26 | Configuration expression macro surface | 1 |
-| Sozu | 27 | Unsupported declarative fragment kind | 1 |
-| Sozu | 28 | Declarative macro statement sequences | 1 |
-| Sozu | 29 | Type fragments in declarative macro matchers | 1 |
-| Sozu | 30 | External nix ancillary-data macro provider | 1 |
-| Sozu | 31 | macro token lexing | 1 |
-| Sozu | 32 | Reserved gen spelling used as a callable identifier | 1 |
-| Sozu | 33 | shared heap ownership | 1 |
-| Sozu | 34 | Tuple destructuring in a function parameter | 1 |
+| dom | 1 | Dependency-provided atom macros in expressions and patterns | 24 |
+| dom | 2 | Shared interior mutation and borrow guards | 9 |
+| dom | 3 | Macro-valued documentation attribute | 1 |
+| dom | 4 | Boxed dyn Iterator | 1 |
+| dom | 5 | Namespaced rustfmt attribute | 1 |
+| dom | 6 | Attribute on an expression statement | 1 |
+| dom | 7 | Immutable static test data | 1 |
+| dom | 8 | std::io data/type facade | 1 |
+| sozu | 1 | Macro calls without a visible declarative definition | 478 |
+| sozu | 2 | External prettytable declarative macro provider | 121 |
+| sozu | 3 | ambient_effect_calls | 96 |
+| sozu | 4 | unsafe_or_raw_pointer | 65 |
+| sozu | 5 | trait_object_dispatch | 44 |
+| sozu | 6 | pure_standard_data_types | 38 |
+| sozu | 7 | Borrowed formatting-arguments macro surface | 20 |
+| sozu | 8 | RefCell-based interior mutation | 18 |
+| sozu | 9 | Error-derive helper attributes on enum variants | 12 |
+| sozu | 10 | Standard unimplemented macro surface | 10 |
+| sozu | 11 | standard_io_traits | 9 |
+| sozu | 12 | Source-information and token-string macros | 8 |
+| sozu | 13 | standard_os_imports | 8 |
+| sozu | 14 | associated_constants | 6 |
+| sozu | 15 | external_crate_binding | 5 |
+| sozu | 16 | Thread-local declaration macro surface | 4 |
+| sozu | 17 | Namespaced source attributes | 3 |
+| sozu | 18 | Target-environment cfg predicates | 3 |
+| sozu | 19 | Compile-time environment macro input | 2 |
+| sozu | 20 | Global static state | 2 |
+| sozu | 21 | same_process_thread_api | 2 |
+| sozu | 22 | Standard todo macro surface | 2 |
+| sozu | 23 | async_block | 1 |
+| sozu | 24 | at_pattern_lexing | 1 |
+| sozu | 25 | build_generated_source | 1 |
+| sozu | 26 | Configuration expression macro surface | 1 |
+| sozu | 27 | Unsupported declarative fragment kind | 1 |
+| sozu | 28 | Declarative macro statement sequences | 1 |
+| sozu | 29 | Type fragments in declarative macro matchers | 1 |
+| sozu | 30 | External nix ancillary-data macro provider | 1 |
+| sozu | 31 | macro_token_lexing | 1 |
+| sozu | 32 | Reserved gen spelling used as a callable identifier | 1 |
+| sozu | 33 | shared_heap_ownership | 1 |
+| sozu | 34 | Tuple destructuring in a function parameter | 1 |
 
-
-Current exact source-hashed reviews are [nom](real-programs-core-facade-nom-review.json),
-[DOM](real-programs-core-facade-dom-review.json) and
-[Sozu](real-programs-core-facade-sozu-review.json). Raw receipts retain the actual
-producer/library inventory and original source/projection command paths.
-The preceding frontier remains in [the prior accounting](../bench/core-facade-data/previous-frontier.json)
-and [its proof](../bench/type-defaults.md). A vanished diagnostic is not
-evidence that a surrounding root admits, nor that a masked later form is
-supported.
+The [numeric proof](../bench/numeric-traits.md) records actual gate and standalone outcomes. Exact reviewed identities are retained for [nom](real-programs-numeric-traits-nom-review.json), [DOM](real-programs-numeric-traits-dom-review.json), and [Sozu](real-programs-numeric-traits-sozu-review.json). The [previous frontier](../bench/numeric-traits-data/previous-frontier.json) and its published core proof remain immutable history. Disappearing diagnostics alone do not establish source admission.
 
 #### Earlier lifetime-where frontier
 

@@ -1,0 +1,4 @@
+{"compiler_sha256":"9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c","observations":2,"receipt":"/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/nom-probe.json","source_unchanged":true}
+{"compiler_sha256":"9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c","observations":2,"receipt":"/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/dom-probe.json","source_unchanged":true}
+{"compiler_sha256":"9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c","observations":8,"receipt":"/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/sozu-probe.json","source_unchanged":true}
+frontend observations numeric-traits: 12 observations, 0 changed streams; rerank review still required

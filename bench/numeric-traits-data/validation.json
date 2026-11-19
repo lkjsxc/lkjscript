@@ -1,0 +1,3143 @@
+{
+   "bootstrap" : {
+      "automatic_seed_bridge" : false,
+      "final_decoded" : {
+         "bytes" : 41669723,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/seed-final-decoded",
+         "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+      },
+      "final_log" : {
+         "bytes" : 13,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/bootstrap-final.log",
+         "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
+      },
+      "final_native" : {
+         "bytes" : 41669723,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+         "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+      },
+      "final_store" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/bootstrap-store-final",
+      "first_native" : {
+         "bytes" : 41669723,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+         "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+      },
+      "fixed_point" : "byte-identical current-emitter generations",
+      "fixed_point_established" : true,
+      "initial_log" : {
+         "bytes" : 13,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/bootstrap-initial.log",
+         "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
+      },
+      "initial_parent_producer_sha256" : "fd83ea00de8b306e44534b50bdee0da47464e2c096a36c2567e2699a2cb1ec86",
+      "initial_seed_sha256" : "4bbd931edf8422044cb61acfc6c3c4fba580a0d61e7283474ba624b9696f90a3",
+      "initial_store" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/bootstrap-store-initial",
+      "seed_refresh" : {
+         "bytes" : 960,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/seed-refresh.json",
+         "sha256" : "9b910b55ab1f4989de26adae29c0e225d401e200988de869557bbac13840798b"
+      },
+      "staged_decoded" : {
+         "bytes" : 41669723,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/seed-staged-decoded",
+         "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+      },
+      "status" : "passed"
+   },
+   "compiler_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+   "core_units" : {
+      "changed_argument" : {
+         "bytes" : 2775,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/fixtures/core/unit-new-argument.log",
+         "sha256" : "1ff52c68145ba79b1bfaac8503922235cd935573d0aa7fb4e51436a878902dd2"
+      },
+      "changed_argument_checked" : 2,
+      "changed_argument_reused" : 0,
+      "cold" : {
+         "bytes" : 2762,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/fixtures/core/unit-cold.log",
+         "sha256" : "d359954d3b1a0e50b822d00335761c1b2de502b6b536d4f0ca11f0ab8192050e"
+      },
+      "cold_checked" : 2,
+      "cold_reused" : 0,
+      "fixture" : {
+         "bytes" : 43665,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/core-fixture.json",
+         "sha256" : "d2fa85fd1ee6f64afc0a7d9d9f8c26ec7687186931d8765a06b399fa4ceb0ab3"
+      },
+      "owned_by" : "tools/core-facade-test.sh",
+      "refusal" : {
+         "bytes" : 1736,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/fixtures/core/unit-rejected.log",
+         "sha256" : "d74e712620ffd3bb849d56ce065c35591e115ccd9b97470eb909389241dcb983"
+      },
+      "warm" : {
+         "bytes" : 1709,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/fixtures/core/unit-warm.log",
+         "sha256" : "fc29f8e95fb92242ea422920d7e30c70e052e4a0a4724e48b0b89bcd8c9f0af6"
+      },
+      "warm_checked" : 0,
+      "warm_reused" : 2
+   },
+   "final_acceptance" : {
+      "bits" : {
+         "cases" : 1,
+         "engine_routes" : 2,
+         "execution" : "reused_exact_producer",
+         "log" : {
+            "bytes" : 1380,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-bits.log",
+            "sha256" : "cdcbde5696666a40a1f2c12a73d1dcc4f8fdc223f9a83106f0b9a3f30736ba94"
+         },
+         "pending" : 0,
+         "producer" : {
+            "bytes" : 41669723,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+            "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+         },
+         "reason" : "identical_final_producer_reuses_completed_first_acceptance",
+         "reused" : 0,
+         "source_acceptance" : "first_acceptance.bits",
+         "source_command" : "first-bits",
+         "source_producer" : {
+            "bytes" : 41669723,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+            "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+         }
+      },
+      "range" : {
+         "cases" : 4,
+         "engine_routes" : 8,
+         "execution" : "reused_exact_producer",
+         "log" : {
+            "bytes" : 1388,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-range.log",
+            "sha256" : "438fc7f7fcab8d91d0d301bba3c096a6f588eb5ac3b7400a18423153af958a33"
+         },
+         "pending" : 0,
+         "producer" : {
+            "bytes" : 41669723,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+            "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+         },
+         "reason" : "identical_final_producer_reuses_completed_first_acceptance",
+         "reused" : 0,
+         "source_acceptance" : "first_acceptance.range",
+         "source_command" : "first-range",
+         "source_producer" : {
+            "bytes" : 41669723,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+            "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+         }
+      },
+      "rhs" : {
+         "cases" : 1,
+         "engine_routes" : 2,
+         "execution" : "reused_exact_producer",
+         "log" : {
+            "bytes" : 1378,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-rhs.log",
+            "sha256" : "4cea40190fc76707eedb586e1f542f490c4c61d025f4af66ebf76a7136c6e006"
+         },
+         "pending" : 0,
+         "producer" : {
+            "bytes" : 41669723,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+            "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+         },
+         "reason" : "identical_final_producer_reuses_completed_first_acceptance",
+         "reused" : 0,
+         "source_acceptance" : "first_acceptance.rhs",
+         "source_command" : "first-rhs",
+         "source_producer" : {
+            "bytes" : 41669723,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+            "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+         }
+      }
+   },
+   "first_acceptance" : {
+      "bits" : {
+         "cases" : 1,
+         "command" : "first-bits",
+         "engine_routes" : 2,
+         "execution" : "executed",
+         "log" : {
+            "bytes" : 1380,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-bits.log",
+            "sha256" : "cdcbde5696666a40a1f2c12a73d1dcc4f8fdc223f9a83106f0b9a3f30736ba94"
+         },
+         "pending" : 0,
+         "producer" : {
+            "bytes" : 41669723,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+            "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+         },
+         "reused" : 0
+      },
+      "range" : {
+         "cases" : 4,
+         "command" : "first-range",
+         "engine_routes" : 8,
+         "execution" : "executed",
+         "log" : {
+            "bytes" : 1388,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-range.log",
+            "sha256" : "438fc7f7fcab8d91d0d301bba3c096a6f588eb5ac3b7400a18423153af958a33"
+         },
+         "pending" : 0,
+         "producer" : {
+            "bytes" : 41669723,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+            "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+         },
+         "reused" : 0
+      },
+      "rhs" : {
+         "cases" : 1,
+         "command" : "first-rhs",
+         "engine_routes" : 2,
+         "execution" : "executed",
+         "log" : {
+            "bytes" : 1378,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-rhs.log",
+            "sha256" : "4cea40190fc76707eedb586e1f542f490c4c61d025f4af66ebf76a7136c6e006"
+         },
+         "pending" : 0,
+         "producer" : {
+            "bytes" : 41669723,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+            "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+         },
+         "reused" : 0
+      }
+   },
+   "focused" : {
+      "cases" : 37,
+      "conservative_boundaries" : {
+         "bytes" : 584,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/conservative-boundaries.json",
+         "sha256" : "ab5ccaed78983056322e1b948cf1567fffaaed0dd8051dadecd5d51e9b632e36"
+      },
+      "engine_routes" : 74,
+      "matching_rust_refusals" : 20,
+      "native" : {
+         "bytes" : 1390,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/cases-native.log",
+         "sha256" : "5b9e5358d4646c600f529da9aeee2516bab3269e5c15671b783e8eaf07089048"
+      },
+      "pending" : 0,
+      "reused" : 0,
+      "rust" : {
+         "bytes" : 53,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/cases-rust.log",
+         "sha256" : "e0e8f3709140c6cd872b5bf7a2212d5ea8ae2ab4c6f491d125490da9731d684e"
+      },
+      "rust_accepted_conservative_boundaries" : 4,
+      "rust_values_or_output" : 13,
+      "rust_verdicts" : 24
+   },
+   "frontier" : {
+      "accounting" : {
+         "dom" : {
+            "genuinely_unreviewed_identity_count" : 0,
+            "inherited_recovery_unique_diagnostics" : 0,
+            "observed_classified_sites" : 39,
+            "observed_prior_unclassified_sites" : 0,
+            "original_suffix_observations_unchanged" : true,
+            "parent_revalidation_failure_count" : 0,
+            "unclassified_unique_diagnostics" : 0
+         },
+         "nom" : {
+            "genuinely_unreviewed_identity_count" : 0,
+            "inherited_recovery_unique_diagnostics" : 0,
+            "observed_classified_sites" : 45,
+            "observed_prior_unclassified_sites" : 0,
+            "original_suffix_observations_unchanged" : true,
+            "parent_revalidation_failure_count" : 0,
+            "unclassified_unique_diagnostics" : 0
+         },
+         "sozu" : {
+            "genuinely_unreviewed_identity_count" : 0,
+            "inherited_recovery_unique_diagnostics" : 18,
+            "observed_classified_sites" : 968,
+            "observed_prior_unclassified_sites" : 34,
+            "original_suffix_observations_unchanged" : true,
+            "parent_revalidation_failure_count" : 0,
+            "unclassified_unique_diagnostics" : 0
+         }
+      },
+      "changed_originals" : 0,
+      "changed_streams" : 0,
+      "fresh_observations" : 12,
+      "new_unclassified" : 0,
+      "observation_index" : {
+         "bytes" : 4906,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/observation-index.json",
+         "sha256" : "3b2eea149ecade22bd4a2f831958920644ef7b4a975d1049f88d2cda71cf18a9"
+      },
+      "projected_roots" : 6,
+      "stage_delta" : {
+         "dom" : [
+            39,
+            39
+         ],
+         "nom" : [
+            45,
+            45
+         ],
+         "sozu" : [
+            968,
+            968
+         ]
+      }
+   },
+   "full_gate" : {
+      "fresh_case_requests" : 6840,
+      "receipt" : {
+         "bytes" : 12837,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/full-gate.log",
+         "sha256" : "85553c333f6e46e2fa7d60b4437163b29b29a6d833fdab253f7c1e6a5092f422"
+      },
+      "reused_case_requests" : 0,
+      "seconds" : 1382.636,
+      "status" : "passed",
+      "workers" : 4
+   },
+   "ir_mutation" : {
+      "findings" : 0,
+      "mutants" : 128,
+      "receipt" : {
+         "bytes" : 320,
+         "observed_at_utc" : "2026-11-19T11:01:08Z",
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/gate-supervision-v2-01/suite-logs/details-ir-mutation.log",
+         "provenance" : "raw observed suite log after gate stage; no blanket current-run attribution",
+         "sha256" : "58fa005e33de27e98ab18c888fd2ac48068e4921a44482906fbe5404a92c97c9"
+      }
+   },
+   "nom_own_tests_run_under_lkjscript" : 0,
+   "original_census" : {
+      "counts" : {
+         "by_project" : {
+            "dom" : {
+               "genuinely_unreviewed_identity_count" : 0,
+               "inherited_recovery_unique_diagnostics" : 0,
+               "observed_classified_sites" : 39,
+               "observed_prior_unclassified_sites" : 0,
+               "original_suffix_observations_unchanged" : true,
+               "parent_revalidation_failure_count" : 0,
+               "unclassified_unique_diagnostics" : 0
+            },
+            "nom" : {
+               "genuinely_unreviewed_identity_count" : 0,
+               "inherited_recovery_unique_diagnostics" : 0,
+               "observed_classified_sites" : 45,
+               "observed_prior_unclassified_sites" : 0,
+               "original_suffix_observations_unchanged" : true,
+               "parent_revalidation_failure_count" : 0,
+               "unclassified_unique_diagnostics" : 0
+            },
+            "sozu" : {
+               "genuinely_unreviewed_identity_count" : 0,
+               "inherited_recovery_unique_diagnostics" : 18,
+               "observed_classified_sites" : 968,
+               "observed_prior_unclassified_sites" : 34,
+               "original_suffix_observations_unchanged" : true,
+               "parent_revalidation_failure_count" : 0,
+               "unclassified_unique_diagnostics" : 0
+            }
+         },
+         "changed_originals" : 0,
+         "changed_streams" : 0,
+         "library_manifest_sha256" : "25acdf3dfc096443818c0d595afe0566002dfa0292507a6a24a3778b08ecdbd0",
+         "newly_unclassified" : 0,
+         "observations" : 12,
+         "projected_roots" : 6
+      },
+      "exit_status" : 0,
+      "rerank_outcome" : {
+         "exit_code" : 0,
+         "log" : {
+            "bytes" : 3148,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/rerank.log",
+            "sha256" : "5f353310336efc578484a46656f0d7515d3df8aa21675239acee93190d788bc5"
+         },
+         "newly_unclassified" : 0,
+         "requires_review" : false,
+         "status" : "passed",
+         "wait_status" : 0
+      },
+      "status" : "completed_observations"
+   },
+   "pending_populations" : [
+      {
+         "cases" : 1490,
+         "identities" : null,
+         "not_summed" : true,
+         "opaque_summary_only" : true,
+         "pending" : 2,
+         "population" : "conformance",
+         "receipt" : {
+            "bytes" : 28129,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/gate-supervision-v2-01/suite-logs/details-conformance.log",
+            "sha256" : "64e4686a89c29b553b650b65297c07a8821f7fce71736160832039cc7c5de542"
+         },
+         "route_checks" : 2978,
+         "summary" : "ok tests/conformance: 1490 cases, 2978 route checks, 2 pending (173.292 s)"
+      },
+      {
+         "cases" : 1490,
+         "identities" : null,
+         "not_summed" : true,
+         "opaque_summary_only" : true,
+         "pending" : 2,
+         "population" : "optimized-conformance",
+         "receipt" : {
+            "bytes" : 28599,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/gate-supervision-v2-01/suite-logs/details-optimized-conformance.log",
+            "sha256" : "eeb1b703756b8bbb8d55ffacb74d5808ce57d463b90d0dd7ab9a2c81b4e72abd"
+         },
+         "route_checks" : 2978,
+         "summary" : "ok tests/conformance: 1490 cases, 2978 route checks, 2 pending (176.459 s)"
+      }
+   ],
+   "prior_regressions" : {
+      "cases" : 200,
+      "engine_routes" : 400,
+      "pending" : 0,
+      "receipt" : {
+         "bytes" : 1409,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/prior-regressions.log",
+         "sha256" : "388e83c8acf82cf2a8ad1193a079fb5cdc29a94ba9c9d4f0aceb86891db9359b"
+      },
+      "reused" : 0
+   },
+   "publication_evidence" : {
+      "actual_source_commands" : [
+         {
+            "argv" : [
+               "git",
+               "ls-remote",
+               "--exit-code",
+               "origin",
+               "refs/heads/main"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 0.61875724903075,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "GIT_TERMINAL_PROMPT" : "0",
+               "LKJSCRIPT_GATE_JOBS" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:25:56Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "fd83ea00de8b306e44534b50bdee0da47464e2c096a36c2567e2699a2cb1ec86",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "15s",
+               "git",
+               "ls-remote",
+               "--exit-code",
+               "origin",
+               "refs/heads/main"
+            ],
+            "log" : {
+               "bytes" : 57,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/public-parent.log",
+               "sha256" : "d5e90fbf58c6b93f6c05fb5d433df8345d58de5cd1da25e1800b120cca5c98df"
+            },
+            "log_sha256" : "d5e90fbf58c6b93f6c05fb5d433df8345d58de5cd1da25e1800b120cca5c98df",
+            "manifest_row" : 1,
+            "maximum_seconds" : 15,
+            "minimum_start_seconds" : 5,
+            "name" : "public-parent",
+            "ordinal" : 12,
+            "owned_session" : 382803,
+            "pid" : 382803,
+            "producer_phase" : "parent_core",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39026220",
+            "started_at_utc" : "2026-11-19T07:25:55Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 15,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "bash",
+               "tools/bootstrap.sh"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 120.979551045981,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1",
+               "LKJSCRIPT_STORE" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/bootstrap-store-initial"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:27:58Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "fd83ea00de8b306e44534b50bdee0da47464e2c096a36c2567e2699a2cb1ec86",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "300s",
+               "bash",
+               "tools/bootstrap.sh"
+            ],
+            "log" : {
+               "bytes" : 13,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/bootstrap-initial.log",
+               "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
+            },
+            "log_sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b",
+            "manifest_row" : 2,
+            "maximum_seconds" : 300,
+            "minimum_start_seconds" : 90,
+            "name" : "bootstrap-initial",
+            "ordinal" : 14,
+            "owned_session" : 382829,
+            "pid" : 382829,
+            "producer_phase" : "parent_core",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39026397",
+            "started_at_utc" : "2026-11-19T07:25:57Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 300,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+               "test",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/acceptance/bits",
+               "--library-dir",
+               "/home/coder/workspace/lkjscript-programs-20261115/library",
+               "--jobs",
+               "1",
+               "--no-store",
+               "--stats"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 0.414850797038525,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:28:00Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "60s",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+               "test",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/acceptance/bits",
+               "--library-dir",
+               "/home/coder/workspace/lkjscript-programs-20261115/library",
+               "--jobs",
+               "1",
+               "--no-store",
+               "--stats"
+            ],
+            "log" : {
+               "bytes" : 1380,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-bits.log",
+               "sha256" : "cdcbde5696666a40a1f2c12a73d1dcc4f8fdc223f9a83106f0b9a3f30736ba94"
+            },
+            "log_sha256" : "cdcbde5696666a40a1f2c12a73d1dcc4f8fdc223f9a83106f0b9a3f30736ba94",
+            "manifest_row" : 3,
+            "maximum_seconds" : 60,
+            "minimum_start_seconds" : 15,
+            "name" : "first-bits",
+            "ordinal" : 16,
+            "owned_session" : 391142,
+            "pid" : 391142,
+            "producer_phase" : "first_numeric",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39038673",
+            "started_at_utc" : "2026-11-19T07:28:00Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 60,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+               "test",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/acceptance/rhs",
+               "--library-dir",
+               "/home/coder/workspace/lkjscript-programs-20261115/library",
+               "--jobs",
+               "1",
+               "--no-store",
+               "--stats"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 0.415121475001797,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:28:02Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "60s",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+               "test",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/acceptance/rhs",
+               "--library-dir",
+               "/home/coder/workspace/lkjscript-programs-20261115/library",
+               "--jobs",
+               "1",
+               "--no-store",
+               "--stats"
+            ],
+            "log" : {
+               "bytes" : 1378,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-rhs.log",
+               "sha256" : "4cea40190fc76707eedb586e1f542f490c4c61d025f4af66ebf76a7136c6e006"
+            },
+            "log_sha256" : "4cea40190fc76707eedb586e1f542f490c4c61d025f4af66ebf76a7136c6e006",
+            "manifest_row" : 4,
+            "maximum_seconds" : 60,
+            "minimum_start_seconds" : 15,
+            "name" : "first-rhs",
+            "ordinal" : 18,
+            "owned_session" : 391209,
+            "pid" : 391209,
+            "producer_phase" : "first_numeric",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39038839",
+            "started_at_utc" : "2026-11-19T07:28:02Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 60,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+               "test",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/acceptance/range",
+               "--library-dir",
+               "/home/coder/workspace/lkjscript-programs-20261115/library",
+               "--jobs",
+               "1",
+               "--no-store",
+               "--stats"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 1.4450410620193,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:28:05Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "60s",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+               "test",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/acceptance/range",
+               "--library-dir",
+               "/home/coder/workspace/lkjscript-programs-20261115/library",
+               "--jobs",
+               "1",
+               "--no-store",
+               "--stats"
+            ],
+            "log" : {
+               "bytes" : 1388,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-range.log",
+               "sha256" : "438fc7f7fcab8d91d0d301bba3c096a6f588eb5ac3b7400a18423153af958a33"
+            },
+            "log_sha256" : "438fc7f7fcab8d91d0d301bba3c096a6f588eb5ac3b7400a18423153af958a33",
+            "manifest_row" : 5,
+            "maximum_seconds" : 60,
+            "minimum_start_seconds" : 15,
+            "name" : "first-range",
+            "ordinal" : 20,
+            "owned_session" : 391335,
+            "pid" : 391335,
+            "producer_phase" : "first_numeric",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39039010",
+            "started_at_utc" : "2026-11-19T07:28:03Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 60,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "gzip",
+               "-n",
+               "-9",
+               "-c",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first"
+            ],
+            "binary_output" : {
+               "bytes" : 8331579,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/seed-refreshed.gz",
+               "sha256" : "7291c450fe4ce9c01463d72cb5e7f0f2b12d1fd2a12991d2da3b9e867aaf19ce"
+            },
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 3.4800653969869,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:28:10Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "30s",
+               "bash",
+               "-c",
+               "set -o noclobber; out=$1; shift; exec \"$@\" > \"$out\"",
+               "numeric-binary-output",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/seed-refreshed.gz",
+               "gzip",
+               "-n",
+               "-9",
+               "-c",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first"
+            ],
+            "log" : {
+               "bytes" : 0,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compress-seed.log",
+               "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "log_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "manifest_row" : 6,
+            "maximum_seconds" : 30,
+            "minimum_start_seconds" : 10,
+            "name" : "compress-seed",
+            "ordinal" : 22,
+            "owned_session" : 391727,
+            "pid" : 391727,
+            "producer_phase" : "first_numeric",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39039324",
+            "started_at_utc" : "2026-11-19T07:28:06Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 30,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "gzip",
+               "-d",
+               "-c",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/seed-refreshed.gz"
+            ],
+            "binary_output" : {
+               "bytes" : 41669723,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/seed-staged-decoded",
+               "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+            },
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 0.210285422974266,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:28:11Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "20s",
+               "bash",
+               "-c",
+               "set -o noclobber; out=$1; shift; exec \"$@\" > \"$out\"",
+               "numeric-binary-output",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/seed-staged-decoded",
+               "gzip",
+               "-d",
+               "-c",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/seed-refreshed.gz"
+            ],
+            "log" : {
+               "bytes" : 0,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/decode-staged-seed.log",
+               "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "log_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "manifest_row" : 7,
+            "maximum_seconds" : 20,
+            "minimum_start_seconds" : 10,
+            "name" : "decode-staged-seed",
+            "ordinal" : 24,
+            "owned_session" : 392093,
+            "pid" : 392093,
+            "producer_phase" : "first_numeric",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39039802",
+            "started_at_utc" : "2026-11-19T07:28:11Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 20,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "bash",
+               "tools/bootstrap.sh"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 66.5121458159992,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1",
+               "LKJSCRIPT_STORE" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/bootstrap-store-final"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:29:21Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "240s",
+               "bash",
+               "tools/bootstrap.sh"
+            ],
+            "log" : {
+               "bytes" : 13,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/bootstrap-final.log",
+               "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
+            },
+            "log_sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b",
+            "manifest_row" : 8,
+            "maximum_seconds" : 240,
+            "minimum_start_seconds" : 90,
+            "name" : "bootstrap-final",
+            "ordinal" : 27,
+            "owned_session" : 392246,
+            "pid" : 392246,
+            "producer_phase" : "first_numeric",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39040161",
+            "started_at_utc" : "2026-11-19T07:28:15Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 240,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "gzip",
+               "-d",
+               "-c",
+               "/home/coder/workspace/lkjscript-programs-20261115/seed/lkjscript.gz"
+            ],
+            "binary_output" : {
+               "bytes" : 41669723,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/seed-final-decoded",
+               "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+            },
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 0.211146391986404,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:29:23Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "20s",
+               "bash",
+               "-c",
+               "set -o noclobber; out=$1; shift; exec \"$@\" > \"$out\"",
+               "numeric-binary-output",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/seed-final-decoded",
+               "gzip",
+               "-d",
+               "-c",
+               "/home/coder/workspace/lkjscript-programs-20261115/seed/lkjscript.gz"
+            ],
+            "log" : {
+               "bytes" : 0,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/decode-final-seed.log",
+               "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "log_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "manifest_row" : 9,
+            "maximum_seconds" : 20,
+            "minimum_start_seconds" : 10,
+            "name" : "decode-final-seed",
+            "ordinal" : 29,
+            "owned_session" : 394780,
+            "pid" : 394780,
+            "producer_phase" : "first_numeric",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39046967",
+            "started_at_utc" : "2026-11-19T07:29:23Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 20,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+               "test",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/cases",
+               "--library-dir",
+               "/home/coder/workspace/lkjscript-programs-20261115/library",
+               "--jobs",
+               "1",
+               "--no-store",
+               "--stats"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 10.8256306180265,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:29:36Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "120s",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+               "test",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/cases",
+               "--library-dir",
+               "/home/coder/workspace/lkjscript-programs-20261115/library",
+               "--jobs",
+               "1",
+               "--no-store",
+               "--stats"
+            ],
+            "log" : {
+               "bytes" : 1390,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/cases-native.log",
+               "sha256" : "5b9e5358d4646c600f529da9aeee2516bab3269e5c15671b783e8eaf07089048"
+            },
+            "log_sha256" : "5b9e5358d4646c600f529da9aeee2516bab3269e5c15671b783e8eaf07089048",
+            "manifest_row" : 13,
+            "maximum_seconds" : 120,
+            "minimum_start_seconds" : 30,
+            "name" : "cases-native",
+            "ordinal" : 31,
+            "owned_session" : 394916,
+            "pid" : 394916,
+            "producer_phase" : "final_fixedpoint",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39047218",
+            "started_at_utc" : "2026-11-19T07:29:25Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 120,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc",
+               "-vV"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 0.212460595008451,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:29:38Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "10s",
+               "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc",
+               "-vV"
+            ],
+            "log" : {
+               "bytes" : 196,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/rust-before-focused.log",
+               "sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+            },
+            "log_sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8",
+            "manifest_row" : 14,
+            "maximum_seconds" : 10,
+            "minimum_start_seconds" : 5,
+            "name" : "rust-before-focused",
+            "ordinal" : 33,
+            "owned_session" : 395668,
+            "pid" : 395668,
+            "producer_phase" : "final_fixedpoint",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39048486",
+            "started_at_utc" : "2026-11-19T07:29:38Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 10,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+               "test",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/cases",
+               "--library-dir",
+               "/home/coder/workspace/lkjscript-programs-20261115/library",
+               "--jobs",
+               "1",
+               "--no-store",
+               "--witness",
+               "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 0.822512469021603,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:29:41Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "120s",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+               "test",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/cases",
+               "--library-dir",
+               "/home/coder/workspace/lkjscript-programs-20261115/library",
+               "--jobs",
+               "1",
+               "--no-store",
+               "--witness",
+               "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc"
+            ],
+            "log" : {
+               "bytes" : 53,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/cases-rust.log",
+               "sha256" : "e0e8f3709140c6cd872b5bf7a2212d5ea8ae2ab4c6f491d125490da9731d684e"
+            },
+            "log_sha256" : "e0e8f3709140c6cd872b5bf7a2212d5ea8ae2ab4c6f491d125490da9731d684e",
+            "manifest_row" : 15,
+            "maximum_seconds" : 120,
+            "minimum_start_seconds" : 30,
+            "name" : "cases-rust",
+            "ordinal" : 35,
+            "owned_session" : 395888,
+            "pid" : 395888,
+            "producer_phase" : "final_fixedpoint",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39048693",
+            "started_at_utc" : "2026-11-19T07:29:40Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 120,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc",
+               "-vV"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 0.217231559974607,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:29:43Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "10s",
+               "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc",
+               "-vV"
+            ],
+            "log" : {
+               "bytes" : 196,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/rust-after-focused.log",
+               "sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+            },
+            "log_sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8",
+            "manifest_row" : 16,
+            "maximum_seconds" : 10,
+            "minimum_start_seconds" : 5,
+            "name" : "rust-after-focused",
+            "ordinal" : 37,
+            "owned_session" : 396136,
+            "pid" : 396136,
+            "producer_phase" : "final_fixedpoint",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39048967",
+            "started_at_utc" : "2026-11-19T07:29:43Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 10,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc",
+               "-vV"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 0.210348952969071,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:29:45Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "10s",
+               "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc",
+               "-vV"
+            ],
+            "log" : {
+               "bytes" : 196,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/rust-before-core.log",
+               "sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+            },
+            "log_sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8",
+            "manifest_row" : 17,
+            "maximum_seconds" : 10,
+            "minimum_start_seconds" : 5,
+            "name" : "rust-before-core",
+            "ordinal" : 39,
+            "owned_session" : 396280,
+            "pid" : 396280,
+            "producer_phase" : "final_fixedpoint",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39049180",
+            "started_at_utc" : "2026-11-19T07:29:45Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 10,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "bash",
+               "tools/core-facade-test.sh",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+               "--witness"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 53.8722273379681,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_CORE_KEEP" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1",
+               "RUSTC" : "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:30:41Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "180s",
+               "bash",
+               "tools/core-facade-test.sh",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+               "--witness"
+            ],
+            "log" : {
+               "bytes" : 253,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/core-query.log",
+               "sha256" : "111906c6a217e9c6afb2057f763b0098d25270e163ab3e9bf9c5c7f05b7a0384"
+            },
+            "log_sha256" : "111906c6a217e9c6afb2057f763b0098d25270e163ab3e9bf9c5c7f05b7a0384",
+            "manifest_row" : 18,
+            "maximum_seconds" : 180,
+            "minimum_start_seconds" : 60,
+            "name" : "core-query",
+            "ordinal" : 41,
+            "owned_session" : 396318,
+            "pid" : 396318,
+            "producer_phase" : "final_fixedpoint",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39049402",
+            "started_at_utc" : "2026-11-19T07:29:47Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 180,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc",
+               "-vV"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 0.210369260981679,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:30:43Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "10s",
+               "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc",
+               "-vV"
+            ],
+            "log" : {
+               "bytes" : 196,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/rust-after-core.log",
+               "sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+            },
+            "log_sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8",
+            "manifest_row" : 19,
+            "maximum_seconds" : 10,
+            "minimum_start_seconds" : 5,
+            "name" : "rust-after-core",
+            "ordinal" : 43,
+            "owned_session" : 399010,
+            "pid" : 399010,
+            "producer_phase" : "final_fixedpoint",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39054996",
+            "started_at_utc" : "2026-11-19T07:30:43Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 10,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "bash",
+               "tools/type-defaults-test.sh",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 2.65880404098425,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1",
+               "LKJSCRIPT_TYPE_DEFAULTS_KEEP" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:30:48Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "60s",
+               "bash",
+               "tools/type-defaults-test.sh",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native"
+            ],
+            "log" : {
+               "bytes" : 249,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/defaults-query.log",
+               "sha256" : "a2ef58706352f0178c41256c009029df59f4252dd64b34c86ea8c7197990b381"
+            },
+            "log_sha256" : "a2ef58706352f0178c41256c009029df59f4252dd64b34c86ea8c7197990b381",
+            "manifest_row" : 20,
+            "maximum_seconds" : 60,
+            "minimum_start_seconds" : 20,
+            "name" : "defaults-query",
+            "ordinal" : 45,
+            "owned_session" : 399044,
+            "pid" : 399044,
+            "producer_phase" : "final_fixedpoint",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39055205",
+            "started_at_utc" : "2026-11-19T07:30:45Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 60,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc",
+               "-vV"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 0.213225535000674,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:30:50Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "10s",
+               "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc",
+               "-vV"
+            ],
+            "log" : {
+               "bytes" : 196,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/rust-before-origins.log",
+               "sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+            },
+            "log_sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8",
+            "manifest_row" : 21,
+            "maximum_seconds" : 10,
+            "minimum_start_seconds" : 5,
+            "name" : "rust-before-origins",
+            "ordinal" : 47,
+            "owned_session" : 399220,
+            "pid" : 399220,
+            "producer_phase" : "final_fixedpoint",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39055653",
+            "started_at_utc" : "2026-11-19T07:30:50Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 10,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "bash",
+               "tools/type-defaults-origins-test.sh",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+               "--witness",
+               "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 33.0526079449919,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1",
+               "LKJSCRIPT_TYPE_DEFAULTS_KEEP" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:31:25Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "90s",
+               "bash",
+               "tools/type-defaults-origins-test.sh",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+               "--witness",
+               "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc"
+            ],
+            "log" : {
+               "bytes" : 382,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/defaults-origins.log",
+               "sha256" : "75dcf1d49fd852052c0c7cc337db916c6af82355399830f253bea3b1ebee57b8"
+            },
+            "log_sha256" : "75dcf1d49fd852052c0c7cc337db916c6af82355399830f253bea3b1ebee57b8",
+            "manifest_row" : 22,
+            "maximum_seconds" : 90,
+            "minimum_start_seconds" : 30,
+            "name" : "defaults-origins",
+            "ordinal" : 49,
+            "owned_session" : 399265,
+            "pid" : 399265,
+            "producer_phase" : "final_fixedpoint",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39055867",
+            "started_at_utc" : "2026-11-19T07:30:52Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 90,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc",
+               "-vV"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 0.21318441600306,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:31:27Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "10s",
+               "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc",
+               "-vV"
+            ],
+            "log" : {
+               "bytes" : 196,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/rust-after-origins.log",
+               "sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+            },
+            "log_sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8",
+            "manifest_row" : 23,
+            "maximum_seconds" : 10,
+            "minimum_start_seconds" : 5,
+            "name" : "rust-after-origins",
+            "ordinal" : 51,
+            "owned_session" : 401030,
+            "pid" : 401030,
+            "producer_phase" : "final_fixedpoint",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39059358",
+            "started_at_utc" : "2026-11-19T07:31:27Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 10,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "bash",
+               "tools/numeric-traits-test.sh",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 31.0266717880149,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1",
+               "LKJSCRIPT_NUMERIC_TRAITS_KEEP" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:32:00Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "60s",
+               "bash",
+               "tools/numeric-traits-test.sh",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native"
+            ],
+            "log" : {
+               "bytes" : 287,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/numeric-query.log",
+               "sha256" : "b056e8cd36663567c6da639b23adfbf268ae3e1c863a4608d62e1cff2649d942"
+            },
+            "log_sha256" : "b056e8cd36663567c6da639b23adfbf268ae3e1c863a4608d62e1cff2649d942",
+            "manifest_row" : 24,
+            "maximum_seconds" : 60,
+            "minimum_start_seconds" : 20,
+            "name" : "numeric-query",
+            "ordinal" : 53,
+            "owned_session" : 401089,
+            "pid" : 401089,
+            "producer_phase" : "final_fixedpoint",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39059582",
+            "started_at_utc" : "2026-11-19T07:31:29Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 60,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "bash",
+               "tools/closed-semantics.sh",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+               "build",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/closed"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 57.7319356080261,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1",
+               "LKJSCRIPT_STORE" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/closed-store",
+               "LKJSCRIPT_STORE_KEY" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/private-closed.key"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:33:00Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "180s",
+               "bash",
+               "tools/closed-semantics.sh",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+               "build",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/closed"
+            ],
+            "log" : {
+               "bytes" : 0,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/source-build.log",
+               "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+            },
+            "log_sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+            "manifest_row" : 25,
+            "maximum_seconds" : 180,
+            "minimum_start_seconds" : 60,
+            "name" : "source-build",
+            "ordinal" : 55,
+            "owned_session" : 402551,
+            "pid" : 402551,
+            "producer_phase" : "final_fixedpoint",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39062916",
+            "started_at_utc" : "2026-11-19T07:32:02Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 180,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "bash",
+               "tools/closed-semantics.sh",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+               "structure",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/closed"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 115.925894622982,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1",
+               "LKJSCRIPT_STORE" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/closed-store",
+               "LKJSCRIPT_STORE_KEY" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/private-closed.key"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:34:58Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "180s",
+               "bash",
+               "tools/closed-semantics.sh",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+               "structure",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/closed"
+            ],
+            "log" : {
+               "bytes" : 965,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/source-contracts.log",
+               "sha256" : "45f54862cbc4328783a4c22d3857080232083658302b93d60147245c7be3e15a"
+            },
+            "log_sha256" : "45f54862cbc4328783a4c22d3857080232083658302b93d60147245c7be3e15a",
+            "manifest_row" : 26,
+            "maximum_seconds" : 180,
+            "minimum_start_seconds" : 60,
+            "name" : "source-contracts",
+            "ordinal" : 57,
+            "owned_session" : 405980,
+            "pid" : 405980,
+            "producer_phase" : "final_fixedpoint",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39068887",
+            "started_at_utc" : "2026-11-19T07:33:02Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 180,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+               "test",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/prior-regressions",
+               "--library-dir",
+               "/home/coder/workspace/lkjscript-programs-20261115/library",
+               "--jobs",
+               "1",
+               "--no-store",
+               "--stats"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 54.1773871959886,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "LKJSCRIPT_GATE_JOBS" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:35:54Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "180s",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+               "test",
+               "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/prior-regressions",
+               "--library-dir",
+               "/home/coder/workspace/lkjscript-programs-20261115/library",
+               "--jobs",
+               "1",
+               "--no-store",
+               "--stats"
+            ],
+            "log" : {
+               "bytes" : 1409,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/prior-regressions.log",
+               "sha256" : "388e83c8acf82cf2a8ad1193a079fb5cdc29a94ba9c9d4f0aceb86891db9359b"
+            },
+            "log_sha256" : "388e83c8acf82cf2a8ad1193a079fb5cdc29a94ba9c9d4f0aceb86891db9359b",
+            "manifest_row" : 27,
+            "maximum_seconds" : 180,
+            "minimum_start_seconds" : 30,
+            "name" : "prior-regressions",
+            "ordinal" : 59,
+            "owned_session" : 410219,
+            "pid" : 410219,
+            "producer_phase" : "final_fixedpoint",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39080661",
+            "started_at_utc" : "2026-11-19T07:35:00Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 180,
+            "wait_status" : 0
+         },
+         {
+            "argv" : [
+               "git",
+               "ls-remote",
+               "--exit-code",
+               "origin",
+               "refs/heads/main"
+            ],
+            "cwd" : "/home/coder/workspace/lkjscript-programs-20261115",
+            "direct_child_reaped" : true,
+            "elapsed_seconds" : 0.414930515980814,
+            "environment" : {
+               "CARGO_BUILD_JOBS" : "1",
+               "GIT_TERMINAL_PROMPT" : "0",
+               "LKJSCRIPT_GATE_JOBS" : "1"
+            },
+            "exit_code" : 0,
+            "exit_status" : 0,
+            "exited_normally" : true,
+            "expected_exit" : 0,
+            "expected_signal" : 0,
+            "finished_at_utc" : "2026-11-19T07:35:56Z",
+            "input_library_source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "input_producer_sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c",
+            "launcher_argv" : [
+               "/usr/bin/timeout",
+               "--signal=TERM",
+               "--kill-after=10s",
+               "15s",
+               "git",
+               "ls-remote",
+               "--exit-code",
+               "origin",
+               "refs/heads/main"
+            ],
+            "log" : {
+               "bytes" : 57,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/public-parent-after.log",
+               "sha256" : "d5e90fbf58c6b93f6c05fb5d433df8345d58de5cd1da25e1800b120cca5c98df"
+            },
+            "log_sha256" : "d5e90fbf58c6b93f6c05fb5d433df8345d58de5cd1da25e1800b120cca5c98df",
+            "manifest_row" : 28,
+            "maximum_seconds" : 15,
+            "minimum_start_seconds" : 5,
+            "name" : "public-parent-after",
+            "ordinal" : 61,
+            "owned_session" : 412400,
+            "pid" : 412400,
+            "producer_phase" : "final_fixedpoint",
+            "signal" : 0,
+            "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+            "start_ticks" : "39086269",
+            "started_at_utc" : "2026-11-19T07:35:56Z",
+            "stream_format" : "combined_stdout_stderr",
+            "supervision_error" : "",
+            "timeout_seconds" : 15,
+            "wait_status" : 0
+         }
+      ],
+      "bootstrap" : {
+         "automatic_seed_bridge" : false,
+         "final_decoded" : {
+            "bytes" : 41669723,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/seed-final-decoded",
+            "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+         },
+         "final_log" : {
+            "bytes" : 13,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/bootstrap-final.log",
+            "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
+         },
+         "final_native" : {
+            "bytes" : 41669723,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+            "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+         },
+         "final_store" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/bootstrap-store-final",
+         "first_native" : {
+            "bytes" : 41669723,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+            "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+         },
+         "fixed_point_established" : true,
+         "initial_log" : {
+            "bytes" : 13,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/bootstrap-initial.log",
+            "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
+         },
+         "initial_parent_producer_sha256" : "fd83ea00de8b306e44534b50bdee0da47464e2c096a36c2567e2699a2cb1ec86",
+         "initial_seed_sha256" : "4bbd931edf8422044cb61acfc6c3c4fba580a0d61e7283474ba624b9696f90a3",
+         "initial_store" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/bootstrap-store-initial",
+         "seed_refresh" : {
+            "bytes" : 960,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/seed-refresh.json",
+            "sha256" : "9b910b55ab1f4989de26adae29c0e225d401e200988de869557bbac13840798b"
+         },
+         "staged_decoded" : {
+            "bytes" : 41669723,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/seed-staged-decoded",
+            "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+         }
+      },
+      "canonical_main" : "/home/coder/workspace/lkjscript-programs-20261115",
+      "census" : {
+         "completion" : {
+            "bytes" : 6595,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/numeric-census-observe-attempt02/completion.json",
+            "sha256" : "bb24b84ed59e8163f08e80ee9fe4c7b0678a0a3b90a2b594c30f32790d9cae5e"
+         },
+         "counts" : {
+            "by_project" : {
+               "dom" : {
+                  "genuinely_unreviewed_identity_count" : 0,
+                  "inherited_recovery_unique_diagnostics" : 0,
+                  "observed_classified_sites" : 39,
+                  "observed_prior_unclassified_sites" : 0,
+                  "original_suffix_observations_unchanged" : true,
+                  "parent_revalidation_failure_count" : 0,
+                  "unclassified_unique_diagnostics" : 0
+               },
+               "nom" : {
+                  "genuinely_unreviewed_identity_count" : 0,
+                  "inherited_recovery_unique_diagnostics" : 0,
+                  "observed_classified_sites" : 45,
+                  "observed_prior_unclassified_sites" : 0,
+                  "original_suffix_observations_unchanged" : true,
+                  "parent_revalidation_failure_count" : 0,
+                  "unclassified_unique_diagnostics" : 0
+               },
+               "sozu" : {
+                  "genuinely_unreviewed_identity_count" : 0,
+                  "inherited_recovery_unique_diagnostics" : 18,
+                  "observed_classified_sites" : 968,
+                  "observed_prior_unclassified_sites" : 34,
+                  "original_suffix_observations_unchanged" : true,
+                  "parent_revalidation_failure_count" : 0,
+                  "unclassified_unique_diagnostics" : 0
+               }
+            },
+            "changed_originals" : 0,
+            "changed_streams" : 0,
+            "library_manifest_sha256" : "25acdf3dfc096443818c0d595afe0566002dfa0292507a6a24a3778b08ecdbd0",
+            "newly_unclassified" : 0,
+            "observations" : 12,
+            "projected_roots" : 6
+         },
+         "final_seal" : {
+            "completion" : {
+               "bytes" : 6753,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/numeric-census-seal/completion.json",
+               "sha256" : "859bfa82ef11299d2bfcb0f1f3383ecf6154323f747a8e740b57a398c9b222ff"
+            },
+            "exit_status_marker" : {
+               "bytes" : 2,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/numeric-census-seal-exit-status.txt",
+               "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+            },
+            "receipt" : {
+               "bytes" : 34494,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/numeric-census-seal/receipt.json",
+               "sha256" : "4964a39e6c16e113a713ec51bbf677057d617af7818a9c0d26c91474067ee9aa"
+            }
+         },
+         "frontier" : {
+            "baseline" : {
+               "bytes" : 1975405,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/previous-frontier.json",
+               "sha256" : "04b86126817d1f809573ba5e62bc74d5c7708507e79593f272794dd02b965c33"
+            },
+            "census_log" : {
+               "bytes" : 956,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census.log",
+               "sha256" : "ce149999272aa606a012fd6899601d6742d11dda0eeaedd51e9df6c0da231438"
+            },
+            "comparison" : {
+               "bytes" : 6074,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/comparison.json",
+               "sha256" : "e63f70bef6884c28f885afdd1b3e52ca830aec3bb3ed3e091f177cc6bed87d91"
+            },
+            "finals" : {
+               "dom" : {
+                  "bytes" : 170063,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/dom-final.json",
+                  "sha256" : "566d6bf062c0a71d97cea6a6dbca2d2e450a95b2c72e57f8582925e9554720d5"
+               },
+               "nom" : {
+                  "bytes" : 215858,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/nom-final.json",
+                  "sha256" : "df9ae2e2ea9445713dec98c0778e0bf2518f8fdb0be41df36dfaab9a3d9891d2"
+               },
+               "sozu" : {
+                  "bytes" : 2450798,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/sozu-final.json",
+                  "sha256" : "55ece68bee893ac6e61658746e912feeabec905bd649909a1c1d4fd234a4c2e8"
+               }
+            },
+            "inherited_reviews" : {
+               "dom" : {
+                  "bytes" : 37958,
+                  "path" : "/home/coder/workspace/lkjscript-programs-20261115/docs/real-programs-core-facade-dom-review.json",
+                  "sha256" : "db61fea3cfd2cc670aebfaadb0ecacb1728d70788e430dde51a25500ccb17c42"
+               },
+               "nom" : {
+                  "bytes" : 62706,
+                  "path" : "/home/coder/workspace/lkjscript-programs-20261115/docs/real-programs-core-facade-nom-review.json",
+                  "sha256" : "b6c2f10539282acfbaa0973798f475fd0b36bed5223fca12a859f736dfeeebb4"
+               },
+               "sozu" : {
+                  "bytes" : 1368600,
+                  "path" : "/home/coder/workspace/lkjscript-programs-20261115/docs/real-programs-core-facade-sozu-review.json",
+                  "sha256" : "1f958174d1d24ad2e58d5ff9858d07f12d624ef0180eb8f71cebc4a39e40049b"
+               }
+            },
+            "observation_index" : {
+               "bytes" : 4906,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/observation-index.json",
+               "sha256" : "3b2eea149ecade22bd4a2f831958920644ef7b4a975d1049f88d2cda71cf18a9"
+            },
+            "pruning" : {
+               "dom" : {
+                  "bytes" : 2344,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/dom-review-pruning.json",
+                  "sha256" : "1d7252d732e9eddb8d6711c41c9ad4889a31608b693d478a27f728953c666835"
+               },
+               "nom" : {
+                  "bytes" : 2322,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/nom-review-pruning.json",
+                  "sha256" : "37b48ed5eb0b640d7d63915e4eed28e0c69a9f2749426f8196ee6ea834e40537"
+               },
+               "sozu" : {
+                  "bytes" : 2353,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/sozu-review-pruning.json",
+                  "sha256" : "e1163e4a5275c2a981abfeafe8e5ae253ba1a9d6a4fee6fa1d4cef00d99d6f78"
+               }
+            },
+            "raws" : {
+               "dom" : {
+                  "bytes" : 20671,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/dom-probe.json",
+                  "sha256" : "33add44913c52e923bd7c538867bef6988bafcb781b70d436fab7ab409fe79a9"
+               },
+               "nom" : {
+                  "bytes" : 21163,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/nom-probe.json",
+                  "sha256" : "3e7dd360b74bed7f0466efe82d3f2b0ecfd9522a4bed2cb2a33f2545f5eb6520"
+               },
+               "sozu" : {
+                  "bytes" : 231187,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/sozu-probe.json",
+                  "sha256" : "9e2d87138a035f6963009d7a95fc21fed075951f423c0af617bf8a073a3122ae"
+               }
+            },
+            "rerank_log" : {
+               "bytes" : 3148,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/rerank.log",
+               "sha256" : "5f353310336efc578484a46656f0d7515d3df8aa21675239acee93190d788bc5"
+            },
+            "review_bank" : {
+               "bytes" : 1190316,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/numeric-publication-preparation/after-core128-draft/numeric-review-bank.core128.json",
+               "sha256" : "e3d2c9f93c96fa78956691d61a4d35a0e23b90029e287ff73a2a219e0dfff9a6"
+            },
+            "reviewed" : {
+               "dom" : {
+                  "bytes" : 170063,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/dom-reviewed.json",
+                  "sha256" : "566d6bf062c0a71d97cea6a6dbca2d2e450a95b2c72e57f8582925e9554720d5"
+               },
+               "nom" : {
+                  "bytes" : 215858,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/nom-reviewed.json",
+                  "sha256" : "df9ae2e2ea9445713dec98c0778e0bf2518f8fdb0be41df36dfaab9a3d9891d2"
+               },
+               "sozu" : {
+                  "bytes" : 2450798,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/sozu-reviewed.json",
+                  "sha256" : "55ece68bee893ac6e61658746e912feeabec905bd649909a1c1d4fd234a4c2e8"
+               }
+            },
+            "reviews" : {
+               "dom" : {
+                  "bytes" : 37996,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/dom-inherited-review.json",
+                  "sha256" : "acc16cbb9cbeaeeccefde4bfc5a0d1cd11da9d4122e9d4865d0ca3748a754a9c"
+               },
+               "nom" : {
+                  "bytes" : 62744,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/nom-inherited-review.json",
+                  "sha256" : "7a97c43b781a1e13e3307e0eed9e66075d47dd218a03e525f6b77423a7948498"
+               },
+               "sozu" : {
+                  "bytes" : 1368638,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/sozu-inherited-review.json",
+                  "sha256" : "f8a348dc299cd109a5e6d55edc75d25e2fa32b92df6c9cf088f6dde17454873d"
+               }
+            },
+            "unreviewed" : {
+               "dom" : {
+                  "bytes" : 147875,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/dom-unreviewed.json",
+                  "sha256" : "049a00203c0825895a7dba1a7e3823fc5a6b73d9f6de99fdabdc66455f08740e"
+               },
+               "nom" : {
+                  "bytes" : 177992,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/nom-unreviewed.json",
+                  "sha256" : "b41711ecc2a34c535c2136dbec27d4dde886fb5d65eb6aa47b3cc63f8f78b397"
+               },
+               "sozu" : {
+                  "bytes" : 1631310,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/sozu-unreviewed.json",
+                  "sha256" : "24b7f21358aab54608d63d09dcffca937cb47752484c7ffa93bbe01e6e9a076c"
+               }
+            }
+         },
+         "original_counts" : {
+            "by_project" : {
+               "dom" : {
+                  "genuinely_unreviewed_identity_count" : 0,
+                  "inherited_recovery_unique_diagnostics" : 0,
+                  "observed_classified_sites" : 39,
+                  "observed_prior_unclassified_sites" : 0,
+                  "original_suffix_observations_unchanged" : true,
+                  "parent_revalidation_failure_count" : 0,
+                  "unclassified_unique_diagnostics" : 0
+               },
+               "nom" : {
+                  "genuinely_unreviewed_identity_count" : 0,
+                  "inherited_recovery_unique_diagnostics" : 0,
+                  "observed_classified_sites" : 45,
+                  "observed_prior_unclassified_sites" : 0,
+                  "original_suffix_observations_unchanged" : true,
+                  "parent_revalidation_failure_count" : 0,
+                  "unclassified_unique_diagnostics" : 0
+               },
+               "sozu" : {
+                  "genuinely_unreviewed_identity_count" : 0,
+                  "inherited_recovery_unique_diagnostics" : 18,
+                  "observed_classified_sites" : 968,
+                  "observed_prior_unclassified_sites" : 34,
+                  "original_suffix_observations_unchanged" : true,
+                  "parent_revalidation_failure_count" : 0,
+                  "unclassified_unique_diagnostics" : 0
+               }
+            },
+            "changed_originals" : 0,
+            "changed_streams" : 0,
+            "library_manifest_sha256" : "25acdf3dfc096443818c0d595afe0566002dfa0292507a6a24a3778b08ecdbd0",
+            "newly_unclassified" : 0,
+            "observations" : 12,
+            "projected_roots" : 6
+         },
+         "original_exit_status" : 0,
+         "original_frontier" : {
+            "baseline" : {
+               "bytes" : 1975405,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/previous-frontier.json",
+               "sha256" : "04b86126817d1f809573ba5e62bc74d5c7708507e79593f272794dd02b965c33"
+            },
+            "census_log" : {
+               "bytes" : 956,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census.log",
+               "sha256" : "ce149999272aa606a012fd6899601d6742d11dda0eeaedd51e9df6c0da231438"
+            },
+            "comparison" : {
+               "bytes" : 6074,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/comparison.json",
+               "sha256" : "e63f70bef6884c28f885afdd1b3e52ca830aec3bb3ed3e091f177cc6bed87d91"
+            },
+            "finals" : {
+               "dom" : {
+                  "bytes" : 170063,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/dom-final.json",
+                  "sha256" : "566d6bf062c0a71d97cea6a6dbca2d2e450a95b2c72e57f8582925e9554720d5"
+               },
+               "nom" : {
+                  "bytes" : 215858,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/nom-final.json",
+                  "sha256" : "df9ae2e2ea9445713dec98c0778e0bf2518f8fdb0be41df36dfaab9a3d9891d2"
+               },
+               "sozu" : {
+                  "bytes" : 2450798,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/sozu-final.json",
+                  "sha256" : "55ece68bee893ac6e61658746e912feeabec905bd649909a1c1d4fd234a4c2e8"
+               }
+            },
+            "inherited_reviews" : {
+               "dom" : {
+                  "bytes" : 37958,
+                  "path" : "/home/coder/workspace/lkjscript-programs-20261115/docs/real-programs-core-facade-dom-review.json",
+                  "sha256" : "db61fea3cfd2cc670aebfaadb0ecacb1728d70788e430dde51a25500ccb17c42"
+               },
+               "nom" : {
+                  "bytes" : 62706,
+                  "path" : "/home/coder/workspace/lkjscript-programs-20261115/docs/real-programs-core-facade-nom-review.json",
+                  "sha256" : "b6c2f10539282acfbaa0973798f475fd0b36bed5223fca12a859f736dfeeebb4"
+               },
+               "sozu" : {
+                  "bytes" : 1368600,
+                  "path" : "/home/coder/workspace/lkjscript-programs-20261115/docs/real-programs-core-facade-sozu-review.json",
+                  "sha256" : "1f958174d1d24ad2e58d5ff9858d07f12d624ef0180eb8f71cebc4a39e40049b"
+               }
+            },
+            "observation_index" : {
+               "bytes" : 4906,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/observation-index.json",
+               "sha256" : "3b2eea149ecade22bd4a2f831958920644ef7b4a975d1049f88d2cda71cf18a9"
+            },
+            "pruning" : {
+               "dom" : {
+                  "bytes" : 2344,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/dom-review-pruning.json",
+                  "sha256" : "1d7252d732e9eddb8d6711c41c9ad4889a31608b693d478a27f728953c666835"
+               },
+               "nom" : {
+                  "bytes" : 2322,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/nom-review-pruning.json",
+                  "sha256" : "37b48ed5eb0b640d7d63915e4eed28e0c69a9f2749426f8196ee6ea834e40537"
+               },
+               "sozu" : {
+                  "bytes" : 2353,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/sozu-review-pruning.json",
+                  "sha256" : "e1163e4a5275c2a981abfeafe8e5ae253ba1a9d6a4fee6fa1d4cef00d99d6f78"
+               }
+            },
+            "raws" : {
+               "dom" : {
+                  "bytes" : 20671,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/dom-probe.json",
+                  "sha256" : "33add44913c52e923bd7c538867bef6988bafcb781b70d436fab7ab409fe79a9"
+               },
+               "nom" : {
+                  "bytes" : 21163,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/nom-probe.json",
+                  "sha256" : "3e7dd360b74bed7f0466efe82d3f2b0ecfd9522a4bed2cb2a33f2545f5eb6520"
+               },
+               "sozu" : {
+                  "bytes" : 231187,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/sozu-probe.json",
+                  "sha256" : "9e2d87138a035f6963009d7a95fc21fed075951f423c0af617bf8a073a3122ae"
+               }
+            },
+            "rerank_log" : {
+               "bytes" : 3148,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/rerank.log",
+               "sha256" : "5f353310336efc578484a46656f0d7515d3df8aa21675239acee93190d788bc5"
+            },
+            "review_bank" : {
+               "bytes" : 1190316,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/numeric-publication-preparation/after-core128-draft/numeric-review-bank.core128.json",
+               "sha256" : "e3d2c9f93c96fa78956691d61a4d35a0e23b90029e287ff73a2a219e0dfff9a6"
+            },
+            "reviewed" : {
+               "dom" : {
+                  "bytes" : 170063,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/dom-reviewed.json",
+                  "sha256" : "566d6bf062c0a71d97cea6a6dbca2d2e450a95b2c72e57f8582925e9554720d5"
+               },
+               "nom" : {
+                  "bytes" : 215858,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/nom-reviewed.json",
+                  "sha256" : "df9ae2e2ea9445713dec98c0778e0bf2518f8fdb0be41df36dfaab9a3d9891d2"
+               },
+               "sozu" : {
+                  "bytes" : 2450798,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/sozu-reviewed.json",
+                  "sha256" : "55ece68bee893ac6e61658746e912feeabec905bd649909a1c1d4fd234a4c2e8"
+               }
+            },
+            "reviews" : {
+               "dom" : {
+                  "bytes" : 37996,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/dom-inherited-review.json",
+                  "sha256" : "acc16cbb9cbeaeeccefde4bfc5a0d1cd11da9d4122e9d4865d0ca3748a754a9c"
+               },
+               "nom" : {
+                  "bytes" : 62744,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/nom-inherited-review.json",
+                  "sha256" : "7a97c43b781a1e13e3307e0eed9e66075d47dd218a03e525f6b77423a7948498"
+               },
+               "sozu" : {
+                  "bytes" : 1368638,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/sozu-inherited-review.json",
+                  "sha256" : "f8a348dc299cd109a5e6d55edc75d25e2fa32b92df6c9cf088f6dde17454873d"
+               }
+            },
+            "unreviewed" : {
+               "dom" : {
+                  "bytes" : 147875,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/dom-unreviewed.json",
+                  "sha256" : "049a00203c0825895a7dba1a7e3823fc5a6b73d9f6de99fdabdc66455f08740e"
+               },
+               "nom" : {
+                  "bytes" : 177992,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/nom-unreviewed.json",
+                  "sha256" : "b41711ecc2a34c535c2136dbec27d4dde886fb5d65eb6aa47b3cc63f8f78b397"
+               },
+               "sozu" : {
+                  "bytes" : 1631310,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/census/sozu-unreviewed.json",
+                  "sha256" : "24b7f21358aab54608d63d09dcffca937cb47752484c7ffa93bbe01e6e9a076c"
+               }
+            }
+         },
+         "original_rerank_outcome" : {
+            "exit_code" : 0,
+            "log" : {
+               "bytes" : 3148,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/rerank.log",
+               "sha256" : "5f353310336efc578484a46656f0d7515d3df8aa21675239acee93190d788bc5"
+            },
+            "newly_unclassified" : 0,
+            "requires_review" : false,
+            "status" : "passed",
+            "wait_status" : 0
+         },
+         "original_status" : "completed_observations",
+         "preflight" : {
+            "bytes" : 108411,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/preflight.json",
+            "sha256" : "9cc046c906cfde59079e448f0b0fc5195a5f9941d1a3687f9d2f122657857ebf"
+         },
+         "receipt" : {
+            "bytes" : 328148,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/numeric-census-observe-attempt02/receipt.json",
+            "sha256" : "345514b2763d9c311cfe2782fe1305258818ed4ae4e4b3afabcb8e70e7fc7043"
+         },
+         "review" : {
+            "bytes" : 37921,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/numeric-census-independent-review.json",
+            "sha256" : "31e423c74c28768d484fcbe354b9a2210b206546d2aaf95f5cbda2ff60477977"
+         },
+         "reviewed_rerank" : null,
+         "reviewed_rerank_review" : null,
+         "stage_delta" : {
+            "dom" : [
+               39,
+               39
+            ],
+            "nom" : [
+               45,
+               45
+            ],
+            "sozu" : [
+               968,
+               968
+            ]
+         }
+      },
+      "command_coverage" : {
+         "completed_count" : 25,
+         "completed_ids" : [
+            "public-parent",
+            "bootstrap-initial",
+            "first-bits",
+            "first-rhs",
+            "first-range",
+            "compress-seed",
+            "decode-staged-seed",
+            "bootstrap-final",
+            "decode-final-seed",
+            "cases-native",
+            "rust-before-focused",
+            "cases-rust",
+            "rust-after-focused",
+            "rust-before-core",
+            "core-query",
+            "rust-after-core",
+            "defaults-query",
+            "rust-before-origins",
+            "defaults-origins",
+            "rust-after-origins",
+            "numeric-query",
+            "source-build",
+            "source-contracts",
+            "prior-regressions",
+            "public-parent-after"
+         ],
+         "missing_ids" : [],
+         "planned_count" : 28,
+         "planned_ids" : [
+            "public-parent",
+            "bootstrap-initial",
+            "first-bits",
+            "first-rhs",
+            "first-range",
+            "compress-seed",
+            "decode-staged-seed",
+            "bootstrap-final",
+            "decode-final-seed",
+            "final-bits",
+            "final-rhs",
+            "final-range",
+            "cases-native",
+            "rust-before-focused",
+            "cases-rust",
+            "rust-after-focused",
+            "rust-before-core",
+            "core-query",
+            "rust-after-core",
+            "defaults-query",
+            "rust-before-origins",
+            "defaults-origins",
+            "rust-after-origins",
+            "numeric-query",
+            "source-build",
+            "source-contracts",
+            "prior-regressions",
+            "public-parent-after"
+         ],
+         "skipped" : [
+            {
+               "executed" : false,
+               "final_producer" : {
+                  "bytes" : 41669723,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+                  "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+               },
+               "first_producer" : {
+                  "bytes" : 41669723,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+                  "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+               },
+               "log" : {
+                  "bytes" : 1380,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-bits.log",
+                  "sha256" : "cdcbde5696666a40a1f2c12a73d1dcc4f8fdc223f9a83106f0b9a3f30736ba94"
+               },
+               "name" : "final-bits",
+               "reason" : "identical_final_producer_reuses_completed_first_acceptance",
+               "source_acceptance" : "first_acceptance.bits",
+               "source_command" : "first-bits"
+            },
+            {
+               "executed" : false,
+               "final_producer" : {
+                  "bytes" : 41669723,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+                  "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+               },
+               "first_producer" : {
+                  "bytes" : 41669723,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+                  "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+               },
+               "log" : {
+                  "bytes" : 1378,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-rhs.log",
+                  "sha256" : "4cea40190fc76707eedb586e1f542f490c4c61d025f4af66ebf76a7136c6e006"
+               },
+               "name" : "final-rhs",
+               "reason" : "identical_final_producer_reuses_completed_first_acceptance",
+               "source_acceptance" : "first_acceptance.rhs",
+               "source_command" : "first-rhs"
+            },
+            {
+               "executed" : false,
+               "final_producer" : {
+                  "bytes" : 41669723,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+                  "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+               },
+               "first_producer" : {
+                  "bytes" : 41669723,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+                  "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+               },
+               "log" : {
+                  "bytes" : 1388,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-range.log",
+                  "sha256" : "438fc7f7fcab8d91d0d301bba3c096a6f588eb5ac3b7400a18423153af958a33"
+               },
+               "name" : "final-range",
+               "reason" : "identical_final_producer_reuses_completed_first_acceptance",
+               "source_acceptance" : "first_acceptance.range",
+               "source_command" : "first-range"
+            }
+         ],
+         "skipped_count" : 3,
+         "skipped_ids" : [
+            "final-bits",
+            "final-rhs",
+            "final-range"
+         ]
+      },
+      "core_units" : {
+         "changed_argument" : {
+            "bytes" : 2775,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/fixtures/core/unit-new-argument.log",
+            "sha256" : "1ff52c68145ba79b1bfaac8503922235cd935573d0aa7fb4e51436a878902dd2"
+         },
+         "changed_argument_checked" : 2,
+         "changed_argument_reused" : 0,
+         "cold" : {
+            "bytes" : 2762,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/fixtures/core/unit-cold.log",
+            "sha256" : "d359954d3b1a0e50b822d00335761c1b2de502b6b536d4f0ca11f0ab8192050e"
+         },
+         "cold_checked" : 2,
+         "cold_reused" : 0,
+         "fixture" : {
+            "bytes" : 43665,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/core-fixture.json",
+            "sha256" : "d2fa85fd1ee6f64afc0a7d9d9f8c26ec7687186931d8765a06b399fa4ceb0ab3"
+         },
+         "owned_by" : "tools/core-facade-test.sh",
+         "refusal" : {
+            "bytes" : 1736,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/fixtures/core/unit-rejected.log",
+            "sha256" : "d74e712620ffd3bb849d56ce065c35591e115ccd9b97470eb909389241dcb983"
+         },
+         "warm" : {
+            "bytes" : 1709,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/fixtures/core/unit-warm.log",
+            "sha256" : "fc29f8e95fb92242ea422920d7e30c70e052e4a0a4724e48b0b89bcd8c9f0af6"
+         },
+         "warm_checked" : 0,
+         "warm_reused" : 2
+      },
+      "final_acceptance" : {
+         "bits" : {
+            "cases" : 1,
+            "engine_routes" : 2,
+            "execution" : "reused_exact_producer",
+            "log" : {
+               "bytes" : 1380,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-bits.log",
+               "sha256" : "cdcbde5696666a40a1f2c12a73d1dcc4f8fdc223f9a83106f0b9a3f30736ba94"
+            },
+            "pending" : 0,
+            "producer" : {
+               "bytes" : 41669723,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+               "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+            },
+            "reason" : "identical_final_producer_reuses_completed_first_acceptance",
+            "reused" : 0,
+            "source_acceptance" : "first_acceptance.bits",
+            "source_command" : "first-bits",
+            "source_producer" : {
+               "bytes" : 41669723,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+               "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+            }
+         },
+         "range" : {
+            "cases" : 4,
+            "engine_routes" : 8,
+            "execution" : "reused_exact_producer",
+            "log" : {
+               "bytes" : 1388,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-range.log",
+               "sha256" : "438fc7f7fcab8d91d0d301bba3c096a6f588eb5ac3b7400a18423153af958a33"
+            },
+            "pending" : 0,
+            "producer" : {
+               "bytes" : 41669723,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+               "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+            },
+            "reason" : "identical_final_producer_reuses_completed_first_acceptance",
+            "reused" : 0,
+            "source_acceptance" : "first_acceptance.range",
+            "source_command" : "first-range",
+            "source_producer" : {
+               "bytes" : 41669723,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+               "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+            }
+         },
+         "rhs" : {
+            "cases" : 1,
+            "engine_routes" : 2,
+            "execution" : "reused_exact_producer",
+            "log" : {
+               "bytes" : 1378,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-rhs.log",
+               "sha256" : "4cea40190fc76707eedb586e1f542f490c4c61d025f4af66ebf76a7136c6e006"
+            },
+            "pending" : 0,
+            "producer" : {
+               "bytes" : 41669723,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+               "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+            },
+            "reason" : "identical_final_producer_reuses_completed_first_acceptance",
+            "reused" : 0,
+            "source_acceptance" : "first_acceptance.rhs",
+            "source_command" : "first-rhs",
+            "source_producer" : {
+               "bytes" : 41669723,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+               "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+            }
+         }
+      },
+      "first_acceptance" : {
+         "bits" : {
+            "cases" : 1,
+            "command" : "first-bits",
+            "engine_routes" : 2,
+            "execution" : "executed",
+            "log" : {
+               "bytes" : 1380,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-bits.log",
+               "sha256" : "cdcbde5696666a40a1f2c12a73d1dcc4f8fdc223f9a83106f0b9a3f30736ba94"
+            },
+            "pending" : 0,
+            "producer" : {
+               "bytes" : 41669723,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+               "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+            },
+            "reused" : 0
+         },
+         "range" : {
+            "cases" : 4,
+            "command" : "first-range",
+            "engine_routes" : 8,
+            "execution" : "executed",
+            "log" : {
+               "bytes" : 1388,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-range.log",
+               "sha256" : "438fc7f7fcab8d91d0d301bba3c096a6f588eb5ac3b7400a18423153af958a33"
+            },
+            "pending" : 0,
+            "producer" : {
+               "bytes" : 41669723,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+               "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+            },
+            "reused" : 0
+         },
+         "rhs" : {
+            "cases" : 1,
+            "command" : "first-rhs",
+            "engine_routes" : 2,
+            "execution" : "executed",
+            "log" : {
+               "bytes" : 1378,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/first-rhs.log",
+               "sha256" : "4cea40190fc76707eedb586e1f542f490c4c61d025f4af66ebf76a7136c6e006"
+            },
+            "pending" : 0,
+            "producer" : {
+               "bytes" : 41669723,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-first",
+               "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+            },
+            "reused" : 0
+         }
+      },
+      "focused" : {
+         "cases" : 37,
+         "conservative_boundaries" : {
+            "bytes" : 584,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/conservative-boundaries.json",
+            "sha256" : "ab5ccaed78983056322e1b948cf1567fffaaed0dd8051dadecd5d51e9b632e36"
+         },
+         "engine_routes" : 74,
+         "matching_rust_refusals" : 20,
+         "native" : {
+            "bytes" : 1390,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/cases-native.log",
+            "sha256" : "5b9e5358d4646c600f529da9aeee2516bab3269e5c15671b783e8eaf07089048"
+         },
+         "pending" : 0,
+         "reused" : 0,
+         "rust" : {
+            "bytes" : 53,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/cases-rust.log",
+            "sha256" : "e0e8f3709140c6cd872b5bf7a2212d5ea8ae2ab4c6f491d125490da9731d684e"
+         },
+         "rust_accepted_conservative_boundaries" : 4,
+         "rust_values_or_output" : 13,
+         "rust_verdicts" : 24
+      },
+      "form" : "numeric-traits",
+      "gate" : {
+         "allowlist" : {
+            "bytes" : 1535,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/numeric-publication-preparation/after-core128-draft/numeric-gate-allowlist.actual.json",
+            "sha256" : "36bd1b5d55df7c9ae6631554e4dc0e892f8f919c7836eaeb9835d29f4ebf2c84"
+         },
+         "capture" : {
+            "bytes" : 1798,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/tracked-code-inputs-capture.json",
+            "sha256" : "7af2fdf3096893648b43a32862ad488c1a8ccfa887e4be88f865bac6cd6fd56c"
+         },
+         "full_gate" : {
+            "fresh_case_requests" : 6840,
+            "receipt" : {
+               "bytes" : 12837,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/full-gate.log",
+               "sha256" : "85553c333f6e46e2fa7d60b4437163b29b29a6d833fdab253f7c1e6a5092f422"
+            },
+            "reused_case_requests" : 0,
+            "seconds" : 1382.636,
+            "status" : "passed",
+            "workers" : 4
+         },
+         "gate_stderr_claim" : "No empty-stderr claim; original launcher streams remain in the independent gate review.",
+         "ir_mutation" : {
+            "findings" : 0,
+            "mutants" : 128,
+            "receipt" : {
+               "bytes" : 320,
+               "observed_at_utc" : "2026-11-19T11:01:08Z",
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/gate-supervision-v2-01/suite-logs/details-ir-mutation.log",
+               "provenance" : "raw observed suite log after gate stage; no blanket current-run attribution",
+               "sha256" : "58fa005e33de27e98ab18c888fd2ac48068e4921a44482906fbe5404a92c97c9"
+            }
+         },
+         "manifest" : {
+            "bytes" : 4086039,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/all-tracked-manifest.json",
+            "sha256" : "9cd068022ec480340148533efb3501fb8827a23b06a2b8ddc63010a0d6286404"
+         },
+         "pending_populations" : [
+            {
+               "cases" : 1490,
+               "identities" : null,
+               "not_summed" : true,
+               "opaque_summary_only" : true,
+               "pending" : 2,
+               "population" : "conformance",
+               "receipt" : {
+                  "bytes" : 28129,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/gate-supervision-v2-01/suite-logs/details-conformance.log",
+                  "sha256" : "64e4686a89c29b553b650b65297c07a8821f7fce71736160832039cc7c5de542"
+               },
+               "route_checks" : 2978,
+               "summary" : "ok tests/conformance: 1490 cases, 2978 route checks, 2 pending (173.292 s)"
+            },
+            {
+               "cases" : 1490,
+               "identities" : null,
+               "not_summed" : true,
+               "opaque_summary_only" : true,
+               "pending" : 2,
+               "population" : "optimized-conformance",
+               "receipt" : {
+                  "bytes" : 28599,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/gate-supervision-v2-01/suite-logs/details-optimized-conformance.log",
+                  "sha256" : "eeb1b703756b8bbb8d55ffacb74d5808ce57d463b90d0dd7ab9a2c81b4e72abd"
+               },
+               "route_checks" : 2978,
+               "summary" : "ok tests/conformance: 1490 cases, 2978 route checks, 2 pending (176.459 s)"
+            }
+         ],
+         "receipt" : {
+            "bytes" : 103255,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/gate-runner-v2.json",
+            "sha256" : "cb8826d46f6f203cf35e241ce578cdc4065f0fe7cbf439fbf6a2307823ef4d8e"
+         },
+         "review" : {
+            "bytes" : 57829,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/numeric-gate-independent-review.json",
+            "sha256" : "0fc32b1725151154bd44c48da7e9589e1a32e291c7b9a236ff9eac0662739561"
+         },
+         "standalone" : {
+            "native_corpus_rows" : 7239,
+            "original_tests_per_engine" : 8,
+            "provenance_controls" : 18,
+            "receipt" : {
+               "bytes" : 168,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/standalone-real-programs.log",
+               "sha256" : "bfe050316ba1664049ab530cb4ea400a72ef27a18a88620f0f19e8efe78c69bf"
+            },
+            "status" : "passed"
+         },
+         "strict_checkpoints" : {
+            "after-full-gate" : {
+               "bytes" : 1396,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/gate-supervision-v2-01/tracked-after-full-gate.json",
+               "sha256" : "ff46663e8b07ba7a4ecb2c6e68328a297500823efc4bd052b99c2289f5a0aaab"
+            },
+            "after-standalone" : {
+               "bytes" : 1396,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/gate-supervision-v2-01/tracked-after-standalone.json",
+               "sha256" : "f5f24f0baf1689468f170fe4e09195f9519d3b59310eb503a1361b1151f44763"
+            },
+            "before-gate" : {
+               "bytes" : 1396,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/gate-supervision-v2-01/tracked-before-gate.json",
+               "sha256" : "8556eab9370db76526a013aa5e294f9ac14afcba85ad824f70dda3a5821f3178"
+            },
+            "final" : {
+               "bytes" : 1396,
+               "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/gate-supervision-v2-01/tracked-final.json",
+               "sha256" : "41e6ac3d2a0722a661eb39d39f005de1e8d2ac66f05388bc5494fd9c933c5276"
+            }
+         },
+         "tracked_count" : 13174
+      },
+      "interpretation" : {
+         "hosted_numeric_ci_not_yet_claimed" : true,
+         "nom_own_tests_run_under_lkjscript" : 0,
+         "operation_adoption_credit" : 0,
+         "parent_core_history_is_not_fresh_numeric_proof" : true,
+         "pending_populations_are_not_summed" : true
+      },
+      "kind" : "numeric_publication_evidence",
+      "parent_ci" : {
+         "bytes" : 3163,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-core-range-repair-03/trait_forms/source-proof/publication-ci/publication-validation.json",
+         "sha256" : "5c352483e3843afe8dc8c50cd82a720642440504ae4c9605ccdd2a2d6bcb210a"
+      },
+      "parent_ci_observation" : {
+         "compiler_sha256" : "fd83ea00de8b306e44534b50bdee0da47464e2c096a36c2567e2699a2cb1ec86",
+         "independent_review" : {
+            "bytes" : 15017,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/numeric-publication-preparation/after-core128-draft/numeric-parent-ci-independent-review.json",
+            "sha256" : "1c5ae5f4f0a4a9d54e4166683e3fe84259ed94f842d427bf59cc42af4cc0ede7"
+         },
+         "jobs" : {
+            "gate" : {
+               "completed_at" : "2026-11-19T06:14:44Z",
+               "conclusion" : "success",
+               "each_recorded_identity_count" : 1,
+               "fresh_case_requests" : 6766,
+               "ir_mutation_suite_completed" : true,
+               "job_id" : 135355530945,
+               "log" : {
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-core-range-repair-03/trait_forms/source-proof/publication-ci/gate-135355530945.log",
+                  "sha256" : "d6ac11cd6c7b3d1cdcc51da873f6f5f88f14d741b3261846c61e0d43c7963783"
+               },
+               "macro_origins_whole_suite_seconds" : 1025.606,
+               "recorded_head" : "128254791f4679abaca2b6e2d357e0f04a7754a7",
+               "recorded_native_sha256" : "fd83ea00de8b306e44534b50bdee0da47464e2c096a36c2567e2699a2cb1ec86",
+               "recorded_seed_gzip_sha256" : "4bbd931edf8422044cb61acfc6c3c4fba580a0d61e7283474ba624b9696f90a3",
+               "reused_case_requests" : 0,
+               "seconds" : 3753.103,
+               "started_at" : "2026-11-19T05:11:48Z",
+               "status" : "completed",
+               "url" : "https://github.com/lkjsxc/lkjscript/actions/runs/44463465678/job/135355530945"
+            },
+            "witness" : {
+               "complete_rust_witness_and_compiler_byte_identity" : true,
+               "completed_at" : "2026-11-19T05:20:03Z",
+               "conclusion" : "success",
+               "each_recorded_identity_count" : 1,
+               "job_id" : 135355531263,
+               "log" : {
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-core-range-repair-03/trait_forms/source-proof/publication-ci/witness-135355531263.log",
+                  "sha256" : "4d49dbdf17efac3d560f61583a0dce96741799a24505f6ae55b4467d8eff8d75"
+               },
+               "recorded_head" : "128254791f4679abaca2b6e2d357e0f04a7754a7",
+               "recorded_native_sha256" : "fd83ea00de8b306e44534b50bdee0da47464e2c096a36c2567e2699a2cb1ec86",
+               "recorded_seed_gzip_sha256" : "4bbd931edf8422044cb61acfc6c3c4fba580a0d61e7283474ba624b9696f90a3",
+               "started_at" : "2026-11-19T05:11:48Z",
+               "status" : "completed",
+               "url" : "https://github.com/lkjsxc/lkjscript/actions/runs/44463465678/job/135355531263"
+            }
+         },
+         "publication_validation" : {
+            "bytes" : 3163,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-core-range-repair-03/trait_forms/source-proof/publication-ci/publication-validation.json",
+            "sha256" : "5c352483e3843afe8dc8c50cd82a720642440504ae4c9605ccdd2a2d6bcb210a"
+         },
+         "run_id" : 44463465678,
+         "seed_gzip_sha256" : "4bbd931edf8422044cb61acfc6c3c4fba580a0d61e7283474ba624b9696f90a3",
+         "source_commit" : "128254791f4679abaca2b6e2d357e0f04a7754a7",
+         "status" : "both_exact_head_jobs_verified"
+      },
+      "parent_ci_review" : {
+         "bytes" : 15017,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/numeric-publication-preparation/after-core128-draft/numeric-parent-ci-independent-review.json",
+         "sha256" : "1c5ae5f4f0a4a9d54e4166683e3fe84259ed94f842d427bf59cc42af4cc0ede7"
+      },
+      "prior_regressions" : {
+         "cases" : 200,
+         "engine_routes" : 400,
+         "pending" : 0,
+         "receipt" : {
+            "bytes" : 1409,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/prior-regressions.log",
+            "sha256" : "388e83c8acf82cf2a8ad1193a079fb5cdc29a94ba9c9d4f0aceb86891db9359b"
+         },
+         "reused" : 0
+      },
+      "producer" : {
+         "bytes" : 41669723,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/compiler-native",
+         "sha256" : "9142dae17c8dce4fb07dc941c7ba9658fc8b9b1742492aa64571b102bb73888c"
+      },
+      "protected_status_prefix_sha256" : "229d2bc1f7ea5bebeef4bc1eb783184ac4183f2017bb82a074e3a4080c10491f",
+      "publication_files" : {
+         "bootstrap_final_log" : {
+            "bytes" : 13,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/bootstrap-final.log",
+            "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
+         },
+         "bootstrap_initial_log" : {
+            "bytes" : 13,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/bootstrap-initial.log",
+            "sha256" : "8164a66e041500a94fe6ebcacd1174b2bc5d13dd8a7f2b09d79e640f042b425b"
+         },
+         "cases_txt" : {
+            "bytes" : 2166,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/cases.txt",
+            "sha256" : "73c01bf04e190630f89c07b990b741dde61f7cdfc3ed3e06a4bf3197df274f9f"
+         },
+         "prior_cases_txt" : {
+            "bytes" : 11030,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/prior-regressions.txt",
+            "sha256" : "d48e6106e75c99a513ec1de2621160c46caf18d9afbf8849f4f3c7a6537af2ad"
+         },
+         "producer_sha256" : {
+            "bytes" : 133,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/producer.sha256",
+            "sha256" : "e0b45e8fe845cb8bec146c9553fd0210e5f3a184072269a84a04a4a509dee580"
+         },
+         "seed_sha256" : {
+            "bytes" : 134,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/seed.sha256",
+            "sha256" : "7b36c5ac4f3edd9272d837b41ee33ecd9ebab953033074a3feb47785bf67831f"
+         }
+      },
+      "published_parent" : "128254791f4679abaca2b6e2d357e0f04a7754a7",
+      "rust" : {
+         "binary" : {
+            "bytes" : 646344,
+            "path" : "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc",
+            "sha256" : "df13f58759c0662831983e3a6501c63c1fc12ea60ec4e1d1ac35e5fe43c500c0"
+         },
+         "brackets" : {
+            "core" : {
+               "after" : {
+                  "bytes" : 196,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/rust-after-core.log",
+                  "sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+               },
+               "before" : {
+                  "bytes" : 196,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/rust-before-core.log",
+                  "sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+               },
+               "binary" : {
+                  "bytes" : 646344,
+                  "path" : "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc",
+                  "sha256" : "df13f58759c0662831983e3a6501c63c1fc12ea60ec4e1d1ac35e5fe43c500c0"
+               }
+            },
+            "focused" : {
+               "after" : {
+                  "bytes" : 196,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/rust-after-focused.log",
+                  "sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+               },
+               "before" : {
+                  "bytes" : 196,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/rust-before-focused.log",
+                  "sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+               },
+               "binary" : {
+                  "bytes" : 646344,
+                  "path" : "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc",
+                  "sha256" : "df13f58759c0662831983e3a6501c63c1fc12ea60ec4e1d1ac35e5fe43c500c0"
+               }
+            },
+            "origins" : {
+               "after" : {
+                  "bytes" : 196,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/rust-after-origins.log",
+                  "sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+               },
+               "before" : {
+                  "bytes" : 196,
+                  "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/rust-before-origins.log",
+                  "sha256" : "a90721a3b031e0e1c8bfc34ece79b6608d2ae53166cfb77dad281a0eb5fa6bc8"
+               },
+               "binary" : {
+                  "bytes" : 646344,
+                  "path" : "/home/coder/.rustup/toolchains/1.97.0-x86_64-unknown-linux-gnu/bin/rustc",
+                  "sha256" : "df13f58759c0662831983e3a6501c63c1fc12ea60ec4e1d1ac35e5fe43c500c0"
+               }
+            }
+         }
+      },
+      "schema_version" : 1,
+      "seed_sha256" : "7291c450fe4ce9c01463d72cb5e7f0f2b12d1fd2a12991d2da3b9e867aaf19ce",
+      "source_authorization" : {
+         "bytes" : 4620,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/authorization.json",
+         "sha256" : "f0a847ef446ad36b126e569626378afd0e994daf1ece6d5a3244425864fdd6e0"
+      },
+      "source_command_manifest" : {
+         "bytes" : 20587,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/numeric-publication-preparation/after-core128-draft/numeric-command-manifest.template.json",
+         "sha256" : "54b15de379e4d0e7512b84e89ec0aff8814342e54efb416cf7c760d4fae80eef"
+      },
+      "source_commands" : {
+         "core_facade" : {
+            "bytes" : 253,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/core-query.log",
+            "sha256" : "111906c6a217e9c6afb2057f763b0098d25270e163ab3e9bf9c5c7f05b7a0384"
+         },
+         "numeric_traits" : {
+            "bytes" : 287,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/numeric-query.log",
+            "sha256" : "b056e8cd36663567c6da639b23adfbf268ae3e1c863a4608d62e1cff2649d942"
+         },
+         "type_defaults" : {
+            "bytes" : 249,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/defaults-query.log",
+            "sha256" : "a2ef58706352f0178c41256c009029df59f4252dd64b34c86ea8c7197990b381"
+         },
+         "type_defaults_origins" : {
+            "bytes" : 382,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/defaults-origins.log",
+            "sha256" : "75dcf1d49fd852052c0c7cc337db916c6af82355399830f253bea3b1ebee57b8"
+         }
+      },
+      "source_commit" : "20f71f81d5cf5f16c6fffc89d3f315a6a4f90de9",
+      "source_completion" : {
+         "driver_receipt" : {
+            "bytes" : 156034,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/driver-receipt.json",
+            "sha256" : "7f299837824f1f5415195f58c601758720b297c2dfe25f0e475b6b05ccf90e46"
+         },
+         "exit_status_marker" : {
+            "bytes" : 2,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/source-proof-exit-status.txt",
+            "sha256" : "9a271f2a916b0b6ee6cecb2426f0b3206ef074578be55d9bc94f6f3fe3ab86aa"
+         },
+         "worker_completion" : {
+            "bytes" : 1872,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/worker-completion.json",
+            "sha256" : "a7003a45143a7fa856b9cf5ce1f5ed66f1c0368d875527d9e86cfb23d1c37331"
+         }
+      },
+      "source_contracts" : {
+         "build" : {
+            "bytes" : 0,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/source-build.log",
+            "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+         },
+         "core" : 200,
+         "each_source_shard" : 134,
+         "receipt" : {
+            "bytes" : 965,
+            "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/source-contracts.log",
+            "sha256" : "45f54862cbc4328783a4c22d3857080232083658302b93d60147245c7be3e15a"
+         },
+         "source" : 536,
+         "source_shards" : 4,
+         "total" : 736,
+         "workers" : 1
+      },
+      "source_manifest" : {
+         "bytes" : 4453402,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/source-after.json",
+         "sha256" : "823298b8728b27ec926b7c35355de6a7198b516f4fe223a3f85fd620202e4e49"
+      },
+      "source_parameters" : {
+         "bytes" : 9124,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/parameters.json",
+         "sha256" : "c1f6a065399cf744f468c705ae152da44f9a676561c579181bdc1be379ec9e5a"
+      },
+      "source_proof" : {
+         "bytes" : 100202,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/source-proof.json",
+         "sha256" : "228c80862a60e57eb4fa14bb6609c081ff18439fb38c6b9be054914dcc791550"
+      },
+      "source_review" : {
+         "bytes" : 43720,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/numeric-source-independent-review.json",
+         "sha256" : "a76ed2dda488509d4b052f2825a8a663d8980599eeba2899e3ebde9e7da7d6e4"
+      },
+      "source_tree" : "965081f59985706f464e9e2b72ebe3c391b57bae",
+      "stage" : "source_numeric_traits"
+   },
+   "publication_evidence_sha256" : "53c52136581be3be25a96ff0bfa4e7077207da1e8f75548cc3aaa456e746a484",
+   "schema_version" : 1,
+   "seed_gzip_sha256" : "7291c450fe4ce9c01463d72cb5e7f0f2b12d1fd2a12991d2da3b9e867aaf19ce",
+   "source_commands" : {
+      "core_facade" : {
+         "bytes" : 253,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/core-query.log",
+         "sha256" : "111906c6a217e9c6afb2057f763b0098d25270e163ab3e9bf9c5c7f05b7a0384"
+      },
+      "numeric_traits" : {
+         "bytes" : 287,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/numeric-query.log",
+         "sha256" : "b056e8cd36663567c6da639b23adfbf268ae3e1c863a4608d62e1cff2649d942"
+      },
+      "type_defaults" : {
+         "bytes" : 249,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/defaults-query.log",
+         "sha256" : "a2ef58706352f0178c41256c009029df59f4252dd64b34c86ea8c7197990b381"
+      },
+      "type_defaults_origins" : {
+         "bytes" : 382,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/defaults-origins.log",
+         "sha256" : "75dcf1d49fd852052c0c7cc337db916c6af82355399830f253bea3b1ebee57b8"
+      }
+   },
+   "source_contracts" : {
+      "build" : {
+         "bytes" : 0,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/source-build.log",
+         "sha256" : "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+      },
+      "core" : 200,
+      "each_source_shard" : 134,
+      "receipt" : {
+         "bytes" : 965,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/source-contracts.log",
+         "sha256" : "45f54862cbc4328783a4c22d3857080232083658302b93d60147245c7be3e15a"
+      },
+      "source" : 536,
+      "source_shards" : 4,
+      "total" : 736,
+      "workers" : 1
+   },
+   "stage" : "source_numeric_traits",
+   "standalone_real_programs" : {
+      "native_corpus_rows" : 7239,
+      "original_tests_per_engine" : 8,
+      "provenance_controls" : 18,
+      "receipt" : {
+         "bytes" : 168,
+         "path" : "/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-numeric-traits-02/trait_forms/source-proof/standalone-real-programs.log",
+         "sha256" : "bfe050316ba1664049ab530cb4ea400a72ef27a18a88620f0f19e8efe78c69bf"
+      },
+      "status" : "passed"
+   }
+}
+

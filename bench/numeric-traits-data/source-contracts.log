@@ -1,0 +1,5 @@
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=200 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=ecc6ab73d9ffccbae165ffc029744c7a98357509c331b44f5ed8a1873c8e9fba
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=134 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=5165da182e5a2515d9448da2e4ce7dcfb9185eab0583eb6295d22d5dcbe98c8e
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=134 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=35605266a108c5a94b8f5c46c9d4259962dc2c7282011dbd619baa337bba639b
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=134 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=771fa5a6649ce8efa3611aef48cf4fceb253e9d43d6f7c1721d32d7912417c00
+LKJSCRIPT_CLOSED_GATE reused=0 rerun=134 proof=authenticated-checked-closure-exact-runner-sealed-ELF-and-input-contract closure=fa52f02af8060d9880416aba83fe0ff7f25cc9b4b3e301832788561551eec539
