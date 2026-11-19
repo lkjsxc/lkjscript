@@ -250,21 +250,26 @@ still under `target/` is a temporary candidate observation, not a durable eviden
 link. Fresh observations additionally require the original/projected trees to pass
 `project.pl --verify`; use `probe.pl --help` for its exact entry and package options.
 
-#### Current type-defaults frontier
+#### Current Core facade frontier
 
-The current producer ef1f22d4...9073f92 resolves omitted nominal and alias type
-arguments in their declaring scope, checks definition/application obligations,
-and preserves exact default identities in macro and derive origins. The syntax
-required by nom's IResult and Err aliases is covered without treating a reduced
-fixture as admission of the actual module tree.
+<!-- corrected-core-evidence-v3 sha256:f43176b8ed929dfc346c407aa2daffd9b741a2c8881d41ae8056186032cd3bfe -->
 
-The focused suite passes 43 cases / 86 engine routes,
-with independent Rust verification of 16 values/output
-cases and 26 verdicts. These 42 standard cases are supplemented by the exact $crate namespace case at the actual crate root, which passes Rust optimization levels 0 and 3 in the generated-defaults suite. All 43 focused cases therefore have an independently recorded Rust route. Source questions, checked edits
-and refusal controls pass; [validation](../bench/type-defaults.md) records the exact
+Bootstrap used private core parent b6cffddc6b, its seed 64b1dd2e and initial native bf5d322f. Published cf379914 is the source ancestor, not the bootstrap seed. The ordinary bootstrap logs record no automatic seed bridge. The first native (fd83ea00de8b) and final fixed-point native (fd83ea00de8b) remain separately labeled; validation retains their full identities and the refreshed seed hash.
+
+All 34 primary records are retained: 20 under frozen bf5 with the repaired library, 4 under the first native, and 10 under the final fixed-point native. The two expected nonzero records are Rust E0308 refusals. The 4-case/8-route repair cohort ran in both early and final phases. The early supplement records 76 LKJ routes, 14 Rust compiles and 4 positive Rust runs; its LKJ routes compare two exact libraries under bf5 and remain early-producer evidence. The local same_name_step_setup_positive setup passed 4 LKJ routes and 2 Rust runs before same_name_step_spoof_without_supertraits reached its body refusal. The original same_name_step_spoof (d9e8ff37) remains authenticated failed history outside these fresh counts. Its ten open-MAX traps establish only the LKJ checked-overflow comparison; its two private-helper checks are unpaired with Rust. The exact foreign RangeFrom<Custom> implementation returned 42 on the old library and received the located overlapping trait implementations refusal at corrected range.lkj:152:1. Rust rejects that foreign implementation for E0117 at its authored header; this is a separate boundary, not parity.
+
+The validation bundle binds the actual nested source checkpoint, independent review, completed census, full command audit and producer provenance. The failed b6 gate remains separate from the corrected full gate, standalone regression and eventual hosted CI.
+
+
+Twelve canonical unchanged-source observations used final producer fd83ea00de8b306e44534b50bdee0da47464e2c096a36c2567e2699a2cb1ec86 and the explicit MAIN library. 0 diagnostic streams changed; every resulting diagnostic identity is classified by source-hashed reviews. No original nom own tests or large-root admission is claimed.
+
+The focused suite passes 51 cases / 102 engine routes,
+with independent Rust verification of 24 values/output
+cases and 27 verdicts.The focused Rust route checks 24 values/output cases and 27 explicit verdict controls. Five reference-bearing PhantomData controls are accepted by Rust and conservatively refused here; the remaining 22 refusals match Rust. The separate repair witness has 3 values and 1 matching mismatch refusal at each optimization level. Strict supplemental Rust evidence has ten source-specific refusal compilations, two setup compilations/runs and two original signed compilations/runs. The original declaration-failure spoof is history only; private helper names and checked overflow are not paired. Source questions, checked edits
+and refusal controls pass; [validation](../bench/core-facade.md) records the exact
 producer/seed identities, fixed point and publication gates.
 
-The twelve fresh unchanged-source observations give nom 47->45, DOM 39->39 and Sozu 968->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
+The twelve fresh unchanged-source observations give nom 45->45, DOM 39->39 and Sozu 968->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
 No original large root or nom own test is admitted by these observations.
 The current classified causes are ranked below; the separately retained prior
 unclassified Sozu population is not folded into these counts.
@@ -322,12 +327,12 @@ unclassified Sozu population is not folded into these counts.
 | Sozu | 34 | Tuple destructuring in a function parameter | 1 |
 
 
-Current exact source-hashed reviews are [nom](real-programs-type-defaults-nom-review.json),
-[DOM](real-programs-type-defaults-dom-review.json) and
-[Sozu](real-programs-type-defaults-sozu-review.json). Raw receipts retain the actual
+Current exact source-hashed reviews are [nom](real-programs-core-facade-nom-review.json),
+[DOM](real-programs-core-facade-dom-review.json) and
+[Sozu](real-programs-core-facade-sozu-review.json). Raw receipts retain the actual
 producer/library inventory and original source/projection command paths.
-The preceding frontier remains in [the prior accounting](../bench/type-defaults-data/previous-frontier.json)
-and [its proof](../bench/type-outlives.md). A vanished diagnostic is not
+The preceding frontier remains in [the prior accounting](../bench/core-facade-data/previous-frontier.json)
+and [its proof](../bench/type-defaults.md). A vanished diagnostic is not
 evidence that a surrounding root admits, nor that a masked later form is
 supported.
 
