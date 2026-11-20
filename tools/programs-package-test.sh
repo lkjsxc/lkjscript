@@ -98,20 +98,28 @@ rm "$work/source/src/lib.rs"
 expect_reject source-missing "$work/package" read fixture src/lib.rs
 cp "$work/original.rs" "$work/source/src/lib.rs"
 cp "$work/catalog/fixture.pin.json" "$work/original.pin"
-perl -MJSON::PP -0777 -i -pe '$j=JSON::PP->new->canonical(1)->utf8(1); $v=$j->decode($_); $v->[1][1]="other-version"; $_=$j->encode($v);' "$work/catalog/fixture.pin.json"
+# The producer writes compact JSON with no trailing newline. Change only the target fields.
+LC_ALL=C sed -E 's/^(\["lkjscript-package-pin-1",\["fixture",)"1\.0"/\1"other-version"/' \
+    "$work/original.pin" > "$work/catalog/fixture.pin.json"
 expect_reject identity "$work/package" read fixture src/lib.rs
-cp "$work/original.pin" "$work/catalog/fixture.pin.json"
-perl -MJSON::PP -0777 -i -pe '$j=JSON::PP->new->canonical(1)->utf8(1); $v=$j->decode($_); $v->[2]=[["unused","1","local","revision",$v->[1][4]]]; $_=$j->encode($v);' "$work/catalog/fixture.pin.json"
+LC_ALL=C sed -E 's/"([0-9a-f]{64})"\],\[\]\]$/"\1"],[["unused","1","local","revision","\1"]]]/' \
+    "$work/original.pin" > "$work/catalog/fixture.pin.json"
 expect_reject dependencies "$work/package" read fixture src/lib.rs
 cp "$work/original.pin" "$work/catalog/fixture.pin.json"
 cp "$work/store/fixture.package" "$work/original.package"
-perl -0777 -i -pe 'substr($_,-1,1)=chr(ord(substr($_,-1,1)) ^ 1);' "$work/store/fixture.package"
+last_offset=$(($(wc -c < "$work/original.package") - 1))
+last_byte=$(od -An -tu1 -j "$last_offset" -N 1 "$work/original.package")
+printf '%b' "\\0$(printf '%03o' "$((last_byte ^ 1))")" |
+    dd of="$work/store/fixture.package" bs=1 seek="$last_offset" conv=notrunc status=none
 expect_reject authentication "$work/package" read fixture src/lib.rs
 cp "$work/original.package" "$work/store/fixture.package"
-perl -0777 -i -pe 'substr($_,length("lkjscript-store-2\n"),8)=pack("Q<",1048576);' "$work/store/fixture.package"
+store_magic=$'lkjscript-store-2\n'
+# Overwrite the eight-byte little-endian length with 1048576 (1 MiB).
+printf '\x00\x00\x10\x00\x00\x00\x00\x00' |
+    dd of="$work/store/fixture.package" bs=1 seek="${#store_magic}" conv=notrunc status=none
 expect_reject authentication "$work/package" read fixture src/lib.rs
 cp "$work/original.package" "$work/store/fixture.package"
-perl -0777 -i -pe 'chop;' "$work/store/fixture.package"
+truncate -s "$last_offset" "$work/store/fixture.package"
 expect_reject authentication "$work/package" read fixture src/lib.rs
 cp "$work/original.package" "$work/store/fixture.package"
 printf '\0' >> "$work/store/fixture.package"
@@ -124,10 +132,10 @@ printf 'pub fn answer() -> u8 { 8 }\n' > "$work/source/src/lib.rs"
 expect_reject source-digest "$work/package" issue candidate
 test ! -e "$work/store/candidate.package"
 cp "$work/original.rs" "$work/source/src/lib.rs"
-perl -0777 -i -pe '$_=" " . $_;' "$work/catalog/candidate.manifest.json"
+{ printf ' '; cat "$work/catalog/fixture.manifest.json"; } > "$work/catalog/candidate.manifest.json"
 expect_reject canonical "$work/package" issue candidate
-cp "$work/catalog/fixture.manifest.json" "$work/catalog/candidate.manifest.json"
-perl -MJSON::PP -0777 -i -pe '$j=JSON::PP->new->canonical(1)->utf8(1); $v=$j->decode($_); $v->[4]=["unlisted"]; $_=$j->encode($v);' "$work/catalog/candidate.manifest.json"
+LC_ALL=C sed 's/\["LICENSE"\]\]$/["unlisted"]]/' \
+    "$work/catalog/fixture.manifest.json" > "$work/catalog/candidate.manifest.json"
 expect_reject notice "$work/package" issue candidate
 env LKJSCRIPT_PACKAGE_SINK="$work/source" "$work/package" owned-snapshot fixture src/lib.rs > "$work/snapshot.out" 2> "$work/snapshot.err"
 cmp "$work/original.rs" "$work/snapshot.out"
