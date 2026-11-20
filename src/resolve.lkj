@@ -1045,12 +1045,9 @@ impl<'a> Resolver<'a> {
     }
 }
 
-pub fn resolve(source: &Program) -> Result<Program> {
-    if source.resolved {
-        return Ok(source.clone());
-    }
-    let resolver = Resolver::new(source)?;
-    let mut result = source.clone();
+/// Give unresolved diagnostic projections the same explicit lexical owners as
+/// resolution. The source report itself remains in its parsed coordinate space.
+pub(crate) fn bind_lexical_scopes(result: &mut Program) {
     let modules = result.scopes.len();
     for id in 0usize..result.types.len() {
         if let Some(block) = result.types[id].block { result.types[id].scope = modules + block; }
@@ -1061,6 +1058,15 @@ pub fn resolve(source: &Program) -> Result<Program> {
     for id in 0usize..result.patterns.len() {
         if let Some(block) = result.patterns[id].block { result.patterns[id].scope = modules + block; }
     }
+}
+
+pub fn resolve(source: &Program) -> Result<Program> {
+    if source.resolved {
+        return Ok(source.clone());
+    }
+    let resolver = Resolver::new(source)?;
+    let mut result = source.clone();
+    bind_lexical_scopes(&mut result);
     resolve_nodes(&mut result, &resolver)?;
     result.declarations = resolver.declarations;
     result.function_owners = resolver

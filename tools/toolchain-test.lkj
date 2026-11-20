@@ -412,6 +412,9 @@ fn rewrite_diagnostics(
         ("split-edit.lkj".to_string(), include_str!("../tests/diagnostics/string_split.lkj").to_string(), "probe".to_string(), "2\n".to_string()),
         ("empty-edit.lkj".to_string(), include_str!("../tests/diagnostics/empty_slice_argument.lkj").to_string(), "probe".to_string(), "0\n".to_string()),
         ("const-edit.lkj".to_string(), include_str!("../tests/diagnostics/local_const_declaration.lkj").to_string(), "probe".to_string(), "7\n".to_string()),
+        ("const-block-edit.lkj".to_string(), "pub fn probe() -> i64 { { const VALUE: i64 = 7; VALUE } }\n".to_string(), "probe".to_string(), "7\n".to_string()),
+        ("set-module-edit.lkj".to_string(), include_str!("../tests/diagnostics/set_constructor_inference.lkj").to_string(), "probe".to_string(), "1\n".to_string()),
+        ("set-block-edit.lkj".to_string(), "pub fn probe() -> usize { use std::collections::BTreeSet; let mut names = BTreeSet::new(); names.insert(\"key\".to_string()); names.len() }\n".to_string(), "probe".to_string(), "1\n".to_string()),
         ("iteration-edit.lkj".to_string(), include_str!("../tests/diagnostics/owned_array_iteration.lkj").to_string(), "probe".to_string(), "3\n".to_string()),
         ("split-custom-count.lkj".to_string(), r#"trait Count { fn count(self) -> usize; }
 impl<'a> Count for std::str::Split<'a, char> {
@@ -481,7 +484,7 @@ pub fn main(mut world: World) { scenario(&mut world, false); scenario(&mut world
         let required = match name.as_str() {
             "split-edit.lkj" => "String.split requires a str receiver",
             "empty-edit.lkj" => "empty array literal [] needs an element type",
-            "const-edit.lkj" => "local const declarations are unsupported",
+            "const-edit.lkj" | "const-block-edit.lkj" => "local const declarations are unsupported",
             "iteration-edit.lkj" => "owned-array iteration requires an IntoIterator implementation",
             _ => "",
         };

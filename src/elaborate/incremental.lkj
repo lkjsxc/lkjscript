@@ -60,7 +60,8 @@ pub fn fingerprint(source: &a::Program, inputs: &[(String, Vec<u8>)]) -> Option<
     // Expansion contexts/captures are not part of this delta-checkpoint schema.
     // Fresh source admission preserves hygiene and provenance after every macro edit.
     if !source.macro_expansions.is_empty() { return None; }
-    let mut data = b"lkjscript-front-topology-2"[..].to_vec();
+    // Lexical owners are cache coordinates: schema 3 binds them explicitly.
+    let mut data = b"lkjscript-front-topology-3"[..].to_vec();
     let mut bodies = vec![String::new(); source.functions.len()];
     // Locate each path once without changing the first-match input contract.
     let mut first_input: BTreeMap<String, usize> = BTreeMap::new();
@@ -116,6 +117,7 @@ pub fn fingerprint(source: &a::Program, inputs: &[(String, Vec<u8>)]) -> Option<
     word(&mut data, source.types.len());
     for node in &source.types {
         span(&mut data, node.span); word(&mut data, node.scope);
+        word(&mut data, node.block.map_or(0, |id| id + 1));
         let raw = &inputs[file_inputs[node.span.file]?].1;
         if node.span.start > node.span.end || node.span.end > raw.len() { return None; }
         bytes(&mut data, &raw[node.span.start..node.span.end]);
@@ -123,6 +125,7 @@ pub fn fingerprint(source: &a::Program, inputs: &[(String, Vec<u8>)]) -> Option<
     word(&mut data, source.exprs.len());
     for node in &source.exprs {
         span(&mut data, node.span); word(&mut data, node.scope);
+        word(&mut data, node.block.map_or(0, |id| id + 1));
         // Includes expand to literals before this fingerprint. Their payload is
         // a peer dependency even when the included path is also parsed source.
         match &node.kind {
@@ -132,9 +135,15 @@ pub fn fingerprint(source: &a::Program, inputs: &[(String, Vec<u8>)]) -> Option<
         }
     }
     word(&mut data, source.patterns.len());
-    for node in &source.patterns { span(&mut data, node.span); word(&mut data, node.scope); }
+    for node in &source.patterns {
+        span(&mut data, node.span); word(&mut data, node.scope);
+        word(&mut data, node.block.map_or(0, |id| id + 1));
+    }
     word(&mut data, source.blocks.len());
-    for node in &source.blocks { span(&mut data, node.span); }
+    for node in &source.blocks {
+        span(&mut data, node.span); word(&mut data, node.scope);
+        word(&mut data, node.parent.map_or(0, |id| id + 1));
+    }
     word(&mut data, source.scopes.len());
     for scope in &source.scopes {
         bytes(&mut data, scope.path.as_bytes()); word(&mut data, scope.parent.map_or(0, |v| v + 1));

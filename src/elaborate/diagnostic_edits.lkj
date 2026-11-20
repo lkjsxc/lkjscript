@@ -283,7 +283,8 @@ impl Builder<'_, '_> {
         );
         let source = self.compiler.source;
         let function = &source.functions[self.source_function()];
-        if self.scope != source.files[self.file].crate_root
+        let module = crate::resolve::module_scope(source, self.scope);
+        if module != source.files[self.file].crate_root
             || constant.span.file != self.file || constant.module != function.module
             || !function.generics.is_empty()
             || source.function_owner(a::FunctionId { index: self.source_function() }) != a::FunctionOwner::Free
@@ -293,7 +294,7 @@ impl Builder<'_, '_> {
             return problem;
         }
         for declaration in &source.declarations {
-            if declaration.scope == self.scope && declaration.name == constant.name
+            if declaration.scope == module && declaration.name == constant.name
                 && declaration.item != a::Item::Constant(index)
             {
                 return problem;

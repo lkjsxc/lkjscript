@@ -19,6 +19,13 @@ pub struct BlockedRegion {
 /// Report every recognized unsupported site, including those after the first
 /// failed body. Existing diagnostics retain their more specific explanation.
 pub fn complete_unsupported(report: &mut SourceReport) {
+    let original = report.program.clone();
+    crate::resolve::bind_lexical_scopes(&mut report.program);
+    complete_lexical_unsupported(report);
+    report.program = original;
+}
+
+fn complete_lexical_unsupported(report: &mut SourceReport) {
     site_edits::complete(report);
     static_label_edits::complete(&report.program, &mut report.diagnostics);
     iterator_edits::complete(&report.program, &mut report.diagnostics);

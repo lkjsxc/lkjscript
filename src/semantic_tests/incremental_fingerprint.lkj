@@ -1,4 +1,4 @@
-//! Fixed fingerprint vectors: the oracle is captured from the unchanged producer.
+//! Fixed schema-3 fingerprint vectors, independently checked from AST coordinates.
 use crate::{ast, elaborate, resolve, source};
 
 fn multi_inputs() -> Vec<(String, Vec<u8>)> {
@@ -243,27 +243,27 @@ pub fn dump() -> String {
     out
 }
 
-/// Replace only this item with the reviewed fixed baseline records before
-/// publishing the closed tests. A missing oracle cannot silently pass.
+/// Fixed schema-3 records are checked independently from exported AST coordinates.
+/// The body hashes and refusal outcomes retain the previous fixed contract.
 fn expected(case: usize) -> String {
     match case {
-        0usize => "case 0 multi-base\nsome 752e231696fcc692c58024672e12b5cee58a412366ca7f965d9c6fb409056509 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
-        1usize => "case 1 multi-reversed-functions\nsome 5b781036c20507d1014e988ce8a23c4170000726a8dfa6842f38d0929ba407e9 6\nbody 0 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nbody 1 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 2 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 3 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 4 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 5 empty\nend\n".to_string(),
-        2usize => "case 2 duplicate-parsed-later\nsome 752e231696fcc692c58024672e12b5cee58a412366ca7f965d9c6fb409056509 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
-        3usize => "case 3 duplicate-parsed-first\nsome 752e231696fcc692c58024672e12b5cee58a412366ca7f965d9c6fb409056509 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 20df9286b5b47e7f8d1c878dfba28ed577d2c52dc3aaf66e4aa4f50097420cde\nend\n".to_string(),
+        0usize => "case 0 multi-base\nsome 2fcdf05860e5c78ff1e926f30f8cd046cbf69f8e368844000f7aa8b10386909e 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
+        1usize => "case 1 multi-reversed-functions\nsome 1b0a36598d241f698bfd900d9658752e22a53106b54a20d601b71c6ca27c06e0 6\nbody 0 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nbody 1 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 2 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 3 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 4 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 5 empty\nend\n".to_string(),
+        2usize => "case 2 duplicate-parsed-later\nsome 2fcdf05860e5c78ff1e926f30f8cd046cbf69f8e368844000f7aa8b10386909e 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
+        3usize => "case 3 duplicate-parsed-first\nsome 2fcdf05860e5c78ff1e926f30f8cd046cbf69f8e368844000f7aa8b10386909e 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 20df9286b5b47e7f8d1c878dfba28ed577d2c52dc3aaf66e4aa4f50097420cde\nend\n".to_string(),
         4usize => "case 4 missing-bodyless-source\nnone\nend\n".to_string(),
         5usize => "case 5 duplicate-first-truncated\nnone\nend\n".to_string(),
-        6usize => "case 6 ignored-invalid-function-file\nsome 676570df0edf73d053dad87f9d0e915a5e5e52f1ec75767d8c08ef01b212777e 6\nbody 0 empty\nbody 1 empty\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
+        6usize => "case 6 ignored-invalid-function-file\nsome 54291e36045d472e413911c6c87db12f7318a909b5150690a40a9cbe11a386d2 6\nbody 0 empty\nbody 1 empty\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
         7usize => "case 7 reversed-body-bounds\nnone\nend\n".to_string(),
         8usize => "case 8 body-past-eof\nnone\nend\n".to_string(),
         9usize => "case 9 overlapping-bodies\nnone\nend\n".to_string(),
         10usize => "case 10 type-past-eof\nnone\nend\n".to_string(),
-        11usize => "case 11 unparsed-order\nsome a5390be69ef4d933adc0c95c9172135fe38af3df6cc848be5107a78ae534ca18 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
-        12usize => "case 12 unparsed-duplicate\nsome 271ba43e04fbebed96514c31726cd330effc5a48adeb0a6788996dcc00123797 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
-        13usize => "case 13 include-base\nsome 18116cbdd0d3c394f6b0e1e79c59f647ad812825bce8e0be9d65da792079e412 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n".to_string(),
-        14usize => "case 14 include-parsed-body\nsome 1c9574a214cbddec85bf1633bc568961dff1cc680aaac6da88abdab0b7a82eb9 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 7c661f9a5e9dbdc8c3c46376af8060132c245f34dd18859e01cfaa6e9ffbfb49\nend\n".to_string(),
-        15usize => "case 15 include-binary-payload\nsome adf535fda264c48390312dc3256e239ef833c6e3ef0ec72950e2378777843ac8 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n".to_string(),
-        16usize => "case 16 include-string-payload\nsome a48eeda0c8db8278db9c45affa110bc0f2641bdebd477a5eb0be29473d0c1607 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n".to_string(),
+        11usize => "case 11 unparsed-order\nsome ff7e220a7abad06b748dfb576f65684d44583d4e14e735c17d00a11f4f8ac497 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
+        12usize => "case 12 unparsed-duplicate\nsome 734f4a7304d3d13e3b402ce4b7560f2c5203dc065c585e1ccf2593756b35a03b 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
+        13usize => "case 13 include-base\nsome 9e8a4e0e3505e69dbcb1f272b8fe3657fc38346797c88105b77e00cec4f9206c 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n".to_string(),
+        14usize => "case 14 include-parsed-body\nsome 6cf76e907569f091e19ed71b678d98f75a14aefab0f9125de7adc60b79950ffd 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 7c661f9a5e9dbdc8c3c46376af8060132c245f34dd18859e01cfaa6e9ffbfb49\nend\n".to_string(),
+        15usize => "case 15 include-binary-payload\nsome 278eb0023e68906970840cdfca7f385ed5039755897655a8fdcd7067bf034ba4 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n".to_string(),
+        16usize => "case 16 include-string-payload\nsome 67052a25f3842a8a989f4181ffdfbc64c531fbfaa4095e7ec77b51f0f5061f65 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n".to_string(),
         _ => panic!("unknown fingerprint golden {case}"),
     }
 }
@@ -273,6 +273,7 @@ fn assert_case(case: usize) {
 }
 
 fn fixed_topology_vectors() {
+    lexical_topology();
     for case in vec![0usize, 1usize, 6usize] {
         assert_case(case);
     }
@@ -298,4 +299,37 @@ pub fn run() -> usize {
     region_and_type_refusals();
     expanded_include_vectors();
     4usize
+}
+
+fn lexical_topology() {
+    let inputs = vec![("scope.lkj".to_string(),
+        "mod a { pub fn value() -> i64 { 1i64 } } mod b { pub fn value() -> i64 { 2i64 } } pub fn main() -> i64 { use a::value; { use b::value; value() } }".as_bytes().to_vec())];
+    let program = resolved("scope.lkj", &inputs);
+    let before = elaborate::incremental::fingerprint(&program, &inputs).unwrap();
+    let mut nested = None;
+    for (id, block) in program.blocks.iter().enumerate() {
+        if block.parent.is_some() { nested = Some(id); }
+    }
+    let edited = vec![("scope.lkj".to_string(),
+        "mod a { pub fn value() -> i64 { 1i64 } } mod b { pub fn value() -> i64 { 2i64 } } pub fn main() -> i64 { use a::value; { use a::value; value() } }".as_bytes().to_vec())];
+    let after = elaborate::incremental::fingerprint(&resolved("scope.lkj", &edited), &edited).unwrap();
+    assert_eq!(before.shape, after.shape, "same-width local import preserves topology");
+    for (index, function) in program.functions.iter().enumerate() {
+        if function.name == "main" { assert_ne!(before.bodies[index], after.bodies[index]); }
+        else { assert_eq!(before.bodies[index], after.bodies[index]); }
+    }
+    let id = nested.unwrap();
+    let mut changed = program.clone();
+    changed.blocks[id].parent = None;
+    assert_ne!(before.shape, elaborate::incremental::fingerprint(&changed, &inputs).unwrap().shape);
+    changed = program.clone();
+    changed.blocks[id].scope = program.scopes.len();
+    assert_ne!(before.shape, elaborate::incremental::fingerprint(&changed, &inputs).unwrap().shape);
+    changed = program.clone();
+    let mut expression = None;
+    for (index, node) in program.exprs.iter().enumerate() {
+        if node.block == Some(id) { expression = Some(index); }
+    }
+    changed.exprs[expression.unwrap()].block = None;
+    assert_ne!(before.shape, elaborate::incremental::fingerprint(&changed, &inputs).unwrap().shape);
 }

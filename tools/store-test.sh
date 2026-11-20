@@ -185,6 +185,35 @@ done
 cp "$test_directory/front-original.lkj" "$source_file"
 printf 'pub fn answer() -> i64 { 40 }\n' > "$source_directory/dependency.lkj"
 
+# A same-width nested import edit reuses peers while recomputing its own body.
+# Equal declaration coordinates in two module files keep the existing IR source
+# locations and call skeleton stable while the selected constant changes.
+block_source="$source_directory/block-import"
+block_store="$test_directory/block-import-store"
+mkdir "$block_source" "$block_store"
+printf 'pub const VALUE: i64 = 1;\n' > "$block_source/a.lkj"
+printf 'pub const VALUE: i64 = 2;\n' > "$block_source/b.lkj"
+for block_module in a b; do
+    cat > "$block_source/main.lkj" <<SOURCE
+mod a;
+mod b;
+fn peer() -> i64 { 0 }
+pub fn probe() -> i64 { { use $block_module::VALUE; VALUE + peer() } }
+SOURCE
+    "$compiler" build main.lkj --source-dir "$block_source" --no-store -o "$test_directory/block-expected"
+    "$compiler" build main.lkj --source-dir "$block_source" --store "$block_store" --store-key "$key" \
+        --stats -o "$test_directory/block-result" > "$test_directory/block-$block_module.out" 2> "$test_directory/block-$block_module.log"
+    cmp "$test_directory/block-expected" "$test_directory/block-result"
+    "$compiler" run main.lkj --source-dir "$block_source" --store "$block_store" --store-key "$key" > "$test_directory/block-value"
+    if [[ "$block_module" == a ]]; then
+        [[ $(cat "$test_directory/block-value") == 1 ]] || fail "cold local import selected the wrong declaration"
+    else
+        (( $(field "$test_directory/block-b.log" front_reused) > 0 )) || fail "same-width local import discarded unchanged peers"
+        (( $(field "$test_directory/block-b.log" front_definitions) == 1 )) || fail "local import edit did not isolate its body"
+        [[ $(cat "$test_directory/block-value") == 2 ]] || fail "warm local import retained its old declaration"
+    fi
+done
+
 # Includes can read a file which is also parsed as a module. The included
 # literal is a peer dependency, including equal-span and successive body edits.
 include_source="$source_directory/parsed-includes"
