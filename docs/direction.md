@@ -19,8 +19,8 @@ Optimization is untrusted IR-to-IR work: recheck it, discard rejected output,
 compare optimized native behavior with interpretation of the original IR.
 There is no unsafe surface, FFI, ambient authority or unwinding.
 Views may occupy locals, parameters, results and view aggregates, not heap containers.
-Apply the two-way rule: add everyday forms through existing IR/library contracts;
-rewrite consumers when a rare form would enlarge trusted semantics.
+Apply the two-way rule: use existing IR/library contracts for everyday forms and rewrite rare consumers that would enlarge trusted semantics.
+Advertised opaque callable origins come from signature positions. Verify concrete containment before admitting the source program.
 
 ## Direct native execution (6.1, complete)
 Keep direct x86-64 instruction selection plain. Materialize source paths/lines on

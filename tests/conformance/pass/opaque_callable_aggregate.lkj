@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+fn keep<T>() -> impl FnMut(T) -> Result<(T, usize), ()> {
+    |input: T| Ok((input, 7usize))
+}
+pub fn probe() -> i64 {
+    let text = String::from("abcdef");
+    let mut keep = keep::<&str>();
+    match keep(text.as_str()) {
+        Ok((view, factor)) => (view.len() * factor) as i64,
+        Err(_) => 0i64,
+    }
+}

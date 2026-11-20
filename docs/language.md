@@ -548,6 +548,20 @@ Concrete execution uses ordinary layouts and functions through the unchanged IR
 checker. Returned `Fn`, `FnMut` and `FnOnce` closures preserve source-checked
 capture and method choices across specialization.
 
+When the opaque result has no written lifetime bound and its hidden value is
+view-free, an advertised callable may return views supplied by its arguments.
+A result leaf from a type parameter selects only the corresponding leaves of
+arguments written using that same parameter. Equal concrete types leave
+distinct parameters independent. An elided result requires a single elided
+argument region. Named output regions require separate caller-region support.
+The returned loan follows the selected argument independently of later calls
+or destruction of the callable. Concrete closure origins must fit the
+advertised contract. Captured views and trait-method positional loans remain
+separate source rules.
+[Shared](../tests/conformance/pass/opaque_callable_shared.lkj) and
+[exclusive](../tests/conformance/pass/opaque_callable_mutable.lkj) cases exercise
+both execution engines.
+
 Associated-type equalities in argument and result bounds use the ordinary
 declared constraint rules. In an inherent result such as `impl Source<Item =
 Self>`, the equality captures the producer's `Self`; a later method call binds
@@ -663,9 +677,9 @@ located refusals. Written regions in nominal arguments, function-pointer inputs,
 invariant nested input storage and ordinary result lifetimes also remain
 located boundaries for functions with type-outlives predicates: those forms
 need caller-region instantiation. Direct outer reference inputs and direct
-opaque result lifetime bounds use the proven contracts above. Returning a
-reference through an opaque callable still requires the separately missing
-hidden result-origin inventory; a type-outlives bound does not supply it.
+opaque result lifetime bounds use the proven contracts above. Opaque callable
+outputs supplied by stored views still require a source contract for those
+views.
 
 Fixed callable inputs may retain loans independently of their result or callable
 destruction. Effects track source roots; descendant access requires checked
@@ -732,7 +746,7 @@ IR checking; they grant no authority. Disjoint mutable outputs stay disjoint, an
 shared results may outlive reference-only environments while owners live.
 Generic/associated result families can refine similarly: acyclic callees first,
 recursive groups conservatively. This does not prove unused generic hidden effects.
-Implicit lifetime capture in opaque generic reference outputs, lending closures and dynamic callables remain unfinished.
+Implicit capture of stored views in opaque generic results, lending closures and dynamic callables remain unfinished.
 Only borrowed_closure_escape remains pending; concurrency uses isolated processes and owned messages, not shared-address-space threads.
 
 ## Source library

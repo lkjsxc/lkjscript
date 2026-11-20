@@ -651,6 +651,7 @@ fn elaborate_definitions(
     for problem in crate::check::refine_return_contracts(&mut program, &refinement) {
         problems.push(problem);
     }
+    problems.extend_from_slice(&closures::check_opaque_returns(&program, &c.closures));
     for problem in crate::check::scoped::check_definitions(&program, &scopes) {
         problems.push(problem);
     }

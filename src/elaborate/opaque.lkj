@@ -256,6 +256,7 @@ impl Compiler<'_> {
             default: None, lifetime: false, constant: false, implicit: true, span: self.source.types[ty].span };
         let mut environment = substitutions.clone();
         environment.insert(name, result);
-        self.bounds(&[parameter], &environment)
+        self.bounds(&[parameter], &environment)?;
+        self.require_opaque_callable_return(ty, result)
     }
 }

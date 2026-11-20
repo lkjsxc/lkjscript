@@ -1,0 +1,12 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+fn pass<T>() -> impl FnMut(T) -> T { |input: T| input }
+pub fn probe() -> i64 {
+    let escaped: &mut i64;
+    {
+        let mut short = 42i64;
+        let mut pass = pass::<&mut i64>();
+        escaped = pass(&mut short);
+    }
+    *escaped
+}

@@ -1,0 +1,10 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+fn stored<T: Clone, I>(value: T) -> impl Fn(I) -> (I, T) {
+    move |input: I| (input, value.clone())
+}
+pub fn probe() -> i64 {
+    let value = 42i64;
+    let call = stored::<&i64, i64>(&value);
+    *call(1i64).1
+}

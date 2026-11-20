@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {}
+fn pass<T>() -> impl FnMut(T) -> T { |input: T| input }
+pub fn probe() -> i64 {
+    let mut first = 1i64;
+    let mut second = 2i64;
+    let mut pass = pass::<&mut i64>();
+    let left = pass(&mut first);
+    let right = pass(&mut second);
+    *left = 40i64;
+    *left + *right
+}

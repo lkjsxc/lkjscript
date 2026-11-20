@@ -1,0 +1,13 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Convert<T> { fn convert(value: T) -> Self; }
+impl<T> Convert<T> for T { fn convert(value: T) -> T { value } }
+fn convert<T, I: Convert<T>>() -> impl Fn(T, I) -> I {
+    |value: T, _: I| I::convert(value)
+}
+pub fn probe() -> i64 {
+    let first = 42i64;
+    let second = 1i64;
+    let convert = convert::<&i64, &i64>();
+    *convert(&first, &second)
+}

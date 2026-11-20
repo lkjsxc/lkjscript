@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+fn project() -> impl Fn(&(i64, i64)) -> &i64 {
+    |pair: &(i64, i64)| &pair.1
+}
+pub fn probe() -> i64 {
+    let pair = (1i64, 42i64);
+    let result = project()(&pair);
+    *result
+}

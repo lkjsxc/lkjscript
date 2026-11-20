@@ -377,6 +377,12 @@ once. `exact` preserves the selected referent; `bound` permits a descendant.
 actual arguments' provenance through the declared contract. A local owner or
 temporary reference carrier cannot become an escaping view's origin.
 
+An opaque source callable returning argument-derived views lowers to ordinary
+closure storage and calls with these same leaf contracts. The frontend checks
+that concrete closure origins fit the advertised source signature. The
+independent checker verifies the emitted contract and body through this same
+returned-view mechanism.
+
 Unix send/receive leaves use one ordinary socket byte stream, never Channel's private framing. Send consumes its Vec<File> and every contained local owner on all results; a positive short write conveys rights exactly once. Receive requires an affine Result whose Ok payload is an affine two-field aggregate (usize, Vec<File>); integer vectors, borrowed owners, Copy result/aggregate substitutions and wrong buffer mutability fail independent checking. Linux may return descriptor-bearing SCM_PIDFD on a previously configured socket; it is handled as an owned File alongside SCM_RIGHTS. Received kernel descriptor kinds are not assumed. Before sendmsg/recvmsg, both hosts independently require SO_DOMAIN=AF_UNIX and SO_TYPE=SOCK_STREAM; incompatible domains/types return EAFNOSUPPORT/EPROTOTYPE and ordinary files return ENOTSOCK. This prevents a different socket family from silently dropping rights. Empty byte buffers fail EINVAL, oversized descriptor-array arithmetic fails EOVERFLOW, and ancillary/data truncation fails EMSGSIZE after closing all delivered rights. Bytes remain unchanged on all receive errors. One nonblocking sendmsg/recvmsg is attempted before waiting, so ready work may succeed even with an expired deadline. EINTR/EAGAIN retry after monotonic deadline recomputation; positive prefixes are never silently retried. Both native sealed leaves and the independent interpreter broker implement acquisition, message transfer, cleanup and errno preservation without importing each other's lowering.
 
 ## Host entry and authority reports

@@ -1,0 +1,15 @@
+// expect: value 42
+// witness: {}
+fn keep<L, R>() -> impl FnMut(L, R) -> R {
+    |_: L, right: R| right
+}
+pub fn probe() -> i64 {
+    let stable = 6i64;
+    let result: &i64;
+    {
+        let short = 1i64;
+        let mut keep = keep::<&i64, &i64>();
+        result = keep(&short, &stable);
+    }
+    *result * 7i64
+}

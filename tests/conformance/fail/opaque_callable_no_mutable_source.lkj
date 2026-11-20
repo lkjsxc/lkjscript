@@ -1,0 +1,7 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+fn idle<T>() -> impl Fn() -> Option<T> { || None }
+pub fn probe() -> i64 {
+    let idle = idle::<&mut i64>();
+    match idle() { Some(reference) => *reference, None => 42i64 }
+}

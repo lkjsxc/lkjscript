@@ -141,6 +141,7 @@ parallel_step 1 associated-query timeout --kill-after=10s 600s bash tools/associ
 parallel_step 1 qualified-paths timeout --kill-after=10s 600s bash tools/qualified-paths-test.sh "$check_binary"
 parallel_step 1 argument-impl-trait timeout --kill-after=10s 600s bash tools/argument-impl-trait-test.sh "$check_binary"
 parallel_step 1 return-impl-trait timeout --kill-after=10s 600s bash tools/return-impl-trait-test.sh "$check_binary"
+parallel_step 1 opaque-callable-return timeout --kill-after=10s 600s bash tools/opaque-callable-return-test.sh "$check_binary"
 parallel_step 1 const-functions timeout --kill-after=10s 600s bash tools/const-functions-test.sh "$check_binary"
 parallel_step 1 const-generics timeout --kill-after=10s 600s bash tools/const-generics-test.sh "$check_binary"
 parallel_step 1 maybe-sized timeout --kill-after=10s 600s bash tools/maybe-sized-test.sh "$check_binary"

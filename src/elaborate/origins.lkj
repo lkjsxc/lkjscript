@@ -476,6 +476,62 @@ impl Compiler<'_> {
         }
     }
 
+    /// Only the advertised arguments supply these results. The verification
+    /// receiver and the concrete closure environment are excluded.
+    pub(super) fn opaque_callable_leaves(
+        &self,
+        owner: usize,
+        bound: &a::Path,
+        signature: &super::closures::Signature,
+    ) -> Option<Vec<ir::ReturnLeaf>> {
+        let a::Type::Tuple(arguments) = &self.source.types[bound.args[0]].kind else {
+            return None;
+        };
+        let source = &self.source.functions[owner];
+        let outputs =
+            self.signature_leaves(source, owner, bound.args[1], signature.result, false);
+        if outputs.len() != crate::check::reference_paths(&self.types, signature.result).len() {
+            return None;
+        }
+        let mut inputs: Vec<(usize, Leaf)> = Vec::new();
+        let mut regions = BTreeSet::new();
+        for (index, (syntax, ty)) in arguments.iter().zip(signature.arguments.iter()).enumerate() {
+            for leaf in self.signature_leaves(source, owner, *syntax, *ty, true) {
+                if leaf.borrowed { continue; }
+                if matches!(leaf.label, Label::Elided { .. } | Label::Lifetime(_) | Label::Static) {
+                    regions.insert(leaf.label.clone());
+                }
+                inputs.push((index + 1, leaf));
+            }
+        }
+        let elided = if regions.len() == 1 { regions.pop_first() } else { None };
+        let mut leaves = Vec::new();
+        for output in outputs {
+            let exact = matches!(output.label, Label::Parameter(..));
+            let label = match (&output.label, &elided) {
+                (Label::Parameter(..), _) => &output.label,
+                (Label::Elided { .. }, Some(Label::Elided { .. })) => elided.as_ref()?,
+                _ => return None,
+            };
+            let mut selected = Vec::new();
+            for (index, input) in &inputs {
+                if input.label == *label && (!output.mutable || input.mutable) {
+                    selected.push(ir::InputLeaf {
+                        index: *index,
+                        projections: input.path.clone(),
+                    });
+                }
+            }
+            if selected.is_empty() { return None; }
+            selected.sort();
+            leaves.push(ir::ReturnLeaf {
+                projections: output.path,
+                origin: ir::LeafOrigin::Inputs { inputs: selected, exact },
+            });
+        }
+        Some(leaves)
+    }
+
     pub(super) fn return_leaf_contract(
         &self,
         source_index: usize,

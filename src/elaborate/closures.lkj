@@ -128,12 +128,19 @@ pub(super) struct RegionBound {
     pub(super) arguments: Vec<a::TypeId>,
 }
 type ClosureKey = (a::ExprId, Vec<usize>, Vec<(String, usize)>);
+struct OpaqueReturn {
+    function: usize,
+    span: a::Span,
+    leaves: Vec<ir::ReturnLeaf>,
+}
+
 #[derive(Default)]
 pub(super) struct Catalog {
     keys: BTreeMap<ClosureKey, usize>,
     entries: BTreeMap<usize, Closure>,
     pub(super) assumptions: BTreeMap<usize, Signature>,
     pub(super) assumed_functions: BTreeMap<usize, usize>,
+    opaque_returns: Vec<OpaqueReturn>,
     pub(super) region_bounds: BTreeMap<usize, Vec<RegionBound>>,
     pub(super) wrappers: BTreeMap<(usize, Kind), usize>,
     pub(super) checked_functions: BTreeSet<usize>,
@@ -716,15 +723,16 @@ impl Compiler<'_> {
             return Ok(*index);
         }
         let signature = self.closures.assumptions.get(&ty).unwrap().clone();
-        // Opaque F currently has no hidden-leaf IR inventory. A signature that
-        // returns an explicit reference from F cannot pretend that F is static.
-        if self.has_view(signature.result) {
-            return Err(err(
-                span,
-                "E_UNSUPPORTED",
-                "reference results of an opaque callable need its hidden origin inventory",
-            ));
-        }
+        let return_source = if self.has_view(signature.result) {
+            let leaves = match self.opaque.names.get(&ty) {
+                Some(source) => self.advertised_callable_leaves(*source, &signature),
+                None => None,
+            }.ok_or_else(|| err(span, "E_UNSUPPORTED",
+                "reference result of opaque callable needs an advertised argument origin"))?;
+            Some(ir::ReturnSource::Leaves(leaves))
+        } else {
+            None
+        };
         let receiver = match signature.kind {
             Kind::Shared => self.reference(ty, false),
             Kind::Mutable => self.reference(ty, true),
@@ -749,12 +757,52 @@ impl Compiler<'_> {
             params: locals.len(),
             locals,
             result: signature.result,
-            return_source: None,
+            return_source,
             body: Vec::new(),
             test: false,
         });
         self.closures.assumed_functions.insert(ty, index);
         Ok(index)
+    }
+
+    fn advertised_callable_leaves(&self, ty: a::TypeId, signature: &Signature)
+        -> Option<Vec<ir::ReturnLeaf>> {
+        if super::opaque::result_lifetime(self.source, ty).is_some() { return None; }
+        let form = self.source.impl_traits.get(&ty)?;
+        let owner = form.result?;
+        let mut leaves: Option<Vec<ir::ReturnLeaf>> = None;
+        for bound in &form.bounds {
+            if !self.is_callable_bound(*bound) { continue; }
+            let a::Type::Path(path) = &self.source.types[*bound].kind else {
+                return None;
+            };
+            let contract = self.opaque_callable_leaves(owner, path, signature)?;
+            if let Some(prior) = &leaves {
+                if prior != &contract { return None; }
+            }
+            leaves = Some(contract);
+        }
+        leaves
+    }
+
+    pub(super) fn require_opaque_callable_return(&mut self, ty: a::TypeId, hidden: usize)
+        -> Result<()> {
+        if self.contracts.is_some() || super::opaque::result_lifetime(self.source, ty).is_some() {
+            return Ok(());
+        }
+        let form = self.source.impl_traits.get(&ty).unwrap();
+        if !form.bounds.iter().any(|bound| self.is_callable_bound(*bound)) { return Ok(()); }
+        let signature = self.callable_signature(hidden).unwrap();
+        if !self.has_view(signature.result) { return Ok(()); }
+        let span = self.source.types[ty].span;
+        let leaves = self.advertised_callable_leaves(ty, &signature)
+            .ok_or_else(|| err(span, "E_UNSUPPORTED",
+                "reference result of opaque callable needs an advertised argument origin"))?;
+        let function = self.closures.entries.get(&hidden).and_then(|entry| entry.function)
+            .ok_or_else(|| err(span, "E_UNSUPPORTED",
+                "opaque callable has no concrete origin contract"))?;
+        self.closures.opaque_returns.push(OpaqueReturn { function, span, leaves });
+        Ok(())
     }
 
     pub(super) fn assumed_callable_functions(&self) -> BTreeSet<usize> {
@@ -1380,6 +1428,40 @@ impl Builder<'_, '_> {
             span.line,
         );
         Ok((dst, signature.result))
+    }
+}
+
+/// A producer may narrow the actual origins, but cannot authorize loans
+/// beyond its signature. Compare after ordinary closure-body refinement.
+/// Independent checking still validates every concrete contract and body.
+pub(super) fn check_opaque_returns(program: &ir::Program, catalog: &Catalog)
+    -> Vec<a::Diagnostic> {
+    let mut problems = Vec::new();
+    for obligation in &catalog.opaque_returns {
+        let actual = &program.functions[obligation.function].return_source;
+        let admitted = match actual {
+            Some(ir::ReturnSource::Leaves(leaves)) => obligation.leaves.iter().all(|promised| {
+                leaves.iter().find(|leaf| leaf.projections == promised.projections)
+                    .is_some_and(|leaf| origin_within(&leaf.origin, &promised.origin))
+            }),
+            _ => false,
+        };
+        if !admitted {
+            problems.push(err(obligation.span, "E_UNSUPPORTED",
+                "hidden callable returns a view outside its advertised argument origins"));
+        }
+    }
+    problems
+}
+
+fn origin_within(actual: &ir::LeafOrigin, promised: &ir::LeafOrigin) -> bool {
+    match (actual, promised) {
+        (ir::LeafOrigin::Static, _) => true,
+        (ir::LeafOrigin::Inputs { inputs, exact },
+         ir::LeafOrigin::Inputs { inputs: candidates, exact: required }) => {
+            (!required || *exact) && inputs.iter().all(|input| candidates.contains(input))
+        }
+        _ => false,
     }
 }
 

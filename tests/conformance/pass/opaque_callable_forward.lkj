@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+fn make<T>() -> impl FnOnce(T) -> T { |input: T| input }
+fn forward<T>() -> impl FnOnce(T) -> T { make::<T>() }
+
+pub fn probe() -> i64 {
+    let value = 42i64;
+    let call = forward::<&i64>();
+    *call(&value)
+}

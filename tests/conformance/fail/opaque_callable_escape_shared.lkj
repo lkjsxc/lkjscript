@@ -1,0 +1,12 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+fn pass<T>() -> impl Fn(T) -> T { |input: T| input }
+pub fn probe() -> i64 {
+    let escaped: &i64;
+    {
+        let short = 42i64;
+        let pass = pass::<&i64>();
+        escaped = pass(&short);
+    }
+    *escaped
+}

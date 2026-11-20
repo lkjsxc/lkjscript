@@ -1,0 +1,12 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+fn local() -> impl Fn(&i64) -> &i64 {
+    |_: &i64| {
+        let value = 42i64;
+        &value
+    }
+}
+pub fn probe() -> i64 {
+    let input = 1i64;
+    *local()(&input)
+}

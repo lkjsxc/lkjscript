@@ -1,0 +1,11 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+fn pass<'a>(_anchor: &'a i64) -> impl Fn(&'a i64) -> &'a i64 {
+    |input: &'a i64| input
+}
+pub fn probe() -> i64 {
+    let anchor = 1i64;
+    let value = 42i64;
+    let call = pass(&anchor);
+    *call(&value)
+}
