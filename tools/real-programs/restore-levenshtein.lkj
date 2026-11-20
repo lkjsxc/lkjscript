@@ -1,0 +1,96 @@
+//! Restore the original source and integration tests from the stored projection.
+use std::bytes;
+use std::json::{self, Value};
+use std::sha256;
+
+fn find(input: &[u8], marker: &[u8]) -> Option<usize> {
+    let mut at = 0usize;
+    while at < input.len() {
+        if input[at] == marker[0usize] && bytes::starts_with(&input[at..], marker) {
+            return Some(at);
+        }
+        at += 1usize;
+    }
+    None
+}
+
+fn unique(input: &[u8], marker: &[u8], problem: &str) -> Result<usize, String> {
+    let at = find(input, marker).ok_or(problem.to_string())?;
+    if find(&input[at + marker.len()..], marker).is_some() {
+        return Err(problem.to_string());
+    }
+    Ok(at)
+}
+
+fn join(left: &[u8], middle: &[u8], right: &[u8]) -> Vec<u8> {
+    let mut result = Vec::new();
+    bytes::append_bytes(&mut result, left);
+    bytes::append_bytes(&mut result, middle);
+    bytes::append_bytes(&mut result, right);
+    result
+}
+
+fn read(source: &mut ReadDirectory, name: &str) -> Result<Vec<u8>, String> {
+    let mut file = source.open(name).map_err(|errno: i64| -> String { format!("{name}: errno {errno}") })?;
+    file.read_to_end().map_err(|errno: i64| -> String { format!("{name}: errno {errno}") })
+}
+
+fn write(output: &mut Directory, name: &str, data: &[u8]) -> Result<(), String> {
+    let mut file = output.create(name).map_err(|errno: i64| -> String { format!("{name}: errno {errno}") })?;
+    file.write_all(data).map_err(|errno: i64| -> String { format!("{name}: errno {errno}") })
+}
+
+fn verify(files: &Value, name: &str, data: &[u8], problem: &str) -> Result<(), String> {
+    if files.get(name).and_then(|value: &Value| value.as_str()) != Some(sha256::hex_digest(data).as_str()) {
+        return Err(problem.to_string());
+    }
+    Ok(())
+}
+
+fn restore(source: &mut ReadDirectory, output: &mut Directory, rust: bool) -> Result<(), String> {
+    let manifest = json::parse(&read(source, "upstream.json")?)
+        .map_err(|problem| -> String { format!("{problem}") })?;
+    let projection = read(source, "upstream.lkj")?;
+    let marker = b"\n// UPSTREAM INTEGRATION TESTS: exact bodies, package header removed.\n";
+    let range = b"std::iter::range_from(1)";
+    let header = b"extern crate levenshtein;\nuse levenshtein::levenshtein;\n";
+
+    let boundary = unique(&projection, marker, "invalid integration boundary")?;
+    let normalized = &projection[..boundary];
+    let tests = &projection[boundary + marker.len()..];
+    let at = unique(normalized, range, "invalid inverse range count")?;
+    let library = join(&normalized[..at], b"(1..)", &normalized[at + range.len()..]);
+    let original_tests = join(header, b"", tests);
+    let files = manifest.get("files").ok_or("missing file hashes".to_string())?;
+    verify(files, "src/lib.rs", &library, "original library bytes differ")?;
+    verify(files, "tests/lib.rs", &original_tests, "original test bytes differ")?;
+    if library.iter().filter(|byte: &&u8| **byte == b'\n').count() != 65usize
+        || manifest.get("source_lines").and_then(|value: &Value| value.as_usize()) != Some(65usize) {
+        return Err("original library line count differs".to_string());
+    }
+
+    if rust {
+        write(output, "upstream.rs", &library)?;
+        write(output, "upstream_tests.rs", &original_tests)
+    } else {
+        write(output, "upstream.lkj", &join(&library, marker, tests))
+    }
+}
+
+pub fn main(
+    mut arguments: Arguments, mut source: ReadDirectory, mut output: Directory,
+    mut errors: Stderr, mut status: ExitStatus,
+) {
+    let args = arguments.args();
+    let result = if args.is_empty() {
+        restore(&mut source, &mut output, false)
+    } else if args.len() == 1usize && args[0usize].as_slice() == b"--rust" {
+        restore(&mut source, &mut output, true)
+    } else {
+        Err("usage: restore-levenshtein [--rust]".to_string())
+    };
+    if let Err(problem) = result {
+        errors.write(format!("restore-levenshtein: {problem}\n").as_bytes());
+        status.set_status(1u8);
+    }
+}

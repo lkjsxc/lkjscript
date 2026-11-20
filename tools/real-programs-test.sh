@@ -51,17 +51,23 @@ NODE
 # Keep the checked import and its normalization receipt intact. The executed
 # specimen restores the original range syntax, then authenticates both complete
 # upstream sections before the compiler reads the temporary .lkj projection.
+restored="$work/restored"
+mkdir "$restored"
+"$compiler" build tools/real-programs/restore-levenshtein.lkj --no-store \
+    --grant arguments --grant source="$PWD/$source" --grant output="$restored" \
+    --grant errors --grant status -o "$work/restore" > "$work/restore-build.out" 2> "$work/restore-build.err"
+"$work/restore"
 original="$work/original"
 mkdir "$original"
+mv "$restored/upstream.lkj" "$original/upstream.lkj"
 cp "$source/main.lkj" "$source/corpus.lkj" "$original/"
-node tools/real-programs/restore-levenshtein.mjs "$source" "$original"
 # The importer itself is now lkjscript: exercise both routes against the exact
 # restored upstream tree and refuse a changed digest before writing a request.
 import_source="$work/import-upstream"
 mkdir -p "$import_source/src" "$import_source/tests"
-node tools/real-programs/restore-levenshtein.mjs "$source" "$import_source" --rust
-mv "$import_source/upstream.rs" "$import_source/src/lib.rs"
-mv "$import_source/upstream_tests.rs" "$import_source/tests/lib.rs"
+"$work/restore" --rust
+mv "$restored/upstream.rs" "$import_source/src/lib.rs"
+mv "$restored/upstream_tests.rs" "$import_source/tests/lib.rs"
 cp "$source/LICENSE" "$import_source/license"
 "$compiler" build tools/real-programs/levenshtein-import.lkj --source-dir . --library-dir library --no-store -o "$work/importer" > "$work/import-build.out" 2> "$work/import-build.err"
 "$work/importer" "$import_source" "$source/upstream.json" "$work/import-native.json" > "$work/import-native.out" 2> "$work/import-native.err"
