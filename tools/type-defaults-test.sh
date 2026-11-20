@@ -39,8 +39,8 @@ value
 query signature Envelope > "$fixture/signature"
 grep -Fq 'T = Payload, U = T' "$fixture/signature"
 query references Envelope > "$fixture/references"
-grep -Fq '"Payload"' "$fixture/references"
-grep -Fq '"Envelope::generic:T"' "$fixture/references"
+grep -Fq '"type@Payload"' "$fixture/references"
+grep -Fq '"type@Envelope::generic:T"' "$fixture/references"
 query outline main > "$fixture/outline"
 binding=$(sed -n 's/^"\([^"]*::binding:result:0\)".*/\1/p' "$fixture/outline" | head -n 1)
 [[ -n $binding ]]
@@ -53,8 +53,8 @@ edit
 value
 publish
 query references Envelope > "$fixture/references"
-grep -Fq '"PayloadRenamed"' "$fixture/references"
-! grep -Fq '"Payload"' "$fixture/references"
+grep -Fq '"type@PayloadRenamed"' "$fixture/references"
+! grep -Fq '"type@Payload"' "$fixture/references"
 cat > "$fixture/request" <<'REQUEST'
 {"version":1,"operations":[{"op":"rename","id":"Envelope::generic:T","name":"Element"}]}
 REQUEST

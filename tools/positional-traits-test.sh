@@ -47,9 +47,9 @@ grep -Fq 'Parser<u8, Output = i64>' "$fixture/signature"
 query type keep::param:value > "$fixture/type"
 grep -Fq 'value="<P as Parser<u8>>::Output"' "$fixture/type"
 query references apply > "$fixture/references"
-grep -Fq '"Parser::type:Output"' "$fixture/references"
+grep -Fq '"type@Parser::type:Output"' "$fixture/references"
 grep -Fq '"Parser::parse"' "$fixture/references"
-! grep -Fq '"Other::type:Output"' "$fixture/references"
+! grep -Fq '"type@Other::type:Output"' "$fixture/references"
 cat > "$fixture/request" <<'REQUEST'
 {"version":1,"operations":[{"op":"rename","id":"Parser::type:Output","name":"Result"}]}
 REQUEST

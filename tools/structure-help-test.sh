@@ -30,7 +30,7 @@ SOURCE
 common=(main.lkj --source-dir "$fixture/source" --no-library --store "$fixture/store" --store-key "$fixture/key")
 "$compiler" build "${common[@]}" --index -o "$fixture/image" > "$fixture/build"
 "$compiler" query "${common[@]}" --kind outline --id math --depth 2 > "$fixture/outline"
-grep -q '"math::increment"' "$fixture/outline"
+grep -q '"value@math::increment"' "$fixture/outline"
 "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/edit"
 for engine in native interpreter; do
     test "$("$compiler" run main.lkj --source-dir "$fixture/source" --no-library --no-store --engine "$engine")" = 6

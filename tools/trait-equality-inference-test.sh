@@ -44,8 +44,8 @@ grep -Fq 'Source<u8, Output = i64>' "$fixture/signature"
 query type identity::param:value > "$fixture/type"
 grep -Fq '<(Number,) as Adapter<u8>>::Output' "$fixture/type"
 query references keep > "$fixture/references"
-grep -Fq '"Source::type:Output"' "$fixture/references"
-! grep -Fq '"Adapter::type:Output"' "$fixture/references"
+grep -Fq '"type@Source::type:Output"' "$fixture/references"
+! grep -Fq '"type@Adapter::type:Output"' "$fixture/references"
 cat > "$fixture/request" <<'REQUEST'
 {"version":1,"operations":[{"op":"rename","id":"Source::type:Output","name":"Value"}]}
 REQUEST
@@ -57,7 +57,7 @@ grep -Fq 'trait Adapter<I> { type Output;' "$fixture/project/main.lkj"
 value
 publish
 query references keep > "$fixture/references"
-grep -Fq '"Source::type:Value"' "$fixture/references"
+grep -Fq '"type@Source::type:Value"' "$fixture/references"
 cp "$fixture/project/main.lkj" "$fixture/before"
 cat > "$fixture/request" <<'REQUEST'
 {"version":1,"operations":[{"op":"replace-body","id":"keep","source":"{ run_bool((parser,)) as i64 }"}]}
