@@ -71,8 +71,12 @@ must not share the directory with the new format.
 
 ## Semantic identities and selection
 
-The root module is `crate`. Module-scope declaration IDs use resolved source
-paths without an initial `crate::`, prefixed by their resolver namespace.
+The application root is `crate`; the external standard-library root is
+`type@std`. Module-scope declaration IDs preserve their resolver crate and
+namespace. External paths use `std::…`; an application's own `std` module
+uses `crate::std::…`, even when no external library is loaded. Other application
+paths omit the initial `crate::`. An authored module named `crate` receives a
+located `E_IDENTITY` refusal during catalog construction.
 Modules, structs, enums, traits and aliases use `type@PATH`; free functions
 and constants use `value@PATH`. A legal module/function pair is therefore
 `type@shared` and `value@shared`. The marker qualifies the final path
@@ -86,7 +90,19 @@ their existing identities, such as `S::new`, `Tr::f` and `<S as Tr>::f`.
 Implementation, use and macro identities also keep their existing forms; query
 the outline for their exact spelling. Checked-IR instance and type IDs retain
 `ir:PATH` and `ir:type:NAME`; their source associations name canonical
-source identities. Type displays remain source type spellings.
+source identities. Crate provenance is retained inside associated-method,
+implementation, use and IR stems too. Type displays remain source spellings;
+copy a printed identity to select an item, rather than deriving a key from its
+display text.
+
+Types without a source declaration use `builtin@NAME`, including families
+(`builtin@Vec`), concrete types (`builtin@Vec<i64>`) and primitives
+(`builtin@i64`). An authored `Vec` is `type@Vec`. Bare `Vec` refuses when
+both exist; each printed key selects its own evidence. `builtin@Vec` collects
+implementation facts across its concrete instantiations. Existing `ir:type:NAME`
+keys identify the checked type records. A builtin and an authored type whose
+associated or implementation stems still coincide receive a duplicate
+`E_IDENTITY` refusal; no colliding stem is silently selected.
 
 A unit, tuple or fieldless braced struct occupies both resolver namespaces but
 has one authored identity, `type@S`. It reserves `value@S` against a second
@@ -96,10 +112,12 @@ selects the struct. Same-namespace duplicate declarations remain invalid.
 
 Edit identity selectors, including `id`, `parent` and `before`, and query
 `--id` use the same selection rule. A selector containing `@` must have
-exactly one `type@` or `value@` prefix and a nonempty remainder; it selects
-only that canonical key. An absent or malformed explicit key refuses. A bare
-selector is checked as its exact spelling,
-`type@SPELLING` and `value@SPELLING`, with equal precedence. Exactly one
+exactly one `type@`, `value@` or `builtin@` prefix and a nonempty remainder;
+it selects only that canonical key. An absent or malformed explicit key refuses.
+A bare selector is checked as its exact spelling, `type@SPELLING`,
+`value@SPELLING` and `builtin@SPELLING`, with equal precedence. These candidates
+are literal concatenations: `std::x` addresses the external root,
+`crate::std::x` addresses the application's module, and `$std::x` is absent. Exactly one
 match succeeds. Multiple matches refuse with `E_EDIT_AMBIGUOUS` or
 `E_QUERY_AMBIGUOUS`, listing canonical candidates and kinds. The operation
 or query kind never chooses a namespace, and an exact-text `expect` does not

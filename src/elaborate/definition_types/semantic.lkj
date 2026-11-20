@@ -28,7 +28,7 @@ impl SourceBindings {
     }
 }
 fn declaration_name(source: &a::Program, declaration: usize) -> String {
-    super::super::semantic::source_module_name(&source.declarations[declaration].name)
+    super::super::semantic::declaration_path(&source.declarations[declaration].name)
 }
 impl DefinitionTypes {
     fn semantic_type(&self, source: &a::Program, variable: usize,
@@ -51,7 +51,7 @@ impl DefinitionTypes {
                 let mut written = name.clone();
                 for ty in source.impl_traits.keys() {
                     if matches!(&source.types[*ty].kind, a::Type::Path(path) if path.name == name) {
-                        written = super::super::semantic::source_type_name(source, *ty);
+                        written = super::super::semantic::identity_type_name(source, *ty);
                         break;
                     }
                 }
@@ -59,7 +59,7 @@ impl DefinitionTypes {
             }
             Shape::Source(ty) => {
                 if matches!(source.types[ty].kind, a::Type::Infer) { return None; }
-                super::super::semantic::source_type_name(source, ty)
+                super::super::semantic::identity_type_name(source, ty)
             }
             Shape::Projection(declaration, member, _, arguments) => {
                 let a::Item::Trait(owner) = source.declarations[declaration].item else { return None; };
@@ -84,7 +84,7 @@ impl DefinitionTypes {
                 }
                 result
             }
-            Shape::Opaque(ty, _, _) => super::super::semantic::source_type_name(source, ty),
+            Shape::Opaque(ty, _, _) => super::super::semantic::identity_type_name(source, ty),
             Shape::Projected(_, _) | Shape::Closure(_, _) => return None,
             Shape::Vec(_) => format!("Vec<{}>", values[0]),
             Shape::Box(_) => format!("Box<{}>", values[0]),

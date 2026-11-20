@@ -442,30 +442,37 @@ fn number(value: &str) -> Option<usize> {
 fn function_identity(program: &ast::Program, index: usize) -> String {
     let function = &program.functions[index];
     match program.function_owner(ast::FunctionId { index }) {
-        ast::FunctionOwner::Free => semantic::module_name(&names::qualified(&function.module, &function.name)),
+        ast::FunctionOwner::Free => semantic::declaration_path(&names::qualified(&function.module, &function.name)),
         ast::FunctionOwner::Trait(owner) => {
             let value = &program.traits[owner.index];
-            format!("{}::{}", semantic::module_name(&names::qualified(&value.module, &value.name)), function.name)
+            format!("{}::{}", semantic::declaration_path(&names::qualified(&value.module, &value.name)), function.name)
         }
         ast::FunctionOwner::Implementation(owner) => {
             let value = &program.impls[owner.index];
-            let target = semantic::type_name(program, value.target);
+            let target = semantic::identity_type_name(program, value.target);
             match value.trait_ty {
-                Some(ty) => format!("<{target} as {}>::{}", semantic::type_name(program, ty), function.name),
+                Some(ty) => format!("<{target} as {}>::{}", semantic::identity_type_name(program, ty), function.name),
                 None => format!("{target}::{}", function.name),
             }
         }
     }
 }
-fn function_name(source: &ast::Program, program: &ir::Program, raw: &str) -> String {
+fn function_name(source: &ast::Program, program: &ir::Program, raw: &str, free: &BTreeMap<String, usize>) -> String {
     let end = raw.find('<').unwrap_or(raw.len());
     let base = &raw[..end];
     let mut result = match base.rfind("$f") {
         Some(at) => match number(&base[at + 2usize..]) {
-            Some(index) if index < source.functions.len() => function_identity(source, index),
-            _ => semantic::module_name(base),
+            Some(index) if index < source.functions.len()
+                && names::qualified(&source.functions[index].module, &source.functions[index].name).as_str() == &base[..at] =>
+                function_identity(source, index),
+            _ => base.to_string(),
         },
-        None => semantic::module_name(base),
+        // Only proven source owners pass through declaration-path conversion.
+        // Intrinsic stems such as std::mem::replace keep their own identity.
+        None => match free.get(&base.to_string()) {
+            Some(index) => function_identity(source, *index),
+            None => base.to_string(),
+        },
     };
     if end == raw.len() { return result; }
     let suffix = &raw[end..];
@@ -479,14 +486,14 @@ fn function_name(source: &ast::Program, program: &ir::Program, raw: &str) -> Str
         if ty >= program.types.len() { return raw.to_string(); }
         if !first { result.push(','); } first = false;
         result.push_str(&pair[..at]); result.push('=');
-        result.push_str(&semantic::ir_type_name(program, ty));
+        result.push_str(&semantic::ir_identity_type_name(program, ty));
     }
     result.push('>');
     result
 }
 pub fn normalize(source: &ast::Program, program: &mut ir::Program) -> Result<Vec<Vec<String>>, String> {
     let mut types = Vec::new();
-    for index in 0usize..program.types.len() { types.push(semantic::ir_type_name(program, index)); }
+    for index in 0usize..program.types.len() { types.push(semantic::ir_identity_type_name(program, index)); }
     let mut functions = Vec::new();
     let mut instances: Vec<Vec<String>> = vec![Vec::new(); source.functions.len()];
     let mut free: BTreeMap<String, usize> = BTreeMap::new();
@@ -496,7 +503,7 @@ pub fn normalize(source: &ast::Program, program: &mut ir::Program) -> Result<Vec
         }
     }
     for function in &program.functions {
-        let name = function_name(source, program, &function.name);
+        let name = function_name(source, program, &function.name, &free);
         let end = function.name.find('<').unwrap_or(function.name.len());
         let base = &function.name[..end];
         let owner = match base.rfind("$f") {

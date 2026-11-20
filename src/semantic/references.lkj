@@ -140,7 +140,7 @@ pub(super) fn value_identity(program: &a::Program, path: &a::Path, functions: &[
     let target = declaration_identity(program, declaration, functions)?;
     match program.declarations[declaration].item {
         a::Item::Enum(index) => {
-            let resolved = module_name(&path.name);
+            let resolved = declaration_path(&path.name);
             if resolved == source_path(&target) { return Some(target); }
             for variant in &program.enums[index].variants {
                 if resolved == format!("{}::{}", source_path(&target), variant.name) {
@@ -150,7 +150,7 @@ pub(super) fn value_identity(program: &a::Program, path: &a::Path, functions: &[
             None
         }
         a::Item::Struct(_) | a::Item::Alias(_) | a::Item::Trait(_) => {
-            if module_name(&path.name) == source_path(&target) { Some(target) } else { None }
+            if declaration_path(&path.name) == source_path(&target) { Some(target) } else { None }
         }
         _ => Some(target),
     }
@@ -384,7 +384,7 @@ fn qualification_site(result: &mut Catalog, files: &[SourceText], program: &a::P
                 record_site(result, files, owner.to_string(), prefix.to_string(), span, unresolved, false);
                 return;
             };
-            if module_name(&path.name) != source_path(&target) {
+            if declaration_path(&path.name) != source_path(&target) {
                 let kind = if namespace { "associated-qualification" } else { unresolved };
                 record_site(result, files, owner.to_string(), prefix.to_string(), span, kind, false);
                 return;
@@ -618,7 +618,7 @@ pub(super) fn self_constructor(result: &mut Catalog, files: &[SourceText], progr
         None => record_site(result, files, owner.to_string(), target.clone(),
             a::Span { end: node.span.start, ..node.span }, "implicit-source", false),
     }
-    Some((target, type_name(program, program.impls[implementation.index].target)))
+    Some((target, identity_type_name(program, program.impls[implementation.index].target)))
 }
 
 pub(super) fn typed_associated(result: &mut Catalog, files: &[SourceText], program: &a::Program,

@@ -472,14 +472,14 @@ fn projection_paths(catalog: &semantic::Catalog, projection: &structure_edit::Pr
         source.file[..source.file.len() - 4usize].to_string()
     } else { return Err(structure_edit::error(&projection.identity, "PROJECTION", "loaded module is not an .lkj source")); };
     let suffix = if projection.parent == source.identity {
-        ""
+        String::new()
     } else if source.identity == "crate" {
-        semantic::source_path(&projection.parent)
+        semantic::resolver_module_path(semantic::source_path(&projection.parent))
     } else {
-        &projection.parent[source.identity.len() + 2usize..]
+        projection.parent[source.identity.len() + 2usize..].to_string()
     };
     if !suffix.is_empty() {
-        for part in suffix.split("::") { directory = physical(&directory, part); }
+        for part in suffix.as_str().split("::") { directory = physical(&directory, part); }
     }
     let name = match projection.identity.rfind("::") {
         Some(at) => &projection.identity[at + 2usize..],

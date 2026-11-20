@@ -108,7 +108,7 @@ pub fn run<Q: store::QueryAccess>(store: &mut Q, selector: &str, options: &Optio
     }
     let snapshot = semantic_store::open(&mut *store, selector, &options.snapshot)?;
     // Selection reads authenticated metadata, never the current source tree.
-    // Exact historical keys and the two namespace keys have equal precedence.
+    // Literal historical, source-namespace and structural type keys have equal precedence.
     let mut reader = semantic_store::Reader::new(snapshot.clone());
     let mut choices: Vec<String> = Vec::new();
     let mut detail = String::new();

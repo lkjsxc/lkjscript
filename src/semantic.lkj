@@ -100,9 +100,14 @@ pub fn module_name(value: &str) -> String {
     else if value.starts_with("$std::") { format!("std::{}", &value[6usize..]) }
     else { value.to_string() }
 }
+/// Accepts only resolver declaration or module scope paths.
+pub fn declaration_path(value: &str) -> String {
+    crate::elaborate::semantic::declaration_path(value)
+}
+/// The path is already canonical; namespace tagging never rewrites it.
 pub fn source_identity(namespace: resolve::Namespace, path: &str) -> String {
     let prefix = match namespace { resolve::Namespace::Type => "type", resolve::Namespace::Value => "value" };
-    format!("{prefix}@{}", module_name(path))
+    format!("{prefix}@{path}")
 }
 /// Strip only the namespace marker; the remaining source path is not a selector.
 pub fn source_path(identity: &str) -> &str {
@@ -110,17 +115,33 @@ pub fn source_path(identity: &str) -> &str {
     else if identity.starts_with("value@") { &identity[6usize..] }
     else { identity }
 }
+/// Normalize source spelling while preserving the application's escaped std root.
+pub fn canonical_source_path(path: &str) -> &str {
+    if path.starts_with("crate::") {
+        let unrooted = &path[7usize..];
+        if unrooted != "std" && !unrooted.starts_with("std::") { return unrooted; }
+    }
+    path
+}
+/// Recover resolver scope names from canonical paths, never from source text.
+pub fn resolver_module_path(path: &str) -> String {
+    if path == "std" { "$std".to_string() }
+    else if path.starts_with("std::") { format!("$std::{}", &path[5usize..]) }
+    else if path == "crate::std" || path.starts_with("crate::std::") { path[7usize..].to_string() }
+    else { path.to_string() }
+}
 pub fn selector_candidates(selector: &str, domain: &str) -> Result<Vec<String>, String> {
     if selector.contains('@') {
-        let path = source_path(selector);
+        let path = if selector.starts_with("builtin@") { &selector[8usize..] } else { source_path(selector) };
         if path == selector || path.is_empty() || path.contains('@') {
-            return Err(format!("{} E_{}_SELECTOR expected one type@PATH or value@PATH marker", quote(selector), domain));
+            return Err(format!("{} E_{}_SELECTOR expected one type@PATH, value@PATH or builtin@NAME marker", quote(selector), domain));
         }
         return Ok(vec![selector.to_string()]);
     }
-    Ok(vec![selector.to_string(), source_identity(resolve::Namespace::Type, selector),
-        source_identity(resolve::Namespace::Value, selector)])
+    Ok(vec![selector.to_string(), format!("type@{selector}"),
+        format!("value@{selector}"), format!("builtin@{selector}")])
 }
+
 impl Catalog {
     pub fn select(&self, selector: &str, domain: &str) -> Result<String, String> {
         let mut found: Vec<String> = Vec::new();
@@ -157,16 +178,19 @@ impl Catalog {
     }
 }
 fn root_parent(value: &str) -> String {
-    if value.is_empty() { "crate".to_string() } else { source_identity(resolve::Namespace::Type, value) }
+    if value.is_empty() { "crate".to_string() } else { source_identity(resolve::Namespace::Type, &declaration_path(value)) }
 }
 fn type_identity(module: &str, name: &str) -> String {
     source_identity(resolve::Namespace::Type, &qualified(module, name))
 }
 fn qualified(module: &str, name: &str) -> String {
-    module_name(&names::qualified(module, name))
+    declaration_path(&names::qualified(module, name))
 }
 pub fn type_name(program: &a::Program, ty: usize) -> String {
     crate::elaborate::semantic::source_type_name(program, ty)
+}
+pub fn identity_type_name(program: &a::Program, ty: usize) -> String {
+    crate::elaborate::semantic::identity_type_name(program, ty)
 }
 fn token_at(tokens: &[syntax::SemanticToken], position: usize) -> usize {
     let mut low = 0usize; let mut high = tokens.len();
@@ -306,9 +330,9 @@ fn function_identity(program: &a::Program, index: usize) -> String {
         }
         a::FunctionOwner::Implementation(owner) => {
             let owner = &program.impls[owner.index];
-            let target = type_name(program, owner.target);
+            let target = identity_type_name(program, owner.target);
             match owner.trait_ty {
-                Some(trait_ty) => format!("<{} as {}>::{}", target, type_name(program, trait_ty), function.name),
+                Some(trait_ty) => format!("<{} as {}>::{}", target, identity_type_name(program, trait_ty), function.name),
                 None => format!("{}::{}", target, function.name),
             }
         }
@@ -316,7 +340,7 @@ fn function_identity(program: &a::Program, index: usize) -> String {
 }
 fn implementation_identity(program: &a::Program, index: usize) -> String {
     let value = &program.impls[index];
-    let target = type_name(program, value.target);
+    let target = identity_type_name(program, value.target);
     let mut members: Vec<String> = Vec::new();
     for index in &value.methods { members.push(program.functions[*index].name.clone()); }
     for associated in &value.associated { members.push(format!("type:{}", associated.name)); }
@@ -325,7 +349,7 @@ fn implementation_identity(program: &a::Program, index: usize) -> String {
     for member in members { bytes(&mut identity, member.as_bytes()); }
     let digest = sha256::hex_digest(&identity);
     match value.trait_ty {
-        Some(trait_ty) => format!("impl:<{} as {}>#{}", target, type_name(program, trait_ty), &digest[..16usize]),
+        Some(trait_ty) => format!("impl:<{} as {}>#{}", target, identity_type_name(program, trait_ty), &digest[..16usize]),
         None => format!("impl:{}#{}", target, &digest[..16usize]),
     }
 }
@@ -392,7 +416,7 @@ fn function_signature(program: &a::Program, function: &a::Function) -> String {
     out
 }
 fn source_type_key(program: &a::Program, ty: usize) -> String {
-    let name = type_name(program, ty);
+    let name = identity_type_name(program, ty);
     if let a::Type::Path(path) = &program.types[ty].kind {
         if let Some(declaration) = path.declaration {
             if matches!(program.declarations[declaration].item,
@@ -401,7 +425,7 @@ fn source_type_key(program: &a::Program, ty: usize) -> String {
             }
         }
     }
-    name
+    format!("builtin@{name}")
 }
 
 fn leaf_name(path: &str) -> &str {
@@ -478,7 +502,7 @@ fn numeric(text: &str) -> Option<usize> {
     }
     Some(result)
 }
-fn ir_source(program: &a::Program, catalog: &Catalog, name: &str) -> Option<(String, String)> {
+fn ir_source(program: &a::Program, catalog: &Catalog, free: &BTreeMap<String, String>, name: &str) -> Option<(String, String)> {
     let end = name.find('<').unwrap_or(name.len());
     let base = &name[..end];
     let source = match base.rfind("$f") {
@@ -488,55 +512,59 @@ fn ir_source(program: &a::Program, catalog: &Catalog, name: &str) -> Option<(Str
             if names::qualified(&function.module, &function.name).as_str() != &base[..at] { return None; }
             catalog.function_ids[index].clone()
         }
-        None => {
-            let path = module_name(base);
-            let value = source_identity(resolve::Namespace::Value, &path);
-            let identity = if catalog.by_identity.contains_key(&value) { value } else { path };
-            let index = *catalog.by_identity.get(&identity)?;
-            if catalog.items[index].kind != "function" { return None; }
-            identity
-        }
+        None => free.get(&base.to_string())?.clone(),
     };
     Some((source, name[end..].to_string()))
 }
-fn nominal_ir_name(program: &ir::Program, name: &str) -> String {
-    let Some(start) = name.find('<') else { return module_name(name); };
-    if !name.ends_with('>') { return module_name(name); }
-    let mut out = module_name(&name[..start]); out.push('<');
+fn nominal_ir_head(name: &str, canonical: bool) -> String {
+    if canonical { declaration_path(name) } else { module_name(name) }
+}
+fn nominal_ir_name(program: &ir::Program, name: &str, canonical: bool) -> String {
+    let Some(start) = name.find('<') else { return nominal_ir_head(name, canonical); };
+    if !name.ends_with('>') { return nominal_ir_head(name, canonical); }
+    let mut out = nominal_ir_head(&name[..start], canonical); out.push('<');
     let mut first = true;
     for argument in name[start + 1usize..name.len() - 1usize].split(',') {
-        if !argument.starts_with('t') { return module_name(name); }
-        let Some(ty) = numeric(&argument[1usize..]) else { return module_name(name); };
-        if ty >= program.types.len() { return module_name(name); }
+        if !argument.starts_with('t') { return nominal_ir_head(name, canonical); }
+        let Some(ty) = numeric(&argument[1usize..]) else { return nominal_ir_head(name, canonical); };
+        if ty >= program.types.len() { return nominal_ir_head(name, canonical); }
         if !first { out.push(','); } first = false;
-        out.push_str(&ir_type_name(program, ty));
+        out.push_str(&ir_type_name_form(program, ty, canonical));
     }
     out.push('>'); out
 }
-pub fn ir_type_name(program: &ir::Program, ty: usize) -> String {
+fn ir_type_name_form(program: &ir::Program, ty: usize, canonical: bool) -> String {
     let value = &program.types[ty];
     match &value.kind {
-        ir::TypeKind::Ref { inner, mutable } => format!("&{}{}", if *mutable { "mut " } else { "" }, ir_type_name(program, *inner)),
-        ir::TypeKind::Slice { inner, mutable } => format!("[{}{}]", if *mutable { "mut " } else { "" }, ir_type_name(program, *inner)),
-        ir::TypeKind::Vec { inner } => format!("Vec<{}>", ir_type_name(program, *inner)),
-        ir::TypeKind::Box { inner } => format!("Box<{}>", ir_type_name(program, *inner)),
+        ir::TypeKind::Ref { inner, mutable } => format!("&{}{}", if *mutable { "mut " } else { "" }, ir_type_name_form(program, *inner, canonical)),
+        ir::TypeKind::Slice { inner, mutable } => format!("[{}{}]", if *mutable { "mut " } else { "" }, ir_type_name_form(program, *inner, canonical)),
+        ir::TypeKind::Vec { inner } => format!("Vec<{}>", ir_type_name_form(program, *inner, canonical)),
+        ir::TypeKind::Box { inner } => format!("Box<{}>", ir_type_name_form(program, *inner, canonical)),
         // Named source values can use existing array storage without acquiring
         // a structural array identity. Keep that declared name in query keys;
         // the checked type facts still expose the exact representation ID.
         ir::TypeKind::Array { .. } if !value.name.starts_with('[') =>
-            nominal_ir_name(program, &value.name),
-        ir::TypeKind::Array { inner, len } => format!("[{};{}]", ir_type_name(program, *inner), len),
+            nominal_ir_name(program, &value.name, canonical),
+        ir::TypeKind::Array { inner, len } => format!("[{};{}]", ir_type_name_form(program, *inner, canonical), len),
         ir::TypeKind::Struct { fields, .. } if value.name.starts_with('(') => {
             let mut out = "(".to_string();
             for (index, field) in fields.iter().enumerate() {
                 if index != 0usize { out.push(','); }
-                out.push_str(&ir_type_name(program, field.ty));
+                out.push_str(&ir_type_name_form(program, field.ty, canonical));
             }
             if fields.len() == 1usize { out.push(','); }
             out.push(')'); out
         }
-        _ => nominal_ir_name(program, &value.name),
+        ir::TypeKind::Struct { .. } | ir::TypeKind::Enum { .. } => nominal_ir_name(program, &value.name, canonical),
+        _ => if canonical { value.name.clone() } else { module_name(&value.name) },
     }
+}
+pub fn ir_type_name(program: &ir::Program, ty: usize) -> String {
+    ir_type_name_form(program, ty, false)
+}
+/// Raw lowered IR retains resolver paths in nominal names; normalized unit names are already canonical.
+pub fn ir_identity_type_name(program: &ir::Program, ty: usize) -> String {
+    ir_type_name_form(program, ty, true)
 }
 fn instance_arguments(program: &ir::Program, raw: &str) -> String {
     if raw.is_empty() { return String::new(); }
@@ -550,7 +578,7 @@ fn instance_arguments(program: &ir::Program, raw: &str) -> String {
         if ty >= program.types.len() { return raw.to_string(); }
         if !first { result.push_str(","); } first = false;
         result.push_str(&pair[..at]); result.push('=');
-        result.push_str(&ir_type_name(program, ty));
+        result.push_str(&ir_identity_type_name(program, ty));
     }
     result.push('>'); result
 }
@@ -601,6 +629,13 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         function_ids: Vec::new(), instance_ids: Vec::new(), instance_sources: Vec::new(),
         implementations: Vec::new(), instance_arguments: Vec::new(), input_digest: sha256::hex_digest(&input_identity),
     };
+    for module in &program.modules {
+        if module.name == "crate" {
+            return Err(format!("{} E_IDENTITY module name crate is reserved; file={} start={} end={}",
+                quote(&names::qualified(&module.parent, &module.name)), quote(&program.files[module.span.file].path),
+                module.span.start, module.span.end));
+        }
+    }
     let mut mounted: BTreeSet<String> = BTreeSet::new();
     for loaded in &program.loaded_modules {
         if loaded.scope >= program.scopes.len() || loaded.file >= program.files.len() {
@@ -624,7 +659,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         let (types, values) = resolve::declaration_namespaces(program, declaration.item);
         for namespace in vec![resolve::Namespace::Type, resolve::Namespace::Value] {
             if !(match namespace { resolve::Namespace::Type => types, resolve::Namespace::Value => values }) { continue; }
-            let slot = source_identity(namespace, &declaration.name);
+            let slot = source_identity(namespace, &declaration_path(&declaration.name));
             if result.namespace_slots.insert(slot.clone(), owner.clone()).is_some() {
                 return Err(format!("E_IDENTITY duplicate source namespace slot {}", quote(&slot)));
             }
@@ -646,7 +681,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         }
         for (position, parameter) in value.params.iter().enumerate() {
             append(&mut result, &files, parameter_identity(&identity, &parameter.name, position), identity.clone(),
-                "parameter", &parameter.name, parameter.span, None, type_name(program, parameter.ty), false)?;
+                "parameter", &parameter.name, parameter.span, None, identity_type_name(program, parameter.ty), false)?;
         }
         for parameter in &value.generics {
             if parameter.implicit { continue; }
@@ -662,7 +697,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         append_generics(&mut result, &files, &identity, &value.generics)?;
         for field in &value.fields {
             append(&mut result, &files, format!("{}::field:{}", identity, field.name), identity.clone(), "field",
-                &field.name, field.span, None, type_name(program, field.ty), false)?;
+                &field.name, field.span, None, identity_type_name(program, field.ty), false)?;
         }
     }
     for value in &program.enums {
@@ -676,7 +711,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                 &variant.name, variant.span, None, source_path(&identity).to_string(), false)?;
             for field in &variant.fields {
                 append(&mut result, &files, format!("{}::field:{}", variant_identity, field.name), variant_identity.clone(),
-                    "field", &field.name, field.span, None, type_name(program, field.ty), false)?;
+                    "field", &field.name, field.span, None, identity_type_name(program, field.ty), false)?;
             }
         }
     }
@@ -688,29 +723,29 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         for associated in &value.associated {
             append(&mut result, &files, format!("{}::type:{}", identity, associated.name), identity.clone(),
                 "associated-type", &associated.name, associated.span, None,
-                associated.value.map_or("_".to_string(), |ty| type_name(program, ty)), false)?;
+                associated.value.map_or("_".to_string(), |ty| identity_type_name(program, ty)), false)?;
             append_generics(&mut result, &files, &format!("{}::type:{}", identity, associated.name), &associated.generics)?;
         }
     }
     for (index, value) in program.impls.iter().enumerate() {
         let identity = implementation_identity(program, index);
         append(&mut result, &files, identity.clone(), root_parent(&value.module), "implementation", "impl",
-            value.span, None, type_name(program, value.target), true)?;
+            value.span, None, identity_type_name(program, value.target), true)?;
         if let Some(structure) = origins.implementations[index] {
             let signature = match value.trait_ty {
-                Some(trait_ty) => format!("impl {} for {}", type_name(program, trait_ty), type_name(program, value.target)),
-                None => format!("impl {}", type_name(program, value.target)),
+                Some(trait_ty) => format!("impl {} for {}", identity_type_name(program, trait_ty), identity_type_name(program, value.target)),
+                None => format!("impl {}", identity_type_name(program, value.target)),
             };
             generated_projection(&mut result, &files, program, &identity, structure, signature, false)?;
         }
         append_generics(&mut result, &files, &identity, &value.generics)?;
         result.implementations.push(Implementation { identity: identity.clone(),
-            target: type_name(program, value.target), trait_name: value.trait_ty.map_or(String::new(), |ty| type_name(program, ty)),
+            target: identity_type_name(program, value.target), trait_name: value.trait_ty.map_or(String::new(), |ty| identity_type_name(program, ty)),
             target_key: source_type_key(program, value.target), trait_key: value.trait_ty.map_or(String::new(), |ty| source_type_key(program, ty)) });
         for associated in &value.associated {
             append(&mut result, &files, format!("{}::type:{}", identity, associated.name), identity.clone(),
                 "associated-type", &associated.name, associated.span, None,
-                associated.value.map_or("_".to_string(), |ty| type_name(program, ty)), false)?;
+                associated.value.map_or("_".to_string(), |ty| identity_type_name(program, ty)), false)?;
             append_generics(&mut result, &files, &format!("{}::type:{}", identity, associated.name), &associated.generics)?;
         }
     }
@@ -721,12 +756,12 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
     }
     for value in &program.aliases {
         append(&mut result, &files, type_identity(&value.module, &value.name), root_parent(&value.module), "alias",
-            &value.name, value.span, None, type_name(program, value.ty), true)?;
+            &value.name, value.span, None, identity_type_name(program, value.ty), true)?;
         append_generics(&mut result, &files, &type_identity(&value.module, &value.name), &value.generics)?;
     }
     for value in &program.constants {
         append(&mut result, &files, source_identity(resolve::Namespace::Value, &qualified(&value.module, &value.name)), root_parent(&value.module), "constant",
-            &value.name, value.span, None, type_name(program, value.ty), true)?;
+            &value.name, value.span, None, identity_type_name(program, value.ty), true)?;
     }
     macro_sources::project_items(&mut result, &files, program, &origins)?;
     // Validated generated calls have identities even in declaration-only catalogs.
@@ -841,7 +876,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                 }
                 if let Some(declaration) = path.declaration {
                     if let Some(target) = declaration_identity(program, declaration, &result.function_ids) {
-                        if module_name(&path.name) == source_path(&target) {
+                        if declaration_path(&path.name) == source_path(&target) {
                             path_reference(&mut result, &files, owner, target, node.span, "type", &resolver, node.scope, true);
                         } else {
                             add_reference(&mut result, &files, owner, path.name.clone(), node.span,
@@ -1041,14 +1076,24 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         // Absence of rows in this mode is never evidence of absence of uses.
         for index in 0usize..result.items.len() { result.items[index].references_complete = false; }
     }
+    let mut ir_sources: BTreeMap<String, String> = BTreeMap::new();
+    for (index, function) in program.functions.iter().enumerate() {
+        if program.function_owner(a::FunctionId { index }) == a::FunctionOwner::Free {
+            ir_sources.insert(names::qualified(&function.module, &function.name), result.function_ids[index].clone());
+        }
+    }
+    let mut instance_keys: BTreeSet<String> = BTreeSet::new();
     for function in &checked.program().functions {
-        let (source, raw) = match ir_source(program, &result, &function.name) {
+        let (source, raw) = match ir_source(program, &result, &ir_sources, &function.name) {
             Some(value) => value,
             None => (String::new(), String::new()),
         };
         let arguments = instance_arguments(checked.program(), &raw);
-        let identity = if source.is_empty() { format!("ir:{}", module_name(&function.name)) }
+        let identity = if source.is_empty() { format!("ir:{}", function.name) }
             else { format!("ir:{}{}", source_path(&source), arguments) };
+        if !instance_keys.insert(identity.clone()) {
+            return Err(format!("{} E_IDENTITY duplicate checked instance identity", quote(&identity)));
+        }
         result.instance_ids.push(identity);
         result.instance_sources.push(source);
         result.instance_arguments.push(arguments);
@@ -1077,7 +1122,7 @@ pub fn generated_epoch_domain(expansion: &str) -> String {
 }
 
 fn origin_identity(program: &a::Program, origin: origins::Origin) -> String {
-    let path = module_name(&origin.identity(program));
+    let path = declaration_path(&origin.identity(program));
     if matches!(origin.expansion, origins::Expansion::Macro(_)) { path }
     else { source_identity(resolve::Namespace::Type, &path) }
 }
@@ -1209,7 +1254,7 @@ fn generated_expression_owned(catalog: &mut Catalog, files: &[SourceText], progr
             let source = function.map(|function| program.function_owner(a::FunctionId { index: function }));
             let target = inferred.or_else(|| match source {
                 Some(a::FunctionOwner::Implementation(index)) => {
-                    let target = type_name(program, program.impls[index.index].target);
+                    let target = source_type_key(program, program.impls[index.index].target);
                     let base = target.find('<').map_or(target.as_str(), |at| &target[..at]);
                     Some(format!("{base}::field:{name}"))
                 }

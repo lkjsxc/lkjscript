@@ -22,7 +22,7 @@ impl Origin {
             return macros::invocation_identity(program.macro_expansions[index].invocation);
         }
         let definition = &program.declarations[self.declaration.unwrap()];
-        names::qualified(&program.scopes[definition.scope].path, &definition.name)
+        definition.name.clone()
     }
     pub fn span(self, program: &a::Program) -> a::Span {
         if let Expansion::Macro(index) = self.expansion {

@@ -73,12 +73,25 @@ pub fn source_module_name(value: &str) -> String {
     else if value.starts_with("$std::") { format!("std::{}", &value[6usize..]) }
     else { value.to_string() }
 }
+/// Convert only resolver declaration or module scope names, never display or intrinsic names.
+pub fn declaration_path(value: &str) -> String {
+    if value == "$std" { "std".to_string() }
+    else if value.starts_with("$std::") { format!("std::{}", &value[6usize..]) }
+    else if value == "std" || value.starts_with("std::") { format!("crate::{value}") }
+    else { value.to_string() }
+}
 pub fn source_type_name(program: &a::Program, ty: usize) -> String {
+    type_name_form(program, ty, false)
+}
+pub fn identity_type_name(program: &a::Program, ty: usize) -> String {
+    type_name_form(program, ty, true)
+}
+fn type_name_form(program: &a::Program, ty: usize, canonical: bool) -> String {
     if let Some(form) = program.impl_traits.get(&ty) {
         let mut out = "impl ".to_string();
         for (index, bound) in form.bounds.iter().enumerate() {
             if index != 0usize { out.push_str(" + "); }
-            out.push_str(&source_type_name(program, *bound));
+            out.push_str(&type_name_form(program, *bound, canonical));
         }
         return out;
     }
@@ -88,23 +101,26 @@ pub fn source_type_name(program: &a::Program, ty: usize) -> String {
         a::Type::Path(path) => {
             let mut out = if let Some(qualification) = &path.qualification {
                 if let Some(trait_ty) = qualification.trait_ty {
-                    format!("<{} as {}>::{}", source_type_name(program, qualification.receiver),
-                        source_type_name(program, trait_ty), path.name)
+                    format!("<{} as {}>::{}", type_name_form(program, qualification.receiver, canonical),
+                        type_name_form(program, trait_ty, canonical), path.name)
                 } else {
-                    format!("{}::{}", source_type_name(program, qualification.receiver), path.name)
+                    format!("{}::{}", type_name_form(program, qualification.receiver, canonical), path.name)
                 }
+            } else if canonical {
+                // Only a resolved declaration establishes which crate owns this path.
+                if path.declaration.is_some() { declaration_path(&path.name) } else { path.name.clone() }
             } else { source_module_name(&path.name) };
             if !path.args.is_empty() || !path.bindings.is_empty() {
                 out.push('<');
                 for (index, argument) in path.args.iter().enumerate() {
                     if index != 0 { out.push_str(", "); }
-                    out.push_str(&source_type_name(program, *argument));
+                    out.push_str(&type_name_form(program, *argument, canonical));
                 }
                 for (index, binding) in path.bindings.iter().enumerate() {
                     if index != 0 || !path.args.is_empty() { out.push_str(", "); }
                     out.push_str(&binding.name);
                     out.push_str(" = ");
-                    out.push_str(&source_type_name(program, binding.value));
+                    out.push_str(&type_name_form(program, binding.value, canonical));
                 }
                 out.push('>');
             }
@@ -114,15 +130,15 @@ pub fn source_type_name(program: &a::Program, ty: usize) -> String {
             let mut out = "&".to_string();
             if !lifetime.is_empty() { out.push_str(lifetime); out.push(' '); }
             if *mutable { out.push_str("mut "); }
-            out.push_str(&source_type_name(program, *inner)); out
+            out.push_str(&type_name_form(program, *inner, canonical)); out
         }
-        a::Type::Slice(inner) => format!("[{}]", source_type_name(program, *inner)),
-        a::Type::Array { inner, len } => format!("[{}; {}]", source_type_name(program, *inner), len),
+        a::Type::Slice(inner) => format!("[{}]", type_name_form(program, *inner, canonical)),
+        a::Type::Array { inner, len } => format!("[{}; {}]", type_name_form(program, *inner, canonical), len),
         a::Type::Tuple(values) => {
             let mut out = "(".to_string();
             for (index, value) in values.iter().enumerate() {
                 if index != 0 { out.push_str(", "); }
-                out.push_str(&source_type_name(program, *value));
+                out.push_str(&type_name_form(program, *value, canonical));
             }
             if values.len() == 1usize { out.push(','); }
             out.push(')'); out
@@ -131,9 +147,9 @@ pub fn source_type_name(program: &a::Program, ty: usize) -> String {
             let mut out = "fn(".to_string();
             for (index, parameter) in params.iter().enumerate() {
                 if index != 0 { out.push_str(", "); }
-                out.push_str(&source_type_name(program, *parameter));
+                out.push_str(&type_name_form(program, *parameter, canonical));
             }
-            out.push_str(") -> "); out.push_str(&source_type_name(program, *result)); out
+            out.push_str(") -> "); out.push_str(&type_name_form(program, *result, canonical)); out
         }
     }
 }

@@ -70,15 +70,15 @@ fn edge(result: &mut Facts, kind: &str, from: &str, to: &str, level: &str, detai
     result.add(kind, from, fact(to, level, kind, detail));
     result.add(&format!("@{kind}"), from, to.to_string());
 }
-/// Nominal source types are queried in the type namespace. Structural IR names
-/// remain independent identities even beside a value with the same spelling.
+/// Nominal source types use declaration identities. Nondeclaration names have
+/// a query-only role, distinct from source declarations and checked IR IDs.
 fn type_key(catalog: &semantic::Catalog, name: &str) -> String {
     let base = name.find('<').map_or(name, |at| &name[..at]);
     let identity = semantic::source_identity(crate::resolve::Namespace::Type, base);
     if catalog.by_identity.get(&identity).is_some_and(|index|
         matches!(catalog.items[*index].kind.as_str(), "struct" | "enum" | "trait" | "alias")) {
         semantic::source_identity(crate::resolve::Namespace::Type, name)
-    } else { name.to_string() }
+    } else { format!("builtin@{name}") }
 }
 pub fn build(catalog: &semantic::Catalog, checked: &ir::CheckedProgram) -> Result<Facts, String> {
     build_emitted(catalog, checked, &BTreeMap::new())
@@ -145,13 +145,16 @@ pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, 
             if name.is_empty() { continue; }
             let selected = if which == 0usize { &implementation.target_key } else { &implementation.trait_key };
             if !catalog.by_identity.contains_key(selected) {
-                result.add("meta", selected, fact(selected, "source-claim", "type-name", &format!("value={}", semantic::quote(name))));
+                let kind = if selected.starts_with("builtin@") { "builtin" } else { "type-name" };
+                result.add("meta", selected, fact(selected, "source-claim", "type-name", &format!("kind={kind} value={}", semantic::quote(name))));
             }
             edge(&mut result, "impls", selected, identity, "source-claim", &format!("target={} trait={}", semantic::quote(target), semantic::quote(trait_name)));
             if let Some(at) = selected.find('<') {
                 let base = selected[..at].to_string();
                 if !catalog.by_identity.contains_key(&base) {
-                    result.add("meta", &base, fact(&base, "source-claim", "type-name", &format!("value={}", semantic::quote(semantic::source_path(&base)))));
+                    let display = match name.find('<') { Some(at) => &name[..at], None => name.as_str() };
+                    let kind = if base.starts_with("builtin@") { "builtin" } else { "type-family" };
+                    result.add("meta", &base, fact(&base, "source-claim", "type-name", &format!("kind={kind} value={}", semantic::quote(display))));
                 }
                 edge(&mut result, "impls", &base, identity, "source-claim", &format!("target={} trait={}", semantic::quote(target), semantic::quote(trait_name)));
             }
@@ -256,14 +259,15 @@ pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, 
     let type_ids = crate::meaning::verified::type_identities(checked)?;
     for (index, ty) in program.types.iter().enumerate() {
         let name = semantic::ir_type_name(program, index);
-        let identity = format!("ir:type:{}", name);
+        let identity_name = semantic::ir_identity_type_name(program, index);
+        let identity = format!("ir:type:{identity_name}");
         let nominal = match &ty.kind {
             ir::TypeKind::Struct { .. } => !ty.name.starts_with('('),
             ir::TypeKind::Enum { .. } => true,
             ir::TypeKind::Array { .. } => !ty.name.starts_with('['),
             _ => false,
         };
-        let selected = if nominal { type_key(catalog, &name) } else { name.clone() };
+        let selected = if nominal { type_key(catalog, &identity_name) } else { format!("builtin@{identity_name}") };
         let layout = &layouts[index];
         let line = fact(&identity, "checked-ir", "layout",
             &format!("target=linux-x86_64 bytes={} alignment={} fields={} cleanup={} representation-id={} representation-domain=lkjscript-ir-type-identity-linux-x86_64-1",
@@ -274,16 +278,17 @@ pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, 
         result.add("type", &identity, type_fact.clone());
         result.add("type", &selected, type_fact);
         if !catalog.by_identity.contains_key(&selected) {
-            result.add("meta", &selected, fact(&selected, "checked-ir", "type-name", &format!("name={}", semantic::quote(&name))));
+            let kind = if selected.starts_with("builtin@") { "builtin" } else { "type-name" };
+            result.add("meta", &selected, fact(&selected, "checked-ir", "type-name", &format!("kind={kind} name={}", semantic::quote(&name))));
         }
         for (variant, offsets) in layout.variants.iter().enumerate() {
             result.add("layout", &identity, fact(&identity, "checked-ir", "variant-layout",
                 &format!("variant={variant} fields={}", numbers(offsets))));
         }
         result.add("meta", &identity, fact(&identity, "checked-ir", "type", &format!("name={}", semantic::quote(&name))));
-        let base = match name.find('<') { Some(at) => &name[..at], None => &name };
+        let base = match identity_name.find('<') { Some(at) => &identity_name[..at], None => &identity_name };
         let base_identity = type_key(catalog, base);
-        if nominal && base != name.as_str() && catalog.by_identity.contains_key(&base_identity) {
+        if nominal && base != identity_name.as_str() && catalog.by_identity.contains_key(&base_identity) {
             result.add("layout", &base_identity, fact(&identity, "checked-ir", "layout",
                 &format!("target=linux-x86_64 bytes={} alignment={} source-claim={} representation-id={} representation-domain=lkjscript-ir-type-identity-linux-x86_64-1", layout.bytes, layout.alignment, semantic::quote(&base_identity), type_ids[index])));
         }

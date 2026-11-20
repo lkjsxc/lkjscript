@@ -45,11 +45,11 @@ fn parse_unit(catalog: &semantic::Catalog, target: &semantic::Item, inputs: &[(S
     while parent != "crate" && parent != "type@std" {
         if !seen.insert(parent.clone()) { return Err(fail(&target.identity, "PARENT", "source parent identities form a cycle")); }
         let owner = edit::item(catalog, &parent)?;
-        if owner.kind == "module" { parents.push(semantic::source_path(&owner.identity).to_string()); }
+        if owner.kind == "module" { parents.push(semantic::resolver_module_path(semantic::source_path(&owner.identity))); }
         parent = owner.parent.clone();
     }
     let mut tree = a::Program::default();
-    tree.scopes.push(a::ModuleScope { path: if parent == "type@std" { "std".to_string() } else { String::new() }, parent: None, crate_root: 0usize });
+    tree.scopes.push(a::ModuleScope { path: if parent == "type@std" { "$std".to_string() } else { String::new() }, parent: None, crate_root: 0usize });
     let mut scope = 0usize;
     while let Some(path) = parents.pop() {
         tree.scopes.push(a::ModuleScope { path, parent: Some(scope), crate_root: 0usize }); scope = tree.scopes.len() - 1usize;
@@ -944,7 +944,7 @@ mod functions {
             || name.contains('<') || name.contains("impl:") {
             return Err(fail(identity, "SCOPE", "identity has no context-independent source path"));
         }
-        if name.starts_with("std::") { Ok(name) } else { Ok(format!("crate::{name}")) }
+        if name.starts_with("std::") || name.starts_with("crate::") { Ok(name) } else { Ok(format!("crate::{name}")) }
     }
     fn path_prefix(unit: &Unit, span: a::Span, site: &semantic::Reference) -> Option<(usize, usize)> {
         let mut index = path_start(&unit.tokens, span);
@@ -1171,7 +1171,7 @@ mod functions {
         edit::one_item(&target.identity, &declaration, false)?;
         let parent = semantic::source_path(&owner.parent);
         let path = if parent == "crate" { format!("crate::{name}") }
-            else if parent == "std" || parent.starts_with("std::") { format!("{parent}::{name}") }
+            else if parent == "std" || parent.starts_with("std::") || parent.starts_with("crate::") { format!("{parent}::{name}") }
             else { format!("crate::{parent}::{name}") };
         edit::patch(patches, &owner.identity, &owner.file, start, end, &format!("{path}{type_arguments}({arguments})"));
         let (file, at) = edit::insertion(catalog, inputs, &owner.parent)?;
@@ -1364,7 +1364,7 @@ pub mod annotations {
                     }
                 }
             }
-            let path_name = if path.name.starts_with("crate::") { &path.name[7usize..] } else { path.name.as_str() };
+            let path_name = semantic::canonical_source_path(&path.name);
             let identity = semantic::source_identity(crate::resolve::Namespace::Type, path_name);
             let source = edit::item(catalog, &identity)?;
             if !matches!(source.kind.as_str(), "struct" | "enum" | "alias" | "trait") {
@@ -1701,8 +1701,9 @@ pub mod relocation {
     }
 
 fn source_path(identity: &str) -> String {
+        if identity == "crate" { return identity.to_string(); }
         let identity = semantic::source_path(identity);
-        if identity == "crate" || identity == "std" || identity.starts_with("std::") { identity.to_string() }
+        if identity == "std" || identity.starts_with("std::") || identity.starts_with("crate::") { identity.to_string() }
         else { format!("crate::{identity}") }
     }
 
@@ -1787,7 +1788,7 @@ fn move_item(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], target: 
         }
         if target.kind == "module" { inline_module(catalog, inputs, target)?; }
         let unit = parse_unit(catalog, target, inputs)?; move_context(&unit)?;
-        let path = if parent == "crate" { target.name.clone() } else { format!("{}::{}", semantic::source_path(parent), target.name) };
+        let path = if parent == "crate" { semantic::declaration_path(&target.name) } else { format!("{}::{}", semantic::source_path(parent), target.name) };
         let namespace = if target.kind == "module" { crate::resolve::Namespace::Type } else { crate::resolve::Namespace::Value };
         let new_identity = semantic::source_identity(namespace, &path);
         let mut selected = BTreeSet::new(); selected.insert(target.identity.clone());
@@ -1986,7 +1987,7 @@ fn nominal_head(catalog: &semantic::Catalog, name: &str) -> Result<Option<String
         let mut index = parsed.functions[0usize].params[0usize].ty;
         while let a::Type::Ref { inner, .. } = parsed.types[index].kind { index = inner; }
         let a::Type::Path(path) = &parsed.types[index].kind else { return Ok(None); };
-        let head = if path.name.starts_with("crate::") { path.name[7usize..].to_string() } else { path.name.clone() };
+        let head = semantic::canonical_source_path(&path.name).to_string();
         let mut substituted = false;
         if let Some(current_environment) = environment {
             for (index, parameter) in frames[current_environment].0.iter().enumerate() {

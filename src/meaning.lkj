@@ -221,7 +221,7 @@ pub(crate) mod verified {
         let layouts = native::semantic::layouts(checked).map_err(|problem| -> String { problem.message })?;
         let mut names = Vec::new();
         for index in 0usize..checked.program().types.len() {
-            names.push(semantic::ir_type_name(checked.program(), index));
+            names.push(semantic::ir_identity_type_name(checked.program(), index));
         }
         Ok(fingerprints(checked.program(), &names, &layouts, true))
     }
@@ -330,7 +330,7 @@ pub(crate) mod verified {
         let program = checked.program();
         let layouts = native::semantic::layouts(checked).map_err(|problem| -> String { problem.message })?;
         let mut names = Vec::new();
-        for index in 0usize..program.types.len() { names.push(semantic::ir_type_name(program, index)); }
+        for index in 0usize..program.types.len() { names.push(semantic::ir_identity_type_name(program, index)); }
         let shapes = fingerprints(program, &names, &layouts, false);
         let identities = fingerprints(program, &names, &layouts, true);
         let mut physical = BTreeMap::new();
@@ -347,7 +347,7 @@ pub(crate) mod verified {
     fn destructors(checked: &ir::CheckedProgram, catalog: &semantic::Catalog) -> BTreeMap<String, String> {
         let mut values = BTreeMap::new();
         for (ty, function) in &checked.program().destructors {
-            values.insert(format!("ir:type:{}", semantic::ir_type_name(checked.program(), *ty)), catalog.instance_ids[*function].clone());
+            values.insert(format!("ir:type:{}", semantic::ir_identity_type_name(checked.program(), *ty)), catalog.instance_ids[*function].clone());
         }
         values
     }

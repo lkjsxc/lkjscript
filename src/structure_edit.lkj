@@ -391,7 +391,7 @@ fn projection(catalog: &semantic::Catalog, operation: &Operation) -> Result<Opti
         }
     }
     let name = external_module_name(&operation.identity, &operation.source)?;
-    let qualified = if operation.identity == "crate" { name }
+    let qualified = if operation.identity == "crate" { semantic::declaration_path(&name) }
         else { format!("{}::{name}", semantic::source_path(&operation.identity)) };
     let identity = semantic::source_identity(crate::resolve::Namespace::Type, &qualified);
     if catalog.by_identity.contains_key(&identity) {
