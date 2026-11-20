@@ -102,9 +102,24 @@ grep -q E_PROFILE "$profile_test/error"
     --grant argv --grant files=. --grant output --grant error --grant status \
     -o "$profile_test/copy-data"
 profile_fixture() (
-    cd "$profile_test"
+    cd "$profile_test" || exit 1
     ./copy-data "$@"
 )
+# The shell checks these refusals independently of the native helper.
+profile_fixture_refuse() {
+    fixture_case=$1
+    fixture_reason=$2
+    shift 2
+    fixture_status=0
+    profile_fixture "$@" > "$profile_test/$fixture_case.out" 2> "$profile_test/$fixture_case.err" || fixture_status=$?
+    if [ "$fixture_status" -ne 255 ] || [ -s "$profile_test/$fixture_case.out" ] ||
+        ! printf '%s\n' "$fixture_reason" | cmp -s - "$profile_test/$fixture_case.err"; then
+        printf 'profiler helper %s returned %s, expected 255 with empty stdout and stderr "%s"\n' \
+            "$fixture_case" "$fixture_status" "$fixture_reason" >&2
+        cat "$profile_test/$fixture_case.err" >&2
+        exit 1
+    fi
+}
 profile_digest() {
     sha256sum "$1" | cut -d ' ' -f 1
 }
@@ -151,6 +166,8 @@ mkdir "$profile_test/copy-store"
     --store-key "$profile_key_directory/key" --stats -o "$profile_test/copy" \
     > "$profile_test/copy-cold.out" 2> "$profile_test/copy-cold.log"
 profile_fixture selection original-inline.lkjir copy.lkjir copy-cold.log
+profile_fixture_refuse helper-selection 'original call missing' \
+    selection copy.lkjir original-inline.lkjir copy-cold.log
 cp "$profile_test/copy" "$profile_test/copy-cold"
 cp "$profile_test/copy.lkjir" "$profile_test/copy-cold.lkjir"
 rm "$profile_test/copy.lkjir"
@@ -161,6 +178,8 @@ rm "$profile_test/copy.lkjir"
 cmp "$profile_test/copy-cold" "$profile_test/copy"
 cmp "$profile_test/copy-cold.lkjir" "$profile_test/copy.lkjir"
 profile_fixture warm copy-cold.log copy-warm.log copy.lkjir
+profile_fixture_refuse helper-warm 'cold fragments were not isolated' \
+    warm copy-warm.log copy-cold.log copy.lkjir
 "$profile_test/copy" > "$profile_test/copy.out"
 cmp "$profile_test/copy-plain.out" "$profile_test/copy.out"
 set -- "$profile_test"/copy.samples.*
@@ -168,6 +187,8 @@ test "$#" -eq 1
 copy_samples=$1
 copy_profile_id=$(profile_digest "$copy_samples")
 copy_ir_id=$(profile_digest "$profile_test/copy.lkjir")
+profile_fixture_refuse helper-roles 'missing retained role copy_role_byte incoming' \
+    roles "${copy_samples##*/}" copy.lkjir "$copy_ir_id"
 copy_count=$(profile_fixture binding "${copy_samples##*/}" "$copy_ir_id")
 copy_report_page() {
     profile_fixture page "$1" "${copy_samples##*/}" "$copy_profile_id" "$copy_ir_id" "$2" "$3" "$4" "$5"
