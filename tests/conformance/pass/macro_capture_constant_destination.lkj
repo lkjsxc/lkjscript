@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {}
+const N: i64 = 1;
+macro_rules! make { ($e:expr) => { mod generated { const N: i64 = 42; pub fn f() -> i64 { $e } } }; }
+make!(N);
+pub fn probe() -> i64 { generated::f() }

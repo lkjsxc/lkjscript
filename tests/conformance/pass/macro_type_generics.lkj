@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+macro_rules! make { ($t:ty) => { fn f<T: Default>() -> $t { T::default() } }; }
+make!(T);
+macro_rules! empty { ($t:ty) => {{ let value: Vec<$t> = Vec::new(); value.len() }}; }
+fn g<T>() -> usize { empty!(T) }
+pub fn probe() -> i64 { assert_eq!(f::<i64>(), 0); assert_eq!(g::<u8>(), 0usize); 42 }

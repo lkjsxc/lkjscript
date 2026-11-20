@@ -67,9 +67,15 @@ edit() {
 refuse() {
     local expected=$1
     cp "$fixture/project/main.lkj" "$fixture/unchanged"
+    if [[ -f "$fixture/project/.lkjscript-edit.generation" ]]; then
+        cp "$fixture/project/.lkjscript-edit.generation" "$fixture/unchanged-generation"
+    fi
     if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/refused" 2> "$fixture/refused-error"; then fail 'unsafe projection edit accepted'; fi
     grep -Fq "$expected" "$fixture/refused-error" || { cat "$fixture/refused-error" >&2; fail "missing $expected"; }
     cmp "$fixture/unchanged" "$fixture/project/main.lkj" || fail 'refusal wrote source'
+    if [[ -f "$fixture/unchanged-generation" ]]; then
+        cmp "$fixture/unchanged-generation" "$fixture/project/.lkjscript-edit.generation" || fail 'refusal changed generation'
+    fi
     [[ ! -e $fixture/project/.lkjscript-edit.pending ]] || fail 'refusal left pending state'
     { cat "$fixture/request"; cat "$fixture/refused-error"; } >> "$fixture/refusals"
 }
@@ -97,6 +103,11 @@ import_values!();
 mod imported { pub fn amount() -> i64 { 0i64 } }
 mod borrowed { pub fn bonus() -> i64 { 0i64 } }
 struct Input { code: i64 }
+type CapturedType = i64;
+macro_rules! typed_alias { ($t:ty) => { fn through_type(value: $t) -> $t { value } }; }
+macro_rules! typed_local { ($t:ty, $e:expr) => {{ let value: $t = $e; value as i64 }}; }
+typed_alias!(CapturedType);
+fn typed_value() -> i64 { typed_local!(i64, 0i64) }
 fn helper(value: i64) -> i64 { value + 1i64 }
 fn field_value(input: &Input) -> i64 { read_code!(input) }
 fn value() -> i64 { generated() + relay!(0i64) }
@@ -105,6 +116,7 @@ fn main() -> i64 {
     assert_eq!(format!("{:?}", Packet::default()), "Packet { code: 0 }");
     assert_eq!(label!().len(), 7usize);
     value() + spare() + field_value(&Input { code: 0i64 }) + imported_amount() + bonus()
+        + through_type(0i64) + typed_value()
 }
 SOURCE
 printf 'payload' > "$fixture/project/payload.txt"
@@ -118,6 +130,8 @@ query meta generated > "$fixture/generated-meta"
 grep -Fq 'expansion=macro-rules source-projection=false span=invocation-anchor' "$fixture/generated-meta" || fail 'macro projection origin'
 initial_epoch=$(epoch "$fixture/generated-meta")
 [[ ${#initial_epoch} == 64 ]] || fail 'macro expansion epoch missing'
+query uses CapturedType > "$fixture/type-uses"
+grep -Fq 'origin=generated expansion=macro-rules' "$fixture/type-uses" || fail 'captured type dependency missing'
 query uses helper > "$fixture/helper-uses"
 grep -Fq 'origin=generated expansion=macro-rules' "$fixture/helper-uses" || fail 'generated helper dependency missing'
 query uses 'Input::field:code' > "$fixture/field-uses"
@@ -194,7 +208,7 @@ cat > "$fixture/request" <<'REQUEST'
 {"version":1,"operations":[{"op":"rename","id":"Input::field:code","name":"renamed"}]}
 REQUEST
 refuse E_EDIT_GENERATED_REFERENCE
-for identity in imported 'imported::amount' borrowed; do
+for identity in imported 'imported::amount' borrowed CapturedType; do
     printf '{"version":1,"operations":[{"op":"rename","id":"%s","name":"changed_import"}]}\n' "$identity" > "$fixture/request"
     refuse E_EDIT_GENERATED_REFERENCE
 done
@@ -219,6 +233,39 @@ value 45
 query meta generated > "$fixture/changed-input-meta"
 [[ $(epoch "$fixture/changed-input-meta") != "$template_epoch" ]] || fail 'include content did not affect macro epoch'
 
+# An authored body can change the type fragment; a bad replacement leaves both
+# the source and transaction generation unchanged.
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-body","id":"typed_value","source":"{ typed_local!(u8, 1u8) }"}]}
+REQUEST
+edit
+value 46
+publish
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-body","id":"typed_value","source":"{ typed_local!(bool, 1u8) }"}]}
+REQUEST
+refuse E_EDIT_CHECK
+value 46
+
+# Type captures grant no return-origin authority to the producer.
+cat > "$fixture/project/view.lkj" <<'SOURCE'
+macro_rules! borrowed { ($t:ty) => { fn borrowed<'a>(value: $t) -> $t { value } }; }
+borrowed!(&'a i64);
+fn main() -> i64 { let value = 42i64; *borrowed(&value) }
+SOURCE
+"$compiler" ir view.lkj --source-dir "$fixture/project" --library-dir "$library" --no-store -o "$fixture/view.lkjir"
+"$compiler" check "$fixture/view.lkjir" --no-store
+awk '
+    $1 == "fn" { selected = index($0, "borrowed") != 0 }
+    selected && $1 == "return-leaf" { changed += sub(/ (exact|bound) .*/, " static") }
+    { print }
+    END { if (changed != 1) exit 1 }
+' "$fixture/view.lkjir" > "$fixture/forged-view.lkjir" || fail 'captured view origin mutation target'
+if "$compiler" check "$fixture/forged-view.lkjir" --no-store > "$fixture/forged-out" 2> "$fixture/forged-error"; then
+    fail 'captured type forged a static return origin'
+fi
+grep -Eq 'E_BORROW|E_RETURN' "$fixture/forged-error" || fail 'independent return-origin refusal missing'
+
 phase contract-build
 for source in ast diagnostic names syntax resolve source; do cp "src/$source.lkj" "$fixture/contracts/$source.lkj"; done
 cp -R src/ast src/syntax src/resolve "$fixture/contracts/"
@@ -230,4 +277,4 @@ phase contracts-native
 "$fixture/contracts-image" >> "$fixture/contracts-out" 2>> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract execution'; }
 phase contracts-interpreter
 "$compiler" run main.lkj --source-dir "$fixture/contracts" --library-dir "$library" --no-store --engine interpreter >> "$fixture/contracts-out" 2>> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'interpreted origin contracts'; }
-printf 'ok declarative macro origins: authenticated source/topology and include replay; generated item, field, import, call and strict derive queries; checked authored rename/body edits; projection/reference refusals; template/include epochs; 26 malformed origins; both engines\n'
+printf 'ok declarative macro origins: authenticated source/topology and include replay; generated item, field, import, call and strict derive queries; checked authored rename/body edits; projection/reference refusals; template/include epochs; 37 malformed origins; typed capture queries/edits, structural block ownership and independent return-origin refusal; both engines\n'

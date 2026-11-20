@@ -1,0 +1,5 @@
+// expect: reject E_MACRO_EXPANSION
+// witness: {"rustAccept":false}
+macro_rules! choose { ($t:ty) => { fn f<T: ($t)>(value: T) -> T { value } }; }
+choose!(Copy);
+pub fn probe() -> i64 { f(42) }

@@ -1,0 +1,5 @@
+// expect: reject E_MACRO_MATCH
+// witness: {"rustAccept":false}
+macro_rules! inner { (i64) => { 42i64 }; }
+macro_rules! outer { ($t:ty) => { inner!($t) }; }
+pub fn probe() -> i64 { outer!(i64) }

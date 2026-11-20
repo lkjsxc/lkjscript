@@ -19,7 +19,8 @@ impl Resolver<'_> {
             Some(Binding { declaration, target: path.name.clone(), scope: entry.scope,
                 public: entry.public, glob: false, ambiguous: false, semantic_alias: false })
         } else {
-            self.path(node.scope, &path.name, Namespace::Type, node.span, true)?
+            let scope = node.block.map(|id| self.program.scopes.len() + id).unwrap_or(node.scope);
+            self.path(scope, &path.name, Namespace::Type, node.span, true)?
                 .and_then(|resolved| resolved.binding)
         };
         let Some(binding) = binding else { return Ok(None); };
@@ -42,7 +43,7 @@ impl Resolver<'_> {
                     "associated constants require a direct nongeneric struct or enum owner"));
             };
             let owner_entry = &self.declarations[owner.declaration];
-            if self.program.scopes[scope].crate_root != self.program.scopes[owner_entry.scope].crate_root {
+            if self.program.scopes[module_scope(self.program, scope)].crate_root != self.program.scopes[owner_entry.scope].crate_root {
                 return Err(Diagnostic::new(constant.span, "E_TYPE",
                     "an inherent associated constant requires a type defined in this crate"));
             }
@@ -84,7 +85,7 @@ impl Resolver<'_> {
             }
         }
         for import in &self.program.uses {
-            let scope = self.scope(&import.module);
+            let scope = self.import_scopes.import_owner(import, self.scope(&import.module));
             let Ok(Some(resolved)) = self.path(scope, &import.path, Namespace::Value, import.span, false) else { continue; };
             if resolved.binding.is_some_and(|binding|
                 matches!(self.declarations[binding.declaration].item, Item::Constant(index)

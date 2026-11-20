@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+macro_rules! borrowed { ($t:ty) => { fn selected<'a>(value: $t) -> $t { value } }; }
+borrowed!(&'a i64);
+pub fn probe() -> i64 { let value = 42i64; *selected(&value) }

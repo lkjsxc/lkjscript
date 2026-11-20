@@ -1,0 +1,6 @@
+// expect: reject E_NAME
+// witness: {"rustAccept":false}
+const N: i64 = 1;
+macro_rules! make { ($e:expr) => { mod generated { pub fn f() -> i64 { $e } } }; }
+make!(N);
+pub fn probe() -> i64 { generated::f() }

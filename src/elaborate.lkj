@@ -2560,11 +2560,14 @@ impl Builder<'_, '_> {
     ) -> Result<(usize, usize)> {
         let previous = self.active_span;
         let previous_expression = self.active_expression;
+        let previous_scope = self.scope;
+        self.scope = self.compiler.source.exprs[id].scope;
         self.active_span = self.compiler.source.exprs[id].span;
         self.active_expression = Some(id);
         let result = self.expr_with_inference_inner(id, expected, inferred);
         self.active_span = previous;
         self.active_expression = previous_expression;
+        self.scope = previous_scope;
         result
     }
     fn expr_with_inference_inner(
@@ -3950,7 +3953,12 @@ impl Builder<'_, '_> {
         {
             return Ok(value);
         }
-        if let Some(a::Item::Struct(index)) = self.compiler.declaration_item(&path) {
+        let constructor = if path.declaration.is_none() && path.name == "Self" {
+            let ty = self.sub.get(&"Self".to_string()).copied()
+                .ok_or_else(|| err(span, "E_TYPE", "Self has no concrete constructor type"))?;
+            Some(self.compiler.source.declarations[self.nominal_declaration(ty, span)?].item)
+        } else { self.compiler.declaration_item(&path) };
+        if let Some(a::Item::Struct(index)) = constructor {
             let s = self.compiler.source.structs[index].clone();
             if !s.tuple {
                 return Err(err(

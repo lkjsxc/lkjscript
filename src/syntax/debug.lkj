@@ -44,7 +44,7 @@ impl Parser {
             receiver, name: "finish".to_string(), types: Vec::new(), args: Vec::new(),
         }, span);
         let index = self.program.blocks.len();
-        self.program.blocks.push(Block { statements, tail: Some(tail), span });
+        self.program.blocks.push(Block { scope: self.scope, parent: self.block, statements, tail: Some(tail), span });
         self.add_expr(Expr::Block(index), span)
     }
     pub(super) fn derive_debug(&mut self, item: Item) -> Result<(), Diagnostic> {
@@ -133,7 +133,7 @@ impl Parser {
             _ => return Ok(()),
         };
         let body = self.program.blocks.len();
-        self.program.blocks.push(Block { statements: Vec::new(), tail: Some(value), span });
+        self.program.blocks.push(Block { scope: self.scope, parent: self.block, statements: Vec::new(), tail: Some(value), span });
         let method = self.program.functions.len();
         self.program.functions.push(Function {
             const_qualified: false, name: "fmt".to_string(), module: module.clone(),

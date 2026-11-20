@@ -1,0 +1,73 @@
+//! Follow expression edges without inferring ownership from projected source spans.
+use super::{BlockId, Expr, ExprId, Program, Stmt};
+use std::collections::BTreeSet;
+
+pub(crate) fn expressions(program: &Program, root: ExprId) -> Vec<ExprId> {
+    let mut result = Vec::new();
+    let mut seen = BTreeSet::new();
+    let mut pending = vec![root];
+    let mut blocks: Vec<BlockId> = Vec::new();
+    loop {
+        if let Some(id) = pending.pop() {
+            if !seen.insert(id) { continue; }
+            result.push(id);
+            match &program.exprs[id].kind {
+                Expr::Tuple(values) | Expr::Array(values) | Expr::Macro { args: values, .. } => {
+                    pending.extend_from_slice(values);
+                }
+                Expr::Repeat { value, count } => { pending.push(*value); pending.push(*count); }
+                Expr::Unary { value, .. } | Expr::Borrow { value, .. } | Expr::Cast { value, .. }
+                | Expr::Field { value, .. } | Expr::Try(value) | Expr::Diverge(value) => pending.push(*value),
+                Expr::Binary { left, right, .. } => { pending.push(*left); pending.push(*right); }
+                Expr::Assign { place, value, .. } => { pending.push(*place); pending.push(*value); }
+                Expr::Index { value, index } => { pending.push(*value); pending.push(*index); }
+                Expr::Call { callee, args } => { pending.push(*callee); pending.extend_from_slice(args); }
+                Expr::Method { receiver, args, .. } => { pending.push(*receiver); pending.extend_from_slice(args); }
+                Expr::Struct { fields, base, .. } => {
+                    for (_, value) in fields { pending.push(*value); }
+                    if let Some(value) = base { pending.push(*value); }
+                }
+                Expr::Block(body) | Expr::Loop { body } => blocks.push(*body),
+                Expr::If { condition, then_block, otherwise } => {
+                    pending.push(*condition); blocks.push(*then_block);
+                    if let Some(value) = otherwise { pending.push(*value); }
+                }
+                Expr::IfLet { value, then_block, otherwise, .. } => {
+                    pending.push(*value); blocks.push(*then_block);
+                    if let Some(value) = otherwise { pending.push(*value); }
+                }
+                Expr::While { condition, body } => { pending.push(*condition); blocks.push(*body); }
+                Expr::WhileLet { value, body, .. } => { pending.push(*value); blocks.push(*body); }
+                Expr::For { iterator, body, .. } => { pending.push(*iterator); blocks.push(*body); }
+                Expr::Match { value, arms } => {
+                    pending.push(*value);
+                    for arm in arms {
+                        pending.push(arm.value);
+                        if let Some(guard) = arm.guard { pending.push(guard); }
+                    }
+                }
+                Expr::Closure { body, .. } => pending.push(*body),
+                Expr::Return(value) | Expr::Break(value) => {
+                    if let Some(value) = value { pending.push(*value); }
+                }
+                Expr::Range { start, end, .. } => {
+                    if let Some(value) = start { pending.push(*value); }
+                    if let Some(value) = end { pending.push(*value); }
+                }
+                Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_)
+                | Expr::Char(_) | Expr::Bytes(_) | Expr::Path(_) | Expr::Continue
+                | Expr::MacroInvocation(_) => {}
+            }
+        } else if let Some(id) = blocks.pop() {
+            let block = &program.blocks[id];
+            for statement in &block.statements {
+                match statement {
+                    Stmt::Let { value: Some(value), .. } | Stmt::Expr { value, .. } => pending.push(*value),
+                    _ => {}
+                }
+            }
+            if let Some(value) = block.tail { pending.push(value); }
+        } else { break; }
+    }
+    result
+}

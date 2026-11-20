@@ -69,7 +69,7 @@ fn range_values(program: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
         let helper = library_function_path(resolver, "range", name, node.span)?;
         let callee = program.exprs.len();
         program.exprs.push(ExprNode {
-            kind: Expr::Path(helper), scope: node.scope, span: node.span,
+            kind: Expr::Path(helper), scope: node.scope, block: node.block, span: node.span,
         });
         program.exprs[id].kind = Expr::Call { callee, args };
     }
@@ -86,6 +86,7 @@ impl Expansion<'_> {
         self.program.exprs.push(ExprNode {
             kind,
             scope: self.scope,
+            block: None,
             span: self.span,
         });
         id
@@ -95,6 +96,7 @@ impl Expansion<'_> {
         self.program.patterns.push(PatternNode {
             kind,
             scope: self.scope,
+            block: None,
             span: self.span,
         });
         id
@@ -118,6 +120,7 @@ impl Expansion<'_> {
     fn block(&mut self, statements: Vec<Stmt>) -> BlockId {
         let id = self.program.blocks.len();
         self.program.blocks.push(Block {
+            scope: module_scope(self.program, self.scope), parent: None,
             statements,
             tail: None,
             span: self.span,
@@ -137,6 +140,7 @@ impl Expansion<'_> {
         self.program.types.push(TypeNode {
             kind: Type::Tuple(Vec::new()),
             scope: self.scope,
+            block: None,
             span: body_span,
         });
         let pattern_span = self.program.patterns[pattern].span;

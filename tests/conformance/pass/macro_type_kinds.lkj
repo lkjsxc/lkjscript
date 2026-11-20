@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+macro_rules! e { ($x:expr) => { 1i64 }; ($x:ty) => { 2i64 }; }
+macro_rules! i { ($x:ident) => { 1i64 }; ($x:ty) => { 2i64 }; }
+macro_rules! t { ($x:ty) => { 1i64 }; ($x:expr) => { 2i64 }; }
+macro_rules! outer { ($t:ty) => { e!($t) + i!($t) }; }
+macro_rules! value { ($e:expr) => { t!($e) }; }
+pub fn probe() -> i64 { assert_eq!(outer!(i64), 4); assert_eq!(value!(i64), 2); 42 }

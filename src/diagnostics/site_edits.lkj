@@ -21,7 +21,7 @@ fn exclusions(report: &mut SourceReport) {
             if !primary(problem, node.span) { continue; }
             let Expr::Path(path) = &node.kind else { continue; };
             if path.name.contains("::") || !path.args.is_empty() { continue; }
-            let name = qualified(&report.program.scopes[node.scope].path, &path.name);
+            let name = qualified(&report.program.scopes[crate::resolve::module_scope(&report.program, node.scope)].path, &path.name);
             for region in &excluded {
                 if region.reason == name {
                     problem.message = format!("{}; declaration {} at {}:{} is excluded by #[cfg(test)], including under lkjscript test; help: make the helper unconditional and keep the test entry separate (docs/language.md, Source graph and names)",

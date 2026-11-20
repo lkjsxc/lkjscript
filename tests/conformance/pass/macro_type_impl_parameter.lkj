@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {}
+use std::fmt::Display;
+macro_rules! show { ($t:ty) => { fn display(value: $t) -> String { format!("{}", value) } }; }
+show!(impl Display);
+pub fn probe() -> i64 { assert_eq!(display(42i64), "42"); 42 }

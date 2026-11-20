@@ -1,0 +1,15 @@
+// expect: value 42
+// witness: {}
+macro_rules! identity { ($name:ident, $t:ty) => { fn $name(value: $t) -> $t { value } }; }
+identity!(scalar, i64);
+identity!(pair, (i64, bool));
+identity!(array, [i64; 2]);
+identity!(nested, Vec<Option<(i64, bool)>>);
+pub fn probe() -> i64 {
+    assert_eq!(scalar(42i64), 42i64);
+    assert_eq!(pair((42i64, true)), (42i64, true));
+    assert_eq!(array([40i64, 2i64]), [40i64, 2i64]);
+    let value = nested(vec![Some((42i64, true))]);
+    assert_eq!(value[0usize], Some((42i64, true)));
+    42
+}

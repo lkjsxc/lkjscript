@@ -1068,24 +1068,39 @@ Normal destructor order matches the supported Rust intersection; outputs/statuse
 ### Declarative source macros
 
 Module-scoped `macro_rules!` definitions produce ordinary source expressions or
-items. Matchers accept literal token trees and `expr`, `ident`, and `tt`
+items. Matchers accept literal token trees and `expr`, `ty`, `ident`, and `tt`
 fragments. `*`, `+`, and `?` repetitions preserve nesting and require matching
 capture lengths when several repeated names are emitted together. Separators,
 optional trailing commas, recursive item producers, and nested macro calls are
-supported. Expression captures remain opaque when forwarded, so substitution
-preserves precedence and a later literal-token arm cannot inspect an expression
-fragment. Literal forms follow the ordinary source lexer; unsupported literal
+supported. Expression and type captures remain distinct opaque fragments when
+forwarded. Substitution preserves precedence; later literal-token or identifier
+arms cannot inspect them. A `tt` capture forwards either as one opaque tree. Literal forms follow the ordinary source lexer; unsupported literal
 prefixes fail before matching. Literal matcher tokens retain their exact spelling, including raw
 string delimiters and byte escapes. Unused expression captures do not expand
-nested macros or read includes; each emitted occurrence gets independent
-ordinary type inference and evaluation. Empty nested repetitions retain their
-outer iteration counts.
+nested macros or read includes. Unused type captures do not resolve their names.
+Each emitted occurrence gets fresh syntax and ordinary checking at its use site,
+including positional `impl Trait` obligations and constructor inference.
+Empty nested repetitions retain their outer iteration counts.
 
-Captured identifiers and expressions retain their caller context. Introduced
-local bindings have a separate syntax context for each expansion; repeating a
-binding in one expansion preserves ordinary lexical shadowing. Unqualified
-item names use the invocation namespace, while `$crate` names the defining
-source crate. Module `#[macro_use]` and `#[macro_export]` expose declarative
+A fragment that cannot begin at the next token lets matching try another arm.
+Once its parse starts, a parse error is fatal. A type fragment must end at the
+matcher boundary or precede `{`, `[`, `,`, `=>`, `:`, `=`, `>`, `>>`,
+`;`, `|`, `as`, `where`, or a repetition with allowed first tokens.
+Separated repetitions use the same follow set. Nested generic closers can split
+`>>`, `>=` and `>>=`: the type owns its consumed prefix, the matcher retains
+the suffix, and failed arms or repetition iterations restore the exact input.
+Splitting preserves source origins and never joins separate tokens.
+
+Captured identifiers, expressions and types retain their source syntax contexts.
+Ordinary names inside expression and type captures resolve in the destination
+module and `Self` environment. Nested macro calls inside captures retain their
+original textual macro scope. Introduced local bindings have a separate syntax
+context for each expansion; repeating a binding preserves ordinary lexical
+shadowing. Block imports follow explicit block ownership and parent links, so
+generated siblings remain separate even when their source anchors coincide.
+Constant-initializer checks likewise follow expression ownership.
+Unqualified template item names use the destination namespace, while `$crate`
+names the defining source crate. Module `#[macro_use]` and `#[macro_export]` expose declarative
 macros through source-module scope; exported qualified calls and
 `macro_export(local_inner_macros)` retain the defining crate. All resulting
 ownership, generic, capability and effect obligations use the normal frontend
@@ -1096,8 +1111,12 @@ The current fragment set is deliberate. Other fragment kinds, procedural
 macros, block-local or generated macro definitions, selective `macro_use`
 imports, attributes on invocations, and expansion that discovers external
 source modules have located refusals. Built-in macro names remain reserved.
-Type, pattern, and multi-statement invocation positions are not admitted by this
-slice. Repetition heads must determine continuation without overlapping the
+Macro invocations in type, pattern, and multi-statement positions are not
+admitted by this slice. Captured types work in ordinary type positions,
+qualified receivers and generic arguments; they cannot become expression paths,
+struct literals or trait bounds. `impl $t for Target` with a captured trait type
+has a located unsupported diagnostic. Existing ordinary type and constant
+expression boundaries still apply. Repetition heads must determine continuation without overlapping the
 following matcher. Fragment ambiguity has a located diagnostic; pure literal
 overlaps that Rust can disambiguate with its matcher automaton remain explicitly
 unsupported. A repeated active invocation has a located recursion diagnostic;
@@ -1114,5 +1133,11 @@ enter name resolution, checked lowering or an accepted semantic index.
 The frontend delta-checkpoint format does not yet encode expansion dependency
 and hygiene identities. Programs with actual macro expansions therefore receive
 fresh frontend admission. Authenticated checked artifacts and source-unit
-linkage retain their normal checks. A macro definition or capture edit must
-reexpand the affected source before its checked result can be published.
+linkage retain their normal checks. Exact source replay binds destination and
+textual scopes, structural block owners, split-token origins and every fragment
+materialization. Captured types belong to their expansion's generated syntax.
+Queries expose those references; renaming a declaration with generated capture
+references refuses rather than publishing an incomplete rewrite. An authored
+body may replace its type arguments through the checked edit path.
+A macro definition or capture edit must reexpand the affected source before
+its checked result can be published.

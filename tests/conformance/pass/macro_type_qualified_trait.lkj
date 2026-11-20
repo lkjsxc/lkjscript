@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+trait Value { fn value() -> i64; }
+struct Item;
+impl Value for Item { fn value() -> i64 { 42 } }
+macro_rules! choose { ($t:ty) => { <Item as $t>::value() }; }
+pub fn probe() -> i64 { choose!(Value) }

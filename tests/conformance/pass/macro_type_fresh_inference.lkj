@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+struct Wrapped<T>(T);
+macro_rules! inferred { ($t:ty) => {{ let a = Wrapped::<$t>(40i64); let b = Wrapped::<$t>(true); if b.0 { a.0 + 2 } else { a.0 } }}; }
+pub fn probe() -> i64 { inferred!(_) }

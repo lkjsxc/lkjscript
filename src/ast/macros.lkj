@@ -1,5 +1,5 @@
 //! Declarative expansion is producer data; none of these identities enter checked IR.
-use super::{ExprId, FileId, Item, ModuleId, Span};
+use super::{BlockId, ExprId, FileId, Item, ModuleId, Span, TypeId};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct MacroToken {
@@ -12,8 +12,8 @@ pub struct MacroToken {
     /// The exact spelling that supplied this token, before expansion projection.
     pub origin: Span,
     pub context: usize,
-    /// Index into Program.macro_captures; expressions stay opaque and materialize lazily.
-    pub expression: Option<usize>,
+    /// Index into Program.macro_captures; parsed fragments stay opaque and materialize lazily.
+    pub capture: Option<usize>,
 }
 #[derive(Clone, PartialEq, Eq)]
 pub struct MacroDefinition {
@@ -28,7 +28,10 @@ pub struct MacroDefinition {
 #[derive(Clone, PartialEq, Eq)]
 pub struct MacroInvocation {
     pub name: String,
+    /// Textual scope for nested macro lookup, independent of ordinary destination names.
     pub scope: ModuleId,
+    pub destination: ModuleId,
+    pub block: Option<BlockId>,
     pub span: Span,
     pub name_span: Span,
     pub tokens: Vec<MacroToken>,
@@ -68,13 +71,14 @@ pub fn source_name(name: &str) -> &str {
 #[derive(Clone, PartialEq, Eq)]
 pub struct MacroCapture {
     pub materializations: Vec<ExprId>,
+    pub type_materializations: Vec<TypeId>,
+    pub ty: Option<TypeId>,
     pub name: String,
     pub path: Vec<usize>,
     pub invocation: usize,
     pub tokens: Vec<MacroToken>,
     pub scope: ModuleId,
     pub span: Span,
-    pub self_context: Option<usize>,
     pub parent: Option<usize>,
     pub expression: Option<ExprId>,
 }

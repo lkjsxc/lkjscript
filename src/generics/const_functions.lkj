@@ -113,10 +113,8 @@ pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
             associated_initializer(source, &names, index, &mut edges)?;
             continue;
         }
-        let span = source.exprs[constant.value].span;
-        for expression in &source.exprs {
-            if expression.span.file != span.file || expression.span.start < span.start
-                || expression.span.end > span.end { continue; }
+        for id in crate::ast::walk::expressions(source, constant.value) {
+            let expression = &source.exprs[id];
             let call = match &expression.kind {
                 Expr::Call { callee, .. } => {
                     match &source.exprs[*callee].kind {

@@ -1,0 +1,4 @@
+// expect: reject E_MACRO_AMBIGUITY
+// witness: {"rustAccept":false}
+macro_rules! choose { ($($t:ty),* , $last:ident) => { 42i64 }; }
+pub fn probe() -> i64 { choose!(u8, x) }

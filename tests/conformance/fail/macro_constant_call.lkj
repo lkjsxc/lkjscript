@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+const fn value() -> i64 { 42 }
+macro_rules! constant { ($e:expr) => { const VALUE: i64 = $e; }; }
+constant!(value());
+pub fn probe() -> i64 { VALUE }

@@ -1,0 +1,4 @@
+// expect: reject E_MACRO_MATCH
+// witness: {"rustAccept":false}
+macro_rules! choose { (<<$t:ty>>) => { 42i64 }; }
+pub fn probe() -> i64 { choose!(<<Vec<u8>>>) }

@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+mod types { pub type Number = i64; }
+macro_rules! local { ($t:ty) => {{ use self::types::Number; let value: $t = 42; value }}; }
+pub fn probe() -> i64 { local!(Number) }

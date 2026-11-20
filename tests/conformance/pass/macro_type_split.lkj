@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+macro_rules! equal { ($t:ty = $value:expr) => {{ let result: $t = $value; result }}; }
+macro_rules! greater { ($t:ty > $value:expr) => { $value }; }
+macro_rules! two_greater { ($t:ty > > $value:expr) => { $value }; }
+macro_rules! fallback { ($t:ty) => { 1i64 }; ($value:expr) => { $value }; }
+pub fn probe() -> i64 {
+    assert_eq!(equal!(Option<i64>=Some(42i64)), Some(42i64));
+    assert_eq!(greater!(Option<i64>> 42i64), 42i64);
+    assert_eq!(two_greater!(Option<i64>>> 42i64), 42i64);
+    assert_eq!(fallback!(42i64), 42i64);
+    42
+}

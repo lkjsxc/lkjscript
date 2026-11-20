@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {}
+struct Holder(i64);
+macro_rules! m { ($e:expr) => { impl Holder { fn make() -> Self { $e } } }; }
+m!(Self(42));
+pub fn probe() -> i64 { Holder::make().0 }

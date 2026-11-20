@@ -101,6 +101,7 @@ impl Parser {
         };
         let body = self.program.blocks.len();
         self.program.blocks.push(Block {
+            scope: self.scope, parent: self.block,
             statements: Vec::new(),
             tail: Some(value),
             span,

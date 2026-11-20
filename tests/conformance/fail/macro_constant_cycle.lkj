@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+macro_rules! cycle { ($e:expr) => { const FIRST: i64 = $e; const SECOND: i64 = FIRST; }; }
+cycle!(SECOND);
+pub fn probe() -> i64 { FIRST }

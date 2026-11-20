@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+macro_rules! all { ($a:ty, $b:ty; $c:ty => $d:ty = $e:ty | $f:ty as $g:ty where $h:ty : $i:ty { } $j:ty [ ] $k:ty > ) => { 42i64 }; }
+pub fn probe() -> i64 { all!(u8, u8; u8 => u8 = u8 | u8 as u8 where u8 : u8 { } u8 [ ] u8 >) }

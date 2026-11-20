@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+macro_rules! choose { ($t:ty; wrong) => { 0i64 }; ($t:ty; good) => { 42i64 }; }
+macro_rules! ignore { ($t:ty) => { choose!($t; good) }; }
+pub fn probe() -> i64 { ignore!(Vec<UnknownType>) }

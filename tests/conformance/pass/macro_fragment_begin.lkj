@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+macro_rules! expr { ($e:expr) => { 0i64 }; (=) => { 20i64 }; }
+macro_rules! ty { ($t:ty) => { 0i64 }; ($($x:tt)*) => { 22i64 }; }
+pub fn probe() -> i64 { expr!(=) + ty!(=) }

@@ -98,7 +98,13 @@ fn join_parts(parts: &[String]) -> String {
     }
     result
 }
+pub(crate) fn module_scope(program: &Program, scope: ModuleId) -> ModuleId {
+    if scope < program.scopes.len() { scope }
+    else { program.blocks[scope - program.scopes.len()].scope }
+}
 fn within(program: &Program, mut scope: ModuleId, ancestor: ModuleId) -> bool {
+    scope = module_scope(program, scope);
+    let ancestor = module_scope(program, ancestor);
     loop {
         if scope == ancestor {
             return true;
@@ -111,6 +117,7 @@ fn within(program: &Program, mut scope: ModuleId, ancestor: ModuleId) -> bool {
     }
 }
 fn region(program: &Program, scope: ModuleId, visibility: Visibility) -> Option<ModuleId> {
+    let scope = module_scope(program, scope);
     match visibility {
         Visibility::Public => None,
         Visibility::Crate => Some(program.scopes[scope].crate_root),
@@ -469,7 +476,7 @@ impl<'a> Resolver<'a> {
         namespace: Namespace,
         span: Span,
     ) -> Option<usize> {
-        let mut owner = self.import_scopes.at(scope, span);
+        let mut owner = scope;
         loop {
             if self
                 .names
@@ -515,7 +522,7 @@ impl<'a> Resolver<'a> {
             .lookup_owner(scope, parts[0].as_str(), Namespace::Type, span)
             .is_some_and(|owner| owner >= self.program.scopes.len());
         if !local_type && self.generic(span, parts[0].as_str())
-            && (namespace == Namespace::Type || parts.len() > 1usize || self.generic_value(span, parts[0].as_str())) {
+            && (namespace == Namespace::Type || parts[0] == "Self" || parts.len() > 1usize || self.generic_value(span, parts[0].as_str())) {
             return Ok(Some(Resolved::intrinsic(path.to_string())));
         }
         if let Some(limit) = self.primitive_limit(scope, path, &parts, namespace, span)? {
@@ -536,10 +543,10 @@ impl<'a> Resolver<'a> {
             return Ok(Some(Resolved::intrinsic(path.to_string())));
         }
         let mut at = 0;
-        let mut current = scope;
+        let mut current = module_scope(self.program, scope);
         let mut rooted = false;
         if parts[0].as_str() == "crate" {
-            current = self.program.scopes[scope].crate_root;
+            current = self.program.scopes[current].crate_root;
             at = 1;
             rooted = true;
         } else if parts[0].as_str() == "self" {
@@ -565,7 +572,7 @@ impl<'a> Resolver<'a> {
         let mut binding = if rooted {
             self.lookup(current, parts[at].as_str(), first_namespace)
         } else {
-            self.lookup_lexical(current, parts[at].as_str(), first_namespace, span)
+            self.lookup_lexical(scope, parts[at].as_str(), first_namespace, span)
         };
         let standard_root = if parts[at].as_str() == "core" { "$std::core" } else { "$std" };
         if binding.is_none()
@@ -883,11 +890,12 @@ impl<'a> Resolver<'a> {
         entries
     }
     fn module_anchor(&self, scope: ModuleId, path: &str, span: Span) -> Result<Option<ModuleId>> {
+        let module = module_scope(self.program, scope);
         if path == "crate" {
-            return Ok(Some(self.program.scopes[scope].crate_root));
+            return Ok(Some(self.program.scopes[module].crate_root));
         }
         if path == "self" {
-            return Ok(Some(scope));
+            return Ok(Some(module));
         }
         if matches!(path, "std" | "core")
             && self.lookup_lexical(scope, path, Namespace::Type, span).is_none()
@@ -896,7 +904,7 @@ impl<'a> Resolver<'a> {
             return Ok(self.modules.get(&root.to_string()).copied());
         }
         if !path.is_empty() && path.split("::").all(|part| part == "super") {
-            let mut current = scope;
+            let mut current = module;
             for _ in path.split("::") {
                 current = self.program.scopes[current]
                     .parent
@@ -908,7 +916,8 @@ impl<'a> Resolver<'a> {
     }
     fn import_one(&mut self, index: usize) -> Result<(bool, bool)> {
         let import = self.program.uses[index].clone();
-        let scope = *self.modules.get(&import.module).unwrap();
+        let module = *self.modules.get(&import.module).unwrap();
+        let scope = self.import_scopes.import_owner(&import, module);
         let mut changed = false;
         if import.glob {
             let mut target = self.module_anchor(scope, &import.path, import.span)?;
@@ -963,7 +972,7 @@ impl<'a> Resolver<'a> {
                 return Ok((false, false));
             };
             for (name, namespace, binding) in entries {
-                changed |= self.import_binding(&import, scope, &name, namespace, &binding)?;
+                changed |= self.import_binding(&import, module, &name, namespace, &binding)?;
             }
             Ok((changed, true))
         } else {
@@ -979,7 +988,7 @@ impl<'a> Resolver<'a> {
                     .and_then(|resolved| resolved.binding)
                 {
                     found = true;
-                    changed |= self.import_binding(&import, scope, &import.alias, ns, &binding)?;
+                    changed |= self.import_binding(&import, module, &import.alias, ns, &binding)?;
                 }
             }
             if !found
@@ -1042,6 +1051,16 @@ pub fn resolve(source: &Program) -> Result<Program> {
     }
     let resolver = Resolver::new(source)?;
     let mut result = source.clone();
+    let modules = result.scopes.len();
+    for id in 0usize..result.types.len() {
+        if let Some(block) = result.types[id].block { result.types[id].scope = modules + block; }
+    }
+    for id in 0usize..result.exprs.len() {
+        if let Some(block) = result.exprs[id].block { result.exprs[id].scope = modules + block; }
+    }
+    for id in 0usize..result.patterns.len() {
+        if let Some(block) = result.patterns[id].block { result.patterns[id].scope = modules + block; }
+    }
     resolve_nodes(&mut result, &resolver)?;
     result.declarations = resolver.declarations;
     result.function_owners = resolver
@@ -1314,7 +1333,7 @@ impl Resolver<'_> {
         self.library_function("sequence", name, span)
     }
     pub fn trait_in_scope(&self, scope: ModuleId, declaration: DeclarationId, span: Span) -> bool {
-        let mut owner = self.import_scopes.at(scope, span);
+        let mut owner = scope;
         loop {
             if self.anonymous_traits.contains(&(owner, declaration)) {
                 return true;

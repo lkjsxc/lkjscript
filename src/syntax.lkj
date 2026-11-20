@@ -19,6 +19,7 @@ enum TokenKind {
     Lifetime,
     Symbol,
     Expression(usize),
+    Type(usize),
     End,
 }
 #[derive(Clone)]
@@ -519,6 +520,7 @@ pub(crate) fn parse_expression_unexpanded(source: &str) -> Result<(Program, Expr
         tokens, at: 0, program, module: String::new(), scope: 0,
         diagnostics: Vec::new(), blocked: Vec::new(), diagnostic_keys: BTreeSet::new(),
         self_context: None, expansion: None, probing: false, fragment: false,
+        block: None, macro_scope: None,
     };
     parser.add_type(Type::Infer, Span::default());
     parser.add_type(Type::Tuple(Vec::new()), Span::default());
@@ -555,7 +557,7 @@ pub fn semantic_tokens(source: &str) -> Result<Vec<SemanticToken>, Diagnostic> {
             TokenKind::String => 2u8, TokenKind::Char => 3u8,
             TokenKind::Bytes => 4u8, TokenKind::Lifetime => 5u8,
             TokenKind::Symbol => 6u8, TokenKind::End => continue,
-            TokenKind::Expression(_) => unreachable!(),
+            TokenKind::Expression(_) | TokenKind::Type(_) => unreachable!(),
         };
         result.push(SemanticToken { kind, text: token.text, span: token.span });
     }
@@ -629,6 +631,8 @@ pub fn parse_file_report(
         expansion: None,
         probing: false,
         fragment: false,
+        block: None,
+        macro_scope: None,
     };
     if parser.program.types.is_empty() {
         parser.add_type(Type::Infer, Span::default());
@@ -782,6 +786,8 @@ struct Parser {
     program: Program,
     module: String,
     scope: ModuleId,
+    block: Option<BlockId>,
+    macro_scope: Option<ModuleId>,
     diagnostics: Vec<Diagnostic>,
     blocked: Vec<BlockedRegion>,
     diagnostic_keys: BTreeSet<(FileId, usize, usize, String, String)>,
@@ -968,6 +974,7 @@ impl Parser {
             kind,
             span,
             scope: self.scope,
+            block: self.block,
         });
         if let Some(expansion) = self.expansion { self.program.macro_expansions[expansion].types.push(id); }
         id
@@ -978,6 +985,7 @@ impl Parser {
             kind,
             span,
             scope: self.scope,
+            block: self.block,
         });
         if let Some(expansion) = self.expansion { self.program.macro_expansions[expansion].expressions.push(id); }
         id
@@ -988,6 +996,7 @@ impl Parser {
             kind,
             span,
             scope: self.scope,
+            block: self.block,
         });
         if let Some(expansion) = self.expansion { self.program.macro_expansions[expansion].patterns.push(id); }
         id
@@ -1416,6 +1425,8 @@ impl Parser {
             self.tokens[self.at].text = "<".to_string();
             self.tokens[self.at].span.start += 1;
             self.tokens[self.at].span.column += 1;
+            self.tokens[self.at].origin.start += 1;
+            self.tokens[self.at].origin.column += 1;
             return true;
         }
         false
@@ -1429,6 +1440,8 @@ impl Parser {
             self.tokens[self.at].text = remaining;
             self.tokens[self.at].span.start += 1;
             self.tokens[self.at].span.column += 1;
+            self.tokens[self.at].origin.start += 1;
+            self.tokens[self.at].origin.column += 1;
             return Ok(());
         }
         Err(self.err("expected `>`"))
@@ -1484,6 +1497,9 @@ impl Parser {
         loop {
             let span = self.token().span;
             let relaxed = self.take("?");
+            if matches!(self.token().kind, TokenKind::Type(_)) {
+                return Err(Diagnostic::new(span, "E_MACRO_EXPANSION", "type captures cannot be used as trait bounds"));
+            }
             let bound = if self.token().kind == TokenKind::Lifetime {
                 let name = self.token().text.clone();
                 self.at += 1;
@@ -1492,6 +1508,9 @@ impl Parser {
                     name, args: Vec::new(),
                 }), span)
             } else { self.ty()? };
+            if self.macro_type_materialization(bound) {
+                return Err(Diagnostic::new(span, "E_MACRO_EXPANSION", "type captures cannot be used as trait bounds"));
+            }
             if relaxed {
                 self.program.relaxed_bounds.insert(bound);
                 self.program.types[bound].span = self.finish_span(span);
@@ -1769,7 +1788,11 @@ impl Parser {
                             span,
                         });
                     }
-                    if self.lt() {
+                    let captured = self.token().kind.clone();
+                    if let TokenKind::Type(id) = captured {
+                        self.at += 1usize;
+                        value = self.macro_capture_type(id)?;
+                    } else if self.lt() {
                         frames.push(TypeFrame::QualifiedReceiver { span });
                         frames.push(TypeFrame::Parse);
                     } else if self.take("impl") {
@@ -1839,7 +1862,13 @@ impl Parser {
                         position: TypePathPosition::Part });
                 }
                 TypeFrame::ImplTrait { span, mut bounds, pending } => {
+                    if matches!(self.token().kind, TokenKind::Type(_)) {
+                        return Err(Diagnostic::new(self.token().span, "E_MACRO_EXPANSION", "type captures cannot be used as trait bounds"));
+                    }
                     if pending {
+                        if self.macro_type_materialization(value) {
+                            return Err(Diagnostic::new(span, "E_MACRO_EXPANSION", "type captures cannot be used as trait bounds"));
+                        }
                         bounds.push(value);
                         if !self.take("+") {
                             value = self.impl_trait_type(span, bounds);
@@ -2487,10 +2516,14 @@ impl Parser {
         let span = self.token().span;
         self.expect("impl")?;
         let mut generics = self.generics()?;
+        let captured_trait = matches!(self.token().kind, TokenKind::Type(_));
         let first = self.ty()?;
+        let captured_trait = captured_trait || self.macro_type_materialization(first);
         let trait_ty: Option<TypeId>;
         let target: TypeId;
         if self.take("for") {
+            if captured_trait { return Err(Diagnostic::new(span, "E_UNSUPPORTED_MACRO",
+                "captured types in implementation trait position are not supported")); }
             trait_ty = Some(first);
             target = self.ty()?;
         } else {
@@ -2558,6 +2591,7 @@ impl Parser {
             self.capability_path(&path)?;
             self.program.uses.push(Use {
                 module: self.module.clone(),
+                block: self.block,
                 path,
                 alias: String::new(),
                 explicit_alias: false,
@@ -2591,6 +2625,7 @@ impl Parser {
         self.capability_path(&path)?;
         self.program.uses.push(Use {
             module: self.module.clone(),
+            block: self.block,
             path,
             alias,
             explicit_alias,
@@ -2603,6 +2638,20 @@ impl Parser {
     fn block(&mut self) -> Result<BlockId, Diagnostic> {
         let span = self.token().span;
         self.expect("{")?;
+        let id = self.program.blocks.len();
+        let parent = self.block;
+        self.program.blocks.push(Block { scope: self.scope, parent,
+            statements: Vec::new(), tail: None, span });
+        self.block = Some(id);
+        let result = self.block_contents();
+        self.block = parent;
+        let (statements, tail) = result?;
+        self.program.blocks[id].statements = statements;
+        self.program.blocks[id].tail = tail;
+        self.program.blocks[id].span = self.finish_span(span);
+        Ok(id)
+    }
+    fn block_contents(&mut self) -> Result<(Vec<Stmt>, Option<ExprId>), Diagnostic> {
         let mut statements = Vec::new();
         let mut tail = None;
         while !self.is("}") {
@@ -2614,6 +2663,7 @@ impl Parser {
             }
             let start = self.at;
             let scope = self.scope;
+            let block = self.block;
             let module = self.module.clone();
             match self.block_part() {
                 Ok(BlockPart::Skipped) => {}
@@ -2624,19 +2674,14 @@ impl Parser {
                 }
                 Err(error) => {
                     self.scope = scope;
+                    self.block = block;
                     self.module = module;
                     self.recover_region(start, "statement", error);
                 }
             }
         }
         self.expect("}")?;
-        let id = self.program.blocks.len();
-        self.program.blocks.push(Block {
-            statements,
-            tail,
-            span: self.finish_span(span),
-        });
-        Ok(id)
+        Ok((statements, tail))
     }
 
     fn block_part(&mut self) -> Result<BlockPart, Diagnostic> {
@@ -2754,6 +2799,7 @@ impl Parser {
                     );
                     let block = self.program.blocks.len();
                     self.program.blocks.push(Block {
+                        scope: self.scope, parent: self.block,
                         statements: vec![Stmt::Let {
                             pattern: binding,
                             ty: Some(ty),
@@ -3114,6 +3160,8 @@ impl Parser {
         let context = self.token().context;
         let captured = self.tokens[self.at].kind.clone();
         if let TokenKind::Expression(id) = captured { self.at += 1usize; return self.macro_capture_expression(id); }
+        if matches!(captured, TokenKind::Type(_)) { return Err(Diagnostic::new(span,
+            "E_MACRO_EXPANSION", "an opaque type capture cannot be used as an expression")); }
         if self.token().kind == TokenKind::Number
             || self.token().kind == TokenKind::String
             || self.token().kind == TokenKind::Char
@@ -3274,6 +3322,7 @@ impl Parser {
                     );
                     let body = self.program.blocks.len();
                     self.program.blocks.push(Block {
+                        scope: self.scope, parent: self.block,
                         statements: vec![Stmt::Expr {
                             value: selection,
                             semicolon: true,

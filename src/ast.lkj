@@ -1,6 +1,7 @@
 //! Flat syntax trees. Edges are arena indices, so dropping a deeply nested source is iterative.
 
 pub mod macros;
+pub(crate) mod walk;
 pub use macros::{MacroToken, MacroDefinition, MacroInvocation, MacroExpansion, MacroCapture, MacroAlias, MacroInventory};
 
 pub type FileId = usize;
@@ -83,6 +84,7 @@ pub enum Type {
 #[derive(Clone, PartialEq, Eq)]
 pub struct TypeNode {
     pub scope: ModuleId,
+    pub block: Option<BlockId>,
     pub kind: Type,
     pub span: Span,
 }
@@ -248,6 +250,7 @@ pub struct Impl {
 #[derive(Clone, PartialEq, Eq)]
 pub struct Use {
     pub module: String,
+    pub block: Option<BlockId>,
     pub path: String,
     pub alias: String,
     /// True even when `as` repeats the original spelling.
@@ -426,6 +429,7 @@ pub enum Expr {
 #[derive(Clone, PartialEq, Eq)]
 pub struct ExprNode {
     pub scope: ModuleId,
+    pub block: Option<BlockId>,
     pub kind: Expr,
     pub span: Span,
 }
@@ -476,6 +480,7 @@ pub enum Pattern {
 #[derive(Clone, PartialEq, Eq)]
 pub struct PatternNode {
     pub scope: ModuleId,
+    pub block: Option<BlockId>,
     pub kind: Pattern,
     pub span: Span,
 }
@@ -497,6 +502,8 @@ pub enum Stmt {
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct Block {
+    pub scope: ModuleId,
+    pub parent: Option<BlockId>,
     pub statements: Vec<Stmt>,
     pub tail: Option<ExprId>,
     pub span: Span,

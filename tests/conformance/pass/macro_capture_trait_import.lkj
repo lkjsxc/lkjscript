@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {}
+struct Item;
+mod operations {
+    pub trait Value { fn value(&self) -> i64; }
+    impl Value for super::Item { fn value(&self) -> i64 { 42 } }
+}
+macro_rules! local { ($e:expr) => {{ use self::operations::Value; $e.value() }}; }
+pub fn probe() -> i64 { local!(Item) }

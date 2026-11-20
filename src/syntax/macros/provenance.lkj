@@ -12,7 +12,7 @@ fn replay_failure(mut problem: Diagnostic, phase: &str) -> Diagnostic {
     problem
 }
 fn raw_token(program: &Program, token: &MacroToken) -> bool {
-    token.kind <= 6u8 && token.expression.is_none() && token.context == 0usize
+    token.kind <= 6u8 && token.capture.is_none() && token.context == 0usize
         && token.span == token.origin && token.span.file < program.files.len()
         && token.span.start <= token.span.end
 }
@@ -37,7 +37,9 @@ fn source_input(program: &Program) -> Result<(), Diagnostic> {
     }
     for invocation in &program.macro_invocations {
         if invocation.scope >= program.scopes.len() || invocation.span.file >= program.files.len()
-            || invocation.parent.is_some()
+            || invocation.parent.is_some() || invocation.destination != invocation.scope
+            || invocation.block.is_some_and(|id| id >= program.blocks.len()
+                || program.blocks[id].scope != invocation.destination)
         {
             return Err(failure(invocation.span, "macro invocation has no authored source scope"));
         }

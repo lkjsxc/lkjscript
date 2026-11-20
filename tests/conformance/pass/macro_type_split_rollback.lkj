@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+macro_rules! fallback { ($t:ty, $e:expr) => { 1i64 }; ($($x:tt)*) => { 42i64 }; }
+macro_rules! repeated { ($(<$t:ty>)*) => { 0i64 $(+ { let v: Option<$t> = None; if v.is_none() { 21i64 } else { 0i64 } })* }; }
+pub fn probe() -> i64 { assert_eq!(fallback!(Vec<u8>>, 1), 42); repeated!(<Vec<u8>><u8>) }

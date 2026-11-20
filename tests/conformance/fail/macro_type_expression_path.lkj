@@ -1,0 +1,4 @@
+// expect: reject E_MACRO_EXPANSION
+// witness: {"rustAccept":false}
+macro_rules! choose { ($t:ty) => { $t::default() }; }
+pub fn probe() -> i64 { choose!(i64) }

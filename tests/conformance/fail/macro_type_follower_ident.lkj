@@ -1,0 +1,4 @@
+// expect: reject E_MACRO_RULE
+// witness: {"rustAccept":false}
+macro_rules! invalid { ($t:ty $n:ident) => { 42i64 }; }
+pub fn probe() -> i64 { 42 }

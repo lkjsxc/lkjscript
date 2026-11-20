@@ -49,8 +49,12 @@ const DEPENDS: &[&str] = &["app=math"];
 const ENTRY: &str = "app::main";
 LKJ
 cat > "$work/units/math.lkj" <<'LKJ'
-macro_rules! next { ($value:expr) => { $value + 1usize }; }
-pub fn increment(value: usize) -> usize { next!(value) }
+macro_rules! next { ($t:ty, $value:expr) => {{ let result: $t = $value + 1usize; result }}; }
+mod selected { pub type Number = usize; }
+pub fn increment(value: usize) -> usize {
+    use self::selected::Number;
+    next!(Number, value)
+}
 LKJ
 cat > "$work/units/app.lkj" <<'LKJ'
 pub fn main(mut world: World) {
@@ -67,7 +71,7 @@ cmp "$work/cold" "$work/warm"
 sed -i 's/+ 1usize/+ 2usize/' "$work/units/math.lkj"
 "$compiler" build-units "${units[@]}" -o "$work/changed" > "$work/output" 2> "$work/error"
 [[ $("$work/changed") == 4 ]]
-printf 'ok declarative macros: cold/warm units match; a template edit rechecks dependent source\n'
+printf 'ok declarative macros: cold/warm typed-capture units and block imports match; a template edit rechecks dependent source\n'
 if [[ -n $witness ]]; then
     cp "$root/witness/bridge/output.rs" "$work/host.rs"
     for case in declarative_macros nom_tuple_macros; do

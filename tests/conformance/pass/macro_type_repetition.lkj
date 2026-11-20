@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+macro_rules! aliases { ($($name:ident : $t:ty),+) => { $(type $name = $t;)+ }; }
+aliases!(Number: i64, Pair: (i64, bool), Nested: Vec<Option<i64>>);
+pub fn probe() -> i64 {
+    let number: Number = 42i64;
+    let pair: Pair = (number, true);
+    let nested: Nested = vec![Some(pair.0)];
+    assert_eq!(nested[0usize], Some(42i64));
+    42
+}

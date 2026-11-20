@@ -1,0 +1,4 @@
+// expect: reject E_PARSE
+// witness: {"rustAccept":false}
+macro_rules! choose { ($t:ty) => { 1i64 }; ($($x:tt)*) => { 2i64 }; }
+pub fn probe() -> i64 { choose!(Vec<) }

@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+macro_rules! nested { ($t:ty) => { mod generated { type Name = i64; pub fn selected(value: $t) -> $t { value } } }; }
+nested!(Name);
+struct Holder(i64);
+macro_rules! inherent { ($t:ty) => { impl Holder { fn selected(value: $t) -> $t { value } } }; }
+inherent!(Self);
+pub fn probe() -> i64 {
+    assert_eq!(generated::selected(42i64), 42i64);
+    Holder::selected(Holder(42i64)).0
+}

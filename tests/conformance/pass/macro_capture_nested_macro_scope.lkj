@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {}
+macro_rules! inner { () => { 42i64 }; }
+macro_rules! make { ($e:expr) => { mod generated { pub fn f() -> i64 { $e } } }; }
+make!(inner!());
+pub fn probe() -> i64 { generated::f() }

@@ -3214,60 +3214,23 @@ fn declarations(source: &Program) -> Result<(), Diagnostic> {
     Ok(())
 }
 fn constant_cycles(source: &Program) -> Result<(), Diagnostic> {
-    let mut names = BTreeMap::new();
-    let mut starts = BTreeMap::new();
-    for i in 0..source.constants.len() {
-        let c = &source.constants[i];
-        if c.owner.is_some() { continue; }
-        let span = source.exprs[c.value].span;
-        names.insert(qualified(&c.module, &c.name), i);
-        starts.insert((span.file, span.start), i);
-    }
-    if starts.is_empty() { return Ok(()); }
-    let mut ordered_starts = Vec::new();
-    for start in starts {
-        ordered_starts.push(start);
-    }
+    let names = crate::resolve::Resolver::new(source)?;
     let mut edges = Vec::new();
-    for expression in &source.exprs {
-        let path = match &expression.kind {
-            Expr::Path(p) => p,
-            _ => continue,
-        };
-        let mut at = 0;
-        let mut end = ordered_starts.len();
-        while at < end {
-            let middle = at + (end - at) / 2;
-            if ordered_starts[middle].0 <= (expression.span.file, expression.span.start) {
-                at = middle + 1;
-            } else {
-                end = middle;
+    for (from, constant) in source.constants.iter().enumerate() {
+        if constant.owner.is_some() { continue; }
+        for id in crate::ast::walk::expressions(source, constant.value) {
+            let expression = &source.exprs[id];
+            let Expr::Path(path) = &expression.kind else { continue; };
+            if path.qualification.is_some() { continue; }
+            // Resolution removes macro hygiene marks only for global names and
+            // retains the selected declaration through aliases and imports.
+            let Ok(path) = names.value_path(expression.scope, path, expression.span) else { continue; };
+            let Some(declaration) = path.declaration else { continue; };
+            if let Item::Constant(to) = source.declarations[declaration].item {
+                if source.constants[to].owner.is_none() {
+                    edges.push(Edge { from, to, expanding: false, unknown: false, span: expression.span });
+                }
             }
-        }
-        if at == 0 {
-            continue;
-        }
-        let from = ordered_starts[at - 1].1;
-        let constant = &source.constants[from];
-        let initializer = source.exprs[constant.value].span;
-        if expression.span.file != initializer.file || expression.span.end > initializer.end {
-            continue;
-        }
-        if path.qualification.is_some() { continue; }
-        let mut name = qualified(&constant.module, &path.name);
-        if let Some(rest) = path.name.as_str().strip_prefix("crate::") {
-            name = rest.to_string();
-        } else if let Some(rest) = path.name.as_str().strip_prefix("self::") {
-            name = qualified(&constant.module, rest);
-        }
-        if let Some(to) = names.get(&name).or_else(|| names.get(&path.name)) {
-            edges.push(Edge {
-                from,
-                to: *to,
-                expanding: false,
-                unknown: false,
-                span: expression.span,
-            });
         }
     }
     constant_dependency_cycles(source.constants.len(), &edges)

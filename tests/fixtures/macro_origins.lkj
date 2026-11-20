@@ -14,6 +14,13 @@ macro_rules! nested { ($value:expr) => { twice!($value) }; }
 macro_rules! text { () => { include_str!("payload.txt") }; }
 macro_rules! discard { ($value:expr) => { 0i64 }; }
 macro_rules! defaults { ($name:ident) => { struct $name<T = i64, U = T> { first: T, second: U } }; }
+macro_rules! typed { ($t:ty) => { fn typed(value: $t) -> ($t, $t) { (value, value) } }; }
+macro_rules! typed_relay { ($t:ty) => { typed!($t); }; }
+macro_rules! split_type { (<$t:ty>) => { type Split = $t; }; }
+macro_rules! discard_type { ($t:ty) => { 0i64 }; }
+macro_rules! block_import { ($e:expr) => {{ { use std::marker::Value; } $e }}; }
+typed_relay!(i64);
+split_type!(<Vec<i64>>);
 fn helper(value: i64) -> i64 { value + 1i64 }
 emit!(generated, helper(5i64));
 defaults!(GeneratedDefaults);
@@ -22,6 +29,8 @@ fn source() -> i64 {
     let pair = nested!(helper(7i64));
     let label = text!();
     let ignored = discard!(missing!());
+    let unused_type = discard_type!(UnresolvedUnused);
+    let scoped = block_import!(0i64);
     pair.0 + pair.1 + generated()
 }
 "#;
@@ -77,6 +86,28 @@ fn main() {
     let repeated = program.macro_captures.iter().position(|capture| capture.materializations.len() > 1usize).unwrap();
     assert!(program.macro_captures[repeated].materializations[0usize]
         != program.macro_captures[repeated].materializations[1usize]);
+    let typed = program.macro_captures.iter().position(|capture| capture.type_materializations.len() > 1usize).unwrap();
+    let first_type = program.macro_captures[typed].type_materializations[0usize];
+    assert!(Some(first_type) == program.macro_captures[typed].ty);
+    assert!(first_type != program.macro_captures[typed].type_materializations[1usize]);
+    for ty in &program.macro_captures[typed].type_materializations {
+        assert!(relation.macros.types.contains_key(ty));
+    }
+    let split = program.macro_captures.iter().position(|capture|
+        capture.tokens.last().is_some_and(|token| token.text == ">")).unwrap();
+    let prefix = program.macro_captures[split].tokens.last().unwrap();
+    assert!(prefix.span.end - prefix.span.start == 1usize);
+    assert!(prefix.origin.end - prefix.origin.start == 1usize);
+    let unused = program.macro_captures.iter().find(|capture|
+        capture.tokens.first().is_some_and(|token| token.text == "UnresolvedUnused")).unwrap();
+    assert!(unused.ty.is_none() && unused.type_materializations.is_empty());
+    assert!(!program.types.iter().any(|node|
+        matches!(&node.kind, ast::Type::Path(path) if path.name == "UnresolvedUnused")));
+    let type_call = program.macro_invocations.iter().position(|call|
+        call.tokens.iter().any(|token| token.kind == 9u8)).unwrap();
+    let opaque_token = program.macro_invocations[type_call].tokens.iter().position(|token| token.kind == 9u8).unwrap();
+    let import = program.uses.iter().position(|item| item.block.is_some()).unwrap();
+    let import_block = program.uses[import].block.unwrap();
     let integer = relation.macros.expressions.keys().find(|index|
         matches!(program.exprs[**index].kind, ast::Expr::Int(_))).copied().unwrap();
     let included = relation.macros.expressions.keys().find(|index|
@@ -196,5 +227,39 @@ fn main() {
     let mut changed_default = program.clone();
     changed_default.structs[generated_type].generics[0usize].default = Some(program.functions[anchor].params[0usize].ty);
     count += refused(&changed_default);
-    assert!(count == 26usize);
+    let mut type_first = program.clone();
+    type_first.macro_captures[typed].ty = Some(program.functions[anchor].params[0usize].ty);
+    count += refused(&type_first);
+    let mut type_list = program.clone();
+    type_list.macro_captures[typed].type_materializations.push(first_type);
+    count += refused(&type_list);
+    let mut opaque_kind = program.clone();
+    opaque_kind.macro_invocations[type_call].tokens[opaque_token].kind = 8u8;
+    count += refused(&opaque_kind);
+    let mut opaque_index = program.clone();
+    opaque_index.macro_invocations[type_call].tokens[opaque_token].capture = Some(repeated);
+    count += refused(&opaque_index);
+    let mut destination = program.clone();
+    destination.macro_invocations[type_call].destination = 1usize;
+    count += refused(&destination);
+    let mut textual_scope = program.clone();
+    textual_scope.macro_invocations[type_call].scope = 1usize;
+    count += refused(&textual_scope);
+    let mut split_origin = program.clone();
+    let last = split_origin.macro_captures[split].tokens.len() - 1usize;
+    split_origin.macro_captures[split].tokens[last].origin.end += 1usize;
+    count += refused(&split_origin);
+    let mut import_owner = program.clone();
+    import_owner.uses[import].block = program.functions[generated].body;
+    count += refused(&import_owner);
+    let mut block_parent = program.clone();
+    block_parent.blocks[import_block].parent = None;
+    count += refused(&block_parent);
+    let mut type_block = program.clone();
+    type_block.types[first_type].block = program.functions[generated].body;
+    count += refused(&type_block);
+    let mut absent_block = program.clone();
+    absent_block.macro_input.as_mut().unwrap().types[0usize].block = Some(18446744073709551615usize);
+    count += refused(&absent_block);
+    assert!(count == 37usize);
 }

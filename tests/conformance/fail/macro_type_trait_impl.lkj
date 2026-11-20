@@ -1,0 +1,7 @@
+// expect: reject E_UNSUPPORTED_MACRO
+// witness: {"rustAccept":true}
+trait Value { fn value() -> i64; }
+struct Item;
+macro_rules! choose { ($t:ty) => { impl $t for Item { fn value() -> i64 { 42 } } }; }
+choose!(Value);
+pub fn probe() -> i64 { Item::value() }

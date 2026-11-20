@@ -13,6 +13,9 @@ use the existing checked array type and layout rules.
 Debug builders are ordinary source aggregates holding exclusive formatter views.
 Their calls, field storage and returned origins use the existing independent checks;
 changing a builder's returned view to static is invalid. Formatting adds no IR authority.
+Declarative expression and type captures are source producer data. Their replayed
+origins and lexical block ownership grant no checked IR privilege; a captured
+borrowed type must satisfy the same parameter-derived return-origin contract.
 
 ## Text and identity
 

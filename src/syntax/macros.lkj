@@ -20,18 +20,20 @@ fn token_kind(kind: &TokenKind) -> u8 {
         TokenKind::Ident => 0u8, TokenKind::Number => 1u8, TokenKind::String => 2u8,
         TokenKind::Char => 3u8, TokenKind::Bytes => 4u8, TokenKind::Lifetime => 5u8,
         TokenKind::Symbol => 6u8, TokenKind::End => 7u8, TokenKind::Expression(_) => 8u8,
+        TokenKind::Type(_) => 9u8,
     }
 }
 fn capture_token(token: &Token) -> MacroToken {
     MacroToken { kind: token_kind(&token.kind), text: token.text.clone(), literal_spelling: token.literal_spelling.clone(), span: token.span,
         origin: token.origin, context: token.context,
-        expression: match token.kind { TokenKind::Expression(id) => Some(id), _ => None } }
+        capture: match token.kind { TokenKind::Expression(id) | TokenKind::Type(id) => Some(id), _ => None } }
 }
 fn restore_token(token: MacroToken) -> Token {
     let kind = match token.kind {
         0u8 => TokenKind::Ident, 1u8 => TokenKind::Number, 2u8 => TokenKind::String,
         3u8 => TokenKind::Char, 4u8 => TokenKind::Bytes, 5u8 => TokenKind::Lifetime,
-        6u8 => TokenKind::Symbol, 8u8 => TokenKind::Expression(token.expression.unwrap()),
+        6u8 => TokenKind::Symbol, 8u8 => TokenKind::Expression(token.capture.unwrap()),
+        9u8 => TokenKind::Type(token.capture.unwrap()),
         _ => TokenKind::End,
     };
     Token { kind, text: token.text, literal_spelling: token.literal_spelling, span: token.span, origin: token.origin, context: token.context }
@@ -142,7 +144,8 @@ impl Parser {
         -> Result<usize, Diagnostic> {
         let tokens = self.macro_tree()?;
         let id = self.program.macro_invocations.len();
-        self.program.macro_invocations.push(MacroInvocation { name, scope: self.scope,
+        self.program.macro_invocations.push(MacroInvocation { name,
+            scope: self.macro_scope.unwrap_or(self.scope), destination: self.scope, block: self.block,
             span: self.finish_span(span), name_span, tokens, self_context: self.self_context,
             parent: self.expansion, item });
         Ok(id)
@@ -154,46 +157,74 @@ fn parser(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvoca
     for token in tokens { restored.push(restore_token(token.clone())); }
     let span = tokens.last().map(|token| token.span).unwrap_or(invocation.span);
     restored.push(Token { kind: TokenKind::End, text: String::new(), literal_spelling: String::new(), span, origin: span, context: 0usize });
-    Parser { tokens: restored, at: 0usize, module: program.scopes[invocation.scope].path.clone(),
-        scope: invocation.scope, program: std::mem::replace(program, Program::default()),
+    Parser { tokens: restored, at: 0usize, module: program.scopes[invocation.destination].path.clone(),
+        scope: invocation.destination, block: invocation.block, macro_scope: None, program: std::mem::replace(program, Program::default()),
         diagnostics: Vec::new(), blocked: Vec::<BlockedRegion>::new(), diagnostic_keys: BTreeSet::new(),
         self_context: invocation.self_context, expansion, probing: false, fragment: true }
 }
-fn expression_mode(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation,
-    expansion: Option<usize>, complete: bool, probing: bool) -> Result<(ExprId, usize), Diagnostic> {
+fn fragment_mode(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation,
+    expansion: Option<usize>, typed: bool, complete: bool, probing: bool,
+    macro_scope: Option<ModuleId>) -> Result<(usize, usize, Option<MacroToken>), Diagnostic> {
     let mut parser = parser(program, tokens, invocation, expansion);
     parser.probing = probing;
-    let mut result = parser.expr(true);
+    parser.macro_scope = macro_scope;
+    let span = parser.token().span;
+    let mut result = if typed { parser.ty() } else { parser.expr(true) };
+    let inferred = match &result { Ok(id) => *id == 0usize, Err(_) => false };
+    if typed && inferred {
+        result = Ok(parser.add_type(Type::Infer, span));
+    }
     if let Some(diagnostic) = parser.diagnostics.first().cloned() { result = Err(diagnostic); }
     if result.is_ok() && complete && parser.token().kind != TokenKind::End {
-        result = Err(error(parser.token().span, "E_MACRO_EXPANSION", "macro expansion must be one complete expression"));
+        result = Err(error(parser.token().span, "E_MACRO_EXPANSION",
+            if typed { "macro capture must be one complete type" }
+            else { "macro expansion must be one complete expression" }));
     }
     let consumed = parser.at;
+    let remainder = if consumed < tokens.len() && parser.token().text != tokens[consumed].text {
+        Some(capture_token(parser.token()))
+    } else { None };
     *program = parser.program;
-    result.map(|id| (id, consumed))
+    result.map(|id| (id, consumed, remainder))
 }
 fn expression(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation,
     expansion: Option<usize>, complete: bool) -> Result<(ExprId, usize), Diagnostic> {
-    expression_mode(program, tokens, invocation, expansion, complete, false)
+    fragment_mode(program, tokens, invocation, expansion, false, complete, false, None)
+        .map(|(id, consumed, _)| (id, consumed))
 }
-fn probe_expression(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation)
-    -> Result<(ExprId, usize), Diagnostic> {
-    expression_mode(program, tokens, invocation, invocation.parent, false, true)
+fn probe_fragment(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation, typed: bool)
+    -> Result<(usize, usize, Option<MacroToken>), Diagnostic> {
+    fragment_mode(program, tokens, invocation, invocation.parent, typed, false, true, None)
 }
 impl Parser {
-    pub(super) fn macro_capture_expression(&mut self, id: usize) -> Result<ExprId, Diagnostic> {
+    pub(super) fn macro_type_materialization(&self, id: TypeId) -> bool {
+        self.program.macro_captures.iter().any(|capture| capture.type_materializations.contains(&id))
+    }
+    fn macro_capture(&mut self, id: usize, typed: bool) -> Result<usize, Diagnostic> {
         let tokens = self.program.macro_captures[id].tokens.clone();
         let scope = self.program.macro_captures[id].scope;
         let span = self.program.macro_captures[id].span;
-        let self_context = self.program.macro_captures[id].self_context;
         let parent = self.program.macro_captures[id].parent;
         let invocation = MacroInvocation { name: "$capture".to_string(), scope,
-            span, name_span: span, tokens: Vec::new(), self_context, parent, item: false };
-        let (expression, _) = expression_mode(&mut self.program, &tokens, &invocation,
-            parent, true, self.probing)?;
-        if self.program.macro_captures[id].expression.is_none() { self.program.macro_captures[id].expression = Some(expression); }
-        self.program.macro_captures[id].materializations.push(expression);
-        Ok(expression)
+            destination: self.scope, block: self.block, span, name_span: span, tokens: Vec::new(),
+            self_context: self.self_context, parent, item: false };
+        let (node, _, _) = fragment_mode(&mut self.program, &tokens, &invocation,
+            parent, typed, true, self.probing, Some(scope))?;
+        let capture = &mut self.program.macro_captures[id];
+        if typed {
+            if capture.ty.is_none() { capture.ty = Some(node); }
+            capture.type_materializations.push(node);
+        } else {
+            if capture.expression.is_none() { capture.expression = Some(node); }
+            capture.materializations.push(node);
+        }
+        Ok(node)
+    }
+    pub(super) fn macro_capture_expression(&mut self, id: usize) -> Result<ExprId, Diagnostic> {
+        self.macro_capture(id, false)
+    }
+    pub(super) fn macro_capture_type(&mut self, id: usize) -> Result<TypeId, Diagnostic> {
+        self.macro_capture(id, true)
     }
 }
 fn items(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation,

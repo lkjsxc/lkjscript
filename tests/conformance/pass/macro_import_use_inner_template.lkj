@@ -1,0 +1,6 @@
+// expect: value 142
+// witness: {}
+mod a { pub fn v() -> i64 { 42 } }
+fn v() -> i64 { 1 }
+macro_rules! m { () => {{ let r = v(); { use a::v; r * 100 + v() } }} }
+pub fn probe() -> i64 { m!() }

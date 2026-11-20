@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+macro_rules! count { ($($t:ty)*) => { 0i64 $(+ { let value: Option<$t> = None; if value.is_none() { 21i64 } else { 0i64 } })* }; }
+pub fn probe() -> i64 { count!(u8 u16) }

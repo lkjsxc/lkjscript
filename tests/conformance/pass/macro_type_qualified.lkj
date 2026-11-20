@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+fn identity<T>(value: T) -> T { value }
+macro_rules! qualified { ($t:ty) => { <$t as Default>::default() + identity::<$t>(42i64) }; }
+pub fn probe() -> i64 { qualified!(i64) }

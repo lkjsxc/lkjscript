@@ -29,28 +29,37 @@ fn repetition(tokens: &[MacroToken], at: usize) -> Result<Repetition, Diagnostic
     Ok(Repetition { body: tokens[at + 2usize..end].to_vec(), separator,
         minimum: if tokens[next].text == "+" { 1usize } else { 0usize }, optional, next: next + 1usize })
 }
-fn expression_follower(tokens: &[MacroToken], at: usize, end_allowed: bool) -> Result<bool, Diagnostic> {
+fn allowed_follower(token: &MacroToken, typed: bool) -> bool {
+    if typed {
+        token.kind == 6u8 && matches!(token.text.as_str(), "{" | "[" | "," | "=>" | ":" | "=" | ">" | ">>" | ";" | "|")
+            || token.kind == 0u8 && matches!(token.text.as_str(), "as" | "where")
+    } else { token.kind == 6u8 && matches!(token.text.as_str(), "," | ";" | "=>") }
+}
+fn follower(tokens: &[MacroToken], at: usize, end_allowed: bool, typed: bool) -> Result<bool, Diagnostic> {
     if at == tokens.len() { return Ok(end_allowed); }
-    if tokens[at].kind == 6u8 && matches!(tokens[at].text.as_str(), "," | ";" | "=>") { return Ok(true); }
+    if allowed_follower(&tokens[at], typed) { return Ok(true); }
     if symbol(&tokens[at], "$") && at + 1usize < tokens.len() && symbol(&tokens[at + 1usize], "(") {
         let repeat = repetition(tokens, at)?;
-        return Ok(expression_follower(&repeat.body, 0usize, end_allowed)?
-            && (repeat.minimum != 0usize || expression_follower(tokens, repeat.next, end_allowed)?));
+        return Ok(follower(&repeat.body, 0usize, end_allowed, typed)?
+            && (repeat.minimum != 0usize || follower(tokens, repeat.next, end_allowed, typed)?));
     }
     Ok(false)
 }
-fn variables(tokens: &[MacroToken], depth: usize, end_allowed: bool, bindings: &mut Vec<Binding>) -> Result<bool, Diagnostic> {
+fn variables(tokens: &[MacroToken], depth: usize, expr_end: bool, ty_end: bool,
+    bindings: &mut Vec<Binding>) -> Result<bool, Diagnostic> {
     let mut at = 0usize;
     let mut consumes = false;
     while at < tokens.len() {
         if symbol(&tokens[at], "$") {
             if at + 1usize < tokens.len() && symbol(&tokens[at + 1usize], "(") {
                 let repeat = repetition(tokens, at)?;
-                let mut follows = expression_follower(tokens, repeat.next, end_allowed)?;
+                let mut expr_follows = follower(tokens, repeat.next, expr_end, false)?;
+                let mut ty_follows = follower(tokens, repeat.next, ty_end, true)?;
                 if let Some(separator) = &repeat.separator {
-                    follows &= separator.kind == 6u8 && matches!(separator.text.as_str(), "," | ";" | "=>");
+                    expr_follows &= allowed_follower(separator, false);
+                    ty_follows &= allowed_follower(separator, true);
                 }
-                if !variables(&repeat.body, depth + 1usize, follows, bindings)? {
+                if !variables(&repeat.body, depth + 1usize, expr_follows, ty_follows, bindings)? {
                     return Err(error(tokens[at].span, "E_MACRO_RULE", "repetition body must consume input"));
                 }
                 consumes |= repeat.minimum != 0usize;
@@ -64,21 +73,22 @@ fn variables(tokens: &[MacroToken], depth: usize, end_allowed: bool, bindings: &
             let name = tokens[at + 1usize].text.clone();
             let fragment = tokens[at + 3usize].text.clone();
             if name == "crate" { return Err(error(tokens[at + 1usize].span, "E_MACRO_RULE", "$crate is reserved for the defining crate")); }
-            if !matches!(fragment.as_str(), "expr" | "ident" | "tt") {
-                return Err(error(tokens[at + 3usize].span, "E_UNSUPPORTED_MACRO", "supported declarative fragments are expr, ident, and tt"));
+            if !matches!(fragment.as_str(), "expr" | "ty" | "ident" | "tt") {
+                return Err(error(tokens[at + 3usize].span, "E_UNSUPPORTED_MACRO", "supported declarative fragments are expr, ty, ident, and tt"));
             }
             for binding in &*bindings {
                 if binding.name == name { return Err(error(tokens[at + 1usize].span, "E_MACRO_RULE", "duplicate matcher binding")); }
             }
-            if fragment == "expr" && !expression_follower(tokens, at + 4usize, end_allowed)? {
-                return Err(error(tokens[at + 3usize].span, "E_MACRO_RULE", "expr fragment must be followed by a comma, semicolon, =>, or matcher end"));
+            if fragment == "expr" && !follower(tokens, at + 4usize, expr_end, false)?
+                || fragment == "ty" && !follower(tokens, at + 4usize, ty_end, true)? {
+                return Err(error(tokens[at + 3usize].span, "E_MACRO_RULE", "fragment has an invalid following token"));
             }
             bindings.push(Binding { name, fragment, depth, values: Vec::new(), repetitions: Vec::new() });
             consumes = true;
             at += 4usize;
         } else if tokens[at].kind == 6u8 && opening(&tokens[at].text) {
             let end = group_end(tokens, at)?;
-            variables(&tokens[at + 1usize..end], depth, true, bindings)?;
+            variables(&tokens[at + 1usize..end], depth, true, true, bindings)?;
             consumes = true;
             at = end + 1usize;
         } else { consumes = true; at += 1usize; }
@@ -99,7 +109,7 @@ pub(super) fn rules(definition: &MacroDefinition) -> Result<Vec<Rule>, Diagnosti
         let template_end = group_end(tokens, template_start)?;
         let pattern = tokens[at + 1usize..pattern_end].to_vec();
         let mut bindings = Vec::new();
-        variables(&pattern, 0usize, true, &mut bindings)?;
+        variables(&pattern, 0usize, true, true, &mut bindings)?;
         result.push(Rule { pattern, template: tokens[template_start + 1usize..template_end].to_vec(), variables: bindings });
         at = template_end + 1usize;
         if at < tokens.len() && !symbol(&tokens[at], ";") {
@@ -109,23 +119,34 @@ pub(super) fn rules(definition: &MacroDefinition) -> Result<Vec<Rule>, Diagnosti
     if result.is_empty() { return Err(error(definition.span, "E_MACRO_RULE", "macro definition has no rules")); }
     Ok(result)
 }
+struct MatchInput {
+    tokens: Vec<MacroToken>,
+    mutations: Vec<(usize, MacroToken)>,
+}
 struct Checkpoint {
     inventory: MacroInventory,
-    captures: Vec<(Option<ExprId>, usize)>,
+    mutations: usize,
+    captures: Vec<(Option<ExprId>, usize, Option<TypeId>, usize)>,
     origins: Vec<(usize, usize, usize)>,
 }
-fn checkpoint(program: &Program, _parent: Option<usize>) -> Checkpoint {
+fn checkpoint(program: &Program, input: &MatchInput) -> Checkpoint {
     let mut captures = Vec::new();
-    for capture in &program.macro_captures { captures.push((capture.expression, capture.materializations.len())); }
+    for capture in &program.macro_captures { captures.push((capture.expression, capture.materializations.len(),
+        capture.ty, capture.type_materializations.len())); }
     let mut origins = Vec::new();
     for origin in &program.macro_expansions { origins.push((origin.types.len(), origin.expressions.len(), origin.patterns.len())); }
-    Checkpoint { inventory: crate::ast::macros::inventory(program), captures, origins }
+    Checkpoint { inventory: crate::ast::macros::inventory(program), mutations: input.mutations.len(), captures, origins }
 }
-fn rollback(program: &mut Program, saved: Checkpoint) {
+fn rollback(program: &mut Program, input: &mut MatchInput, saved: Checkpoint) {
+    while input.mutations.len() > saved.mutations {
+        let (position, token) = input.mutations.pop().unwrap();
+        input.tokens[position] = token;
+    }
     let counts = saved.inventory;
     for id in counts.types..program.types.len() {
         program.impl_traits.remove(&id); program.constant_arguments.remove(&id);
         program.value_argument_lists.remove(&id); program.array_length_spans.remove(&id); program.relaxed_bounds.remove(&id);
+        program.array_length_constants.remove(&id);
     }
     for id in counts.patterns..program.patterns.len() { program.macro_pattern_bindings.remove(&id); }
     for id in counts.scopes..program.scopes.len() { program.macro_use_modules.remove(&id); }
@@ -140,6 +161,8 @@ fn rollback(program: &mut Program, saved: Checkpoint) {
     for id in 0usize..saved.captures.len() {
         program.macro_captures[id].expression = saved.captures[id].0;
         program.macro_captures[id].materializations.truncate(saved.captures[id].1);
+        program.macro_captures[id].ty = saved.captures[id].2;
+        program.macro_captures[id].type_materializations.truncate(saved.captures[id].3);
     }
     for id in 0usize..saved.origins.len() {
         let (types, expressions, patterns) = saved.origins[id];
@@ -148,8 +171,26 @@ fn rollback(program: &mut Program, saved: Checkpoint) {
     }
 }
 fn same(left: &MacroToken, right: &MacroToken) -> bool {
-    left.kind == right.kind && left.kind != 8u8 && left.text == right.text
+    left.kind == right.kind && left.kind < 8u8 && left.text == right.text
         && left.literal_spelling == right.literal_spelling
+}
+fn may_begin(token: &MacroToken, typed: bool) -> bool {
+    if typed {
+        if token.kind == 9u8 { return true; }
+        if token.kind == 0u8 {
+            return !matches!(token.text.as_str(), "as" | "async" | "await" | "break" | "const"
+                | "continue" | "else" | "enum" | "false" | "if" | "in" | "let" | "loop"
+                | "match" | "mod" | "move" | "mut" | "pub" | "ref" | "return" | "static"
+                | "struct" | "trait" | "true" | "type" | "use" | "where" | "while" | "yield"
+                | "abstract" | "become" | "box" | "do" | "final" | "macro" | "override"
+                | "priv" | "typeof" | "unsized" | "virtual" | "try" | "gen");
+        }
+        token.kind == 6u8 && matches!(token.text.as_str(), "(" | "[" | "!" | "*" | "&" | "&&" | "<" | "<<" | "::")
+    } else if token.kind == 0u8 {
+        token.text != "_" && !super::super::keyword_cannot_begin_expression(&token.text)
+    } else if token.kind == 6u8 {
+        matches!(token.text.as_str(), "::" | "<" | "<<" | "(" | "[" | "{" | "-" | "!" | "*" | "&" | "&&" | ".." | "..=" | "|" | "||")
+    } else { matches!(token.kind, 1u8 | 2u8 | 3u8 | 4u8 | 5u8 | 8u8) }
 }
 // Repetition heads must determine whether to continue without speculative capture choices.
 // Pure literal overlaps can be legal in Rust's NFA matcher; this bounded reader locates them
@@ -167,12 +208,7 @@ fn starts(pattern: &[MacroToken], at: usize, token: &MacroToken) -> Result<(bool
         let fragment = pattern[at + 3usize].text.as_str();
         let accepts = if fragment == "ident" { token.kind == 0u8 && token.text != "_" }
             else if fragment == "tt" { true }
-            else if token.kind == 0u8 {
-                !matches!(token.text.as_str(), "_" | "else" | "in" | "let" | "mut" | "ref" | "fn"
-                    | "struct" | "enum" | "trait" | "impl" | "mod" | "use" | "pub" | "type" | "where")
-            } else if token.kind == 6u8 {
-                matches!(token.text.as_str(), "::" | "<" | "(" | "[" | "{" | "-" | "!" | "*" | "&" | "&&" | ".." | "..=" | "|" | "||")
-            } else { matches!(token.kind, 1u8 | 2u8 | 3u8 | 4u8 | 8u8) };
+            else { may_begin(token, fragment == "ty") };
         return Ok((accepts, accepts));
     }
     Ok((same(&pattern[at], token), false))
@@ -187,42 +223,50 @@ fn contains_binding(tokens: &[MacroToken], name: &str) -> bool {
     false
 }
 fn matches(program: &mut Program, invocation: &MacroInvocation, pattern: &[MacroToken],
-    input: &[MacroToken], position: &mut usize, path: &[usize], bindings: &mut Vec<Binding>) -> Result<bool, Diagnostic> {
+    input: &mut MatchInput, end: usize, position: &mut usize, path: &[usize], bindings: &mut Vec<Binding>) -> Result<bool, Diagnostic> {
     let mut at = 0usize;
     while at < pattern.len() {
         if symbol(&pattern[at], "$") && at + 1usize < pattern.len() && symbol(&pattern[at + 1usize], "(") {
             let repeat = repetition(pattern, at)?;
             let mut count = 0usize;
             loop {
-                if count >= repeat.minimum && *position < input.len() {
-                    let token = &input[*position];
+                if count >= repeat.minimum && *position < end {
+                    let token = &input.tokens[*position];
                     let (next, next_fragment) = if count != 0usize && repeat.separator.is_some() {
                         (same(repeat.separator.as_ref().unwrap(), token), false)
                     } else { starts(&repeat.body, 0usize, token)? };
                     let (after, after_fragment) = starts(pattern, repeat.next, token)?;
                     if next && after {
+                        let mut fragment_overlap = false;
+                        if *position + 1usize < end && repeat.next < pattern.len()
+                            && same(&pattern[repeat.next], token) {
+                            let following = &input.tokens[*position + 1usize];
+                            let (head, head_fragment) = starts(&repeat.body, 0usize, following)?;
+                            let (tail, tail_fragment) = starts(pattern, repeat.next + 1usize, following)?;
+                            fragment_overlap = head && tail && (head_fragment || tail_fragment);
+                        }
                         return Err(error(token.span,
-                            if next_fragment || after_fragment { "E_MACRO_AMBIGUITY" } else { "E_UNSUPPORTED_MACRO" },
+                            if next_fragment || after_fragment || fragment_overlap { "E_MACRO_AMBIGUITY" } else { "E_UNSUPPORTED_MACRO" },
                             "repetition continuation overlaps its following matcher"));
                     }
                 }
                 let start = *position;
-                let saved = checkpoint(program, invocation.parent);
+                let saved = checkpoint(program, input);
                 let old = bindings.clone();
                 if count != 0usize {
                     if let Some(separator) = &repeat.separator {
-                        if *position >= input.len() || !same(separator, &input[*position]) { break; }
+                        if *position >= end || !same(separator, &input.tokens[*position]) { break; }
                         *position += 1usize;
                     }
                 }
                 let before = *position;
                 let mut nested = path.to_vec(); nested.push(count);
-                if matches(program, invocation, &repeat.body, input, position, &nested, bindings)? {
+                if matches(program, invocation, &repeat.body, input, end, position, &nested, bindings)? {
                     if *position == before { return Err(error(pattern[at].span, "E_MACRO_RULE", "repetition matched without progress")); }
                     count += 1usize;
-                    if repeat.optional || *position == input.len() { break; }
+                    if repeat.optional || *position == end { break; }
                 } else {
-                    *position = start; *bindings = old; rollback(program, saved); break;
+                    *position = start; *bindings = old; rollback(program, input, saved); break;
                 }
             }
             if count < repeat.minimum { return Ok(false); }
@@ -234,7 +278,7 @@ fn matches(program: &mut Program, invocation: &MacroInvocation, pattern: &[Macro
             at = repeat.next;
             continue;
         }
-        if *position >= input.len() { return Ok(false); }
+        if *position >= end { return Ok(false); }
         if symbol(&pattern[at], "$") {
             let name = &pattern[at + 1usize].text;
             let binding = bindings.iter().position(|binding| binding.name == *name).unwrap();
@@ -242,39 +286,71 @@ fn matches(program: &mut Program, invocation: &MacroInvocation, pattern: &[Macro
             let start = *position;
             let captured: Vec<MacroToken>;
             if fragment == "ident" {
-                if input[start].kind != 0u8 || input[start].text == "_" { return Ok(false); }
-                *position += 1usize; captured = input[start..*position].to_vec();
+                if input.tokens[start].kind != 0u8 || input.tokens[start].text == "_" { return Ok(false); }
+                *position += 1usize; captured = input.tokens[start..*position].to_vec();
             } else if fragment == "tt" {
-                *position = if input[start].kind == 6u8 && opening(&input[start].text) { group_end(input, start)? + 1usize } else { start + 1usize };
-                captured = input[start..*position].to_vec();
+                *position = if input.tokens[start].kind == 6u8 && opening(&input.tokens[start].text) { group_end(&input.tokens, start)? + 1usize } else { start + 1usize };
+                captured = input.tokens[start..*position].to_vec();
             } else {
-                let saved = checkpoint(program, invocation.parent);
-                let parsed = probe_expression(program, &input[start..], invocation);
-                let consumed = match parsed { Ok((_, consumed)) => consumed, Err(problem) => { rollback(program, saved); return Err(problem); } };
-                rollback(program, saved);
+                let typed = fragment == "ty";
+                if !may_begin(&input.tokens[start], typed) { return Ok(false); }
+                let (consumed, remainder) = if typed && input.tokens[start].kind == 9u8 {
+                    (1usize, None)
+                } else {
+                    let saved = checkpoint(program, input);
+                    let parsed = probe_fragment(program, &input.tokens[start..end], invocation, typed);
+                    rollback(program, input, saved);
+                    let (_, consumed, remainder) = parsed?;
+                    (consumed, remainder)
+                };
                 *position += consumed;
-                let mut span = input[start].span;
-                if consumed != 0usize && input[*position - 1usize].span.file == span.file { span.end = input[*position - 1usize].span.end; }
+                let mut tokens = input.tokens[start..*position].to_vec();
+                if let Some(remainder) = remainder {
+                    let original = input.tokens[*position].clone();
+                    if !typed || original.kind != 6u8
+                        || !matches!(original.text.as_str(), ">>" | ">=" | ">>=") {
+                        return Err(error(original.span, "E_UNSUPPORTED_MACRO",
+                            "expression fragments cannot end inside a split token"));
+                    }
+                    let count = original.text.len() - remainder.text.len();
+                    let mut prefix = original.clone();
+                    prefix.text = original.text[..count].to_string();
+                    prefix.span.end = prefix.span.start + count;
+                    prefix.origin.end = prefix.origin.start + count;
+                    tokens.push(prefix);
+                    let mut suffix = original.clone();
+                    suffix.text = remainder.text;
+                    suffix.span.start += count; suffix.span.column += count;
+                    suffix.origin.start += count; suffix.origin.column += count;
+                    input.mutations.push((*position, original));
+                    input.tokens[*position] = suffix;
+                }
+                let mut span = input.tokens[start].span;
+                if let Some(last) = tokens.last() {
+                    if last.span.file == span.file { span.end = last.span.end; }
+                }
                 let id = program.macro_captures.len();
                 let owner = program.macro_expansions.last().unwrap().invocation;
-                program.macro_captures.push(MacroCapture { materializations: Vec::new(), name: name.clone(), path: path.to_vec(), invocation: owner,
-                    tokens: input[start..*position].to_vec(), scope: invocation.scope, span,
-                    self_context: invocation.self_context, parent: invocation.parent, expression: None });
-                captured = vec![MacroToken { kind: 8u8, text: String::new(), literal_spelling: String::new(), span,
-                    origin: input[start].origin, context: input[start].context, expression: Some(id) }];
+                program.macro_captures.push(MacroCapture { materializations: Vec::new(),
+                    type_materializations: Vec::new(), ty: None, name: name.clone(),
+                    path: path.to_vec(), invocation: owner, tokens, scope: invocation.scope, span,
+                    parent: invocation.parent, expression: None });
+                captured = vec![MacroToken { kind: if typed { 9u8 } else { 8u8 },
+                    text: String::new(), literal_spelling: String::new(), span,
+                    origin: input.tokens[start].origin, context: input.tokens[start].context, capture: Some(id) }];
             }
             bindings[binding].values.push(Value { path: path.to_vec(), tokens: captured });
             at += 4usize;
         } else if pattern[at].kind == 6u8 && opening(&pattern[at].text) {
-            if !same(&pattern[at], &input[*position]) { return Ok(false); }
+            if !same(&pattern[at], &input.tokens[*position]) { return Ok(false); }
             let pattern_end = group_end(pattern, at)?;
-            let input_end = group_end(input, *position)?;
-            let inner = &input[*position + 1usize..input_end];
-            let mut nested = 0usize;
-            if !matches(program, invocation, &pattern[at + 1usize..pattern_end], inner, &mut nested, path, bindings)? || nested != inner.len() { return Ok(false); }
+            let input_end = group_end(&input.tokens, *position)?;
+            let mut nested = *position + 1usize;
+            if !matches(program, invocation, &pattern[at + 1usize..pattern_end],
+                input, input_end, &mut nested, path, bindings)? || nested != input_end { return Ok(false); }
             *position = input_end + 1usize; at = pattern_end + 1usize;
         } else {
-            if !same(&pattern[at], &input[*position]) { return Ok(false); }
+            if !same(&pattern[at], &input.tokens[*position]) { return Ok(false); }
             at += 1usize; *position += 1usize;
         }
     }
@@ -361,15 +437,16 @@ fn transcribe(program: &Program, definition: &MacroDefinition, invocation: &Macr
 pub(super) fn apply(program: &mut Program, definition: &MacroDefinition, rules: &[Rule],
     invocation: &MacroInvocation, context: usize) -> Result<Vec<MacroToken>, Diagnostic> {
     for rule in rules {
-        let saved = checkpoint(program, invocation.parent);
+        let mut input = MatchInput { tokens: invocation.tokens.clone(), mutations: Vec::new() };
+        let saved = checkpoint(program, &input);
         let mut bindings = rule.variables.clone();
         let mut at = 0usize;
-        if matches(program, invocation, &rule.pattern, &invocation.tokens, &mut at, &[0usize; 0], &mut bindings)? && at == invocation.tokens.len() {
+        if matches(program, invocation, &rule.pattern, &mut input, invocation.tokens.len(), &mut at, &[0usize; 0], &mut bindings)? && at == invocation.tokens.len() {
             let mut output = Vec::new();
             transcribe(program, definition, invocation, &rule.template, &bindings, &[0usize; 0], context, &mut output)?;
             return Ok(output);
         }
-        rollback(program, saved);
+        rollback(program, &mut input, saved);
     }
     Err(error(invocation.span, "E_MACRO_MATCH", "no declarative macro rule matches these tokens"))
 }

@@ -63,7 +63,7 @@ fn fingerprint(tokens: &[MacroToken]) -> String {
     let mut result = String::new();
     for token in tokens {
         result.push_str(&format!("{}:{}:{}:{}:{};", token.kind, token.text.len(), token.text, token.literal_spelling.len(), token.literal_spelling));
-        if token.expression.is_some() { result.push_str(&format!("{}:{}:{};", token.origin.file, token.origin.start, token.origin.end)); }
+        if token.capture.is_some() { result.push_str(&format!("{}:{}:{};", token.origin.file, token.origin.start, token.origin.end)); }
     }
     result
 }

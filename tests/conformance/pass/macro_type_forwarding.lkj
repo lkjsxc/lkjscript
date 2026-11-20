@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+macro_rules! selected { (i64) => { 0i64 }; ($t:ty) => { 42i64 }; }
+macro_rules! relay { ($t:tt) => { selected!($t) }; }
+macro_rules! outer { ($t:ty) => { relay!($t) }; }
+pub fn probe() -> i64 {
+    assert_eq!(selected!(i64), 0i64);
+    assert_eq!(outer!(i64), 42i64);
+    assert_eq!(outer!(Vec<Option<(i64, bool)>>), 42i64);
+    42
+}
