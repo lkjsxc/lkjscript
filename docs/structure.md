@@ -91,9 +91,12 @@ Implementation, use and macro identities also keep their existing forms; query
 the outline for their exact spelling. Checked-IR instance and type IDs retain
 `ir:PATH` and `ir:type:NAME`; their source associations name canonical
 source identities. Crate provenance is retained inside associated-method,
-implementation, use and IR stems too. Type displays remain source spellings;
-copy a printed identity to select an item, rather than deriving a key from its
-display text.
+implementation, use and IR stems too. Declared and inferred type values,
+signatures and outline text retain source display spellings. These displays
+are not selectors and are not used to reconstruct identity joins. Refactors
+retain separate canonical type evidence, including crate provenance; equal
+displayed names can belong to distinct source identities. Copy a printed
+identity when selecting an item.
 
 Types without a source declaration use `builtin@NAME`, including families
 (`builtin@Vec`), concrete types (`builtin@Vec<i64>`) and primitives
@@ -117,11 +120,23 @@ it selects only that canonical key. An absent or malformed explicit key refuses.
 A bare selector is checked as its exact spelling, `type@SPELLING`,
 `value@SPELLING` and `builtin@SPELLING`, with equal precedence. These candidates
 are literal concatenations: `std::x` addresses the external root,
-`crate::std::x` addresses the application's module, and `$std::x` is absent. Exactly one
-match succeeds. Multiple matches refuse with `E_EDIT_AMBIGUOUS` or
-`E_QUERY_AMBIGUOUS`, listing canonical candidates and kinds. The operation
-or query kind never chooses a namespace, and an exact-text `expect` does not
-disambiguate a selector.
+`crate::std::x` addresses the application's module, and `$std::x` is absent.
+Exactly one match selects that identity. Multiple matches refuse with
+`E_EDIT_AMBIGUOUS` or `E_QUERY_AMBIGUOUS`, listing canonical candidates and kinds.
+Candidate lookup includes the complete metadata set: source items and roots,
+builtin families, concrete type instances and checked-IR identities.
+Applicability is checked only after selection. An edit requires an editable
+source item or source module root; a uniquely selected builtin or concrete
+type metadata record does not supply an edit target. For example,
+`builtin@Vec` and `type@Vec<i64>` can select query evidence while refusing as
+edit targets. The operation or query kind never chooses a namespace, and an
+exact-text `expect` does not disambiguate a selector.
+
+Detailed comparison applies the same candidate rule to the union of identities
+recorded before and after the change. It resolves ambiguity before checking
+whether the selected identity supports source or checked-IR detail. Newly
+published query metadata must contain exactly the candidate keys used by the
+edit catalog.
 
 Query selection uses authenticated snapshot metadata without reopening source.
 When a bare spelling selects a canonical identity, the report includes
