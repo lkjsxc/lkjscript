@@ -36,6 +36,13 @@ fn ident_start(b: u8) -> bool {
 fn ident_continue(b: u8) -> bool {
     ident_start(b) || b.is_ascii_digit()
 }
+fn keyword_cannot_begin_expression(name: &str) -> bool {
+    matches!(name,
+        "as" | "else" | "extern" | "fn" | "in" | "let" | "mod" | "mut" | "pub" | "ref"
+        | "static" | "struct" | "trait" | "type" | "use" | "where" | "enum" | "impl" | "dyn"
+        | "abstract" | "become" | "box" | "do" | "final" | "macro" | "override" | "priv"
+        | "typeof" | "unsized" | "virtual" | "try" | "gen" | "await")
+}
 fn span_at(start: usize, end: usize, line: usize, column: usize) -> Span {
     Span {
         file: 0,
@@ -1307,7 +1314,15 @@ impl Parser {
         }
         if self.take("mod") {
             let span = self.tokens[self.at - 1].span;
+            let name_span = self.token().span;
             let name = self.ident()?;
+            if keyword_cannot_begin_expression(&name) || matches!(name.as_str(),
+                "async" | "break" | "const" | "continue" | "crate" | "false" | "for" | "if"
+                | "loop" | "match" | "move" | "return" | "self" | "Self" | "super" | "true"
+                | "unsafe" | "while" | "yield")
+            {
+                return Err(Diagnostic::new(name_span, "E_PARSE", &format!("module name `{name}` is reserved")));
+            }
             let parent = self.module.clone();
             let parent_scope = self.scope;
             let scope = self.program.scopes.len();
@@ -3403,11 +3418,7 @@ impl Parser {
         if self.token().kind != TokenKind::Ident && !self.is("::") && !self.at_lt() {
             return Err(self.err("expected an expression"));
         }
-        if self.token().kind == TokenKind::Ident && matches!(self.token().text.as_str(),
-            "as" | "else" | "extern" | "fn" | "in" | "let" | "mod" | "mut" | "pub" | "ref"
-            | "static" | "struct" | "trait" | "type" | "use" | "where" | "enum" | "impl" | "dyn"
-            | "abstract" | "become" | "box" | "do" | "final" | "macro" | "override" | "priv"
-            | "typeof" | "unsized" | "virtual" | "try" | "gen" | "await") {
+        if self.token().kind == TokenKind::Ident && keyword_cannot_begin_expression(&self.token().text) {
             return Err(self.err("keyword cannot begin this expression"));
         }
         let path = self.value_path()?;

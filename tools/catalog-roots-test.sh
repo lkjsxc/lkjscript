@@ -149,20 +149,56 @@ for child in spare answer; do
     refuse E_EDIT_IDENTITY
 done
 
-# The parser still admits keyword-named modules; catalog admission must refuse.
-setup keyword
+setup module-identifiers
+mkdir -p "$project/_outer2/default"
 cat > "$project/main.lkj" <<'SOURCE'
+mod _outer2 {
+    pub mod r;
+    pub mod default;
+    pub fn answer() -> i64 { self::r::value() + self::default::value() }
+}
+pub fn probe() -> i64 { crate::_outer2::answer() }
+SOURCE
+printf '%s\n' 'pub fn value() -> i64 { 20i64 }' > "$project/_outer2/r.lkj"
+printf '%s\n' 'pub fn value() -> i64 { 22i64 }' > "$project/_outer2/default/mod.lkj"
+value 42
+
+# Report reserved names at their declaration before loading or catalog admission.
+for form in inline file-backed nested; do
+    setup "keyword-$form"
+    case "$form" in
+        inline)
+            cat > "$project/main.lkj" <<'SOURCE'
 mod std { pub fn answer() -> i64 { 42i64 } }
 mod crate { pub mod std { pub fn answer() -> i64 { 9i64 } } }
 pub fn probe() -> i64 { crate::std::answer() + crate::crate::std::answer() }
 SOURCE
-"$compiler" check "${common[@]}" --no-store
-index_refuse E_IDENTITY
-grep -Fq 'crate' "$fixture/error"
-grep -Fq 'main.lkj' "$fixture/error" || fail 'keyword-module refusal is not located'
-request '{"op":"replace-body","id":"probe","source":"{ 0i64 }"}'
-refuse E_IDENTITY
-source_count 2
+            location=main.lkj:2:5
+            keyword=crate
+            ;;
+        file-backed)
+            printf '%s\n' 'mod crate;' 'pub fn probe() -> i64 { crate::crate::answer() }' > "$project/main.lkj"
+            printf '%s\n' 'pub fn answer() -> i64 { 42i64 }' > "$project/crate.lkj"
+            location=main.lkj:1:5
+            keyword=crate
+            ;;
+        nested)
+            printf '%s\n' 'mod _outer2;' 'pub fn probe() -> i64 { crate::_outer2::answer() }' > "$project/main.lkj"
+            mkdir "$project/_outer2"
+            printf '%s\n' 'pub mod fn {}' 'pub fn answer() -> i64 { 42i64 }' > "$project/_outer2/mod.lkj"
+            location=_outer2/mod.lkj:1:9
+            keyword=fn
+            ;;
+    esac
+    diagnostic="$location: E_PARSE module name \`$keyword\` is reserved"
+    status=0
+    "$compiler" check "${common[@]}" --no-store > "$fixture/check" 2> "$fixture/error" || status=$?
+    [[ $status == 1 && ! -s "$fixture/check" ]] || fail "check accepted $form keyword module"
+    grep -Fq "$diagnostic" "$fixture/error" || fail "check missed $diagnostic"
+    index_refuse "$diagnostic"
+    request '{"op":"replace-body","id":"probe","source":"{ 0i64 }"}'
+    refuse "$diagnostic"
+done
 
 # A function named crate is allowed and must not become the unmarked root.
 project="$fixture/keyword-function"

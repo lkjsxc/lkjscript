@@ -151,6 +151,8 @@ A selected constructor establishes its tag even if the pattern binds no fields.
 The owned loader reads inline/file modules, child.lkj or child/mod.lkj, and nested
 directories through the source Directory. Missing, ambiguous and duplicate inputs
 have distinct diagnostics. File identities survive into IR and diagnostics.
+A reserved keyword in a module declaration produces `E_PARSE` at the name token
+before the loader looks for a module file.
 include_str!("path") produces static UTF-8 text; include_bytes!("path") produces
 a static reference to an exact-size byte array. Paths are literal, relative to the
 containing file and beneath the granted source root. Missing/escaping paths reject;
