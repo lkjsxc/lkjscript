@@ -906,6 +906,64 @@ fn witness_invoke(
     invoke(world, shell, &command, 0)
 }
 
+fn witness_is_root(case: &Case) -> bool {
+    case.witness.contains("\"root\":true")
+}
+
+fn witness_build(
+    world: &mut World,
+    shell: &File,
+    rustc: &str,
+    temporary: &str,
+    name: &str,
+) -> Result<Capture, String> {
+    let arguments = vec![
+        "PATH=/usr/local/bin:/usr/bin:/bin".as_bytes().to_vec(), rustc.as_bytes().to_vec(),
+        "--edition=2024".as_bytes().to_vec(), "--cfg".as_bytes().to_vec(),
+        "lkjscript_control".as_bytes().to_vec(), "-C".as_bytes().to_vec(),
+        "overflow-checks=yes".as_bytes().to_vec(), "-C".as_bytes().to_vec(),
+        "opt-level=1".as_bytes().to_vec(), "-A".as_bytes().to_vec(), "warnings".as_bytes().to_vec(),
+        format!("{temporary}/{name}.rs").into_bytes(), "-o".as_bytes().to_vec(),
+        format!("{temporary}/{name}").into_bytes(),
+    ];
+    witness_invoke(world, shell, &arguments)
+}
+
+fn witness_with_root_host(source: &str, host: &str, bindings: &str) -> String {
+    // Append a glob prelude so authored declarations still take precedence.
+    format!("{source}\nmod __lkjscript_witness {{\n{host}\npub(crate) mod prelude {{ pub(crate) use super::{{{bindings}}}; }}\n}}\nuse self::__lkjscript_witness::prelude::*;\n")
+}
+
+fn witness_run_root(
+    world: &mut World,
+    shell: &File,
+    rustc: &str,
+    temporary: &str,
+    directory: &mut Directory,
+    case: &Case,
+    host: &str,
+) -> Result<Capture, String> {
+    let entry = if case.kind == "value" && case.entry.is_empty() { "probe" } else { case.entry.as_str() };
+    if entry.is_empty() || entry == "main" {
+        return Err(format!("E_TEST Rust root witness {} needs an entry other than main", case.path));
+    }
+    let specimen = read(world, &case.path)?;
+    let (bindings, adapter) = if case.kind == "value" {
+        ("", format!("fn main() {{ __lkjscript_witness::observe(|| {{ ::std::println!(\"{{}}\", crate::{entry}()); 0 }}); }}\n"))
+    } else {
+        ("World", format!("fn main() {{ __lkjscript_witness::enter(crate::{entry}); }}\n"))
+    };
+    let mut source = witness_with_root_host(&specimen, host, bindings);
+    source.push_str(&adapter);
+    write(directory, "root.rs", &source)?;
+    let built = witness_build(world, shell, rustc, temporary, "root")?;
+    if built.status != 0 {
+        world.stderr().write(&built.stderr);
+        return Err(format!("E_TEST Rust root witness {} did not compile", case.path));
+    }
+    witness_invoke(world, shell, &vec![format!("{temporary}/root").into_bytes()])
+}
+
 fn witness_inner(
     world: &mut World,
     path: &str,
@@ -920,14 +978,15 @@ fn witness_inner(
         if !case.witness.is_empty() && case.path.ends_with(".lkj") { cases.push(case); }
     }
     if cases.is_empty() { return Err(format!("E_TEST no marked Rust cases in {path}")); }
-    let rustc_path = rustc.to_string();
     let shell = open_file(world, "/bin/sh")?;
     let host = read(world, "witness/bridge/output.rs")?;
     let mut harness = "#![allow(dead_code,unused_imports,unused_variables)]\nmod host {\n".to_string();
     harness.push_str(&host);
     harness.push_str("\n}\n");
+    let mut has_aggregate = false;
     for (index, case) in cases.iter().enumerate() {
-        if case.kind == "reject" { continue; }
+        if case.kind == "reject" || witness_is_root(case) { continue; }
+        has_aggregate = true;
         harness.push_str(&format!("mod case_{index} {{\n"));
         if case.kind != "value" {
             harness.push_str("use crate::host::{World,Arguments,Environment,ExitStatus,Stdout,Stdin,Stderr,Directory,ReadDirectory,ReadFile,ForeignCommand,ForeignSession,NullDevice,File,Process,Clock,Child,Listener,Connector,TcpPort,TemporaryFiles,Readiness,Entropy,Stop};\n");
@@ -937,7 +996,7 @@ fn witness_inner(
     }
     harness.push_str("fn main(){let name=std::env::var(\"LKJSCRIPT_ORACLE_CASE\").unwrap();match name.as_str(){\n");
     for (index, case) in cases.iter().enumerate() {
-        if case.kind == "reject" { continue; }
+        if case.kind == "reject" || witness_is_root(case) { continue; }
         if case.kind == "value" {
             let entry = if case.entry.is_empty() { "probe" } else { case.entry.as_str() };
             harness.push_str(&format!("\"{index}\"=>host::observe(||{{println!(\"{{}}\",case_{index}::{entry}());0}}),\n"));
@@ -946,29 +1005,27 @@ fn witness_inner(
         }
     }
     harness.push_str("_=>std::process::exit(2)}}\n");
-    write(directory, "positive.rs", &harness)?;
-    let arguments = vec![
-        "PATH=/usr/local/bin:/usr/bin:/bin".as_bytes().to_vec(), rustc_path.as_bytes().to_vec(),
-        "--edition=2024".as_bytes().to_vec(), "--cfg".as_bytes().to_vec(),
-        "lkjscript_control".as_bytes().to_vec(), "-C".as_bytes().to_vec(),
-        "overflow-checks=yes".as_bytes().to_vec(), "-C".as_bytes().to_vec(),
-        "opt-level=1".as_bytes().to_vec(), "-A".as_bytes().to_vec(), "warnings".as_bytes().to_vec(),
-        format!("{temporary}/positive.rs").into_bytes(), "-o".as_bytes().to_vec(),
-        format!("{temporary}/positive").into_bytes(),
-    ];
-    let built = witness_invoke(world, &shell, &arguments)?;
-    if built.status != 0 {
-        world.stderr().write(&built.stderr);
-        return Err("E_TEST Rust witness harness did not compile".to_string());
+    if has_aggregate {
+        write(directory, "positive.rs", &harness)?;
+        let built = witness_build(world, &shell, rustc, temporary, "positive")?;
+        if built.status != 0 {
+            world.stderr().write(&built.stderr);
+            return Err("E_TEST Rust witness harness did not compile".to_string());
+        }
     }
     let mut positive = 0usize;
     let mut negative = 0usize;
     let mut failures = 0usize;
     for (index, case) in cases.iter().enumerate() {
         if case.kind != "reject" {
-            let arguments = vec![format!("LKJSCRIPT_ORACLE_CASE={index}").into_bytes(),
-                format!("{temporary}/positive").into_bytes()];
-            let actual = witness_record(witness_invoke(world, &shell, &arguments)?)?;
+            let capture = if witness_is_root(case) {
+                witness_run_root(world, &shell, rustc, temporary, directory, case, &host)?
+            } else {
+                let arguments = vec![format!("LKJSCRIPT_ORACLE_CASE={index}").into_bytes(),
+                    format!("{temporary}/positive").into_bytes()];
+                witness_invoke(world, &shell, &arguments)?
+            };
+            let actual = witness_record(capture)?;
             let mut expectation = Case {
                 path: case.path.clone(), kind: case.kind.clone(), value: case.value.clone(),
                 stdout: case.stdout.clone(), stderr: case.stderr.clone(), status: case.status, line: 0,
@@ -985,10 +1042,15 @@ fn witness_inner(
         } else {
             let source = read(world, &case.path)?;
             let source = if case.witness.contains("\"world\":true") {
-                format!("mod host {{\n{host}\n}}\nmod case {{\nuse crate::host::{{World,Arguments,Environment,ExitStatus,Stdout,Stdin,Stderr,Directory,ReadDirectory,ReadFile,File,Process,Clock,Child,Listener,Connector,TcpPort,TemporaryFiles,Readiness,Entropy,Stop}};\n{source}\n}}\n")
+                let bindings = "World,Arguments,Environment,ExitStatus,Stdout,Stdin,Stderr,Directory,ReadDirectory,ReadFile,File,Process,Clock,Child,Listener,Connector,TcpPort,TemporaryFiles,Readiness,Entropy,Stop";
+                if witness_is_root(case) {
+                    witness_with_root_host(&source, &host, bindings)
+                } else {
+                    format!("mod host {{\n{host}\n}}\nmod case {{\nuse crate::host::{{{bindings}}};\n{source}\n}}\n")
+                }
             } else { source };
             write(directory, "rejection.rs", &source)?;
-            let arguments = vec!["PATH=/usr/local/bin:/usr/bin:/bin".as_bytes().to_vec(), rustc_path.as_bytes().to_vec(),
+            let arguments = vec!["PATH=/usr/local/bin:/usr/bin:/bin".as_bytes().to_vec(), rustc.as_bytes().to_vec(),
                 "--edition=2024".as_bytes().to_vec(),
                 "--crate-type=lib".as_bytes().to_vec(), "--emit=metadata".as_bytes().to_vec(),
                 "-A".as_bytes().to_vec(), "warnings".as_bytes().to_vec(),

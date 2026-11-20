@@ -1,5 +1,6 @@
 // expect: output 6d6163726f73206f6b0a
-// Root-crate Rust comparison is in tools/declarative-macro-test.sh ($crate keeps its real meaning).
+// entry: specimen
+// witness: {"root":true}
 macro_rules! error_position {
     ($input:expr, $code:expr $(,)?) => ({ $crate::make_error($input, $code) });
 }
@@ -54,7 +55,7 @@ macro_rules! impl_parser_for_tuples {
     (__impl $($parser:ident $output:ident),+;) => { impl_parser_for_tuple!($($parser $output),+); };
 }
 impl_parser_for_tuples!(P1 O1, P2 O2, P3 O3);
-pub fn main(mut world: World) {
+pub fn specimen(mut world: World) {
     assert_eq!(error_position!(2usize + 3usize, 4u8,), (5usize, 4u8));
     let hidden = 11i32;
     assert_eq!(hygienic!(hidden), (11i32, 7i32));

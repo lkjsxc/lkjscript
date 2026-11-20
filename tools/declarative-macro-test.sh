@@ -86,19 +86,15 @@ cmp "$work/changed" "$work/restored"
 printf 'ok declarative macros: cold/warm statement captures and block imports match; template edit rechecks dependents and failed output remains unpublished\n'
 if [[ -n $witness ]]; then
     cp "$root/witness/bridge/output.rs" "$work/host.rs"
-    for case in declarative_macros nom_tuple_macros; do
-        {
-            printf '#![allow(dead_code,unused_imports,unused_variables,deprecated)]\n#[path="%s/host.rs"] mod host;\nuse host::World;\n' "$work"
-            sed 's/^pub fn main(mut world: World) {/pub fn specimen(mut world: World) {/' "tests/conformance/output/$case.lkj"
-            printf '\nfn main() { host::enter(specimen); }\n'
-        } > "$work/$case.rs"
-        "$witness" --edition=2024 --crate-name "$case" -A warnings "$work/$case.rs" -o "$work/$case" > "$work/output" 2> "$work/rust-error"
-        "$work/$case" > "$work/output" 2> "$work/rust-error"
-        expected='macros ok'
-        [[ $case != nom_tuple_macros ]] || expected='nom macros ok'
-        [[ $(cat "$work/output") == "$expected" && ! -s $work/rust-error ]]
-        printf 'ok declarative macros Rust root-crate witness: %s\n' "$case"
-    done
+    {
+        printf '#![allow(dead_code,unused_imports,unused_variables,deprecated)]\n#[path="%s/host.rs"] mod host;\nuse host::World;\n' "$work"
+        sed 's/^pub fn main(mut world: World) {/pub fn specimen(mut world: World) {/' tests/conformance/output/nom_tuple_macros.lkj
+        printf '\nfn main() { host::enter(specimen); }\n'
+    } > "$work/nom_tuple_macros.rs"
+    "$witness" --edition=2024 --crate-name nom_tuple_macros -A warnings "$work/nom_tuple_macros.rs" -o "$work/nom_tuple_macros" > "$work/output" 2> "$work/rust-error"
+    "$work/nom_tuple_macros" > "$work/output" 2> "$work/rust-error"
+    [[ $(cat "$work/output") == 'nom macros ok' && ! -s $work/rust-error ]]
+    printf 'ok declarative macros Rust root-crate witness: nom_tuple_macros\n'
     for case in macro_stmt_use_after macro_stmt_use_before macro_stmt_use_stmt; do
         {
             cat "tests/conformance/pass/$case.lkj"

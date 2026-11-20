@@ -52,6 +52,13 @@ builds the Rust witness, compares complete compiler bytes, and checks every
 marked case with overflow checks enabled. Its native test coordinator keeps
 program stderr and Rust trap/status records separate.
 
+Use `// witness: {"root":true}` for a self-contained source case that needs
+Rust crate-root resolution, such as a macro using `$crate`. Rust compiles the
+case at crate root with a witness adapter appended. A value case defaults to
+`probe`. An output or trap case uses a named `World` entry selected with
+`// entry: NAME`. Reserve `main` for the adapter in runnable root cases. A reject
+case uses the same `rustAccept`, `rustCode` and `world` metadata as other rejects.
+
 `tools/world-test.lkj` checks binary arguments and streams, directory confinement,
 closed and broken descriptors, process ownership, Listener descriptor promotion,
 and source/IR identity. Listener conformance cases cover IPv4 parsing, raw socket
