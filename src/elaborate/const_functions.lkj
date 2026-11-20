@@ -1,10 +1,38 @@
 //! Conservative source const-function qualification over ordinary lowering.
 //! This untrusted producer check grants no IR authority and does not evaluate constants.
-use super::{Compiler, PendingFunction, Result, a, err, ir, is_copy, place_type};
+use super::{Bindings, Builder, Compiler, PendingFunction, Result, a, definition_types, err, ir, is_copy, place_type};
 use crate::generics::TraitIdentity;
 use std::collections::{BTreeMap, BTreeSet};
 
 impl Compiler<'_> {
+    pub(super) fn check_associated_constants(&mut self) -> Result<()> {
+        for index in 0usize..self.source.constants.len() {
+            if self.source.constants[index].owner.is_none() { continue; }
+            let constant = self.source.constants[index].clone();
+            let scope = self.names.scope(&constant.module);
+            let mut scratch = ir::Function {
+                file: constant.span.file, name: constant.name.clone(), params: 0,
+                result: ir::UNIT, return_source: None, locals: Vec::new(), body: Vec::new(), test: false,
+            };
+            let mut builder = Builder {
+                source_function: None, scope, file: constant.span.file, compiler: self, function: &mut scratch,
+                return_annotated: true, scoped_body: super::scoped_locals::Body::default(), typed_bindings: Vec::new(),
+                sub: BTreeMap::new(), bindings: Bindings::default(), guard_aliases: BTreeMap::new(),
+                guard_shells: Vec::new(), capture_aliases: BTreeMap::new(), capture_locals: BTreeSet::new(),
+                active_span: constant.span, active_expression: None, const_calls: BTreeMap::new(),
+                const_constructors: BTreeSet::new(), references: super::Facts::new(0),
+                reference_updates: super::Facts::new(0), reference_schedules: BTreeMap::new(), carriers: BTreeMap::new(),
+                dependents: BTreeMap::new(), assignment_types: BTreeMap::new(), range_borrows: BTreeMap::new(),
+                inferred: definition_types::Types::default(), live: super::Facts::new(0),
+                definite_live: super::Facts::new(0), written: super::Facts::new(0), loops: Vec::new(), reachable: true,
+            };
+            let (_, ty) = builder.associated_constant(&constant)?;
+            drop(builder);
+            scratch.result = ty;
+            self.check_sized_function(&scratch, constant.span)?;
+        }
+        Ok(())
+    }
     pub(super) fn const_source_declaration(&self, function: usize) -> Option<usize> {
         for (index, pending) in &self.pending_functions {
             if *index != function { continue; }
@@ -120,5 +148,30 @@ impl Compiler<'_> {
             }
         }
         Ok(())
+    }
+}
+
+impl Builder<'_, '_> {
+    pub(super) fn associated_constant(&mut self, constant: &a::Constant) -> Result<(usize, usize)> {
+        let ty = self.compiler.resolve(constant.ty, &BTreeMap::new())?;
+        // A use constructs the same value in the declaration's lexical context.
+        let previous_scope = self.scope;
+        let previous_file = self.file;
+        self.scope = self.compiler.names.scope(&constant.module);
+        self.file = constant.span.file;
+        let previous_sub = std::mem::replace(&mut self.sub, BTreeMap::new());
+        let previous_bindings = std::mem::replace(&mut self.bindings, Bindings::default());
+        let previous_guards = std::mem::replace(&mut self.guard_aliases, BTreeMap::new());
+        let result = self.expr(constant.value, Some(ty));
+        self.scope = previous_scope;
+        self.file = previous_file;
+        self.sub = previous_sub;
+        self.bindings = previous_bindings;
+        self.guard_aliases = previous_guards;
+        let result = result?;
+        if result.1 != ty {
+            return Err(err(constant.span, "E_TYPE", "associated constant initializer type differs from its declaration"));
+        }
+        Ok(result)
     }
 }

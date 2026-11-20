@@ -384,6 +384,7 @@ fn implementation_identity(program: &a::Program, index: usize) -> String {
     let mut members: Vec<String> = Vec::new();
     for index in &value.methods { members.push(program.functions[*index].name.clone()); }
     for associated in &value.associated { members.push(format!("type:{}", associated.name)); }
+    for constant in &value.constants { members.push(format!("const:{}", program.constants[*constant].name)); }
     members.sort();
     let mut identity = Vec::new();
     for member in members { bytes(&mut identity, member.as_bytes()); }
@@ -392,6 +393,14 @@ fn implementation_identity(program: &a::Program, index: usize) -> String {
         Some(trait_ty) => format!("impl:<{} as {}>#{}", target, identity_type_name(program, trait_ty), &digest[..16usize]),
         None => format!("impl:{}#{}", target, &digest[..16usize]),
     }
+}
+fn constant_owner(program: &a::Program, value: &a::Constant) -> Option<String> {
+    let a::Type::Path(path) = &program.types[value.owner?].kind else { return None; };
+    Some(program.declarations[path.declaration?].name.clone())
+}
+fn constant_identity(program: &a::Program, value: &a::Constant) -> String {
+    let owner = constant_owner(program, value).unwrap_or_else(|| value.module.clone());
+    source_identity(resolve::Namespace::Value, &qualified(&owner, &value.name))
 }
 fn item_identity(program: &a::Program, item: a::Item, function_ids: &[String]) -> String {
     match item {
@@ -404,8 +413,7 @@ fn item_identity(program: &a::Program, item: a::Item, function_ids: &[String]) -
         a::Item::Use(index) => format!("{}::use:{}", source_path(&root_parent(&program.uses[index].module)), program.uses[index].alias),
         a::Item::Module(index) => type_identity(&program.modules[index].parent, &program.modules[index].name),
         a::Item::Alias(index) => type_identity(&program.aliases[index].module, &program.aliases[index].name),
-        a::Item::Constant(index) => source_identity(resolve::Namespace::Value,
-            &qualified(&program.constants[index].module, &program.constants[index].name)),
+        a::Item::Constant(index) => constant_identity(program, &program.constants[index]),
     }
 }
 fn declaration_identity(program: &a::Program, index: usize, function_ids: &[String]) -> Option<String> {
@@ -853,7 +861,9 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         append_generics(&mut result, &files, &type_identity(&value.module, &value.name), &value.generics)?;
     }
     for value in &program.constants {
-        append_typed(&mut result, &files, program, source_identity(resolve::Namespace::Value, &qualified(&value.module, &value.name)), root_parent(&value.module), "constant",
+        let owner = constant_owner(program, value).map_or_else(|| root_parent(&value.module),
+            |owner: String| source_identity(resolve::Namespace::Type, &owner));
+        append_typed(&mut result, &files, program, constant_identity(program, value), owner, "constant",
             &value.name, value.span, Some(value.ty), true)?;
     }
     macro_sources::project_items(&mut result, &files, program, &origins)?;

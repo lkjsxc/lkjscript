@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+struct Flag(u16);
+impl Flag { const VALUE: Flag = false; }
+pub fn probe() -> u16 { 42 }

@@ -39,6 +39,58 @@ pub(crate) fn const_data_constructor(source: &Program, path: &Path) -> bool {
     }
 }
 
+fn associated_initializer(source: &Program, names: &crate::resolve::Resolver<'_>, index: usize,
+    edges: &mut Vec<Edge>) -> Result<(), Diagnostic> {
+    let mut pending = vec![source.constants[index].value];
+    while let Some(expression) = pending.pop() {
+        let node = &source.exprs[expression];
+        match &node.kind {
+            Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::Char(_) => continue,
+            Expr::Unary { op, value } if op == "-" && matches!(&source.exprs[*value].kind, Expr::Int(_)) => continue,
+            Expr::Tuple(items) => {
+                pending.extend_from_slice(items);
+                continue;
+            }
+            Expr::Struct { fields, base: None, .. } => {
+                for (_, value) in fields { pending.push(*value); }
+                continue;
+            }
+            Expr::Call { callee, args } => {
+                let callee = &source.exprs[*callee];
+                if let Expr::Path(path) = &callee.kind {
+                    let path = names.value_path(callee.scope, path, callee.span)?;
+                    if const_data_constructor(source, &path) {
+                        pending.extend_from_slice(args);
+                        continue;
+                    }
+                }
+            }
+            Expr::Path(path) => {
+                let path = names.value_path(node.scope, path, node.span)?;
+                if let Some(declaration) = path.declaration {
+                    let entry = &source.declarations[declaration];
+                    let inert = match entry.item {
+                        Item::Constant(target) if source.constants[target].owner.is_some() => {
+                            edges.push(Edge { from: index, to: target, expanding: false,
+                                unknown: false, span: node.span });
+                            true
+                        }
+                        Item::Struct(index) => source.structs[index].unit && path.name == entry.name,
+                        Item::Enum(index) => source.enums[index].variants.iter().any(|variant|
+                            variant.style == VariantStyle::Unit && path.name == qualified(&entry.name, &variant.name)),
+                        _ => false,
+                    };
+                    if inert { continue; }
+                }
+            }
+            _ => {}
+        }
+        return Err(Diagnostic::new(node.span, "E_UNSUPPORTED",
+            "associated constant initializer requires literal data, data constructors or another inherent constant"));
+    }
+    Ok(())
+}
+
 pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
     for (index, function) in source.functions.iter().enumerate() {
         if !function.const_qualified { continue; }
@@ -55,7 +107,12 @@ pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
     // Initializers are currently projected into ordinary execution. Do not
     // silently turn an apparent compile-time const call into a runtime call.
     let names = crate::resolve::Resolver::new(source)?;
-    for constant in &source.constants {
+    let mut edges = Vec::new();
+    for (index, constant) in source.constants.iter().enumerate() {
+        if constant.owner.is_some() {
+            associated_initializer(source, &names, index, &mut edges)?;
+            continue;
+        }
         let span = source.exprs[constant.value].span;
         for expression in &source.exprs {
             if expression.span.file != span.file || expression.span.start < span.start
@@ -79,5 +136,6 @@ pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
             }
         }
     }
+    constant_dependency_cycles(source.constants.len(), &edges)?;
     Ok(())
 }

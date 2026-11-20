@@ -3203,6 +3203,7 @@ fn declarations(source: &Program) -> Result<(), Diagnostic> {
         generic_names(&alias.generics)?;
     }
     for constant in &source.constants {
+        if constant.owner.is_some() { continue; }
         add_name(
             &mut value_names,
             &constant.module,
@@ -3217,9 +3218,12 @@ fn constant_cycles(source: &Program) -> Result<(), Diagnostic> {
     let mut starts = BTreeMap::new();
     for i in 0..source.constants.len() {
         let c = &source.constants[i];
+        if c.owner.is_some() { continue; }
+        let span = source.exprs[c.value].span;
         names.insert(qualified(&c.module, &c.name), i);
-        starts.insert(source.exprs[c.value].span.start, i);
+        starts.insert((span.file, span.start), i);
     }
+    if starts.is_empty() { return Ok(()); }
     let mut ordered_starts = Vec::new();
     for start in starts {
         ordered_starts.push(start);
@@ -3234,7 +3238,7 @@ fn constant_cycles(source: &Program) -> Result<(), Diagnostic> {
         let mut end = ordered_starts.len();
         while at < end {
             let middle = at + (end - at) / 2;
-            if ordered_starts[middle].0 <= expression.span.start {
+            if ordered_starts[middle].0 <= (expression.span.file, expression.span.start) {
                 at = middle + 1;
             } else {
                 end = middle;
@@ -3245,7 +3249,8 @@ fn constant_cycles(source: &Program) -> Result<(), Diagnostic> {
         }
         let from = ordered_starts[at - 1].1;
         let constant = &source.constants[from];
-        if expression.span.end > source.exprs[constant.value].span.end {
+        let initializer = source.exprs[constant.value].span;
+        if expression.span.file != initializer.file || expression.span.end > initializer.end {
             continue;
         }
         if path.qualification.is_some() { continue; }
@@ -3255,8 +3260,7 @@ fn constant_cycles(source: &Program) -> Result<(), Diagnostic> {
         } else if let Some(rest) = path.name.as_str().strip_prefix("self::") {
             name = qualified(&constant.module, rest);
         }
-        let to = names.get(&name).or_else(|| names.get(&path.name));
-        if let Some(to) = to {
+        if let Some(to) = names.get(&name).or_else(|| names.get(&path.name)) {
             edges.push(Edge {
                 from,
                 to: *to,
@@ -3266,7 +3270,11 @@ fn constant_cycles(source: &Program) -> Result<(), Diagnostic> {
             });
         }
     }
-    let groups = components(source.constants.len(), &edges);
+    constant_dependency_cycles(source.constants.len(), &edges)
+}
+fn constant_dependency_cycles(count: usize, edges: &[Edge]) -> Result<(), Diagnostic> {
+    if edges.is_empty() { return Ok(()); }
+    let groups = components(count, edges);
     for edge in edges {
         if groups[edge.from] == groups[edge.to] {
             return Err(Diagnostic::new(

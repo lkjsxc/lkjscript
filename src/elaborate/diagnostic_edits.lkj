@@ -282,11 +282,11 @@ impl Builder<'_, '_> {
             "local const declarations are unsupported; help: move the declaration to its containing module (docs/language.md, Statements, control and patterns)",
         );
         let source = self.compiler.source;
-        let function = &source.functions[self.source_function];
+        let function = &source.functions[self.source_function()];
         if self.scope != source.files[self.file].crate_root
             || constant.span.file != self.file || constant.module != function.module
             || !function.generics.is_empty()
-            || source.function_owner(a::FunctionId { index: self.source_function }) != a::FunctionOwner::Free
+            || source.function_owner(a::FunctionId { index: self.source_function() }) != a::FunctionOwner::Free
             || self.binding(&constant.name).is_some()
             || source.attrs.iter().any(|attribute| attribute.span.file == self.file)
         {

@@ -1,0 +1,6 @@
+// expect: reject E_PRIVACY
+mod readiness {
+    pub struct Ready;
+    impl Ready { const EMPTY: u16 = 0; }
+}
+pub fn probe() -> u16 { readiness::Ready::EMPTY }

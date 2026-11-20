@@ -1638,8 +1638,10 @@ impl Infer<'_, '_> {
                                 if let a::Item::Constant(index) =
                                     self.source.declarations[declaration].item
                                 {
-                                    let environment = self.environment.clone();
-                                    let ty = self.source.constants[index].ty;
+                                    let constant = &self.source.constants[index];
+                                    let ty = constant.ty;
+                                    let environment = if constant.owner.is_some() { BTreeMap::new() }
+                                        else { self.environment.clone() };
                                     self.source_type(ty, &environment)?
                                 } else {
                                     let no_fields: Vec<(String, Variable)> = Vec::new();

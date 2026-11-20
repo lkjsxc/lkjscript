@@ -78,6 +78,18 @@ Functions, structs, enums, module constants, aliases, generics, trait implementa
 match, if, while, loop and for are implemented. Assertions, panic and vec forms
 are fixed syntax. Literal panic messages and plain named captures of unique immutable outer-block literal bindings become static trap text. Other panic payloads are not evaluated: write format!(...) bytes through an already granted output capability before panic!(). Local const declarations reject; move the declaration to its containing module.
 
+An inherent implementation on a nongeneric struct or enum may declare `const`
+members. A value path such as `Ready::EMPTY` selects the member of that exact
+nominal declaration and checks its visibility. An import can rename the owning
+type, and `Self::EMPTY` works within its inherent implementations. `Self` in the
+constant's annotation or constructor denotes the owning type. Initializers admit
+scalar literals, tuples, data constructors and paths to other inherent constants.
+The initializer checks in its declaring module even when unused. Cycles are
+rejected. Each use constructs the value with ordinary IR, including inside a
+const function. The catalog records value identities such as `value@Ready::EMPTY`.
+Trait constants, generic owners, type-alias owners, constant patterns and calls
+that require compile-time evaluation remain source boundaries.
+
 Free functions and inherent methods may be declared `const fn`. Ordinary runtime
 calls use the same concrete functions and checked IR as other calls. Every
 const-qualified body is verified, including unused definitions and unreachable
@@ -815,8 +827,8 @@ is private. Copy, Clone, comparisons, Display and Debug use that checked value.
 Its source representation carries no Rust niche or external ABI claim.
 
 Primitive `MIN/MAX` paths for the ten integer types select typed constants
-from the source integer module. The primitive must be written directly; general
-type-alias or user-associated constants are separate source boundaries. A local
+from the source integer module. The primitive must be written directly to use
+this library mapping. A local
 module or generic parameter named `usize` prevents the primitive shortcut.
 An absent integer library refuses the spelling rather than supplying a hidden
 value. The source `SaturatingArithmetic::saturating_add` implementations use

@@ -202,7 +202,7 @@ impl Builder<'_, '_> {
         Ok(annotations)
     }
     fn declared_region(&self, name: &str) -> bool {
-        for parameter in self.compiler.scoped_parameters(self.source_function) {
+        for parameter in self.compiler.scoped_parameters(self.source_function()) {
             if parameter.lifetime && parameter.name == name {
                 return true;
             }
@@ -243,7 +243,7 @@ impl Builder<'_, '_> {
                     if path.declaration.is_none() && path.name == "Self" {
                         if let a::FunctionOwner::Implementation(owner) =
                             self.compiler.source.function_owner(a::FunctionId {
-                                index: self.source_function,
+                                index: self.source_function(),
                             })
                         {
                             pending.push(self.compiler.source.impls[owner.index].target);
@@ -263,7 +263,7 @@ impl Builder<'_, '_> {
         let mut annotations = Vec::new();
         for leaf in self
             .compiler
-            .region_leaves(self.source_function, syntax, ty)
+            .region_leaves(self.source_function(), syntax, ty)
         {
             let name = match leaf.label {
                 super::origins::Label::Lifetime(name) => name,
@@ -286,7 +286,7 @@ impl Builder<'_, '_> {
                     scope: if name == "'static" {
                         0
                     } else {
-                        self.source_function
+                        self.source_function()
                     },
                     name,
                 },

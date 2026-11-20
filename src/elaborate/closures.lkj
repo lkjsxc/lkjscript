@@ -1162,7 +1162,7 @@ impl Builder<'_, '_> {
         let mut scoped_body: super::scoped_locals::Body;
         {
             let mut builder = Builder {
-                source_function: entry.source_function,
+                source_function: Some(entry.source_function),
                 scope: self.scope,
                 file: span.file,
                 compiler: self.compiler,

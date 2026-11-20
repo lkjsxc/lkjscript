@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+const fn answer() -> u16 { 42 }
+struct Flag;
+impl Flag { const VALUE: u16 = answer(); }
+pub fn probe() -> u16 { Flag::VALUE }

@@ -324,6 +324,9 @@ fn infer_resolved_report_with_library(
     if let std::result::Result::Err(error) = compiler.check_capability_methods() {
         return std::result::Result::Err(vec![error]);
     }
+    if let std::result::Result::Err(error) = compiler.check_associated_constants() {
+        return std::result::Result::Err(vec![error]);
+    }
     let mut selected = Vec::new();
     for index in 0..source.functions.len() {
         if all_library || !library_definition(source, index) {
@@ -1415,7 +1418,7 @@ impl Compiler<'_> {
         let references = Facts::new(live.len());
         let scope = self.names.scope(&source.module);
         let mut builder = Builder {
-            source_function: instance.source,
+            source_function: Some(instance.source),
             scope,
             file: source.span.file,
             compiler: self,
@@ -1561,7 +1564,7 @@ struct LoopScope {
     exits: Vec<Snapshot>,
 }
 struct Builder<'a, 'b> {
-    source_function: usize,
+    source_function: Option<usize>,
     scope: a::ModuleId,
     file: a::FileId,
     compiler: &'a mut Compiler<'b>,
@@ -1594,6 +1597,9 @@ struct Builder<'a, 'b> {
     reachable: bool,
 }
 impl Builder<'_, '_> {
+    fn source_function(&self) -> usize {
+        self.source_function.expect("operation requires an authored function body")
+    }
     fn trait_entails(&self, source: a::DeclarationId, target: a::DeclarationId) -> bool {
         let mut pending = vec![source];
         let mut seen = std::collections::BTreeSet::new();
@@ -1659,13 +1665,13 @@ impl Builder<'_, '_> {
         {
             return true;
         }
-        let function = &self.compiler.source.functions[self.source_function];
+        let function = &self.compiler.source.functions[self.source_function()];
         if self.parameter_allows_trait(&function.generics, base, declaration) {
             return true;
         }
         if let a::FunctionOwner::Implementation(owner) =
             self.compiler.source.function_owner(a::FunctionId {
-                index: self.source_function,
+                index: self.source_function(),
             })
         {
             let owner = &self.compiler.source.impls[owner.index];
@@ -1730,7 +1736,7 @@ impl Builder<'_, '_> {
         }
     }
     fn emit(&mut self, op: ir::Op, line: usize) {
-        let const_expression = if self.compiler.source.functions[self.source_function].const_qualified {
+        let const_expression = if self.source_function.is_some_and(|index| self.compiler.source.functions[index].const_qualified) {
             self.active_expression
         } else { None };
         if let Some(expression) = const_expression {
@@ -1891,7 +1897,7 @@ impl Builder<'_, '_> {
             _ => {}
         }
         self.function.body.push(ir::Instruction {
-            file: None,
+            file: if self.file == self.function.file { None } else { Some(self.file) },
             op,
             line,
             column: if self.active_span.line == line {
@@ -2884,6 +2890,7 @@ impl Builder<'_, '_> {
                         ));
                     }
                     let constant = self.compiler.source.constants[index].clone();
+                    if constant.owner.is_some() { return self.associated_constant(&constant); }
                     let t = self.compiler.resolve(constant.ty, &self.sub)?;
                     return self.expr(constant.value, Some(t));
                 }
@@ -4117,7 +4124,7 @@ impl Builder<'_, '_> {
             }
         }
         if associated.is_some() && self.compiler.semantic_evidence.is_some()
-            && semantic::closed_source_owner(self.compiler.source, self.source_function) {
+            && self.source_function.is_some_and(|index| semantic::closed_source_owner(self.compiler.source, index)) {
             if let Some(evidence) = self.compiler.semantic_evidence.as_mut() { evidence.method(callee, index); }
         }
         let ty = self.compiler.functions[function].result;

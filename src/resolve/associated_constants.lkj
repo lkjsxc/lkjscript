@@ -1,0 +1,145 @@
+//! Inherent constants occupy the value namespace of one resolved nominal type.
+use super::*;
+
+#[derive(Default)]
+pub(super) struct Constants {
+    members: BTreeMap<(DeclarationId, String), Binding>,
+    initializers: BTreeMap<FileId, Vec<(Span, Binding)>>,
+    implementations: BTreeMap<FileId, Vec<(Span, DeclarationId)>>,
+}
+
+impl Resolver<'_> {
+    fn constant_owner(&self, target: TypeId) -> Result<Option<Binding>> {
+        let node = &self.program.types[target];
+        let Type::Path(path) = &node.kind else { return Ok(None); };
+        if path.qualification.is_some() || !path.args.is_empty() || !path.bindings.is_empty()
+            || path.name == "Self" { return Ok(None); }
+        let binding = if let Some(declaration) = path.declaration {
+            let entry = &self.declarations[declaration];
+            Some(Binding { declaration, target: path.name.clone(), scope: entry.scope,
+                public: entry.public, glob: false, ambiguous: false, semantic_alias: false })
+        } else {
+            self.path(node.scope, &path.name, Namespace::Type, node.span, true)?
+                .and_then(|resolved| resolved.binding)
+        };
+        let Some(binding) = binding else { return Ok(None); };
+        let entry = &self.declarations[binding.declaration];
+        if binding.target != entry.name { return Ok(None); }
+        let nongeneric = match entry.item {
+            Item::Struct(index) => self.program.structs[index].generics.is_empty(),
+            Item::Enum(index) => self.program.enums[index].generics.is_empty(),
+            _ => false,
+        };
+        if nongeneric { Ok(Some(binding)) } else { Ok(None) }
+    }
+
+    pub(super) fn index_associated_constants(&mut self) -> Result<()> {
+        for (index, constant) in self.program.constants.iter().enumerate() {
+            let Some(target) = constant.owner else { continue; };
+            let scope = self.scope(&constant.module);
+            let Some(owner) = self.constant_owner(target)? else {
+                return Err(Diagnostic::new(constant.span, "E_UNSUPPORTED",
+                    "associated constants require a direct nongeneric struct or enum owner"));
+            };
+            let owner_entry = &self.declarations[owner.declaration];
+            if self.program.scopes[scope].crate_root != self.program.scopes[owner_entry.scope].crate_root {
+                return Err(Diagnostic::new(constant.span, "E_TYPE",
+                    "an inherent associated constant requires a type defined in this crate"));
+            }
+            if let Item::Enum(index) = owner_entry.item {
+                if self.program.enums[index].variants.iter().any(|variant| variant.name == constant.name) {
+                    return Err(Diagnostic::new(constant.span, "E_UNSUPPORTED",
+                        "associated constant collides with an enum variant"));
+                }
+            }
+            let name = qualified(&owner_entry.name, &constant.name);
+            let declaration = self.declarations.len();
+            let binding = Binding { declaration, target: name.clone(), scope, public: constant.public,
+                glob: false, ambiguous: false, semantic_alias: false };
+            if self.associated_constants.members.insert((owner.declaration, constant.name.clone()), binding).is_some() {
+                return Err(Diagnostic::new(constant.span, "E_NAME", &format!("duplicate declaration: {name}")));
+            }
+            self.declarations.push(Declaration { name, scope, item: Item::Constant(index),
+                public: constant.public, span: constant.span });
+            if !self.associated_constants.initializers.contains_key(&constant.span.file) {
+                self.associated_constants.initializers.insert(constant.span.file, Vec::new());
+            }
+            self.associated_constants.initializers.get_mut(&constant.span.file).unwrap().push((constant.span, owner));
+        }
+        if self.associated_constants.members.is_empty() { return Ok(()); }
+        for implementation in &self.program.impls {
+            if implementation.trait_ty.is_some() || !implementation.generics.is_empty()
+                || !implementation.predicates.is_empty() { continue; }
+            let Some(owner) = self.constant_owner(implementation.target)? else { continue; };
+            let span = implementation.span;
+            if !self.associated_constants.implementations.contains_key(&span.file) {
+                self.associated_constants.implementations.insert(span.file, Vec::new());
+            }
+            self.associated_constants.implementations.get_mut(&span.file).unwrap().push((span, owner.declaration));
+            for method in &implementation.methods {
+                let method = &self.program.functions[*method];
+                if self.associated_constants.members.contains_key(&(owner.declaration, method.name.clone())) {
+                    return Err(Diagnostic::new(method.span, "E_NAME", "inherent method and constant have the same name"));
+                }
+            }
+        }
+        for import in &self.program.uses {
+            let scope = self.scope(&import.module);
+            let Ok(Some(resolved)) = self.path(scope, &import.path, Namespace::Value, import.span, false) else { continue; };
+            if resolved.binding.is_some_and(|binding|
+                matches!(self.declarations[binding.declaration].item, Item::Constant(index)
+                    if self.program.constants[index].owner.is_some())) {
+                return Err(Diagnostic::new(import.span, "E_IMPORT", "import the type to refer to an associated constant"));
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn associated_constant(&self, owner: DeclarationId, name: &str,
+        scope: ModuleId, span: Span) -> Result<Option<Resolved>> {
+        if self.associated_constants.members.is_empty() { return Ok(None); }
+        let Some(binding) = self.associated_constants.members.get(&(owner, name.to_string())) else { return Ok(None); };
+        self.access(binding, scope, span)?;
+        Ok(Some(Resolved::item(binding.clone())))
+    }
+
+    pub(super) fn constant_self(&self, scope: ModuleId, parts: &[String],
+        namespace: Namespace, span: Span) -> Result<Option<Resolved>> {
+        if self.associated_constants.members.is_empty() { return Ok(None); }
+        if parts.len() == 1usize {
+            if let Some(entries) = self.associated_constants.initializers.get(&span.file) {
+                let mut selected: Option<Binding> = None;
+                for (owner_span, owner) in entries {
+                    if owner_span.start <= span.start && span.end <= owner_span.end {
+                        if selected.as_ref().is_some_and(|entry| entry.declaration != owner.declaration) {
+                            return Err(Diagnostic::new(span, "E_UNSUPPORTED", "Self has overlapping associated constant scopes"));
+                        }
+                        selected = Some(owner.clone());
+                    }
+                }
+                return Ok(selected.map(|binding: Binding| Resolved::item(binding)));
+            }
+        }
+        if namespace == Namespace::Value && parts.len() == 2usize {
+            let Some(implementations) = self.associated_constants.implementations.get(&span.file) else { return Ok(None); };
+            let mut first: Option<DeclarationId> = None;
+            let mut selected: Option<DeclarationId> = None;
+            let mut ambiguous = false;
+            for (owner_span, owner) in implementations {
+                if owner_span.start > span.start || span.end > owner_span.end { continue; }
+                ambiguous |= first.is_some_and(|first| first != *owner);
+                first = Some(*owner);
+                if self.associated_constants.members.contains_key(&(*owner, parts[1].clone())) {
+                    selected = Some(*owner);
+                }
+            }
+            if let Some(owner) = selected {
+                if ambiguous {
+                    return Err(Diagnostic::new(span, "E_UNSUPPORTED", "Self has overlapping associated constant scopes"));
+                }
+                return self.associated_constant(owner, &parts[1], scope, span);
+            }
+        }
+        Ok(None)
+    }
+}

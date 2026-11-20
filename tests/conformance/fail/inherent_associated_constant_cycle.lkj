@@ -1,0 +1,10 @@
+// expect: reject E_TYPE
+mod first {
+    pub struct Flag;
+    impl Flag { pub const VALUE: u16 = super::second::Flag::VALUE; }
+}
+mod second {
+    pub struct Flag;
+    impl Flag { pub const VALUE: u16 = super::first::Flag::VALUE; }
+}
+pub fn probe() -> u16 { first::Flag::VALUE }

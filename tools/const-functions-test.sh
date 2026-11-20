@@ -109,4 +109,13 @@ header_build header-qualified-warm
 grep -Eq '"build_reused":1' "$fixture/header-qualified-warm.log"
 execute 42
 test ! -e "$fixture/source/.lkjscript-edit.pending"
+cp tests/conformance/pass/inherent_associated_constant.lkj "$fixture/source/main.lkj"
+publish associated
+query references value@readiness::Ready::WRITABLE > "$fixture/references"
+grep -Fq '"value@readiness::Ready::BASE"' "$fixture/references"
+printf '%s\n' '{"version":1,"operations":[{"op":"rename","id":"value@readiness::Ready::BASE","name":"ORIGIN"}]}' > "$fixture/request"
+"$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/associated-rename.log"
+grep -Fq 'const ORIGIN: Ready' "$fixture/source/main.lkj"
+grep -Fq 'Self::ORIGIN' "$fixture/source/main.lkj"
+execute 42
 printf 'ok const fn: qualified meaning, call references, checked rename/body edit, rejected nonconst edits, raw-header cache invalidation, warm cache and both engines\n'

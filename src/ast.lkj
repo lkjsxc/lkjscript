@@ -241,6 +241,7 @@ pub struct Impl {
     pub trait_ty: Option<TypeId>,
     pub methods: Vec<usize>,
     pub associated: Vec<AssociatedType>,
+    pub constants: Vec<usize>,
     pub span: Span,
 }
 
@@ -282,6 +283,7 @@ pub struct Alias {
 pub struct Constant {
     pub name: String,
     pub module: String,
+    pub owner: Option<TypeId>,
     pub ty: TypeId,
     pub value: ExprId,
     pub public: Visibility,

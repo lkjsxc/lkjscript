@@ -1,0 +1,22 @@
+// expect: value 42
+// witness: {}
+mod readiness {
+    pub struct Ready(u16);
+    impl Ready {
+        pub const EMPTY: Self = Self(0);
+        pub const READABLE: Ready = Ready(0b00001);
+        const BASE: Ready = Ready(41);
+    }
+    impl Ready {
+        pub const WRITABLE: Ready = Self::BASE;
+        pub const fn bits(&self) -> u16 { self.0 }
+    }
+}
+mod unrelated {
+    pub struct Ready;
+    impl Ready { pub const READABLE: u16 = 2; }
+}
+use readiness::Ready as Mask;
+const EMPTY: Mask = Mask::EMPTY;
+const fn observed() -> u16 { Mask::READABLE.bits() + Mask::WRITABLE.bits() }
+pub fn probe() -> u16 { observed() + EMPTY.bits() + unrelated::Ready::READABLE - 2 }

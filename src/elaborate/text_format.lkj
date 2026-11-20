@@ -16,7 +16,7 @@ impl Builder<'_, '_> {
         };
         if !matches!(self.compiler.types[inner].kind, ir::TypeKind::Str) { return None; }
         let source = self.compiler.source;
-        let function = &source.functions[self.source_function];
+        let function = &source.functions[self.source_function()];
         if function.span.file != span.file || function.params.iter().any(|param| param.name == name) {
             return None;
         }

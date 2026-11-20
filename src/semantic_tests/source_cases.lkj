@@ -5228,7 +5228,7 @@ source_file("source_bounds.lkj", Some("struct Cell{value:i64}\nstruct Pair{left:
     }
     if 378usize % workers == shard {
         record(source_case("recovery_reaches_independent_statements_items_and_nested_methods_0000", "case/main.lkj", None, vec![
-source_file("case/main.lkj", Some("\n        fn broken() { let = 1; mystery!(); let Some(x) = unknown else {}; }\n        fn good() -> i64 { 42 }\n        mod nested { fn broken() { other!(); } fn good() -> i64 { 7 } }\n        struct Item;\n        impl Item {\n            const BAD: i64 = 0;\n            fn broken() { third!(); }\n            fn good() -> i64 { 9 }\n        }\n    ")),
+source_file("case/main.lkj", Some("\n        fn broken() { let = 1; mystery!(); let Some(x) = unknown else {}; }\n        fn good() -> i64 { 42 }\n        mod nested { fn broken() { other!(); } fn good() -> i64 { 7 } }\n        struct Item;\n        impl Item {\n            static BAD: i64 = 0;\n            fn broken() { third!(); }\n            fn good() -> i64 { 9 }\n        }\n    ")),
 ], "E_PARSE"), errors);
         count += 1;
     }

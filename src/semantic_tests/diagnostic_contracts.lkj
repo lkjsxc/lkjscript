@@ -27,7 +27,7 @@ fn recovery_reaches_independent_statements_items_and_nested_methods() {
         mod nested { fn broken() { other!(); } fn good() -> i64 { 7 } }
         struct Item;
         impl Item {
-            const BAD: i64 = 0;
+            static BAD: i64 = 0;
             fn broken() { third!(); }
             fn good() -> i64 { 9 }
         }

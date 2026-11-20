@@ -1,4 +1,5 @@
 //! Module and declaration identity. Later phases consume resolved paths, never bare-name guesses.
+mod associated_constants;
 mod import_scopes;
 mod iteration;
 mod primitive_limits;
@@ -65,6 +66,7 @@ pub struct Resolver<'a> {
     // Only an unresolved input needs a newly built relation. Resolved inputs
     // retain the program's authoritative table without constructing another.
     function_owners: Option<Vec<FunctionOwner>>,
+    associated_constants: associated_constants::Constants,
 }
 
 fn first_name(path: &str) -> &str {
@@ -227,6 +229,7 @@ impl<'a> Resolver<'a> {
             trait_names: BTreeMap::new(),
             anonymous_traits: BTreeSet::new(),
             function_owners,
+            associated_constants: associated_constants::Constants::default(),
         };
         for (id, scope) in program.scopes.iter().enumerate() {
             result.modules.insert(scope.path.clone(), id);
@@ -295,6 +298,7 @@ impl<'a> Resolver<'a> {
             )?;
         }
         for (id, item) in program.constants.iter().enumerate() {
+            if item.owner.is_some() { continue; }
             result.declare(
                 &item.name,
                 &item.module,
@@ -322,6 +326,7 @@ impl<'a> Resolver<'a> {
             )?;
         }
         let problems = result.imports();
+        if problems.is_empty() { result.index_associated_constants()?; }
         Ok((result, problems))
     }
     fn function_owner(&self, function: FunctionId) -> FunctionOwner {
@@ -501,6 +506,11 @@ impl<'a> Resolver<'a> {
         if parts.is_empty() {
             return Ok(None);
         }
+        if parts[0].as_str() == "Self" {
+            if let Some(resolved) = self.constant_self(scope, &parts, namespace, span)? {
+                return Ok(Some(resolved));
+            }
+        }
         let local_type = self
             .lookup_owner(scope, parts[0].as_str(), Namespace::Type, span)
             .is_some_and(|owner| owner >= self.program.scopes.len());
@@ -674,6 +684,11 @@ impl<'a> Resolver<'a> {
                     at += 1;
                 }
                 Item::Struct(_) | Item::Enum(_) | Item::Alias(_) | Item::Trait(_) => {
+                    if namespace == Namespace::Value && parts.len() - at == 1usize {
+                        if let Some(member) = self.associated_constant(binding.declaration, &parts[at], scope, span)? {
+                            return Ok(Some(member));
+                        }
+                    }
                     binding.target = format!("{}::{}", binding.target, join_parts(&parts[at..]));
                     // The suffix has its own spelling; an alias of its owner
                     // does not make a variant or associated member an alias.
@@ -1171,6 +1186,11 @@ impl Resolver<'_> {
         let mut path = path.clone();
         if path.name.starts_with("__macro$") { let marked = path.name.clone(); path.name = crate::ast::macros::source_name(&marked).to_string(); }
         self.resolve_path(scope, &mut path, Namespace::Value, span)?;
+        if !path.args.is_empty() && path.declaration.is_some_and(|declaration|
+            matches!(self.declarations[declaration].item, Item::Constant(index)
+                if self.program.constants[index].owner.is_some())) {
+            return Err(Diagnostic::new(span, "E_TYPE", "associated constants take no generic arguments"));
+        }
         Ok(path)
     }
     pub fn scope(&self, path: &str) -> ModuleId {
