@@ -1,0 +1,84 @@
+//! JSON identities and edit requests for associated-query-test.sh.
+use std::json::{self, Value};
+
+fn select_identity(input: &mut Stdin, suffix: &str) -> Result<String, String> {
+    let bytes = input.read_to_end().map_err(|errno: i64| -> String { format!("read function identities: errno {errno}") })?;
+    let lines = match std::str::from_utf8(&bytes) {
+        Ok(text) => text,
+        Err(_) => return Err("function identities must be UTF-8".to_string()),
+    };
+    let mut selected = String::new();
+    let mut count = 0usize;
+    for line in lines.split('\n') {
+        if line.is_empty() { continue; }
+        let identity = match json::parse(line.as_bytes()) {
+            Ok(Value::String(identity)) => identity,
+            Ok(_) => return Err("expected a JSON string for the function identity".to_string()),
+            Err(problem) => return Err(format!("{problem}")),
+        };
+        let matches_suffix = identity.as_str().ends_with(suffix);
+        if matches_suffix {
+            selected = identity;
+            count += 1usize;
+        }
+    }
+    if count == 1usize { Ok(selected) }
+    else { Err(format!("expected one function identity for {suffix}, found {count}")) }
+}
+
+fn request(fields: Vec<(String, Value)>) -> Result<String, String> {
+    let body = Value::Object(vec![
+        ("operations".to_string(), Value::Array(vec![Value::Object(fields)])),
+        ("version".to_string(), Value::from_usize(1usize)),
+    ]);
+    let encoded = json::stringify(&body).map_err(|problem| -> String { format!("{problem}") })?;
+    Ok(format!("{encoded}\n"))
+}
+
+fn run(input: &mut Stdin, args: &[String]) -> Result<String, String> {
+    if !args.is_empty() {
+        match (args[0].as_str(), args.len()) {
+            ("identity", 2) => return select_identity(input, &args[1]),
+            ("rename", 3) => return request(vec![
+                ("op".to_string(), Value::String("rename".to_string())),
+                ("id".to_string(), Value::String(args[1].clone())),
+                ("name".to_string(), Value::String(args[2].clone())),
+            ]),
+            ("change-signature", 2) => {
+                let id = &args[1];
+                let parameters = Value::Array(vec![
+                    Value::String(format!("{id}::param:b")),
+                    Value::String(format!("{id}::param:a")),
+                ]);
+                // The planner hashes this field order when naming generated locals.
+                return request(vec![
+                    ("op".to_string(), Value::String("change-signature".to_string())),
+                    ("parameters".to_string(), parameters),
+                    ("id".to_string(), Value::String(id.clone())),
+                ]);
+            }
+            _ => {}
+        }
+    }
+    Err("invalid associated-query fixture invocation".to_string())
+}
+
+pub fn main(mut argv: Arguments, mut input: Stdin, mut output: Stdout, mut error: Stderr, mut status: ExitStatus) {
+    let result = (|| -> Result<String, String> {
+        let mut args = Vec::new();
+        for bytes in argv.args() {
+            match String::from_utf8(bytes) {
+                Ok(text) => args.push(text),
+                Err(_) => return Err("arguments must be UTF-8".to_string()),
+            }
+        }
+        run(&mut input, &args)
+    })();
+    match result {
+        Ok(text) => { output.write(text.as_bytes()); }
+        Err(problem) => {
+            error.write(format!("{problem}\n").as_bytes());
+            status.set_status(255);
+        }
+    }
+}

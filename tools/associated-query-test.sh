@@ -12,6 +12,8 @@ trap 'if [[ ${COMPILER_ASSOCIATED_KEEP:-0} == 1 ]]; then printf "retained_fixtur
 mkdir "$fixture/project" "$fixture/store"
 head -c 32 /dev/urandom > "$fixture/key"
 common=(main.lkj --source-dir "$fixture/project" --no-library --store "$fixture/store" --store-key "$fixture/key")
+"$compiler" build tools/associated-query-fixtures.lkj --no-store \
+    --grant argv --grant input --grant output --grant error --grant status -o "$fixture/data"
 publish() {
     "$compiler" build "${common[@]}" --index -o "$fixture/image" > "$fixture/index"
     snapshot=$(awk '$1=="LKJSCRIPT_SNAPSHOT" { print $2 }' "$fixture/index")
@@ -24,24 +26,20 @@ query() {
     "$compiler" query "${common[@]}" --snapshot "$snapshot" --kind "$kind" --id "$identity" --limit 128 --bytes 100000 "$@"
 }
 identity() {
-    perl -MJSON::PP -e '
-        my ($file,$suffix)=@ARGV; open my $fh,"<",$file or die $!; my @ids;
-        while(<$fh>) {
-            next unless /^(("(?:\\.|[^"])*"))\s+level=source-claim\s+fact=signature\s+kind=function/;
-            my $id=decode_json($1); push @ids,$id if $id =~ /\Q$suffix\E$/;
-        }
-        die "expected one function identity for $suffix, found ".scalar(@ids) unless @ids==1;
-        print $ids[0];
-    ' "$fixture/outline" "$1"
+    awk -F '\t' '$2 == "level=source-claim" && $3 == "fact=signature" && $4 ~ /^kind=function( |$)/ { print $1 }' \
+        "$fixture/outline" | "$fixture/data" identity "$1"
 }
 uses() {
     query uses "$1" > "$fixture/uses"
     local actual
-    actual=$(perl -ne '$n++ if /level=source-claim\s+fact=uses\s+.*kind=associated-call/; END {print $n//0}' "$fixture/uses")
+    actual=$(awk -F '\t' '
+        $2 == "level=source-claim" && $3 == "fact=uses" && $4 ~ / kind=associated-call$/ { count++ }
+        END { print count + 0 }
+    ' "$fixture/uses")
     [[ $actual == "$2" ]]
 }
 rename() {
-    perl -MJSON::PP -e 'print encode_json({version=>1,operations=>[{op=>"rename",id=>$ARGV[0],name=>$ARGV[1]}]}),"\n"' "$1" "$2" > "$fixture/request"
+    "$fixture/data" rename "$1" "$2" > "$fixture/request"
     "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/plan"
     grep -q 'mode=apply' "$fixture/plan"
     [[ ! -e $fixture/project/.lkjscript-edit.pending ]]
@@ -52,7 +50,7 @@ value() {
 }
 refuse_rename() {
     cp "$fixture/project/main.lkj" "$fixture/unchanged"
-    perl -MJSON::PP -e 'print encode_json({version=>1,operations=>[{op=>"rename",id=>$ARGV[0],name=>"changed"}]}),"\n"' "$1" > "$fixture/request"
+    "$fixture/data" rename "$1" changed > "$fixture/request"
     if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/plan" 2> "$fixture/error"; then
         echo 'associated call lacking a proved source target was renamed' >&2; exit 1
     fi
@@ -85,7 +83,7 @@ rename "$pair" combine
 value 12
 publish
 combine=$(identity '::combine')
-perl -MJSON::PP -e 'print encode_json({version=>1,operations=>[{op=>"change-signature",id=>$ARGV[0],parameters=>[$ARGV[0]."::param:b",$ARGV[0]."::param:a"]}]}),"\n"' "$combine" > "$fixture/request"
+"$fixture/data" change-signature "$combine" > "$fixture/request"
 "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/plan"
 value 12
 grep -q 'Widget::combine' "$fixture/project/main.lkj"
