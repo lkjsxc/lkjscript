@@ -1,0 +1,7 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false,"rustCode":"E0716"}
+fn invalid(f: &mut std::fmt::Formatter) {
+    let map = f.debug_map().entry(&1i64, &2i64);
+    let _ = map.finish();
+}
+pub fn probe() -> i64 { 42 }

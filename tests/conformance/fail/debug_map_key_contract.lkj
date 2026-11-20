@@ -1,0 +1,4 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+fn invalid<T>(value: &T, f: &mut std::fmt::Formatter) { f.debug_map().entry(value, &1i64); }
+pub fn probe() -> i64 { 42 }

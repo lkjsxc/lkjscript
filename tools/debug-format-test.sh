@@ -11,7 +11,8 @@ umask 077
 mkdir "$fixture/project" "$fixture/store"
 head -c 32 /dev/urandom > "$fixture/key"
 fail() { printf 'debug-format: %s\n' "$*" >&2; exit 1; }
-common=(main.lkj --source-dir "$fixture/project" --library-dir "$library" --store "$fixture/store" --store-key "$fixture/key")
+project="$fixture/project"
+common=(main.lkj --source-dir "$project" --library-dir "$library" --store "$fixture/store" --store-key "$fixture/key")
 publish() {
     "$compiler" build "${common[@]}" --index -o "$fixture/image" > "$fixture/index" 2> "$fixture/error" || { cat "$fixture/error" >&2; fail build; }
     snapshot=$(awk '$1=="LKJSCRIPT_SNAPSHOT" { print $2 }' "$fixture/index")
@@ -22,7 +23,7 @@ query() {
 }
 value() {
     for engine in native interpreter; do
-        actual=$("$compiler" run main.lkj --source-dir "$fixture/project" --library-dir "$library" --no-store --engine "$engine")
+        actual=$("$compiler" run main.lkj --source-dir "$project" --library-dir "$library" --no-store --engine "$engine")
         [[ $actual == "$1" ]] || fail "$engine returned $actual, expected $1"
     done
 }
@@ -164,3 +165,72 @@ cp tests/fixtures/debug_origins.lkj "$fixture/contracts/main.lkj"
 "$compiler" build main.lkj --source-dir "$fixture/contracts" --library-dir "$library" --no-store -o "$fixture/contracts-image" > "$fixture/contracts-out" 2> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract build'; }
 "$fixture/contracts-image" >> "$fixture/contracts-out" 2>> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract execution'; }
 printf 'ok Debug formatting: trait/type/implementation and concrete/generic struct/enum generated-origin queries; checked rename/body edit; capture and generated-edit refusals; independent same-named module rename; twelve malformed origins rejected; both engines\n'
+
+# Map/set builders use ordinary selected library methods and exclusive loans.
+mkdir "$fixture/collection-project"
+project="$fixture/collection-project"
+common=(main.lkj --source-dir "$fixture/collection-project" --library-dir "$library" --store "$fixture/store" --store-key "$fixture/key")
+cat > "$fixture/collection-project/main.lkj" <<'SOURCE'
+use std::fmt;
+struct Entry(i64);
+impl fmt::Debug for Entry {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.debug_map().entry(&"n", &self.0).finish()
+    }
+}
+fn shown(value: &Entry) -> String { format!("{:?}", value) }
+fn main() -> i64 { shown(&Entry(42i64)).len() as i64 }
+SOURCE
+publish
+value 9
+query references '<Entry as std::fmt::Debug>::fmt' > "$fixture/map-references"
+grep -Fq 'debug_map' "$fixture/map-references" || fail 'map method reference'
+"$compiler" ir main.lkj --source-dir "$fixture/collection-project" --library-dir "$library" --no-store -o "$fixture/map.lkjir"
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-body","id":"<Entry as std::fmt::Debug>::fmt","source":"{ f.debug_set().entry(&self.0).finish() }"}]}
+REQUEST
+edit
+value 4
+publish
+query references '<Entry as std::fmt::Debug>::fmt' > "$fixture/set-references"
+grep -Fq 'debug_set' "$fixture/set-references" || fail 'set method reference'
+if grep -Fq 'debug_map' "$fixture/set-references"; then fail 'stale map method reference'; fi
+"$compiler" ir main.lkj --source-dir "$fixture/collection-project" --library-dir "$library" --no-store -o "$fixture/set.lkjir"
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"rename","id":"shown","name":"rendered"}]}
+REQUEST
+edit
+grep -Fq 'rendered(&Entry' "$fixture/collection-project/main.lkj" || fail 'collection caller rename'
+value 4
+publish
+cp "$fixture/collection-project/main.lkj" "$fixture/collection-unchanged"
+cp "$fixture/collection-project/.lkjscript-edit.generation" "$fixture/collection-generation"
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-body","id":"<Entry as std::fmt::Debug>::fmt","source":"{ let mut builder = f.debug_map(); let _ = f.write_str(\"conflict\"); builder.finish() }"}]}
+REQUEST
+if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/collection-plan" 2> "$fixture/collection-error"; then
+    fail 'builder loan conflict accepted by checked edit'
+fi
+grep -Fq E_BORROW "$fixture/collection-error" || { cat "$fixture/collection-error" >&2; fail 'builder loan refusal'; }
+cmp "$fixture/collection-unchanged" "$fixture/collection-project/main.lkj" || fail 'builder refusal changed source'
+cmp "$fixture/collection-generation" "$fixture/collection-project/.lkjscript-edit.generation" || fail 'builder refusal changed generation'
+[[ ! -e $fixture/collection-project/.lkjscript-edit.pending ]] || fail 'builder refusal left pending state'
+value 4
+
+# An untrusted producer cannot turn either exclusive builder view into static data.
+for builder in map set; do
+    "$compiler" check "$fixture/$builder.lkjir" --no-store
+    awk -v needle="::debug_$builder\$" '
+        $1 == "fn" { selected = index($0, needle) != 0 }
+        selected && $1 == "return-leaf" { changed += sub(/ (exact|bound) .*/, " static") }
+        { print }
+        END { if (changed != 1) exit 1 }
+    ' "$fixture/$builder.lkjir" > "$fixture/$builder-forged.lkjir" || fail "$builder origin mutation target"
+    if "$compiler" check "$fixture/$builder-forged.lkjir" --no-store > "$fixture/$builder-forged.out" 2> "$fixture/$builder-forged.err"; then
+        fail "$builder forged static origin accepted"
+    fi
+    grep -Eq 'E_BORROW|E_RETURN' "$fixture/$builder-forged.err" || {
+        cat "$fixture/$builder-forged.err" >&2; fail "$builder independent origin refusal";
+    }
+done
+printf 'ok Debug map/set: selected method queries, checked replacement and rename, loan rollback, independent forged-origin refusal\n'

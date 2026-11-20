@@ -10,6 +10,9 @@ Inherent associated constants are a source producer form. Their uses produce
 ordinary literal and constructor instructions subject to the same independent check.
 The source producer resolves named literal array lengths to concrete counts that
 use the existing checked array type and layout rules.
+Debug builders are ordinary source aggregates holding exclusive formatter views.
+Their calls, field storage and returned origins use the existing independent checks;
+changing a builder's returned view to static is invalid. Formatting adds no IR authority.
 
 ## Text and identity
 

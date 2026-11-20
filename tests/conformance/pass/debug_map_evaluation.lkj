@@ -1,0 +1,20 @@
+// expect: value 42
+// witness: {}
+use std::fmt;
+struct Item(i64);
+impl fmt::Debug for Item {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.debug_map().entry(&"n", &self.0).finish() }
+}
+impl Item { fn fmt(&self) -> i64 { 7 } }
+fn observed(trace: &mut i64, value: i64) -> Item {
+    *trace = *trace * 10i64 + value;
+    Item(value)
+}
+pub fn probe() -> i64 {
+    let mut trace = 0i64;
+    let text = format!("{1:?} {0:#?} {1:?}", observed(&mut trace, 1i64), observed(&mut trace, 2i64));
+    assert_eq!(trace, 12i64);
+    assert_eq!(text, "{\"n\": 2} {\n    \"n\": 1,\n} {\"n\": 2}");
+    assert_eq!(Item(3i64).fmt(), 7i64);
+    42
+}

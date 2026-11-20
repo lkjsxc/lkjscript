@@ -1,0 +1,52 @@
+// expect: value 42
+// witness: {}
+use std::fmt;
+use std::fmt::Write;
+struct Bad(u8);
+impl fmt::Debug for Bad {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        if self.0 == 1u8 { f.write_str("a\n")?; }
+        Err(fmt::Error)
+    }
+}
+struct Failure(u8, u8);
+impl fmt::Debug for Failure {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let bad = Bad(self.1);
+        match self.0 {
+            0u8 => f.debug_list().entry(&bad).finish(),
+            1u8 => f.debug_struct("S").field("f", &bad).finish(),
+            2u8 => f.debug_tuple("T").field(&bad).finish(),
+            3u8 => f.debug_set().entry(&bad).finish(),
+            4u8 => f.debug_map().key(&bad).value(&1i64).finish(),
+            5u8 => f.debug_map().key(&"k").value(&bad).finish(),
+            _ => unreachable!(),
+        }
+    }
+}
+#[derive(Debug)] struct Outer { value: Failure }
+pub fn probe() -> i64 {
+    for kind in 0u8..6u8 {
+        for mode in 0u8..2u8 {
+            let mut text = String::new();
+            assert!(write!(&mut text, "{:#?}", Failure(kind, mode)).is_err());
+            let mut expected = match kind {
+                0u8 => "[\n",
+                1u8 => "S {\n    f: ",
+                2u8 => "T(\n",
+                3u8 | 4u8 => "{\n",
+                5u8 => "{\n    \"k\": ",
+                _ => unreachable!(),
+            }.to_string();
+            if mode == 1u8 {
+                if kind != 1u8 && kind != 5u8 { expected.push_str("    "); }
+                expected.push_str("a\n");
+            }
+            assert_eq!(text, expected);
+        }
+    }
+    let mut nested = String::new();
+    assert!(write!(&mut nested, "{:#?}", Outer { value: Failure(3u8, 1u8) }).is_err());
+    assert_eq!(nested, "Outer {\n    value: {\n        a\n");
+    42
+}

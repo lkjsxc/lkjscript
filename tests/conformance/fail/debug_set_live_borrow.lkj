@@ -1,0 +1,8 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+fn invalid(f: &mut std::fmt::Formatter) {
+    let mut set = f.debug_set();
+    let _ = f.write_str("conflict");
+    let _ = set.finish();
+}
+pub fn probe() -> i64 { 42 }

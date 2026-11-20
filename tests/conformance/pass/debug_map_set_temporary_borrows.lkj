@@ -1,0 +1,38 @@
+// expect: value 42
+// witness: {}
+use std::fmt;
+struct Temporary;
+impl fmt::Debug for Temporary {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut map = f.debug_map();
+        {
+            let key = "first".to_string();
+            let value = vec![1i64, 2i64];
+            map.entry(&key, &value);
+        }
+        {
+            let key = "second".to_string();
+            let value = 3i64;
+            map.key(&key);
+            map.value(&value);
+        }
+        map.finish()
+    }
+}
+struct TemporarySet;
+impl fmt::Debug for TemporarySet {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        let mut set = f.debug_set();
+        {
+            let value = "first".to_string();
+            set.entry(&value);
+        }
+        set.entry(&2i64);
+        set.finish()
+    }
+}
+pub fn probe() -> i64 {
+    assert_eq!(format!("{:?}", Temporary), "{\"first\": [1, 2], \"second\": 3}");
+    assert_eq!(format!("{:?}", TemporarySet), "{\"first\", 2}");
+    42
+}

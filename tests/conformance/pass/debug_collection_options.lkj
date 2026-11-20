@@ -1,0 +1,32 @@
+// expect: value 42
+// witness: {}
+use std::fmt;
+struct Map;
+impl fmt::Debug for Map {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.debug_map().entry(&1i64, &2i64).finish() }
+}
+struct Set;
+impl fmt::Debug for Set {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.debug_set().entry(&1i64).entry(&2i64).finish() }
+}
+struct Options;
+impl fmt::Debug for Options {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        assert_eq!(f.width(), Some(7usize));
+        assert_eq!(f.fill(), '·');
+        assert!(f.sign_plus());
+        assert!(f.alternate());
+        assert!(!f.sign_aware_zero_pad());
+        f.write_str("O")
+    }
+}
+struct OptionsMap;
+impl fmt::Debug for OptionsMap {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.debug_map().entry(&Options, &Options).finish() }
+}
+pub fn probe() -> i64 {
+    assert_eq!(format!("{:5?}", Map), "{    1:     2}");
+    assert_eq!(format!("{:+?}", Set), "{+1, +2}");
+    assert_eq!(format!("{:·>+#7?}", OptionsMap), "{\n    O: O,\n}");
+    42
+}

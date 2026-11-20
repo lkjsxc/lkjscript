@@ -511,12 +511,13 @@ existing atom-macro pattern refusal inside `elem_require_linebreak` survives
 at 127:19 after its const header at 124:7 disappears. The 22 macro sites retain
 exact source accounting; only the atom-pattern site needs a current explicit
 review now that the lifetime predicate is absent. The original nine shared-
-mutation sites remain an ownership/representation port cost.
+mutation sites remain an ownership/representation port cost. The following table
+preserves the original inventory; its Debug row is historical, not a current refusal count.
 
 | Rank | Cause | Sites | Affected file lines | Owner / next route |
 | --- | --- | ---: | ---: | --- |
 | 1 | ns! / local_name! expansion | 22 | 1,843 | Compiler / producer; 17 default candidates and five test-only |
-| 2 | Debug ? formatting | 24 | 207 | Compiler formatting producer |
+| 2 | Debug ? formatting | 24 | 207 | Historical producer refusal; ordinary Debug now supported |
 | 3 | Generic associated types | 2 | 844 | Language |
 | 4 | Box with dyn Iterator | 1 | 917 | Language |
 | 5 | doc include_str! attribute | 1 | 45 | Language / producer |
@@ -525,9 +526,12 @@ mutation sites remain an ownership/representation port cost.
 | 8 | std::io imported as io::Result | 1 | 115 | Library data facade; not an ambient-I/O proof |
 | 9 | Ref / RefCell / Cell | 9 | 4,073 | Refused by design; explicit ownership/tree port |
 
-All 24 Debug-format refusals are direct producer refusals; the compiler formatting
-parser unconditionally rejects that syntax. RefCell supports upstream’s shared
-mutable tree, and `Vec<NodeRef>` forms support heap-held views. The latter have
+The original 24 Debug-format sites were direct producer refusals. Ordinary `?`,
+`#?`, derive(Debug) and source builders now work; map/set builders and ordered
+collection Debug also have focused Rust witnesses. This does not establish DOM
+root admission or a new whole-root refusal count. Borrowed `format_args!` remains
+a separate representation boundary. RefCell supports upstream's shared mutable
+tree, and `Vec<NodeRef>` forms support heap-held views. The latter have
 20 lexical occurrences on 19 lines, but no additional heap-view semantic-refusal
 count is claimed before parsing succeeds. An eventual handle-based rewrite must
 count both representation and API/test adaptation.

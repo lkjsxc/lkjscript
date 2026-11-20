@@ -614,9 +614,22 @@ impl<T: Debug> Debug for Box<T> {
     fn fmt(&self, formatter: &mut Formatter) -> Result { __lkjscript_debug(formatter, &**self) }
 }
 
-// Each child formats into an owned string before its bytes are indented. This
-// keeps nested pretty output within the existing checked borrowing rules.
-fn debug_child<T: Debug + ?Sized>(formatter: &mut Formatter, value: &T) -> Result {
+// Children use owned scratch text, then preserve every byte before an error.
+// Pretty indentation is lazy: a trailing newline earns no spaces until another
+// character (including the field suffix) is actually written.
+fn debug_write(formatter: &mut Formatter, text: &str, on_newline: &mut bool) -> Result {
+    if formatter.alternate() {
+        for ch in text.chars() {
+            if *on_newline { formatter.write_str("    ")?; }
+            formatter.write_char(ch)?;
+            *on_newline = ch == '\n';
+        }
+        crate::Result::Ok(())
+    } else {
+        formatter.write_str(text)
+    }
+}
+fn debug_child<T: Debug + ?Sized>(formatter: &mut Formatter, value: &T, on_newline: &mut bool) -> Result {
     let mut bytes = String::new();
     let result = {
         let mut child = Formatter {
@@ -624,35 +637,43 @@ fn debug_child<T: Debug + ?Sized>(formatter: &mut Formatter, value: &T) -> Resul
         };
         __lkjscript_debug(&mut child, value)
     };
-    if formatter.alternate() {
-        for ch in bytes.as_str().chars() {
-            formatter.write_char(ch)?;
-            if ch == '\n' { formatter.write_str("    ")?; }
-        }
-    } else {
-        formatter.write_str(bytes.as_str())?;
-    }
+    debug_write(formatter, bytes.as_str(), on_newline)?;
     result
 }
 fn debug_field<T: Debug + ?Sized>(formatter: &mut Formatter, count: usize,
     name: &str, value: &T, style: u8) -> Result {
     let pretty = formatter.alternate();
     if count == 0usize {
-        if style == 0u8 { formatter.write_str(if pretty { " {\n    " } else { " { " })?; }
-        else if style == 1u8 { formatter.write_str(if pretty { "(\n    " } else { "(" })?; }
-        else if pretty { formatter.write_str("\n    ")?; }
-    } else if pretty {
-        formatter.write_str("    ")?;
-    } else {
+        if style == 0u8 { formatter.write_str(if pretty { " {\n" } else { " { " })?; }
+        else if style == 1u8 { formatter.write_str(if pretty { "(\n" } else { "(" })?; }
+        else if pretty { formatter.write_str("\n")?; }
+    } else if !pretty {
         formatter.write_str(", ")?;
     }
+    let mut on_newline = pretty;
     if style == 0u8 {
-        formatter.write_str(name)?;
-        formatter.write_str(": ")?;
+        debug_write(formatter, name, &mut on_newline)?;
+        debug_write(formatter, ": ", &mut on_newline)?;
     }
-    debug_child(formatter, value)?;
-    if pretty { formatter.write_str(",\n")?; }
+    debug_child(formatter, value, &mut on_newline)?;
+    if pretty { debug_write(formatter, ",\n", &mut on_newline)?; }
     crate::Result::Ok(())
+}
+fn debug_non_exhaustive(formatter: &mut Formatter, count: usize, style: u8) -> Result {
+    let ending = if style == 0u8 {
+        if count == 0usize { " { .. }" }
+        else if formatter.alternate() { "    ..\n}" }
+        else { ", .. }" }
+    } else if style == 1u8 {
+        if count == 0usize { "(..)" }
+        else if formatter.alternate() { "    ..\n)" }
+        else { ", ..)" }
+    } else {
+        if count == 0usize { "..]" }
+        else if formatter.alternate() { "    ..\n]" }
+        else { ", ..]" }
+    };
+    formatter.write_str(ending)
 }
 fn debug_finish(formatter: &mut Formatter, count: usize, style: u8, unnamed: bool) -> Result {
     if style == 2u8 { return formatter.write_str("]"); }
@@ -704,6 +725,10 @@ impl<'a, 'b: 'a> DebugStruct<'a, 'b> {
         }
         self
     }
+    pub fn finish_non_exhaustive(&mut self) -> Result {
+        if self.failed { crate::Result::Err(Error) }
+        else { debug_non_exhaustive(self.formatter, self.fields, 0u8) }
+    }
     pub fn finish(&mut self) -> Result {
         if self.failed { crate::Result::Err(Error) }
         else { debug_finish(self.formatter, self.fields, 0u8, false) }
@@ -717,6 +742,10 @@ impl<'a, 'b: 'a> DebugTuple<'a, 'b> {
         }
         self
     }
+    pub fn finish_non_exhaustive(&mut self) -> Result {
+        if self.failed { crate::Result::Err(Error) }
+        else { debug_non_exhaustive(self.formatter, self.fields, 1u8) }
+    }
     pub fn finish(&mut self) -> Result {
         if self.failed { crate::Result::Err(Error) }
         else { debug_finish(self.formatter, self.fields, 1u8, self.unnamed) }
@@ -729,6 +758,10 @@ impl<'a, 'b: 'a> DebugList<'a, 'b> {
             self.entries += 1usize;
         }
         self
+    }
+    pub fn finish_non_exhaustive(&mut self) -> Result {
+        if self.failed { crate::Result::Err(Error) }
+        else { debug_non_exhaustive(self.formatter, self.entries, 2u8) }
     }
     pub fn finish(&mut self) -> Result {
         if self.failed { crate::Result::Err(Error) }
@@ -1010,5 +1043,127 @@ impl<T0: Debug, T1: Debug, T2: Debug, T3: Debug, T4: Debug, T5: Debug, T6: Debug
         tuple.field(&self.10);
         tuple.field(&self.11);
         tuple.finish()
+    }
+}
+
+// Map and set builders borrow the existing source formatter. Every field is
+// ordinary checked storage; each child retains the same formatting flags.
+pub struct DebugMap<'a, 'b> {
+    formatter: &'a mut Formatter<'b>,
+    has_fields: bool,
+    has_key: bool,
+    failed: bool,
+}
+pub struct DebugSet<'a, 'b> {
+    formatter: &'a mut Formatter<'b>,
+    entries: usize,
+    failed: bool,
+}
+impl<'a> Formatter<'a> {
+    pub fn debug_map<'b>(&'b mut self) -> DebugMap<'b, 'a> {
+        let failed = self.write_str("{").is_err();
+        DebugMap { formatter: self, has_fields: false, has_key: false, failed }
+    }
+    pub fn debug_set<'b>(&'b mut self) -> DebugSet<'b, 'a> {
+        let failed = self.write_str("{").is_err();
+        DebugSet { formatter: self, entries: 0usize, failed }
+    }
+}
+fn debug_map_key<T: Debug + ?Sized>(formatter: &mut Formatter, has_fields: bool, key: &T) -> Result {
+    let pretty = formatter.alternate();
+    if pretty {
+        if !has_fields { formatter.write_str("\n")?; }
+    } else if has_fields {
+        formatter.write_str(", ")?;
+    }
+    let mut on_newline = pretty;
+    debug_child(formatter, key, &mut on_newline)?;
+    debug_write(formatter, ": ", &mut on_newline)
+}
+fn debug_map_value<T: Debug + ?Sized>(formatter: &mut Formatter, value: &T) -> Result {
+    let mut on_newline = false; // A successful key ends in ": ".
+    debug_child(formatter, value, &mut on_newline)?;
+    if formatter.alternate() { debug_write(formatter, ",\n", &mut on_newline)?; }
+    crate::Result::Ok(())
+}
+fn debug_collection_finish(formatter: &mut Formatter, has_fields: bool, incomplete: bool) -> Result {
+    if incomplete {
+        if !has_fields { formatter.write_str("..")?; }
+        else if formatter.alternate() { formatter.write_str("    ..\n")?; }
+        else { formatter.write_str(", ..")?; }
+    }
+    formatter.write_str("}")
+}
+impl<'a, 'b: 'a> DebugMap<'a, 'b> {
+    fn add_key<K: Debug + ?Sized>(&mut self, key: &K) {
+        if !self.failed {
+            if self.has_key { panic!("attempted to begin a new map entry without completing the previous one"); }
+            self.failed = debug_map_key(self.formatter, self.has_fields, key).is_err();
+            if !self.failed { self.has_key = true; }
+        }
+    }
+    fn add_value<V: Debug + ?Sized>(&mut self, value: &V) {
+        if !self.failed {
+            if !self.has_key { panic!("attempted to format a map value before its key"); }
+            self.failed = debug_map_value(self.formatter, value).is_err();
+            if !self.failed { self.has_key = false; }
+        }
+        self.has_fields = true;
+    }
+    pub fn key<'c, K: Debug + ?Sized>(&'c mut self, key: &K) -> &'c mut Self where 'a: 'c {
+        self.add_key(key);
+        self
+    }
+    pub fn value<'c, V: Debug + ?Sized>(&'c mut self, value: &V) -> &'c mut Self where 'a: 'c {
+        self.add_value(value);
+        self
+    }
+    pub fn entry<'c, K: Debug + ?Sized, V: Debug + ?Sized>(
+        &'c mut self, key: &K, value: &V,
+    ) -> &'c mut Self where 'a: 'c {
+        self.add_key(key);
+        self.add_value(value);
+        self
+    }
+    pub fn finish(&mut self) -> Result {
+        if self.failed { return crate::Result::Err(Error); }
+        if self.has_key { panic!("attempted to finish a map with a partial entry"); }
+        debug_collection_finish(self.formatter, self.has_fields, false)
+    }
+    pub fn finish_non_exhaustive(&mut self) -> Result {
+        if self.failed { return crate::Result::Err(Error); }
+        if self.has_key { panic!("attempted to finish a map with a partial entry"); }
+        debug_collection_finish(self.formatter, self.has_fields, true)
+    }
+}
+impl<'a, 'b: 'a> DebugSet<'a, 'b> {
+    pub fn entry<'c, T: Debug + ?Sized>(&'c mut self, value: &T) -> &'c mut Self where 'a: 'c {
+        if !self.failed {
+            self.failed = debug_field(self.formatter, self.entries, "", value, 2u8).is_err();
+            self.entries += 1usize;
+        }
+        self
+    }
+    pub fn finish(&mut self) -> Result {
+        if self.failed { crate::Result::Err(Error) }
+        else { debug_collection_finish(self.formatter, self.entries != 0usize, false) }
+    }
+    pub fn finish_non_exhaustive(&mut self) -> Result {
+        if self.failed { crate::Result::Err(Error) }
+        else { debug_collection_finish(self.formatter, self.entries != 0usize, true) }
+    }
+}
+impl<K: Debug, V: Debug> Debug for crate::BTreeMap<K, V> {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let mut map = formatter.debug_map();
+        for (key, value) in self { map.entry(key, value); }
+        map.finish()
+    }
+}
+impl<T: Debug> Debug for crate::BTreeSet<T> {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        let mut set = formatter.debug_set();
+        for value in self { set.entry(value); }
+        set.finish()
     }
 }

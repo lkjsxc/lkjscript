@@ -1,0 +1,13 @@
+// expect: trap R0004
+// stdout:
+// witness: {}
+use std::fmt;
+use std::fmt::Write;
+struct Invalid;
+impl fmt::Debug for Invalid {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result { f.debug_map().value(&1i64).finish() }
+}
+pub fn main(_world: World) {
+    let mut output = String::new();
+    let _ = write!(&mut output, "{:?}", Invalid);
+}

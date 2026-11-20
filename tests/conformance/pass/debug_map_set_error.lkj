@@ -1,0 +1,43 @@
+// expect: value 42
+// witness: {}
+use std::fmt;
+use std::fmt::Write;
+struct Bad;
+impl fmt::Debug for Bad {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        f.write_str("bad\ntrail")?;
+        Err(fmt::Error)
+    }
+}
+struct Never;
+impl fmt::Debug for Never {
+    fn fmt(&self, _f: &mut fmt::Formatter) -> fmt::Result { panic!("unexpected later formatting") }
+}
+struct Shape(u8);
+impl fmt::Debug for Shape {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.0 {
+            0u8 => f.debug_map().entry(&Bad, &Never).entry(&Never, &Never).finish(),
+            1u8 => f.debug_map().entry(&"key", &Bad).entry(&Never, &Never).finish(),
+            2u8 => f.debug_set().entry(&Bad).entry(&Never).finish(),
+            3u8 => f.debug_map().key(&Bad).finish(),
+            4u8 => f.debug_map().key(&Bad).key(&Never).finish_non_exhaustive(),
+            5u8 => f.debug_map().key(&Bad).value(&Never).value(&Never).finish(),
+            6u8 => f.debug_set().entry(&Bad).entry(&Never).finish_non_exhaustive(),
+            _ => unreachable!(),
+        }
+    }
+}
+pub fn probe() -> i64 {
+    for mode in 0u8..7u8 {
+        let mut plain = String::new();
+        let result = write!(&mut plain, "prefix{:?}suffix{:?}", Shape(mode), Never);
+        assert!(result.is_err());
+        assert_eq!(plain.as_str(), if mode == 1u8 { "prefix{\"key\": bad\ntrail" } else { "prefix{bad\ntrail" });
+        let mut pretty = String::new();
+        let result = write!(&mut pretty, "{:#?}", Shape(mode));
+        assert!(result.is_err());
+        assert_eq!(pretty.as_str(), if mode == 1u8 { "{\n    \"key\": bad\n    trail" } else { "{\n    bad\n    trail" });
+    }
+    42
+}

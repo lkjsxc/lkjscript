@@ -1,0 +1,34 @@
+// expect: value 42
+// witness: {}
+use std::fmt;
+struct Shape(u8);
+impl fmt::Debug for Shape {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        match self.0 {
+            0u8 => f.debug_map().finish(),
+            1u8 => f.debug_set().finish(),
+            2u8 => f.debug_map().entry(&"key", &vec![1i64, 2i64]).key(&(3i64, 4i64)).value(&"value").finish(),
+            3u8 => f.debug_set().entry(&vec![1i64, 2i64]).entry(&"last").finish(),
+            4u8 => f.debug_map().finish_non_exhaustive(),
+            5u8 => f.debug_map().entry(&"key", &1i64).finish_non_exhaustive(),
+            6u8 => f.debug_set().finish_non_exhaustive(),
+            7u8 => f.debug_set().entry(&1i64).finish_non_exhaustive(),
+            _ => unreachable!(),
+        }
+    }
+}
+pub fn probe() -> i64 {
+    assert_eq!(format!("{:?} {:#?}", Shape(0u8), Shape(0u8)), "{} {}");
+    assert_eq!(format!("{:?} {:#?}", Shape(1u8), Shape(1u8)), "{} {}");
+    assert_eq!(format!("{:?}", Shape(2u8)), "{\"key\": [1, 2], (3, 4): \"value\"}");
+    assert_eq!(format!("{:#?}", Shape(2u8)), "{\n    \"key\": [\n        1,\n        2,\n    ],\n    (\n        3,\n        4,\n    ): \"value\",\n}");
+    assert_eq!(format!("{:?}", Shape(3u8)), "{[1, 2], \"last\"}");
+    assert_eq!(format!("{:#?}", Shape(3u8)), "{\n    [\n        1,\n        2,\n    ],\n    \"last\",\n}");
+    assert_eq!(format!("{:?} {:#?}", Shape(4u8), Shape(4u8)), "{..} {..}");
+    assert_eq!(format!("{:?}", Shape(5u8)), "{\"key\": 1, ..}");
+    assert_eq!(format!("{:#?}", Shape(5u8)), "{\n    \"key\": 1,\n    ..\n}");
+    assert_eq!(format!("{:?} {:#?}", Shape(6u8), Shape(6u8)), "{..} {..}");
+    assert_eq!(format!("{:?}", Shape(7u8)), "{1, ..}");
+    assert_eq!(format!("{:#?}", Shape(7u8)), "{\n    1,\n    ..\n}");
+    42
+}
