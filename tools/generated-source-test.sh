@@ -102,15 +102,15 @@ if [[ -n "$baseline" ]]; then
 fi
 build
 query meta "$generated" "$fixture/generated-meta"
-grep -Fq 'origin=generated definition="Record" expansion=derive-default source-projection=false span=definition-anchor' "$fixture/generated-meta"
+grep -Fq 'origin=generated definition="type@Record" expansion=derive-default source-projection=false span=definition-anchor' "$fixture/generated-meta"
 grep -Fq 'body-locals=derived-declaration-epoch' "$fixture/generated-meta"
 query text "$generated" "$fixture/generated-text"
 grep -Fq 'fact=text-unavailable' "$fixture/generated-text"
 if grep -Fq 'struct Record' "$fixture/generated-text"; then fail 'generated text exposes struct projection'; fi
 query item "$generated" "$fixture/generated-item"
-grep -Fq 'origin=generated definition="Record"' "$fixture/generated-item"
+grep -Fq 'origin=generated definition="type@Record"' "$fixture/generated-item"
 query outline crate "$fixture/outline"
-implementation=$(sed -n 's/^"\(impl:[^"]*\)".*origin=generated definition="Record".*/\1/p' "$fixture/outline" | head -1)
+implementation=$(sed -n 's/^"\(impl:[^"]*\)".*origin=generated definition="type@Record".*/\1/p' "$fixture/outline" | head -1)
 [[ -n "$implementation" ]] || fail 'generated implementation absent'
 query outline "$generated" "$fixture/generated-calls"
 call=$(sed -n 's/^"\([^"]*::derived:[0-9a-f]*::call:[0-9]*\)".*/\1/p' "$fixture/generated-calls" | head -1)
@@ -131,7 +131,7 @@ if grep -Fq 'origin=generated' "$fixture/manual-meta"; then fail 'authored metho
 for operation in replace-body replace-item remove-item rename move inline-function; do
     request "$operation" "$generated" '{ 0i64 }'
     refuse E_EDIT_GENERATED_SOURCE "$fixture/request.json"
-    grep -Fq 'edit defining item "Record"' "$fixture/edit.err"
+    grep -Fq 'edit defining item "type@Record"' "$fixture/edit.err"
 done
 request add-item "$implementation" 'fn extra() {}'
 refuse E_EDIT_GENERATED_SOURCE "$fixture/request.json"

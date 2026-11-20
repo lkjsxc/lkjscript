@@ -126,31 +126,31 @@ value 42
 # Receiver, trait and member each have their own exact source binding. The
 # generic source type keeps its trait identity even after a concrete call.
 query references roundtrip > "$fixture/concrete-references"
-sites "$fixture/concrete-references" Number type Number 2
-sites "$fixture/concrete-references" left::Source type Source 2
-sites "$fixture/concrete-references" left::Source::type:Item associated-type Item 2
+sites "$fixture/concrete-references" type@Number type Number 2
+sites "$fixture/concrete-references" type@left::Source type Source 2
+sites "$fixture/concrete-references" type@left::Source::type:Item associated-type Item 2
 query references concrete_chain > "$fixture/concrete-chain-references"
-sites "$fixture/concrete-chain-references" Number type Number 1
-sites "$fixture/concrete-chain-references" left::Source type Source 1
-sites "$fixture/concrete-chain-references" left::Source::type:Item associated-type Item 1
+sites "$fixture/concrete-chain-references" type@Number type Number 1
+sites "$fixture/concrete-chain-references" type@left::Source type Source 1
+sites "$fixture/concrete-chain-references" type@left::Source::type:Item associated-type Item 1
 query references left::selected > "$fixture/left-references"
-sites "$fixture/left-references" left::Source type Source 5
-sites "$fixture/left-references" left::Source::type:Item associated-type Item 3
+sites "$fixture/left-references" type@left::Source type Source 5
+sites "$fixture/left-references" type@left::Source::type:Item associated-type Item 3
 sites "$fixture/left-references" left::Source::get associated-call get 1
-sites "$fixture/left-references" right::Source::type:Item associated-type Item 0
+sites "$fixture/left-references" type@right::Source::type:Item associated-type Item 0
 sites "$fixture/left-references" right::Source::get associated-call get 0
 query references right::selected > "$fixture/right-references"
-sites "$fixture/right-references" right::Source::type:Item associated-type Item 1
+sites "$fixture/right-references" type@right::Source::type:Item associated-type Item 1
 sites "$fixture/right-references" right::Source::get associated-call get 1
-sites "$fixture/right-references" left::Source::type:Item associated-type Item 0
+sites "$fixture/right-references" type@left::Source::type:Item associated-type Item 0
 sites "$fixture/right-references" left::Source::get associated-call get 0
 query references left::chained > "$fixture/left-chain-references"
-sites "$fixture/left-chain-references" left::Source type Source 5
-sites "$fixture/left-chain-references" left::Source::type:Item associated-type Item 4
+sites "$fixture/left-chain-references" type@left::Source type Source 5
+sites "$fixture/left-chain-references" type@left::Source::type:Item associated-type Item 4
 sites "$fixture/left-chain-references" left::Value::make associated-call make 1
 sites "$fixture/left-chain-references" right::Value::make associated-call make 0
 query references right::chained > "$fixture/right-chain-references"
-sites "$fixture/right-chain-references" right::Source::type:Item associated-type Item 3
+sites "$fixture/right-chain-references" type@right::Source::type:Item associated-type Item 3
 sites "$fixture/right-chain-references" right::Value::make associated-call make 1
 sites "$fixture/right-chain-references" left::Value::make associated-call make 0
 source_type Number declared-type Number
@@ -177,9 +177,9 @@ value 42
 grep -Fq '<T as Source>::fetch()' "$fixture/project/left.lkj" || fail 'qualified value call was not renamed'
 publish
 query references left::selected > "$fixture/renamed-references"
-sites "$fixture/renamed-references" left::Source::type:Output associated-type Output 3
+sites "$fixture/renamed-references" type@left::Source::type:Output associated-type Output 3
 sites "$fixture/renamed-references" left::Source::fetch associated-call fetch 1
-sites "$fixture/renamed-references" left::Source::type:Item associated-type Item 0
+sites "$fixture/renamed-references" type@left::Source::type:Item associated-type Item 0
 sites "$fixture/renamed-references" left::Source::get associated-call get 0
 rename left::Value::make construct
 value 42
@@ -187,7 +187,7 @@ grep -Fq '<T as Source>::Output::construct()' "$fixture/project/left.lkj" || fai
 grep -Fq '<Number as left::Source>::Output::construct()' "$fixture/project/main.lkj" || fail 'concrete chained member was not renamed'
 publish
 query references left::chained > "$fixture/renamed-chain-references"
-sites "$fixture/renamed-chain-references" left::Source::type:Output associated-type Output 4
+sites "$fixture/renamed-chain-references" type@left::Source::type:Output associated-type Output 4
 sites "$fixture/renamed-chain-references" left::Value::construct associated-call construct 1
 sites "$fixture/renamed-chain-references" left::Value::make associated-call make 0
 created=$(binding left::chained created)

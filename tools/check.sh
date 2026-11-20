@@ -167,6 +167,7 @@ parallel_step 1 structure-create-kills timeout --kill-after=10s 600s bash tools/
 parallel_step 1 structure-edit timeout --kill-after=10s 600s bash tools/structure-test.sh "$check_binary"
 parallel_step 1 structure-help timeout --kill-after=10s 600s bash tools/structure-help-test.sh "$check_binary"
 parallel_step 1 structure-call timeout --kill-after=10s 600s bash tools/structure-call-test.sh "$check_binary"
+parallel_step 1 catalog-namespace timeout --kill-after=10s 600s bash tools/catalog-namespace-test.sh "$check_binary"
 parallel_step 1 structure-embedded timeout --kill-after=10s 600s bash tools/structure-embedded-test.sh "$check_binary"
 parallel_step 1 structure-refactor timeout --kill-after=10s 600s bash tools/structure-refactor-test.sh "$check_binary"
 parallel_step 1 checked-meaning timeout --kill-after=10s 600s bash tools/meaning-test.sh "$check_binary"

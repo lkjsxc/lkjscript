@@ -42,14 +42,14 @@ fn parse_unit(catalog: &semantic::Catalog, target: &semantic::Item, inputs: &[(S
     edit::validate_item(target, inputs, "")?;
     let mut parents: Vec<String> = Vec::new(); let mut seen: BTreeSet<String> = BTreeSet::new();
     let mut parent = target.parent.clone();
-    while parent != "crate" && parent != "std" {
+    while parent != "crate" && parent != "type@std" {
         if !seen.insert(parent.clone()) { return Err(fail(&target.identity, "PARENT", "source parent identities form a cycle")); }
         let owner = edit::item(catalog, &parent)?;
-        if owner.kind == "module" { parents.push(owner.identity.clone()); }
+        if owner.kind == "module" { parents.push(semantic::source_path(&owner.identity).to_string()); }
         parent = owner.parent.clone();
     }
     let mut tree = a::Program::default();
-    tree.scopes.push(a::ModuleScope { path: if parent == "std" { "std".to_string() } else { String::new() }, parent: None, crate_root: 0usize });
+    tree.scopes.push(a::ModuleScope { path: if parent == "type@std" { "std".to_string() } else { String::new() }, parent: None, crate_root: 0usize });
     let mut scope = 0usize;
     while let Some(path) = parents.pop() {
         tree.scopes.push(a::ModuleScope { path, parent: Some(scope), crate_root: 0usize }); scope = tree.scopes.len() - 1usize;
@@ -894,6 +894,8 @@ pub fn plan(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], operation
     if !catalog.references_recorded {
         return Err(fail(&operation.identity, "REFERENCES", "this operation requires a full resolved typed catalog"));
     }
+    let selected = edit::selected_operation(catalog, operation)?;
+    let operation = &selected;
     let target = edit::item(catalog, &operation.identity)?;
     edit::validate_item(target, inputs, &operation.expected)?;
     let request = json::parse(operation.data.as_bytes()).map_err(|problem| fail(&operation.identity, "REQUEST", &problem.message))?;
@@ -936,8 +938,8 @@ mod functions {
     fn qualified(catalog: &semantic::Catalog, identity: &str) -> Result<String, String> {
         let target = edit::item(catalog, identity)?;
         let name = if target.kind == "variant" {
-            format!("{}::{}", target.parent, target.name)
-        } else { target.identity.clone() };
+            format!("{}::{}", semantic::source_path(&target.parent), target.name)
+        } else { semantic::source_path(&target.identity).to_string() };
         if name.contains("::body:") || name.contains("::param:") || name.contains("::field:")
             || name.contains('<') || name.contains("impl:") {
             return Err(fail(identity, "SCOPE", "identity has no context-independent source path"));
@@ -1100,7 +1102,7 @@ mod functions {
         let name = text(request, &target.identity, "name", true)?;
         if !edit::identifier(&name) { return Err(fail(&target.identity, "NAME", "extracted function needs one identifier")); }
         for item in &catalog.items {
-            if item.parent == owner.parent && item.name == name { return Err(fail(&item.identity, "NAME", "extracted name already exists in the module")); }
+            if item.parent == owner.parent && item.name == name && catalog.names_conflict(owner, item) { return Err(fail(&item.identity, "NAME", "extracted name already exists in the module")); }
         }
         let result = text(request, &target.identity, "result", true)?; type_source(&target.identity, &result)?;
         let original_type: &String = catalog.expression_types.get(&(owner.file.clone(), start, end)).and_then(|ty| ty.as_ref())
@@ -1167,7 +1169,10 @@ mod functions {
         let (generic, type_arguments, bounds) = generic_source(&unit, source)?;
         let declaration = format!("fn {name}{generic}({parameters}) -> {result} {bounds} {{ {body} }}");
         edit::one_item(&target.identity, &declaration, false)?;
-        let path = if owner.parent == "crate" { format!("crate::{name}") } else { format!("crate::{}::{name}", owner.parent) };
+        let parent = semantic::source_path(&owner.parent);
+        let path = if parent == "crate" { format!("crate::{name}") }
+            else if parent == "std" || parent.starts_with("std::") { format!("{parent}::{name}") }
+            else { format!("crate::{parent}::{name}") };
         edit::patch(patches, &owner.identity, &owner.file, start, end, &format!("{path}{type_arguments}({arguments})"));
         let (file, at) = edit::insertion(catalog, inputs, &owner.parent)?;
         edit::patch(patches, &owner.parent, &file, at, at, &format!("\n{declaration}\n"));
@@ -1354,13 +1359,14 @@ pub mod annotations {
             }
             if path.name.starts_with("std::") {
                 for item in &catalog.items {
-                    if item.kind == "module" && item.name == "std" && item.identity != "std" {
+                    if item.kind == "module" && item.name == "std" && item.identity != "type@std" {
                         return Err(fail(&unit.owner.identity, "TYPE_IDENTITY", "a source std module makes the external type path ambiguous"));
                     }
                 }
             }
-            let identity = if path.name.starts_with("crate::") { &path.name[7usize..] } else { path.name.as_str() };
-            let source = edit::item(catalog, identity)?;
+            let path_name = if path.name.starts_with("crate::") { &path.name[7usize..] } else { path.name.as_str() };
+            let identity = semantic::source_identity(crate::resolve::Namespace::Type, path_name);
+            let source = edit::item(catalog, &identity)?;
             if !matches!(source.kind.as_str(), "struct" | "enum" | "alias" | "trait") {
                 return Err(fail(&unit.owner.identity, "TYPE_IDENTITY", "inferred type path does not name a source type"));
             }
@@ -1370,7 +1376,7 @@ pub mod annotations {
             if end > node.span.end || &wrapped[start..end] != path.name.as_str() {
                 return Err(fail(&unit.owner.identity, "TYPE_IDENTITY", "inferred type has no exact canonical path spelling"));
             }
-            patches.insert(start, (end, qualified(catalog, identity)?));
+            patches.insert(start, (end, qualified(catalog, &identity)?));
         }
         let mut out = String::new(); let mut at = span.start;
         for (start, (end, value)) in patches {
@@ -1513,7 +1519,7 @@ pub mod relocation {
             _ => return Err(fail(&target.identity, "MEMBER", "member has no source trait or implementation owner")),
         };
         let Some(trait_id) = trait_id else { return Ok(result); };
-        if trait_id == "std" || trait_id.starts_with("std::") {
+        if semantic::source_path(&trait_id) == "std" || semantic::source_path(&trait_id).starts_with("std::") {
             return Err(fail(&target.identity, "TRAIT_COHORT", "standard protocol member names require an explicit compiler decision"));
         }
         let mut declaration = false;
@@ -1523,7 +1529,8 @@ pub mod relocation {
             }
         }
         if !declaration { return Err(fail(&target.identity, "TRAIT_COHORT", "trait member declaration is absent")); }
-        for (identity, _, trait_type) in &catalog.implementations {
+        for recorded in &catalog.implementations {
+            let identity = &recorded.identity; let trait_type = &recorded.trait_name;
             if trait_type.is_empty() { continue; }
             if nominal_head(catalog, trait_type.as_str())? != Some(trait_id.clone()) { continue; }
             let implementation = edit::item(catalog, identity)?;
@@ -1607,6 +1614,15 @@ pub mod relocation {
         if !edit::identifier(name) { return Err(fail(&target.identity, "NAME", "new member name must be one identifier")); }
         if target.kind == "module" { inline_module(catalog, inputs, target)?; }
         let targets = cohort(catalog, inputs, target)?;
+        for site in &catalog.references {
+            if !targets.contains(&site.target) || !matches!(site.kind.as_str(), "import" | "alias-import") { continue; }
+            for other in &catalog.references {
+                if other.file == site.file && other.start == site.start && other.end == site.end
+                    && matches!(other.kind.as_str(), "import" | "alias-import") && !targets.contains(&other.target) {
+                    return Err(at_site(&target.identity, "REFERENCES", site, "one import spelling denotes multiple namespaces; split it explicitly before renaming"));
+                }
+            }
+        }
         if matches!(target.kind.as_str(), "parameter" | "binding") { local_scope(catalog, inputs, target, name)?; }
         else if !scoped_type_parameter { incomplete(catalog, inputs, &targets)?; }
         let global = matches!(target.kind.as_str(), "module" | "struct" | "enum" | "trait" | "alias" | "constant" | "variant")
@@ -1619,7 +1635,7 @@ pub mod relocation {
             new_path = format!("{}::{name}", &old[..at]);
             if new_path.starts_with("std::") {
                 for item in &catalog.items {
-                    if item.kind == "module" && item.name == "std" && item.identity != "std" {
+                    if item.kind == "module" && item.name == "std" && item.identity != "type@std" {
                         return Err(fail(&item.identity, "SCOPE_STD", "a source std module makes the qualified library path ambiguous"));
                     }
                 }
@@ -1628,7 +1644,8 @@ pub mod relocation {
         for identity in &targets {
             let item = edit::item(catalog, identity)?; edit::validate_item(item, inputs, "")?;
             for other in &catalog.items {
-                if other.parent == item.parent && other.name == name && !targets.contains(&other.identity) {
+                if other.parent == item.parent && other.name == name && !targets.contains(&other.identity)
+                    && catalog.names_conflict(item, other) {
                     return Err(fail(&other.identity, "NAME", "new spelling collides with another declaration in this scope"));
                 }
             }
@@ -1684,6 +1701,7 @@ pub mod relocation {
     }
 
 fn source_path(identity: &str) -> String {
+        let identity = semantic::source_path(identity);
         if identity == "crate" || identity == "std" || identity.starts_with("std::") { identity.to_string() }
         else { format!("crate::{identity}") }
     }
@@ -1694,7 +1712,7 @@ fn within_path(path: &str, prefix: &str) -> bool {
 
 fn relocated_path(catalog: &semantic::Catalog, identity: &str, from: &str, to: &str) -> Result<String, String> {
         let path = qualified(catalog, identity)?;
-        if !from.is_empty() {
+        if !from.is_empty() && descendant(catalog, identity, from) {
             let prefix = source_path(from);
             if within_path(&path, &prefix) { return Ok(format!("{}{}", source_path(to), &path[prefix.len()..])); }
         }
@@ -1765,20 +1783,22 @@ fn move_item(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], target: 
         }
         if descendant(catalog, parent, &target.identity) { return Err(fail(&target.identity, "MOVE_CYCLE", "an item cannot move into its own descendant")); }
         for item in &catalog.items {
-            if item.parent == parent && item.name == target.name { return Err(fail(&item.identity, "NAME", "destination already has this declaration spelling")); }
+            if item.parent == parent && item.name == target.name && catalog.names_conflict(target, item) { return Err(fail(&item.identity, "NAME", "destination already has this declaration spelling")); }
         }
         if target.kind == "module" { inline_module(catalog, inputs, target)?; }
         let unit = parse_unit(catalog, target, inputs)?; move_context(&unit)?;
-        let new_identity = if parent == "crate" { target.name.clone() } else { format!("{parent}::{}", target.name) };
+        let path = if parent == "crate" { target.name.clone() } else { format!("{}::{}", semantic::source_path(parent), target.name) };
+        let namespace = if target.kind == "module" { crate::resolve::Namespace::Type } else { crate::resolve::Namespace::Value };
+        let new_identity = semantic::source_identity(namespace, &path);
         let mut selected = BTreeSet::new(); selected.insert(target.identity.clone());
         incomplete(catalog, inputs, &selected)?;
         let mut placed = target.clone(); placed.parent = parent.to_string();
         let mut capture_tokens: BTreeMap<String, Vec<syntax::SemanticToken>> = BTreeMap::new();
         capture(catalog, inputs, &placed, &selected, &target.name, &mut capture_tokens)?;
-        let prefix = source_path(&target.identity); let mut affected: BTreeSet<String> = BTreeSet::new();
+        let mut affected: BTreeSet<String> = BTreeSet::new();
         for item in &catalog.items {
             if !matches!(item.kind.as_str(), "module" | "function" | "struct" | "enum" | "trait" | "alias" | "variant" | "constant") { continue; }
-            if let Ok(path) = qualified(catalog, &item.identity) { if within_path(&path, &prefix) { affected.insert(item.identity.clone()); } }
+            if descendant(catalog, &item.identity, &target.identity) { affected.insert(item.identity.clone()); }
         }
         let mut owners: BTreeSet<String> = BTreeSet::new();
         for site in &catalog.references {
@@ -1929,6 +1949,7 @@ fn capture(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)],
             if site.start > site.end || site.end > bytes.len() { return Err(fail(&site.owner, "SPAN", "reference is outside its source")); }
             if bytes[site.start..site.end] != *name.as_bytes() { continue; }
             let existing = edit::item(catalog, &site.target)?;
+            if !catalog.names_conflict(target, existing) { continue; }
             if matches!(existing.kind.as_str(), "binding" | "parameter" | "generic-parameter") { continue; }
             if canonical_source_site(catalog, inputs, site, cache)? { continue; }
             return Err(at_site(&target.identity, "CAPTURE", site, "new declaration spelling may capture an existing nonlocal binding; exact lookup provenance is required"));
@@ -1970,21 +1991,23 @@ fn nominal_head(catalog: &semantic::Catalog, name: &str) -> Result<Option<String
         if let Some(current_environment) = environment {
             for (index, parameter) in frames[current_environment].0.iter().enumerate() {
                 if parameter != &head { continue; }
-                let argument = frames[current_environment].1.get(index)
-                    .ok_or_else(|| fail(&head, "ALIAS_HEAD", "an omitted alias argument is needed to determine the match type"))?;
+                let Some(argument) = frames[current_environment].1.get(index) else {
+                    return Err(fail(&head, "ALIAS_HEAD", "an omitted alias argument is needed to determine the match type"));
+                };
                 current = argument.0.clone(); environment = argument.1; substituted = true; break;
             }
         }
         if substituted { continue; }
-        let Some(index) = catalog.by_identity.get(&head) else { return Ok(Some(head)); };
+        let identity = semantic::source_identity(crate::resolve::Namespace::Type, &head);
+        let Some(index) = catalog.by_identity.get(&identity) else { return Ok(Some(identity)); };
         let alias = &catalog.items[*index];
-        if alias.kind != "alias" { return Ok(Some(head)); }
+        if alias.kind != "alias" { return Ok(Some(identity)); }
         if !aliases.insert(head.clone()) {
             return Err(fail(&head, "ALIAS_HEAD", "a repeated alias expansion needs an explicit match-type decision"));
         }
         let mut parameters = Vec::new();
         for item in &catalog.items {
-            if item.kind == "generic-parameter" && item.parent == head { parameters.push(item.name.clone()); }
+            if item.kind == "generic-parameter" && item.parent == alias.identity { parameters.push(item.name.clone()); }
         }
         let mut arguments = Vec::new();
         for argument in &path.args {

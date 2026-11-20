@@ -42,6 +42,15 @@ pub(crate) enum Namespace {
     Type,
     Value,
 }
+/// The declaration slots used by both resolution and semantic source identity.
+pub(crate) fn declaration_namespaces(program: &Program, item: Item) -> (bool, bool) {
+    match item {
+        Item::Function(_) | Item::Constant(_) => (false, true),
+        Item::Struct(index) => (true, program.structs[index].tuple || program.structs[index].fields.is_empty()),
+        Item::Module(_) | Item::Enum(_) | Item::Trait(_) | Item::Alias(_) => (true, false),
+        _ => (false, false),
+    }
+}
 pub struct Resolver<'a> {
     program: &'a Program,
     declarations: Vec<Declaration>,
@@ -236,7 +245,7 @@ impl<'a> Resolver<'a> {
                     Item::Function(id),
                     item.public,
                     item.span,
-                    (false, true),
+                    declaration_namespaces(program, Item::Function(id)),
                 )?;
             }
         }
@@ -248,7 +257,7 @@ impl<'a> Resolver<'a> {
                 Item::Struct(id),
                 item.public,
                 item.span,
-                (true, item.tuple || item.fields.is_empty()),
+                declaration_namespaces(program, Item::Struct(id)),
             )?;
         }
         for (id, item) in program.enums.iter().enumerate() {
@@ -259,7 +268,7 @@ impl<'a> Resolver<'a> {
                 Item::Enum(id),
                 item.public,
                 item.span,
-                (true, false),
+                declaration_namespaces(program, Item::Enum(id)),
             )?;
         }
         for (id, item) in program.traits.iter().enumerate() {
@@ -271,7 +280,7 @@ impl<'a> Resolver<'a> {
                 Item::Trait(id),
                 item.public,
                 item.span,
-                (true, false),
+                declaration_namespaces(program, Item::Trait(id)),
             )?;
         }
         for (id, item) in program.aliases.iter().enumerate() {
@@ -282,7 +291,7 @@ impl<'a> Resolver<'a> {
                 Item::Alias(id),
                 item.public,
                 item.span,
-                (true, false),
+                declaration_namespaces(program, Item::Alias(id)),
             )?;
         }
         for (id, item) in program.constants.iter().enumerate() {
@@ -292,7 +301,7 @@ impl<'a> Resolver<'a> {
                 Item::Constant(id),
                 item.public,
                 item.span,
-                (false, true),
+                declaration_namespaces(program, Item::Constant(id)),
             )?;
         }
         for (id, item) in program.modules.iter().enumerate() {
@@ -309,7 +318,7 @@ impl<'a> Resolver<'a> {
                 Item::Module(id),
                 item.public,
                 item.span,
-                (true, false),
+                declaration_namespaces(program, Item::Module(id)),
             )?;
         }
         let problems = result.imports();

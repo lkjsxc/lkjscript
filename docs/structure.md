@@ -69,18 +69,59 @@ latest/locator names under the existing lock, while preserving unrelated signed
 entries. This first migration still visits the old population. Old-format writers
 must not share the directory with the new format.
 
-Module and declaration IDs follow resolved source paths, without an initial
-`crate::`; the root module is `crate`. Fields use `::field:NAME`, variants
-`::variant:NAME`, named parameters `::param:NAME`. Query the outline for an
-implementation's displayed identity. Physical file moves, whitespace and
-neighboring items do not determine these identities. A semantic path rename or
-move changes the addressed path.
+## Semantic identities and selection
+
+The root module is `crate`. Module-scope declaration IDs use resolved source
+paths without an initial `crate::`, prefixed by their resolver namespace.
+Modules, structs, enums, traits and aliases use `type@PATH`; free functions
+and constants use `value@PATH`. A legal module/function pair is therefore
+`type@shared` and `value@shared`. The marker qualifies the final path
+segment. A function inside that module is `value@shared::value`, with
+parent `type@shared`.
+
+Descendants retain their owner's complete identity: `value@f::param:x`,
+`value@f::body:EPOCH::call:0`, `type@Pair::field:a`,
+`type@E::variant:A` and `type@Tr::type:Item`. Associated methods keep
+their existing identities, such as `S::new`, `Tr::f` and `<S as Tr>::f`.
+Implementation, use and macro identities also keep their existing forms; query
+the outline for their exact spelling. Checked-IR instance and type IDs retain
+`ir:PATH` and `ir:type:NAME`; their source associations name canonical
+source identities. Type displays remain source type spellings.
+
+A unit, tuple or fieldless braced struct occupies both resolver namespaces but
+has one authored identity, `type@S`. It reserves `value@S` against a second
+declaration. Constructor references target `type@S`; an explicit
+`value@S` selector refuses and identifies that owner. Bare `S` uniquely
+selects the struct. Same-namespace duplicate declarations remain invalid.
+
+Edit identity selectors, including `id`, `parent` and `before`, and query
+`--id` use the same selection rule. A selector containing `@` must have
+exactly one `type@` or `value@` prefix and a nonempty remainder; it selects
+only that canonical key. An absent or malformed explicit key refuses. A bare
+selector is checked as its exact spelling,
+`type@SPELLING` and `value@SPELLING`, with equal precedence. Exactly one
+match succeeds. Multiple matches refuse with `E_EDIT_AMBIGUOUS` or
+`E_QUERY_AMBIGUOUS`, listing canonical candidates and kinds. The operation
+or query kind never chooses a namespace, and an exact-text `expect` does not
+disambiguate a selector.
+
+Query selection uses authenticated snapshot metadata without reopening source.
+When a bare spelling selects a canonical identity, the report includes
+`selected=CANONICAL`. Query cursors bind that canonical selection, so the
+unique bare spelling and canonical spelling resume the same cursor. Historical
+pins retain their producer's stored facts and exact bare keys; reading one
+does not rewrite its identities or assert current freshness.
+
+Physical file moves, whitespace and neighboring items do not determine
+canonical identities. Adding an opposite-namespace sibling leaves existing IDs
+unchanged, while making their shared bare selector ambiguous. A semantic path
+rename or move changes the addressed path.
 
 An anonymous `_` parameter uses `::param:POSITION`, where POSITION is its
 zero-based position in the complete signature, including a receiver. For example,
-`fn f(_: u8, named: i64, _: bool)` has `f::param:0`,
-`f::param:named` and `f::param:2`. Numeric positions cannot collide with
-legal parameter names. Anonymous IDs remain stable until signature positions
+`fn f(_: u8, named: i64, _: bool)` has `value@f::param:0`,
+`value@f::param:named` and `value@f::param:2`. Numeric positions cannot
+collide with legal parameter names. Anonymous IDs remain stable until signature positions
 change; after adding, removing or reordering parameters, query the new outline.
 `::param:_` is not an alias. Signature changes and inlining refuse a referenced
 wildcard until it has an explicit named-parameter decision.
@@ -304,10 +345,12 @@ and parent. An occupied alternate or a later change to either captured candidate
 refuses. Creating an explicit library module promotes the transaction to full
 library validation just as changing an existing library body does.
 
-Renames and moves rewrite exact resolved declaration/use spans. Import aliases
-retain their local spelling. These operations must also preserve the
-checked-meaning digest. In a mixed request, the rename/move subset is separately
-elaborated and checked for that postcondition before the complete candidate is
+Renames and moves rewrite exact resolved declaration/use spans in the selected
+namespace, leaving an opposite-namespace sibling intact. Import aliases retain
+their local spelling. A single import spelling that binds both namespaces
+refuses a one-namespace rewrite with `E_EDIT_REFERENCES`; the planner does not
+infer a split. These operations must also preserve the checked-meaning digest.
+In a mixed request, the rename/move subset is separately elaborated and checked for that postcondition before the complete candidate is
 accepted. This conservative condition can reject a request whose relocations
 would only become valid after other operations; split or restate it explicitly.
 Moves require the full reference catalog, including outgoing references in the
@@ -346,7 +389,7 @@ distinct addresses.
 
 ```json
 {"version":1,"operations":[
-  {"op":"replace-call","id":"main::body:BODY_DIGEST::call:0",
+  {"op":"replace-call","id":"value@main::body:BODY_DIGEST::call:0",
    "source":"value + 2","expect":"CALL_ITEM_TEXT_DIGEST"}
 ]}
 ```

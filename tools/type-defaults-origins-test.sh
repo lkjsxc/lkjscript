@@ -68,7 +68,7 @@ value
 query signature Authored > "$fixture/signature"
 grep -Fq 'T = i64, U = T' "$fixture/signature"
 query references Authored > "$fixture/references"
-grep -Fq '"Authored::generic:T"' "$fixture/references"
+grep -Fq '"type@Authored::generic:T"' "$fixture/references"
 binding_type authored 'Authored<i64, i64>'
 binding_type generated 'Generated<i64, i64>'
 query meta Generated > "$fixture/generated-meta"

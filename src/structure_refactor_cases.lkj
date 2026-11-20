@@ -84,13 +84,15 @@ mod cases {
         Ok(())
     }
     fn identity(snapshot: &Snapshot, kind: &str, parent: &str, name: &str) -> String {
+        let parent = snapshot.catalog.select(parent, "EDIT").unwrap();
         for item in &snapshot.catalog.items {
             if item.kind == kind && item.parent == parent && item.name == name { return item.identity.clone(); }
         }
         panic!("missing test identity {kind} {parent} {name}")
     }
     fn extract(source: &str, owner: &str, expression: &str, parameters: &str, result: &str) -> String {
-        let parsed = snapshot(source).unwrap(); let item = &parsed.catalog.items[*parsed.catalog.by_identity.get(&owner.to_string()).unwrap()];
+        let parsed = snapshot(source).unwrap(); let selected = parsed.catalog.select(owner, "EDIT").unwrap();
+        let item = &parsed.catalog.items[*parsed.catalog.by_identity.get(&selected).unwrap()];
         let start = item.text.find(expression).unwrap(); let end = start + expression.len();
         format!("{{\"op\":\"extract-function\",\"id\":{},\"expect\":{},\"name\":\"extracted\",\"start\":{start},\"end\":{end},\"parameters\":{parameters},\"result\":{}}}",
             semantic::quote(owner), semantic::quote(&item.text_digest), semantic::quote(result))
@@ -119,17 +121,17 @@ mod cases {
         same(borrowed, r#"{"op":"change-signature","id":"combine","parameters":["combine::param:add","combine::param:value"]}"#)?;
         let anonymous = format!("{}fn twin(_: i64, named: i64, _: bool) -> i64 {{ named }} fn main() -> i64 {{ let mut n = 0i64; let value = twin(tick(&mut n), tick(&mut n), true); value * 10i64 + n }}", tick());
         let before = snapshot(&anonymous)?;
-        assert!(before.catalog.by_identity.contains_key(&"twin::param:0".to_string()));
-        assert!(before.catalog.by_identity.contains_key(&"twin::param:named".to_string()));
-        assert!(before.catalog.by_identity.contains_key(&"twin::param:2".to_string()));
-        assert!(!before.catalog.by_identity.contains_key(&"twin::param:_".to_string()));
+        assert!(before.catalog.by_identity.contains_key(&"value@twin::param:0".to_string()));
+        assert!(before.catalog.by_identity.contains_key(&"value@twin::param:named".to_string()));
+        assert!(before.catalog.by_identity.contains_key(&"value@twin::param:2".to_string()));
+        assert!(!before.catalog.by_identity.contains_key(&"value@twin::param:_".to_string()));
         same(&anonymous, r#"{"op":"change-signature","id":"twin","parameters":["twin::param:2","twin::param:named","twin::param:0"]}"#)?;
         refuses(&anonymous, r#"{"op":"change-signature","id":"twin","parameters":["twin::param:_"]}"#, "E_EDIT_IDENTITY")?;
         refuses(&anonymous, r#"{"op":"change-signature","id":"twin","parameters":["twin::param:1"]}"#, "E_EDIT_IDENTITY")?;
         refuses(&anonymous, r#"{"op":"change-signature","id":"twin","parameters":["twin::param:0","twin::param:0"]}"#, "E_EDIT_PARAMETER")?;
         let anonymous_reference = "fn wildcard(_: i64, _: i64) -> i64 { _ } fn main() -> i64 { wildcard(1i64, 2i64) }";
         let before = snapshot(anonymous_reference)?;
-        assert!(before.catalog.references.iter().any(|site| site.owner == "wildcard" && site.target == "wildcard::param:1"));
+        assert!(before.catalog.references.iter().any(|site| site.owner == "value@wildcard" && site.target == "value@wildcard::param:1"));
         refuses(anonymous_reference, r#"{"op":"change-signature","id":"wildcard","parameters":["wildcard::param:1","wildcard::param:0"]}"#, "E_EDIT_WILDCARD_PARAMETER")?;
         Ok(16usize)
     }
@@ -232,7 +234,9 @@ mod cases {
         refuses(context, &extract(context, "main", "2147483647 + 1", "[]", "u64"), "E_EDIT_RESULT_TYPE")?;
         let wrong_capture = extract(source, "compute", "x + 1i64", r#"[{"id":"compute::param:x","name":"value","type":"u64","argument":"x"}]"#, "i64");
         refuses(source, &wrong_capture, "E_EDIT_CAPTURE_TYPE")?;
-        Ok(12usize)
+        let nested = "mod space { mod extracted {} pub fn compute(x: i64) -> i64 { x + 1i64 } } fn space() -> i64 { 0i64 } fn main() -> i64 { space::compute(5i64) + space() }";
+        same(nested, &extract(nested, "space::compute", "x + 1i64", r#"[{"id":"space::compute::param:x","name":"value","type":"i64","argument":"x"}]"#, "i64"))?;
+        Ok(13usize)
     }
     fn inlines() -> Result<usize, String> {
         let source = format!("{}fn pair(a: i64, b: i64) -> i64 {{ a * 10i64 + b }} fn main() -> i64 {{ let mut n = 0i64; let p = pair(tick(&mut n), tick(&mut n)); p * 10i64 + n }}", tick());
@@ -249,7 +253,7 @@ mod cases {
         same(nested, r#"{"op":"inline-function","id":"helper","remove":true}"#)?;
         let selective = "fn helper(x: i64) -> i64 { x + 1i64 } fn main() -> i64 { helper(1i64) + helper(3i64) }";
         let parsed = snapshot(selective).unwrap(); let mut id = String::new();
-        for item in &parsed.catalog.items { if item.kind == "call-site" && item.parent == "main" && item.text == "helper(1i64)" { id = item.identity.clone(); } }
+        for item in &parsed.catalog.items { if item.kind == "call-site" && item.parent == "value@main" && item.text == "helper(1i64)" { id = item.identity.clone(); } }
         assert!(!id.is_empty());
         let operation = format!("{{\"op\":\"inline-function\",\"id\":\"helper\",\"sites\":[{}]}}", semantic::quote(&id));
         same(selective, &operation)?;
@@ -270,9 +274,10 @@ mod cases {
         let operation = r#"{"op":"inline-function","id":"helper","remove":true}"#;
         let template = "fn helper(__lkjscript_edit_0000000000000000_0_1: i64, second: i64) -> i64 { second } fn main() -> i64 { helper(1i64, 2i64) }";
         let parsed = snapshot(template)?; let mut position = 0usize;
-        for item in &parsed.catalog.items { if item.kind == "call-site" && item.parent == "main" { position = item.start; } }
+        for item in &parsed.catalog.items { if item.kind == "call-site" && item.parent == "value@main" { position = item.start; } }
         let request = structure_edit::parse(format!("{{\"version\":1,\"operations\":[{operation}]}}").as_bytes())?;
-        let digest = sha256::hex_digest(format!("{}:{position}", request.operations[0usize].data).as_bytes());
+        let selected = structure_edit::selected_operation(&parsed.catalog, &request.operations[0usize])?;
+        let digest = sha256::hex_digest(format!("{}:{position}", selected.data).as_bytes());
         let collision = format!("fn helper(__lkjscript_edit_{}_0_1: i64, second: i64) -> i64 {{ second }} fn main() -> i64 {{ helper(1i64, 2i64) }}", &digest[..16usize]);
         assert_eq!(template.len(), collision.len()); same(&collision, operation)?;
         let parent_visibility = "mod inner { pub(super) fn helper(x: i64) -> i64 { x + 1i64 } } fn main() -> i64 { inner::helper(3i64) }";
@@ -447,8 +452,8 @@ fn moves() -> Result<usize, String> {
         let outgoing = "fn other() -> i64 { 1i64 } mod old { pub fn helper() -> i64 { crate::other() } } mod fresh {} fn main() -> i64 { old::helper() }";
         for category in 0usize..4usize {
         let mut missing = snapshot(outgoing)?;
-        let item = &missing.catalog.items[*missing.catalog.by_identity.get(&"old::helper".to_string()).unwrap()];
-        missing.catalog.unresolved.push(semantic::Reference { owner: item.identity.clone(), target: "other".to_string(),
+        let item = &missing.catalog.items[*missing.catalog.by_identity.get(&"value@old::helper".to_string()).unwrap()];
+        missing.catalog.unresolved.push(semantic::Reference { owner: item.identity.clone(), target: "value@other".to_string(),
             file: item.file.clone(), kind: match category {
                 0usize => "implicit-source".to_string(),
                 1usize => "unresolved-namespace-qualification".to_string(),
@@ -523,14 +528,14 @@ fn rename_scope() -> Result<usize, String> {
         for category in 0usize..2usize {
             let kind = if category == 0usize { "implicit-source" } else { "alias-origin" };
             let mut unrelated = snapshot(source)?;
-            unrelated.catalog.unresolved.push(semantic::Reference { owner: "main".to_string(), target: "other".to_string(),
+            unrelated.catalog.unresolved.push(semantic::Reference { owner: "value@main".to_string(), target: "value@other".to_string(),
                 file: "fixture.lkj".to_string(), kind: kind.to_string(), start: 0usize, end: 0usize });
             let after = apply(&unrelated, operation)?;
             assert_eq!(meaning::identity(&unrelated.checked), meaning::identity(&snapshot(&after)?.checked));
             for relevance in 0usize..2usize {
-                let target = if relevance == 0usize { "chosen" } else { "" };
+                let target = if relevance == 0usize { "value@chosen" } else { "" };
                 let mut relevant = snapshot(source)?;
-                relevant.catalog.unresolved.push(semantic::Reference { owner: "main".to_string(), target: target.to_string(),
+                relevant.catalog.unresolved.push(semantic::Reference { owner: "value@main".to_string(), target: target.to_string(),
                     file: "fixture.lkj".to_string(), kind: kind.to_string(), start: 0usize, end: 0usize });
                 let request = structure_edit::parse(format!("{{\"version\":1,\"operations\":[{operation}]}}").as_bytes())?;
                 let mut patches = Vec::new();
@@ -558,7 +563,7 @@ fn rename_scope() -> Result<usize, String> {
                 _ => "typed-field".to_string(),
             };
             let mut namespace = snapshot(source)?;
-            namespace.catalog.unresolved.push(semantic::Reference { owner: "main".to_string(), target: String::new(),
+            namespace.catalog.unresolved.push(semantic::Reference { owner: "value@main".to_string(), target: String::new(),
                 file: "fixture.lkj".to_string(), kind: kind.to_string(), start: 0usize, end: 0usize });
             let after = apply(&namespace, operation)?;
             assert_eq!(meaning::identity(&namespace.checked), meaning::identity(&snapshot(&after)?.checked));

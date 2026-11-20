@@ -48,6 +48,15 @@ pub struct ModuleSource {
     pub file: String,
     pub alternate: String,
 }
+/// Display type spellings and resolved query keys are kept distinct.
+pub struct Implementation {
+    pub identity: String,
+    pub target: String,
+    pub trait_name: String,
+    pub target_key: String,
+    pub trait_key: String,
+}
+
 pub struct Catalog {
     pub root: String,
     pub module_sources: Vec<ModuleSource>,
@@ -55,6 +64,8 @@ pub struct Catalog {
     pub references_recorded: bool,
     pub items: Vec<Item>,
     pub by_identity: BTreeMap<String, usize>,
+    /// Resolver namespace slots, including a constructor's reserved value slot.
+    pub namespace_slots: BTreeMap<String, String>,
     pub references: Vec<Reference>,
     /// Semantic edges from validated expansions, never editable spelling sites.
     pub generated_references: Vec<Reference>,
@@ -66,7 +77,7 @@ pub struct Catalog {
     pub instance_sources: Vec<String>,
     pub instance_arguments: Vec<String>,
     pub input_digest: String,
-    pub implementations: Vec<(String, String, String)>,
+    pub implementations: Vec<Implementation>,
 }
 struct SourceText {
     path: String,
@@ -89,8 +100,67 @@ pub fn module_name(value: &str) -> String {
     else if value.starts_with("$std::") { format!("std::{}", &value[6usize..]) }
     else { value.to_string() }
 }
+pub fn source_identity(namespace: resolve::Namespace, path: &str) -> String {
+    let prefix = match namespace { resolve::Namespace::Type => "type", resolve::Namespace::Value => "value" };
+    format!("{prefix}@{}", module_name(path))
+}
+/// Strip only the namespace marker; the remaining source path is not a selector.
+pub fn source_path(identity: &str) -> &str {
+    if identity.starts_with("type@") { &identity[5usize..] }
+    else if identity.starts_with("value@") { &identity[6usize..] }
+    else { identity }
+}
+pub fn selector_candidates(selector: &str, domain: &str) -> Result<Vec<String>, String> {
+    if selector.contains('@') {
+        let path = source_path(selector);
+        if path == selector || path.is_empty() || path.contains('@') {
+            return Err(format!("{} E_{}_SELECTOR expected one type@PATH or value@PATH marker", quote(selector), domain));
+        }
+        return Ok(vec![selector.to_string()]);
+    }
+    Ok(vec![selector.to_string(), source_identity(resolve::Namespace::Type, selector),
+        source_identity(resolve::Namespace::Value, selector)])
+}
+impl Catalog {
+    pub fn select(&self, selector: &str, domain: &str) -> Result<String, String> {
+        let mut found: Vec<String> = Vec::new();
+        let mut detail = String::new();
+        for candidate in selector_candidates(selector, domain)? {
+            let index = self.by_identity.get(&candidate);
+            let mut root = candidate == "crate";
+            for source in &self.module_sources { if source.identity == candidate { root = true; } }
+            if index.is_none() && !root { continue; }
+            if !detail.is_empty() { detail.push_str(", "); }
+            let kind = match index { Some(index) => self.items[*index].kind.clone(), None => "module".to_string() };
+            detail.push_str(&format!("{} ({kind})", quote(&candidate)));
+            found.push(candidate);
+        }
+        if found.len() > 1usize {
+            return Err(format!("{} E_{}_AMBIGUOUS select one canonical identity: {}", quote(selector), domain, detail));
+        }
+        if let Some(identity) = found.pop() { return Ok(identity); }
+        if let Some(owner) = self.namespace_slots.get(&selector.to_string()) {
+            return Err(format!("{} E_{}_IDENTITY constructor slot belongs to {}", quote(selector), domain, quote(owner)));
+        }
+        Err(format!("{} E_{}_IDENTITY identity is absent from this source snapshot", quote(selector), domain))
+    }
+    pub fn names_conflict(&self, left: &Item, right: &Item) -> bool {
+        if self.namespace_slots.get(&left.identity) != Some(&left.identity)
+            || self.namespace_slots.get(&right.identity) != Some(&right.identity) { return true; }
+        for namespace in vec![resolve::Namespace::Type, resolve::Namespace::Value] {
+            let left_slot = source_identity(namespace, source_path(&left.identity));
+            let right_slot = source_identity(namespace, source_path(&right.identity));
+            if self.namespace_slots.get(&left_slot) == Some(&left.identity)
+                && self.namespace_slots.get(&right_slot) == Some(&right.identity) { return true; }
+        }
+        false
+    }
+}
 fn root_parent(value: &str) -> String {
-    if value.is_empty() { "crate".to_string() } else { module_name(value) }
+    if value.is_empty() { "crate".to_string() } else { source_identity(resolve::Namespace::Type, value) }
+}
+fn type_identity(module: &str, name: &str) -> String {
+    source_identity(resolve::Namespace::Type, &qualified(module, name))
 }
 fn qualified(module: &str, name: &str) -> String {
     module_name(&names::qualified(module, name))
@@ -229,7 +299,7 @@ fn append_generics(result: &mut Catalog, files: &[SourceText], owner: &str, valu
 fn function_identity(program: &a::Program, index: usize) -> String {
     let function = &program.functions[index];
     match program.function_owner(a::FunctionId { index }) {
-        a::FunctionOwner::Free => qualified(&function.module, &function.name),
+        a::FunctionOwner::Free => source_identity(resolve::Namespace::Value, &qualified(&function.module, &function.name)),
         a::FunctionOwner::Trait(owner) => {
             let owner = &program.traits[owner.index];
             format!("{}::{}", qualified(&owner.module, &owner.name), function.name)
@@ -263,14 +333,15 @@ fn item_identity(program: &a::Program, item: a::Item, function_ids: &[String]) -
     match item {
         a::Item::MacroInvocation(id) => format!("macro-invocation:{id}"),
         a::Item::Function(index) => function_ids[index].clone(),
-        a::Item::Struct(index) => qualified(&program.structs[index].module, &program.structs[index].name),
-        a::Item::Enum(index) => qualified(&program.enums[index].module, &program.enums[index].name),
-        a::Item::Trait(index) => qualified(&program.traits[index].module, &program.traits[index].name),
+        a::Item::Struct(index) => type_identity(&program.structs[index].module, &program.structs[index].name),
+        a::Item::Enum(index) => type_identity(&program.enums[index].module, &program.enums[index].name),
+        a::Item::Trait(index) => type_identity(&program.traits[index].module, &program.traits[index].name),
         a::Item::Impl(index) => implementation_identity(program, index),
-        a::Item::Use(index) => format!("{}::use:{}", root_parent(&program.uses[index].module), program.uses[index].alias),
-        a::Item::Module(index) => qualified(&program.modules[index].parent, &program.modules[index].name),
-        a::Item::Alias(index) => qualified(&program.aliases[index].module, &program.aliases[index].name),
-        a::Item::Constant(index) => qualified(&program.constants[index].module, &program.constants[index].name),
+        a::Item::Use(index) => format!("{}::use:{}", source_path(&root_parent(&program.uses[index].module)), program.uses[index].alias),
+        a::Item::Module(index) => type_identity(&program.modules[index].parent, &program.modules[index].name),
+        a::Item::Alias(index) => type_identity(&program.aliases[index].module, &program.aliases[index].name),
+        a::Item::Constant(index) => source_identity(resolve::Namespace::Value,
+            &qualified(&program.constants[index].module, &program.constants[index].name)),
     }
 }
 fn declaration_identity(program: &a::Program, index: usize, function_ids: &[String]) -> Option<String> {
@@ -320,6 +391,19 @@ fn function_signature(program: &a::Program, function: &a::Function) -> String {
     }
     out
 }
+fn source_type_key(program: &a::Program, ty: usize) -> String {
+    let name = type_name(program, ty);
+    if let a::Type::Path(path) = &program.types[ty].kind {
+        if let Some(declaration) = path.declaration {
+            if matches!(program.declarations[declaration].item,
+                a::Item::Struct(_) | a::Item::Enum(_) | a::Item::Trait(_) | a::Item::Alias(_)) {
+                return source_identity(resolve::Namespace::Type, &name);
+            }
+        }
+    }
+    name
+}
+
 fn leaf_name(path: &str) -> &str {
     match path.rfind("::") { Some(at) => &path[at + 2usize..], None => path }
 }
@@ -405,8 +489,11 @@ fn ir_source(program: &a::Program, catalog: &Catalog, name: &str) -> Option<(Str
             catalog.function_ids[index].clone()
         }
         None => {
-            let identity = module_name(base);
-            if !catalog.by_identity.contains_key(&identity) { return None; }
+            let path = module_name(base);
+            let value = source_identity(resolve::Namespace::Value, &path);
+            let identity = if catalog.by_identity.contains_key(&value) { value } else { path };
+            let index = *catalog.by_identity.get(&identity)?;
+            if catalog.items[index].kind != "function" { return None; }
             identity
         }
     };
@@ -509,7 +596,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
     }
     let mut result = Catalog {
         root: program.files[0usize].path.clone(), module_sources: Vec::new(), references_recorded: include_references,
-        items: Vec::new(), by_identity: BTreeMap::new(), references: Vec::new(), generated_references: Vec::new(), unresolved: Vec::new(),
+        items: Vec::new(), by_identity: BTreeMap::new(), namespace_slots: BTreeMap::new(), references: Vec::new(), generated_references: Vec::new(), unresolved: Vec::new(),
         expression_types: BTreeMap::new(),
         function_ids: Vec::new(), instance_ids: Vec::new(), instance_sources: Vec::new(),
         implementations: Vec::new(), instance_arguments: Vec::new(), input_digest: sha256::hex_digest(&input_identity),
@@ -532,13 +619,24 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             file: program.files[loaded.file].path.clone(), alternate: loaded.alternate.clone() });
     }
     for index in 0usize..program.functions.len() { result.function_ids.push(function_identity(program, index)); }
+    for declaration in &program.declarations {
+        let owner = item_identity(program, declaration.item, &result.function_ids);
+        let (types, values) = resolve::declaration_namespaces(program, declaration.item);
+        for namespace in vec![resolve::Namespace::Type, resolve::Namespace::Value] {
+            if !(match namespace { resolve::Namespace::Type => types, resolve::Namespace::Value => values }) { continue; }
+            let slot = source_identity(namespace, &declaration.name);
+            if result.namespace_slots.insert(slot.clone(), owner.clone()).is_some() {
+                return Err(format!("E_IDENTITY duplicate source namespace slot {}", quote(&slot)));
+            }
+        }
+    }
     macro_sources::append_entries(&mut result, &files, program)?;
     for (index, value) in program.functions.iter().enumerate() {
         let identity = result.function_ids[index].clone();
         let parent = match program.function_owner(a::FunctionId { index }) {
             a::FunctionOwner::Free => root_parent(&value.module),
             a::FunctionOwner::Implementation(owner) => implementation_identity(program, owner.index),
-            a::FunctionOwner::Trait(owner) => qualified(&program.traits[owner.index].module, &program.traits[owner.index].name),
+            a::FunctionOwner::Trait(owner) => type_identity(&program.traits[owner.index].module, &program.traits[owner.index].name),
         };
         let body = value.body.map(|body| (program.blocks[body].span.start, program.blocks[body].span.end));
         append(&mut result, &files, identity.clone(), parent, "function", &value.name,
@@ -558,9 +656,9 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         }
     }
     for value in &program.structs {
-        let identity = qualified(&value.module, &value.name);
+        let identity = type_identity(&value.module, &value.name);
         append(&mut result, &files, identity.clone(), root_parent(&value.module), "struct",
-            &value.name, value.span, None, identity.clone(), true)?;
+            &value.name, value.span, None, source_path(&identity).to_string(), true)?;
         append_generics(&mut result, &files, &identity, &value.generics)?;
         for field in &value.fields {
             append(&mut result, &files, format!("{}::field:{}", identity, field.name), identity.clone(), "field",
@@ -568,14 +666,14 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         }
     }
     for value in &program.enums {
-        let identity = qualified(&value.module, &value.name);
+        let identity = type_identity(&value.module, &value.name);
         append(&mut result, &files, identity.clone(), root_parent(&value.module), "enum",
-            &value.name, value.span, None, identity.clone(), true)?;
+            &value.name, value.span, None, source_path(&identity).to_string(), true)?;
         append_generics(&mut result, &files, &identity, &value.generics)?;
         for variant in &value.variants {
             let variant_identity = format!("{}::variant:{}", identity, variant.name);
             append(&mut result, &files, variant_identity.clone(), identity.clone(), "variant",
-                &variant.name, variant.span, None, identity.clone(), false)?;
+                &variant.name, variant.span, None, source_path(&identity).to_string(), false)?;
             for field in &variant.fields {
                 append(&mut result, &files, format!("{}::field:{}", variant_identity, field.name), variant_identity.clone(),
                     "field", &field.name, field.span, None, type_name(program, field.ty), false)?;
@@ -583,9 +681,9 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         }
     }
     for value in &program.traits {
-        let identity = qualified(&value.module, &value.name);
+        let identity = type_identity(&value.module, &value.name);
         append(&mut result, &files, identity.clone(), root_parent(&value.module), "trait", &value.name,
-            value.span, None, identity.clone(), true)?;
+            value.span, None, source_path(&identity).to_string(), true)?;
         append_generics(&mut result, &files, &identity, &value.generics)?;
         for associated in &value.associated {
             append(&mut result, &files, format!("{}::type:{}", identity, associated.name), identity.clone(),
@@ -606,8 +704,9 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             generated_projection(&mut result, &files, program, &identity, structure, signature, false)?;
         }
         append_generics(&mut result, &files, &identity, &value.generics)?;
-        result.implementations.push((identity.clone(), type_name(program, value.target),
-            value.trait_ty.map_or(String::new(), |ty| type_name(program, ty))));
+        result.implementations.push(Implementation { identity: identity.clone(),
+            target: type_name(program, value.target), trait_name: value.trait_ty.map_or(String::new(), |ty| type_name(program, ty)),
+            target_key: source_type_key(program, value.target), trait_key: value.trait_ty.map_or(String::new(), |ty| source_type_key(program, ty)) });
         for associated in &value.associated {
             append(&mut result, &files, format!("{}::type:{}", identity, associated.name), identity.clone(),
                 "associated-type", &associated.name, associated.span, None,
@@ -616,17 +715,17 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         }
     }
     for value in &program.modules {
-        let identity = qualified(&value.parent, &value.name);
+        let identity = type_identity(&value.parent, &value.name);
         append(&mut result, &files, identity.clone(), root_parent(&value.parent), "module", &value.name,
-            value.span, None, identity, true)?;
+            value.span, None, source_path(&identity).to_string(), true)?;
     }
     for value in &program.aliases {
-        append(&mut result, &files, qualified(&value.module, &value.name), root_parent(&value.module), "alias",
+        append(&mut result, &files, type_identity(&value.module, &value.name), root_parent(&value.module), "alias",
             &value.name, value.span, None, type_name(program, value.ty), true)?;
-        append_generics(&mut result, &files, &qualified(&value.module, &value.name), &value.generics)?;
+        append_generics(&mut result, &files, &type_identity(&value.module, &value.name), &value.generics)?;
     }
     for value in &program.constants {
-        append(&mut result, &files, qualified(&value.module, &value.name), root_parent(&value.module), "constant",
+        append(&mut result, &files, source_identity(resolve::Namespace::Value, &qualified(&value.module, &value.name)), root_parent(&value.module), "constant",
             &value.name, value.span, None, type_name(program, value.ty), true)?;
     }
     macro_sources::project_items(&mut result, &files, program, &origins)?;
@@ -685,7 +784,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                         path.declaration.and_then(|declaration| declaration_identity(program, declaration, &result.function_ids))
                             .or_else(|| {
                                 let origin = origins.functions[*function]?;
-                                let candidate = format!("{}::generic:{}", module_name(&origin.identity(program)), path.name);
+                                let candidate = format!("{}::generic:{}", origin_identity(program, origin), path.name);
                                 if result.by_identity.contains_key(&candidate) { Some(candidate) } else { None }
                             })
                     }
@@ -732,7 +831,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                     match crate::generics::associated_binding_owner(program, path, binding) {
                         Ok(index) => {
                             let declaration = &program.traits[index];
-                            let target = format!("{}::type:{}", qualified(&declaration.module, &declaration.name), binding.name);
+                            let target = format!("{}::type:{}", type_identity(&declaration.module, &declaration.name), binding.name);
                             add_reference(&mut result, &files, owner.clone(), target, binding.span,
                                 &binding.name, "associated-type-binding", true);
                         }
@@ -742,7 +841,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                 }
                 if let Some(declaration) = path.declaration {
                     if let Some(target) = declaration_identity(program, declaration, &result.function_ids) {
-                        if module_name(&path.name) == target {
+                        if module_name(&path.name) == source_path(&target) {
                             path_reference(&mut result, &files, owner, target, node.span, "type", &resolver, node.scope, true);
                         } else {
                             add_reference(&mut result, &files, owner, path.name.clone(), node.span,
@@ -756,24 +855,21 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             if origins.macros.items.contains_key(&(5usize, index)) || imported.glob { continue; }
             let scope = resolve::module(program, &imported.module);
             let path = a::Path { qualification: None, bindings: Vec::new(), declaration: None, name: imported.path.clone(), args: Vec::new() };
-            let mut target: Option<String> = None;
-            let mut alias = false;
+            let mut targets: BTreeMap<String, bool> = BTreeMap::new();
             if let Ok(resolved) = resolver.value_path(scope, &path, imported.span) {
-                target = value_identity(program, &resolved, &result.function_ids);
-                alias = resolve::semantic_path_alias(&resolver, scope, &imported.path, true, imported.span).map_err(|problem| problem.message)?;
-            }
-            if target.is_none() {
-                if let Ok(name) = resolver.type_name(scope, &imported.path, imported.span) {
-                    let identity = module_name(&name);
-                    if result.by_identity.contains_key(&identity) {
-                        target = Some(identity);
-                        alias = resolve::semantic_path_alias(&resolver, scope, &imported.path, false, imported.span).map_err(|problem| problem.message)?;
-                    }
+                if let Some(target) = value_identity(program, &resolved, &result.function_ids) {
+                    let alias = resolve::semantic_path_alias(&resolver, scope, &imported.path, true, imported.span).map_err(|problem| problem.message)?;
+                    targets.insert(target, alias);
                 }
             }
-            if let Some(target) = target {
-                let owner = root_parent(&imported.module);
-                import_reference(&mut result, &files, owner, target, imported, alias);
+            if let Ok(path) = resolve::semantic_type_path(&resolver, scope, &imported.path, imported.span) {
+                if let Some(target) = value_identity(program, &path, &result.function_ids) {
+                    let alias = resolve::semantic_path_alias(&resolver, scope, &imported.path, false, imported.span).map_err(|problem| problem.message)?;
+                    targets.insert(target, alias);
+                }
+            }
+            for (target, alias) in targets {
+                import_reference(&mut result, &files, root_parent(&imported.module), target, imported, alias);
             }
         }
         let mut generated_patterns = origins.patterns.clone();
@@ -952,7 +1048,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         };
         let arguments = instance_arguments(checked.program(), &raw);
         let identity = if source.is_empty() { format!("ir:{}", module_name(&function.name)) }
-            else { format!("ir:{}{}", source, arguments) };
+            else { format!("ir:{}{}", source_path(&source), arguments) };
         result.instance_ids.push(identity);
         result.instance_sources.push(source);
         result.instance_arguments.push(arguments);
@@ -980,10 +1076,15 @@ pub fn generated_epoch_domain(expansion: &str) -> String {
     else { format!("lkjscript-{expansion}-body-1") }
 }
 
+fn origin_identity(program: &a::Program, origin: origins::Origin) -> String {
+    let path = module_name(&origin.identity(program));
+    if matches!(origin.expansion, origins::Expansion::Macro(_)) { path }
+    else { source_identity(resolve::Namespace::Type, &path) }
+}
 fn generated_projection(catalog: &mut Catalog, files: &[SourceText], program: &a::Program,
     identity: &str, origin: origins::Origin, signature: String, body: bool) -> Result<(), String> {
     let span = origin.span(program);
-    let defining = module_name(&origin.identity(program));
+    let defining = origin_identity(program, origin);
     let file = &files[span.file];
     let start = preceding(&file.tokens, span.start);
     let declaration = token_digest(&file.tokens, start, span.end);

@@ -77,8 +77,8 @@ perl -MJSON::PP - "$fixture/source/main.lkj" "$fixture/primitive-limit.query" "$
 use strict; use warnings;
 my ($path,$primitive,$local)=@ARGV;
 open my $input,'<:raw',$path or die $!; local $/; my $source=<$input>; close $input;
-for my $entry ([$primitive,'std::integer::__lkjscript_usize_max','alias-value'],
-               [$local,'local::usize::MAX','value']) {
+for my $entry ([$primitive,'value@std::integer::__lkjscript_usize_max','alias-value'],
+               [$local,'value@local::usize::MAX','value']) {
     open my $facts,'<',$entry->[0] or die $!;
     my $text=<$facts>; close $facts;
     my $seen=0;

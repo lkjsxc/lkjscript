@@ -16,7 +16,7 @@ mod native; mod x86; mod child_image; mod entry_grants; mod runtime;
 mod runtime_diagnostics; mod semantic; mod source; mod syntax;
 mod structure_edit; mod structure_refactor; mod structure_replay;
 pub use std::sha256;
-pub fn main(mut world: World) { match cases::run() { Ok(()) => { let mut output = world.stdout(); output.write(b"ok module projection: loader provenance, strict declaration/path checks and scoped replay\n"); }, Err(error) => panic!("{error}") } }
+pub fn main(mut world: World) { match cases::run() { Ok(()) => { let mut output = world.stdout(); output.write(b"ok module projection: loader provenance, strict declaration/path checks and scoped replay\n"); }, Err(error) => { let mut output = world.stdout(); output.write(format!("{error}\n").as_bytes()); panic!("module projection cases failed") } } }
 mod cases {
     use super::*;
     struct Snapshot { catalog: semantic::Catalog, inputs: Vec<(String, Vec<u8>)>, checked: ir::CheckedProgram }
@@ -89,23 +89,23 @@ mod cases {
         let direct = snapshot("main.lkj", None, vec![file("main.lkj", "mod empty; fn main() -> i64 { 1i64 }"), file("empty.lkj", "")])?;
         assert_eq!(direct.catalog.module_sources.len(), 2usize);
         assert_eq!(mounted(&direct, "crate").parent, ""); assert_eq!(mounted(&direct, "crate").alternate, "");
-        assert_eq!(mounted(&direct, "empty").file, "empty.lkj");
-        assert_eq!(mounted(&direct, "empty").alternate, "empty/mod.lkj"); assert_eq!(mounted(&direct, "empty").parent, "crate");
+        assert_eq!(mounted(&direct, "type@empty").file, "empty.lkj");
+        assert_eq!(mounted(&direct, "type@empty").alternate, "empty/mod.lkj"); assert_eq!(mounted(&direct, "type@empty").parent, "crate");
         let draft = plan(&direct, r#"{"op":"add-item","id":"empty","source":"pub fn value() -> i64 { 3i64 }"}"#)?;
         assert_eq!(draft.changes.len(), 1usize); assert!(draft.projections.is_empty());
         assert_eq!(draft.changes[0usize].file, "empty.lkj");
         match &draft.changes[0usize].before { structure_edit::PreviousText::Present(bytes) => assert!(bytes.is_empty()), _ => panic!("empty is present") }
         snapshot("main.lkj", None, apply(&direct, &draft, "."))?;
         let nested = snapshot("src/main.lkj", None, vec![file("src/main.lkj", "mod empty; fn main() -> i64 { 2i64 }"), file("src/empty/mod.lkj", "")])?;
-        assert_eq!(mounted(&nested, "empty").file, "src/empty/mod.lkj"); assert_eq!(mounted(&nested, "empty").alternate, "src/empty.lkj");
+        assert_eq!(mounted(&nested, "type@empty").file, "src/empty/mod.lkj"); assert_eq!(mounted(&nested, "type@empty").alternate, "src/empty.lkj");
         let include = snapshot("main.lkj", None, vec![file("main.lkj", "fn main() -> i64 { include_bytes!(\"data.bin\")[0] as i64 }"), file("data.bin", "x")])?;
         assert_eq!(include.catalog.module_sources.len(), 1usize); assert_eq!(value(&include), 120i64);
         let standard = snapshot("main.lkj", Some("library/lib.lkj"), vec![file("main.lkj", "fn main() -> i64 { 4i64 }"), file("library/lib.lkj", "")])?;
-        assert_eq!(mounted(&standard, "std").file, "library/lib.lkj"); assert_eq!(mounted(&standard, "std").parent, "");
+        assert_eq!(mounted(&standard, "type@std").file, "library/lib.lkj"); assert_eq!(mounted(&standard, "type@std").parent, "");
         let draft = plan(&standard, &operation("std", "pub mod added;", "library/added.lkj", ""))?;
-        assert_eq!(draft.changes[0usize].file, "library/lib.lkj"); assert_eq!(draft.projections[0usize].identity, "std::added");
+        assert_eq!(draft.changes[0usize].file, "library/lib.lkj"); assert_eq!(draft.projections[0usize].identity, "type@std::added");
         let candidate = snapshot("main.lkj", Some("library/lib.lkj"), apply(&standard, &draft, "."))?;
-        assert_eq!(mounted(&candidate, "std::added").parent, "std");
+        assert_eq!(mounted(&candidate, "type@std::added").parent, "type@std");
         let both = snapshot("main.lkj", None, vec![file("main.lkj", "mod ambiguous;"), file("ambiguous.lkj", ""), file("ambiguous/mod.lkj", "")]);
         match both { Err(error) => assert!(error.contains("E_MODULE_AMBIGUOUS")), Ok(_) => panic!("both candidates admitted") }
         Ok(())
@@ -114,13 +114,13 @@ mod cases {
         let before = snapshot("main.lkj", None, vec![file("main.lkj", "fn main() -> i64 { 42i64 }")])?;
         let draft = plan(&before, &operation("crate", "pub mod added;", "added.lkj", ""))?;
         assert_eq!(draft.changes.len(), 1usize); assert_eq!(draft.projections.len(), 1usize);
-        assert_eq!(draft.projections[0usize].parent, "crate"); assert_eq!(draft.projections[0usize].identity, "added"); assert!(draft.projections[0usize].source.is_empty());
+        assert_eq!(draft.projections[0usize].parent, "crate"); assert_eq!(draft.projections[0usize].identity, "type@added"); assert!(draft.projections[0usize].source.is_empty());
         let candidate = snapshot("main.lkj", None, apply(&before, &draft, "."))?;
-        assert_eq!(value(&candidate), 42i64); assert_eq!(mounted(&candidate, "added").file, "added.lkj");
+        assert_eq!(value(&candidate), 42i64); assert_eq!(mounted(&candidate, "type@added").file, "added.lkj");
         let inline = snapshot("main.lkj", None, vec![file("main.lkj", "mod inner {} fn main() -> i64 { 42i64 }")])?;
         let draft = plan(&inline, &operation("inner", "pub mod added;", "inner/added.lkj", "pub fn value() -> i64 { 9i64 }"))?;
         let candidate = snapshot("main.lkj", None, apply(&inline, &draft, "."))?;
-        assert_eq!(mounted(&candidate, "inner::added").parent, "inner");
+        assert_eq!(mounted(&candidate, "type@inner::added").parent, "type@inner");
         refusal(&before, &operation("crate", "mod added {}", "added.lkj", ""), "E_EDIT_PROJECTION")?;
         refusal(&before, &operation("crate", "fn added() {}", "added.lkj", ""), "E_EDIT_PROJECTION")?;
         refusal(&before, &operation("crate", "mod added; fn extra() {}", "added.lkj", ""), "E_EDIT_PROJECTION")?;
@@ -161,7 +161,7 @@ mod cases {
         let draft = replay_draft(&before, &after, "old")?;
         assert_eq!(draft.projections.len(), 1usize); assert_eq!(draft.projections[0usize].path, "added.lkj");
         let candidate = snapshot("old/main.lkj", None, apply(&before, &draft, "old"))?;
-        assert_eq!(value(&candidate), value(&after)); assert_eq!(mounted(&candidate, "added").file, "old/added.lkj");
+        assert_eq!(value(&candidate), value(&after)); assert_eq!(mounted(&candidate, "type@added").file, "old/added.lkj");
         let empty = snapshot("new/main.lkj", None, vec![file("new/main.lkj", "mod empty; fn main() -> i64 { 1i64 }"), file("new/empty.lkj", "")])?;
         let draft = replay_draft(&before, &empty, "old")?; assert!(draft.projections[0usize].source.is_empty());
         snapshot("old/main.lkj", None, apply(&before, &draft, "old"))?;
@@ -193,7 +193,7 @@ mod cases {
         let library_before = snapshot("old/main.lkj", Some("old/library/lib.lkj"), vec![file("old/main.lkj", "fn main() -> i64 { 1i64 }"), file("old/library/lib.lkj", "")])?;
         let library_after = snapshot("new/main.lkj", Some("new/library/lib.lkj"), vec![file("new/main.lkj", "fn main() -> i64 { 1i64 }"), file("new/library/lib.lkj", "pub mod added;"), file("new/library/added.lkj", "")])?;
         let draft = replay_draft(&library_before, &library_after, "old")?;
-        assert_eq!(draft.projections[0usize].identity, "std::added"); assert_eq!(draft.projections[0usize].path, "library/added.lkj");
+        assert_eq!(draft.projections[0usize].identity, "type@std::added"); assert_eq!(draft.projections[0usize].path, "library/added.lkj");
         snapshot("old/main.lkj", Some("old/library/lib.lkj"), apply(&library_before, &draft, "old"))?;
         Ok(())
     }

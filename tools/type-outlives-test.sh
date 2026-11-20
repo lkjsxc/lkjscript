@@ -63,6 +63,7 @@ meaning() {
 use strict;
 use warnings;
 my ($facts,$root,$owner,$lifetime,$mode)=@ARGV;
+$owner = "value\@$owner" if $mode eq 'free';
 open my $input,'<',$facts or die $!;
 my $seen=0;
 while (<$input>) {

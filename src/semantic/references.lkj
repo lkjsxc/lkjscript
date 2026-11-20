@@ -48,7 +48,7 @@ pub(super) fn lifetime_predicate_references(result: &mut Catalog, files: &[Sourc
 pub(super) fn self_trait_owners(program: &a::Program) -> BTreeMap<String, usize> {
     let mut owners = BTreeMap::new();
     for (index, declaration) in program.traits.iter().enumerate() {
-        owners.insert(qualified(&declaration.module, &declaration.name), index);
+        owners.insert(type_identity(&declaration.module, &declaration.name), index);
     }
     for (index, implementation) in program.impls.iter().enumerate() {
         let Some(trait_ty) = implementation.trait_ty else { continue; };
@@ -92,7 +92,7 @@ pub(super) fn self_associated_identity(program: &a::Program, catalog: &Catalog,
         }
     }
     let declaration = &program.traits[found?];
-    Some(format!("{}::type:{}", qualified(&declaration.module, &declaration.name), member))
+    Some(format!("{}::type:{}", type_identity(&declaration.module, &declaration.name), member))
 }
 
 /// A family binder owns only the exact type paths inside its member declaration.
@@ -129,7 +129,7 @@ pub(super) fn family_member_reference(result: &mut Catalog, files: &[SourceText]
     let Some(Some(declaration)) = evidence.family_members.get(&source_type) else { return false; };
     let definition = &program.traits[*declaration];
     let member = leaf_name(&path.name);
-    let target = format!("{}::type:{member}", qualified(&definition.module, &definition.name));
+    let target = format!("{}::type:{member}", type_identity(&definition.module, &definition.name));
     if !result.by_identity.contains_key(&target) { return false; }
     add_reference(result, files, owner.to_string(), target, span, member, "associated-type", true);
     true
@@ -140,14 +140,17 @@ pub(super) fn value_identity(program: &a::Program, path: &a::Path, functions: &[
     let target = declaration_identity(program, declaration, functions)?;
     match program.declarations[declaration].item {
         a::Item::Enum(index) => {
-            let name = leaf_name(&path.name);
+            let resolved = module_name(&path.name);
+            if resolved == source_path(&target) { return Some(target); }
             for variant in &program.enums[index].variants {
-                if variant.name == name { return Some(format!("{}::variant:{}", target, name)); }
+                if resolved == format!("{}::{}", source_path(&target), variant.name) {
+                    return Some(format!("{}::variant:{}", target, variant.name));
+                }
             }
-            if module_name(&path.name) == target { Some(target) } else { None }
+            None
         }
         a::Item::Struct(_) | a::Item::Alias(_) | a::Item::Trait(_) => {
-            if module_name(&path.name) == target { Some(target) } else { None }
+            if module_name(&path.name) == source_path(&target) { Some(target) } else { None }
         }
         _ => Some(target),
     }
@@ -381,7 +384,7 @@ fn qualification_site(result: &mut Catalog, files: &[SourceText], program: &a::P
                 record_site(result, files, owner.to_string(), prefix.to_string(), span, unresolved, false);
                 return;
             };
-            if module_name(&path.name) != target {
+            if module_name(&path.name) != source_path(&target) {
                 let kind = if namespace { "associated-qualification" } else { unresolved };
                 record_site(result, files, owner.to_string(), prefix.to_string(), span, kind, false);
                 return;

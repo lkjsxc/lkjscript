@@ -403,6 +403,21 @@ fn authority_fact(fact: &verified::Fact) -> String {
 }
 pub fn compare(before: &semantic::Catalog, old: &ir::CheckedProgram,
     after: &semantic::Catalog, new: &ir::CheckedProgram, text_identical: bool, limit: usize, detail: &str) -> Result<String, String> {
+    let mut selected = detail.to_string();
+    if !detail.is_empty() {
+        let mut found = Vec::new();
+        for candidate in semantic::selector_candidates(detail, "COMPARE")? {
+            if before.by_identity.contains_key(&candidate) || after.by_identity.contains_key(&candidate) { found.push(candidate); }
+        }
+        if found.len() > 1usize {
+            return Err(format!("{} E_COMPARE_AMBIGUOUS select one canonical source identity", semantic::quote(detail)));
+        }
+        if let Some(identity) = found.pop() { selected = identity; }
+        else if detail.contains('@') {
+            return Err(format!("{} E_COMPARE_IDENTITY no matching canonical source identity", semantic::quote(detail)));
+        }
+    }
+    let detail = selected.as_str();
     let old_meaning = identity(old);
     let new_meaning = identity(new);
     let old_exact = exact_identity(old);

@@ -71,6 +71,7 @@ bound_sites() {
 use strict;
 use warnings;
 my ($facts,$wanted,$spelling,$expected,$root)=@ARGV;
+$wanted = "type\@$wanted";
 open my $input,'<',$facts or die $!;
 my $count=0;
 while (<$input>) {

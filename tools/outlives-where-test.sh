@@ -68,6 +68,7 @@ references() {
 use strict;
 use warnings;
 my ($facts,$root,$owner,$mode)=@ARGV;
+$owner = "value\@$owner" if $mode eq 'free';
 open my $input,'<',$facts or die $!;
 my %seen;
 while (<$input>) {

@@ -107,6 +107,35 @@ pub fn run<Q: store::QueryAccess>(store: &mut Q, selector: &str, options: &Optio
         return Err("E_QUERY_BOUND --limit, --bytes and --depth must be positive".to_string());
     }
     let snapshot = semantic_store::open(&mut *store, selector, &options.snapshot)?;
+    // Selection reads authenticated metadata, never the current source tree.
+    // Exact historical keys and the two namespace keys have equal precedence.
+    let mut reader = semantic_store::Reader::new(snapshot.clone());
+    let mut choices: Vec<String> = Vec::new();
+    let mut detail = String::new();
+    for candidate in semantic::selector_candidates(&options.identity, "QUERY")? {
+        if let Some(page) = reader.page(&mut *store, "meta", &candidate, 0usize)? {
+            let mut kind = "recorded identity".to_string();
+            for line in &page.lines {
+                if let Some(at) = line.find("kind=") {
+                    kind = line[at + 5usize..].split(' ').next().unwrap_or("").to_string();
+                }
+            }
+            if !detail.is_empty() { detail.push_str(", "); }
+            detail.push_str(&format!("{} ({kind})", semantic::quote(&candidate)));
+            choices.push(candidate);
+        }
+    }
+    if choices.len() > 1usize {
+        return Err(format!("{} E_QUERY_AMBIGUOUS select one canonical identity: {}", semantic::quote(&options.identity), detail));
+    }
+    let requested = options.identity.clone();
+    let mut selected = options.clone();
+    if let Some(identity) = choices.pop() { selected.identity = identity; }
+    else if let Some(page) = reader.page(&mut *store, "@namespace-slot", &options.identity, 0usize)? {
+        let owner = page.lines.first().map_or("", |line| line.as_str());
+        return Err(format!("{} E_QUERY_ID constructor slot belongs to {}", semantic::quote(&options.identity), semantic::quote(owner)));
+    }
+    let options = &selected;
     let request = identity(&snapshot.identity, options);
     let mut state = match &options.cursor {
         Some(cursor) => {
@@ -116,12 +145,12 @@ pub fn run<Q: store::QueryAccess>(store: &mut Q, selector: &str, options: &Optio
         }
         None => start(options),
     };
-    let mut output = semantic_facts::fact(&options.identity, "protocol", "query",
+    let mut output = semantic_facts::fact(&requested, "protocol", "query",
         &format!("version=3 producer={} validation=authenticated-producing-compiler current-check=not-performed snapshot={} source={} checked-ir={} kind={} depth={} freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection={}",
             snapshot.producer, snapshot.identity, snapshot.source, snapshot.checked_ir, options.kind, options.depth,
             if options.snapshot.is_some() { "explicit" } else { "stored-pointer" }));
+    if requested != options.identity { output.push_str(&format!(" selected={}", semantic::quote(&options.identity))); }
     output.push('\n');
-    let mut reader = semantic_store::Reader::new(snapshot);
     let mut emitted = 0usize; let mut steps = 0usize;
     let budget = options.limit.checked_mul(8usize).unwrap_or(!0usize - 32usize).checked_add(32usize).unwrap_or(!0usize);
     while let Some(mut current) = state.pop() {

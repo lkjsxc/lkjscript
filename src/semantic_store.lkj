@@ -3,6 +3,7 @@
 use crate::{ir, ir_binary, semantic, semantic_facts, sha256, store};
 use std::collections::BTreeMap;
 
+#[derive(Clone)]
 pub struct Snapshot {
     pub identity: String,
     pub producer: String,

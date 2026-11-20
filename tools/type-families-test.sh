@@ -46,9 +46,9 @@ grep -Fq 'type Output<T>' "$fixture/signature"
 query type Mode::type:Output::generic:T > "$fixture/binder"
 grep -Fq 'value="T"' "$fixture/binder"
 query references keep > "$fixture/references"
-grep -Fq '"Mode::type:Output"' "$fixture/references"
-[[ $(grep -Fc '"Mode::type:Output"' "$fixture/references") == 2 ]]
-! grep -Fq '"Other::type:Output"' "$fixture/references"
+grep -Fq '"type@Mode::type:Output"' "$fixture/references"
+[[ $(grep -Fc '"type@Mode::type:Output"' "$fixture/references") == 2 ]]
+! grep -Fq '"type@Other::type:Output"' "$fixture/references"
 cat > "$fixture/request" <<'REQUEST'
 {"version":1,"operations":[{"op":"rename","id":"Mode::type:Output","name":"Value"}]}
 REQUEST

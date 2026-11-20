@@ -187,7 +187,7 @@ mkdir "$fixture/small-store"
 refuse "$compiler" build main.lkj --source-dir "$fixture/source" --no-library --store "$fixture/small-store" --store-key "$fixture/key" --store-bytes 32768 --index -o "$fixture/small-program"
 refuse "$compiler" query main.lkj --source-dir "$fixture/source" --no-library --store "$fixture/small-store" --store-key "$fixture/key" --kind outline
 query outline helpers --depth 2 --limit 80 > "$fixture/outline"
-grep -Eq '"helpers::square".*level=source-claim.*fact=signature' "$fixture/outline" || fail outline
+grep -Eq '"value@helpers::square".*level=source-claim.*fact=signature' "$fixture/outline" || fail outline
 query item helpers::square > "$fixture/item"
 grep -Eq 'fn square' "$fixture/item" || fail 'item source'
 query uses helpers::square > "$fixture/uses"
@@ -195,19 +195,19 @@ grep -Eq 'kind=import' "$fixture/uses" || fail 'resolved import reference'
 query references probe > "$fixture/references"
 grep -Eq 'kind=alias-value' "$fixture/references" || fail 'alias use is not a rename site'
 query references shadowed --limit 80 > "$fixture/shadowed"
-[[ $(grep -Ec '"scalar".*kind=value' "$fixture/shadowed") == 2 ]] || fail 'lexical scope lost a free call'
+[[ $(grep -Ec '"value@scalar".*kind=value' "$fixture/shadowed") == 2 ]] || fail 'lexical scope lost a free call'
 grep -Eq 'binding:scalar:0.*kind=local-value' "$fixture/shadowed" || fail 'local binding target'
 if grep -Eq 'kind=lexical-name' "$fixture/shadowed"; then fail 'typed local kept lexical ambiguity'; fi
 query references alias_type > "$fixture/alias-type"
 grep -Eq 'helpers::Counter.*kind=alias-type' "$fixture/alias-type" || fail 'resolved type alias use'
 for identity in borrowed_type double_borrowed; do
     query references "$identity" > "$fixture/borrowed-type"
-    grep -Eq '"helpers::Counter".*kind=type' "$fixture/borrowed-type" || fail 'borrowed nominal type site omitted'
-    grep -Eq '"helpers".*kind=qualification' "$fixture/borrowed-type" || fail 'borrowed qualification omitted'
+    grep -Eq '"type@helpers::Counter".*kind=type' "$fixture/borrowed-type" || fail 'borrowed nominal type site omitted'
+    grep -Eq '"type@helpers".*kind=qualification' "$fixture/borrowed-type" || fail 'borrowed qualification omitted'
     if grep -Eq 'kind=implicit-source' "$fixture/borrowed-type"; then fail 'reference prefix confused a type path'; fi
 done
 query references borrowed_alias > "$fixture/borrowed-alias"
-grep -Eq '"helpers::Counter".*kind=alias-type' "$fixture/borrowed-alias" || fail 'borrowed alias site omitted'
+grep -Eq '"type@helpers::Counter".*kind=alias-type' "$fixture/borrowed-alias" || fail 'borrowed alias site omitted'
 query uses 'helpers::Counter::field:value' --limit 80 > "$fixture/field-uses"
 for kind in field constructor-field field-shorthand pattern-field pattern-field-shorthand; do
     grep -Eq "kind=$kind( |$)" "$fixture/field-uses" || fail "missing $kind reference"
@@ -224,28 +224,28 @@ query type "$held" > "$fixture/generic-binding"
 grep -Eq 'fact=inferred-type.*value="T"' "$fixture/generic-binding" || fail 'generic definition type'
 
 query references probe > "$fixture/qualified"
-grep -Eq '"helpers".*kind=qualification' "$fixture/qualified" || fail 'module qualification omitted'
+grep -Eq '"type@helpers".*kind=qualification' "$fixture/qualified" || fail 'module qualification omitted'
 query references helpers::patterned > "$fixture/qualified-pattern"
-grep -Eq '"helpers::Color".*kind=qualification' "$fixture/qualified-pattern" || fail 'pattern type qualification omitted'
+grep -Eq '"type@helpers::Color".*kind=qualification' "$fixture/qualified-pattern" || fail 'pattern type qualification omitted'
 query references same_alias::run > "$fixture/same-alias"
-grep -Eq '"helpers::square".*kind=alias-value' "$fixture/same-alias" || fail 'same-spelling explicit alias lost'
+grep -Eq '"value@helpers::square".*kind=alias-value' "$fixture/same-alias" || fail 'same-spelling explicit alias lost'
 query references direct_import::run > "$fixture/direct-import"
-grep -Eq '"helpers::square".*kind=value' "$fixture/direct-import" || fail 'ordinary import became an alias'
+grep -Eq '"value@helpers::square".*kind=value' "$fixture/direct-import" || fail 'ordinary import became an alias'
 query references wildcard::run > "$fixture/wildcard"
-grep -Eq '"helpers::square".*kind=alias-value' "$fixture/wildcard" || fail 'reexport/glob alias provenance lost'
+grep -Eq '"value@helpers::square".*kind=alias-value' "$fixture/wildcard" || fail 'reexport/glob alias provenance lost'
 query references same_type::run > "$fixture/same-type"
-grep -Eq '"helpers::Counter".*kind=alias-type' "$fixture/same-type" || fail 'same-spelling type alias lost'
+grep -Eq '"type@helpers::Counter".*kind=alias-type' "$fixture/same-type" || fail 'same-spelling type alias lost'
 query references module_alias::run > "$fixture/module-alias"
-grep -Eq '"helpers".*kind=alias-qualification' "$fixture/module-alias" || fail 'module alias provenance lost'
-grep -Eq '"helpers::square".*kind=value' "$fixture/module-alias" || fail 'owner alias changed member spelling'
+grep -Eq '"type@helpers".*kind=alias-qualification' "$fixture/module-alias" || fail 'module alias provenance lost'
+grep -Eq '"value@helpers::square".*kind=value' "$fixture/module-alias" || fail 'owner alias changed member spelling'
 query references grouped::run > "$fixture/grouped"
-grep -Eq '"helpers".*kind=alias-qualification' "$fixture/grouped" || fail 'grouped self alias lost'
-grep -Eq '"helpers::square".*kind=alias-value' "$fixture/grouped" || fail 'grouped reexport alias lost'
+grep -Eq '"type@helpers".*kind=alias-qualification' "$fixture/grouped" || fail 'grouped self alias lost'
+grep -Eq '"value@helpers::square".*kind=alias-value' "$fixture/grouped" || fail 'grouped reexport alias lost'
 query uses helpers::square --limit 120 > "$fixture/reexport-uses"
 grep -Eq 'kind=alias-import' "$fixture/reexport-uses" || fail 'reexport import treated as original declaration spelling'
 for identity in self_function self_terminal self_transparent self_sibling self_repeated self_alias; do
     query references "$identity" > "$fixture/self-import"
-    grep -Eq '^"helpers::square".*kind=import( |$)' "$fixture/self-import" || fail "missing exact self import: $identity"
+    grep -Eq '^"value@helpers::square".*kind=import( |$)' "$fixture/self-import" || fail "missing exact self import: $identity"
     if grep -Eq 'unresolved-reference' "$fixture/self-import"; then fail "self import retained a false namespace gap: $identity"; fi
     perl - "$fixture/source/main.lkj" "$fixture/self-import" <<'PERL'
 use strict;
@@ -255,7 +255,7 @@ my $source = do { local $/; <$source_file> };
 open my $facts, '<:raw', shift @ARGV or die $!;
 my $found = 0;
 while (<$facts>) {
-    next unless /^"helpers::square".* start=(\d+) end=(\d+) kind=import(?: |$)/;
+    next unless /^"value\@helpers::square".* start=(\d+) end=(\d+) kind=import(?: |$)/;
     die "wrong inherited import span\n" unless substr($source, $1, $2 - $1) eq 'square';
     ++$found;
 }
@@ -263,14 +263,14 @@ die "missing inherited import span\n" unless $found == 1;
 PERL
 done
 query references self_alias::run > "$fixture/self-alias-use"
-grep -Eq '^"helpers::square".*kind=alias-value' "$fixture/self-alias-use" || fail 'self leaf alias provenance lost'
+grep -Eq '^"value@helpers::square".*kind=alias-value' "$fixture/self-alias-use" || fail 'self leaf alias provenance lost'
 query references self_reexport > "$fixture/self-reexport"
-grep -Eq '^"helpers::square".*kind=alias-import' "$fixture/self-reexport" || fail 'self reexport alias provenance lost'
+grep -Eq '^"value@helpers::square".*kind=alias-import' "$fixture/self-reexport" || fail 'self reexport alias provenance lost'
 if grep -Eq 'unresolved-reference' "$fixture/self-reexport"; then fail 'self reexport retained a false namespace gap'; fi
 query references namespace_probe > "$fixture/namespace-probe"
 grep -Eq 'kind=unresolved-namespace-qualification' "$fixture/namespace-probe" || fail 'exact nonterminal namespace role missing'
 query references turbofish_probe > "$fixture/turbofish-probe"
-grep -Eq '^"helpers::identity".*kind=value' "$fixture/turbofish-probe" || fail 'turbofish terminal value binding missing'
+grep -Eq '^"value@helpers::identity".*kind=value' "$fixture/turbofish-probe" || fail 'turbofish terminal value binding missing'
 if grep -Eq 'unresolved-namespace-qualification' "$fixture/turbofish-probe"; then fail 'turbofish terminal became a namespace'; fi
 
 query references visibility::hidden > "$fixture/visibility"
@@ -285,7 +285,7 @@ grep -Eq 'fact=inferred-type.*value="helpers::Counter"' "$fixture/nominal-bindin
 query callees probe > "$fixture/callees"
 grep -Eq 'helpers::square' "$fixture/callees" || fail callees
 query callers helpers::square > "$fixture/callers"
-grep -Eq '"probe"' "$fixture/callers" || fail callers
+grep -Eq '"value@probe"' "$fixture/callers" || fail callers
 query instances helpers::identity > "$fixture/instances"
 grep -Eq 'arguments="<T=i64>"' "$fixture/instances" || fail 'generic instance arguments'
 grep -Eq 'native-bytes=[0-9].*native-size=producer-measurement' "$fixture/instances" || fail 'native instance bytes'
@@ -293,16 +293,16 @@ query type 'scalar::param:value' > "$fixture/type"
 grep -Eq 'value="i64"' "$fixture/type" || fail type
 query outline helpers::anonymous --limit 8 > "$fixture/anonymous-outline"
 for parameter in 0 named 2; do
-    grep -Fq "\"helpers::anonymous::param:$parameter\"" "$fixture/anonymous-outline" || fail 'anonymous parameter identity missing'
+    grep -Fq "\"value@helpers::anonymous::param:$parameter\"" "$fixture/anonymous-outline" || fail 'anonymous parameter identity missing'
 done
 query type helpers::anonymous::param:0 > "$fixture/anonymous-first"
 grep -Eq 'value="u8"' "$fixture/anonymous-first" || fail 'first anonymous parameter type'
 query type helpers::anonymous::param:2 > "$fixture/anonymous-last"
 grep -Eq 'value="bool"' "$fixture/anonymous-last" || fail 'last anonymous parameter type'
 query references helpers::anonymous > "$fixture/anonymous-named"
-grep -Eq '"helpers::anonymous::param:named".*kind=local-value' "$fixture/anonymous-named" || fail 'named parameter identity changed'
+grep -Eq '"value@helpers::anonymous::param:named".*kind=local-value' "$fixture/anonymous-named" || fail 'named parameter identity changed'
 query references helpers::anonymous_reference > "$fixture/anonymous-reference"
-grep -Eq '"helpers::anonymous_reference::param:1".*kind=local-value' "$fixture/anonymous-reference" || fail 'anonymous reference lost its exact parameter position'
+grep -Eq '"value@helpers::anonymous_reference::param:1".*kind=local-value' "$fixture/anonymous-reference" || fail 'anonymous reference lost its exact parameter position'
 refuse query type helpers::anonymous::param:_
 refuse query type helpers::anonymous::param:1
 query layout helpers::Counter > "$fixture/layout"
@@ -314,7 +314,7 @@ grep -Eq 'level=checked-ir.*stdout_write' "$fixture/effect" || fail 'ordinary ef
 query impls helpers::Apply > "$fixture/impls"
 grep -Eq 'helpers::Counter as helpers::Apply' "$fixture/impls" || fail implementations
 query dependents helpers::square > "$fixture/dependents"
-grep -Eq '"probe"' "$fixture/dependents" || fail dependents
+grep -Eq '"value@probe"' "$fixture/dependents" || fail dependents
 query slice probe > "$fixture/slice"
 grep -Eq 'fn probe' "$fixture/slice" || fail slice
 query outline helpers --limit 1 > "$fixture/page"
@@ -453,10 +453,10 @@ untyped_snapshot=$(sed -n 's/^LKJSCRIPT_SNAPSHOT \([0-9a-f]*\) .*/\1/p' "$fixtur
 [[ ${#untyped_snapshot} == 64 ]] || fail 'untyped library snapshot'
 untyped_query() { "$compiler" query "${untyped_common[@]}" --snapshot "$untyped_snapshot" --kind "$1" --id "$2" --limit 80; }
 untyped_query references std::scope::unshadowed > "$fixture/untyped-param"
-grep -Eq '^"std::scope::unshadowed::param:target".*kind=local-value' "$fixture/untyped-param" || fail 'unshadowed library parameter identity missing'
+grep -Eq '^"value@std::scope::unshadowed::param:target".*kind=local-value' "$fixture/untyped-param" || fail 'unshadowed library parameter identity missing'
 if grep -Eq 'kind=lexical-name' "$fixture/untyped-param"; then fail 'proved parameter remained ambiguous'; fi
 untyped_query references std::scope::top_local > "$fixture/untyped-local"
-local_identity=$(sed -n 's/^"\(std::scope::top_local::body:[^"]*::binding:target:0\)".*kind=local-value.*/\1/p' "$fixture/untyped-local")
+local_identity=$(sed -n 's/^"\(value@std::scope::top_local::body:[^"]*::binding:target:0\)".*kind=local-value.*/\1/p' "$fixture/untyped-local")
 [[ -n "$local_identity" ]] || fail 'unique top-level library binding identity missing'
 untyped_query type "$local_identity" > "$fixture/untyped-local-type"
 grep -Eq 'fact=type-unavailable' "$fixture/untyped-local-type" || fail 'lexical identity invented an inferred type'
@@ -465,7 +465,7 @@ for identity in shadowed before initializer nested_block closure_shadow; do
     grep -Eq 'kind=lexical-name.*claim=partial' "$fixture/untyped-ambiguous" || fail "unproved lexical scope was accepted: $identity"
 done
 untyped_query references std::scope::outer > "$fixture/untyped-outer"
-grep -Eq '^"std::scope::outer::param:target".*kind=local-value' "$fixture/untyped-outer" || fail 'outer parameter identity missing'
+grep -Eq '^"value@std::scope::outer::param:target".*kind=local-value' "$fixture/untyped-outer" || fail 'outer parameter identity missing'
 untyped_query uses std::scope::target > "$fixture/untyped-inner"
 grep -Eq 'inner".*kind=value' "$fixture/untyped-inner" || fail 'nested function captured the outer parameter'
 untyped_query uses std::scope::SOURCE > "$fixture/untyped-item"
@@ -502,12 +502,12 @@ self_common=(main.lkj --source-dir "$fixture/self-source" --no-library --store "
 self_snapshot=$(sed -n 's/^LKJSCRIPT_SNAPSHOT \([0-9a-f]*\) .*/\1/p' "$fixture/self-build.log")
 self_query() { "$compiler" query "${self_common[@]}" --snapshot "$self_snapshot" --kind "$1" --id "$2" --limit 80; }
 self_query references types::Item::new > "$fixture/self-references"
-grep -Eq '^"types::Item".*kind=alias-constructor$' "$fixture/self-references" || fail 'Self nominal constructor identity missing'
-grep -Eq '^"types::Item::field:value".*kind=constructor-field$' "$fixture/self-references" || fail 'Self field identity missing'
-read -r self_start self_end <<< "$(sed -n 's/^"types::Item".*start=\([0-9]*\) end=\([0-9]*\) kind=alias-constructor$/\1 \2/p' "$fixture/self-references")"
+grep -Eq '^"type@types::Item".*kind=alias-constructor$' "$fixture/self-references" || fail 'Self nominal constructor identity missing'
+grep -Eq '^"type@types::Item::field:value".*kind=constructor-field$' "$fixture/self-references" || fail 'Self field identity missing'
+read -r self_start self_end <<< "$(sed -n 's/^"type@types::Item".*start=\([0-9]*\) end=\([0-9]*\) kind=alias-constructor$/\1 \2/p' "$fixture/self-references")"
 [[ $(dd if="$fixture/self-source/main.lkj" bs=1 skip="$self_start" count="$((self_end - self_start))" status=none) == Self ]] || fail 'Self constructor span was not the exact token'
 self_query references 'generic::Record<T>::new' > "$fixture/self-generic"
-grep -Eq '^"generic::Record".*kind=alias-constructor$' "$fixture/self-generic" || fail 'generic Self nominal identity missing'
+grep -Eq '^"type@generic::Record".*kind=alias-constructor$' "$fixture/self-generic" || fail 'generic Self nominal identity missing'
 printf '%s\n' '{"version":1,"operations":[{"op":"rename","id":"types::Item","name":"Renamed"}]}' > "$fixture/self-request"
 "$compiler" edit main.lkj --source-dir "$fixture/self-source" --no-library --no-store --store-key "$fixture/key" --request "$fixture/self-request" > "$fixture/self-plan" 2> "$fixture/self-error" || { cat "$fixture/self-error" >&2; fail 'Self nominal rename'; }
 grep -Fq 'Self { value: 21i64 }' "$fixture/self-source/main.lkj" || fail 'nominal rename changed Self spelling'
@@ -536,7 +536,7 @@ for identity in std::nested_self_constructor std::Abstract::make; do
     if grep -Eq 'kind=alias-constructor' "$fixture/self-unresolved"; then fail "Self acquired an enclosing implementation: $identity"; fi
 done
 "$compiler" query "${self_untyped_common[@]}" --snapshot "$self_untyped_snapshot" --kind references --id std::Actual::construct > "$fixture/self-resolved"
-grep -Eq '^"std::Actual".*kind=alias-constructor$' "$fixture/self-resolved" || fail 'resolved owner missing from an undemanded inherent method'
+grep -Eq '^"type@std::Actual".*kind=alias-constructor$' "$fixture/self-resolved" || fail 'resolved owner missing from an undemanded inherent method'
 
 # Ordinary checkpoints omit source-site evidence. Indexing the same tree must
 # rebuild complete references, while a complete unchanged snapshot may be reused.
@@ -580,7 +580,7 @@ SOURCE
     capture_facts() {
         local phase=$1 held scalar_binding fact cursor
         query references shadowed --limit 80 --bytes 32768 > "$fixture/capture-$phase-shadowed"
-        [[ $(grep -Ec '^"scalar".*kind=value' "$fixture/capture-$phase-shadowed") == 2 ]] ||
+        [[ $(grep -Ec '^"value@scalar".*kind=value' "$fixture/capture-$phase-shadowed") == 2 ]] ||
             fail "capture lost a shadowed free call: $phase"
         grep -Eq 'binding:scalar:0.*kind=local-value' "$fixture/capture-$phase-shadowed" ||
             fail "capture lost the shadowed local: $phase"
@@ -594,7 +594,7 @@ SOURCE
             fail "capture lost the local inferred type: $phase"
 
         query references local_generic --limit 80 --bytes 32768 > "$fixture/capture-$phase-generic"
-        grep -Eq '^"local_generic::param:value".*kind=local-value' "$fixture/capture-$phase-generic" ||
+        grep -Eq '^"value@local_generic::param:value".*kind=local-value' "$fixture/capture-$phase-generic" ||
             fail "capture lost the generic parameter reference: $phase"
         grep -Eq 'binding:held:0.*kind=local-value' "$fixture/capture-$phase-generic" ||
             fail "capture lost the generic binding reference: $phase"

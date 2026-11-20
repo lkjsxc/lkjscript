@@ -456,7 +456,7 @@ fn projection_paths(catalog: &semantic::Catalog, projection: &structure_edit::Pr
     for (index, source) in catalog.module_sources.iter().enumerate() {
         let prefix = format!("{}::", source.identity);
         let matches = if source.identity == "crate" {
-            projection.parent != "std" && !projection.parent.starts_with("std::")
+            projection.parent != "type@std" && !projection.parent.starts_with("type@std::")
         } else {
             projection.parent == source.identity || projection.parent.starts_with(&prefix)
         };
@@ -466,7 +466,7 @@ fn projection_paths(catalog: &semantic::Catalog, projection: &structure_edit::Pr
     let index = selected.ok_or_else(|| structure_edit::error(&projection.identity, "PROJECTION", "parent has no loaded module provenance"))?;
     let source = &catalog.module_sources[index];
     let (parent, leaf) = super::location(&source.file);
-    let mut directory = if source.identity == "crate" || source.identity == "std" || leaf == "mod.lkj" {
+    let mut directory = if source.identity == "crate" || source.identity == "type@std" || leaf == "mod.lkj" {
         parent
     } else if source.file.ends_with(".lkj") {
         source.file[..source.file.len() - 4usize].to_string()
@@ -474,7 +474,7 @@ fn projection_paths(catalog: &semantic::Catalog, projection: &structure_edit::Pr
     let suffix = if projection.parent == source.identity {
         ""
     } else if source.identity == "crate" {
-        projection.parent.as_str()
+        semantic::source_path(&projection.parent)
     } else {
         &projection.parent[source.identity.len() + 2usize..]
     };
@@ -483,7 +483,7 @@ fn projection_paths(catalog: &semantic::Catalog, projection: &structure_edit::Pr
     }
     let name = match projection.identity.rfind("::") {
         Some(at) => &projection.identity[at + 2usize..],
-        None => projection.identity.as_str(),
+        None => semantic::source_path(&projection.identity),
     };
     let direct = physical(&directory, &format!("{name}.lkj"));
     let nested = physical(&directory, &format!("{name}/mod.lkj"));

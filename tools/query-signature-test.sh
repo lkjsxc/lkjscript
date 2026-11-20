@@ -45,7 +45,7 @@ snapshot=$(sed -n 's/^LKJSCRIPT_SNAPSHOT \([0-9a-f]*\) .*/\1/p' "$fixture/build.
 query() {
     "$compiler" query "${common[@]}" --snapshot "$snapshot" --kind "$1" --id "$2" --depth 1 --limit 2 --bytes 4096 "${@:3}"
 }
-printf '"signatures::short_signature"\tlevel=source-claim\tfact=signature\tkind=function text="%s" bytes=%s complete=true\n' "$short" "${#short}" > "$fixture/short-line.expected"
+printf '"value@signatures::short_signature"\tlevel=source-claim\tfact=signature\tkind=function text="%s" bytes=%s complete=true\n' "$short" "${#short}" > "$fixture/short-line.expected"
 query signature signatures::short_signature > "$fixture/short.out" 2> "$fixture/short.err"
 awk -F '\t' '$3 == "fact=signature"' "$fixture/short.out" > "$fixture/short-line.joined"
 cmp "$fixture/short-line.expected" "$fixture/short-line.joined"
@@ -53,7 +53,7 @@ fail() { printf 'query-signature: %s\n' "$*" >&2; }
 walk() {
     local kind=$1 identity=$2 cursor= page=0 seen=0 total=0 adjusted=0 short_count=0 complete_count=0
     local out line continuation declared facts fragment chunk chunks bytes complete lead length
-    local pattern='^"signatures::long_signature"'$'\t''level=source-claim'$'\t''fact=signature'$'\t''kind=function chunk=([0-9a-f]{16}) chunks=([0-9]+) text="([^"\\]*)" bytes=([0-9]+) complete=(true|false)$'
+    local pattern='^"value@signatures::long_signature"'$'\t''level=source-claim'$'\t''fact=signature'$'\t''kind=function chunk=([0-9a-f]{16}) chunks=([0-9]+) text="([^"\\]*)" bytes=([0-9]+) complete=(true|false)$'
     local short_line
     short_line=$(cat "$fixture/short-line.expected") || return 1
     : > "$fixture/$kind.joined"

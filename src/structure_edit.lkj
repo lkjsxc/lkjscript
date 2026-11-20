@@ -119,6 +119,49 @@ pub fn parse(bytes: &[u8]) -> Result<Request, String> {
     }
     Ok(Request { snapshot, operations: parsed })
 }
+fn select_value(catalog: &semantic::Catalog, value: &mut Value, optional: bool) -> Result<(), String> {
+    if let Value::String(selector) = value {
+        if optional && selector.is_empty() { return Ok(()); }
+        *selector = catalog.select(selector, "EDIT")?;
+    }
+    Ok(())
+}
+/// Resolve every supplied identity before comparing owners or planning writes.
+/// Source fragments and ordinary names are never interpreted as selectors.
+pub(crate) fn selected_operation(catalog: &semantic::Catalog, operation: &Operation) -> Result<Operation, String> {
+    let mut value = json::parse(operation.data.as_bytes()).map_err(|problem| error(&operation.identity, "REQUEST", &problem.message))?;
+    if let Value::Object(fields) = &mut value {
+        for index in 0usize..fields.len() {
+            let key = fields[index].0.clone();
+            let value = &mut fields[index].1;
+            if key == "id" || key == "parent" || key == "before" {
+                select_value(catalog, value, key != "id")?;
+            } else if key == "sites" || key == "parameters" {
+                if let Value::Array(values) = value {
+                    for index in 0usize..values.len() {
+                        let value = &mut values[index];
+                        if key == "sites" || operation.kind == "change-signature" {
+                            select_value(catalog, value, false)?;
+                        } else if operation.kind == "extract-function" {
+                            if let Value::Object(fields) = value {
+                                for index in 0usize..fields.len() {
+                                    let key = fields[index].0.clone();
+                                    let value = &mut fields[index].1;
+                                    if key == "id" { select_value(catalog, value, false)?; }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+    let mut selected = operation.clone();
+    selected.identity = string(&value, "id", true)?;
+    selected.parent = string(&value, "parent", false)?;
+    selected.data = json::stringify(&value).map_err(|problem| error(&operation.identity, "REQUEST", &problem.message))?;
+    Ok(selected)
+}
 pub(crate) fn input<'a>(inputs: &'a [(String, Vec<u8>)], path: &str) -> Result<&'a [u8], String> {
     for (name, bytes) in inputs {
         if name == path { return Ok(bytes.as_slice()); }
@@ -126,8 +169,9 @@ pub(crate) fn input<'a>(inputs: &'a [(String, Vec<u8>)], path: &str) -> Result<&
     Err(error(path, "SOURCE", "source bytes are absent from the compilation snapshot"))
 }
 pub(crate) fn item<'a>(catalog: &'a semantic::Catalog, identity: &str) -> Result<&'a semantic::Item, String> {
-    let index = catalog.by_identity.get(&identity.to_string())
-        .ok_or_else(|| error(identity, "IDENTITY", "identity is absent from this source snapshot"))?;
+    let selected = catalog.select(identity, "EDIT")?;
+    let index = catalog.by_identity.get(&selected)
+        .ok_or_else(|| error(identity, "IDENTITY", "selected module root has no authored declaration"))?;
     Ok(&catalog.items[*index])
 }
 pub(crate) fn patch(patches: &mut Vec<Patch>, identity: &str, file: &str, start: usize, end: usize, replacement: &str) {
@@ -163,6 +207,8 @@ pub(crate) fn validate_item(target: &semantic::Item, inputs: &[(String, Vec<u8>)
 }
 pub(crate) fn insertion(catalog: &semantic::Catalog,
     inputs: &[(String, Vec<u8>)], identity: &str) -> Result<(String, usize), String> {
+    let selected = catalog.select(identity, "EDIT")?;
+    let identity = selected.as_str();
     if identity == "crate" {
         let bytes = input(inputs, &catalog.root)?;
         return Ok((catalog.root.clone(), bytes.len()));
@@ -170,7 +216,7 @@ pub(crate) fn insertion(catalog: &semantic::Catalog,
     // Crate roots and external modules have actual selected-file provenance,
     // including empty modules. A positive include read never enters this list.
     for mounted in &catalog.module_sources {
-        if mounted.identity == identity {
+        if mounted.identity.as_str() == identity {
             if !mounted.parent.is_empty() {
                 let target = item(catalog, identity)?;
                 if target.kind != "module" {
@@ -345,8 +391,9 @@ fn projection(catalog: &semantic::Catalog, operation: &Operation) -> Result<Opti
         }
     }
     let name = external_module_name(&operation.identity, &operation.source)?;
-    let identity = if operation.identity == "crate" { name }
-        else { format!("{}::{name}", operation.identity) };
+    let qualified = if operation.identity == "crate" { name }
+        else { format!("{}::{name}", semantic::source_path(&operation.identity)) };
+    let identity = semantic::source_identity(crate::resolve::Namespace::Type, &qualified);
     if catalog.by_identity.contains_key(&identity) {
         return Err(error(&identity, "NAME", "projected module identity already exists"));
     }
@@ -426,6 +473,8 @@ pub fn plan(catalog: &semantic::Catalog,
     let mut projected_identities: BTreeSet<String> = BTreeSet::new();
     let mut projected_paths: BTreeSet<String> = BTreeSet::new();
     for operation in &request.operations {
+        let selected = selected_operation(catalog, operation)?;
+        let operation = &selected;
         if let Some(index) = catalog.by_identity.get(&operation.identity) {
             let selected = &catalog.items[*index];
             if !selected.generated_from.is_empty() { validate_item(selected, inputs, &operation.expected)?; }
@@ -512,7 +561,7 @@ pub fn plan(catalog: &semantic::Catalog,
 pub fn report(draft: &Draft) -> String {
     let mut out = String::new();
     for identity in &draft.identities {
-        out.push_str(&format!("{} level=source-claim operation-target\n", semantic::quote(identity)));
+        out.push_str(&format!("{} level=source-claim operation-target selected={}\n", semantic::quote(identity), semantic::quote(identity)));
     }
     for projected in &draft.projections {
         out.push_str(&format!("{} level=source-claim projection parent={} path={} bytes={} source={}\n",

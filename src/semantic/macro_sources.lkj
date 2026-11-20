@@ -109,7 +109,7 @@ pub(super) fn project_items(catalog: &mut Catalog, files: &[SourceText], program
         let identity = item_identity(program, item_from_key(*kind, *index), &catalog.function_ids);
         let item = match catalog.by_identity.get(&identity) { Some(item) => *item, None => continue };
         if !catalog.items[item].generated_from.is_empty() { continue; }
-        let signature = format!("{} {}: {}", catalog.items[item].kind, identity, catalog.items[item].type_name);
+        let signature = format!("{} {}: {}", catalog.items[item].kind, source_path(&identity), catalog.items[item].type_name);
         generated_projection(catalog, files, program, &identity, *origin, signature, false)?;
     }
     // Fields, variants, parameters and associated members inherit their actual
@@ -155,24 +155,21 @@ pub(super) fn generated_imports(catalog: &mut Catalog, files: &[SourceText], pro
             if !prefix.is_empty() { prefix.push_str("::"); }
             prefix.push_str(part);
             let terminal = position + 1usize == parts.len();
-            let mut target: Option<String> = None;
+            let mut targets: BTreeSet<String> = BTreeSet::new();
             if terminal && !imported.glob {
                 let path = a::Path { qualification: None, bindings: Vec::new(), declaration: None,
                     name: prefix.clone(), args: Vec::new() };
                 if let Ok(resolved) = resolver.value_path(scope, &path, imported.span) {
-                    target = value_identity(program, &resolved, &catalog.function_ids);
+                    if let Some(target) = value_identity(program, &resolved, &catalog.function_ids) { targets.insert(target); }
                 }
             }
-            if target.is_none() {
-                if let Ok(path) = resolve::semantic_type_path(resolver, scope, &prefix, imported.span) {
-                    if let Some(declaration) = path.declaration {
-                        target = declaration_identity(program, declaration, &catalog.function_ids);
-                    }
-                }
+            if let Ok(path) = resolve::semantic_type_path(resolver, scope, &prefix, imported.span) {
+                if let Some(target) = value_identity(program, &path, &catalog.function_ids) { targets.insert(target); }
             }
             let kind = if terminal { if imported.glob { "glob-import" } else { "import" } }
                 else { "import-qualification" };
-            generated_reference(catalog, files, &owner, target, imported.span, kind);
+            if targets.is_empty() { generated_reference(catalog, files, &owner, None, imported.span, kind); }
+            for target in targets { generated_reference(catalog, files, &owner, Some(target), imported.span, kind); }
         }
     }
 }
