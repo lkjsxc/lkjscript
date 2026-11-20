@@ -37,6 +37,6 @@ The two intervals have 11 samples in total. Replace and any other work outside
 the existing KIND_COPY classification are not added to that count. Nothing
 here predicts removed time or classifies another function.
 
-[Structured review](compiler-copy-sites-census-extraction-data/fn7710-review.json)
+[Structured review](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-copy-sites-census-extraction-data/fn7710-review.json)
 records all six locals, both complete chains and the separate interpretation
 limits. No compiler, extractor, join, profile or transformation was rerun.

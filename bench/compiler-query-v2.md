@@ -54,7 +54,7 @@ The indexed image and executing producer are separate artifacts. Cold and
 unchanged indexed outputs are byte-identical to each other; the image is not
 byte-identical to the supplied reader. This benchmark does not claim a compiler
 fixed point. It explicitly selects the archived physical source library and
-runtime, with native IR inlining disabled by `--inline-limit 0`. [The metadata](compiler-query-v2.meta) preserves the actual selector
+runtime, with native IR inlining disabled by `--inline-limit 0`. [The metadata](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-query-v2.meta) preserves the actual selector
 path and every pin; the temporary archive itself has been removed.
 
 ## Protocol and reproduction

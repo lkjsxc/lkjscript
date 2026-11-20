@@ -37,7 +37,7 @@ supervisor and live-reference checks. It writes six recovery records under
 the target evidence directory before completing: four owner files,
 `store-apparent-bytes`, and `action`.
 
-The new [read-only guard](compiler-scale-refusal-cleanup-check.pl), SHA-256
+The new [read-only guard](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-scale-refusal-cleanup-check.pl), SHA-256
 `e8585f1416c8a671819e4deb8eec727bc60b4aaef8b8c443f5f967f930565a6e`,
 performs no cleanup. Its `before` mode binds the accepted result and root
 acceptance identities, verifies the 92 original mirror files against their

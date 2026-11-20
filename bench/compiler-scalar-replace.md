@@ -69,10 +69,10 @@ snapshots, field loans, returned view origins, bounds and custom traps. They
 compare original independent interpretation and exact original/candidate native
 stdout and private result/trap records. After the exhaustive instruction-arm
 rewrite, the final producer passed the bounded CLI
-[controls](compiler-scalar-replace-data/cli.stdout), including original
+[controls](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-scalar-replace-data/cli.stdout), including original
 admission before optimization, unit-command refusal, cache separation,
 `--no-opt`, original IR/authority and worker-option propagation. The frozen
-optimizer [oracle](compiler-scalar-replace-data/raw/oracle.sra1.1.stdout),
+optimizer [oracle](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-scalar-replace-data/raw/oracle.sra1.1.stdout),
 including its mutation slice, also passed. No full gate or fixed-point claim is
 made for the rejected experimental source.
 

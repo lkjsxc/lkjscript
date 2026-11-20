@@ -1,8 +1,0 @@
-{
-   "archive_bytes" : "54190",
-   "archive_sha256" : "12197424fe9194642cae806776e8100498dd8c19d50470ce7784416c0b2f4ab5",
-   "logical_bytes" : 306068,
-   "original_manifest_sha256" : "1d3710033c86e8062f67bb0bf45313cd43f060ccf7a7b5a50509e07dcddcf4c8",
-   "regular_files" : 140,
-   "status" : "all archived and live bytes agree"
-}

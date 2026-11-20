@@ -71,7 +71,7 @@ The ordinary and inline64 conformance/generated suites both reran their cases.
 The new generated-source suite also passes in the integrated v3 store context.
 
 All 114 fresh suite/detail logs, outer status, metadata and timings are retained
-under [integration-data/local](compiler-origin-container-integration-data/local/).
+under [integration-data/local](https://github.com/lkjsxc/lkjscript/tree/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-origin-container-integration-data/local).
 The complete gate log SHA-256 is
 `2aeaa17467a5fe6019efac9073b79e0d4f8520e9d5e88c87a5ed615dd53cedf7`.
 The new gate store held 318,819,150 apparent bytes at completion. It is a
@@ -114,7 +114,7 @@ identity. Its completed job log is evidence of those outcomes; no extra
 benchmark timing is inferred from the job timestamps.
 
 Raw gate/witness logs and the final run/head/job metadata are retained in
-[ci43853670261](compiler-origin-container-integration-data/ci43853670261/).
+[ci43853670261](https://github.com/lkjsxc/lkjscript/tree/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-origin-container-integration-data/ci43853670261).
 Their SHA-256 digests are respectively
 `d3b8ee7ff610b9188934234ff93fa1430c036cecd4b67c139f1429bdb15ee84f`,
 `b1e671c877c4f3e9afb20559ea176be12a09d5fd5cce563090ff597d74f6dbbd`

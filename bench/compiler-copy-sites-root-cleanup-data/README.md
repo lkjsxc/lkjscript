@@ -6,7 +6,7 @@ This bundle proposes one enumerated cleanup after root reviews and commits the e
 
 ## Exact scope
 
-All paths below are beneath `/home/coder/workspace/lkjscript/target`. Every directory and regular file is listed in `full-inventory.tsv`; each regular file has SHA-256 and Git blob identity, plus device, inode, ownership, mode, link count, size, block count, mtime and ctime.
+All paths below are beneath `/home/coder/workspace/lkjscript/target`. Every directory and regular file is listed in [full-inventory.tsv](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-copy-sites-root-cleanup-data/full-inventory.tsv); each regular file has SHA-256 and Git blob identity, plus device, inode, ownership, mode, link count, size, block count, mtime and ctime.
 
 | Scope | Files | Directories | Logical bytes | Allocated bytes |
 |---|---:|---:|---:|---:|
@@ -49,7 +49,7 @@ That exact byte sequence matches both `compiler-copy-sites-integration-evidence/
 
 ## Explicit disposable products
 
-The remaining **18,621 files / 686,883,145 bytes** are enumerated in `disposable.json`, not inferred again at cleanup time. Their hashes identify exactly what would be discarded; they do not make these bytes recoverable.
+The remaining **18,621 files / 686,883,145 bytes** are enumerated in [disposable.json](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-copy-sites-root-cleanup-data/disposable.json), not inferred again at cleanup time. Their hashes identify exactly what would be discarded; they do not make these bytes recoverable.
 
 | Product class | Files | Bytes |
 |---|---:|---:|

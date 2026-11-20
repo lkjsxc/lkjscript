@@ -1,3 +1,0 @@
-ok trait method arguments: concrete tuple dispatch, exact method references/rename and rejected input transaction on both engines
-ok method result arguments: chained context, exact specialized calls and rename, missing-bound and wrong-result transactions on both engines
-retained_fixture=/home/coder/workspace/lkjscript-programs-20261115/target/programs-trait-method-arguments.ANxvlj

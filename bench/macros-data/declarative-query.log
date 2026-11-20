@@ -1,8 +1,0 @@
-ok declarative macros: unchanged nom 8.0.0 succ, tuple chain and error producers
-ok declarative macros native: lexical scope, shadowing, exports, defining crate and include origin
-ok declarative macros interpreter: lexical scope, shadowing, exports, defining crate and include origin
-ok declarative macros: cold/warm units match; a template edit rechecks dependent source
-ok declarative macros Rust root-crate witness: declarative_macros
-ok declarative macros Rust root-crate witness: nom_tuple_macros
-ok declarative macros Rust witness: source module scope and include origin
-retained_fixture=/home/coder/workspace/lkjscript-programs-20261115/target/declarative-macros.cFdYwY

@@ -1,6 +1,0 @@
-cleanup_complete=true
-fixture_removed=target/compiler-history.uhUs7i
-private_key_removed=true
-stop_marker_removed=true
-retained_continuation_input=target/compiler-self-history-strict-producer
-4c4537ea7ccb31213f376d1402f619883eea6f8877fdb8b752b31df364099e09  target/compiler-self-history-strict-producer

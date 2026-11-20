@@ -1,7 +1,0 @@
-"semantic_query::decode" level=source-claim operation-target
-"/home/coder/workspace/lkjscript-compiler-query-container-20261116/src/semantic_query.lkj" level=source-claim file before=d3e65b2c5db85ba4529d79c256becd97a893a108a093d9f3d4e0f33da361b325 after=6db89d85392bed48974928dc2949a0a184005f3cfe599dd443889d1b0d948908
-transaction sites=1 files=1 identities=1
-"semantic_query::decode" level=source-claim changed=body
-program level=checked-ir authority-delta=none
-program level=checked-ir before=9aeb6d993bc4450eddefa62134ba3e0a3817db4f904f0bd6b19a42b6dd59891f after=a2556806c600b77d9418cd2e5c7dae0956d5edfefca3aae41362d6de7c92e608 checked-instances=12728 fresh-checked=12728 proof-reused=0 frontend-resumed=0 library-validation=demanded
-transaction source-before=e5f0fce34d47f12cfb606d101f19a384a09d0980b1f9b4b03c7887d579468243 source-after=e9e54b9f45f3b52db85086cd21ab3f5447059cbdd1876196573bd0e3d004eb0a mode=apply

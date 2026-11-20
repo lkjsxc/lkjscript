@@ -1,1 +1,0 @@
-perl /home/coder/workspace/lkjscript-compiler-query-container-20261116/bench/compiler-query-container-census.pl /home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-helper-run.6JS2DU/store-candidate /tmp/compiler-container-helper-key.ABXkeg/key 67108864 

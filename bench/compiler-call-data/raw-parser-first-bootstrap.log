@@ -1,2 +1,0 @@
-src/syntax.lkj:518:52: E_UNSUPPORTED method remove on Vec<diagnostic::Diagnostic> has 0 applicable implementations; help: use an implemented method or write an explicit loop
-src/main.lkj:1:1: E_BLOCKED remaining semantic analysis: failed bodies are blocked; independent typed bodies were constructed and checked

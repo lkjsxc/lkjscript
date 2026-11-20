@@ -244,7 +244,7 @@ and load windows; their difference is not a measured source-change speed ratio.
 
 ## Evidence and next measurement
 
-[The focused summary](compiler-copy-sites-data/focused-summary.json) derives
+[The focused summary](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-copy-sites-data/focused-summary.json) derives
 the phase table from raw records. Source/proposal archives retain exact bytes,
 including refused candidates and the prevalidation role README. Its proposed
 projected-write coverage and standalone scalar output were corrected by the

@@ -69,7 +69,7 @@ guard ran. That guard required the run/key to be absent and verified exactly
 98 files in the two expected directories against committed counterparts.
 Its success satisfied root's previously released mirror-disposal condition.
 
-The retained [completion record](compiler-scale-refusal-cleanup-data/completion.json)
+The retained [completion record](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-scale-refusal-cleanup-data/completion.json)
 derives the captures and metadata totals and records final absence checks.
 The accepted original manifest, five-record preparation manifest and
 21-record first-completion manifest all still verify. The separate final

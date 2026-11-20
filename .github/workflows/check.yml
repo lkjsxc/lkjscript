@@ -9,14 +9,29 @@ jobs:
         # C builds independent syscall witnesses; the compiler bootstraps from its seed.
         run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl gcc libc6-dev
       - uses: actions/checkout@v4
-      - name: Seed-only native gate
+      - name: Seed-only compiler bootstrap
+        run: |
+          for tool in cargo rustc node; do
+            if command -v "$tool" >/dev/null 2>&1; then
+              printf 'unexpected bootstrap tool: %s\n' "$tool" >&2
+              exit 1
+            fi
+          done
+          test ! -d target/store
+          sh tools/bootstrap.sh
+      - name: Real-program host tooling
+        run: apt-get install -y --no-install-recommends nodejs
+      - name: Native gate
         env:
           LKJSCRIPT_GATE_JOBS: '4'
         run: |
-          ! command -v cargo
-          ! command -v rustc
-          ! command -v node
-          test ! -d target/store
+          for tool in cargo rustc; do
+            if command -v "$tool" >/dev/null 2>&1; then
+              printf 'unexpected gate tool: %s\n' "$tool" >&2
+              exit 1
+            fi
+          done
+          node --version
           bash tools/check.sh
       - name: Record compiler identities
         run: |

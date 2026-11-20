@@ -1,6 +1,0 @@
-ok site switch: failed release retained, unique retries, interrupted activation and repeated rollback (0.053 s, load 4.51 3.13 2.56 -> 4.51 3.13 2.56)
-ok site query guard: complete list accepted; missing, duplicate and non-search lists refused
-ok site offline cases: 12 published paths plus archived 404 checked byte-for-byte, 51 search queries and 13 protocol probes checked against frozen origin status/Content-Length/stable headers/full-body SHA256, 316466 response body bytes; no live-origin connection
-ok Listener: occupied address refused with errno; TIME_WAIT rebind passed in native and interpreter
-Site offline check 1989 ms; load 4.51 3.13 2.56 3/5540 1598702 -> 4.51 3.13 2.56 6/5548 1599150
-Site cleanup: server/client-supervisor PIDs 3587619 3587638 reaped; client completed; loopback port 36627 released; private files removed

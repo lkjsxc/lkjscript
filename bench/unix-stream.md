@@ -95,9 +95,9 @@ byte for byte: nom 17, DOM 63, and Sōzu 448 classified plus 34 prior-unclassifi
 rows. This runtime addition does not admit a large source root or a nom own test.
 
 The repaired integrated producer passes the complete four-worker
-[gate](unix-stream-data/full-gate.log) in 989.660 seconds, with all 6,188 case
+[gate](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/unix-stream-data/full-gate.log) in 989.660 seconds, with all 6,188 case
 requests rerun and no reused requests. The separate
-[real-program test](unix-stream-data/standalone-real-programs.log) passes the
+[real-program test](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/unix-stream-data/standalone-real-programs.log) passes the
 original Levenshtein algorithm, eight tests on each engine, eighteen provenance
 controls and all 7,239 native corpus rows. Producer and seed identities still
 match after the gate. Exact-head publication gate/witness CI is recorded with the

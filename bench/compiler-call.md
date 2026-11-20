@@ -22,7 +22,7 @@ The earlier passing Rust witness is bound to the integrated candidate through
 bytes. It was not rerun. Its 499 values/output cases, 652 verdicts and independent
 compiler-byte equality retain their original run and toolchain provenance.
 [Integrated validation](compiler-call-data/integration/README.md) and the
-[machine-readable receipt](compiler-call-data/integration/validation.json)
+[machine-readable receipt](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/integration/validation.json)
 record the new gate separately from that historical witness.
 
 The implementation experiments and verification below describe the original
@@ -213,8 +213,8 @@ the following warm apply took 0.37 s wall, 0.34 s user and 32,704 KiB. The sampl
 host load was 6.40 before and after. These are single observations on a four-instance
 fixture, with a prior indexed baseline and the apply warmed by the dry-run. They
 are not final-producer timing, an isolated checking cost or a speedup measurement.
-The exact [time](compiler-call-data/controlled-dry-run.time)
-[records](compiler-call-data/controlled-apply.time) and load samples are retained.
+The exact [time](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/controlled-dry-run.time)
+[records](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/controlled-apply.time) and load samples are retained.
 
 ## Shape defects found and corrected before the full gate
 
@@ -354,7 +354,7 @@ The [full log](compiler-call-data/gate/full-gate.log),
 [provenance](compiler-call-data/gate/provenance.txt),
 [output hashes](compiler-call-data/gate/output.sha256),
 [time record](compiler-call-data/gate/time.txt) and
-[machine-readable verification](compiler-call-data/verification.json) retain the
+[machine-readable verification](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/verification.json) retain the
 result. Native output is byte-identical to the reviewed 40,989,463-byte producer,
 and the public seed is unchanged. GNU time reports 3,160.62 s user, 82.25 s system
 and 1,576,788 KiB maximum RSS for the script; that RSS metric is not a measurement
@@ -369,7 +369,7 @@ commit does not change those compiler or gate inputs. The shared gate lock was
 released, and the native gate process exited zero.
 
 The real-programs suite passed **inside** this full gate; its
-[receipt](compiler-call-data/gate-details/real-programs.log) retains the original
+[receipt](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/gate-details/real-programs.log) retains the original
 library/provenance controls, eight tests per engine and 7,239 native corpus rows.
 After the full gate, lead requested separate landing checks. The standalone
 real-programs script passed in **4.02 s** on the frozen reviewed producer. The
@@ -378,9 +378,9 @@ complete documented `bash witness/check.sh` passed in **156.87 s**, including
 boundaries and the original real-program Rust profiles. Its independently
 Rust-built compiler emitted a byte-identical copy of the reviewed native compiler.
 The [standalone receipt](compiler-call-data/landing/standalone.log),
-[witness log](compiler-call-data/landing/witness.log),
-[time record](compiler-call-data/landing/witness.time) and
-[output identities](compiler-call-data/landing/witness-output.sha256) are retained.
+[witness log](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/landing/witness.log),
+[time record](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/landing/witness.time) and
+[output identities](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/landing/witness-output.sha256) are retained.
 Cargo and its release code generation used one worker/unit; the native witness
 coordinator's default is one worker. There is no CI result for this unpublished
 slice. The published parent's separate CI hit its macro-origins watchdog; Programs
@@ -397,7 +397,7 @@ tracked seed path: gzip SHA-256
 seed remains `9327f64a…5f612`, 8,192,800 bytes. Applying the proposal would change
 only `seed/lkjscript.gz` in a separate compiler-owned seed commit after lead's
 decision. No proposed-seed gate, tracked seed change or publication was performed.
-The [packet manifest](compiler-call-data/landing/manifest.json) records the exact
+The [packet manifest](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/landing/manifest.json) records the exact
 artifact path, both seed identities and the reviewable delta.
 
 The normal reproduction in this checkout is:

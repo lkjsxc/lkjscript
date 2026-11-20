@@ -38,20 +38,20 @@ Seed gzip SHA-256:
 
     5fc31ce964b2173300b230b28c2d0672a23e964da9723f899c6a572a83b49976
 
-The [bootstrap](type-defaults-data/bootstrap.log) starts from the reproduced combined defaults/replace-call producer, whose source contains the exact public replace-call commit 327fa6c
+The [bootstrap](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-defaults-data/bootstrap.log) starts from the reproduced combined defaults/replace-call producer, whose source contains the exact public replace-call commit 327fa6c
 and reaches byte-identical current-emitter generations without a bridge.
-The [focused suite](type-defaults-data/cases-native.log) passes 43 cases /
+The [focused suite](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-defaults-data/cases-native.log) passes 43 cases /
 86 native/interpreter routes. The independent
-[Rust witness](type-defaults-data/cases-rust.log) verifies 16
+[Rust witness](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-defaults-data/cases-rust.log) verifies 16
 values/output cases and 26 recorded Rust verdicts. These 42 standard cases are supplemented by the exact $crate namespace case at the actual crate root, which passes Rust optimization levels 0 and 3 in the generated-defaults suite. All 43 focused cases therefore have an independently recorded Rust route.
 
 The combined producer passes these source-command proofs:
 
-- [debug default origins](type-defaults-data/debug-query.log)
-- [declaration defaults](type-defaults-data/query.log)
-- [generated defaults](type-defaults-data/origins-query.log)
-- [macro origins](type-defaults-data/macro-query.log)
-- [structural rename](type-defaults-data/structural-rename.log)
+- [debug default origins](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-defaults-data/debug-query.log)
+- [declaration defaults](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-defaults-data/query.log)
+- [generated defaults](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-defaults-data/origins-query.log)
+- [macro origins](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-defaults-data/macro-query.log)
+- [structural rename](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-defaults-data/structural-rename.log)
 
 The combined proof passes declaration queries, exact parameter renames, atomic
 capture refusal and generated-source epoch checks. The source-origin suites reject
@@ -78,20 +78,20 @@ retains the checked meaning and authority, and preserves value 7 across both
 engines in old and current compilers. A separately retained function-owned type
 parameter still refuses atomically. The complete structural suite passes 142
 cases and its CLI checks; unchanged Rust source and exact-body wrappers agree
-at optimization levels 0 and 3. The [failed first full gate](type-defaults-data/first-gate-failure.log) remains
-preserved. The [migration receipt](type-defaults-data/rename-migration.json),
+at optimization levels 0 and 3. The [failed first full gate](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-defaults-data/first-gate-failure.log) remains
+preserved. The [migration receipt](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-defaults-data/rename-migration.json),
 [original source](type-defaults-data/rename-before.txt),
 [renamed source](type-defaults-data/rename-after.txt) and
-[exact transaction](type-defaults-data/rename-transaction.log) retain the evidence.
-The [independent preflight review](type-defaults-data/preflight-independent-review.json)
+[exact transaction](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-defaults-data/rename-transaction.log) retain the evidence.
+The [independent preflight review](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-defaults-data/preflight-independent-review.json)
 verifies the original and corrected inputs.
 
-The refreshed-seed four-worker [full gate](type-defaults-data/full-gate.log) passes in 1283.412 seconds with 6661 fresh case requests, zero case-request reuse and 128 IR mutants with zero findings. The separate [real-program regression](type-defaults-data/standalone-real-programs.log) passes eight original Levenshtein tests per engine, eighteen provenance controls and all 7,239 native corpus rows. Producer and seed hashes remain unchanged.
+The refreshed-seed four-worker [full gate](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-defaults-data/full-gate.log) passes in 1283.412 seconds with 6661 fresh case requests, zero case-request reuse and 128 IR mutants with zero findings. The separate [real-program regression](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-defaults-data/standalone-real-programs.log) passes eight original Levenshtein tests per engine, eighteen provenance controls and all 7,239 native corpus rows. Producer and seed hashes remain unchanged.
 
 Twelve fresh unchanged-source observations give nom 47->45, DOM 39->39 and Sozu 968->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
 No original large root or nom own test admits. The
 [current frontier](../docs/real-programs-current.json), exact source-hashed
-reviews and [previous frontier](type-defaults-data/previous-frontier.json) retain
+reviews and [previous frontier](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-defaults-data/previous-frontier.json) retain
 original/projected input identity and complete diagnostic accounting.
 
 The checked IR, independent checker, interpreter and runtime are unchanged.

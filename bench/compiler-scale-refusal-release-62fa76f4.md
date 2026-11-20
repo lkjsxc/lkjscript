@@ -15,7 +15,7 @@ The dedicated worktree is based on accepted main
 
 ## Bound producer and prerequisites
 
-The [machine-readable release](compiler-scale-refusal-release-62fa76f4.json)
+The [machine-readable release](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-scale-refusal-release-62fa76f4.json)
 pins every record below and the supporting raw manifests/logs by exact digest.
 
 | Prerequisite | Binding |

@@ -1,7 +1,0 @@
-53f3c5307384b8bde038f0f9eb6849f1e4b17230b6780524415fa5b952a087f5  bench/compiler-strict-scoped.acceptance.md
-659dc15b025fa65e182b5cad4ced52f840e231bab6ec3096c6444e249fa969d2  bench/compiler-strict-scoped-root-audit/audit.meta
-87e8b0a07f89255c097781d27469ce75d6cfee517661d195693664864e9af550  bench/compiler-strict-scoped-root-audit/proof.err
-d14910e78b21f0e3e1c0be498a22e997887921b373145141c0a32dd319269853  bench/compiler-strict-scoped-root-audit/proof.time
-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  bench/compiler-strict-scoped-root-audit/state.err
-511a5465658cd7e9555fec25dde776281a1716c3fdd407126239e3fa56b393c3  bench/compiler-strict-scoped-root-audit/state.log
-26fb311586e9782287838ac3f936e2e90225c736427c8e777e10faef1dad91be  bench/compiler-strict-scoped-root-audit/state.time

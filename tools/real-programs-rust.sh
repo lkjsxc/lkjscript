@@ -35,35 +35,10 @@ for foreign_case in macro_rules impl_trait qualified_type qualified_call nested_
         "$foreign_source" -o "$work/foreign_$foreign_case.rmeta" \
         > "$work/foreign_$foreign_case.out" 2> "$work/foreign_$foreign_case.err"
 done
-perl tools/real-programs/verify-levenshtein.pl "$source" > "$work/provenance.json"
+node tools/real-programs/verify-levenshtein.mjs "$source" > "$work/provenance.json"
 # Invert the single recorded expression and restore the exact integration header.
 # Hash the reconstructed files again before rustc receives either one.
-perl -MJSON::PP -MDigest::SHA=sha256_hex - "$source" "$work" <<'PERL'
-use strict; use warnings;
-my ($source, $work) = @ARGV;
-sub read_file {
-    my ($path) = @_;
-    open my $input, '<:raw', $path or die "$path: $!";
-    local $/;
-    return <$input>;
-}
-my $manifest = decode_json(read_file("$source/upstream.json"));
-my $projection = read_file("$source/upstream.lkj");
-my $marker = "\n// UPSTREAM INTEGRATION TESTS: exact bodies, package header removed.\n";
-my @parts = split /\Q$marker\E/, $projection, -1;
-@parts == 2 or die "invalid integration boundary\n";
-my ($library, $tests) = @parts;
-my $replacements = $library =~ s/\Qstd::iter::range_from(1)\E/(1..)/g;
-$replacements == 1 or die "invalid inverse range count\n";
-$tests = "extern crate levenshtein;\nuse levenshtein::levenshtein;\n" . $tests;
-for my $item (['src/lib.rs', 'upstream.rs', $library], ['tests/lib.rs', 'upstream_tests.rs', $tests]) {
-    my ($original, $filename, $bytes) = @$item;
-    sha256_hex($bytes) eq $manifest->{files}{$original} or die "reconstructed bytes differ: $original\n";
-    open my $output, '>:raw', "$work/$filename" or die $!;
-    print {$output} $bytes;
-    close $output or die $!;
-}
-PERL
+node tools/real-programs/restore-levenshtein.mjs "$source" "$work" --rust
 cp "$source/LICENSE" "$work/LICENSE"
 cp "$source/corpus.lkj" "$work/corpus.rs"
 cat > "$work/main.rs" <<'RUST'

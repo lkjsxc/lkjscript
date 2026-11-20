@@ -20,7 +20,7 @@ Production source is trial commit `767a341a6e8b1098cdfb5301d36abe5d7f2f7880`
 on baseline `71e3c9637aab74fdb860dbe1d5ff2ab9631b2f31`; the post-build
 namespace census was frozen in `c5c8b718`. The exact command scripts, raw
 outputs, stats and hashes are in [compiler-index-pages-data](compiler-index-pages-data/).
-The [SHA-256 manifest](compiler-index-pages-proof.sha256) covers the retained evidence.
+The [SHA-256 manifest](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-index-pages-proof.sha256) covers the retained evidence.
 
 | Role | SHA-256 |
 |---|---|

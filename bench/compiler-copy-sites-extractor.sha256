@@ -1,6 +1,0 @@
-9ca679c6f24cfe1ad9fcfd14a54f27be0edef56a1c9a0faeb7c455ab76536517  bench/compiler-copy-sites-extract.pl
-529972dddb02f6b76b4885c699a9cf741ca96e3c1ba78905663bb6205848da64  bench/compiler-copy-sites-extractor.md
-1b032f3963f61ac7883d4f2e6ef2b3295e16eefe259a2da82ea0e0caf9d56fc1  bench/compiler-copy-sites-extractor-data/candidate-inventory.json
-36508dca7c9b073e65134068e14f9710f401581d6fe2c82a6e021161a4e0047e  bench/compiler-copy-sites-extractor-data/candidate-inventory.sha256
-39e748fc1364a2ab1a3120ff8f0372d2c0885faf083e8b21e5fc77e6a62f76ad  bench/compiler-copy-sites-extractor-data/candidate.tar.gz
-83687696a03efce6b72b0157730992ff1e821f2df2ada4844dc6b87fa39e0b63  bench/compiler-copy-sites-extractor-data/root-retention.json

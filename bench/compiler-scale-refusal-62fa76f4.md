@@ -18,7 +18,7 @@ additional workload. The original incomplete 1M cohort remains unchanged.
 ## Protocol, producer and execution
 
 The [protocol](compiler-scale-refusal-plan.md) and corrected harness/helper were
-committed before execution. The [actual release](compiler-scale-refusal-release-62fa76f4.json)
+committed before execution. The [actual release](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-scale-refusal-release-62fa76f4.json)
 was committed at `15171eeaddd0029b23cbae17d4657b4252896b3e`, JSON SHA-256
 `790022df0306aa06f6543caaa9c51a8dbf24bea2b0626fe60ffe45f9ccebb494`.
 Root independently inspected that input and ran its release validator, then

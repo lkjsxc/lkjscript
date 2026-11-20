@@ -1,4 +1,0 @@
-"edit"	level=protocol	fact=query	version=2 producer=adc0b26f2c6db38710971b48ca88a6598078537959e04accbaae60a07a82ccc7 validation=authenticated-producing-compiler current-check=not-performed snapshot=fb6ba9ea93c2a725843be865b8d05231abdad2f232f02acbddb002d80aec7dfd source=dabec907fdcd16011d4e3c816053dc57806f1676966ddb0fbd809557081d397e checked-ir=8246e2c39abf7fca5dab772e487fe9d6274b77154508dbbc978d432b357f0092 kind=outline depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
-"edit::other"	level=source-claim	fact=signature	kind=function text="pub fn other(value: u64) -> u64" bytes=31 complete=true
-"edit::target"	level=source-claim	fact=signature	kind=function text="pub fn target(value: u64) -> u64" bytes=32 complete=true
-"edit"	level=protocol	fact=continuation	cursor=none facts=2 pages-read=2 traversal-steps=3

@@ -130,7 +130,7 @@ perl bench/compiler-strict-history-new-files.pl . \
   bench/compiler-strict-history-new-files
 ```
 
-Its [summary](compiler-strict-history-new-files.log) records 22 ordinary
+Its [summary](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-strict-history-new-files.log) records 22 ordinary
 external declarations, 13 legacy path-bound modules, one source include
 and one standalone root. Eighteen paths have conventional selected-root
 routes, fifteen are test-excluded, three belong to separate roots and one

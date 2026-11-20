@@ -57,12 +57,12 @@ Perl compilation: `}if$class` after a regex was parsed as regex modifiers.
 No guard body, unlink or rmdir ran. Root had read the guard but had not required
 a syntax check; that review missed the lexical error. The attempt is closed,
 with no retry or reinterpretation. All 18 original capture files are retained
-byte-identically in [attempt 1](compiler-copy-sites-root-cleanup-attempt-1/failed-attempt.json),
+byte-identically in [attempt 1](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-copy-sites-root-cleanup-attempt-1/failed-attempt.json),
 including its 17-record manifest `1916a23bc4622e8976cb2a7693474c04353454d09a14f795453bc39e2565a275`.
 Elapsed/user/system were 0.02/0.02/0.00 s, peak RSS 13,988 KiB; all three load
 averages stayed 1.35/1.33/1.72. The original guard and 39-record bundle are unchanged.
 
-The [separate v2 guard](compiler-copy-sites-root-cleanup-guard-v2.pl), SHA-256
+The [separate v2 guard](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-copy-sites-root-cleanup-guard-v2.pl), SHA-256
 `55884264496cbe04ff872883128e65400092c42b32e84b6785a961a5c8197c41`,
 changes exactly nine existing lines: seven explicit regex/statement token
 boundaries, a fresh `cleanup-results-v2` path and its own committed-blob pin.
@@ -86,7 +86,7 @@ ran the exact v2 guard from main against committed bundle
 15:12:34–15:12:43 on 2026-11-16; GNU wall time was 8.17 s, with load
 0.96/1.57/1.95→0.97/1.55/1.94. This includes recovery validation and deletion.
 
-The [completion](compiler-copy-sites-root-cleanup-v2-data/cleanup-completion-v2.json)
+The [completion](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-copy-sites-root-cleanup-v2-data/cleanup-completion-v2.json)
 and independent postcheck verify all six literal ENOENT results, the unchanged
 standard 32,584,542 B canonical producer and all 39 original retention records.
 Root separately confirmed the six absences and canonical identity, then copied

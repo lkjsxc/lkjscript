@@ -27,7 +27,7 @@ retain the exact capability kind and port authority. There is no new native
 runtime feature or child packet kind: unsupported child transfer has a located
 refusal and publishes neither an image nor an admission record.
 
-The [boundary proof](tcp-port-data/boundary.log) grants only TcpPort, Arguments,
+The [boundary proof](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/tcp-port-data/boundary.log) grants only TcpPort, Arguments,
 Clock and Stdout. It selects its destination from run-time argument bytes and
 connects to an independent C listener. Native, interpreter and an independent
 Rust host bridge all receive the same peer data. Its checked authority report
@@ -53,9 +53,9 @@ Rust witness agrees on one output case and three verdicts. The complete Unix
 message regression also passes with this producer, including its descriptor
 cleanup and confined-path replacement controls.
 
-The complete four-worker [gate](tcp-port-data/full-gate.log) passes in 875.318
+The complete four-worker [gate](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/tcp-port-data/full-gate.log) passes in 875.318
 seconds, with all 6,206 case requests rerun and none reused. The separate
-[real-program proof](tcp-port-data/standalone-real-programs.log) passes the
+[real-program proof](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/tcp-port-data/standalone-real-programs.log) passes the
 original Levenshtein algorithm, eight tests per engine, eighteen provenance
 controls and all 7,239 native corpus rows. Producer and seed identities remain
 unchanged after the gate. Exact-head publication gate/witness CI is recorded

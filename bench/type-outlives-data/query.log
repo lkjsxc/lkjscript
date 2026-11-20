@@ -1,1 +1,0 @@
-ok type outlives: exact function/enclosing lifetime identities, body and rename edits, whole-value bound-removal rollback, warm snapshots and both engines

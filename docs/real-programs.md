@@ -195,18 +195,18 @@ dom-query-bench/test-pages -> ../test-pages was a tooling gap. The projector
 now preserves safe internal relative tracked symlinks and refuses escaping,
 dangling, cyclic, untracked or alias-only targets and gitlinks. Review also
 corrected Git owner-execute interpretation and UTF-8 entry/path handling.
-The required real-program gate runs 19 census, 69 projection and 68 probe
+The required real-program gate runs 19 census, 81 projection and 68 probe
 controls, including exact diagnostic bytes and non-ASCII roots. Sources must be
 quiescent during projection; this is not a hostile concurrent-namespace snapshot.
 
 ### Ranked observed barriers
 
-`tools/real-programs/rerank.pl` repeats the accounting from the complete probe
+`tools/real-programs/rerank.mjs` repeats the accounting from the complete probe
 receipts and the reviewed site tables below. Run it once with identical `--before`
 and `--after` inputs to reproduce the baseline, then against each new producer:
 
 ```sh
-perl tools/real-programs/rerank.pl --baseline docs/real-programs-nom.json \
+node tools/real-programs/rerank.mjs --baseline docs/real-programs-nom.json \
   --before OLD_PROBE.json --after NEW_PROBE.json \
   --projection PROJECTION/projection.json --source ORIGINAL_SOURCE \
   --output NEW_COMPARISON.json
@@ -248,7 +248,7 @@ explicit review inputs with the code; retain upstream originals and notices once
 The larger comparison JSON can then be regenerated from these inputs. A receipt
 still under `target/` is a temporary candidate observation, not a durable evidence
 link. Fresh observations additionally require the original/projected trees to pass
-`project.pl --verify`; use `probe.pl --help` for its exact entry and package options.
+`node tools/real-programs/project.mjs --verify`; use `node tools/real-programs/probe.mjs --help` for its exact entry and package options.
 
 #### Current ordinary numeric traits frontier
 
@@ -314,11 +314,11 @@ Twelve unchanged-source observations across six projected roots give nom 45 -> 4
 | sozu | 33 | shared_heap_ownership | 1 |
 | sozu | 34 | Tuple destructuring in a function parameter | 1 |
 
-The [numeric proof](../bench/numeric-traits.md) records actual gate and standalone outcomes. Exact reviewed identities are retained for [nom](real-programs-numeric-traits-nom-review.json), [DOM](real-programs-numeric-traits-dom-review.json), and [Sozu](real-programs-numeric-traits-sozu-review.json). The [previous frontier](../bench/numeric-traits-data/previous-frontier.json) and its published core proof remain immutable history. Disappearing diagnostics alone do not establish source admission.
+The [numeric proof](../bench/numeric-traits.md) records actual gate and standalone outcomes. Exact reviewed identities are retained for [nom](https://github.com/lkjsxc/lkjscript/blob/evidence-archive-20261120/docs/real-programs-numeric-traits-nom-review.json), [DOM](https://github.com/lkjsxc/lkjscript/blob/evidence-archive-20261120/docs/real-programs-numeric-traits-dom-review.json), and [Sozu](https://github.com/lkjsxc/lkjscript/blob/evidence-archive-20261120/docs/real-programs-numeric-traits-sozu-review.json). The [previous frontier](https://github.com/lkjsxc/lkjscript/blob/evidence-archive-20261120/bench/numeric-traits-data/previous-frontier.json) and its published core proof remain immutable history. Disappearing diagnostics alone do not establish source admission.
 
 #### Earlier lifetime-where frontier
 
-The [preceding lifetime-where implementation](../bench/positional-traits-data/previous-frontier.json), producer
+The [preceding lifetime-where implementation](https://github.com/lkjsxc/lkjscript/blob/evidence-archive-20261120/bench/positional-traits-data/previous-frontier.json), producer
 `59c7df4c…749a0836a`, adds named lifetime-outlives where predicates on free
 functions and inherent methods to the earlier forms, within the
 [language limits](language.md). A predicate such as `where 'long: 'short`
@@ -377,10 +377,10 @@ credited. Sized, const-function and opaque-result restrictions remain as documen
 
 The summary pins durable raw receipts, exact re-ranking payloads and reviewed
 original-source hashes. Reproduce the results with the
-[nom review](real-programs-lifetime-where-nom-review.json),
-[DOM review](real-programs-lifetime-where-dom-review.json), and
-[Sōzu review](real-programs-lifetime-where-sozu-review.json) passed to
-`rerank.pl --review`. Ten complete exit/status/stdout/stderr identities are
+[nom review](https://github.com/lkjsxc/lkjscript/blob/evidence-archive-20261120/docs/real-programs-lifetime-where-nom-review.json),
+[DOM review](https://github.com/lkjsxc/lkjscript/blob/evidence-archive-20261120/docs/real-programs-lifetime-where-dom-review.json), and
+[Sōzu review](https://github.com/lkjsxc/lkjscript/blob/evidence-archive-20261120/docs/real-programs-lifetime-where-sozu-review.json) passed to
+`node tools/real-programs/rerank.mjs --review`. Ten complete exit/status/stdout/stderr identities are
 byte-identical to published Sized; only the nom and DOM projections change.
 Original-suffix observations, source/projection hashes and the literal library
 inventory remain unchanged. There are no new unclassified diagnostics or
@@ -419,7 +419,7 @@ logs, source patch and Rust-hosted repair proof remain in the validation record;
 the canonical proof above is fresh on final native `59c7df4c…`.
 The full four-worker gate passes in 721.195 seconds with 6175 fresh case
 requests and 128 IR mutants, zero findings. The standalone real-programs
-validation also passes. Publication CI is recorded with the landing report. [Historical proof records](../bench/positional-traits-data/previous-frontier.json)
+validation also passes. Publication CI is recorded with the landing report. [Historical proof records](https://github.com/lkjsxc/lkjscript/blob/evidence-archive-20261120/bench/positional-traits-data/previous-frontier.json)
 pin completed checks and root-owned validation paths.
 
 The original fifteen foreign reductions retain **six checking and nine

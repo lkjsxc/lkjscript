@@ -1,1 +1,0 @@
-ok conformance (72.388 s, load 4.27 -> 4.57; gate+297.612..370.000 s); cases reused=0 rerun=813 (authenticated producer and input closure; misses/open effects rerun)

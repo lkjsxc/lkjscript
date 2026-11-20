@@ -21,7 +21,7 @@ repair are included here.
 | [Tests and gate patch](tests-and-gate.patch.gz) | One `tools/check.sh` registration and the focused `tools/structure-call-test.sh`; no conformance or witness-source change. |
 | [Documentation patch](documentation.patch.gz) | Current `docs/status.md` and `docs/structure.md` delta from the published parent; Programs status text preserved. |
 | [Source delta](source-delta.txt) | Five source/test files, 451 insertions and three deletions in total. |
-| [Manifest](manifest.json) | Exact hashes, scope, proof outcomes and unapplied seed proposal. |
+| [Manifest](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/landing/manifest.json) | Exact hashes, scope, proof outcomes and unapplied seed proposal. |
 
 The patches are gzip encodings of exact Git diffs; decompression preserves their
 required blank context lines. Production and test patches target the named parent.
@@ -41,13 +41,13 @@ The subsequently requested [standalone real-program check](standalone.log) passe
 in **4.02 seconds**, including exact source/provenance controls, eight tests on
 each engine and 7,239 native corpus rows.
 
-The complete documented [Rust witness](witness.log) passed in **156.87 seconds**:
+The complete documented [Rust witness](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/landing/witness.log) passed in **156.87 seconds**:
 499 values/output cases and 652 verdicts, plus its directory, network, macro,
 TemporaryFiles and original-program checks. Its Rust-built compiler emitted
 exactly the native bytes above. The Rust-host compiler itself has SHA-256
 `fbebd08a32c9823642625e240164c2590ce4fdb443b8f886230b963ab36f4ac6`.
-[Output identities](witness-output.sha256), [toolchain](toolchain.txt) and both
-[standalone](standalone.time) and [witness](witness.time) time records are retained.
+[Output identities](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/landing/witness-output.sha256), [toolchain](toolchain.txt) and both
+[standalone](standalone.time) and [witness](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/landing/witness.time) time records are retained.
 Cargo used one build worker and one release code-generation unit; the native
 witness coordinator used its one-worker default. These are script observations,
 not comparative performance claims. There is no CI result for this unpublished

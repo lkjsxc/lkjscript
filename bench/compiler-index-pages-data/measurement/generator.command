@@ -1,1 +1,0 @@
-/home/coder/workspace/lkjscript-compiler-index-pages-20261116/target/compiler-index-baseline build analysis/main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-index-pages-20261116/target/compiler-index-pages-run.D4yDIv --no-store --inline-limit 0 -o /home/coder/workspace/lkjscript-compiler-index-pages-20261116/target/compiler-index-pages-run.D4yDIv/generator 

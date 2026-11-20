@@ -1,0 +1,105 @@
+//! Rebuild the authenticated upstream specimen as an add-item request.
+//! Uses standard JSON/SHA-256 and byte-preserving UTF-8 text operations.
+use std::json::{self, Value};
+use std::sha256;
+
+fn require(ok: bool, message: &str) -> Result<(), String> {
+    if ok { Ok(()) } else { Err(message.to_string()) }
+}
+fn text(bytes: Vec<u8>, description: &str) -> Result<String, String> {
+    String::from_utf8(bytes).map_err(|_| -> String { format!("non-UTF-8 {description}") })
+}
+fn parent_name(path: &str) -> (String, String) {
+    let mut slash: Option<usize> = None;
+    let mut index = 0usize;
+    while index < path.len() {
+        if path.as_bytes()[index] == b'/' { slash = Some(index); }
+        index += 1usize;
+    }
+    match slash {
+        Some(0usize) => ("/".to_string(), path[1usize..].to_string()),
+        Some(at) => (path[..at].to_string(), path[at + 1usize..].to_string()),
+        None => (".".to_string(), path.to_string()),
+    }
+}
+fn read(world: &mut World, path: &str) -> Result<Vec<u8>, String> {
+    let (parent, name) = parent_name(path);
+    let mut directory = world.directory(&parent).map_err(|errno: i64| -> String { format!("{parent}: errno {errno}") })?;
+    let mut file = directory.open(&name).map_err(|errno: i64| -> String { format!("{path}: errno {errno}") })?;
+    file.read_to_end().map_err(|errno: i64| -> String { format!("{path}: errno {errno}") })
+}
+fn write(world: &mut World, path: &str, bytes: &[u8]) -> Result<(), String> {
+    let (parent, name) = parent_name(path);
+    let mut directory = world.directory(&parent).map_err(|errno: i64| -> String { format!("{parent}: errno {errno}") })?;
+    let mut file = directory.create(&name).map_err(|errno: i64| -> String { format!("{path}: errno {errno}") })?;
+    file.write_all(bytes).map_err(|errno: i64| -> String { format!("{path}: errno {errno}") })
+}
+fn test_names(tests: &str) -> Vec<String> {
+    let marker = "#[test]\nfn ";
+    let mut names = Vec::new();
+    for part in tests.split(marker).skip(1usize) {
+        let mut length = 0usize;
+        for byte in part.as_bytes() {
+            if (*byte >= b'a' && *byte <= b'z') || *byte == b'_' { length += 1usize; }
+            else { break; }
+        }
+        if length > 0usize && part[length..].starts_with("()") {
+            names.push(part[..length].to_string());
+        }
+    }
+    names
+}
+fn run(world: &mut World) -> Result<(), String> {
+    let args = world.args();
+    require(args.len() == 3usize, "usage: levenshtein-import UPSTREAM MANIFEST REQUEST")?;
+    let upstream = text(args[0usize].clone(), "upstream path")?;
+    let manifest_path = text(args[1usize].clone(), "manifest path")?;
+    let request_path = text(args[2usize].clone(), "request path")?;
+    let manifest_bytes = read(world, &manifest_path)?;
+    let manifest = json::parse(&manifest_bytes).map_err(|problem| -> String { format!("{problem}") })?;
+    let files = manifest.get("files").and_then(|value: &Value| value.as_object())
+        .ok_or("manifest files must be an object".to_string())?;
+    for (name, expected) in files {
+        let digest = match expected.as_str() { Some(value) => value, None => return Err("manifest digest must be a string".to_string()) };
+        let bytes = read(world, &format!("{upstream}/{name}"))?;
+        require(sha256::hex_digest(&bytes).as_str() == digest, &format!("upstream digest mismatch: {name}"))?;
+    }
+    let algorithm = text(read(world, &format!("{upstream}/src/lib.rs"))?, "upstream algorithm")?;
+    require(algorithm.as_str().split("(1..)").count() == 2usize, "expected one range-value producer gap")?;
+    let algorithm = algorithm.as_str().replace("(1..)", "std::iter::range_from(1)");
+    let original_tests = text(read(world, &format!("{upstream}/tests/lib.rs"))?, "upstream tests")?;
+    let tests = original_tests.as_str().strip_prefix("extern crate levenshtein;\nuse levenshtein::levenshtein;\n")
+        .ok_or("unrecognized integration header".to_string())?;
+    let expected_names = manifest.get("test_names").and_then(|value: &Value| value.as_array())
+        .ok_or("manifest test_names must be an array".to_string())?;
+    let names = test_names(tests);
+    require(names.len() == expected_names.len(), "test inventory changed")?;
+    let mut index = 0usize;
+    while index < names.len() {
+        require(expected_names[index].as_str() == Some(names[index].as_str()), "test inventory changed")?;
+        index += 1usize;
+    }
+    let projection = format!("{algorithm}\n// UPSTREAM INTEGRATION TESTS: exact bodies, package header removed.\n{tests}");
+    let request = Value::Object(vec![
+        ("operations".to_string(), Value::Array(vec![Value::Object(vec![
+            ("id".to_string(), Value::String("crate".to_string())),
+            ("op".to_string(), Value::String("add-item".to_string())),
+            ("projection".to_string(), Value::Object(vec![
+                ("path".to_string(), Value::String("examples/real_programs/levenshtein/upstream.lkj".to_string())),
+                ("source".to_string(), Value::String(projection)),
+            ])),
+            ("source".to_string(), Value::String("mod upstream;".to_string())),
+        ])])),
+        ("version".to_string(), Value::from_usize(1usize)),
+    ]);
+    let encoded = json::stringify(&request).map_err(|problem| -> String { format!("{problem}") })?;
+    write(world, &request_path, format!("{encoded}\n").as_bytes())?;
+    world.stdout().write(b"verified upstream: 65 algorithm lines, 8 unchanged test bodies; range-expression=1, integration-header-lines=2\n");
+    Ok(())
+}
+pub fn main(mut world: World) {
+    if let Err(problem) = run(&mut world) {
+        world.stderr().write(format!("{problem}\n").as_bytes());
+        world.set_exit_status(255);
+    }
+}

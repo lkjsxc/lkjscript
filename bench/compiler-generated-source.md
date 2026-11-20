@@ -91,7 +91,7 @@ The five successful requests contain **26 operations and 11 file facts**.
 Every file fact's before/after hashes chains to the parent Git blob and final
 source file. The initial new helper's bytes also match the operation's
 projection source exactly. Neither refused request changed a file.
-[audit.pl](compiler-generated-source-data/audit.pl) and
+[audit.pl](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-generated-source-data/audit.pl) and
 [audit.txt](compiler-generated-source-data/audit.txt) verify this chain;
 the request JSON, status, stdout, stderr and before/after manifests are retained.
 

@@ -1,7 +1,7 @@
 # Replace-call integration on the corrected public parent
 
 The integrated candidate passed the reserved local gate and standalone
-real-program validation. The [validation receipt](validation.json) binds the
+real-program validation. The [validation receipt](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/integration/validation.json) binds the
 exact input, approved seed, reproduced compiler, original witness and raw logs.
 Final exact candidate review and the external next action belong to lead.
 
@@ -42,7 +42,7 @@ outside this integration.
 
 The [complete non-seed input diff](complete-nonseed-input.patch.gz),
 [input path list](input-delta-paths.txt), [input tree manifest](input-manifest.txt)
-and [source hashes](current-source.sha256) retain the review boundary. The seed
+and [source hashes](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/integration/current-source.sha256) retain the review boundary. The seed
 binary is independently bound to the approved identities above.
 
 ## Completed validation
@@ -84,7 +84,7 @@ and all 7,239 native corpus rows. Its [time receipt](standalone.time) reports
 
 ## Exact historical Rust witness binding
 
-The preserved [original witness](../landing/witness.log) passed 499 values/output
+The preserved [original witness](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/landing/witness.log) passed 499 values/output
 cases and 652 verdicts, including the independent compiler-byte comparison.
 It was not rerun for this integration. Both the reviewed and integrated
 [witness input manifests](witness-inputs.txt) are byte-identical, with SHA-256
@@ -97,17 +97,17 @@ by `witness/check.sh`. The retained Rust-host compiler still hashes to
 `fbebd08a32c9823642625e240164c2590ce4fdb443b8f886230b963ab36f4ac6`;
 its previously emitted native bytes match the new bootstrap exactly. The
 [original toolchain](../landing/toolchain.txt) and
-[time record](../landing/witness.time) retain that older run's context; the binding is not a new timing measurement.
+[time record](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/landing/witness.time) retain that older run's context; the binding is not a new timing measurement.
 
 ## Evidence and publication
 
-All 111 [original packet checksums](original-checksums.log) and 15
-[reviewer checksums](reviewer-checksums.log) pass. The historical landing packet,
+All 111 [original packet checksums](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/integration/original-checksums.log) and 15
+[reviewer checksums](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/integration/reviewer-checksums.log) pass. The historical landing packet,
 original full gate and unfamiliar-agent archives remain unchanged. The archive
 review verified all 59 allowlisted regular members across three archives; no
 private keys, stores, configurations or compiler binaries are included there.
 
-The [public-parent CI receipt](public-parent-ci.json) independently verifies
+The [public-parent CI receipt](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-call-data/integration/public-parent-ci.json) independently verifies
 run 44352321149 on exact `e414aeddb`: both gate and witness jobs succeeded.
 There is no CI result for this local integrated candidate because it has not
 been pushed. Lead receives the final exact candidate and receipt for review

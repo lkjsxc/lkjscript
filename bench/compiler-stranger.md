@@ -17,7 +17,7 @@ enabled. A setup approval refusal is infrastructure failure, not language eviden
 
 ## Baseline discovery
 
-The complete gpt-6-luna baseline in compiler-stranger-initial.json contains twenty
+The complete gpt-6-luna baseline in [compiler-stranger-initial.json](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-stranger-initial.json) contains twenty
 fresh attempts per arm with the frozen b4594275-era producer. Every row keeps its
 actual calls, bytes, time, submitted source, checker and target comparison results.
 
@@ -69,7 +69,7 @@ preparation timing, so its active setup-tail measurement is not end-to-end setup
 
 ## Same-family baseline control
 
-The complete gpt-6-astra control is bound in compiler-stranger-astra-initial.json.
+The complete gpt-6-astra control is bound in [compiler-stranger-astra-initial.json](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-stranger-astra-initial.json).
 It uses the same frozen a92e81e2 producer and twenty historical changes, with fresh
 processes, medium reasoning and the same 900-second/24-call allowances.
 

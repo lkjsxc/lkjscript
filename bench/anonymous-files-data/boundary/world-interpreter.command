@@ -1,1 +1,0 @@
-/home/coder/workspace/lkjscript-programs-anonymous-20261118/target/anonymous-build/candidate2 run /home/coder/workspace/lkjscript-programs-anonymous-20261118/target/temporary-files.PmTFUN/world-control.lkj --library-dir /home/coder/workspace/lkjscript-programs-anonymous-20261118/library --no-store --engine interpreter 

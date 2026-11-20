@@ -1,6 +1,0 @@
-load_before=8.64 9.05 9.51
-started_ns=1794812882668959529
-argv= /home/coder/workspace/lkjscript-compiler-cache-reads-20261116/target/compiler-cache-reads-candidate query main.lkj --source-dir /home/coder/workspace/lkjscript-compiler-cache-reads-20261116/target/compiler-cache-reads-observation.ZWqPda/source --no-library --store /home/coder/workspace/lkjscript-compiler-cache-reads-20261116/target/compiler-cache-reads-observation.ZWqPda/baseline-store --store-key /home/coder/workspace/lkjscript-compiler-cache-reads-20261116/target/compiler-cache-reads-observation.ZWqPda/key --snapshot d854829c575efef10d83c113913b822660238fa4db0368f4b75821959713af00 --kind outline --id main
-status=0
-load_after=8.64 9.05 9.51
-ended_ns=1794812882670816250

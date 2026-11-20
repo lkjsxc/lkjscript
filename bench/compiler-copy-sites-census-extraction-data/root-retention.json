@@ -1,9 +1,0 @@
-{
-   "all_archive_files_match" : true,
-   "archive_bytes" : 10260424,
-   "archive_sha256" : "babfaf4cbcaebb16fb146e142d96b98890907bb47a6f0abe576df8bcb9d1ab46",
-   "extraction_rerun" : false,
-   "files" : 356,
-   "logical_bytes" : 59163875,
-   "schema" : "compiler-census-extraction-retention-1"
-}

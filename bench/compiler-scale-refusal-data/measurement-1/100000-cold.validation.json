@@ -1,8 +1,0 @@
-{
-   "command" : "build",
-   "emitted_bytes" : 4472259,
-   "ir_instances" : 4209,
-   "ir_instructions" : 896361,
-   "status" : "accepted",
-   "store_retained_bytes" : 26716768
-}

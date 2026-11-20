@@ -1,1 +1,0 @@
-ok http (28.999 s, load 4.79 -> 4.11; gate+221.654..250.653 s); cases reused=0 rerun=28 (authenticated exact stable runner, sealed ELF, checked closure and closed input contract)

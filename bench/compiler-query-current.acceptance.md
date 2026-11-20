@@ -7,7 +7,7 @@ captures; this audit ran no compiler or query and read no semantic-store node.
 
 ## Independent checks
 
-Root's separate auditor, [compiler-query-current-root-audit.pl](compiler-query-current-root-audit.pl),
+Root's separate auditor, [compiler-query-current-root-audit.pl](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-query-current-root-audit.pl),
 checks each raw argv/cwd, status, chronological clock interval, exact query
 identity/kind/depth and producer/source/IR/snapshot header, fact framing/count,
 checked-fact level, complete output byte bound, stdout digest and the mandatory

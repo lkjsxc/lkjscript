@@ -73,7 +73,7 @@ live file bytes; all agree. The archive retains both earlier draft versions,
 the first schema-defective results, the final correction, raw inputs, exact
 commands, resource/load captures and all expected refusals.
 
-[Raw phase extraction](compiler-profile-copy-sites-preparation-data/accounting-validation-phases.json)
+[Raw phase extraction](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-profile-copy-sites-preparation-data/accounting-validation-phases.json)
 contains all 21 captures, including fixture setup. The first root extraction
 mistakenly expected 20 and stopped before emitting a report; its empty output
 and error remain beside the corrected extraction. No input or command was

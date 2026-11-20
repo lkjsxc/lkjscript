@@ -34,7 +34,7 @@ bash bench/compiler-profile-copy-sites.sh run bench/compiler-profile-copy-sites-
 Cohort: `compiler-copy-sites-20261116-2`.
 Fresh run: `target/compiler-copy-sites-run.20261116-2`.
 Fresh evidence: `target/compiler-copy-sites-evidence.20261116-2`.
-[The complete release JSON](compiler-profile-copy-sites-release-20261116-2.json)
+[The complete release JSON](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-profile-copy-sites-release-20261116-2.json)
 must be exact committed HEAD bytes before this invocation.
 
 The unchanged [measurement protocol](compiler-profile-copy-sites-measurement-plan.md)

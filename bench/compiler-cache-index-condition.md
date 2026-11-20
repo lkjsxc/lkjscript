@@ -37,9 +37,9 @@ One immutable instrumented producer was used throughout:
 - Src/library trees: 68b8a295a2c8671c3a574ddd71e7c5b15ce80430 /
   25bdb8ff8567b941790d3951c78e896b23e26e8e.
 - Generator/census digests, exact command arguments, snapshot/source/IR pins and
-  all output identities are retained in the [metadata](compiler-cache-index-condition.meta),
-  [arguments](compiler-cache-index-condition.arguments.log),
-  [snapshot rows](compiler-cache-index-condition.snapshots.log) and
+  all output identities are retained in the [metadata](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-cache-index-condition.meta),
+  [arguments](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-cache-index-condition.arguments.log),
+  [snapshot rows](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-cache-index-condition.snapshots.log) and
   [parity rows](compiler-cache-index-condition.parity.tsv).
 
 Each rung uses one generated source path, one private key, seed 20261116 and
@@ -220,5 +220,5 @@ harness, and run-directory absence was independently verified. After root accept
 emitter/baseline/instrumented producers and private operation key were removed.
 The source lock was free, no pending intent or process used those artifacts,
 and absence was verified. Requests, manifests and raw evidence remain; see the
-[cleanup record](compiler-cache-io.cleanup.meta). This follow-up changes no
+[cleanup record](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-cache-io.cleanup.meta). This follow-up changes no
 production source.

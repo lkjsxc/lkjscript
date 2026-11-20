@@ -100,7 +100,7 @@ in 76.946 s (load 6.32 → 4.28). Relevant integration suites were:
 | Store I/O statistics | 4.436 | 11.16 → 10.91 |
 | No-create cache reads | 1.076 | 11.16 → 11.16 |
 
-The [accepted gate log](compiler-store-gate-data/accepted-cold.log) has SHA-256
+The [accepted gate log](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-store-gate-data/accepted-cold.log) has SHA-256
 `9f901ab92fad2bdaa2ef214b17e1e1d6d03d726b6a7c5ad86a44dfbd931fb555`.
 Its time and metadata files are preserved beside it. The data manifest covers
 both runs, the toolchain operation proof and the independent witness.
@@ -127,9 +127,9 @@ in **1,641.955 s (load 0.74 → 2.08)**. Its bootstrap took 87.269 s
 cases, 344 verdicts and exact compiler bytes; both Directory suites passed
 across native, interpretation and Rust routes.
 
-The downloaded [native log](compiler-store-gate-data/ci-gate.log) has SHA-256
+The downloaded [native log](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-store-gate-data/ci-gate.log) has SHA-256
 `e1952492373748ae5deb124174a3f8465be83abb2a88b70db1828c59b04f3edc`;
-the [witness log](compiler-store-gate-data/ci-witness.log) has SHA-256
+the [witness log](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-store-gate-data/ci-witness.log) has SHA-256
 `d4a42a92a42a4b4a5719f18f0f1eb9422dc13803833ec54c83b99749e7875801`.
 This acceptance belongs to the Store integration and its ADC producer. The
 later explicit source-scope change has a separate gate and CI history.

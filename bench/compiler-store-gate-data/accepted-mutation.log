@@ -1,1 +1,0 @@
-ok mutation: 128 mutants, 104 rejected, 22 values, 1 traps, 1 did not terminate, 0 resources, 0 findings; 3145 mutants/minute (2.441 s, 4 workers); 12 checked reuses, 5 emitted reuses, 0 store rejects; inline default(0), 0 attempts, 0 accepted, 0 executed, 0 rejected, 0 candidate calls in 0 bodies, 0 local body proofs

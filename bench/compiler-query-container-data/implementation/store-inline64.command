@@ -1,1 +1,0 @@
-env LKJSCRIPT_QUERY_STORE_EVIDENCE=/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-evidence/store-inline64.details bash tools/query-store-test.sh /home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-inline64-g2 

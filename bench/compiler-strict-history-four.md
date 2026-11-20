@@ -153,21 +153,21 @@ coverage.
 ## Evidence and audit
 
 The [result rows](compiler-strict-history-four.tsv), [new proof row](compiler-strict-history-four.proofs.tsv),
-[metadata](compiler-strict-history-four.tsv.meta), [space checks](compiler-strict-history-four.tsv.space),
-[wrapper metrics](compiler-strict-history-four.run.time) and all 26 raw
+[metadata](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-strict-history-four.tsv.meta), [space checks](compiler-strict-history-four.tsv.space),
+[wrapper metrics](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-strict-history-four.run.time) and all 26 raw
 files (433,433 bytes) are retained. The original scoped manifest and all
 103 prior rows were reverified unchanged.
 
-The [read-only auditor](compiler-strict-history-four-audit.pl) validates the
+The [read-only auditor](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-strict-history-four-audit.pl) validates the
 imported subset, frozen Git population, declared order, actual Git changed
 paths, required-file coverage, nonempty publication, canonical equality
 and exact historical before hashes. It prints the
-[audit result](compiler-strict-history-four.audit.log). It never invokes
+[audit result](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-strict-history-four.audit.log). It never invokes
 the compiler. A manifest records the hashes of the new artifacts separately
 from the immutable earlier manifest.
 
 After acceptance, the owned fixture (332,021,266 bytes before deletion),
 private key, store and both producer copies were removed at 03:57:53 UTC.
-The [cleanup record](compiler-strict-history-four.cleanup.meta) confirms
+The [cleanup record](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-strict-history-four.cleanup.meta) confirms
 that no stop marker remains. Intentional text evidence is preserved, and
 no compiler job remains.

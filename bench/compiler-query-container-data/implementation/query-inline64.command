@@ -1,1 +1,0 @@
-env LKJSCRIPT_QUERY_EVIDENCE=/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-evidence/query-inline64.details bash tools/semantic-query-test.sh /home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-container-inline64-g2 

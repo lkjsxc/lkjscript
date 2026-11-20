@@ -1,9 +1,0 @@
-mode=replay root_policy=common-main-otherwise-common-lib scan=300 wanted=30 memory_bytes=4294967296 timeout_seconds=900 store_bytes=2147483648
-history_head=a4fd685a9bb2e7736110a4ed2a43651dfe040d56
-compiler_origin=/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-self-history-producer
-4c4537ea7ccb31213f376d1402f619883eea6f8877fdb8b752b31df364099e09  /home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/compiler
-harness_sha256=5fea2592cf9dd13fe311ef7858dc455efc97a8f5b35a7e66e786ca8cec4af795
-library_policy=historical-roots-when-both-present-else-frozen-compiler-embedded-on-both-sides
-stop_file=/home/coder/workspace/lkjscript-compiler-self-history-20261116/bench/compiler-self-history.tsv.stop
-attempted=103 passed=30 wanted=30
-retained_fixture=/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i

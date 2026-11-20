@@ -1,2 +1,0 @@
-ok closed gate lock: absent read writes nothing, rejected proof releases before execution, failure publishes nothing, busy writer never waits, serial success reuses
-ok closed gate proofs: exact sealed bytes, producer, contract, authority/image/entry matching, key, corruption, cross-compiler reuse, failure, host exclusions and multi-entry parity/preflight

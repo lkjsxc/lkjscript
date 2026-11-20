@@ -6,7 +6,7 @@ store censuses, emitted image pairs, final source pins, and producing executable
 pins. The report and both historical proof manifests remain unchanged.
 
 On 2026-11-16, the guarded cleanup removed exactly the eleven paths listed in
-[accepted-cleanup.json](accepted-cleanup.json): the complete measured run, the
+[accepted-cleanup.json](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-query-container-data/cleanup/accepted-cleanup.json): the complete measured run, the
 tiny helper run, their two external private-key directories, five copied compiler
 executables, and the standalone case-validation `src`/`library` copies.
 The measured run included all four stores, generated source trees, factory

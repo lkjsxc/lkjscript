@@ -51,28 +51,28 @@ Seed gzip SHA-256:
 
     4bbd931edf8422044cb61acfc6c3c4fba580a0d61e7283474ba624b9696f90a3
 
-The [bootstrap](core-facade-data/bootstrap.log) reaches byte-identical
+The [bootstrap](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/core-facade-data/bootstrap.log) reaches byte-identical
 current-emitter generations. Its exact input and observed bridge path are
 retained in the provenance section.
-The [focused suite](core-facade-data/cases-native.log) passes 51 cases /
+The [focused suite](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/core-facade-data/cases-native.log) passes 51 cases /
 102 native/interpreter routes. The independent
-[Rust witness](core-facade-data/cases-rust.log) verifies 24
+[Rust witness](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/core-facade-data/cases-rust.log) verifies 24
 values/output cases and 27 recorded Rust verdicts.The focused Rust route checks 24 values/output cases and 27 explicit verdict controls. Five reference-bearing PhantomData controls are accepted by Rust and conservatively refused here; the remaining 22 refusals match Rust. The separate repair witness has 3 values and 1 matching mismatch refusal at each optimization level. Strict supplemental Rust evidence has ten source-specific refusal compilations, two setup compilations/runs and two original signed compilations/runs. The original declaration-failure spoof is history only; private helper names and checked overflow are not paired.
 
 The combined producer passes these source-command proofs:
 
-- [closed source and core](core-facade-data/source-contracts.log)
-- [core facade](core-facade-data/core-query.log)
-- [trait method arguments](core-facade-data/method-query.log)
+- [closed source and core](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/core-facade-data/source-contracts.log)
+- [core facade](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/core-facade-data/core-query.log)
+- [trait method arguments](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/core-facade-data/method-query.log)
 
 The final producer passes 51 focused cases/102 routes, 93 prior cases/186 routes and 200 core plus 536 source contracts. The separate range repair cohort passes 4 cases/8 routes before and after bootstrap. Exact Rust inputs yield 3 values and 1 E0308 refusal at each of opt0 and opt3. Original Levenshtein tests and 7,239 native corpus rows pass on both early and final producer phases. The separately retained early strict76 LKJ routes compare old/current libraries under frozen bf5; they are not attributed to the rebuilt native. Exact fourteen Rust compilations and four positive runs are retained separately. The exact foreign RangeFrom<Custom> implementation returned 42 on the old library and received the located overlapping trait implementations refusal at corrected range.lkj:152:1. Rust rejects that foreign implementation for E0117 at its authored header; this is a separate boundary, not parity.
 
-The refreshed-seed four-worker [full gate](core-facade-data/full-gate.log) passes in 1271.693 seconds with 6766 fresh case requests, zero reuse and 128 IR mutants with zero findings. The separate [real-program regression](core-facade-data/standalone-real-programs.log) passes eight original Levenshtein tests per engine, eighteen provenance controls and all 7,239 native corpus rows. Producer and seed hashes remain unchanged.
+The refreshed-seed four-worker [full gate](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/core-facade-data/full-gate.log) passes in 1271.693 seconds with 6766 fresh case requests, zero reuse and 128 IR mutants with zero findings. The separate [real-program regression](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/core-facade-data/standalone-real-programs.log) passes eight original Levenshtein tests per engine, eighteen provenance controls and all 7,239 native corpus rows. Producer and seed hashes remain unchanged.
 
 Twelve fresh unchanged-source observations give nom 45->45, DOM 39->39 and Sozu 968->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
 No original large root or nom own test admits. The
 [current frontier](../docs/real-programs-current.json), exact source-hashed
-reviews and [previous frontier](core-facade-data/previous-frontier.json) retain
+reviews and [previous frontier](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/core-facade-data/previous-frontier.json) retain
 original/projected input identity and complete diagnostic accounting.
 
 The checked IR, independent checker, interpreter and runtime are unchanged.

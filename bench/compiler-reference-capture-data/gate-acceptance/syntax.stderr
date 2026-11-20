@@ -1,5 +1,0 @@
-"my" variable %seen masks earlier declaration in same scope at /home/coder/workspace/lkjscript/target/compiler-reference-capture-gate-acceptance-1/audit.pl line 162.
-Scalar found where operator expected (Missing operator before "$m"?) at /home/coder/workspace/lkjscript/target/compiler-reference-capture-gate-acceptance-1/audit.pl line 162, near "s{/\z}{}if$m"
-Unknown regexp modifier "/f" at /home/coder/workspace/lkjscript/target/compiler-reference-capture-gate-acceptance-1/audit.pl line 162, at end of line
-syntax error at /home/coder/workspace/lkjscript/target/compiler-reference-capture-gate-acceptance-1/audit.pl line 162, near "s{/\z}{}if$m"
-/home/coder/workspace/lkjscript/target/compiler-reference-capture-gate-acceptance-1/audit.pl had compilation errors.

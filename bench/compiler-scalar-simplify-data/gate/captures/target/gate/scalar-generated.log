@@ -1,1 +1,0 @@
-ok scalar-generated (63.980 s, load 5.84 -> 6.83; gate+630.935..694.915 s); cases reused=0 rerun=1215 (authenticated producer and input closure; misses/open effects rerun)

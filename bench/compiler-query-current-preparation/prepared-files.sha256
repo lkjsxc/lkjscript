@@ -1,5 +1,0 @@
-e09435c6fd30b00ce33f5aa21af5e012f83c1705de1a9f6ac41259ed44bf934c  bench/compiler-query-current.sh
-bc57855884da6aa7dc2aede7cb856e58032d9b488b1e3537bc3fc89669f0d1da  bench/compiler-query-current-validate.pl
-417a4adfe357aab04915c5cdee3ebe2f691ee46ca2fb74663735e5d35a6e81e9  bench/compiler-query-current-questions.tsv
-a1c7949723c3402786379d4d5d71656f7387f2a36cbf1208e1caab04b324a4e8  bench/compiler-query-current-plan.md
-23dca8138de5ffd2b95dfb0c79cf262e64c02e1f4555bcdf0228c0dedc3ae95b  bench/compiler-query-current-identities.example.json

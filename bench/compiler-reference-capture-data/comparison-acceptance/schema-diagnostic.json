@@ -1,7 +1,0 @@
-{
-  "request_id": "compiler-reference-capture-comparison-audit-row-type-329",
-  "status": 0,
-  "stdout": "[{\"path\":\"/timing/gnu/max_rss_kib\",\"row_json\":\"\\\"697408\\\"\",\"summary_json\":697408}]\n",
-  "stderr": "",
-  "qualification": "Independent auditor v1 was stricter than the frozen row/summary representation: only max_rss_kib changes from unsigned digit string to JSON number. V2 normalizes only this field after strict unsigned-integer validation; no measurement was rerun or changed."
-}

@@ -1,1 +1,0 @@
-ok closed gate lock: absent read writes nothing, rejected proof releases before execution, failure publishes nothing, busy writer never waits, serial success reuses

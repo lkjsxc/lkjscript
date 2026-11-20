@@ -1,3 +1,0 @@
-Bareword found where operator expected (Missing operator before "eqCompilerClosure::json"?) at target/compiler-completed-evidence-closure-20261116/guard.pl line 30, near ")eqCompilerClosure::json"
-syntax error at target/compiler-completed-evidence-closure-20261116/guard.pl line 30, near ")eqCompilerClosure::json"
-target/compiler-completed-evidence-closure-20261116/guard.pl had compilation errors.

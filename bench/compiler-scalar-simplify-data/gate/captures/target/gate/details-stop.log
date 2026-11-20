@@ -1,5 +1,0 @@
-armed
-drained
-ok shutdown admitted pipeline, current request, idle close, late request exclusion and fixed drain deadline
-Shutdown native elapsed 2005 ms; load 3.47 2.58 1.88 2/5563 3440876 -> 3.47 2.58 1.88 2/5551 3441315
-Shutdown cleanup: PIDs 3103987 3103991 reaped; loopback port 34197 released; temporary directory removed

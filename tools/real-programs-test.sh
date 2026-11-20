@@ -35,52 +35,60 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' HUP TERM
 # The untrusted source inventory/projection tools must preserve Git bytes and context.
-perl tools/real-programs/census.pl --self-test > "$work/census-controls.json"
-perl tools/real-programs/project.pl --self-test > "$work/projection-controls.json"
-perl tools/real-programs/probe-test.pl > "$work/probe-controls.json"
-perl tools/real-programs/rerank-test.pl > "$work/rerank-controls.json"
-perl tools/real-programs/verify-levenshtein.pl --self-test "$source" > "$work/provenance.json"
-perl -MJSON::PP -0777 -e '
-    my $report=decode_json(<>);
-    die "unexpected upstream inventory\n" unless $report->{test_count} == 8
-        && $report->{assertion_count} == 26 && $report->{mutants_rejected} == 18
-        && $report->{exact_upstream_bytes};
-' "$work/provenance.json"
+node tools/real-programs/census.mjs --self-test > "$work/census-controls.json"
+node tools/real-programs/project.mjs --self-test > "$work/projection-controls.json"
+node tools/real-programs/probe-test.mjs > "$work/probe-controls.json"
+node tools/real-programs/rerank-test.mjs > "$work/rerank-controls.json"
+node tools/real-programs/verify-levenshtein.mjs --self-test "$source" > "$work/provenance.json"
+node --input-type=module - "$work/provenance.json" <<'NODE'
+import fs from 'node:fs';
+const report = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
+if (report.test_count !== 8 || report.assertion_count !== 26 ||
+    report.mutants_rejected !== 18 || report.malformed_manifests_rejected !== 4 || !report.exact_upstream_bytes) {
+    throw new Error('unexpected upstream inventory');
+}
+NODE
 # Keep the checked import and its normalization receipt intact. The executed
 # specimen restores the original range syntax, then authenticates both complete
 # upstream sections before the compiler reads the temporary .lkj projection.
 original="$work/original"
 mkdir "$original"
 cp "$source/main.lkj" "$source/corpus.lkj" "$original/"
-perl -MJSON::PP -MDigest::SHA=sha256_hex - "$source" "$original" <<'PERL'
-use strict; use warnings;
-my ($source, $output) = @ARGV;
-sub read_file {
-    my ($path) = @_;
-    open my $input, '<:raw', $path or die "$path: $!";
-    local $/;
-    return <$input>;
+node tools/real-programs/restore-levenshtein.mjs "$source" "$original"
+# The importer itself is now lkjscript: exercise both routes against the exact
+# restored upstream tree and refuse a changed digest before writing a request.
+import_source="$work/import-upstream"
+mkdir -p "$import_source/src" "$import_source/tests"
+node tools/real-programs/restore-levenshtein.mjs "$source" "$import_source" --rust
+mv "$import_source/upstream.rs" "$import_source/src/lib.rs"
+mv "$import_source/upstream_tests.rs" "$import_source/tests/lib.rs"
+cp "$source/LICENSE" "$import_source/license"
+"$compiler" build tools/real-programs/levenshtein-import.lkj --source-dir . --library-dir library --no-store -o "$work/importer" > "$work/import-build.out" 2> "$work/import-build.err"
+"$work/importer" "$import_source" "$source/upstream.json" "$work/import-native.json" > "$work/import-native.out" 2> "$work/import-native.err"
+"$compiler" run tools/real-programs/levenshtein-import.lkj --source-dir . --library-dir library --no-store --engine interpreter -- "$import_source" "$source/upstream.json" "$work/import-interpreter.json" > "$work/import-interpreter.out" 2> "$work/import-interpreter.err"
+cmp "$work/import-native.out" "$work/import-interpreter.out"
+test ! -s "$work/import-native.err"
+test ! -s "$work/import-interpreter.err"
+node --input-type=module - "$source" "$work" <<'NODE'
+import fs from 'node:fs';
+import assert from 'node:assert/strict';
+const [source, work] = process.argv.slice(2);
+const expected = {version:1, operations:[{op:'add-item', id:'crate', source:'mod upstream;',
+    projection:{path:'examples/real_programs/levenshtein/upstream.lkj',
+        source:fs.readFileSync(source + '/upstream.lkj','utf8')}}]};
+for (const engine of ['native','interpreter']) {
+    assert.deepEqual(JSON.parse(fs.readFileSync(work + '/import-' + engine + '.json','utf8')), expected);
 }
-my $manifest = decode_json(read_file("$source/upstream.json"));
-my $projection = read_file("$source/upstream.lkj");
-my $marker = "\n// UPSTREAM INTEGRATION TESTS: exact bodies, package header removed.\n";
-my @parts = split /\Q$marker\E/, $projection, -1;
-@parts == 2 or die "invalid integration boundary\n";
-my ($library, $tests) = @parts;
-my $replacements = $library =~ s/\Qstd::iter::range_from(1)\E/(1..)/g;
-$replacements == 1 or die "invalid inverse range count\n";
-sha256_hex($library) eq $manifest->{files}{'src/lib.rs'}
-    or die "original library bytes differ\n";
-my $library_lines = () = $library =~ /\n/g;
-$library_lines == 65 && $library_lines == $manifest->{source_lines}
-    or die "original library line count differs\n";
-my $original_tests = "extern crate levenshtein;\nuse levenshtein::levenshtein;\n" . $tests;
-sha256_hex($original_tests) eq $manifest->{files}{'tests/lib.rs'}
-    or die "original test bytes differ\n";
-open my $file, '>:raw', "$output/upstream.lkj" or die $!;
-print {$file} $library, $marker, $tests;
-close $file or die $!;
-PERL
+NODE
+printf '\nchanged digest\n' >> "$import_source/license"
+if "$work/importer" "$import_source" "$source/upstream.json" "$work/import-refused.json" > "$work/import-refused.out" 2> "$work/import-refused.err"; then
+    printf 'importer admitted changed upstream bytes\n' >&2
+    exit 1
+else
+    test "$?" -eq 255
+fi
+test ! -e "$work/import-refused.json"
+grep -Fq 'upstream digest mismatch: license' "$work/import-refused.err"
 entry="${original#"$PWD/"}"/main.lkj
 gzip -dc "$golden" > "$work/expected.out"
 awk -F: 'NF != 2 || $1 != NR-1 || $2 !~ /^[0-9]+$/ { exit 1 } END { if (NR != 7239) exit 1 }' "$work/expected.out"
@@ -114,4 +122,4 @@ if [[ "$full_interpreter" == yes ]]; then
     test ! -s "$work/interpreter.err"
     printf 'ok real programs: full interpreted 7,239-row corpus\n'
 fi
-printf 'ok real programs: original library syntax, exact upstream hashes, 18 provenance controls, 8 tests on each engine, pure algorithm authority and 7,239 native corpus rows\n'
+printf 'ok real programs: original library syntax, exact upstream hashes, 18 provenance and 4 manifest-shape controls, native/interpreter importer, 8 tests on each engine, pure algorithm authority and 7,239 native corpus rows\n'

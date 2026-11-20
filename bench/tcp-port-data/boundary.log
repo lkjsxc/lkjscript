@@ -1,6 +1,0 @@
-ok tcp port native: run-time numeric host, immutable grant port, no World
-ok tcp port interpreter: run-time numeric host, immutable grant port, no World
-ok tcp port witness: run-time numeric host, immutable grant port, no World
-ok tcp port: empty/zero/overflow/negative/list/environment/address/missing/duplicate grants refuse before publication or execution
-ok tcp port: cold/warm authenticated units preserve port authority across interfaces
-ok tcp port: unsupported child transfer has a located refusal

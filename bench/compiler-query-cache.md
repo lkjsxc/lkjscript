@@ -160,8 +160,8 @@ return continuations after 273 and 276 raw-page reads respectively.
 - [Forty timings and provenance](compiler-query-cache.tsv)
 - [Forty subsequent exact-stdout validations](compiler-query-cache-parity.tsv)
 - [Shared index and focused-pair timings](compiler-query-cache-witness.tsv)
-- [Campaign metadata](compiler-query-cache.meta) and
-  [shared-fixture metadata](compiler-query-cache-witness.meta)
+- [Campaign metadata](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-query-cache.meta) and
+  [shared-fixture metadata](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-query-cache-witness.meta)
 - [Ten separately labelled query kinds](compiler-query-kinds.md)
 
 `bench/compiler-query-cache.sh` accepts an existing source/library selector,

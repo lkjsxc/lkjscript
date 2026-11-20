@@ -1,1 +1,0 @@
-/home/coder/workspace/lkjscript-programs-anonymous-20261118/target/anonymous-build/candidate2 authority /home/coder/workspace/lkjscript-programs-anonymous-20261118/tests/fixtures/authority/temporary_files_boundary.lkj --library-dir /home/coder/workspace/lkjscript-programs-anonymous-20261118/library --no-store 

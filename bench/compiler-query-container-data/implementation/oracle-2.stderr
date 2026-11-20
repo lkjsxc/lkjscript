@@ -1,2 +1,0 @@
-/home/coder/workspace/lkjscript-compiler-query-container-20261116/target/compiler-index-page-oracle.6OaoLP/tree/src/semantic_store.lkj:437:28: E_MOVE store is uninitialized or moved on a reachable path
-src/compiler_index_page_main.lkj:1:1: E_BLOCKED remaining semantic analysis: each invalid IR body stops at its diagnostic; no artifact is produced

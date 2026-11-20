@@ -1,5 +1,0 @@
-e8585f1416c8a671819e4deb8eec727bc60b4aaef8b8c443f5f967f930565a6e  bench/compiler-scale-refusal-cleanup-check.pl
-f77328b5ee11a210a260832834ec4a8f00d129e43c955e4f5ee9f059ea2c66f7  bench/compiler-scale-refusal-cleanup-plan.md
-304e79be9762abe6d42d96297fc29cd56dfaa071614b9ef839a795948bfd7a1c  bench/compiler-scale-refusal-cleanup-data/preparation.json
-e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  bench/compiler-scale-refusal-cleanup-data/syntax.stdout
-4de467acd62246f3ff0a030bff82f830c5496f31b41d8b13d237cba14f8938b3  bench/compiler-scale-refusal-cleanup-data/syntax.stderr

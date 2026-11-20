@@ -1,7 +1,0 @@
-verified named_horizon=6a187b94fb763f7b0565436a98ab5feda3cd642f prior_inside=24 prior_outside=0 selected=6 language_commits=11 compiler_executions=0
-strict-scoped ordinal=1 revision=9047a677f9a353ae13883b4998adf9da2fc67b48 status=passed reason=desired-checked-meaning-and-full-language-scope
-strict-scoped ordinal=2 revision=de65c09bab9d336e10dcfe245058d4ee14b3aea2 status=passed reason=desired-checked-meaning-and-full-language-scope
-strict-scoped ordinal=3 revision=0a410badb7e96ed9f6cf185df7d1f781d71c5fdb status=refused reason=E_EDIT_SYNTAX
-strict-scoped ordinal=4 revision=c5f67a5583aaba6dd338ba3e7278fdc775f36731 status=passed reason=desired-checked-meaning-and-full-language-scope
-strict-scoped ordinal=5 revision=ba27e90add8c1a28e7d2c03984dbaa4aed1a8e72 status=passed reason=desired-checked-meaning-and-full-language-scope
-strict-scoped ordinal=6 revision=71e821dfcaaf6a7940ed67bb7d2d3a721c169922 status=passed reason=desired-checked-meaning-and-full-language-scope

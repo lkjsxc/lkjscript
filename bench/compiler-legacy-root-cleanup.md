@@ -19,9 +19,9 @@ as disposable store state; their payloads are not archived or claimed exactly
 recoverable. The proposal preserves this distinction and the full original
 path/type/metadata/hash inventory.
 
-The [25-record completion manifest](compiler-legacy-root-cleanup-results/manifest.sha256)
+The [25-record completion manifest](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-legacy-root-cleanup-results/manifest.sha256)
 is `af97a24d0eb7a3a32df2e9da134782ea30960a9c106ebda6d3b397a983ad2e0e`.
-Root verifies it and the seven final absences. The [result](compiler-legacy-root-cleanup-results/result.json)
+Root verifies it and the seven final absences. The [result](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-legacy-root-cleanup-results/result.json)
 is `7b7289442832529f3dff1d852f8113209c005a319253566ab191e2c54a512aca`;
 the separate postcheck is
 `555e55a6e032442b4208d1b1251d1c5e69a081bbf663e5848c43ac51c24ca6d6`.

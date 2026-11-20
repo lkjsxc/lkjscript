@@ -124,7 +124,7 @@ The committed proof auditor verified the producer/pin and source associations,
 exact argv/cwd/key exclusion, timestamp/load records, one applied transaction,
 canonical meaning equality, every required path and all publication digests.
 Its output is [the proof table](compiler-strict-derived.proofs.tsv), with its
-[full audit log](compiler-strict-derived.audit.log).
+[full audit log](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-strict-derived.audit.log).
 
 The separate live archive auditor checked **two archives and 3,695 file
 instances**: 1,847 before files and 1,848 desired files. Every desired file/path
@@ -140,7 +140,7 @@ Both retained source include expressions remain
 `Some(include_str!("../library/runtime.lkj").to_string())`.
 The [archive table](compiler-strict-derived.archives.tsv),
 [runtime table](compiler-strict-derived.runtime-inputs.tsv), and
-[state-audit log](compiler-strict-derived.state-audit.log) retain those checks.
+[state-audit log](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-strict-derived.state-audit.log) retain those checks.
 
 The proof auditor also rechecked named-window membership and disjointness:
 

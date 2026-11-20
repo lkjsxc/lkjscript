@@ -1,4 +1,0 @@
-ok child admission 679 attacks
-ok sealed production File through exec, aliases and path substitution
-ok child-image compiler admission, exact producer/ELF/entry and source-key refusal
-child-image gate 6.782 s load 3.68 -> 3.47 status=0

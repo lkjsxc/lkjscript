@@ -40,24 +40,24 @@ Seed gzip SHA-256:
 
     4ae9d6c884af0e04df53971cd09d4101f0487a332ee238f38c171d5e249ab83e
 
-The [bootstrap](debug-data/bootstrap.log) starts from the corrected GAT seed
+The [bootstrap](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/debug-data/bootstrap.log) starts from the corrected GAT seed
 and reaches byte-identical current-emitter generations without a bridge.
-The [focused suite](debug-data/cases-native.log) passes 18 cases / 36 engine
-routes; the independent [Rust witness](debug-data/cases-rust.log) verifies
+The [focused suite](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/debug-data/cases-native.log) passes 18 cases / 36 engine
+routes; the independent [Rust witness](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/debug-data/cases-rust.log) verifies
 10 values/output cases and eight recorded Rust verdicts.
-The [query/edit suite](debug-data/query.log), including ten malformed-origin
+The [query/edit suite](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/debug-data/query.log), including ten malformed-origin
 controls, passes. Regressions cover all 56 GAT/equality-inference cases /
 112 routes and 77 earlier positional/family cases / 154 routes. Those two
 regression populations overlap and are not summed as distinct cases.
 
-The refreshed-seed four-worker [full gate](debug-data/full-gate.log) passes in 996.394 seconds with 6437 fresh case requests, zero reuse and 128 IR mutants with zero findings. The separate [real-program regression](debug-data/standalone-real-programs.log) passes eight original Levenshtein tests per engine, eighteen provenance controls and all 7,239 native corpus rows. Producer and seed hashes remain unchanged.
+The refreshed-seed four-worker [full gate](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/debug-data/full-gate.log) passes in 996.394 seconds with 6437 fresh case requests, zero reuse and 128 IR mutants with zero findings. The separate [real-program regression](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/debug-data/standalone-real-programs.log) passes eight original Levenshtein tests per engine, eighteen provenance controls and all 7,239 native corpus rows. Producer and seed hashes remain unchanged.
 
 Twelve fresh unchanged-source observations give nom 17->17, DOM 61->37 and
 Sozu 448->427 classified sites, with the 34 prior-unclassified Sozu sites
 retained and zero new unclassified diagnostics. The 24 original DOM Debug
 format refusals disappear. No original large root or nom own test admits.
 The [current frontier](../docs/real-programs-current.json), exact source-hashed
-reviews and [previous frontier](debug-data/previous-frontier.json) preserve
+reviews and [previous frontier](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/debug-data/previous-frontier.json) preserve
 the original/projected inputs and diagnostic accounting.
 
 The checked IR, its independent checker, interpreter and runtime are unchanged.

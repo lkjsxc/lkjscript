@@ -1,3 +1,0 @@
-die_if arity=1 arguments=["unsafe relative path"] at /home/coder/workspace/lkjscript-compiler-scale-refusal-20261116/target/compiler-copy-sites-preflight-diagnostic.kGyrqc/preflight.instrumented.pl line 7.
-	main::die_if("unsafe relative path") called at /home/coder/workspace/lkjscript-compiler-scale-refusal-20261116/target/compiler-copy-sites-preflight-diagnostic.kGyrqc/preflight.instrumented.pl line 30
-	main::rel("bench/compiler-profile-copy-sites-release-20261116.json") called at /home/coder/workspace/lkjscript-compiler-scale-refusal-20261116/target/compiler-copy-sites-preflight-diagnostic.kGyrqc/preflight.instrumented.pl line 52

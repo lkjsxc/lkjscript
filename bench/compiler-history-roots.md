@@ -161,6 +161,6 @@ outcomes.
 - [Candidate manifest](compiler-history-roots-candidates.tsv)
 - [All command measurements](compiler-history-roots.tsv)
 - [Candidate outcomes and identities](compiler-history-roots-results.tsv)
-- [Producer and resource metadata](compiler-history-roots.meta)
+- [Producer and resource metadata](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-history-roots.meta)
 - [Raw command output and proof observations](compiler-history-roots-observations.txt)
 - [Original compiler-root campaign](compiler-history.md)

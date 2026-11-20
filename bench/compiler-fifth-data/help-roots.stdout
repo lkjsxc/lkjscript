@@ -1,7 +1,0 @@
-"driver::help::topic" level=source-claim operation-target
-"/home/coder/workspace/lkjscript-compiler-stranger-20261117/src/driver/help.lkj" level=source-claim file before=fda5e9870ee464831973f42d0674647f46b99f7f7ffa2002f49ef099a2adc1b1 after=1e734242bca13ea30a21a7419a733755299484d86a43a747f4f19ab4b587d858
-transaction sites=1 files=1 identities=1
-"driver::help::topic" level=source-claim changed=body
-program level=checked-ir authority-delta=none
-program level=checked-ir before=c1493feabc4c54e3d59055894e244ec854baa755177a3bad81896b162ab88ffc after=227773437339aaa659f24f963a8b4e399119d8451133c31dc7b3e67de6ee9acf checked-instances=12918 fresh-checked=12918 proof-reused=0 frontend-resumed=0 library-validation=demanded
-transaction source-before=6676875813d040f893e19d977bd02d8d08827cc7377aa63380f7dc8a823d66a2 source-after=2056845ed2484cf15ea74972f0a128058df791d9cec5378f0f11aeedac71f936 mode=apply

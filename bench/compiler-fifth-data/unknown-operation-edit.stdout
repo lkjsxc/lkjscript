@@ -1,7 +1,0 @@
-"structure_edit::error" level=source-claim operation-target
-"src/structure_edit.lkj" level=source-claim file before=50a33d024a3d29ac963ef171fcc75f6b3aa6b8413b6a4e28c3199cc00086542b after=9b8ea1474bd0cd0372207e995f10724aebd2830367f6527de88fd4f469b00023
-transaction sites=1 files=1 identities=1
-"structure_edit::error" level=source-claim changed=body
-program level=checked-ir authority-delta=none
-program level=checked-ir before=66e749ac671f2a369ba1e6827d80b5e786904410769e2efcd68a5f714ff2034b after=ebadd3153d8d8479f5e026fb36782b0b33a5590b19889afe72d7af9a282f0e2d checked-instances=13693 fresh-checked=13693 proof-reused=0 frontend-resumed=0 library-validation=demanded
-transaction source-before=5f8387cb1c800dd1b2fd28392f188482584644a5d51bd84fbcd77167937c1461 source-after=f39935626ec862c9b58c7a909cf0ca15c2028476af201b78d4b09728d172b0fb mode=apply

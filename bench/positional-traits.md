@@ -51,21 +51,21 @@ Seed gzip SHA-256:
 
     c1563abbe755c994dc5e9baf2170b384db7b1390ff21dbcc7fe32cbfe27e446a
 
-The [bootstrap](positional-traits-data/bootstrap.log) reproduces itself exactly.
-The [focused proof](positional-traits-data/cases-native.log) passes 41 cases /
-82 engine routes; the separate [Rust witness](positional-traits-data/cases-rust.log)
+The [bootstrap](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/positional-traits-data/bootstrap.log) reproduces itself exactly.
+The [focused proof](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/positional-traits-data/cases-native.log) passes 41 cases /
+82 engine routes; the separate [Rust witness](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/positional-traits-data/cases-rust.log)
 agrees on 19 values/output cases and 22 verdicts. Both
-[applied-trait](positional-traits-data/query.log) and
-[method-dispatch](positional-traits-data/dispatch-query.log) query/edit suites pass.
+[applied-trait](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/positional-traits-data/query.log) and
+[method-dispatch](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/positional-traits-data/dispatch-query.log) query/edit suites pass.
 
-The refreshed-seed four-worker [full gate](positional-traits-data/full-gate.log) passes in 772.339 seconds. All 6,288 case requests rerun, with no reuse; 128 IR mutants have zero findings. The separate [real-program regression](positional-traits-data/standalone-real-programs.log) passes eight Levenshtein tests per engine, eighteen provenance controls and all 7,239 native corpus rows. The producer and seed remain byte-identical after both checks. Exact-head publication gate/witness CI is recorded
+The refreshed-seed four-worker [full gate](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/positional-traits-data/full-gate.log) passes in 772.339 seconds. All 6,288 case requests rerun, with no reuse; 128 IR mutants have zero findings. The separate [real-program regression](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/positional-traits-data/standalone-real-programs.log) passes eight Levenshtein tests per engine, eighteen provenance controls and all 7,239 native corpus rows. The producer and seed remain byte-identical after both checks. Exact-head publication gate/witness CI is recorded
 with the session report after publication.
 
 All twelve fresh original-source observations are byte-identical: nom 17,
 DOM 63, and Sōzu 448 classified plus 34 prior-unclassified sites. Exact
 source-hashed reviews carry forward; no diagnostic is classified by keyword or
 disappearance. The [current frontier](../docs/real-programs-current.json)
-records producer and library inventory. The [preceding frontier](positional-traits-data/previous-frontier.json)
+records producer and library inventory. The [preceding frontier](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/positional-traits-data/previous-frontier.json)
 preserves the full lifetime-where proof and earlier failure/repair history.
 
 The initial isolated fixture copy flattened matching pass/fail basenames and

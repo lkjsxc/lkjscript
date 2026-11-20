@@ -65,6 +65,6 @@ is 129,300 B, SHA-256
 It contains 104 regular files, 460,223 logical bytes and 25 directories,
 including all earlier candidates and raw validation captures. Its sorted tar
 metadata is normalized and gzip has no timestamp. The complete inventory and
-[root verification](compiler-copy-sites-extractor-data/root-retention.json)
+[root verification](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-copy-sites-extractor-data/root-retention.json)
 are retained beside it. Packaging took 0.01 s at load 1.49/2.44/2.65 unchanged;
 it did not execute the extractor or open future census inputs.

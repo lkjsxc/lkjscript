@@ -17,7 +17,7 @@ The archive is 54,190 bytes, SHA-256
 Its 140 regular files total 306,068 bytes, including the original 139-record
 manifest `1d3710033c86e8062f67bb0bf45313cd43f060ccf7a7b5a50509e07dcddcf4c8`.
 Root independently compared every archived file with its manifest entry and
-live original bytes before acceptance; [the result](archive-acceptance.json)
+live original bytes before acceptance; [the result](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-copy-sites-data/ci-43872738366/archive-acceptance.json)
 records that verification. The language source is historical evidence inside
 the archive, not an additional compiled specimen or adopted source change.
 

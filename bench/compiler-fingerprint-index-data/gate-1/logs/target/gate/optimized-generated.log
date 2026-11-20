@@ -1,1 +1,0 @@
-ok optimized-generated (55.597 s, load 3.83 -> 4.05; gate+489.182..544.780 s); cases reused=0 rerun=1215 (authenticated producer and input closure; misses/open effects rerun)

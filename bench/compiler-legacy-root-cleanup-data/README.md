@@ -17,7 +17,7 @@ Every scope is an immediate child of `/home/coder/workspace/lkjscript/target`.
 | compiler-scale-refusal-root-audit | 8 | 1 | 3,674 | 28,672 |
 | **Total** | **16,365** | **15** | **365,876,759** | **417,542,144** |
 
-`full-inventory.tsv` records every exact relative path, type, mode, UID/GID, link count, size, allocated blocks, device/inode, modification/change time and regular-file SHA-256. Its SHA-256 is `bda3ce9d26ec494ba97779315bd1d731cb35ecf97c326f80ce6e58d542d69b8e`. All discovered entries are regular files or directories; every regular file has one link. The complete hash pass matched the initial path/metadata census. No process or FD scan was performed.
+[full-inventory.tsv](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-legacy-root-cleanup-data/full-inventory.tsv) records every exact relative path, type, mode, UID/GID, link count, size, allocated blocks, device/inode, modification/change time and regular-file SHA-256. Its SHA-256 is `bda3ce9d26ec494ba97779315bd1d731cb35ecf97c326f80ce6e58d542d69b8e`. All discovered entries are regular files or directories; every regular file has one link. The complete hash pass matched the initial path/metadata census. No process or FD scan was performed.
 
 Allocated bytes are the observed regular-file block counts, not a promise about eventual free-space change. Directory metadata is inventoried separately.
 

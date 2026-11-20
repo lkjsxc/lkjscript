@@ -8,7 +8,7 @@ launcher and distinct cohort did not replace that record.
 
 Root accepts the [independent proof](compiler-profile-copy-sites-cohort-2-acceptance/README.md)
 and has compared every retained evidence file with its original.
-The [raw evidence](compiler-profile-copy-sites-cohort-2-data/manifest.sha256)
+The [raw evidence](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-profile-copy-sites-cohort-2-data/manifest.sha256)
 contains all 175 files, 20,380,632 payload bytes, including the two complete
 compressed artifacts. The separate [acceptance archive](compiler-profile-copy-sites-cohort-2-acceptance/raw-audit.tar.gz)
 contains all 208 audit files, 2,060,223 logical bytes, with every member checked

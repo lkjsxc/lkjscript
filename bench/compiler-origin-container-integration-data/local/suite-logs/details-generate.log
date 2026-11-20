@@ -1,8 +1,0 @@
-ok generator/reducer contracts
-ok generate: 100 seeded cases in target/gate/generated/values
-ok generate: 100 seeded cases in target/gate/generated/ownership
-ok generate: 50 seeded cases in target/gate/generated/output
-ok generate: 100 seeded cases in target/gate/generated/drops
-ok generate: 216 seeded cases in target/gate/generated/sugar
-ok generate: 44 seeded cases in target/gate/generated/closures
-ok generate: 195 integer boundary cases in target/gate/generated/integers

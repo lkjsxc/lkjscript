@@ -1,7 +1,0 @@
-mode=compare root_policy=common-main-otherwise-common-lib scan=300 wanted=50 memory_bytes=4294967296 timeout_seconds=240 store_bytes=2147483648
-history_head=1f48bd24c90f98e833c3647d902ea0b4515d4d90
-compiler_origin=/home/coder/workspace/lkjscript-compiler-query-20261116/target/compiler-history-fixed-compiler
-0a4ab39752523a29f7936a589a5c53fd029d8a466f638b6d4f951fababee6aa0  /home/coder/workspace/lkjscript-compiler-query-20261116/target/compiler-history.kDMOCf/compiler
-library_policy=historical-roots-when-both-present-else-frozen-compiler-embedded-on-both-sides
-stop_file=/home/coder/workspace/lkjscript-compiler-query-20261116/target/compiler-history-compare-fixed-1f48.tsv.stop
-attempted=50 passed=50 wanted=50

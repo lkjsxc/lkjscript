@@ -23,7 +23,7 @@ The **snapshot producer** is SHA-256
 is `fac8db084310bc8168493cb040944d8e463652a1f680534c91c56a6d0da3bc1a`.
 Both source and checked-IR identities, the actual physical selector paths and
 snapshot `cc171466d0b2b5ff3319737d33b7ff633bd572a749f0916fc7e4babfe3a85280`
-are preserved in [metadata](compiler-query-kinds.meta). This reuses the same
+are preserved in [metadata](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-query-kinds.meta). This reuses the same
 single index as the forty-request campaign; no new index was built.
 
 Each timed request ran **once** at depth **2**, with a **96-fact** limit and

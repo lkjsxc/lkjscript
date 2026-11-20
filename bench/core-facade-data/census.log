@@ -1,4 +1,0 @@
-{"compiler_sha256":"fd83ea00de8b306e44534b50bdee0da47464e2c096a36c2567e2699a2cb1ec86","observations":2,"receipt":"/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-core-range-repair-03/trait_forms/source-proof/census/nom-probe.json","source_unchanged":true}
-{"compiler_sha256":"fd83ea00de8b306e44534b50bdee0da47464e2c096a36c2567e2699a2cb1ec86","observations":2,"receipt":"/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-core-range-repair-03/trait_forms/source-proof/census/dom-probe.json","source_unchanged":true}
-{"compiler_sha256":"fd83ea00de8b306e44534b50bdee0da47464e2c096a36c2567e2699a2cb1ec86","observations":8,"receipt":"/home/coder/workspace/prompts/reports/lkjscript-next/preflight-window-20261119-core-range-repair-03/trait_forms/source-proof/census/sozu-probe.json","source_unchanged":true}
-frontend observations core-facade: 12 observations, 0 changed streams; rerank review still required

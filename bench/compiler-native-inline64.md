@@ -132,7 +132,7 @@ address-space requirements at arbitrary thresholds.
 The first outer launcher failed before the harness started because the new
 worktree lacked `target/` for its log redirection. It started no compiler and
 produced zero timed observations. Creating that directory allowed the sole
-campaign to start. [The exact setup failure](compiler-native-inline64-attempts.log)
+campaign to start. [The exact setup failure](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-native-inline64-attempts.log)
 is retained. No measured phase was retried, and no other threshold was selected
 after seeing the result.
 
@@ -167,9 +167,9 @@ a new separately identified campaign; it does not overwrite this observation.
 
 - [All nine timing rows](compiler-native-inline64.tsv).
 - [Six exact-output parity rows](compiler-native-inline64-parity.tsv).
-- [Protocol and input metadata](compiler-native-inline64.meta).
-- [Complete phase captures, arguments, stdout and stderr](compiler-native-inline64-raw.log).
-- [Setup-attempt and final outcome records](compiler-native-inline64-attempts.log).
+- [Protocol and input metadata](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-native-inline64.meta).
+- [Complete phase captures, arguments, stdout and stderr](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-native-inline64-raw.log).
+- [Setup-attempt and final outcome records](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-native-inline64-attempts.log).
 
 This measurement commit adds only the harness, report and measurement evidence.
 It makes no changes to the inliner, native emitter, source language, compiler

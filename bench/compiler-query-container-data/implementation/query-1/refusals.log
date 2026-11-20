@@ -1,4 +1,0 @@
-refused: target/semantic-query.xhPOHc/another-reader query main.lkj --source-dir target/semantic-query.xhPOHc/source --no-library --store target/semantic-query.xhPOHc/store --store-key target/semantic-query.xhPOHc/key --kind meta --id crate
-E_QUERY_SNAPSHOT no authenticated snapshot; build with --index and this store first
-refused: target/semantic-query.xhPOHc/another-reader query main.lkj --source-dir target/semantic-query.xhPOHc/not-selected --no-library --store target/semantic-query.xhPOHc/store --store-key target/semantic-query.xhPOHc/key --snapshot 933562e21118a6859be168fe64ff35a04209427e7c6104afaf218954ea813f2a --kind meta --id crate
-E_QUERY_SNAPSHOT snapshot belongs to another source selection

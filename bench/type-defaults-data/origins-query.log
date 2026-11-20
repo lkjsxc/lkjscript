@@ -1,3 +1,0 @@
-ok type defaults Rust root-crate witness: captured versus $crate default namespaces at opt-level 0 and 3
-ok type defaults origins: Default/Debug and nested macros; authored binder/default edits; generated edit refusal; changed default capture invalidates its epoch; both engines
-retained_fixture=/home/coder/workspace/lkjscript-programs-20261115/target/type-defaults-origins.yKUNcv

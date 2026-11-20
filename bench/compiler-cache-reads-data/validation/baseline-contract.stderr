@@ -1,4 +1,0 @@
-cmp: EOF on /home/coder/workspace/lkjscript-compiler-cache-reads-20261116/target/compiler-cache-read-test.ErvbIQ/ordinary-absent.before which is empty
-cache-read contract failed; retained diagnostics follow
-/home/coder/workspace/lkjscript-compiler-cache-reads-20261116/target/compiler-cache-read-test.ErvbIQ/build.stderr
-/home/coder/workspace/lkjscript-compiler-cache-reads-20261116/target/compiler-cache-read-test.ErvbIQ/ordinary-absent.stderr

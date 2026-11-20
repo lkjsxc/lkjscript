@@ -42,20 +42,20 @@ Seed gzip SHA-256:
 
     590f0863bf80a78506f080825364cc33b557087b517e4c8752ec96cac2b3bb04
 
-The [bootstrap](macros-data/bootstrap.log) starts from the published TemporaryFiles seed at a013e5727
+The [bootstrap](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/macros-data/bootstrap.log) starts from the published TemporaryFiles seed at a013e5727
 and reaches byte-identical current-emitter generations without a bridge.
-The [focused suite](macros-data/cases-native.log) passes 24 cases /
+The [focused suite](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/macros-data/cases-native.log) passes 24 cases /
 48 native/interpreter routes. The independent
-[Rust witness](macros-data/cases-rust.log) verifies 3
+[Rust witness](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/macros-data/cases-rust.log) verifies 3
 values/output cases and 17 recorded Rust verdicts. Two further exact output cases, declarative_macros and nom_tuple_macros, pass separate actual-root Rust comparisons in the declarative-source suite, preserving $crate. Two explicit unsupported producer/fragment boundaries remain unpaired. A separate module/include fixture also has an independent Rust route and is not added to the 24-case cohort.
 
 The combined producer passes these source-command proofs:
 
-- [debug origins](macros-data/debug-query.log)
-- [declarative source](macros-data/declarative-query.log)
-- [default reconstruction](macros-data/default-query.log)
-- [diagnostic recovery](macros-data/semantic-structure.log)
-- [macro origins](macros-data/origin-query.log)
+- [debug origins](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/macros-data/debug-query.log)
+- [declarative source](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/macros-data/declarative-query.log)
+- [default reconstruction](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/macros-data/default-query.log)
+- [diagnostic recovery](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/macros-data/semantic-structure.log)
+- [macro origins](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/macros-data/origin-query.log)
 
 The declarative proof retains exact original nom macro-block hashes, a
 twenty-one-element tuple expansion and Mode::Output/PResult contracts. It compares
@@ -85,8 +85,8 @@ those parent relations and leaves zero new unclassified identities.
 
 The accounting tool maps absolute macro-origin locations only through the
 authenticated baseline source-dir and tracked original aliases. Its
-[38 offline controls](macros-data/rerank-path-controls.log) and the inherited-review
-helper's [nine path controls](macros-data/prune-path-controls.log) reject forged
+[38 offline controls](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/macros-data/rerank-path-controls.log) and the inherited-review
+helper's [nine path controls](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/macros-data/prune-path-controls.log) reject forged
 roots, traversal, untracked files and evidence tampering. Raw diagnostic streams
 and complete original-file hashes are retained.
 
@@ -95,12 +95,12 @@ fixed point were rebuilt. Its six-grant Weston/TcpPort proof remains a separate
 runtime landing. The independent Rust-hosted compiler built from the same
 combined source reproduces the native compiler bytes exactly.
 
-The refreshed-seed four-worker [full gate](macros-data/full-gate.log) passes in 1166.061 seconds with 6515 fresh case requests, zero reuse and 128 IR mutants with zero findings. The separate [real-program regression](macros-data/standalone-real-programs.log) passes eight original Levenshtein tests per engine, eighteen provenance controls and all 7,239 native corpus rows. Producer and seed hashes remain unchanged.
+The refreshed-seed four-worker [full gate](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/macros-data/full-gate.log) passes in 1166.061 seconds with 6515 fresh case requests, zero reuse and 128 IR mutants with zero findings. The separate [real-program regression](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/macros-data/standalone-real-programs.log) passes eight original Levenshtein tests per engine, eighteen provenance controls and all 7,239 native corpus rows. Producer and seed hashes remain unchanged.
 
 Twelve fresh unchanged-source observations give nom 17->49, DOM 37->39 and Sozu 427->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
 No original large root or nom own test admits. The
 [current frontier](../docs/real-programs-current.json), exact source-hashed
-reviews and [previous frontier](macros-data/previous-frontier.json) retain
+reviews and [previous frontier](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/macros-data/previous-frontier.json) retain
 original/projected input identity and complete diagnostic accounting.
 
 The checked IR, independent checker, interpreter and runtime are unchanged.
@@ -129,7 +129,7 @@ standalone real-program validation passes. All twelve fresh original-source
 streams are byte-identical, retaining nom49, DOM39 and Sozu968 primary sites plus
 34 prior-unclassified Sozu sites. No additional form or root admission is claimed.
 
-The [corrective validation receipt](macros-data/ci-repair/validation.json) and
-[full witness log](macros-data/ci-repair/full-local-witness.log) retain the exact
+The [corrective validation receipt](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/macros-data/ci-repair/validation.json) and
+[full witness log](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/macros-data/ci-repair/full-local-witness.log) retain the exact
 patches, unchanged producer/seed identities and local results. Publication still
 requires successful gate and witness jobs on the exact corrective commit.

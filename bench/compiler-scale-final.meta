@@ -1,9 +1,0 @@
-compiler_sha256=54db01f51ca7b5802f932a8f4b76737ee2671cbe306f229c62e3c3ccae54c1e3
-shape_root=/home/coder/workspace/lkjscript-compiler-bench-20261116/target/compiler-final-source.3jFRGE
-shape_sha256=0457f8f9424882d2e3160a568f280193d49b9b046a5fae2d6e2d0b6da047072c
-seed=20261116
-structural=yes
-memory_ceiling_mib=4096
-timeout_ceiling_s=600
-rename_compiler_sha256=4e5a0d3e3ea1cc0c7651ded221093866f00ab32e5f5fc8b0dddd49e9e9b241f0
-rename_compiler=/home/coder/workspace/lkjscript-compiler-bench-20261116/target/compiler-library-validation-producer

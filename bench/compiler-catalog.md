@@ -1,6 +1,6 @@
 # Namespace-aware catalog identities
 
-The catalog admits legal type/value declaration pairs, including the compiler's module and function both named `syntax::macros::expand`. A checked transaction selects the function as `value@syntax::macros::expand`; the module remains `type@syntax::macros::expand`. The candidate is `7e08803ba`, based on public `7dd89b8fb`. Its namespace, crate-root, selector and incomplete-reference repairs are separate commits. Main publication belongs to lead.
+The catalog admits legal type/value declaration pairs, including the compiler's module and function both named `syntax::macros::expand`. A checked transaction selects the function as `value@syntax::macros::expand`; the module remains `type@syntax::macros::expand`. The candidate is `7e08803ba`, based on public `7dd89b8fb`. Its namespace, crate-root, selector and incomplete-reference repairs are separate commits. Lead published the integrated candidate as `589e11b5a`.
 
 ## Contract and consumer audit
 
@@ -63,7 +63,7 @@ The full four-worker gate passes in **1,361.762 seconds**, rerunning **6,840 cas
 
 Baseline `7dd89b8fb` and repaired `7e08803ba` index identical source and checked IR from retained revision `62fa76f4f863a169b906094f0dd9998c8421e77a`. The unchanged [50-question cohort](compiler-query-current-questions.tsv) uses its original bare selectors, depths, 96-fact limits and 32,768-byte limits. One untimed warmup precedes three alternating matched rounds under the shared gate lock after this stream's other compiler/test workers stop.
 
-The unchanged [Number::doubled request](compiler-call-data/call.request.json) supplies the change control. Each sample starts from the same source; exact resulting text and both-engine result 43 are checked outside timing. The [measurement harness](compiler-catalog-data/measure-latency.pl) rejects mismatched source/IR and violated query bounds.
+The unchanged [Number::doubled request](compiler-call-data/call.request.json) supplies the change control. Each sample starts from the same source; exact resulting text and both-engine result 43 are checked outside timing. The [archived measurement harness](https://github.com/lkjsxc/lkjscript/blob/evidence-archive-20261120/bench/compiler-catalog-data/measure-latency.pl) rejects mismatched source/IR and violated query bounds.
 
 | Observation | Baseline | Repaired |
 |---|---:|---:|

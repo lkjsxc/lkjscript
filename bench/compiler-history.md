@@ -198,5 +198,5 @@ creation. The final campaigns did not need a pause or resume.
 
 Supporting data: [population inventory](compiler-history-population.tsv),
 [replay measurements](compiler-history-replay.tsv),
-[replay metadata](compiler-history-replay.meta), and
-[comparison metadata](compiler-history-compare.meta).
+[replay metadata](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-history-replay.meta), and
+[comparison metadata](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-history-compare.meta).

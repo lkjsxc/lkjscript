@@ -1,1 +1,0 @@
-/home/coder/workspace/lkjscript/target/unit-scale.a9We25/producer check src/main.lkj --source-dir /home/coder/workspace/lkjscript --library-dir /home/coder/workspace/lkjscript/library --no-store --stats 

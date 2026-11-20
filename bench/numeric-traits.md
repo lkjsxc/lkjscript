@@ -20,7 +20,7 @@ The actual four-worker full gate passes in 1382.636 seconds with 6840 fresh case
 
 Twelve unchanged-source observations across six projected roots give nom 45 -> 45 classified, 0 prior-unclassified, 0 recovery; dom 39 -> 39 classified, 0 prior-unclassified, 0 recovery; sozu 968 -> 968 classified, 34 prior-unclassified, 18 recovery. The actual changed diagnostic-stream count is 0; new unclassified identities are zero. Original source/projection bytes are unchanged. These refusals do not admit a whole foreign root or execute nom's own tests.
 
-The exact logs, immutable fixture lists, producer identities, source/unit/query receipts, and canonical provenance are retained in [validation](numeric-traits-data/validation.json). Published core128 is the prior completed proof; numeric exact-head hosted CI is recorded separately after publication.
+The exact logs, immutable fixture lists, producer identities, source/unit/query receipts, and canonical provenance are retained in [validation](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/numeric-traits-data/validation.json). Published core128 is the prior completed proof; numeric exact-head hosted CI is recorded separately after publication.
 
 ## Located boundaries
 

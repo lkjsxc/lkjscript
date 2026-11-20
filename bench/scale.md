@@ -303,7 +303,7 @@ timing from the eventual complete run.
 | --- | --- | --- |
 | 1,000-line smoke, main producer throughout | [Builds and transactions](compiler-scale-smoke.tsv), [questions](compiler-scale-smoke-queries.tsv) | Rename conservatively refused an unrelated implicit-source site in std::foreign::__lkjscript_run. |
 | First 10k run | [Builds and transactions](compiler-scale-partial.tsv), [questions](compiler-scale-partial-queries.tsv) | The temporary harness handoff read EOF before rename. This was a harness failure; no rename result exists. The handoff was removed in favor of an explicit immutable producer argument. |
-| 10k run with repaired rename producer | [Builds and transactions](compiler-scale-refused.tsv), [questions](compiler-scale-refused-queries.tsv), [full refusal](compiler-scale-refused.log) | Rename refused the lexical-name receiver target in std::bytes::append_bytes, library/bytes.lkj bytes 751..757. The 100k rung was not run after this refusal. |
+| 10k run with repaired rename producer | [Builds and transactions](compiler-scale-refused.tsv), [questions](compiler-scale-refused-queries.tsv), [full refusal](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-scale-refused.log) | Rename refused the lexical-name receiver target in std::bytes::append_bytes, library/bytes.lkj bytes 751..757. The 100k rung was not run after this refusal. |
 
 The third attempt's rename producer is source 87a69131, SHA-256
 e681f7e3e186ec5b7e7986ac6c0ce7bd875c777d1db873670456cf937c44908d.
@@ -360,9 +360,9 @@ observations from the older producer; neither large rung was rerun.
 
 The complete portable evidence is the [build/transaction TSV](compiler-scale-final.tsv),
 [question TSV](compiler-scale-final-queries.tsv),
-[phase records](compiler-scale-final-phases.log),
-[transaction plans](compiler-scale-final-operations.log),
-[run log](compiler-scale-final.log) and [producer/shape metadata](compiler-scale-final.meta).
+[phase records](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-scale-final-phases.log),
+[transaction plans](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-scale-final-operations.log),
+[run log](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-scale-final.log) and [producer/shape metadata](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-scale-final.meta).
 The earlier incomplete attempts remain intact; no earlier observation replaces
 a row from this complete run.
 

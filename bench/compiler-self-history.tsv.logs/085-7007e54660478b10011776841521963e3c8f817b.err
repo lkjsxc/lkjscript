@@ -1,3 +1,0 @@
-LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":375.643,"key_hash_ms":5.807,"load_parse_ms":357.899,"source_read_ms":5.159,"peak_rss_bytes":40288256}
-/home/coder/workspace/lkjscript-compiler-self-history-20261116/target/compiler-history.uhUs7i/before/src/wasm.lkj:3:1: E_IMPORT unresolved or cyclic import std::collections::BTreeSet
-src/lib.lkj:1:1: E_BLOCKED remaining semantic analysis: declaration resolution failed; dependent definition and IR analysis was not attempted

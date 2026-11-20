@@ -85,7 +85,7 @@ filename, with only the stated `.rs` filename projection, to occur in the
 transaction's exact file facts. A successful compilation or equality for a
 smaller root alone is insufficient.
 
-The [retained-proof auditor](compiler-self-history-audit.pl) checks the
+The [retained-proof auditor](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-self-history-audit.pl) checks the
 retained population/order against their frozen hashes, the recorded producer
 and bounds, nonempty proof, equal desired/candidate hashes, apply marker,
 operation count and changed-file coverage. It verified all thirty successes.
@@ -94,11 +94,11 @@ parents, canonical identities, source hashes and stdout/stderr hashes.
 
 A separate read-only audit compared the complete population/order with Git and
 checked the actual retained executable digest. The reproducible
-[file auditor](compiler-self-history-file-audit.pl) reads Git blobs and the
+[file auditor](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-self-history-file-audit.pl) reads Git blobs and the
 published file facts: all 63 historical-before hashes match. Published after
 hashes match exact target text for **48 of 63 files** and differ for **15**.
 Those results are retained in [file proofs](compiler-self-history.file-proofs.tsv)
-and [the file-audit summary](compiler-self-history.file-audit.log).
+and [the file-audit summary](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-self-history.file-audit.log).
 Canonical checked-meaning equality is the acceptance proof; exact target-text
 reproduction is not established for those fifteen files.
 
@@ -132,7 +132,7 @@ doubled for legacy copies (at least 128 MiB), the compiler bytes and a
 No setup failure, memory refusal, timeout or implementation-failure row occurred.
 The worker has exited. After acceptance, the final owned source trees, store,
 private key, internal compiler copy and armed stop marker were removed. The
-[cleanup record](compiler-self-history.cleanup.meta) retains that result. One
+[cleanup record](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-self-history.cleanup.meta) retains that result. One
 verified compiler copy remains outside Git solely as the frozen input for a
 separately assessed continuation; intentional text evidence remains preserved.
 
@@ -167,7 +167,7 @@ transaction E_REPLAY_MEANING desired=8d56c213f6c47430eb7098d532dcd23a4356be69c59
 ```
 
 It remains an equality-guard refusal, with no causal attribution or retry.
-The [exact diagnostic](compiler-self-history.tsv.logs/074-cc9e7b83374a9e09a8aa7816d5353e578e09327c.err)
+The [exact diagnostic](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-self-history.tsv.logs/074-cc9e7b83374a9e09a8aa7816d5353e578e09327c.err)
 and empty stdout are preserved.
 
 ## Counted commits
@@ -239,12 +239,12 @@ the ordered-candidate SHA-256 is
 Retained records include the [300 revisions](compiler-self-history.revisions),
 [197 ordered candidates](compiler-self-history.order),
 [measurements](compiler-self-history.tsv),
-[campaign metadata](compiler-self-history.tsv.meta),
+[campaign metadata](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-self-history.tsv.meta),
 [publication/equality proofs](compiler-self-history.proofs.tsv),
-[audit output](compiler-self-history.audit.log),
-[run metadata](compiler-self-history.run.meta),
-[overall timing](compiler-self-history.run.time),
-[progress log](compiler-self-history.run.log),
+[audit output](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-self-history.audit.log),
+[run metadata](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-self-history.run.meta),
+[overall timing](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-self-history.run.time),
+[progress log](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-self-history.run.log),
 [raw-record SHA-256 manifest](compiler-self-history.raw.sha256) and all per-attempt
 [stdout, stderr, timing, changed-path and scope records](compiler-self-history.tsv.logs).
 No private key, store record, source fixture or executable is part of this report.

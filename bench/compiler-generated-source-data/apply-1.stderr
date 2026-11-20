@@ -1,7 +1,0 @@
-transaction E_EDIT_CHECK identities="semantic,semantic::Catalog,semantic::Item,semantic::Owners::new,semantic::append,semantic::catalog_mode,semantic_facts::build_emitted,semantic_facts::source_signature,structure_edit::plan,structure_edit::validate_item,structure_replay::file_pairs_allowed,structure_replay::items,semantic::origins" /home/coder/workspace/lkjscript-compiler-generated-source-20261116/src/semantic_facts.lkj:139:67: E_TYPE closure parameter or result type needs context
-/home/coder/workspace/lkjscript-compiler-generated-source-20261116/src/semantic.lkj:195:14: E_TYPE closure parameter or result type needs context
-/home/coder/workspace/lkjscript-compiler-generated-source-20261116/src/semantic.lkj:811:21: E_TYPE closure parameter or result type needs context
-/home/coder/workspace/lkjscript-compiler-generated-source-20261116/src/semantic.lkj:827:17: E_UNSUPPORTED method unwrap_or_default on prelude::Option<string::String> has 0 applicable implementations; help: use an implemented method or write an explicit loop
-/home/coder/workspace/lkjscript-compiler-generated-source-20261116/src/semantic.lkj:862:43: E_TYPE closure parameter or result type needs context
-/home/coder/workspace/lkjscript-compiler-generated-source-20261116/src/semantic/origins.lkj:80:61: E_TYPE closure parameter or result type needs context
-src/main.lkj:1:1: E_BLOCKED remaining semantic analysis: failed bodies are blocked; independent typed bodies were constructed and checked

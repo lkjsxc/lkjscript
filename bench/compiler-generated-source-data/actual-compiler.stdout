@@ -1,6 +1,0 @@
-"semantic::quote" level=source-claim operation-target
-"/home/coder/workspace/lkjscript-compiler-generated-source-20261116/src/semantic.lkj" level=source-claim file before=f85b5d25336462e58505a07d4426c94489e9df849306174c3719b8de5a8a91d0 after=f85b5d25336462e58505a07d4426c94489e9df849306174c3719b8de5a8a91d0
-transaction sites=1 files=1 identities=1
-program level=checked-ir authority-delta=none
-program level=checked-ir before=6e00f51393b089d7d0fee798e3f2b7f5ea348e9cc5eb9b8a566830c7a93c2eec after=6e00f51393b089d7d0fee798e3f2b7f5ea348e9cc5eb9b8a566830c7a93c2eec checked-instances=12757 fresh-checked=12757 proof-reused=0 frontend-resumed=0 library-validation=demanded
-transaction source-before=ecf58be91d826be4abfeef9f568501b5984687fddec5c7fb1d53b237dcd62b9b source-after=ecf58be91d826be4abfeef9f568501b5984687fddec5c7fb1d53b237dcd62b9b mode=dry-run

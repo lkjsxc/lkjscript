@@ -1,1 +1,0 @@
-/home/coder/workspace/lkjscript/target/unit-scale.JPMpxo/producer build src/main.lkj --source-dir /home/coder/workspace/lkjscript --library-dir /home/coder/workspace/lkjscript/library --no-store --stats --runtime-source /home/coder/workspace/lkjscript/library/runtime.lkj --inline-limit 64 -o /home/coder/workspace/lkjscript/target/unit-scale.JPMpxo/ordinary-compiler 

@@ -1,8 +1,0 @@
-"store::cache_file" level=source-claim operation-target
-"/home/coder/workspace/lkjscript-compiler-cache-reads-20261116/src/store.lkj" level=source-claim file before=50290c38ab68f80f700e37ad66ebfce4166e35ad8ec979bf8ed83c4c141d907f after=79a5502d8d478540917cf22caafba8fcf8d314d2a2dbae828f2235d7e460d4e4
-transaction sites=1 files=1 identities=1
-"store::cache_file" level=source-claim changed=body
-"ir:driver::main" level=checked-ir authority-gained="" authority-lost="effect:file_set_nonblocking" entry-before=true entry-after=true
-"ir:main" level=checked-ir authority-gained="" authority-lost="effect:file_set_nonblocking" entry-before=true entry-after=true
-program level=checked-ir before=b8252dd08031da487c29131d85d98c4fa6a801bd487b3088b03d0c621055cade after=31afabf2665225d49e88bd4d555898e4a8d0a6f11d25169f843c2c53e709a785 checked-instances=12692 fresh-checked=12692 proof-reused=0 frontend-resumed=0 library-validation=demanded
-transaction source-before=c7ad47aee3254be6f5ea59cc9db8f6404b348c0b3aba6a20294b02e4f3e52b67 source-after=d4b279160c27b45b06792e1c318ce0d40e69b69ad21a05f953aecac43649096f mode=apply

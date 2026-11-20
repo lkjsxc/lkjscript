@@ -502,7 +502,7 @@ The exact command, fitted continuation, workload manifest, statistics and sole
 attempt marker remain beside it. The generated tree and image are reproducible
 from the recorded inputs.
 
-The published producer also passed [CI 44031513044](compiler-fifth-data/ci-unit-packets-44031513044.json):
+The published producer also passed [CI 44031513044](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-fifth-data/ci-unit-packets-44031513044.json):
 the seed-only gate completed in 883.243 s with all 5,470 requests freshly run,
 and the independent Rust witness passed. The earlier cross-filesystem fixture
 failure did not recur.

@@ -32,17 +32,17 @@ Seed gzip SHA-256:
 
     9327f64a3c9a5c37146ca6c91a6926a8707d9fef3d9fd67398125909f4b5f612
 
-The [bootstrap](type-outlives-data/bootstrap.log) starts from the unchanged published type-outlives seed at 739c8cde2
+The [bootstrap](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-outlives-data/bootstrap.log) starts from the unchanged published type-outlives seed at 739c8cde2
 and reaches byte-identical current-emitter generations without a bridge.
-The [focused suite](type-outlives-data/cases-native.log) passes 31 cases /
+The [focused suite](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-outlives-data/cases-native.log) passes 31 cases /
 62 native/interpreter routes. The independent
-[Rust witness](type-outlives-data/cases-rust.log) verifies 14
+[Rust witness](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-outlives-data/cases-rust.log) verifies 14
 values/output cases and 17 recorded Rust verdicts.
 
 The combined producer passes these source-command proofs:
 
-- [lifetime outlives](type-outlives-data/region-query.log)
-- [type outlives](type-outlives-data/query.log)
+- [lifetime outlives](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-outlives-data/region-query.log)
+- [type outlives](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-outlives-data/query.log)
 
 The integrated source includes the published TemporaryFiles, Unix and TcpPort
 runtime, corrected GAT inference, Debug and operational macros with transactional
@@ -71,12 +71,12 @@ watchdog and reports phases/status while removing default fixtures and stripping
 keys before explicit retention. Its full gate, bootstrap, final phase proof and
 twelve original-source observations are separately fresh.
 
-The refreshed-seed four-worker [full gate](type-outlives-data/full-gate.log) passes in 1213.535 seconds with 6575 fresh case requests, zero reuse and 128 IR mutants with zero findings. The separate [real-program regression](type-outlives-data/standalone-real-programs.log) passes eight original Levenshtein tests per engine, eighteen provenance controls and all 7,239 native corpus rows. Producer and seed hashes remain unchanged.
+The refreshed-seed four-worker [full gate](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-outlives-data/full-gate.log) passes in 1213.535 seconds with 6575 fresh case requests, zero reuse and 128 IR mutants with zero findings. The separate [real-program regression](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-outlives-data/standalone-real-programs.log) passes eight original Levenshtein tests per engine, eighteen provenance controls and all 7,239 native corpus rows. Producer and seed hashes remain unchanged.
 
 Twelve fresh unchanged-source observations give nom 47->47, DOM 39->39 and Sozu 968->968 classified sites, with 34 prior-unclassified Sozu sites and zero new unclassified diagnostics.
 No original large root or nom own test admits. The
 [current frontier](../docs/real-programs-current.json), exact source-hashed
-reviews and [previous frontier](type-outlives-data/previous-frontier.json) retain
+reviews and [previous frontier](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/type-outlives-data/previous-frontier.json) retain
 original/projected input identity and complete diagnostic accounting.
 
 The checked IR, independent checker, interpreter and runtime are unchanged.

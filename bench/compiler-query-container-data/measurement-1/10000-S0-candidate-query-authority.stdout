@@ -1,3 +1,0 @@
-"edit::target"	level=protocol	fact=query	version=3 producer=eed6ca32edcc182a92c4e697f4702ec685dff8e7778b0374a27552aa9c938947 validation=authenticated-producing-compiler current-check=not-performed snapshot=5bd46ecfa54b71ba8d60edab6f221396b0dd4e128d26e23f4ea0da0696733938 source=d1e1ac340ca307fcb2ec1972745f74aa51454659626d7abea0e8fbe60ba5d415 checked-ir=ab27304e981ce96283e9a53f67524bf0516589cfc439b7e9428a8eea4782435f kind=authority depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
-"ir:edit::target"	level=checked-ir	fact=authority	reachable-effects="" ownership-cleanup=included
-"edit::target"	level=protocol	fact=continuation	cursor=none facts=1 pages-read=4 traversal-steps=2

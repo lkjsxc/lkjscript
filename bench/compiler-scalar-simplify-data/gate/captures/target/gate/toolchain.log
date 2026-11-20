@@ -1,1 +1,0 @@
-ok toolchain (64.164 s, load 3.23 -> 4.31; gate+118.691..182.855 s); cases reused=0 rerun=96 (authenticated producer and input closure; misses/open effects rerun)

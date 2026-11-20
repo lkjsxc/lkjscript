@@ -108,7 +108,7 @@ case reuse, and 128 IR mutants produce zero findings. The immediately following
 [standalone real-program proof](anonymous-files-data/standalone-real-programs.log)
 passes its upstream provenance controls, eight tests per engine and all 7,239
 native corpus rows. The producer and seed identities remain unchanged after both.
-[Machine-readable local validation](anonymous-files-data/validation.json).
+[Machine-readable local validation](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/anonymous-files-data/validation.json).
 
 Eighteen focused source/IR cases pass all 36 native/interpreter route checks,
 with zero pending. Eight independent Rust refusal verdicts agree. The boundary
@@ -142,6 +142,6 @@ bash tools/real-programs-test.sh target/lkjscript
 All twelve original-source observations have unchanged exit status, signal,
 stdout and stderr identities against published parent `6f6236afe`: nom 17,
 DOM 37 and Sozu 427 classified sites plus the retained 34 prior-unclassified
-rows. [Exact fresh census comparison](anonymous-files-data/census/comparison.json).
+rows. [Exact fresh census comparison](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/anonymous-files-data/census/comparison.json).
 No new original large root or nom own-test admission is inferred. The browser
 repository and its compiler pin are left to the browser stream.

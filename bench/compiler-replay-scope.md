@@ -48,7 +48,7 @@ by those four operations**, with no manual language-file change. Before and
 after manifests cover all 1,206 tracked `.lkj` files. An independent read-only
 audit checks all 2,412 before/after Git blobs, reconstructs the exact committed
 file from the four original items and replacements, and verifies the request's
-text expectations. Its [raw result](compiler-replay-scope-data/independent-audit.log)
+text expectations. Its [raw result](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-replay-scope-data/independent-audit.log)
 is retained with the other operation evidence.
 
 The operation used producer
@@ -121,7 +121,7 @@ This is the producer for any later frozen scope campaign, distinct from the
 focused absolute-path build above. The source/library trees remain unchanged
 through the evidence-only and seed commits.
 
-The [full log](compiler-replay-scope-data/cold-gate.log) has SHA-256
+The [full log](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-replay-scope-data/cold-gate.log) has SHA-256
 `aff46525d057e1195fa3d5fb2dda2d324d5a2884ab791069d485451f0294ed46`.
 The final mutation detail records 104 rejections, 22 values, one trap, one
 nontermination and no resource findings. Its 15 checked and three emitted
@@ -157,8 +157,8 @@ GitHub's unavailable-log diagnostic and supplied no evidence.
 
 | Retained CI log | SHA-256 |
 | --- | --- |
-| [Native](compiler-replay-scope-data/ci-gate.log) | `418f72555ed64d50e1a28cc31425de10255c18cc2853c0f8f70ebbb2d8e1847e` |
-| [Witness](compiler-replay-scope-data/ci-witness.log) | `ef7c94e56957afa101b02b242f8b1f106221f9406d19aa70579c6b835a404088` |
+| [Native](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-replay-scope-data/ci-gate.log) | `418f72555ed64d50e1a28cc31425de10255c18cc2853c0f8f70ebbb2d8e1847e` |
+| [Witness](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-replay-scope-data/ci-witness.log) | `ef7c94e56957afa101b02b242f8b1f106221f9406d19aa70579c6b835a404088` |
 
 After this acceptance and an independent prelaunch review, the separate fixed
 six-case campaign was released with explicit desired source roots. Its actual

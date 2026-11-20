@@ -38,7 +38,7 @@ The instrumented producer differs only in `src/store.lkj` and driver stats
 reporting: final file hashes `9231ed34c66dbfe554045b520435418913a41b90280c62a42f6d4d14bebca3d4`
 and `0b9a7784c025264a8b63d5101cb1089e9567a4e735a19e6c014aac4f6088c1e1`.
 Construction commands and costs are separate in the
-[setup evidence](compiler-cache-io.setup.log).
+[setup evidence](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-cache-io.setup.log).
 
 The actual main-root census contains 88,488 lines, 3,634,522 bytes, 171 files,
 3,425 functions, 50,622 source call sites, 143 generic functions, 2,197 nominal

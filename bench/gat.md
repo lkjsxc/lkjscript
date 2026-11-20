@@ -53,15 +53,15 @@ Seed gzip SHA-256:
 
     754c709e8ae210bd1a50a50015636ced39e74061d8c756fee07b7038a06ae254
 
-The [bootstrap](gat-data/bootstrap.log) bridges from the previous positional
+The [bootstrap](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/gat-data/bootstrap.log) bridges from the previous positional
 seed and obtains two consecutive byte-identical current-emitter generations.
-The [focused proof](gat-data/cases-native.log) passes 56 cases / 112 engine
-routes. The independent [Rust witness](gat-data/cases-rust.log) agrees on
+The [focused proof](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/gat-data/cases-native.log) passes 56 cases / 112 engine
+routes. The independent [Rust witness](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/gat-data/cases-rust.log) agrees on
 24 values/output cases and 32 verdicts. All family, equality-inference and
-method-dispatch [query/edit proofs](gat-data/validation.json) pass, as do
+method-dispatch [query/edit proofs](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/gat-data/validation.json) pass, as do
 41 earlier positional cases / 82 routes and their source-command suite.
 
-The refreshed-seed four-worker [full gate](gat-data/full-gate.log) passes in 837.933 seconds, with all 6403 case requests fresh, no reuse and 128 IR mutants with zero findings. The separate [real-program regression](gat-data/standalone-real-programs.log) passes eight Levenshtein tests per engine, eighteen provenance controls and all 7,239 native corpus rows. Producer and seed hashes remain unchanged after both checks.
+The refreshed-seed four-worker [full gate](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/gat-data/full-gate.log) passes in 837.933 seconds, with all 6403 case requests fresh, no reuse and 128 IR mutants with zero findings. The separate [real-program regression](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/gat-data/standalone-real-programs.log) passes eight Levenshtein tests per engine, eighteen provenance controls and all 7,239 native corpus rows. Producer and seed hashes remain unchanged after both checks.
 
 The first full gate stopped after 871.890 seconds on three stale diagnostic
 fixtures, while ordinary and optimized 1,273-case conformance runs and both 1,215-case
@@ -71,7 +71,7 @@ lkjscript engines. Their original function bodies remain byte-identical in
 positive conformance cases; the consumer harness retains both the inferred and
 annotated Vec versions as executed controls. No compiler or library source
 changed for this expectation repair. The [retained failed log](gat-data/failed-gate-01.log.gz)
-and [validation](gat-data/validation.json) distinguish it from the successful gate.
+and [validation](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/gat-data/validation.json) distinguish it from the successful gate.
 
 The twelve fresh original-source observations give nom 17->17, DOM 63->61,
 and Sozu 448 classified plus 34 prior-unclassified unchanged, with zero new
@@ -81,7 +81,7 @@ use lifetime families, which remain a semantic boundary masked by later root
 refusals. Their disappearance does not establish lifetime-GAT support.
 
 The [current frontier](../docs/real-programs-current.json), exact source-hashed
-reviews and [previous frontier](gat-data/previous-frontier.json) retain this
+reviews and [previous frontier](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/gat-data/previous-frontier.json) retain this
 distinction. No original large root or nom own test has run under lkjscript.
 Exact-head publication gate/witness CI is recorded in the session report after
 publication.

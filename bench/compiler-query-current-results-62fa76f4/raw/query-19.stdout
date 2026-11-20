@@ -1,6 +1,0 @@
-"ir::Program"	level=protocol	fact=query	version=3 producer=34491766f5258dd3af3caf92db6b92dfeba09b405c00a8dd19cd955205c0d377 validation=authenticated-producing-compiler current-check=not-performed snapshot=9ff914ad9f4ef15c9bc5c61cb5d0718abcfde00322243a7a52a73f6b08d3534e source=d01c7eb47d92c7aefc7490b83f9bbc05025f6197871a7f90c51dfcad1576bb2b checked-ir=4613bd709ee1d9238dca31e51b25d091abcd21a77f018090fedb8db8032c0fa2 kind=outline depth=1 freshness=not-asserted source-reference-coverage=recorded-sites instance-coverage=demanded selection=explicit
-"ir::Program::field:destructors"	level=source-claim	fact=signature	kind=field text="pub destructors: Vec<(usize, usize)>" bytes=36 complete=true
-"ir::Program::field:functions"	level=source-claim	fact=signature	kind=field text="pub functions: Vec<Function>" bytes=28 complete=true
-"ir::Program::field:sources"	level=source-claim	fact=signature	kind=field text="pub sources: Vec<String>" bytes=24 complete=true
-"ir::Program::field:types"	level=source-claim	fact=signature	kind=field text="pub types: Vec<Type>" bytes=20 complete=true
-"ir::Program"	level=protocol	fact=continuation	cursor=none facts=4 pages-read=5 traversal-steps=5

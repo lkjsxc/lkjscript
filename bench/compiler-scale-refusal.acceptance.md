@@ -18,7 +18,7 @@ The two independent refusals name a shared compile/native-stack wall in this env
 
 ## Root reconstruction
 
-A separately written [auditor](compiler-scale-refusal-root-audit.pl), SHA-256 `15031ad6b550422372ee7747d61f056eea77ca776238128cf95f84b3a7dccdce`, verified all 106 manifest records, reconstructed all six exact argv/cwd pairs, checked raw time/status/load versus captured JSON, enforced the released limits and conditional refusal rule, rechecked successful-control statistics and recomputed the bound.
+A separately written [auditor](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-scale-refusal-root-audit.pl), SHA-256 `15031ad6b550422372ee7747d61f056eea77ca776238128cf95f84b3a7dccdce`, verified all 106 manifest records, reconstructed all six exact argv/cwd pairs, checked raw time/status/load versus captured JSON, enforced the released limits and conditional refusal rule, rechecked successful-control statistics and recomputed the bound.
 
 Its live input audit read **2,294 file instances across four exact path sets**: 215 factory inputs, 28 frozen library inputs, 170 100k inputs and 1,881 1M inputs. It checked every digest and independently counted precisely 100,000 / 1,000,000 source lines and 3,923,070 / 40,327,556 source bytes. Workload reports are included in file counts but excluded from source line/byte totals. It also verified the copied canonical producer `34491766…c0d377`, successful image `cf6568ce…70bea`, absent 1M image and completed refused supervisor.
 

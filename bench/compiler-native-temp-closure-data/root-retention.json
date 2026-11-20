@@ -1,9 +1,0 @@
-{
-   "all_live_files_byte_identical" : true,
-   "bytes_copied" : 399054,
-   "destination" : "bench/compiler-native-temp-closure-data",
-   "files_copied" : 47,
-   "manifest_sha256" : "f3d08237f8780f14fdbd5146eaa26c9ef74caeba53f0fb3345d78e8eb70c4e08",
-   "records" : 46,
-   "source" : "/home/coder/workspace/lkjscript-compiler-copy-sites-native-20261116/target/compiler-native-temp-closure-20261116"
-}

@@ -1,2 +1,0 @@
-LKJSCRIPT_STATS {"route":"compiler","stopped_stage":"failed","total_ms":39582.837,"build_ir_ms":11767.004,"check_ms":0.016,"check_body_ms":10865.317,"check_verification_ms":0.021,"key_hash_ms":87.222,"load_parse_ms":1894.080,"resolve_ms":419.919,"semantic_catalog_ms":1947.535,"source_read_ms":39.870,"type_ms":12228.849,"ir_functions":10803,"ir_instructions":1096624,"peak_rss_bytes":1136332800}
-"/home/coder/workspace/lkjscript/tests/conformance/pass/scalar_clone_bits.lkj" E_REPLAY_FILES source file has no stable identity or unambiguous relative-path counterpart

@@ -18,7 +18,7 @@ The first-path map keeps the first matching input, including a truncated first d
 
 Regions still sort by `(start, end, function index)`. Raw gaps and suffixes, body hashes and their original vector slots, extra input order, type spellings, expanded include literals, all arena/scoping coordinates and the local-item refusal retain their exact encoding order. Duplicate unparsed inputs are still encoded individually in their original order.
 
-Index construction adds allocations before the old failure points, so resource behavior is not identical. A malformed type FileId still bounds-traps, now at the input-index vector instead of the source-file vector. The static review does not claim identical trap locations for malformed internal coordinates. These qualifications are recorded in the [root review](compiler-fingerprint-index-data/root-integration-review-1.json).
+Index construction adds allocations before the old failure points, so resource behavior is not identical. A malformed type FileId still bounds-traps, now at the input-index vector instead of the source-file vector. The static review does not claim identical trap locations for malformed internal coordinates. These qualifications are recorded in the [root review](https://github.com/lkjsxc/lkjscript/blob/589e11b5a5ede874d05917c2c8b9227c7af62fc5/bench/compiler-fingerprint-index-data/root-integration-review-1.json).
 
 ## Original implementation as the oracle
 
