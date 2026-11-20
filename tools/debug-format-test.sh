@@ -87,14 +87,58 @@ cat > "$fixture/request" <<'REQUEST'
 REQUEST
 edit
 publish
+query meta value@rendered > "$fixture/capture-meta"
+grep -Eq '^"value@rendered".*references-complete=false' "$fixture/capture-meta" ||
+    fail 'implicit capture did not mark its canonical owner partial'
+query references value@rendered > "$fixture/capture-references"
+grep -Eq '^"value@rendered".*fact=unresolved-reference.*kind=local-value( |$)' "$fixture/capture-references" ||
+    fail 'implicit capture lost its unresolved local reference'
 cp "$fixture/project/main.lkj" "$fixture/capture-unchanged"
+cp "$fixture/project/.lkjscript-edit.generation" "$fixture/capture-generation"
 cat > "$fixture/request" <<'REQUEST'
 {"version":1,"operations":[{"op":"rename","id":"rendered","name":"captured"}]}
 REQUEST
 if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/capture-plan" 2> "$fixture/capture-error"; then fail 'implicit capture rename guessed source spans'; fi
 grep -Fq E_EDIT_REFERENCES "$fixture/capture-error" || { cat "$fixture/capture-error" >&2; fail 'capture refusal'; }
 cmp "$fixture/capture-unchanged" "$fixture/project/main.lkj" || fail 'capture refusal wrote source'
+cmp "$fixture/capture-generation" "$fixture/project/.lkjscript-edit.generation" || fail 'capture refusal changed generation'
+[[ ! -e $fixture/project/.lkjscript-edit.pending ]] || fail 'capture refusal left pending state'
 value 43
+
+# Canonical ancestry must keep a same-named module independent of the function.
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"add-item","id":"crate","source":"mod rendered {}"}]}
+REQUEST
+edit
+cp "$fixture/project/main.lkj" "$fixture/capture-with-module"
+cp "$fixture/project/.lkjscript-edit.generation" "$fixture/capture-generation"
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"rename","id":"value@rendered","name":"captured"}]}
+REQUEST
+if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/canonical-capture-plan" 2> "$fixture/canonical-capture-error"; then
+    fail 'canonical function rename ignored its implicit capture'
+fi
+grep -Fq E_EDIT_REFERENCES "$fixture/canonical-capture-error" || fail 'canonical capture refusal'
+cmp "$fixture/capture-with-module" "$fixture/project/main.lkj" || fail 'canonical capture refusal wrote source'
+cmp "$fixture/capture-generation" "$fixture/project/.lkjscript-edit.generation" || fail 'canonical capture refusal changed generation'
+[[ ! -e $fixture/project/.lkjscript-edit.pending ]] || fail 'canonical capture refusal left pending state'
+perl -0777 -e '
+my $text=<>; my $before="mod rendered {}"; my $at=index($text,$before);
+die "expected exactly one same-named module\n" unless $at>=0 && index($text,$before,$at+length($before))<0;
+substr($text,$at,length($before),"mod rendered_module {}"); print $text;
+' "$fixture/capture-with-module" > "$fixture/module-renamed-expected"
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"rename","id":"type@rendered","name":"rendered_module"}]}
+REQUEST
+edit
+cmp "$fixture/module-renamed-expected" "$fixture/project/main.lkj" || fail 'module rename changed the captured function'
+publish
+query meta value@rendered > "$fixture/capture-meta-after-module"
+grep -Eq '^"value@rendered".*references-complete=false' "$fixture/capture-meta-after-module" ||
+    fail 'module rename lost the function partial-reference metadata'
+query meta type@rendered_module > "$fixture/renamed-module-meta"
+value 43
+cp "$fixture/project/main.lkj" "$fixture/capture-unchanged"
 
 # Query the generated functions for concrete and generic structs and a generic
 # enum, and refuse direct mutation of every unwritten body.
@@ -119,4 +163,4 @@ cp -R src/semantic/origins "$fixture/contracts/"
 cp tests/fixtures/debug_origins.lkj "$fixture/contracts/main.lkj"
 "$compiler" build main.lkj --source-dir "$fixture/contracts" --library-dir "$library" --no-store -o "$fixture/contracts-image" > "$fixture/contracts-out" 2> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract build'; }
 "$fixture/contracts-image" >> "$fixture/contracts-out" 2>> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract execution'; }
-printf 'ok Debug formatting: trait/type/implementation and concrete/generic struct/enum generated-origin queries; checked rename/body edit; capture and generated-edit refusals; twelve malformed origins rejected; both engines\n'
+printf 'ok Debug formatting: trait/type/implementation and concrete/generic struct/enum generated-origin queries; checked rename/body edit; capture and generated-edit refusals; independent same-named module rename; twelve malformed origins rejected; both engines\n'

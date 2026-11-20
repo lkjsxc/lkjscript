@@ -1470,14 +1470,25 @@ pub mod relocation {
             // incoming relevance; relocation still checks every outgoing gap.
             if only_free && matches!(site.kind.as_str(),
                 "unresolved-namespace-qualification" | "typed-method" | "typed-field") { continue; }
+            let known_target = catalog.by_identity.contains_key(&site.target);
+            let mut related = targets.contains(&site.target);
+            if known_target {
+                for identity in targets {
+                    if descendant(catalog, &site.target, identity) { related = true; break; }
+                }
+            }
             if only_free && matches!(site.kind.as_str(), "implicit-source" | "alias-origin")
-                && !site.target.is_empty() && !targets.contains(&site.target) { continue; }
-            let mut relevant = site.target.is_empty() || targets.contains(&site.target);
-            for part in site.target.as_str().split("::") { if names.contains(&part.to_string()) { relevant = true; } }
+                && !site.target.is_empty() && !related { continue; }
+            let mut relevant = site.target.is_empty() || related;
             let bytes = edit::input(inputs, &site.file)?;
             if site.start > site.end || site.end > bytes.len() { return Err(fail(&site.owner, "SPAN", "unresolved reference is outside its source")); }
-            for name in &names {
-                if bytes[site.start..site.end] == *name.as_bytes() { relevant = true; }
+            // Resolved targets carry namespace and parent provenance; spelling
+            // is a fallback only when no catalog item identifies the target.
+            if !known_target {
+                for part in site.target.as_str().split("::") { if names.contains(&part.to_string()) { relevant = true; } }
+                for name in &names {
+                    if bytes[site.start..site.end] == *name.as_bytes() { relevant = true; }
+                }
             }
             if relevant { return Err(at_site(&site.owner, "REFERENCES", site, "relevant unresolved references need an explicit decision")); }
         }
