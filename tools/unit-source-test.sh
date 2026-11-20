@@ -2,6 +2,7 @@
 # Source-unit cache/link integration, kept small; scale and agent trials are separate.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source tools/fixture-bytes.sh
 unit_compiler=$(realpath "${LKJSCRIPT_BINARY:-target/lkjscript}")
 unit_fixture=$(mktemp -d target/unit-source.XXXXXX)
 # Keep the key outside the source grant but on its filesystem for the hard-link attack.
@@ -16,15 +17,6 @@ unit_cleanup() {
         done
     fi
     rm -rf "$unit_fixture" "$unit_key_root"
-}
-unit_flip_last_byte() {
-    local file=$1 size offset byte escape
-    size=$(stat -c %s "$file")
-    (( size > 0 )) || { printf 'fixture has no final byte: %s\n' "$file" >&2; return 1; }
-    offset=$((size - 1))
-    byte=$(od -An -tu1 -N1 -j "$offset" "$file")
-    printf -v escape '\\%03o' "$((byte ^ 1))"
-    printf '%b' "$escape" | dd of="$file" bs=1 seek="$offset" conv=notrunc status=none
 }
 trap unit_cleanup EXIT
 trap 'exit 130' HUP INT TERM
@@ -111,7 +103,7 @@ sed -i 's/assert_eq!(original, "unit include");/assert!(original.contains("value
 unit_interfaces=("$unit_root/store"/lkjscript-unit-interface-1-*)
 [[ -f ${unit_interfaces[0]} ]] || { echo 'no retained interfaces to corrupt' >&2; exit 1; }
 for unit_interface in "${unit_interfaces[@]}"; do
-    unit_flip_last_byte "$unit_interface"
+    fixture_flip_last_byte "$unit_interface"
 done
 "$unit_compiler" check-units "${unit_options[@]}" > "$unit_root/corrupt.out" 2> "$unit_root/corrupt.err"
 grep -Fq -- 'checked=3 reused=0' "$unit_root/corrupt.out"
@@ -181,7 +173,7 @@ grep -Fq -- 'checked=3 reused=0' "$unit_root/ancestor-edited.out"
 ancestor_projections=("$unit_root/ancestor/store"/unit-source-*)
 [[ -f ${ancestor_projections[0]} ]] || { echo 'no retained source projections to corrupt' >&2; exit 1; }
 for ancestor_projection in "${ancestor_projections[@]}"; do
-    unit_flip_last_byte "$ancestor_projection"
+    fixture_flip_last_byte "$ancestor_projection"
 done
 "$unit_compiler" build-units "${ancestor_options[@]}" --grant out -o "$unit_root/ancestor/recovered" > "$unit_root/ancestor-recovered.out" 2> "$unit_root/ancestor-recovered.err"
 grep -Fq -- 'checked=3 reused=0' "$unit_root/ancestor-recovered.out"

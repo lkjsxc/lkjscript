@@ -3,6 +3,7 @@
 # for an explicit real-source round trip; all other outputs remain disposable.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source tools/fixture-bytes.sh
 io_only=no
 if [[ ${1:-} == --io-only ]]; then io_only=yes; shift; fi
 [[ $# -le 2 ]] || { printf 'usage: %s [--io-only] [COMPILER [NEW-IMAGE-OUTPUT]]\n' "$0" >&2; exit 2; }
@@ -107,10 +108,7 @@ LC_ALL=C sed -E 's/"([0-9a-f]{64})"\],\[\]\]$/"\1"],[["unused","1","local","revi
 expect_reject dependencies "$work/package" read fixture src/lib.rs
 cp "$work/original.pin" "$work/catalog/fixture.pin.json"
 cp "$work/store/fixture.package" "$work/original.package"
-last_offset=$(($(wc -c < "$work/original.package") - 1))
-last_byte=$(od -An -tu1 -j "$last_offset" -N 1 "$work/original.package")
-printf '%b' "\\0$(printf '%03o' "$((last_byte ^ 1))")" |
-    dd of="$work/store/fixture.package" bs=1 seek="$last_offset" conv=notrunc status=none
+fixture_flip_last_byte "$work/store/fixture.package"
 expect_reject authentication "$work/package" read fixture src/lib.rs
 cp "$work/original.package" "$work/store/fixture.package"
 store_magic=$'lkjscript-store-2\n'
@@ -119,6 +117,7 @@ printf '\x00\x00\x10\x00\x00\x00\x00\x00' |
     dd of="$work/store/fixture.package" bs=1 seek="${#store_magic}" conv=notrunc status=none
 expect_reject authentication "$work/package" read fixture src/lib.rs
 cp "$work/original.package" "$work/store/fixture.package"
+last_offset=$(($(wc -c < "$work/original.package") - 1))
 truncate -s "$last_offset" "$work/store/fixture.package"
 expect_reject authentication "$work/package" read fixture src/lib.rs
 cp "$work/original.package" "$work/store/fixture.package"
