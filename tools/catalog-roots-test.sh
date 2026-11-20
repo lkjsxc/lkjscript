@@ -36,7 +36,8 @@ SOURCE
     common=(main.lkj --source-dir "$project" --library-dir "$library")
 }
 source_state() {
-    (cd "$project"; find . -type f \( -name '*.lkj' -o -name '.lkjscript-edit.generation' \) -print0 |
+    # The writer lock is operational; every other file and generation must match.
+    (cd "$project"; find . -type f ! -name '.lkjscript-edit.lock' -print0 |
         LC_ALL=C sort -z | xargs -0 sha256sum) > "$1"
 }
 source_count() {
@@ -89,8 +90,9 @@ apply() {
 }
 refuse() {
     local code=$1 status=0
+    shift
     source_state "$fixture/before-state"
-    edit || status=$?
+    edit "$@" || status=$?
     [[ $status == 1 && ! -s "$fixture/plan" ]] || fail "edit accepted $code"
     grep -Fq "$code" "$fixture/error" || fail "edit missed $code"
     source_state "$fixture/after-state"
@@ -344,6 +346,51 @@ grep -Fq 'impl:<crate::std::Data as crate::std::Read>' "$fixture/application-imp
 grep -Fq 'impl:<std::Data as std::Read>' "$fixture/library-impls"
 value 42
 
+# Display types stay readable while references, layouts and refactors use root keys.
+setup display-types
+cat > "$project/main.lkj" <<'SOURCE'
+mod std {
+    pub struct Data { pub value: i64 }
+    pub fn read(data: &Data) -> i64 { data.value }
+    pub enum Choice { A }
+    pub type Identity<T> = T;
+    pub type Alias = Identity<Choice>;
+    pub fn make() -> Alias { Choice::A }
+}
+pub fn probe() -> i64 {
+    let data = crate::std::Data { value: 42i64 };
+    let choice = crate::std::make();
+    match choice { _ => crate::std::read(&data) }
+}
+SOURCE
+index
+query type value@crate::std::read::param:data > "$fixture/display-parameter"
+grep -Fq $'\tfact=declared-type\tvalue="&std::Data"' "$fixture/display-parameter"
+query signature value@crate::std::read > "$fixture/display-signature"
+grep -Fq 'data: &Data' "$fixture/display-signature"
+query references value@crate::std::read > "$fixture/display-references"
+[[ $(grep -Ec '^"type@crate::std::Data".*kind=type$' "$fixture/display-references") == 1 ]]
+grep -Eq '^"type@crate::std::Data::field:value".*kind=field$' "$fixture/display-references"
+if grep -Eq '^"type@std::Data(::|")' "$fixture/display-references"; then fail 'display name replaced the reference root'; fi
+query layout type@crate::std::Data > "$fixture/display-layout"
+grep -Fq $'"ir:type:crate::std::Data"\tlevel=checked-ir\tfact=layout\t' "$fixture/display-layout"
+query type type@crate::std::Alias > "$fixture/display-alias"
+grep -Fq $'\tfact=declared-type\tvalue="std::Identity<std::Choice>"' "$fixture/display-alias"
+query references value@probe > "$fixture/display-probe"
+binding=$(sed -n 's/^"\(value@probe::body:[^"]*::binding:choice:0\)".*kind=local-value$/\1/p' "$fixture/display-probe")
+[[ -n "$binding" ]] || fail 'missing inferred choice binding'
+query type "$binding" > "$fixture/display-binding"
+grep -Fq $'\tfact=inferred-type\tvalue="std::Choice"' "$fixture/display-binding"
+value 42
+request '{"op":"add-variant","id":"type@crate::std::Choice","source":"B","arm":"crate::std::Choice::B => 7i64"}'
+apply
+[[ $(grep -Fo 'crate::std::Choice::B => 7i64' "$project/main.lkj" | wc -l) == 1 ]] ||
+    fail 'canonical alias/inferred-type join missed the wildcard match'
+value 42
+request '{"op":"replace-body","id":"value@crate::std::make","source":"{ Choice::B }"}'
+apply
+value 7
+
 # A derived owner already carries its module path; never qualify it twice.
 # Derives and the following Vec group need the full standard library.
 setup derived-root
@@ -377,6 +424,7 @@ cat > "$project/main.lkj" <<'SOURCE'
 trait Count { fn count(&self) -> i64; }
 impl Count for std::vec::Vec<i64> { fn count(&self) -> i64 { self.len() as i64 } }
 impl Count for std::vec::Vec<bool> { fn count(&self) -> i64 { self.len() as i64 } }
+pub fn carried() -> i64 { 9i64 }
 pub fn probe() -> i64 {
     let mut numbers = std::vec::Vec::new(); numbers.push(42i64);
     let mut flags = std::vec::Vec::new(); flags.push(true);
@@ -388,10 +436,48 @@ query impls builtin@Vec > "$fixture/family-before"
 grep $'\tfact=impls\t' "$fixture/family-before" > "$fixture/family-before-facts"
 query impls Vec > "$fixture/bare-family"
 grep -Fq 'selected="builtin@Vec"' "$fixture/bare-family"
-cat >> "$project/main.lkj" <<'SOURCE'
-mod Vec {}
-fn Vec() -> i64 { 1i64 }
-SOURCE
+printf '%s\n' 'mod Vec {}' >> "$project/main.lkj"
+index
+query_refuse E_QUERY_AMBIGUOUS impls Vec
+for id in builtin@Vec type@Vec; do grep -Fq "\"$id\"" "$fixture/error"; done
+
+# Edits and comparisons see the same two candidates as query, in every selector.
+request '{"op":"add-item","id":"type@Vec","source":"pub fn inserted() -> i64 { 9i64 }"}'
+apply
+[[ -s "$project/.lkjscript-edit.generation" ]] || fail 'canonical addition did not publish a generation'
+index
+meta value@Vec::inserted type@Vec "$project/main.lkj"
+for mode in dry-run apply; do
+    edit_flags=()
+    if [[ $mode == dry-run ]]; then edit_flags=(--dry-run); fi
+    for selector in id before parent; do
+        case "$selector" in
+            id) request '{"op":"add-item","id":"Vec","source":"pub fn misplaced() {}"}' ;;
+            before) request '{"op":"add-item","id":"crate","before":"Vec","source":"pub fn misplaced() {}"}' ;;
+            parent) request '{"op":"move","id":"value@carried","parent":"Vec"}' ;;
+        esac
+        refuse E_EDIT_AMBIGUOUS "${edit_flags[@]}"
+        for id in builtin@Vec type@Vec; do grep -Fq "\"$id\"" "$fixture/error"; done
+    done
+    request '{"op":"add-item","id":"builtin@Vec","source":"pub fn misplaced() {}"}'
+    refuse E_EDIT_IDENTITY "${edit_flags[@]}"
+    grep -Fq '"builtin@Vec"' "$fixture/error"
+done
+status=0
+source_state "$fixture/before-state"
+"$compiler" compare "${common[@]}" --against main.lkj --against-source-dir "$project" \
+    --against-library-dir "$library" --no-store --id Vec > "$fixture/plan" 2> "$fixture/error" || status=$?
+[[ $status == 1 && ! -s "$fixture/plan" ]] || fail 'compare accepted ambiguous Vec'
+grep -Fq 'E_COMPARE_AMBIGUOUS' "$fixture/error"
+for id in builtin@Vec type@Vec; do grep -Fq "\"$id\"" "$fixture/error"; done
+source_state "$fixture/after-state"
+cmp "$fixture/before-state" "$fixture/after-state"
+[[ ! -e "$project/.lkjscript-edit.pending" ]] || fail 'comparison refusal left intent'
+"$compiler" compare "${common[@]}" --against main.lkj --against-source-dir "$project" \
+    --against-library-dir "$library" --no-store --id type@Vec > "$fixture/comparison" 2> "$fixture/error"
+grep -Fq 'text identical, checked IR identical' "$fixture/comparison"
+
+printf '%s\n' 'fn Vec() -> i64 { 1i64 }' >> "$project/main.lkj"
 index
 query_refuse E_QUERY_AMBIGUOUS impls Vec
 for id in builtin@Vec type@Vec value@Vec; do grep -Fq "\"$id\"" "$fixture/error"; done
@@ -442,4 +528,4 @@ SOURCE
 "$compiler" check "${common[@]}" --no-store
 index_refuse E_IDENTITY
 
-printf 'ok catalog roots: exact application/library parents, anchored insertion, projection and replay, associated stems, keyword refusal, literal selectors and builtin family separation\n'
+printf 'ok catalog roots: exact application/library parents, anchored insertion, projection and replay, associated stems, keyword refusal, shared literal selectors, display types and builtin family separation\n'

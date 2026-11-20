@@ -22,7 +22,9 @@ pub struct Item {
     pub generated_expansion: String,
     pub signature: String,
     pub text: String,
+    /// Source display only; type-sensitive operations use canonical_type.
     pub type_name: String,
+    pub canonical_type: String,
     pub type_resolved: bool,
     pub file_digest: String,
     pub text_digest: String,
@@ -66,6 +68,8 @@ pub struct Catalog {
     pub by_identity: BTreeMap<String, usize>,
     /// Resolver namespace slots, including a constructor's reserved value slot.
     pub namespace_slots: BTreeMap<String, String>,
+    /// The complete metadata candidate universe, including noneditable type and IR identities.
+    pub selector_kinds: BTreeMap<String, String>,
     pub references: Vec<Reference>,
     /// Semantic edges from validated expansions, never editable spelling sites.
     pub generated_references: Vec<Reference>,
@@ -146,20 +150,23 @@ impl Catalog {
     pub fn select(&self, selector: &str, domain: &str) -> Result<String, String> {
         let mut found: Vec<String> = Vec::new();
         let mut detail = String::new();
+        let mut source = false;
         for candidate in selector_candidates(selector, domain)? {
-            let index = self.by_identity.get(&candidate);
+            let Some(kind) = self.selector_kinds.get(&candidate) else { continue; };
             let mut root = candidate == "crate";
-            for source in &self.module_sources { if source.identity == candidate { root = true; } }
-            if index.is_none() && !root { continue; }
+            for module in &self.module_sources { if module.identity == candidate { root = true; } }
+            if self.by_identity.contains_key(&candidate) || root { source = true; }
             if !detail.is_empty() { detail.push_str(", "); }
-            let kind = match index { Some(index) => self.items[*index].kind.clone(), None => "module".to_string() };
             detail.push_str(&format!("{} ({kind})", quote(&candidate)));
             found.push(candidate);
         }
         if found.len() > 1usize {
             return Err(format!("{} E_{}_AMBIGUOUS select one canonical identity: {}", quote(selector), domain, detail));
         }
-        if let Some(identity) = found.pop() { return Ok(identity); }
+        if let Some(identity) = found.pop() {
+            if source { return Ok(identity); }
+            return Err(format!("{} E_{}_IDENTITY recorded identity has no editable source item", quote(&identity), domain));
+        }
         if let Some(owner) = self.namespace_slots.get(&selector.to_string()) {
             return Err(format!("{} E_{}_IDENTITY constructor slot belongs to {}", quote(selector), domain, quote(owner)));
         }
@@ -254,10 +261,33 @@ fn name_span(file: &SourceText, start: usize, end: usize, name: &str) -> (usize,
     }
     (start, start)
 }
+/// Render canonical evidence for display without changing its retained identity.
+fn display_type_evidence(value: &str) -> Result<String, String> {
+    if !value.contains("crate::std") { return Ok(value.to_string()); }
+    let tokens = syntax::semantic_tokens(value)
+        .map_err(|problem| -> String { format!("E_IDENTITY invalid type display evidence: {}", problem.message) })?;
+    let mut out = String::new(); let mut at = 0usize;
+    for index in 0usize..tokens.len() {
+        if tokens[index].text != "crate" || index + 2usize >= tokens.len()
+            || tokens[index + 1usize].text != "::" || tokens[index + 2usize].text != "std"
+            || (index > 0usize && tokens[index - 1usize].text == "::") { continue; }
+        out.push_str(&value[at..tokens[index].span.start]);
+        at = tokens[index + 2usize].span.start;
+    }
+    out.push_str(&value[at..]); Ok(out)
+}
 fn append(
     result: &mut Catalog, files: &[SourceText], identity: String, parent: String,
     kind: &str, name: &str, span: a::Span, body: Option<(usize, usize)>,
     ty: String, attributes: bool,
+) -> Result<(), String> {
+    let display = display_type_evidence(&ty)?;
+    append_evidence(result, files, identity, parent, kind, name, span, body, display, ty, attributes)
+}
+fn append_evidence(
+    result: &mut Catalog, files: &[SourceText], identity: String, parent: String,
+    kind: &str, name: &str, span: a::Span, body: Option<(usize, usize)>,
+    ty: String, canonical_type: String, attributes: bool,
 ) -> Result<(), String> {
     if result.by_identity.contains_key(&identity) {
         return Err(format!("E_IDENTITY duplicate source identity {}", quote(&identity)));
@@ -304,12 +334,22 @@ fn append(
         name_end: if generated { start } else { name_end },
         body: if generated { None } else { body }, generated_from, generated_expansion, signature_digest,
         text_digest: sha256::hex_digest(text.as_bytes()), body_digest,
-        signature, text, type_name: ty, type_resolved: !matches!(kind, "binding" | "call-site"), file_digest: file.digest.clone(),
+        signature, text, type_name: ty, canonical_type,
+        type_resolved: !matches!(kind, "binding" | "call-site"), file_digest: file.digest.clone(),
         references_complete: !generated,
     };
     result.by_identity.insert(identity, result.items.len());
     result.items.push(item);
     Ok(())
+}
+fn append_typed(
+    result: &mut Catalog, files: &[SourceText], program: &a::Program,
+    identity: String, parent: String, kind: &str, name: &str, span: a::Span,
+    ty: Option<usize>, attributes: bool,
+) -> Result<(), String> {
+    let display = ty.map_or("_".to_string(), |ty| type_name(program, ty));
+    let canonical = ty.map_or("_".to_string(), |ty| identity_type_name(program, ty));
+    append_evidence(result, files, identity, parent, kind, name, span, None, display, canonical, attributes)
 }
 fn append_generics(result: &mut Catalog, files: &[SourceText], owner: &str, values: &[a::GenericParam]) -> Result<(), String> {
     for parameter in values {
@@ -566,6 +606,61 @@ pub fn ir_type_name(program: &ir::Program, ty: usize) -> String {
 pub fn ir_identity_type_name(program: &ir::Program, ty: usize) -> String {
     ir_type_name_form(program, ty, true)
 }
+/// Nominal source types use declaration identities; structural names use builtin keys.
+pub fn type_key(catalog: &Catalog, name: &str) -> String {
+    let base = name.find('<').map_or(name, |at| &name[..at]);
+    let identity = source_identity(resolve::Namespace::Type, base);
+    if catalog.by_identity.get(&identity).is_some_and(|index|
+        matches!(catalog.items[*index].kind.as_str(), "struct" | "enum" | "trait" | "alias")) {
+        source_identity(resolve::Namespace::Type, name)
+    } else { format!("builtin@{name}") }
+}
+pub fn ir_type_is_nominal(value: &ir::Type) -> bool {
+    match &value.kind {
+        ir::TypeKind::Struct { .. } => !value.name.starts_with('('),
+        ir::TypeKind::Enum { .. } => true,
+        ir::TypeKind::Array { .. } => !value.name.starts_with('['),
+        _ => false,
+    }
+}
+pub fn ir_type_key(catalog: &Catalog, value: &ir::Type, name: &str) -> String {
+    if ir_type_is_nominal(value) { type_key(catalog, name) } else { format!("builtin@{name}") }
+}
+/// Collect exactly the metadata identities published by semantic_facts, without building facts.
+fn collect_selector_metadata(catalog: &Catalog, program: &ir::Program) -> BTreeMap<String, String> {
+    let mut result: BTreeMap<String, String> = BTreeMap::new();
+    result.insert("crate".to_string(), "module".to_string());
+    for source in &catalog.module_sources { result.insert(source.identity.clone(), "module".to_string()); }
+    for item in &catalog.items { result.insert(item.identity.clone(), item.kind.clone()); }
+    for implementation in &catalog.implementations {
+        for which in 0usize..2usize {
+            let selected = if which == 0usize { &implementation.target_key } else { &implementation.trait_key };
+            if selected.is_empty() { continue; }
+            if !result.contains_key(selected) {
+                let kind = if selected.starts_with("builtin@") { "builtin" } else { "type-name" };
+                result.insert(selected.clone(), kind.to_string());
+            }
+            if let Some(at) = selected.find('<') {
+                let base = selected[..at].to_string();
+                if !result.contains_key(&base) {
+                    let kind = if base.starts_with("builtin@") { "builtin" } else { "type-family" };
+                    result.insert(base, kind.to_string());
+                }
+            }
+        }
+    }
+    for identity in &catalog.instance_ids { result.insert(identity.clone(), "recorded identity".to_string()); }
+    for (index, value) in program.types.iter().enumerate() {
+        let name = ir_identity_type_name(program, index);
+        let selected = ir_type_key(catalog, value, &name);
+        if !result.contains_key(&selected) {
+            let kind = if selected.starts_with("builtin@") { "builtin" } else { "type-name" };
+            result.insert(selected, kind.to_string());
+        }
+        result.insert(format!("ir:type:{name}"), "recorded identity".to_string());
+    }
+    result
+}
 fn instance_arguments(program: &ir::Program, raw: &str) -> String {
     if raw.is_empty() { return String::new(); }
     if !raw.starts_with('<') || !raw.ends_with('>') { return raw.to_string(); }
@@ -624,7 +719,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
     }
     let mut result = Catalog {
         root: program.files[0usize].path.clone(), module_sources: Vec::new(), references_recorded: include_references,
-        items: Vec::new(), by_identity: BTreeMap::new(), namespace_slots: BTreeMap::new(), references: Vec::new(), generated_references: Vec::new(), unresolved: Vec::new(),
+        items: Vec::new(), by_identity: BTreeMap::new(), namespace_slots: BTreeMap::new(), selector_kinds: BTreeMap::new(), references: Vec::new(), generated_references: Vec::new(), unresolved: Vec::new(),
         expression_types: BTreeMap::new(),
         function_ids: Vec::new(), instance_ids: Vec::new(), instance_sources: Vec::new(),
         implementations: Vec::new(), instance_arguments: Vec::new(), input_digest: sha256::hex_digest(&input_identity),
@@ -680,8 +775,8 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             generated_projection(&mut result, &files, program, &identity, structure, function_signature(program, value), true)?;
         }
         for (position, parameter) in value.params.iter().enumerate() {
-            append(&mut result, &files, parameter_identity(&identity, &parameter.name, position), identity.clone(),
-                "parameter", &parameter.name, parameter.span, None, identity_type_name(program, parameter.ty), false)?;
+            append_typed(&mut result, &files, program, parameter_identity(&identity, &parameter.name, position), identity.clone(),
+                "parameter", &parameter.name, parameter.span, Some(parameter.ty), false)?;
         }
         for parameter in &value.generics {
             if parameter.implicit { continue; }
@@ -696,8 +791,8 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             &value.name, value.span, None, source_path(&identity).to_string(), true)?;
         append_generics(&mut result, &files, &identity, &value.generics)?;
         for field in &value.fields {
-            append(&mut result, &files, format!("{}::field:{}", identity, field.name), identity.clone(), "field",
-                &field.name, field.span, None, identity_type_name(program, field.ty), false)?;
+            append_typed(&mut result, &files, program, format!("{}::field:{}", identity, field.name), identity.clone(), "field",
+                &field.name, field.span, Some(field.ty), false)?;
         }
     }
     for value in &program.enums {
@@ -710,8 +805,8 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             append(&mut result, &files, variant_identity.clone(), identity.clone(), "variant",
                 &variant.name, variant.span, None, source_path(&identity).to_string(), false)?;
             for field in &variant.fields {
-                append(&mut result, &files, format!("{}::field:{}", variant_identity, field.name), variant_identity.clone(),
-                    "field", &field.name, field.span, None, identity_type_name(program, field.ty), false)?;
+                append_typed(&mut result, &files, program, format!("{}::field:{}", variant_identity, field.name), variant_identity.clone(),
+                    "field", &field.name, field.span, Some(field.ty), false)?;
             }
         }
     }
@@ -721,31 +816,29 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             value.span, None, source_path(&identity).to_string(), true)?;
         append_generics(&mut result, &files, &identity, &value.generics)?;
         for associated in &value.associated {
-            append(&mut result, &files, format!("{}::type:{}", identity, associated.name), identity.clone(),
-                "associated-type", &associated.name, associated.span, None,
-                associated.value.map_or("_".to_string(), |ty| identity_type_name(program, ty)), false)?;
+            append_typed(&mut result, &files, program, format!("{}::type:{}", identity, associated.name), identity.clone(),
+                "associated-type", &associated.name, associated.span, associated.value, false)?;
             append_generics(&mut result, &files, &format!("{}::type:{}", identity, associated.name), &associated.generics)?;
         }
     }
     for (index, value) in program.impls.iter().enumerate() {
         let identity = implementation_identity(program, index);
-        append(&mut result, &files, identity.clone(), root_parent(&value.module), "implementation", "impl",
-            value.span, None, identity_type_name(program, value.target), true)?;
+        append_typed(&mut result, &files, program, identity.clone(), root_parent(&value.module), "implementation", "impl",
+            value.span, Some(value.target), true)?;
         if let Some(structure) = origins.implementations[index] {
             let signature = match value.trait_ty {
-                Some(trait_ty) => format!("impl {} for {}", identity_type_name(program, trait_ty), identity_type_name(program, value.target)),
-                None => format!("impl {}", identity_type_name(program, value.target)),
+                Some(trait_ty) => format!("impl {} for {}", type_name(program, trait_ty), type_name(program, value.target)),
+                None => format!("impl {}", type_name(program, value.target)),
             };
             generated_projection(&mut result, &files, program, &identity, structure, signature, false)?;
         }
         append_generics(&mut result, &files, &identity, &value.generics)?;
         result.implementations.push(Implementation { identity: identity.clone(),
-            target: identity_type_name(program, value.target), trait_name: value.trait_ty.map_or(String::new(), |ty| identity_type_name(program, ty)),
+            target: type_name(program, value.target), trait_name: value.trait_ty.map_or(String::new(), |ty| type_name(program, ty)),
             target_key: source_type_key(program, value.target), trait_key: value.trait_ty.map_or(String::new(), |ty| source_type_key(program, ty)) });
         for associated in &value.associated {
-            append(&mut result, &files, format!("{}::type:{}", identity, associated.name), identity.clone(),
-                "associated-type", &associated.name, associated.span, None,
-                associated.value.map_or("_".to_string(), |ty| identity_type_name(program, ty)), false)?;
+            append_typed(&mut result, &files, program, format!("{}::type:{}", identity, associated.name), identity.clone(),
+                "associated-type", &associated.name, associated.span, associated.value, false)?;
             append_generics(&mut result, &files, &format!("{}::type:{}", identity, associated.name), &associated.generics)?;
         }
     }
@@ -755,13 +848,13 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             value.span, None, source_path(&identity).to_string(), true)?;
     }
     for value in &program.aliases {
-        append(&mut result, &files, type_identity(&value.module, &value.name), root_parent(&value.module), "alias",
-            &value.name, value.span, None, identity_type_name(program, value.ty), true)?;
+        append_typed(&mut result, &files, program, type_identity(&value.module, &value.name), root_parent(&value.module), "alias",
+            &value.name, value.span, Some(value.ty), true)?;
         append_generics(&mut result, &files, &type_identity(&value.module, &value.name), &value.generics)?;
     }
     for value in &program.constants {
-        append(&mut result, &files, source_identity(resolve::Namespace::Value, &qualified(&value.module, &value.name)), root_parent(&value.module), "constant",
-            &value.name, value.span, None, identity_type_name(program, value.ty), true)?;
+        append_typed(&mut result, &files, program, source_identity(resolve::Namespace::Value, &qualified(&value.module, &value.name)), root_parent(&value.module), "constant",
+            &value.name, value.span, Some(value.ty), true)?;
     }
     macro_sources::project_items(&mut result, &files, program, &origins)?;
     // Validated generated calls have identities even in declaration-only catalogs.
@@ -937,7 +1030,8 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                             "inferred type is unavailable".to_string(), false)?;
                         if let Some(ty) = evidence.as_ref().and_then(|evidence| evidence.bindings.get(&pattern)) {
                             let index = *result.by_identity.get(&identity).unwrap();
-                            result.items[index].type_name = ty.clone(); result.items[index].type_resolved = true;
+                            result.items[index].type_name = display_type_evidence(ty.as_str())?;
+                            result.items[index].canonical_type = ty.clone(); result.items[index].type_resolved = true;
                         }
                     }
                 }
@@ -1068,7 +1162,8 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                     "inferred result type is unavailable".to_string(), false)?;
                 if let Some(ty) = evidence.as_ref().and_then(|evidence| evidence.expressions.get(&expression)) {
                     let index = *result.by_identity.get(&identity).unwrap();
-                    result.items[index].type_name = ty.clone(); result.items[index].type_resolved = true;
+                    result.items[index].type_name = display_type_evidence(ty.as_str())?;
+                    result.items[index].canonical_type = ty.clone(); result.items[index].type_resolved = true;
                 }
             }
         }
@@ -1104,6 +1199,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         ordered.insert((reference.owner.clone(), reference.file.clone(), reference.start, reference.end, reference.target.clone()), reference);
     }
     for (_, reference) in ordered { result.references.push(reference); }
+    result.selector_kinds = collect_selector_metadata(&result, checked.program());
     Ok(result)
 }
 

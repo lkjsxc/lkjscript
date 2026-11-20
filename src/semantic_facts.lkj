@@ -70,16 +70,6 @@ fn edge(result: &mut Facts, kind: &str, from: &str, to: &str, level: &str, detai
     result.add(kind, from, fact(to, level, kind, detail));
     result.add(&format!("@{kind}"), from, to.to_string());
 }
-/// Nominal source types use declaration identities. Nondeclaration names have
-/// a query-only role, distinct from source declarations and checked IR IDs.
-fn type_key(catalog: &semantic::Catalog, name: &str) -> String {
-    let base = name.find('<').map_or(name, |at| &name[..at]);
-    let identity = semantic::source_identity(crate::resolve::Namespace::Type, base);
-    if catalog.by_identity.get(&identity).is_some_and(|index|
-        matches!(catalog.items[*index].kind.as_str(), "struct" | "enum" | "trait" | "alias")) {
-        semantic::source_identity(crate::resolve::Namespace::Type, name)
-    } else { format!("builtin@{name}") }
-}
 pub fn build(catalog: &semantic::Catalog, checked: &ir::CheckedProgram) -> Result<Facts, String> {
     build_emitted(catalog, checked, &BTreeMap::new())
 }
@@ -261,13 +251,8 @@ pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, 
         let name = semantic::ir_type_name(program, index);
         let identity_name = semantic::ir_identity_type_name(program, index);
         let identity = format!("ir:type:{identity_name}");
-        let nominal = match &ty.kind {
-            ir::TypeKind::Struct { .. } => !ty.name.starts_with('('),
-            ir::TypeKind::Enum { .. } => true,
-            ir::TypeKind::Array { .. } => !ty.name.starts_with('['),
-            _ => false,
-        };
-        let selected = if nominal { type_key(catalog, &identity_name) } else { format!("builtin@{identity_name}") };
+        let nominal = semantic::ir_type_is_nominal(ty);
+        let selected = semantic::ir_type_key(catalog, ty, &identity_name);
         let layout = &layouts[index];
         let line = fact(&identity, "checked-ir", "layout",
             &format!("target=linux-x86_64 bytes={} alignment={} fields={} cleanup={} representation-id={} representation-domain=lkjscript-ir-type-identity-linux-x86_64-1",
@@ -287,14 +272,21 @@ pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, 
         }
         result.add("meta", &identity, fact(&identity, "checked-ir", "type", &format!("name={}", semantic::quote(&name))));
         let base = match identity_name.find('<') { Some(at) => &identity_name[..at], None => &identity_name };
-        let base_identity = type_key(catalog, base);
+        let base_identity = semantic::type_key(catalog, base);
         if nominal && base != identity_name.as_str() && catalog.by_identity.contains_key(&base_identity) {
             result.add("layout", &base_identity, fact(&identity, "checked-ir", "layout",
                 &format!("target=linux-x86_64 bytes={} alignment={} source-claim={} representation-id={} representation-domain=lkjscript-ir-type-identity-linux-x86_64-1", layout.bytes, layout.alignment, semantic::quote(&base_identity), type_ids[index])));
         }
     }
     let records = std::mem::replace(&mut result.records, BTreeMap::new());
+    let mut metadata_count = 0usize;
     for (key, mut lines) in records {
+        if key.starts_with("meta\t") {
+            if !catalog.selector_kinds.contains_key(&key[5usize..].to_string()) {
+                return Err(format!("{} E_IDENTITY published metadata is absent from selector candidates", semantic::quote(&key[5usize..])));
+            }
+            metadata_count += 1usize;
+        }
         lines.sort();
         let old = std::mem::replace(&mut lines, Vec::new());
         let mut previous: Option<String> = None;
@@ -305,6 +297,9 @@ pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, 
             }
         }
         result.records.insert(key, lines);
+    }
+    if metadata_count != catalog.selector_kinds.len() {
+        return Err("E_IDENTITY selector candidates include unpublished metadata".to_string());
     }
     Ok(result)
 }

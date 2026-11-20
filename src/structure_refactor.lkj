@@ -1036,7 +1036,7 @@ mod functions {
         Err(fail(id, "CAPTURE", "argument must be this binding, &binding, or &mut binding; arbitrary effects need a separate operation"))
     }
     fn scalar_capture(target: &semantic::Item) -> bool {
-        let name = std::str::trim_ascii(&target.type_name);
+        let name = std::str::trim_ascii(&target.canonical_type);
         name.starts_with('&') || matches!(name, "bool" | "char" | "u8" | "u16" | "u32" | "u64" | "usize"
             | "i8" | "i16" | "i32" | "i64" | "isize" | "f64" | "()")
     }
@@ -1127,8 +1127,8 @@ mod functions {
             if !binding.type_resolved { return Err(fail(&id, "CAPTURE_TYPE", "capture has no resolved source type")); }
             let expected_type = if borrowed {
                 let tokens = syntax::semantic_tokens(&argument).map_err(|problem| fail(&id, "CAPTURE", &problem.message))?;
-                format!("{}{}", if tokens.len() == 3usize { "&mut " } else { "&" }, binding.type_name)
-            } else { binding.type_name.clone() };
+                format!("{}{}", if tokens.len() == 3usize { "&mut " } else { "&" }, binding.canonical_type)
+            } else { binding.canonical_type.clone() };
             if type_key(&id, &ty)? != type_key(&id, &expected_type)? {
                 return Err(fail(&id, "CAPTURE_TYPE", &format!("capture must retain the inferred type {expected_type}")));
             }
@@ -1151,7 +1151,7 @@ mod functions {
             let mut position: Option<usize> = None;
             for (index, capture) in captures.iter().enumerate() { if capture.identity == binding.identity { position = Some(index); } }
             let capture = &captures[position.ok_or_else(|| at_site(&binding.identity, "CAPTURE", reference, "free binding is absent from parameters"))?];
-            if !capture.borrowed && !binding.type_name.starts_with('&') && mutated(&unit, reference, start, end) {
+            if !capture.borrowed && !binding.canonical_type.starts_with('&') && mutated(&unit, reference, start, end) {
                 return Err(at_site(&binding.identity, "CAPTURE_WRITE", reference, "write or method receiver needs an explicit reference capture"));
             }
             used.insert(capture.identity.clone());
@@ -1530,9 +1530,9 @@ pub mod relocation {
         }
         if !declaration { return Err(fail(&target.identity, "TRAIT_COHORT", "trait member declaration is absent")); }
         for recorded in &catalog.implementations {
-            let identity = &recorded.identity; let trait_type = &recorded.trait_name;
-            if trait_type.is_empty() { continue; }
-            if nominal_head(catalog, trait_type.as_str())? != Some(trait_id.clone()) { continue; }
+            let identity = &recorded.identity;
+            if !recorded.trait_key.starts_with("type@") { continue; }
+            if nominal_head(catalog, semantic::source_path(&recorded.trait_key))? != Some(trait_id.clone()) { continue; }
             let implementation = edit::item(catalog, identity)?;
             if trait_of(catalog, inputs, implementation)? != Some(trait_id.clone()) {
                 return Err(fail(identity, "TRAIT_COHORT", "implementation metadata lacks matching resolved trait evidence"));
@@ -2015,7 +2015,7 @@ fn nominal_head(catalog: &semantic::Catalog, name: &str) -> Result<Option<String
             let span = parsed.types[*argument].span;
             arguments.push((wrapped[span.start..span.end].to_string(), environment));
         }
-        environment = Some(frames.len()); frames.push((parameters, arguments)); current = alias.type_name.clone();
+        environment = Some(frames.len()); frames.push((parameters, arguments)); current = alias.canonical_type.clone();
     }
 }
 
