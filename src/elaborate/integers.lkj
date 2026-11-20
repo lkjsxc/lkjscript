@@ -1,5 +1,6 @@
 //! Integer constants share one typed validation path in expressions and patterns.
 use super::{Builder, Result, a, err, ir};
+use crate::syntax::integer_literals::magnitude;
 use std::collections::BTreeMap;
 
 fn integer_suffix(index: usize) -> &'static str {
@@ -16,33 +17,6 @@ fn integer_suffix(index: usize) -> &'static str {
         9 => "i8",
         _ => unreachable!(),
     }
-}
-
-pub(super) fn magnitude(text: &str, radix: u64) -> Option<u64> {
-    let bytes = text.as_bytes();
-    let mut index = if bytes.first() == Some(&b'+') { 1 } else { 0 };
-    if index == bytes.len() {
-        return None;
-    }
-    let mut value = 0_u64;
-    while index < bytes.len() {
-        let byte = bytes[index];
-        let digit = if byte >= b'0' && byte <= b'9' {
-            (byte - b'0') as u64
-        } else if byte >= b'a' && byte <= b'f' {
-            (byte - b'a' + 10) as u64
-        } else if byte >= b'A' && byte <= b'F' {
-            (byte - b'A' + 10) as u64
-        } else {
-            return None;
-        };
-        if digit >= radix || value > (!0_u64 - digit) / radix {
-            return None;
-        }
-        value = value * radix + digit;
-        index += 1;
-    }
-    Some(value)
 }
 
 pub(super) fn suffix_type(names: &BTreeMap<String, usize>, text: &str) -> Option<usize> {
@@ -83,24 +57,8 @@ pub(super) fn literal(
             break;
         }
     }
-    let radix = if digits.starts_with("0x") {
-        16
-    } else if digits.starts_with("0b") {
-        2
-    } else if digits.starts_with("0o") {
-        8
-    } else {
-        10
-    };
-    let magnitude = magnitude(
-        if radix == 10 {
-            digits.as_str()
-        } else {
-            &digits[2..]
-        },
-        radix,
-    )
-    .ok_or_else(|| err(span, "E_TYPE", "integer literal exceeds its representation"))?;
+    let magnitude = magnitude(&digits)
+        .ok_or_else(|| err(span, "E_TYPE", "integer literal exceeds its representation"))?;
     let (bits, signed) = match types[ty].kind {
         ir::TypeKind::Int { bits, signed } => (bits, signed),
         _ => {

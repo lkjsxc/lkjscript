@@ -893,6 +893,21 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         // Every declaration-backed type path is a resolved reference, including aliases.
         for (type_index, node) in program.types.iter().enumerate() {
             if program.impl_traits.contains_key(&type_index) || program.constant_arguments.contains_key(&type_index) { continue; }
+            if let Some((declaration, _)) = program.array_length_constants.get(&type_index) {
+                if let Some(target) = declaration_identity(program, *declaration, &result.function_ids) {
+                    let span = *program.array_length_spans.get(&type_index).unwrap();
+                    if let Some(function) = origins.types.get(&type_index) {
+                        let owner = result.function_ids[*function].clone();
+                        generated_reference(&mut result, &files, &owner, Some(target), span, "array-length");
+                    } else if let Some(expansion) = origins.macros.types.get(&type_index) {
+                        let owner = origins::macros::expansion_identity(*expansion);
+                        generated_reference(&mut result, &files, &owner, Some(target), span, "array-length");
+                    } else if let Some(owner) = owners.get(&files[span.file].path, span.start, span.end) {
+                        path_qualifications(&mut result, &files, program, &resolver, &owner, node.scope, span);
+                        path_reference(&mut result, &files, owner, target, span, "array-length", &resolver, node.scope, false);
+                    }
+                }
+            }
             if !origins.types.contains_key(&type_index) {
                 if let Some(expansion) = origins.macros.types.get(&type_index) {
                     let owner = origins::macros::expansion_identity(*expansion);

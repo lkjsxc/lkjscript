@@ -1,0 +1,7 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+pub fn probe() -> usize {
+    let count = 3usize;
+    let values: [u8; count] = [0u8; 3];
+    values.len()
+}

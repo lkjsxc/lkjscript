@@ -89,3 +89,28 @@ meaning changed COUNT
 execute 42
 test ! -e "$fixture/source/.lkjscript-edit.pending"
 printf 'ok const generics: symbolic source types, exact references, checked rename, rollback, layout edits, warm cache and both engines\n'
+
+cp tests/conformance/pass/module_constant_array_length_import.lkj "$fixture/source/main.lkj"
+publish module-length
+query type imported > "$fixture/module-length-type"
+grep -Fq 'fn() -> [u8; COUNT]' "$fixture/module-length-type"
+query uses value@widths::WIDTH > "$fixture/module-length-references"
+grep -Fq 'kind=alias-array-length' "$fixture/module-length-references"
+grep -Fq 'value@widths::local' "$fixture/module-length-references"
+query dependents value@widths::WIDTH > "$fixture/module-length-dependents"
+grep -Fq 'value@imported' "$fixture/module-length-dependents"
+query uses 'shadow::generic:COUNT' > "$fixture/shadow-references"
+grep -Fq 'const-parameter' "$fixture/shadow-references"
+printf '%s\n' '{"version":1,"operations":[{"op":"rename","id":"value@widths::WIDTH","name":"COLUMNS"}]}' > "$fixture/request"
+"$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/module-length-rename.log"
+grep -Fq 'pub const COLUMNS: usize' "$fixture/source/main.lkj"
+grep -Fq 'fn local() -> [u8; crate::widths::COLUMNS]' "$fixture/source/main.lkj"
+grep -Fq 'use widths::COLUMNS as COUNT;' "$fixture/source/main.lkj"
+grep -Fq 'fn imported() -> [u8; COUNT]' "$fixture/source/main.lkj"
+grep -Fq 'fn shadow<const COUNT: usize>(value: u8) -> [u8; COUNT]' "$fixture/source/main.lkj"
+grep -Fq 'let root_value: [u8; WIDTH]' "$fixture/source/main.lkj"
+publish module-length-renamed
+query uses value@widths::COLUMNS > "$fixture/module-length-renamed-references"
+grep -Fq 'kind=alias-array-length' "$fixture/module-length-renamed-references"
+execute 42
+printf 'ok module constant array length: lexical value identity, exact references, checked rename and both engines\n'

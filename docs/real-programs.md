@@ -370,10 +370,10 @@ while other parse errors masked its unsupported-result resolver. Dedicated
 semantic and query/edit controls later established RPIT support. Const-header
 and relaxed-bound diagnostic removals likewise did not admit their original
 positional `Parser<I>`, Fn/Borrow or GAT contracts. The six nom const-header
-removals retain positional-trait and receiver-occurrence limits. Sōzu’s global
-`MAX_FDS_OUT` array length remains outside the literal/scoped-const validator,
-with its later refusal masked by surviving parser/macro errors. No CTFE is
-credited. Sized, const-function and opaque-result restrictions remain as documented.
+removals retain positional-trait and receiver-occurrence limits. In this
+historical cohort, parser and macro errors masked the later `MAX_FDS_OUT`
+array length refusal. Sized, const-function and opaque-result restrictions remain
+as documented.
 
 The summary pins durable raw receipts, exact re-ranking payloads and reviewed
 original-source hashes. Reproduce the results with the
@@ -552,12 +552,15 @@ The frozen original unknown row is not retroactively added to a Sized baseline
 category. The two earlier removed unknown rows remain explicitly recorded at
 `command/src/state.rs:1409:23` and `1435:27`, on Iterator equality bindings.
 
-The earlier `MAX_FDS_OUT` parser diagnostic at `scm_socket.rs:111:39` also
-remains absent. It is still a module constant at line 16, outside the validator
-contract for literal/scoped const-parameter array lengths. Other parser/macro
-errors mask the later E_TYPE. General CTFE and the surrounding function are
-not admitted. The earlier delimiter_size header removal likewise did not
-establish its size_of body. All six associated-constant sites survive.
+The earlier `MAX_FDS_OUT` parser diagnostic at `scm_socket.rs:111:39` was absent
+from this cohort. The later literal module constant change admits the
+`[RawFd; MAX_FDS_OUT]` type in a [reduction](../tests/conformance/pass/sozu_module_constant_array_length.lkj)
+from the pinned Sōzu 1.0.6 file. The reduction preserves the count of 200
+and uses `i32` for `RawFd`. It uses a literal repeat count. The full receive
+function still includes the named repeat count and separate socket and macro
+dependencies. The earlier delimiter_size observation covered its header only.
+The historical totals include all six associated-constant sites.
+[Pinned Sōzu source](https://github.com/sozu-proxy/sozu/blob/c5ff06a12bd514e06ab28965052d0ad1e19c45b3/command/src/scm_socket.rs#L99-L116)
 
 | Rank | Cause | Sites | Affected file lines | Owner / next route |
 | --- | --- | ---: | ---: | --- |

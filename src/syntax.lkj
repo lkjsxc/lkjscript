@@ -1,6 +1,7 @@
 //! Rust-compatible surface reader. The syntax tree is an arena, not a recursive tree.
 mod default;
 mod debug;
+pub(crate) mod integer_literals;
 pub(crate) mod macros;
 mod impl_trait;
 pub(crate) mod formatting;
@@ -1881,12 +1882,19 @@ impl Parser {
                 TypeFrame::Array { span } => {
                     if self.take(";") {
                         if self.token().kind != TokenKind::Number && self.token().kind != TokenKind::Ident {
-                            return Err(self.unsupported("array lengths other than literals or const usize parameters"));
+                            return Err(self.unsupported("array lengths other than literals or names"));
                         }
-                        let len = self.token().text.clone();
+                        let named = self.token().kind == TokenKind::Ident;
+                        let mut len = self.token().text.clone();
                         let length_span = self.token().span;
                         self.at += 1;
+                        while named && self.is("::") && self.tokens[self.at + 1usize].kind == TokenKind::Ident {
+                            self.at += 1;
+                            len.push_str("::");
+                            len.push_str(&self.ident()?);
+                        }
                         if !self.is("]") { return Err(self.unsupported("generic constant arithmetic in array lengths")); }
+                        let length_span = self.finish_span(length_span);
                         self.expect("]")?;
                         value = self.add_finished_type(Type::Array { inner: value, len }, span);
                         self.program.array_length_spans.insert(value, length_span);

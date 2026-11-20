@@ -1,0 +1,8 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+const fn count() -> usize { 3 }
+const COUNT: usize = count();
+pub fn probe() -> usize {
+    let values: [u8; COUNT] = [0u8; 3];
+    values.len()
+}

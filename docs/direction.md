@@ -20,7 +20,7 @@ compare optimized native behavior with interpretation of the original IR.
 There is no unsafe surface, FFI, ambient authority or unwinding. Views may occupy locals, parameters, results and view aggregates, not heap containers.
 Apply the two-way rule: use existing IR/library contracts for everyday forms and rewrite rare consumers that would enlarge trusted semantics.
 Advertised opaque callable origins come from signature positions. Verify concrete containment before admitting the source program.
-Resolve inherent constants in the source producer and lower inert values through ordinary IR. General compile-time evaluation needs its own design decision.
+Resolve inherent constants and literal module constants used as array lengths in the source producer. Lower through ordinary IR. General compile-time evaluation needs its own design decision.
 
 ## Direct native execution (6.1, complete)
 Keep direct x86-64 instruction selection plain. Materialize source paths/lines on

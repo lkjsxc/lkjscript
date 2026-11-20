@@ -133,7 +133,12 @@ fn type_name_form(program: &a::Program, ty: usize, canonical: bool) -> String {
             out.push_str(&type_name_form(program, *inner, canonical)); out
         }
         a::Type::Slice(inner) => format!("[{}]", type_name_form(program, *inner, canonical)),
-        a::Type::Array { inner, len } => format!("[{}; {}]", type_name_form(program, *inner, canonical), len),
+        a::Type::Array { inner, len } => {
+            let length = if canonical { len } else {
+                program.array_length_constants.get(&ty).map_or(len, |(_, name)| name)
+            };
+            format!("[{}; {}]", type_name_form(program, *inner, canonical), length)
+        }
         a::Type::Tuple(values) => {
             let mut out = "(".to_string();
             for (index, value) in values.iter().enumerate() {

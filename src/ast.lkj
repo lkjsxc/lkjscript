@@ -566,6 +566,8 @@ pub struct Program {
     /// Owner::<T>::make and Owner::make::<T> retain distinct source meaning.
     pub value_argument_lists: std::collections::BTreeMap<TypeId, (String, bool)>,
     pub array_length_spans: std::collections::BTreeMap<TypeId, Span>,
+    /// The declaration and written name of a length resolved to a concrete count.
+    pub array_length_constants: std::collections::BTreeMap<TypeId, (DeclarationId, String)>,
     /// Written relaxed Sized bounds are source contracts, never IR type facts.
     pub relaxed_bounds: std::collections::BTreeSet<TypeId>,
     pub exprs: Vec<ExprNode>,

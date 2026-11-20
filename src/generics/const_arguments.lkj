@@ -144,7 +144,8 @@ fn validate_uses(source: &a::Program) -> Result<(), a::Diagnostic> {
         if let a::Type::Array { len, .. } = &node.kind {
             if literal(len).is_none() && !declared(source, node.span, len) {
                 let span = source.array_length_spans.get(&id).copied().unwrap_or(node.span);
-                return Err(a::Diagnostic::new(span, "E_TYPE", "array length requires a declared const usize parameter or usize literal"));
+                return Err(a::Diagnostic::new(span, "E_TYPE",
+                    "array length requires a usize literal, const parameter, or literal module constant"));
             }
         }
     }

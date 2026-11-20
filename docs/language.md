@@ -522,8 +522,8 @@ checking never establishes an array length equality.
 
 Const parameter types must resolve to the builtin `usize`. Other const types,
 const defaults, arithmetic/braced const arguments and array lengths, const
-parameters on nominal types/aliases/trait declarations or trait methods, and
-module constants used as array lengths remain located source boundaries.
+parameters on nominal types/aliases/trait declarations or trait methods remain
+located source boundaries.
 Where predicates whose written target contains a symbolic array length also
 remain a located boundary: the current predicate engine introduces assumptions
 for direct rigid types, while compound targets require concrete trait evidence.
@@ -533,6 +533,15 @@ Checked const-parameter renames update those references when the replacement
 spelling is fresh in the complete enclosing item and all use sites are exact.
 Ambiguous or capturing renames retain a located refusal. Checked body edits
 revalidate symbolic identities before committing source changes.
+
+A name in an array type length can refer to a visible module constant
+declared with the builtin `usize` type and initialized by an integer literal.
+The name may use a module path or a lexical import. For a bare name, a const
+parameter of the same name takes precedence. Resolution uses the literal's value
+as an ordinary concrete length and retains the written reference for queries
+and checked rename.
+Module constants in repeat counts or const-generic arguments and calls or
+arithmetic in named length initializers remain located source boundaries.
 [Const array cases](../tests/conformance/pass/const_generic_arrays.lkj),
 [const receiver cases](../tests/conformance/pass/const_generic_borrowed.lkj),
 [distinct opaque captures](../tests/conformance/fail/const_generic_opaque_identity.lkj).

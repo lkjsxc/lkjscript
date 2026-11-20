@@ -1112,6 +1112,21 @@ fn resolve_nodes(result: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
             resolver.resolve_path(scope, path, Namespace::Type, span)?;
         }
     }
+    for (id, span) in &result.array_length_spans {
+        let (scope, written) = {
+            let node = &result.types[*id];
+            let Type::Array { len, .. } = &node.kind else { continue; };
+            let name = crate::ast::macros::source_name(len);
+            if name.as_bytes().first().is_some_and(|byte| byte.is_ascii_digit())
+                || resolver.generic_value(node.span, name) { continue; }
+            (node.scope, len.clone())
+        };
+        let name = crate::ast::macros::source_name(&written);
+        let Some((declaration, count)) = resolver.module_array_length(result, scope, name, *span)? else { continue; };
+        let Type::Array { len, .. } = &mut result.types[*id].kind else { unreachable!() };
+        *len = format!("{count}");
+        result.array_length_constants.insert(*id, (declaration, written));
+    }
     for id in 0..result.patterns.len() {
         if let Some((context, mutable, by_ref)) = result.macro_pattern_bindings.get(&id).copied() {
             let name: Option<String> = match &result.patterns[id].kind {
@@ -1159,6 +1174,37 @@ fn resolve_nodes(result: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
 }
 
 impl Resolver<'_> {
+    fn module_array_length(&self, resolved: &Program, scope: ModuleId, name: &str, span: Span)
+        -> Result<Option<(DeclarationId, usize)>> {
+        if let Some(separator) = name.rfind("::") {
+            let owner = &name[..separator];
+            if self.module_anchor(scope, owner, span)?.is_none() {
+                let module = self.path(scope, owner, Namespace::Type, span, false)?
+                    .and_then(|path| path.binding)
+                    .is_some_and(|binding| matches!(self.declarations[binding.declaration].item, Item::Module(_)));
+                if !module { return Ok(None); }
+            }
+        }
+        let Some(path) = self.path(scope, name, Namespace::Value, span, false)? else { return Ok(None); };
+        let Some(binding) = path.binding else { return Ok(None); };
+        let Item::Constant(index) = self.declarations[binding.declaration].item else { return Ok(None); };
+        let constant = &resolved.constants[index];
+        if constant.owner.is_some() { return Ok(None); }
+        if !matches!(&resolved.types[constant.ty].kind, Type::Path(ty)
+            if ty.name == "usize" && ty.declaration.is_none() && ty.qualification.is_none()
+                && ty.args.is_empty() && ty.bindings.is_empty()) {
+            return Err(Diagnostic::new(span, "E_TYPE", "array length constant requires the builtin usize type"));
+        }
+        let Expr::Int(text) = &resolved.exprs[constant.value].kind else {
+            return Err(Diagnostic::new(span, "E_UNSUPPORTED", "array length constant requires a usize literal initializer"));
+        };
+        let digits = text.replace('_', "");
+        let digits = if digits.ends_with("usize") { &digits[..digits.len() - 5usize] } else { digits.as_str() };
+        let count = crate::syntax::integer_literals::magnitude(digits).ok_or_else(||
+            Diagnostic::new(span, "E_TYPE", "array length constant initializer is not a representable usize literal"))?;
+        Ok(Some((binding.declaration, count as usize)))
+    }
+
     /// A parameter path keeps its lexical binding even when another module has
     /// a declaration with the same spelling. Resolved items are never parameters.
     pub(crate) fn generic_path(&self, path: &Path, span: Span) -> bool {

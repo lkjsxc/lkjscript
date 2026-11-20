@@ -1955,7 +1955,8 @@ fn capture(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)],
         if matches!(target.kind.as_str(), "field" | "parameter" | "binding" | "generic-parameter") { return Ok(()); }
         for site in &catalog.references {
             if targets.contains(&site.target)
-                || !matches!(site.kind.as_str(), "value" | "alias-value" | "type" | "alias-type" | "constructor" | "alias-constructor"
+                || !matches!(site.kind.as_str(), "value" | "alias-value" | "array-length" | "alias-array-length"
+                    | "type" | "alias-type" | "constructor" | "alias-constructor"
                     | "pattern" | "alias-pattern" | "qualification" | "alias-qualification" | "import" | "alias-import") { continue; }
             let bytes = edit::input(inputs, &site.file)?;
             if site.start > site.end || site.end > bytes.len() { return Err(fail(&site.owner, "SPAN", "reference is outside its source")); }

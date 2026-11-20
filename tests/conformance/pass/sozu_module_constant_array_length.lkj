@@ -1,0 +1,13 @@
+// expect: value 242
+// witness: {}
+// Sōzu 1.0.6, command/src/scm_socket.rs:16,111. Use a literal repeat count.
+type RawFd = i32;
+pub const MAX_FDS_OUT: usize = 200;
+
+fn capacity(fds: &[RawFd; 200]) -> usize { fds.len() }
+
+pub fn probe() -> usize {
+    let mut received_fds: [RawFd; MAX_FDS_OUT] = [0; 200];
+    received_fds[199] = 42;
+    capacity(&received_fds) + received_fds[199] as usize
+}

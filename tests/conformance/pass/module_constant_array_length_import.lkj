@@ -1,0 +1,19 @@
+// expect: value 42
+// witness: {}
+mod widths {
+    pub const WIDTH: usize = 0x0_3usize;
+    pub fn local() -> [u8; WIDTH] { [10u8; 3] }
+}
+use widths::WIDTH as COUNT;
+const WIDTH: usize = 1;
+
+fn imported() -> [u8; COUNT] { widths::local() }
+fn shadow<const COUNT: usize>(value: u8) -> [u8; COUNT] { [value; COUNT] }
+
+pub fn probe() -> usize {
+    let module_value: [u8; 3] = imported();
+    let parameter_value: [u8; 2] = shadow::<2>(5u8);
+    let root_value: [u8; WIDTH] = [2u8];
+    module_value[2] as usize + parameter_value[1] as usize + root_value[0] as usize
+        + module_value.len() * 5 + parameter_value.len() * 5
+}
