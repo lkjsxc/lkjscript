@@ -1,0 +1,19 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait ParseError<I> {}
+trait Parser<I> { type Error: ParseError<I>; }
+struct Verify<F, J> { first: F, other_input: J }
+impl<I, J, F: Parser<I> + Parser<J>> Parser<I> for Verify<F, J> {
+    type Error = <F as Parser<J>>::Error;
+}
+// One caller happens to use the same error type for both applications.
+struct Number;
+impl ParseError<u8> for i64 {}
+impl ParseError<u16> for i64 {}
+impl Parser<u8> for Number { type Error = i64; }
+impl Parser<u16> for Number { type Error = i64; }
+fn use_parser<F: Parser<u8>>(_: F) {}
+pub fn probe() -> i64 {
+    use_parser(Verify { first: Number, other_input: 0u16 });
+    42i64
+}

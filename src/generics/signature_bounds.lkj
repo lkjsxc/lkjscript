@@ -330,14 +330,51 @@ fn prerequisites(
     Ok(selected)
 }
 
-fn concrete_projection(terms: &[Term], ty: usize) -> Option<(Goal, String)> {
+fn projection(terms: &[Term], ty: usize) -> Option<(Goal, String)> {
     let Term::Named(name, children) = &terms[ty] else { return None; };
-    if !name.starts_with("$projection:") || children.len() != 2 { return None; }
+    let member = name.as_str().strip_prefix("$projection:")?;
+    if children.len() != 2 { return None; }
     if !matches!(&terms[children[1]], Term::DeclaredTrait(_, _)) {
         return None;
     }
-    let receiver = children[0];
-    let owner = children[1];
+    Some(((children[0], children[1]), member.to_string()))
+}
+
+fn declared_projection_bound(source: &Program, terms: &mut Vec<Term>, goal: Goal, known: &[Goal]) -> Result<bool, Diagnostic> {
+    let Some(((receiver, owner), member)) = projection(terms, goal.0) else { return Ok(false); };
+    if !known.iter().any(|(ty, bound)| equivalent(terms, receiver, *ty) && equivalent(terms, owner, *bound)) {
+        return Ok(false);
+    }
+    let (declaration, argument_count) = match &terms[owner] {
+        Term::DeclaredTrait(declaration, arguments) => (*declaration, arguments.len()),
+        _ => return Ok(false),
+    };
+    let declared = &source.traits[declaration];
+    if declared.generics.len() != argument_count { return Ok(false); }
+    // The exact applied owner is an assumption. Instantiate its member's
+    // contract with the owner's arguments, keeping sibling projections symbolic.
+    let mut environment = implemented_trait_environment(source, declaration, owner, receiver, &BTreeMap::new(), terms);
+    parameter_projection_terms(source, &declared.generics, &mut environment, terms);
+    let mut bounds = Vec::new();
+    for item in &declared.associated {
+        if !item.generics.is_empty() { continue; }
+        if item.name == member { bounds = item.bounds.clone(); }
+        let value = push(terms, Term::Named(projection_name(&item.name), vec![receiver, owner]));
+        environment.insert(format!("Self::{}", item.name), value);
+        environment.insert(format!("$self-projection:{declaration}:{}", item.name), value);
+    }
+    environment.insert("$bound-self".to_string(), goal.0);
+    for constraint in bounds {
+        let bound = signature_type(source, constraint, &environment, terms)?;
+        for inherited in bound_closure(source, bound, goal.0, terms)? {
+            if equivalent(terms, goal.1, inherited) { return Ok(true); }
+        }
+    }
+    Ok(false)
+}
+
+fn concrete_projection(terms: &[Term], ty: usize) -> Option<(Goal, String)> {
+    let ((receiver, owner), member) = projection(terms, ty)?;
     let mut pending = vec![receiver, owner];
     while let Some(ty) = pending.pop() {
         match &terms[ty] {
@@ -350,7 +387,7 @@ fn concrete_projection(terms: &[Term], ty: usize) -> Option<(Goal, String)> {
             Term::DeclaredTrait(_, children) => pending.extend_from_slice(children),
         }
     }
-    Some(((receiver, owner), name["$projection:".len()..].to_string()))
+    Some(((receiver, owner), member))
 }
 
 fn term_contains(terms: &[Term], outer: usize, inner: usize) -> bool {
@@ -418,7 +455,9 @@ pub(super) fn prove(
             }
             continue;
         }
-        if sized_bounds::symbolic_goal(source, terms, goal.0, goal.1, known) || symbolic_bound(terms, goal.0, goal.1, known) {
+        if sized_bounds::symbolic_goal(source, terms, goal.0, goal.1, known)
+            || symbolic_bound(terms, goal.0, goal.1, known)
+            || declared_projection_bound(source, terms, goal, known)? {
             state.insert(goal, 2);
             continue;
         }

@@ -1,0 +1,24 @@
+// expect: value 42
+// witness: {}
+// Reduced from nom's Parser::Error and its forwarding combinators.
+trait ParseError<I> {
+    fn from_error_kind(input: I, kind: i64) -> Self;
+}
+trait Parser<I> {
+    type Error: ParseError<I>;
+}
+struct Verify<F> { first: F }
+impl<I, F: Parser<I>> Parser<I> for Verify<F> {
+    type Error = <F as Parser<I>>::Error;
+}
+struct Number;
+impl ParseError<i64> for i64 {
+    fn from_error_kind(input: i64, kind: i64) -> Self { input + kind }
+}
+impl Parser<i64> for Number {
+    type Error = i64;
+}
+fn make_error<I, F: Parser<I>>(input: I) -> <F as Parser<I>>::Error {
+    <F as Parser<I>>::Error::from_error_kind(input, 2i64)
+}
+pub fn probe() -> i64 { make_error::<i64, Verify<Number>>(40i64) }

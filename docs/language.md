@@ -449,6 +449,9 @@ inside other types and in `where` predicates; conditional implementation selecti
 proves these predicates before exposing a witness. Qualified and unambiguous
 shorthand projections denote the same source type. Unused nominal declarations
 and trait method signatures retain their obligations.
+Forwarding `<F as Parser<I>>::Error` as an associated type carries its declared
+bounds from the exact `F: Parser<I>` assumption, so `Error: ParseError<I>` uses
+that same `I` during generic implementation checking.
 
 A chained call such as `<T as Source>::Item::make()` selects an associated
 function on the projected receiver. Its declared trait must be in scope; inherent
