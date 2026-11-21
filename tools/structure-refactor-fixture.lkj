@@ -1,0 +1,44 @@
+//! Produce the extract-function request from the query's item span.
+use std::sha256;
+
+fn item_metadata(report: &str) -> Option<(usize, usize, &str)> {
+    for line in report.lines() {
+        if let Some(item) = line.strip_prefix("\"value@probe\"\tlevel=source-claim\tfact=item\t") {
+            let (_, span) = item.split_once(" start=")?;
+            let (start, tail) = span.split_once(" end=")?;
+            let (end, tail) = tail.split_once(' ')?;
+            let (_, digest) = tail.split_once(" item-sha256=")?;
+            let (digest, _) = digest.split_once(' ')?;
+            return Some((start.parse::<usize>().ok()?, end.parse::<usize>().ok()?, digest));
+        }
+    }
+    None
+}
+
+fn request(input: &mut Stdin, source: &mut ReadDirectory) -> Result<String, String> {
+    let report = input.read_to_end().map_err(|errno: i64| -> String { format!("metadata: read errno {errno}") })?;
+    let report = String::from_utf8(report).map_err(|_| -> String { "metadata is not UTF-8".to_string() })?;
+    let (start, end, digest) = item_metadata(report.as_str()).ok_or("missing source metadata".to_string())?;
+    let mut file = source.open("main.lkj").map_err(|errno: i64| -> String { format!("main.lkj: open errno {errno}") })?;
+    let bytes = file.read_to_end().map_err(|errno: i64| -> String { format!("main.lkj: read errno {errno}") })?;
+    if start > end || end > bytes.len() { return Err("item span outside main.lkj".to_string()); }
+    let item = &bytes[start..end];
+    if sha256::hex_digest(item).as_str() != digest { return Err("item digest mismatch".to_string()); }
+    let item = String::from_utf8(item.to_vec()).map_err(|_| -> String { "item is not UTF-8".to_string() })?;
+    let expression = "20i64 + 22i64";
+    let start = item.find(expression).ok_or("missing expression".to_string())?;
+    let end = start + expression.len();
+    Ok(format!(
+        "{{\"version\":1,\"operations\":[{{\"op\":\"extract-function\",\"id\":\"probe\",\"expect\":\"{digest}\",\"name\":\"calculate\",\"start\":{start},\"end\":{end},\"parameters\":[],\"result\":\"i64\"}}]}}\n"
+    ))
+}
+
+pub fn main(mut input: Stdin, mut source: ReadDirectory, mut output: Stdout, mut errors: Stderr, mut status: ExitStatus) {
+    match request(&mut input, &mut source) {
+        Ok(text) => output.write(text.as_bytes()),
+        Err(problem) => {
+            errors.write(format!("structure-refactor fixture: {problem}\n").as_bytes());
+            status.set_status(1);
+        }
+    }
+}

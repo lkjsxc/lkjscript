@@ -63,17 +63,10 @@ mkdir "$fixture/store"
 snapshot=$(awk '$1 == "LKJSCRIPT_SNAPSHOT" { print $2 }' "$fixture/index")
 test "${#snapshot}" -eq 64
 "$compiler" query main.lkj --source-dir "$fixture/project" --no-library --store "$fixture/store" --store-key "$fixture/key" --snapshot "$snapshot" --kind meta --id probe > "$fixture/meta"
-perl - "$fixture/project/main.lkj" "$fixture/meta" > "$fixture/request.json" <<'PERL'
-use strict; use warnings;
-open my $file, '<:raw', shift or die $!; local $/; my $text=<$file>;
-open my $meta, '<:raw', shift or die $!; my $facts=<$meta>;
-$facts =~ /start=([0-9]+) end=([0-9]+).*item-sha256=([0-9a-f]{64})/ or die "missing source metadata";
-my ($begin,$end,$digest)=($1,$2,$3);
-$text=substr($text,$begin,$end-$begin);
-my $expression='20i64 + 22i64'; my $start=index($text,$expression); die "missing expression" if $start < 0;
-printf '{"version":1,"operations":[{"op":"extract-function","id":"probe","expect":"%s","name":"calculate","start":%d,"end":%d,"parameters":[],"result":"i64"}]}', $digest,$start,$start+length($expression);
-print "\n";
-PERL
+"$compiler" build tools/structure-refactor-fixture.lkj --library-dir library --no-store \
+    --grant input --grant source=env:LKJSCRIPT_REFACTOR_FIXTURE_SOURCE --grant output --grant errors --grant status \
+    -o "$fixture/extract-request"
+LKJSCRIPT_REFACTOR_FIXTURE_SOURCE="$fixture/project" "$fixture/extract-request" < "$fixture/meta" > "$fixture/request.json"
 # Reconstruct the exact request from the authored item, independently of query metadata.
 extract_expression='20i64 + 22i64'
 extract_prefix=${extract_item%%"$extract_expression"*}
@@ -81,6 +74,14 @@ extract_digest=$(printf '%s' "$extract_item" | sha256sum)
 printf '{"version":1,"operations":[{"op":"extract-function","id":"probe","expect":"%s","name":"calculate","start":%d,"end":%d,"parameters":[],"result":"i64"}]}\n' \
     "${extract_digest%% *}" "${#extract_prefix}" "$((${#extract_prefix} + ${#extract_expression}))" > "$fixture/expected-request.json"
 cmp "$fixture/expected-request.json" "$fixture/request.json"
+mkdir "$fixture/changed-source"
+printf '%s\n' "${extract_item/20i64/21i64}" > "$fixture/changed-source/main.lkj"
+fixture_status=0
+LKJSCRIPT_REFACTOR_FIXTURE_SOURCE="$fixture/changed-source" "$fixture/extract-request" < "$fixture/meta" \
+    > "$fixture/extract-refused.out" 2> "$fixture/extract-refused.err" || fixture_status=$?
+test "$fixture_status" -eq 1
+test ! -s "$fixture/extract-refused.out"
+printf 'structure-refactor fixture: item digest mismatch\n' | cmp - "$fixture/extract-refused.err"
 "$compiler" edit "${common[@]}" --request "$fixture/request.json" > "$fixture/plan"
 value 42
 grep -q 'fn calculate' "$fixture/project/main.lkj"
