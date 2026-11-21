@@ -75,8 +75,7 @@ Holder liveness is conservative; its rejection names the lexical-scope rewrite.
 borrowed_closure_escape remains pending; obsolete prose about three absent scoped-concurrency cases is not a contract.
 Cargo, bridge and rustc shim stay in witness/. CI bootstraps from the seed and an empty
 store without Cargo, rustc or Node. The full native gate uses Node and Perl for fixtures.
-The advisory witness must never constrain language design.
-Accepted programs agree; delete the witness when it blocks
+The advisory witness must never constrain language design. Accepted programs agree; delete the witness when it blocks
 needed forms or ceases to find useful differences. Source uses .lkj to identify lkjscript before reading; only actual Rust witness code uses .rs. Retain Rust shape; child.lkj/child/mod.lkj and program.lkj have no .rs alias or fallback.
 
 ## Program specimens (programs stream)
