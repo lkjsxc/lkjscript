@@ -116,15 +116,24 @@ timeout --kill-after=3s 30s "$work/supervisor" > "$work/server.out" 2>"$work/ser
 server_pid=$!
 for _ in {1..200};do test ! -s "$work/state/port" || break;kill -0 "$server_pid";sleep 0.01;done
 port=$(cat "$work/state/port")
+# Observe the socket with Bash, independently of the compiled worker and supervisor.
 for path in ok panic ok ok spin ok bad ok;do
-    if [[ "$path" == panic || "$path" == spin ]];then
-        if curl -fsS --max-time 2 "http://127.0.0.1:$port/$path" > "$work/response" 2>"$work/curl.err";then exit 1;fi
-    elif [[ "$path" == bad ]];then
-        status=$(curl -sS --max-time 2 -o "$work/response" -w '%{http_code}' "http://127.0.0.1:$port/$path")
-        test "$status" = 400;test "$(cat "$work/response")" = bad
-    else
-        curl -fsS --max-time 2 "http://127.0.0.1:$port/$path" > "$work/response" 2>"$work/curl.err"
-        test "$(cat "$work/response")" = 42
+    if ! timeout --kill-after=1s 2s bash -euc '
+        exec 3<>"/dev/tcp/127.0.0.1/$1"
+        printf "GET /%s HTTP/1.1\r\nHost: 127.0.0.1:%s\r\nAccept: */*\r\n\r\n" "$2" "$1" >&3
+        exec cat <&3
+    ' process-http "$port" "$path" > "$work/response"; then
+        printf 'supervisor request /%s failed before a complete response\n' "$path" >&2
+        exit 1
+    fi
+    case "$path" in
+        ok) expected=$'HTTP/1.1 200 OK\r\nContent-Length: 2\r\nConnection: close\r\n\r\n42';;
+        bad) expected=$'HTTP/1.1 400 Bad Request\r\nContent-Length: 3\r\nConnection: close\r\n\r\nbad';;
+        panic|spin) expected=;;
+    esac
+    if ! printf '%s' "$expected" | cmp - "$work/response"; then
+        printf 'unexpected supervisor response to /%s\n' "$path" >&2
+        exit 1
     fi
 done
 wait "$server_pid";server_pid=

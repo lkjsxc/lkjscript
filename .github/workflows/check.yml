@@ -7,7 +7,7 @@ jobs:
     steps:
       - name: Gate dependencies
         # C builds independent syscall witnesses; the compiler bootstraps from its seed.
-        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates curl gcc libc6-dev
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates gcc libc6-dev
       - uses: actions/checkout@v4
       - name: Seed-only compiler bootstrap
         run: |

@@ -164,9 +164,9 @@ File drop, independent aliases and identical errno behavior.
 
 The complete focused process gate passed in 20.498 s, load 18.07 → 15.12.
 The default gate uses fresh state and an OS-assigned loopback port, cleans its
-own files, and runs beneath a private subreaper that kills/reaps any leaked
-test descendants. It needs Perl and curl as test tools; the runtime and
-libraries remain lkjscript.
+own files, and runs beneath a private Perl subreaper that kills/reaps any
+leaked test descendants. A Bash loopback client compares the exact HTTP
+responses from the parser supervisor.
 
 ```sh
 bash tools/programs-process-test.sh --compiler target/lkjscript
