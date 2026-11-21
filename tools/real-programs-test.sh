@@ -49,9 +49,10 @@ test ! -s "$work/provenance.err"
     > "$work/checksums-build.out" 2> "$work/checksums-build.err"
 "$work/checksums" < "$work/provenance.json" > "$work/restored.sha256" 2> "$work/checksums.err"
 test ! -s "$work/checksums.err"
-# Recompute the inverse projection from the specimen, compare every report byte,
-# and run the independent mutation controls before consuming the native report.
-node tools/real-programs/verify-levenshtein.mjs --check-report "$work/provenance.json" "$source" --checksums "$work/restored.sha256"
+# Authenticate the pinned inputs, check the inverse and compare every report
+# and checksum byte before the restorer consumes them.
+bash tools/real-programs/check-levenshtein.sh "$source" "$work/provenance.json" "$work/restored.sha256" "$work/oracle"
+IFS= read -r expected_import < "$work/oracle/import.json"
 # A malformed second digest must refuse before emitting the first checksum line.
 checksum_status=0
 printf '{"files":{"src/lib.rs":{"sha256":"%064d"},"tests/lib.rs":{"sha256":"bad"}}}\n' 0 |
@@ -109,17 +110,9 @@ cp "$source/LICENSE" "$import_source/license"
 cmp "$work/import-native.out" "$work/import-interpreter.out"
 test ! -s "$work/import-native.err"
 test ! -s "$work/import-interpreter.err"
-node --input-type=module - "$source" "$work" <<'NODE'
-import fs from 'node:fs';
-import assert from 'node:assert/strict';
-const [source, work] = process.argv.slice(2);
-const expected = {version:1, operations:[{op:'add-item', id:'crate', source:'mod upstream;',
-    projection:{path:'examples/real_programs/levenshtein/upstream.lkj',
-        source:fs.readFileSync(source + '/upstream.lkj','utf8')}}]};
-for (const engine of ['native','interpreter']) {
-    assert.deepEqual(JSON.parse(fs.readFileSync(work + '/import-' + engine + '.json','utf8')), expected);
-}
-NODE
+for engine in native interpreter; do
+    printf '%s\n' "$expected_import" | cmp - "$work/import-$engine.json"
+done
 printf '\nchanged digest\n' >> "$import_source/license"
 if "$work/importer" "$import_source" "$source/upstream.json" "$work/import-refused.json" > "$work/import-refused.out" 2> "$work/import-refused.err"; then
     printf 'importer admitted changed upstream bytes\n' >&2
