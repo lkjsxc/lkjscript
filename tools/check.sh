@@ -148,6 +148,7 @@ parallel_step 1 maybe-sized timeout --kill-after=10s 600s bash tools/maybe-sized
 parallel_step 1 outlives-where timeout --kill-after=10s 600s bash tools/outlives-where-test.sh "$check_binary"
 parallel_step 1 debug-format timeout --kill-after=10s 600s bash tools/debug-format-test.sh "$check_binary"
 parallel_step 1 declarative-macros timeout --kill-after=10s 600s bash tools/declarative-macro-test.sh "$check_binary"
+parallel_step 1 macro-statements timeout --kill-after=10s 600s bash tools/macro-statement-test.sh "$check_binary"
 # The complete macro-origin host suite took 580.842 s in CI; retain a
 # finite watchdog with headroom while preserving every native/interpreter check.
 parallel_step 1 macro-origins timeout --kill-after=10s 1800s bash tools/macro-origin-test.sh "$check_binary"

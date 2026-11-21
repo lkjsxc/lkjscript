@@ -194,3 +194,76 @@ pub(super) fn generated_nodes(catalog: &mut Catalog, files: &[SourceText], progr
     }
     Ok(())
 }
+
+/// Generated binders belong to their expansion epoch, never an authored body ordinal.
+pub(super) fn generated_bindings(catalog: &mut Catalog, files: &[SourceText], program: &a::Program,
+    origins: &origins::Origins, bindings: &mut BTreeMap<usize, String>,
+    evidence: &Option<crate::elaborate::semantic::Evidence>) -> Result<(), String> {
+    let mut counts: BTreeMap<(usize, String), usize> = BTreeMap::new();
+    for (pattern, expansion) in &origins.macros.patterns {
+        if origins.patterns.contains_key(pattern) || !origins.macros.live_patterns.contains(pattern) { continue; }
+        let node = &program.patterns[*pattern];
+        let a::Pattern::Bind { name, .. } = &node.kind else { continue; };
+        let name = a::macros::source_name(name).to_string();
+        let owner = origins::macros::expansion_identity(*expansion);
+        let index = *catalog.by_identity.get(&owner).unwrap();
+        let epoch = catalog.items[index].body_digest.clone();
+        let key = (*expansion, name.clone());
+        let ordinal = counts.get(&key).copied().unwrap_or(0usize);
+        counts.insert(key, ordinal + 1usize);
+        let identity = format!("{owner}::derived:{epoch}::binding:{name}:{ordinal}");
+        bindings.insert(*pattern, identity.clone());
+        let ty = evidence.as_ref().and_then(|value| value.bindings.get(pattern)).cloned();
+        append(catalog, files, identity.clone(), owner, "binding", &name, node.span, None,
+            ty.clone().unwrap_or_else(|| -> String { "inferred type is unavailable".to_string() }), false)?;
+        generated_projection(catalog, files, program, &identity,
+            origins::Origin { declaration: None, expansion: origins::Expansion::Macro(*expansion) }, name, false)?;
+        let index = *catalog.by_identity.get(&identity).unwrap();
+        if let Some(ty) = ty {
+            catalog.items[index].type_name = display_type_evidence(&ty)?;
+            catalog.items[index].canonical_type = ty; catalog.items[index].type_resolved = true;
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn function_owner(program: &a::Program, roots: &BTreeMap<usize, usize>,
+    mut block: Option<usize>) -> Option<usize> {
+    let mut seen: BTreeSet<usize> = BTreeSet::new();
+    while let Some(id) = block {
+        if !seen.insert(id) { return None; }
+        if let Some(function) = roots.get(&id) { return Some(*function); }
+        block = program.blocks.get(id)?.parent;
+    }
+    None
+}
+
+pub(super) fn local_identity(catalog: &Catalog, program: &a::Program, bindings: &BTreeMap<usize, String>,
+    function: Option<usize>, target: crate::elaborate::semantic::LocalTarget) -> Option<String> {
+    match target {
+        crate::elaborate::semantic::LocalTarget::Pattern(pattern) => bindings.get(&pattern).cloned(),
+        crate::elaborate::semantic::LocalTarget::Parameter(position) => {
+            let function = function?;
+            let parameter = program.functions[function].params.get(position)?;
+            Some(parameter_identity(&catalog.function_ids[function], &parameter.name, position))
+        }
+        crate::elaborate::semantic::LocalTarget::Unavailable => None,
+    }
+}
+
+pub(super) fn generated_locals(catalog: &mut Catalog, files: &[SourceText], program: &a::Program,
+    origins: &origins::Origins, bindings: &BTreeMap<usize, String>,
+    evidence: &Option<crate::elaborate::semantic::Evidence>) {
+    let Some(evidence) = evidence else { return; };
+    let mut roots: BTreeMap<usize, usize> = BTreeMap::new();
+    for (function, value) in program.functions.iter().enumerate() { if let Some(body) = value.body { roots.insert(body, function); } }
+    for (expression, expansion) in &origins.macros.expressions {
+        if origins.expressions.contains_key(expression) || !origins.macros.live_expressions.contains(expression) { continue; }
+        let Some(target) = evidence.locals.get(expression).copied() else { continue; };
+        let node = &program.exprs[*expression];
+        let a::Expr::Path(_) = &node.kind else { continue; };
+        let function = function_owner(program, &roots, node.block);
+        let target = local_identity(catalog, program, bindings, function, target);
+        generated_reference(catalog, files, &origins::macros::expansion_identity(*expansion), target, node.span, "local-value");
+    }
+}

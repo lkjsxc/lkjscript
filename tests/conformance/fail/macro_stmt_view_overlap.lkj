@@ -1,0 +1,4 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+macro_rules! borrow_view { ($name:ident, $value:ident) => { let $name = &$value; }; }
+pub fn probe() -> i64 { let mut value = 1i64; borrow_view!(view, value); value = 2i64; *view }

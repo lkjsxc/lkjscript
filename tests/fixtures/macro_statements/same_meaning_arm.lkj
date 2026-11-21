@@ -1,0 +1,3 @@
+macro_rules! choose { (y) => { 0i64 }; ($i:ident) => { 0i64 }; }
+macro_rules! read_and_test { ($i:ident) => { choose!($i) + $i }; }
+pub fn probe() -> i64 { let x = 5i64; read_and_test!(x) }

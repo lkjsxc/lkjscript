@@ -1,0 +1,2 @@
+macro_rules! shadow { ($e:expr) => {{ let y = 1i64; $e + y }}; }
+fn main() -> i64 { let x = 41i64; shadow!(x) }

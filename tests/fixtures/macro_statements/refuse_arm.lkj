@@ -1,0 +1,2 @@
+macro_rules! pick { (y) => { 100i64 }; ($e:expr) => { $e }; }
+fn main() -> i64 { let x = 5i64; pick!(x) }

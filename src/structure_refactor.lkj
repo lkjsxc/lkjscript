@@ -72,7 +72,7 @@ fn raw(unit: &Unit, span: a::Span) -> Result<String, String> {
 }
 fn absolute(unit: &Unit, span: a::Span) -> (usize, usize) { (unit.owner.start + span.start, unit.owner.start + span.end) }
 fn contains(start: usize, end: usize, begin: usize, finish: usize) -> bool { start <= begin && finish <= end }
-fn at_site(id: &str, rule: &str, site: &semantic::Reference, reason: &str) -> String {
+pub(crate) fn at_site(id: &str, rule: &str, site: &semantic::Reference, reason: &str) -> String {
     fail(id, rule, &format!("{reason}; decision site {} {}:{}..{} ({})",
         semantic::quote(&site.owner), semantic::quote(&site.file), site.start, site.end, site.kind))
 }

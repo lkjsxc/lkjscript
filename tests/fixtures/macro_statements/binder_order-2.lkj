@@ -1,0 +1,2 @@
+macro_rules! pair { ($a:ident, $b:ident) => {{ let $b = 2i64; let $a = 1i64; $a * 10i64 + $b }}; }
+pub fn probe() -> i64 { let t = 0i64; pair!(t, t) + t }

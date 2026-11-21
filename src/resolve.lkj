@@ -1165,6 +1165,9 @@ fn resolve_nodes(result: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
                 if let Some(path) = resolver.value_pattern(scope, &name, span)? {
                     if mutable || by_ref { return Err(Diagnostic::new(span, "E_TYPE", "binding mode cannot shadow a value constructor or constant")); }
                     result.patterns[id].kind = Pattern::Path(path);
+                    // value_pattern already resolved the constructor at its destination.
+                    // Internal library paths are canonical results, not new source spellings.
+                    continue;
                 } else {
                     result.patterns[id].kind = Pattern::Bind { name: crate::ast::macros::local_name(&name, context),
                         mutable: mutable && !by_ref, by_ref, ref_mut: mutable && by_ref };

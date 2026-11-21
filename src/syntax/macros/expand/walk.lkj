@@ -1,0 +1,215 @@
+//! One depth-first syntax traversal is shared by normal expansion and replay.
+use super::*;
+
+fn absent(kind: &str) -> Diagnostic {
+    error(Span::default(), "E_MACRO_EXPANSION", &format!("expanded {kind} edge is absent"))
+}
+impl Expander {
+    pub(super) fn program(&mut self, program: &mut Program) -> Result<(), Diagnostic> {
+        let items = std::mem::replace(&mut program.items, Vec::new());
+        program.items = self.items(program, items)?;
+        let mut at = 0usize;
+        while at < program.modules.len() { self.item_node(program, Item::Module(at))?; at += 1usize; }
+        at = 0usize;
+        while at < program.functions.len() { self.item_node(program, Item::Function(at))?; at += 1usize; }
+        at = 0usize;
+        while at < program.constants.len() { self.item_node(program, Item::Constant(at))?; at += 1usize; }
+        at = 0usize;
+        while at < program.enums.len() { self.item_node(program, Item::Enum(at))?; at += 1usize; }
+        Ok(())
+    }
+    pub(super) fn item_node(&mut self, program: &mut Program, item: Item) -> Result<(), Diagnostic> {
+        match item {
+            Item::Function(id) => {
+                if !self.visited.insert((3usize, id)) { return Ok(()); }
+                let body = program.functions.get(id).ok_or_else(|| absent("function"))?.body;
+                if let Some(body) = body { self.block_node(program, body)?; }
+            }
+            Item::Module(id) => {
+                if !self.visited.insert((4usize, id)) { return Ok(()); }
+                if id >= program.modules.len() { return Err(absent("module")); }
+                let items = std::mem::replace(&mut program.modules[id].items, Vec::new());
+                program.modules[id].items = self.items(program, items)?;
+            }
+            Item::Constant(id) => {
+                if !self.visited.insert((5usize, id)) { return Ok(()); }
+                let value = program.constants.get(id).ok_or_else(|| absent("constant"))?.value;
+                self.expression_node(program, value)?;
+            }
+            Item::Enum(id) => {
+                if !self.visited.insert((6usize, id)) { return Ok(()); }
+                let variants = program.enums.get(id).ok_or_else(|| absent("enum"))?.variants.clone();
+                for variant in variants {
+                    if let Some(value) = variant.discriminant { self.expression_node(program, value)?; }
+                }
+            }
+            Item::Impl(id) => {
+                let value = program.impls.get(id).cloned().ok_or_else(|| absent("implementation"))?;
+                for method in value.methods { self.item_node(program, Item::Function(method))?; }
+                for constant in value.constants { self.item_node(program, Item::Constant(constant))?; }
+            }
+            Item::Trait(id) => {
+                let methods = program.traits.get(id).ok_or_else(|| absent("trait"))?.methods.clone();
+                for method in methods { self.item_node(program, Item::Function(method))?; }
+            }
+            Item::MacroInvocation(_) => return Err(absent("item invocation consumer")),
+            Item::Struct(_) | Item::Use(_) | Item::Alias(_) => {}
+        }
+        Ok(())
+    }
+    fn statement(&mut self, program: &mut Program, call: usize, block: BlockId, first: usize,
+        inherited_semi: bool, terminal: bool) -> Result<(Vec<Stmt>, Option<ExprId>), Diagnostic> {
+        if self.failed.contains(&call) { return Ok((vec![Stmt::MacroInvocation(call)], None)); }
+        self.active.push(call);
+        let invocation = self.invocation(program, call)?;
+        let MacroPosition::Statement { semicolon, .. } = invocation.position else {
+            return Err(error(invocation.span, "E_MACRO_EXPANSION", "macro invocation is not a statement"));
+        };
+        if invocation.block != Some(block) || block >= program.blocks.len()
+            || program.blocks[block].scope != invocation.destination {
+            return Err(error(invocation.span, "E_MACRO_EXPANSION", "statement macro destination block differs"));
+        }
+        let (tokens, expansion) = self.begin(program, call)?;
+        let (statements, tail) = super::super::statements(program, &tokens, &invocation, expansion)?;
+        program.macro_expansions[expansion].end = crate::ast::macros::inventory(program);
+        let (statements, tail) = self.sequence(program, block, first, statements, tail,
+            semicolon || inherited_semi, terminal)?;
+        program.macro_expansions[expansion].splice = Some(MacroSplice {
+            block, first, count: statements.len(), tail,
+        });
+        self.active.pop();
+        Ok((statements, tail))
+    }
+    fn sequence(&mut self, program: &mut Program, block: BlockId, first: usize, input: Vec<Stmt>,
+        tail: Option<ExprId>, semi: bool, terminal: bool) -> Result<(Vec<Stmt>, Option<ExprId>), Diagnostic> {
+        let mut output = Vec::new();
+        let mut result_tail = None;
+        let count = input.len();
+        for (at, statement) in input.into_iter().enumerate() {
+            let last = at + 1usize == count && tail.is_none();
+            if let Stmt::MacroInvocation(call) = statement {
+                let (statements, nested_tail) = self.statement(program, call, block, first + output.len(),
+                    semi && last, terminal && last)?;
+                for statement in statements { output.push(statement); }
+                if nested_tail.is_some() { result_tail = nested_tail; }
+            } else {
+                match &statement {
+                    Stmt::Let { pattern, value, .. } => {
+                        self.pattern_node(program, *pattern)?;
+                        if let Some(value) = value { self.expression_node(program, *value)?; }
+                    }
+                    Stmt::Expr { value, .. } => self.expression_node(program, *value)?,
+                    Stmt::Item(item) => self.item_node(program, *item)?,
+                    Stmt::MacroInvocation(_) => {}
+                }
+                output.push(statement);
+            }
+        }
+        if let Some(value) = tail {
+            self.expression_node(program, value)?;
+            if semi { output.push(Stmt::Expr { value, semicolon: true }); }
+            else if terminal { result_tail = Some(value); }
+            else { output.push(Stmt::Expr { value, semicolon: false }); }
+        }
+        Ok((output, result_tail))
+    }
+    fn block_node(&mut self, program: &mut Program, id: BlockId) -> Result<(), Diagnostic> {
+        if !self.visited.insert((1usize, id)) { return Ok(()); }
+        if id >= program.blocks.len() { return Err(absent("block")); }
+        let input = std::mem::replace(&mut program.blocks[id].statements, Vec::new());
+        let tail = program.blocks[id].tail.take();
+        let (statements, tail) = self.sequence(program, id, 0usize, input, tail, false, true)?;
+        program.blocks[id].statements = statements;
+        program.blocks[id].tail = tail;
+        Ok(())
+    }
+    fn pattern_node(&mut self, program: &mut Program, id: PatternId) -> Result<(), Diagnostic> {
+        if !self.visited.insert((2usize, id)) { return Ok(()); }
+        let node = program.patterns.get(id).cloned().ok_or_else(|| absent("pattern"))?;
+        match node.kind {
+            Pattern::Literal(value) => self.expression_node(program, value)?,
+            Pattern::Range { start, end, .. } => {
+                if let Some(value) = start { self.expression_node(program, value)?; }
+                if let Some(value) = end { self.expression_node(program, value)?; }
+            }
+            Pattern::Tuple(values) | Pattern::Variant { fields: values, .. } | Pattern::Or(values) => {
+                for value in values { self.pattern_node(program, value)?; }
+            }
+            Pattern::Struct { fields, .. } => { for (_, value) in fields { self.pattern_node(program, value)?; } }
+            Pattern::Ref { inner, .. } => self.pattern_node(program, inner)?,
+            Pattern::Wild | Pattern::Rest | Pattern::Bind { .. } | Pattern::Path(_) => {}
+        }
+        Ok(())
+    }
+    pub(super) fn expression_node(&mut self, program: &mut Program, id: ExprId) -> Result<(), Diagnostic> {
+        if !self.visited.insert((0usize, id)) { return Ok(()); }
+        let node = program.exprs.get(id).cloned().ok_or_else(|| absent("expression"))?;
+        match node.kind.clone() {
+            Expr::MacroInvocation(call) => {
+                if self.failed.contains(&call) { return Ok(()); }
+                let expanded = self.expression(program, call)?;
+                program.macro_aliases.push(MacroAlias { expression: id, original: node, expanded, invocation: call });
+                program.exprs[id] = program.exprs[expanded].clone();
+            }
+            Expr::Tuple(values) | Expr::Array(values) | Expr::Macro { args: values, .. } => {
+                for value in values { self.expression_node(program, value)?; }
+            }
+            Expr::Repeat { value, count } => { self.expression_node(program, value)?; self.expression_node(program, count)?; }
+            Expr::Unary { value, .. } | Expr::Borrow { value, .. } | Expr::Cast { value, .. }
+            | Expr::Field { value, .. } | Expr::Try(value) | Expr::Diverge(value) => self.expression_node(program, value)?,
+            Expr::Binary { left, right, .. } => { self.expression_node(program, left)?; self.expression_node(program, right)?; }
+            Expr::Assign { place, value, .. } => { self.expression_node(program, place)?; self.expression_node(program, value)?; }
+            Expr::Index { value, index } => { self.expression_node(program, value)?; self.expression_node(program, index)?; }
+            Expr::Call { callee, args } => {
+                self.expression_node(program, callee)?;
+                for value in args { self.expression_node(program, value)?; }
+            }
+            Expr::Method { receiver, args, .. } => {
+                self.expression_node(program, receiver)?;
+                for value in args { self.expression_node(program, value)?; }
+            }
+            Expr::Struct { fields, base, .. } => {
+                for (_, value) in fields { self.expression_node(program, value)?; }
+                if let Some(value) = base { self.expression_node(program, value)?; }
+            }
+            Expr::Block(body) | Expr::Loop { body } => self.block_node(program, body)?,
+            Expr::If { condition, then_block, otherwise } => {
+                self.expression_node(program, condition)?; self.block_node(program, then_block)?;
+                if let Some(value) = otherwise { self.expression_node(program, value)?; }
+            }
+            Expr::IfLet { pattern, value, then_block, otherwise } => {
+                self.pattern_node(program, pattern)?; self.expression_node(program, value)?; self.block_node(program, then_block)?;
+                if let Some(value) = otherwise { self.expression_node(program, value)?; }
+            }
+            Expr::While { condition, body } => { self.expression_node(program, condition)?; self.block_node(program, body)?; }
+            Expr::WhileLet { pattern, value, body } => {
+                self.pattern_node(program, pattern)?; self.expression_node(program, value)?; self.block_node(program, body)?;
+            }
+            Expr::For { pattern, iterator, body } => {
+                self.pattern_node(program, pattern)?; self.expression_node(program, iterator)?; self.block_node(program, body)?;
+            }
+            Expr::Match { value, arms } => {
+                self.expression_node(program, value)?;
+                for arm in arms {
+                    self.pattern_node(program, arm.pattern)?;
+                    if let Some(guard) = arm.guard { self.expression_node(program, guard)?; }
+                    self.expression_node(program, arm.value)?;
+                }
+            }
+            Expr::Closure { patterns, body, .. } => {
+                for pattern in patterns { self.pattern_node(program, pattern)?; }
+                self.expression_node(program, body)?;
+            }
+            Expr::Return(value) | Expr::Break(value) => {
+                if let Some(value) = value { self.expression_node(program, value)?; }
+            }
+            Expr::Range { start, end, .. } => {
+                if let Some(value) = start { self.expression_node(program, value)?; }
+                if let Some(value) = end { self.expression_node(program, value)?; }
+            }
+            Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_)
+            | Expr::Char(_) | Expr::Bytes(_) | Expr::Path(_) | Expr::Continue => {}
+        }
+        Ok(())
+    }
+}

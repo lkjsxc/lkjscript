@@ -1,0 +1,6 @@
+// expect: value 7
+// witness: {}
+struct Mark<'a> { target: &'a mut i64 }
+impl<'a> Drop for Mark<'a> { fn drop(&mut self) { *self.target = 7i64; } }
+macro_rules! mark { ($name:ident, $value:ident) => { let $name = Mark { target: &mut $value }; }; }
+pub fn probe() -> i64 { let mut value = 0i64; mark!(owner, value); drop(owner); value }

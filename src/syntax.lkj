@@ -520,7 +520,7 @@ pub(crate) fn parse_expression_unexpanded(source: &str) -> Result<(Program, Expr
         tokens, at: 0, program, module: String::new(), scope: 0,
         diagnostics: Vec::new(), blocked: Vec::new(), diagnostic_keys: BTreeSet::new(),
         self_context: None, expansion: None, probing: false, fragment: false,
-        block: None, macro_scope: None,
+        block: None, macro_scope: None, macro_carriers: Vec::new(),
     };
     parser.add_type(Type::Infer, Span::default());
     parser.add_type(Type::Tuple(Vec::new()), Span::default());
@@ -633,6 +633,7 @@ pub fn parse_file_report(
         fragment: false,
         block: None,
         macro_scope: None,
+        macro_carriers: Vec::new(),
     };
     if parser.program.types.is_empty() {
         parser.add_type(Type::Infer, Span::default());
@@ -788,6 +789,7 @@ struct Parser {
     scope: ModuleId,
     block: Option<BlockId>,
     macro_scope: Option<ModuleId>,
+    macro_carriers: Vec<(usize, usize)>,
     diagnostics: Vec<Diagnostic>,
     blocked: Vec<BlockedRegion>,
     diagnostic_keys: BTreeSet<(FileId, usize, usize, String, String)>,
@@ -1300,7 +1302,7 @@ impl Parser {
             let name_span = self.tokens[self.at - 1usize].span;
             self.expect("!")?;
             let braces = self.is("{");
-            let invocation = self.macro_invocation(path.name, span, name_span, true)?;
+            let invocation = self.macro_invocation(path.name, span, name_span, MacroPosition::Item)?;
             self.macro_terminator(braces)?;
             return Ok(Item::MacroInvocation(invocation));
         }
@@ -2643,7 +2645,7 @@ impl Parser {
         self.program.blocks.push(Block { scope: self.scope, parent,
             statements: Vec::new(), tail: None, span });
         self.block = Some(id);
-        let result = self.block_contents();
+        let result = self.block_contents(false);
         self.block = parent;
         let (statements, tail) = result?;
         self.program.blocks[id].statements = statements;
@@ -2651,10 +2653,10 @@ impl Parser {
         self.program.blocks[id].span = self.finish_span(span);
         Ok(id)
     }
-    fn block_contents(&mut self) -> Result<(Vec<Stmt>, Option<ExprId>), Diagnostic> {
+    fn block_contents(&mut self, allow_end: bool) -> Result<(Vec<Stmt>, Option<ExprId>), Diagnostic> {
         let mut statements = Vec::new();
         let mut tail = None;
-        while !self.is("}") {
+        while !self.is("}") && !(allow_end && self.token().kind == TokenKind::End) {
             if self.token().kind == TokenKind::End {
                 return Err(self.err("unterminated block"));
             }
@@ -2680,11 +2682,22 @@ impl Parser {
                 }
             }
         }
-        self.expect("}")?;
+        if !allow_end { self.expect("}")?; }
+        else if self.token().kind != TokenKind::End { return Err(self.err("unexpected closing delimiter in macro output")); }
         Ok((statements, tail))
     }
 
     fn block_part(&mut self) -> Result<BlockPart, Diagnostic> {
+        if let Some((semicolon, braces)) = self.macro_statement_ahead()? {
+            let span = self.token().span;
+            let path = self.value_path()?;
+            let name_span = self.tokens[self.at - 1usize].span;
+            self.expect("!")?;
+            let call = self.macro_invocation(path.name, span, name_span,
+                MacroPosition::Statement { semicolon, braces })?;
+            if semicolon { self.expect(";")?; }
+            return Ok(BlockPart::Statement(Stmt::MacroInvocation(call)));
+        }
         if self.take("let") {
             let start = self.tokens[self.at - 1].span;
             let pattern = self.pattern()?;
@@ -2859,6 +2872,10 @@ impl Parser {
                 self.skip_disabled()?;
                 return Ok(BlockPart::Skipped);
             }
+            if self.macro_statement_ahead()?.is_some() {
+                let span = attrs.first().map(|attribute| attribute.span).unwrap_or(self.token().span);
+                return Err(Diagnostic::new(span, "E_UNSUPPORTED_MACRO", "attributes on statement macro invocations are not supported"));
+            }
             let public = self.visibility()?;
             let item = self.item(attrs, public)?;
             return Ok(BlockPart::Statement(Stmt::Item(item)));
@@ -2869,7 +2886,7 @@ impl Parser {
                 value: expression,
                 semicolon: true,
             }))
-        } else if self.is("}") {
+        } else if self.is("}") || self.token().kind == TokenKind::End {
             Ok(BlockPart::Tail(expression))
         } else {
             if !standalone {
@@ -3496,7 +3513,7 @@ impl Parser {
             // Fragment matching recognizes syntax without executing any nested producer.
             if self.probing {
                 let name_span = self.tokens[self.at - 2usize].span;
-                let invocation = self.macro_invocation(path.name, span, name_span, false)?;
+                let invocation = self.macro_invocation(path.name, span, name_span, MacroPosition::Expression)?;
                 return Ok(self.add_finished_expr(Expr::MacroInvocation(invocation), span));
             }
             if path.name == "macro_rules" { return Err(Diagnostic::new(span, "E_UNSUPPORTED_MACRO", "block-local macro definitions are not supported")); }
@@ -3536,7 +3553,7 @@ impl Parser {
                 || path.name == "include_bytes";
             if !known {
                 let name_span = self.tokens[self.at - 2usize].span;
-                let invocation = self.macro_invocation(path.name, span, name_span, false)?;
+                let invocation = self.macro_invocation(path.name, span, name_span, MacroPosition::Expression)?;
                 return Ok(self.add_finished_expr(Expr::MacroInvocation(invocation), span));
             }
             let end = if self.take("(") {
@@ -3616,11 +3633,15 @@ impl Parser {
                     break;
                 }
                 let field_span = self.token().span;
+                let field_origin = self.token().origin;
                 let field_context = self.token().context;
                 let name = self.ident()?;
                 let value = if self.take(":") {
                     self.expr(true)?
                 } else {
+                    if self.fragment && !self.probing && field_context == 0usize && field_span == field_origin {
+                        self.program.macro_identifier_uses.push(field_origin);
+                    }
                     self.add_expr(
                         Expr::Path(Path {
                             qualification: None, bindings: Vec::new(),

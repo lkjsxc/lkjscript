@@ -1,0 +1,9 @@
+// expect: value 42
+// Root-crate Rust comparison is in tools/declarative-macro-test.sh.
+mod metrics {
+  pub trait Subscriber { fn receive(&mut self, v: i32); }
+  pub struct M { pub total: i32 }
+  impl Subscriber for M { fn receive(&mut self, v: i32) { self.total += v; } }
+}
+macro_rules! record ( ($m:expr, $a:expr) => { use $crate::metrics::Subscriber; $m.receive($a); } );
+pub fn probe() -> i32 { let mut m = metrics::M { total: 0 }; m.receive(2); record!(m, 40); m.total }

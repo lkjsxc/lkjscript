@@ -869,7 +869,7 @@ impl Analysis<'_> {
                                 }
                             }
                             Stmt::Expr { value, .. } => tasks.push(Task::Expr(*value)),
-                            Stmt::Item(_) => {}
+                            Stmt::Item(_) | Stmt::MacroInvocation(_) => {}
                         }
                     }
                 }

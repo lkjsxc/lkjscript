@@ -1,0 +1,6 @@
+// expect: value 1
+// witness: {}
+mod a { pub fn v() -> i32 { 42 } }
+fn v() -> i32 { 1 }
+macro_rules! m ( () => { use a::v; } );
+pub fn probe() -> i32 { { m!(); } v() }

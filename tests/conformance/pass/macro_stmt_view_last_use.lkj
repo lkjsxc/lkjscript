@@ -1,0 +1,4 @@
+// expect: value 2
+// witness: {}
+macro_rules! borrow_use { ($name:ident, $value:ident) => { let $name = &$value; let _seen = *$name; }; }
+pub fn probe() -> i64 { let mut value = 1i64; borrow_use!(view, value); value = 2i64; value }

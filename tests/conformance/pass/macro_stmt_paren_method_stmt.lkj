@@ -1,0 +1,4 @@
+// expect: value 1
+// witness: {}
+macro_rules! val { () => { 5i32 } }
+pub fn probe() -> i32 { let mut n = 1; val!().max(n); n }

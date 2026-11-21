@@ -62,6 +62,54 @@ fn group_end(tokens: &[MacroToken], start: usize) -> Result<usize, Diagnostic> {
     Err(error(tokens[start].span, "E_MACRO_RULE", "unclosed token-tree delimiter"))
 }
 impl Parser {
+    pub(super) fn macro_statement_ahead(&self) -> Result<Option<(bool, bool)>, Diagnostic> {
+        if !self.macro_item_ahead() { return Ok(None); }
+        let mut at = self.at;
+        let mut name = String::new();
+        while at < self.tokens.len() && self.tokens[at].text != "!" {
+            name.push_str(&self.tokens[at].text); at += 1usize;
+        }
+        if matches!(name.as_str(), "macro_rules" | "assert" | "assert_eq" | "assert_ne" | "panic" | "vec" | "format"
+            | "write" | "writeln" | "matches" | "unreachable" | "debug_assert" | "debug_assert_eq"
+            | "debug_assert_ne" | "include_str" | "include_bytes" | "print" | "println" | "eprint" | "eprintln") {
+            return Ok(None);
+        }
+        at += 1usize;
+        if at >= self.tokens.len() || !opening(&self.tokens[at].text) { return Ok(None); }
+        let braces = self.tokens[at].text == "{";
+        let mut stack = vec![partner(&self.tokens[at].text)];
+        at += 1usize;
+        while at < self.tokens.len() && self.tokens[at].kind != TokenKind::End {
+            let token = &self.tokens[at];
+            if token.kind == TokenKind::Symbol {
+                if opening(&token.text) { stack.push(partner(&token.text)); }
+                else if closing(&token.text) {
+                    if stack.last() != Some(&token.text) { return Err(error(token.span, "E_MACRO_RULE", "mismatched token-tree delimiter")); }
+                    stack.pop();
+                    if stack.is_empty() {
+                        let Some(next) = self.tokens.get(at + 1usize) else { return Ok(None); };
+                        let semicolon = next.kind == TokenKind::Symbol && next.text == ";";
+                        if semicolon || next.kind == TokenKind::End || (braces && next.text != "." && next.text != "?") {
+                            return Ok(Some((semicolon, braces)));
+                        }
+                        return Ok(None);
+                    }
+                }
+            }
+            at += 1usize;
+        }
+        Ok(None)
+    }
+    fn record_macro_identifiers(&mut self) {
+        if self.probing { return; }
+        for at in 0usize..self.at {
+            let token = &self.tokens[at];
+            if token.kind == TokenKind::Ident && token.context == 0usize && token.span == token.origin
+                && !self.macro_carriers.iter().any(|(start, end)| *start <= at && at < *end) {
+                self.program.macro_identifier_uses.push(token.origin);
+            }
+        }
+    }
     pub(super) fn macro_item_ahead(&self) -> bool {
         let mut at = self.at;
         if self.tokens[at].kind == TokenKind::Symbol && self.tokens[at].text == "::" { at += 1usize; }
@@ -83,6 +131,7 @@ impl Parser {
     fn macro_tree(&mut self) -> Result<Vec<MacroToken>, Diagnostic> {
         if self.token().kind != TokenKind::Symbol || !opening(&self.token().text) { return Err(self.err("expected macro delimiter")); }
         let start = self.token().span;
+        let carrier = self.at + 1usize;
         let mut stack = vec![partner(&self.token().text).to_string()];
         self.at += 1usize;
         let mut tokens = Vec::new();
@@ -95,7 +144,7 @@ impl Parser {
                         return Err(error(token.span, "E_MACRO_RULE", "mismatched token-tree delimiter"));
                     }
                     stack.pop();
-                    if stack.is_empty() { self.at += 1usize; return Ok(tokens); }
+                    if stack.is_empty() { self.macro_carriers.push((carrier, self.at)); self.at += 1usize; return Ok(tokens); }
                 }
             }
             tokens.push(capture_token(&token));
@@ -140,14 +189,14 @@ impl Parser {
             span: self.finish_span(span), name_span, body, exported, local_inner });
         Ok(())
     }
-    pub(super) fn macro_invocation(&mut self, name: String, span: Span, name_span: Span, item: bool)
+    pub(super) fn macro_invocation(&mut self, name: String, span: Span, name_span: Span, position: MacroPosition)
         -> Result<usize, Diagnostic> {
         let tokens = self.macro_tree()?;
         let id = self.program.macro_invocations.len();
         self.program.macro_invocations.push(MacroInvocation { name,
             scope: self.macro_scope.unwrap_or(self.scope), destination: self.scope, block: self.block,
             span: self.finish_span(span), name_span, tokens, self_context: self.self_context,
-            parent: self.expansion, item });
+            parent: self.expansion, position });
         Ok(id)
     }
 }
@@ -160,7 +209,7 @@ fn parser(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvoca
     Parser { tokens: restored, at: 0usize, module: program.scopes[invocation.destination].path.clone(),
         scope: invocation.destination, block: invocation.block, macro_scope: None, program: std::mem::replace(program, Program::default()),
         diagnostics: Vec::new(), blocked: Vec::<BlockedRegion>::new(), diagnostic_keys: BTreeSet::new(),
-        self_context: invocation.self_context, expansion, probing: false, fragment: true }
+        self_context: invocation.self_context, expansion, probing: false, fragment: true, macro_carriers: Vec::new() }
 }
 fn fragment_mode(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation,
     expansion: Option<usize>, typed: bool, complete: bool, probing: bool,
@@ -178,17 +227,22 @@ fn fragment_mode(program: &mut Program, tokens: &[MacroToken], invocation: &Macr
     if result.is_ok() && complete && parser.token().kind != TokenKind::End {
         result = Err(error(parser.token().span, "E_MACRO_EXPANSION",
             if typed { "macro capture must be one complete type" }
-            else { "macro expansion must be one complete expression" }));
+            else { "statement-list expansion needs statement position; help: use a brace call, a semicolon after the call, or a block template" }));
     }
     let consumed = parser.at;
     let remainder = if consumed < tokens.len() && parser.token().text != tokens[consumed].text {
         Some(capture_token(parser.token()))
     } else { None };
+    if result.is_ok() { parser.record_macro_identifiers(); }
     *program = parser.program;
     result.map(|id| (id, consumed, remainder))
 }
 fn expression(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation,
     expansion: Option<usize>, complete: bool) -> Result<(ExprId, usize), Diagnostic> {
+    if tokens.is_empty() { return Err(error(invocation.span, "E_MACRO_EXPANSION", "empty expansion in expression position")); }
+    if tokens.first().is_some_and(|token| token.kind == 0u8 && matches!(token.text.as_str(), "let" | "use" | "fn" | "struct" | "enum" | "type")) {
+        return Err(error(invocation.span, "E_MACRO_EXPANSION", "statement-list expansion needs statement position; help: use a brace call, a semicolon after the call, or a block template"));
+    }
     fragment_mode(program, tokens, invocation, expansion, false, complete, false, None)
         .map(|(id, consumed, _)| (id, consumed))
 }
@@ -207,7 +261,7 @@ impl Parser {
         let parent = self.program.macro_captures[id].parent;
         let invocation = MacroInvocation { name: "$capture".to_string(), scope,
             destination: self.scope, block: self.block, span, name_span: span, tokens: Vec::new(),
-            self_context: self.self_context, parent, item: false };
+            self_context: self.self_context, parent, position: MacroPosition::Expression };
         let (node, _, _) = fragment_mode(&mut self.program, &tokens, &invocation,
             parent, typed, true, self.probing, Some(scope))?;
         let capture = &mut self.program.macro_captures[id];
@@ -234,6 +288,7 @@ fn items(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocat
     let mut parser = parser(program, tokens, invocation, Some(expansion));
     let result = parser.items(false);
     let diagnostic = parser.diagnostics.first().cloned();
+    if result.is_ok() && diagnostic.is_none() { parser.record_macro_identifiers(); }
     *program = parser.program;
     if let Some(diagnostic) = diagnostic { return Err(diagnostic); }
     let items = result?;
@@ -241,6 +296,17 @@ fn items(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocat
     for id in first_impl..program.impls.len() { program.macro_expansions[expansion].implementations.push(id); }
     program.macro_expansions[expansion].items = items.clone();
     Ok(items)
+}
+
+fn statements(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation,
+    expansion: usize) -> Result<(Vec<Stmt>, Option<ExprId>), Diagnostic> {
+    let mut parser = parser(program, tokens, invocation, Some(expansion));
+    let result = parser.block_contents(true);
+    let diagnostic = parser.diagnostics.first().cloned();
+    if result.is_ok() && diagnostic.is_none() { parser.record_macro_identifiers(); }
+    *program = parser.program;
+    if let Some(problem) = diagnostic { return Err(problem); }
+    result
 }
 
 pub(crate) fn expand(program: &mut Program) -> Result<(), Diagnostic> { expand::run(program) }

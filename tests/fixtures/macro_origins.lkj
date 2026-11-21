@@ -13,6 +13,7 @@ macro_rules! twice { ($value:expr) => { ($value, $value) }; }
 macro_rules! nested { ($value:expr) => { twice!($value) }; }
 macro_rules! text { () => { include_str!("payload.txt") }; }
 macro_rules! discard { ($value:expr) => { 0i64 }; }
+macro_rules! statements { ($name:ident, $value:expr) => { let $name = $value; }; }
 macro_rules! defaults { ($name:ident) => { struct $name<T = i64, U = T> { first: T, second: U } }; }
 macro_rules! typed { ($t:ty) => { fn typed(value: $t) -> ($t, $t) { (value, value) } }; }
 macro_rules! typed_relay { ($t:ty) => { typed!($t); }; }
@@ -26,6 +27,7 @@ emit!(generated, helper(5i64));
 defaults!(GeneratedDefaults);
 fn type_anchor(_value: bool) {}
 fn source() -> i64 {
+    statements!(captured, 3i64);
     let pair = nested!(helper(7i64));
     let label = text!();
     let ignored = discard!(missing!());
@@ -106,6 +108,10 @@ fn main() {
     let type_call = program.macro_invocations.iter().position(|call|
         call.tokens.iter().any(|token| token.kind == 9u8)).unwrap();
     let opaque_token = program.macro_invocations[type_call].tokens.iter().position(|token| token.kind == 9u8).unwrap();
+    let statement = program.macro_invocations.iter().position(|call|
+        matches!(call.position, ast::MacroPosition::Statement { .. })).unwrap();
+    let splice = program.macro_expansions.iter().position(|item| item.splice.is_some()).unwrap();
+    assert!(!program.macro_identifier_uses.is_empty());
     let import = program.uses.iter().position(|item| item.block.is_some()).unwrap();
     let import_block = program.uses[import].block.unwrap();
     let integer = relation.macros.expressions.keys().find(|index|
@@ -261,5 +267,42 @@ fn main() {
     let mut absent_block = program.clone();
     absent_block.macro_input.as_mut().unwrap().types[0usize].block = Some(18446744073709551615usize);
     count += refused(&absent_block);
-    assert!(count == 37usize);
+    let mut position = program.clone();
+    position.macro_invocations[statement].position = ast::MacroPosition::Expression;
+    count += refused(&position);
+    let mut semicolon = program.clone();
+    semicolon.macro_invocations[statement].position = ast::MacroPosition::Statement { semicolon: false, braces: false };
+    count += refused(&semicolon);
+    let mut absent_statement_block = program.clone();
+    absent_statement_block.macro_invocations[statement].block = None;
+    count += refused(&absent_statement_block);
+    let mut splice_block = program.clone();
+    splice_block.macro_expansions[splice].splice.as_mut().unwrap().block = program.functions[generated].body.unwrap();
+    count += refused(&splice_block);
+    let mut splice_first = program.clone();
+    splice_first.macro_expansions[splice].splice.as_mut().unwrap().first += 1usize;
+    count += refused(&splice_first);
+    let mut splice_count = program.clone();
+    splice_count.macro_expansions[splice].splice.as_mut().unwrap().count += 1usize;
+    count += refused(&splice_count);
+    let mut splice_tail = program.clone();
+    splice_tail.macro_expansions[splice].splice.as_mut().unwrap().tail = Some(integer);
+    count += refused(&splice_tail);
+    let mut chosen_rule = program.clone();
+    chosen_rule.macro_expansions[splice].rule += 1usize;
+    count += refused(&chosen_rule);
+    let mut identifier_role = program.clone();
+    identifier_role.macro_identifier_uses.clear();
+    count += refused(&identifier_role);
+    let mut leftover = program.clone();
+    let block = program.macro_invocations[statement].block.unwrap();
+    leftover.blocks[block].statements.push(ast::Stmt::MacroInvocation(statement));
+    count += refused(&leftover);
+    let mut original_position = program.clone();
+    original_position.macro_input.as_mut().unwrap().macro_invocations[statement].position = ast::MacroPosition::Expression;
+    count += unauthenticated(&original_position, &inputs);
+    let mut original_block = program.clone();
+    original_block.macro_input.as_mut().unwrap().macro_invocations[statement].block = None;
+    count += unauthenticated(&original_block, &inputs);
+    assert!(count == 49usize);
 }

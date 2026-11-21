@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+macro_rules! intro { ($n:ident) => { let t = 20; let $n = t + 1; } }
+pub fn probe() -> i32 { intro!(a); intro!(b); a + b }

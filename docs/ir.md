@@ -16,6 +16,9 @@ changing a builder's returned view to static is invalid. Formatting adds no IR a
 Declarative expression and type captures are source producer data. Their replayed
 origins and lexical block ownership grant no checked IR privilege; a captured
 borrowed type must satisfy the same parameter-derived return-origin contract.
+Statement macro output splices into source blocks before ordinary elaboration.
+Its locals, loans, temporary lifetimes and cleanup use the existing checked rules;
+positions, splice coordinates and capture roles add no trusted IR operation.
 
 ## Text and identity
 

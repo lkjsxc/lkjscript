@@ -211,7 +211,8 @@ into the exact original source program, then replaying token matching,
 transcription, fresh opaque-capture materialization, immutable include reads and
 name resolution. The complete resolved AST and topology receipts must agree.
 The proof covers source scopes, export attributes, literal spelling, capture
-contexts, parent expansions, allocation ranges and alias replacement. Replay
+contexts, parent expansions, selected rules, statement positions and splices,
+identifier roles, allocation ranges and alias replacement. Replay
 uses no ambient filesystem reads. These checks run while constructing an index;
 bounded queries read the authenticated published facts. Missing or inconsistent
 origin evidence refuses with `E_IDENTITY_ORIGIN`.
@@ -223,13 +224,30 @@ created by a macro keeps its strict derive validator and identity, with the
 macro's authenticated inputs added to its epoch. Authored Default and Debug
 declarations retain their previous epoch construction exactly.
 
+Generated local bindings use
+`macro-expansion:N::derived:MACRO_EPOCH::binding:NAME:ORD`, with a separate ordinal
+per expansion and name. Authored binding ordinals still count authored patterns
+only. Template edits change generated epochs without changing the authored body
+identity. Generated bindings have no source projection and refuse edits with
+`E_EDIT_GENERATED_SOURCE`; ordinary references can still name them.
+
+Authored captured local tokens become editable references only with complete
+evidence that every emitted role is a value reference to the same local or
+parameter. Rename replays the full candidate and compares chosen matcher rules,
+capture topology and all caller reference targets. Mixed transactions also prove
+the preserving subset separately. Rule flips refuse even when checked IR is
+identical. Refusals use `E_EDIT_REFERENCES` at the captured token, with a capture
+role, target or rule reason, and leave source, generation and pending state intact.
+[Statement controls](../tools/macro-statement-test.sh) cover pure and mixed
+transactions, parameter captures, generated binding epochs and hand-expanded IR twins.
+
 Checked authored function-body changes re-expand and recheck macro calls.
 Direct generated-item changes refuse with `E_EDIT_GENERATED_SOURCE`;
 renaming a helper or field with a proven generated reference refuses with
 `E_EDIT_GENERATED_REFERENCE`. Unavailable targets remain partial claims.
 [Macro origin controls](../tools/macro-origin-test.sh) cover indexed item,
 expression and nested expansions, both engines, source-preserving refusals,
-template/include epoch changes and 25 malformed-origin cases.
+template/include epoch changes and 49 malformed-origin cases.
 
 `references-complete=false` and unresolved-reference facts are explicit limits,
 not evidence that an item has no uses. Declaration-only capture deliberately

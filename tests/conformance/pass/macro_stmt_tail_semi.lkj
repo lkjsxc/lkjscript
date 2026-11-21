@@ -1,0 +1,5 @@
+// expect: value 1
+// witness: {}
+macro_rules! val { () => { 5i32 } }
+fn f() { val!(); }
+pub fn probe() -> i32 { f(); 1 }

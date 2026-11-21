@@ -1,5 +1,6 @@
 //! Expansion keeps authored fragments and generated syntax in distinct provenance tables.
 mod recovery;
+mod walk;
 use super::*;
 use std::collections::BTreeMap;
 
@@ -71,10 +72,24 @@ struct Expander {
     rules: Vec<Vec<matcher::Rule>>,
     invalid_rules: BTreeMap<usize, Diagnostic>,
     expressions: BTreeMap<usize, usize>,
+    visited: BTreeSet<(usize, usize)>,
+    failed: BTreeSet<usize>,
+    active: Vec<usize>,
 }
 impl Expander {
+    fn new(rules: Vec<Vec<matcher::Rule>>, invalid_rules: BTreeMap<usize, Diagnostic>, failed: BTreeSet<usize>) -> Self {
+        Self { rules, invalid_rules, expressions: BTreeMap::new(), visited: BTreeSet::new(), failed, active: Vec::new() }
+    }
+    fn invocation(&self, program: &Program, call: usize) -> Result<MacroInvocation, Diagnostic> {
+        let invocation = program.macro_invocations.get(call).cloned()
+            .ok_or_else(|| error(Span::default(), "E_MACRO_EXPANSION", "macro invocation is absent"))?;
+        if invocation.scope >= program.scopes.len() || invocation.destination >= program.scopes.len() {
+            return Err(error(invocation.span, "E_MACRO_EXPANSION", "macro destination scope is absent"));
+        }
+        Ok(invocation)
+    }
     fn begin(&self, program: &mut Program, call: usize) -> Result<(Vec<MacroToken>, usize), Diagnostic> {
-        let invocation = program.macro_invocations[call].clone();
+        let invocation = self.invocation(program, call)?;
         let definition = resolve(program, &invocation)?;
         if let Some(problem) = self.invalid_rules.get(&definition) { return Err(problem.clone()); }
         let key = fingerprint(&invocation.tokens);
@@ -92,28 +107,32 @@ impl Expander {
             None => return Err(error(invocation.span, "E_MACRO_EXPANSION", "macro syntax context is not representable")) };
         let start = crate::ast::macros::inventory(program);
         program.macro_expansions.push(MacroExpansion { start: start.clone(), end: start, definition, invocation: call, context,
-            parent: invocation.parent, types: Vec::new(), expressions: Vec::new(), patterns: Vec::new(),
+            parent: invocation.parent, rule: 0usize, splice: None, types: Vec::new(), expressions: Vec::new(), patterns: Vec::new(),
             functions: Vec::new(), implementations: Vec::new(), items: Vec::new() });
         let declaration = program.macro_definitions[definition].clone();
-        let tokens = matcher::apply(program, &declaration, &self.rules[definition], &invocation, context)?;
+        let (tokens, rule) = matcher::apply(program, &declaration, &self.rules[definition], &invocation, context)?;
+        program.macro_expansions[expansion].rule = rule;
         Ok((tokens, expansion))
     }
     fn expression(&mut self, program: &mut Program, call: usize) -> Result<usize, Diagnostic> {
         if let Some(id) = self.expressions.get(&call) { return Ok(*id); }
+        self.active.push(call);
+        let invocation = self.invocation(program, call)?;
+        if invocation.position != MacroPosition::Expression { return Err(error(invocation.span, "E_MACRO_EXPANSION", "macro invocation is not an expression")); }
         let (tokens, expansion) = self.begin(program, call)?;
-        let invocation = program.macro_invocations[call].clone();
-        let (mut id, _) = super::expression(program, &tokens, &invocation, Some(expansion), true)?;
+        let (id, _) = super::expression(program, &tokens, &invocation, Some(expansion), true)?;
         let end = crate::ast::macros::inventory(program);
         program.macro_expansions[expansion].end = end;
-        if let Expr::MacroInvocation(nested) = program.exprs[id].kind {
-            id = self.expression(program, nested)?;
-        }
+        self.expression_node(program, id)?;
         self.expressions.insert(call, id);
+        self.active.pop();
         Ok(id)
     }
-    fn item(&self, program: &mut Program, call: usize) -> Result<Vec<Item>, Diagnostic> {
+    fn item(&mut self, program: &mut Program, call: usize) -> Result<Vec<Item>, Diagnostic> {
+        self.active.push(call);
+        let invocation = self.invocation(program, call)?;
+        if invocation.position != MacroPosition::Item { return Err(error(invocation.span, "E_MACRO_EXPANSION", "macro invocation is not an item")); }
         let (tokens, expansion) = self.begin(program, call)?;
-        let invocation = program.macro_invocations[call].clone();
         let expanded = super::items(program, &tokens, &invocation, expansion)?;
         let end = crate::ast::macros::inventory(program);
         program.macro_expansions[expansion].end = end;
@@ -123,15 +142,17 @@ impl Expander {
                     "E_UNSUPPORTED_MACRO", "macro expansion cannot discover an external source module")); }
             }
         }
+        let expanded = self.items(program, expanded)?;
+        self.active.pop();
         Ok(expanded)
     }
     fn items(&mut self, program: &mut Program, input: Vec<Item>) -> Result<Vec<Item>, Diagnostic> {
         let mut output = Vec::new();
         for item in input {
             if let Item::MacroInvocation(call) = item {
-                let expanded = self.item(program, call)?;
-                for item in self.items(program, expanded)? { output.push(item); }
-            } else { output.push(item); }
+                if self.failed.contains(&call) { output.push(item); continue; }
+                for item in self.item(program, call)? { output.push(item); }
+            } else { self.item_node(program, item)?; output.push(item); }
         }
         Ok(output)
     }
@@ -155,24 +176,8 @@ pub(super) fn replay(program: &mut Program) -> Result<(), Diagnostic> {
         }
         rules.push(matcher::rules(definition)?);
     }
-    let mut expander = Expander { rules, invalid_rules: BTreeMap::new(), expressions: BTreeMap::new() };
-    let original = std::mem::replace(&mut program.items, Vec::new());
-    program.items = expander.items(program, original)?;
-    let mut module = 0usize;
-    while module < program.modules.len() {
-        let items = std::mem::replace(&mut program.modules[module].items, Vec::new());
-        program.modules[module].items = expander.items(program, items)?;
-        module += 1usize;
-    }
-    let mut at = 0usize;
-    while at < program.exprs.len() {
-        if let Expr::MacroInvocation(call) = program.exprs[at].kind {
-            let id = expander.expression(program, call)?;
-            program.macro_aliases.push(MacroAlias { expression: at, original: program.exprs[at].clone(), expanded: id, invocation: call });
-            program.exprs[at] = program.exprs[id].clone();
-        }
-        at += 1usize;
-    }
+    let mut expander = Expander::new(rules, BTreeMap::new(), BTreeSet::new());
+    expander.program(program)?;
     program.macros_expanded = true;
     Ok(())
 }

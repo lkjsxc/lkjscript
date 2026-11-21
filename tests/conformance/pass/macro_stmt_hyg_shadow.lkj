@@ -1,0 +1,4 @@
+// expect: value 1011
+// witness: {}
+macro_rules! intro { ($e:expr, $out:ident) => { let x = 100; let $out = $e + x; } }
+pub fn probe() -> i32 { let x = 1; intro!(x, r); r * 10 + x }

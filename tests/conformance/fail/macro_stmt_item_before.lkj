@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+macro_rules! def { () => { fn g() -> i32 { 42 } } }
+pub fn probe() -> i32 { let a = g(); def!(); a }

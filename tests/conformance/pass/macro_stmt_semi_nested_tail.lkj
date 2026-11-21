@@ -1,0 +1,4 @@
+// expect: value 1
+// witness: {}
+macro_rules! inner { () => { 41i32 } } macro_rules! outer { () => { inner!() } }
+pub fn probe() -> i32 { let mut n = 1; outer!(); n }

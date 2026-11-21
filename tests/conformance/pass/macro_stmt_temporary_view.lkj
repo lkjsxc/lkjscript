@@ -1,0 +1,4 @@
+// expect: value 2
+// witness: {}
+macro_rules! temporary { ($name:ident) => { let $name = &[1i64, 2i64]; }; }
+pub fn probe() -> i64 { temporary!(view); view[1usize] }

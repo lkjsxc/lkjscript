@@ -1,0 +1,5 @@
+// expect: value 427
+// witness: {}
+macro_rules! take ( ($x:ident, $e:expr) => { let $x = $e?; } );
+fn f(v: Option<i32>) -> Option<i32> { take!(x, v); Some(x * 2) }
+pub fn probe() -> i32 { let a = match f(Some(21)) { Some(v) => v, None => 0 }; let b = match f(None) { Some(v) => v, None => 7 }; a * 10 + b }

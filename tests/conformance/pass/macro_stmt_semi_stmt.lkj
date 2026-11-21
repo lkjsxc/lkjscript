@@ -1,0 +1,4 @@
+// expect: value 7
+// witness: {}
+macro_rules! check { ($a:expr, $b:expr) => ( assert_eq!($a, $b); ); }
+pub fn probe() -> i32 { check!(2 + 2, 4); check!{3, 3} check![1, 1]; 7 }

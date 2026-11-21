@@ -1,0 +1,4 @@
+macro_rules! choose { (y) => { 100i64 }; ($e:expr) => { $e }; }
+macro_rules! tokens { ($t:tt) => { choose!($t) }; }
+macro_rules! expression { ($e:expr) => { $e }; }
+pub fn probe() -> i64 { let x = 5i64; expression!(tokens!(x)) }

@@ -49,11 +49,12 @@ const DEPENDS: &[&str] = &["app=math"];
 const ENTRY: &str = "app::main";
 LKJ
 cat > "$work/units/math.lkj" <<'LKJ'
-macro_rules! next { ($t:ty, $value:expr) => {{ let result: $t = $value + 1usize; result }}; }
+macro_rules! next { ($name:ident, $t:ty, $value:expr) => { let $name: $t = $value + 1usize; }; }
 mod selected { pub type Number = usize; }
 pub fn increment(value: usize) -> usize {
     use self::selected::Number;
-    next!(Number, value)
+    next!(result, Number, value);
+    result
 }
 LKJ
 cat > "$work/units/app.lkj" <<'LKJ'
@@ -71,7 +72,18 @@ cmp "$work/cold" "$work/warm"
 sed -i 's/+ 1usize/+ 2usize/' "$work/units/math.lkj"
 "$compiler" build-units "${units[@]}" -o "$work/changed" > "$work/output" 2> "$work/error"
 [[ $("$work/changed") == 4 ]]
-printf 'ok declarative macros: cold/warm typed-capture units and block imports match; a template edit rechecks dependent source\n'
+cp "$work/units/math.lkj" "$work/valid-math"
+sed -i 's/+ 2usize/+ true/' "$work/units/math.lkj"
+cp "$work/units/math.lkj" "$work/invalid-math"
+if "$compiler" build-units "${units[@]}" -o "$work/invalid" > "$work/output" 2> "$work/error"; then
+    printf 'invalid statement template accepted\n' >&2; exit 1
+fi
+[[ ! -e $work/invalid ]]
+cmp "$work/invalid-math" "$work/units/math.lkj"
+cp "$work/valid-math" "$work/units/math.lkj"
+"$compiler" build-units "${units[@]}" -o "$work/restored" > "$work/output" 2> "$work/error"
+cmp "$work/changed" "$work/restored"
+printf 'ok declarative macros: cold/warm statement captures and block imports match; template edit rechecks dependents and failed output remains unpublished\n'
 if [[ -n $witness ]]; then
     cp "$root/witness/bridge/output.rs" "$work/host.rs"
     for case in declarative_macros nom_tuple_macros; do
@@ -86,6 +98,18 @@ if [[ -n $witness ]]; then
         [[ $case != nom_tuple_macros ]] || expected='nom macros ok'
         [[ $(cat "$work/output") == "$expected" && ! -s $work/rust-error ]]
         printf 'ok declarative macros Rust root-crate witness: %s\n' "$case"
+    done
+    for case in macro_stmt_use_after macro_stmt_use_before macro_stmt_use_stmt; do
+        {
+            cat "tests/conformance/pass/$case.lkj"
+            printf '\nfn main() { assert_eq!(probe(), 42); }\n'
+        } > "$work/$case.rs"
+        for level in 0 3; do
+            "$witness" --edition=2024 --crate-name "$case" -A warnings -C "opt-level=$level" "$work/$case.rs" -o "$work/$case" > "$work/output" 2> "$work/rust-error"
+            "$work/$case" > "$work/output" 2> "$work/rust-error"
+            [[ ! -s $work/output && ! -s $work/rust-error ]]
+        done
+        printf 'ok statement macro Rust root-crate witness: %s\n' "$case"
     done
     mkdir "$work/rust-scopes"
     cp -R "$work/project/definitions" "$work/rust-scopes/definitions"

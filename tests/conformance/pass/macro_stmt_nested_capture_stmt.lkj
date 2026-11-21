@@ -1,0 +1,5 @@
+// expect: value 6
+// witness: {}
+macro_rules! bind { ($n:ident, $v:expr) => { let $n = $v; } }
+macro_rules! wrap { ($e:expr) => { $e } }
+pub fn probe() -> i32 { let v = wrap!({ bind!(z, 5); z + 1 }); v }

@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false}
+macro_rules! val { () => { 5i32 } }
+pub fn probe() -> i32 { val!{} - 1 }

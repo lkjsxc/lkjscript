@@ -1,0 +1,4 @@
+// expect: reject E_NAME
+// witness: {"rustAccept":false}
+macro_rules! peek { () => { x + 1 } }
+pub fn probe() -> i32 { let x = 1; peek!(); 0 }

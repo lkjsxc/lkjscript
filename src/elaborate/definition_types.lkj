@@ -1577,7 +1577,7 @@ impl Infer<'_, '_> {
                     let value = self.expr(value)?;
                     diverges |= self.never(value);
                 }
-                a::Stmt::Item(_) => {}
+                a::Stmt::Item(_) | a::Stmt::MacroInvocation(_) => {}
             }
         }
         let result = if let Some(tail) = block.tail {

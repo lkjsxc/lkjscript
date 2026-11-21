@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+macro_rules! select { ($e:expr) => {{ match $e { Some(value) => value, None => 42i64 } }}; }
+pub fn probe() -> i64 { let value: Option<i64> = None; select!(value) }

@@ -1,0 +1,3 @@
+// expect: value 7
+// witness: {}
+pub fn probe() -> i64 { #[cfg(any())] never_defined!(); 7i64 }

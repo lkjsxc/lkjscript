@@ -2,7 +2,7 @@
 
 pub mod macros;
 pub(crate) mod walk;
-pub use macros::{MacroToken, MacroDefinition, MacroInvocation, MacroExpansion, MacroCapture, MacroAlias, MacroInventory};
+pub use macros::{MacroToken, MacroDefinition, MacroInvocation, MacroExpansion, MacroCapture, MacroAlias, MacroInventory, MacroPosition, MacroSplice};
 
 pub type FileId = usize;
 pub type ModuleId = usize;
@@ -498,6 +498,7 @@ pub enum Stmt {
         semicolon: bool,
     },
     Item(Item),
+    MacroInvocation(usize),
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -553,6 +554,7 @@ pub struct Program {
     pub macro_aliases: Vec<MacroAlias>,
     pub macro_inputs: Vec<(String, Vec<u8>)>,
     pub macro_captures: Vec<MacroCapture>,
+    pub macro_identifier_uses: Vec<Span>,
     pub macro_definitions: Vec<MacroDefinition>,
     pub macro_invocations: Vec<MacroInvocation>,
     pub macro_expansions: Vec<MacroExpansion>,

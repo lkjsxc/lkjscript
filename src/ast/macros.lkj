@@ -25,6 +25,12 @@ pub struct MacroDefinition {
     pub exported: bool,
     pub local_inner: bool,
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum MacroPosition { Item, Expression, Statement { semicolon: bool, braces: bool } }
+#[derive(Clone, PartialEq, Eq)]
+pub struct MacroSplice {
+    pub block: BlockId, pub first: usize, pub count: usize, pub tail: Option<ExprId>,
+}
 #[derive(Clone, PartialEq, Eq)]
 pub struct MacroInvocation {
     pub name: String,
@@ -37,13 +43,15 @@ pub struct MacroInvocation {
     pub tokens: Vec<MacroToken>,
     pub self_context: Option<usize>,
     pub parent: Option<usize>,
-    pub item: bool,
+    pub position: MacroPosition,
 }
 #[derive(Clone, PartialEq, Eq)]
 pub struct MacroExpansion {
     pub start: MacroInventory,
     pub end: MacroInventory,
     pub definition: usize,
+    pub rule: usize,
+    pub splice: Option<MacroSplice>,
     pub invocation: usize,
     pub context: usize,
     pub parent: Option<usize>,
@@ -96,6 +104,7 @@ pub struct MacroInventory {
     pub impls: usize, pub uses: usize, pub modules: usize, pub aliases: usize,
     pub constants: usize, pub scopes: usize, pub macro_invocations: usize,
     pub macro_captures: usize, pub attrs: usize, pub macro_definitions: usize,
+    pub identifier_uses: usize,
 }
 pub fn inventory(program: &super::Program) -> MacroInventory {
     MacroInventory { types: program.types.len(), exprs: program.exprs.len(),
@@ -104,5 +113,6 @@ pub fn inventory(program: &super::Program) -> MacroInventory {
         impls: program.impls.len(), uses: program.uses.len(), modules: program.modules.len(),
         aliases: program.aliases.len(), constants: program.constants.len(), scopes: program.scopes.len(),
         macro_invocations: program.macro_invocations.len(), macro_captures: program.macro_captures.len(),
-        attrs: program.attrs.len(), macro_definitions: program.macro_definitions.len() }
+        attrs: program.attrs.len(), macro_definitions: program.macro_definitions.len(),
+        identifier_uses: program.macro_identifier_uses.len() }
 }

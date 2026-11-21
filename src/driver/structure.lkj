@@ -321,6 +321,15 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
         draft = structure_edit::plan(&old_catalog, &before.source_inputs, &operations)?;
         prepare_projections(world, &active_options, &mut before, &old_catalog, &mut draft)?;
     }
+    let mut capture_targets: Vec<String> = Vec::new();
+    preserving.clear();
+    for operation in &operations.operations {
+        if matches!(operation.kind.as_str(), "rename" | "move") { preserving.push(operation.clone()); }
+        if operation.kind == "rename" {
+            let selected = structure_edit::selected_operation(&old_catalog, operation)?;
+            if old_catalog.macro_replay.captures.contains_key(&selected.identity) { capture_targets.push(selected.identity); }
+        }
+    }
     let mut prepared = match writer.as_mut() {
         Some(writer) => writer.prepare(&draft)?,
         None => structure_write::prepare(world, scope, &draft)?,
@@ -331,10 +340,16 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
         let preserving_draft = structure_edit::plan(&old_catalog, &before.source_inputs, &preserving_request)?;
         let mut proof_options = active_options.clone(); proof_options.store_directory = None;
         let mut proof = Memo::new(world, &proof_options);
-        proof.capture_catalog = true; proof.catalog_items_only = true;
+        proof.capture_catalog = true; proof.catalog_items_only = capture_targets.is_empty();
         proof.private_source_digest = before.private_source_digest;
         replace_snapshot(&before, &mut proof, &preserving_draft)?;
         let preserved = super::compile(world, &proof_options, stats, &mut proof)?;
+        if !capture_targets.is_empty() {
+            let catalog = proof.catalog.as_ref().ok_or("E_EDIT_SOURCE capture replay catalog is missing")?;
+            if let Some(refusal) = semantic::macro_renames::verify(&old_catalog, catalog, &capture_targets) {
+                return Err(crate::structure_refactor::at_site(&refusal.identity, "REFERENCES", &refusal.site, &refusal.reason));
+            }
+        }
         if original_identity != meaning::identity(preserved.original().checked()) {
             return Err("transaction E_EDIT_MEANING rename/move subset changed checked IR; no source was published".to_string());
         }
@@ -343,7 +358,7 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
     uncached.store_directory = None;
     let mut after = Memo::new(world, &uncached);
     after.capture_catalog = true;
-    after.catalog_items_only = true;
+    after.catalog_items_only = capture_targets.is_empty();
     after.private_source_digest = before.private_source_digest;
     after.store = before.store.take();
     replace_snapshot(&before, &mut after, &draft)?;
@@ -353,6 +368,11 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
     let new_catalog = after.catalog.take().ok_or("E_EDIT_SOURCE candidate source catalog is missing")?;
     verify_projections(scope, &old_catalog, &new_catalog, &draft)?;
     let candidate_identity = meaning::identity(new.original().checked());
+    if !capture_targets.is_empty() && preserving.len() == operations.operations.len() {
+        if let Some(refusal) = semantic::macro_renames::verify(&old_catalog, &new_catalog, &capture_targets) {
+            return Err(crate::structure_refactor::at_site(&refusal.identity, "REFERENCES", &refusal.site, &refusal.reason));
+        }
+    }
     if !preserving.is_empty() && preserving.len() == operations.operations.len()
         && original_identity != candidate_identity {
         return Err("transaction E_EDIT_MEANING rename/move changed checked IR; no source was published".to_string());

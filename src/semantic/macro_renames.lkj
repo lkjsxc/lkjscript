@@ -1,0 +1,261 @@
+//! Compact authenticated replay evidence for authored local captures.
+use super::*;
+use crate::elaborate::semantic::{Evidence, LocalTarget, MethodTarget};
+
+#[derive(Clone)]
+pub(crate) struct Capture {
+    pub invocation: usize, pub token: usize, pub function: usize,
+    pub canonical: String, pub site: Reference, pub refusal: String,
+}
+#[derive(Default)]
+pub(crate) struct Proof {
+    pub topology: String,
+    pub functions: BTreeMap<usize, Option<String>>,
+    pub captures: BTreeMap<String, Vec<Capture>>,
+}
+pub(crate) struct Refusal { pub identity: String, pub site: Reference, pub reason: String }
+fn key(span: a::Span) -> (usize, usize, usize) { (span.file, span.start, span.end) }
+fn optional(out: &mut Vec<u8>, value: Option<usize>) { word(out, value.unwrap_or(18446744073709551615usize)); }
+fn local(target: LocalTarget, function: Option<usize>) -> Option<String> {
+    match target {
+        LocalTarget::Pattern(id) => Some(format!("pattern:{id}")),
+        LocalTarget::Parameter(id) => function.map(|owner| -> String { format!("parameter:{owner}:{id}") }),
+        LocalTarget::Unavailable => None,
+    }
+}
+fn inventory(out: &mut Vec<u8>, value: &a::MacroInventory) {
+    for count in vec![value.types, value.exprs, value.patterns, value.blocks, value.functions, value.structs,
+        value.enums, value.traits, value.impls, value.uses, value.modules, value.aliases, value.constants,
+        value.scopes, value.macro_invocations, value.macro_captures, value.attrs, value.macro_definitions,
+        value.identifier_uses] { word(out, count); }
+}
+fn topology(program: &a::Program) -> String {
+    let mut out = Vec::new();
+    bytes(&mut out, b"lkjscript-capture-replay-1");
+    word(&mut out, program.macro_definitions.len());
+    word(&mut out, program.macro_invocations.len());
+    for call in &program.macro_invocations {
+        word(&mut out, call.scope); word(&mut out, call.destination);
+        optional(&mut out, call.block); optional(&mut out, call.parent); optional(&mut out, call.self_context);
+        match call.position {
+            a::MacroPosition::Item => word(&mut out, 0usize),
+            a::MacroPosition::Expression => word(&mut out, 1usize),
+            a::MacroPosition::Statement { semicolon, braces } => {
+                word(&mut out, 2usize); word(&mut out, if semicolon { 1usize } else { 0usize });
+                word(&mut out, if braces { 1usize } else { 0usize });
+            }
+        }
+        word(&mut out, call.tokens.len());
+        for token in &call.tokens {
+            word(&mut out, token.kind as usize); word(&mut out, token.context); optional(&mut out, token.capture);
+        }
+    }
+    word(&mut out, program.macro_expansions.len());
+    for expansion in &program.macro_expansions {
+        word(&mut out, expansion.definition); word(&mut out, expansion.rule); word(&mut out, expansion.invocation);
+        word(&mut out, expansion.context); optional(&mut out, expansion.parent);
+        inventory(&mut out, &expansion.start); inventory(&mut out, &expansion.end);
+        if let Some(splice) = &expansion.splice {
+            word(&mut out, 1usize); word(&mut out, splice.block); word(&mut out, splice.first);
+            word(&mut out, splice.count); optional(&mut out, splice.tail);
+        } else { word(&mut out, 0usize); }
+    }
+    word(&mut out, program.macro_captures.len());
+    for capture in &program.macro_captures {
+        bytes(&mut out, capture.name.as_bytes()); word(&mut out, capture.invocation);
+        word(&mut out, capture.scope); optional(&mut out, capture.parent);
+        word(&mut out, capture.path.len()); for value in &capture.path { word(&mut out, *value); }
+        optional(&mut out, capture.expression); optional(&mut out, capture.ty);
+        word(&mut out, capture.materializations.len()); for value in &capture.materializations { word(&mut out, *value); }
+        word(&mut out, capture.type_materializations.len()); for value in &capture.type_materializations { word(&mut out, *value); }
+    }
+    sha256::hex_digest(&out)
+}
+fn path_target(resolver: &resolve::Resolver<'_>, node: &a::ExprNode, path: &a::Path) -> Option<String> {
+    let resolved = resolver.value_path(node.scope, path, node.span).ok()?;
+    Some(format!("path:{}:{}", resolved.declaration.unwrap_or(18446744073709551615usize), resolved.name))
+}
+fn reference_target(program: &a::Program, resolver: &resolve::Resolver<'_>, evidence: &Evidence,
+    expression: usize, function: Option<usize>) -> (bool, Option<String>) {
+    let node = &program.exprs[expression];
+    match &node.kind {
+        a::Expr::Path(path) => {
+            if let Some(target) = evidence.locals.get(&expression).copied() { return (true, local(target, function)); }
+            (true, path_target(resolver, node, path))
+        }
+        a::Expr::Struct { path, fields, .. } => {
+            let Some(declaration) = path.declaration else { return (true, None); };
+            let mut result = format!("constructor:{declaration}");
+            for (name, _) in fields { result.push_str(&format!(":{}:{name}", name.len())); }
+            (true, Some(result))
+        }
+        a::Expr::Field { value, name } => {
+            let owner = evidence.expressions.get(value);
+            let target = if let Some(declaration) = evidence.fields.get(&expression) {
+                owner.map(|owner| -> String { format!("field:{declaration}:{owner}:{name}") })
+            } else if evidence.builtin_fields.contains(&expression) {
+                owner.map(|owner| -> String { format!("builtin-field:{owner}:{name}") })
+            } else { None };
+            (true, target)
+        }
+        a::Expr::Method { receiver, name, .. } => {
+            let Some(owner) = evidence.expressions.get(receiver) else { return (true, None); };
+            let target = match evidence.methods.get(&expression) {
+                Some(MethodTarget::Builtin) => Some(format!("builtin-method:{owner}:{name}")),
+                Some(MethodTarget::Source(id)) => Some(format!("method:{id}:{owner}")),
+                Some(MethodTarget::Trait(id)) => Some(format!("trait-method:{id}:{owner}:{name}")),
+                Some(MethodTarget::BuiltinTrait(trait_name)) => Some(format!("builtin-trait:{trait_name}:{owner}:{name}")),
+                _ => None,
+            };
+            (true, target)
+        }
+        _ => (false, None),
+    }
+}
+struct Use { expression: usize, function: Option<usize>, identity: Option<String>, canonical: Option<String> }
+
+pub(super) fn append(catalog: &mut Catalog, files: &[SourceText], program: &a::Program,
+    resolver: &resolve::Resolver<'_>, origins: &origins::Origins, bindings: &BTreeMap<usize, String>,
+    evidence: &Option<Evidence>) {
+    let Some(input) = &program.macro_input else { return; };
+    let Some(evidence) = evidence else { return; };
+    let mut proof = Proof::default();
+    proof.topology = topology(program);
+    let mut roots: BTreeMap<usize, usize> = BTreeMap::new();
+    for (function, value) in program.functions.iter().enumerate() { if let Some(body) = value.body { roots.insert(body, function); } }
+    let mut originals: BTreeMap<(usize, usize, usize), Vec<(usize, usize)>> = BTreeMap::new();
+    for (call, invocation) in input.macro_invocations.iter().enumerate() {
+        for (token, value) in invocation.tokens.iter().enumerate() {
+            if value.kind != 0u8 || value.context != 0usize || value.span != value.origin { continue; }
+            let key = key(value.origin);
+            if !originals.contains_key(&key) { originals.insert(key, Vec::new()); }
+            originals.get_mut(&key).unwrap().push((call, token));
+        }
+    }
+    let mut roles: BTreeMap<(usize, usize, usize), usize> = BTreeMap::new();
+    for span in &program.macro_identifier_uses {
+        let key = key(*span); let count = roles.get(&key).copied().unwrap_or(0usize);
+        roles.insert(key, count + 1usize);
+    }
+    let mut groups: BTreeMap<(usize, usize, usize), Vec<Use>> = BTreeMap::new();
+    let mut functions: BTreeMap<usize, Vec<u8>> = BTreeMap::new();
+    let mut incomplete: BTreeSet<usize> = BTreeSet::new();
+    for expression in &origins.macros.live_expressions {
+        let node = &program.exprs[*expression];
+        let function = macro_sources::function_owner(program, &roots, node.block);
+        let (reference, canonical) = reference_target(program, resolver, evidence, *expression, function);
+        if reference {
+            if let Some(function) = function {
+                if !evidence.definitions.contains(&function) || canonical.is_none() { incomplete.insert(function); }
+                if !functions.contains_key(&function) { functions.insert(function, Vec::new()); }
+                let data = functions.get_mut(&function).unwrap();
+                word(data, *expression);
+                if let Some(target) = &canonical { bytes(data, target.as_bytes()); }
+            }
+        }
+        let a::Expr::Path(path) = &node.kind else { continue; };
+        if path.qualification.is_some() || !path.args.is_empty() || !path.bindings.is_empty() || path.name.contains("::") { continue; }
+        let key = key(node.span);
+        if !originals.contains_key(&key) { continue; }
+        let identity = evidence.locals.get(expression).copied()
+            .and_then(|target| macro_sources::local_identity(catalog, program, bindings, function, target));
+        if !groups.contains_key(&key) { groups.insert(key, Vec::new()); }
+        groups.get_mut(&key).unwrap().push(Use { expression: *expression, function, identity, canonical });
+    }
+    for pattern in &origins.macros.live_patterns {
+        let node = &program.patterns[*pattern];
+        let path = match &node.kind {
+            a::Pattern::Path(path) | a::Pattern::Variant { path, .. } | a::Pattern::Struct { path, .. } => Some(path),
+            _ => None,
+        };
+        let Some(path) = path else { continue; };
+        let Some(function) = macro_sources::function_owner(program, &roots, node.block) else { continue; };
+        if !functions.contains_key(&function) { functions.insert(function, Vec::new()); }
+        let data = functions.get_mut(&function).unwrap();
+        bytes(data, b"pattern"); word(data, *pattern);
+        optional(data, path.declaration); bytes(data, path.name.as_bytes());
+    }
+    for (function, data) in functions {
+        proof.functions.insert(function, if incomplete.contains(&function) { None } else { Some(sha256::hex_digest(&data)) });
+    }
+    let mut editable: BTreeSet<(usize, usize, usize, String)> = BTreeSet::new();
+    for (origin, uses) in groups {
+        let source = originals.get(&origin).unwrap();
+        if source.len() != 1usize { continue; }
+        let (invocation, token) = source[0usize];
+        let mut seen: BTreeSet<String> = BTreeSet::new();
+        for usage in &uses {
+            let Some(identity) = &usage.identity else { continue; };
+            if !seen.insert(identity.clone()) { continue; }
+            let Some(index) = catalog.by_identity.get(identity) else { continue; };
+            if !catalog.items[*index].generated_from.is_empty() { continue; }
+            let node = &program.exprs[usage.expression];
+            let mut refusal = String::new();
+            if roles.get(&origin).copied().unwrap_or(0usize) != uses.len() {
+                refusal = "capture role is not exclusively a local value reference".to_string();
+            } else if usage.canonical.is_none() || uses.iter().any(|value| value.canonical != usage.canonical) {
+                refusal = "capture target differs between materializations".to_string();
+            }
+            let function = usage.function.unwrap_or(18446744073709551615usize);
+            if refusal.is_empty() && !proof.functions.get(&function).is_some_and(|value: &Option<String>| -> bool { value.is_some() }) {
+                refusal = "capture target evidence is incomplete in the caller".to_string();
+            }
+            let owner = usage.function.map(|function: usize| -> String { catalog.function_ids[function].clone() }).unwrap_or_else(|| -> String { String::new() });
+            let site = Reference { owner, target: identity.clone(), file: files[node.span.file].path.clone(),
+                kind: "local-value".to_string(), start: node.span.start, end: node.span.end };
+            if refusal.is_empty() {
+                editable.insert((origin.0, origin.1, origin.2, identity.clone()));
+                catalog.references.push(site.clone());
+            }
+            if !proof.captures.contains_key(identity) { proof.captures.insert(identity.clone(), Vec::new()); }
+            proof.captures.get_mut(identity).unwrap().push(Capture { invocation, token, function,
+                canonical: usage.canonical.clone().unwrap_or_else(|| -> String { String::new() }), site, refusal });
+        }
+    }
+    catalog.generated_references.retain(|site| {
+        if site.kind != "local-value" { return true; }
+        let file = program.files.iter().position(|file| file.path == site.file);
+        !file.is_some_and(|file| editable.contains(&(file, site.start, site.end, site.target.clone())))
+    });
+    catalog.macro_replay = proof;
+}
+pub(crate) fn refusal(catalog: &Catalog, identity: &str) -> Option<Refusal> {
+    for capture in catalog.macro_replay.captures.get(&identity.to_string())? {
+        if !capture.refusal.is_empty() {
+            return Some(Refusal { identity: identity.to_string(), site: capture.site.clone(), reason: capture.refusal.clone() });
+        }
+    }
+    None
+}
+pub(crate) fn verify(before: &Catalog, after: &Catalog, identities: &[String]) -> Option<Refusal> {
+    for identity in identities {
+        let Some(captures) = before.macro_replay.captures.get(identity) else { continue; };
+        for capture in captures {
+            let mut reason = capture.refusal.clone();
+            if reason.is_empty() && before.macro_replay.topology != after.macro_replay.topology {
+                reason = "capture rule or expansion topology changed".to_string();
+            }
+            let mut candidate: Option<Capture> = None;
+            for values in after.macro_replay.captures.values() {
+                for value in values {
+                    if value.invocation == capture.invocation && value.token == capture.token { candidate = Some(value.clone()); }
+                }
+            }
+            if reason.is_empty() {
+                match candidate {
+                    None => reason = "capture role has no complete replayed reference".to_string(),
+                    Some(value) => {
+                        if !value.refusal.is_empty() { reason = value.refusal.clone(); }
+                        else if value.canonical != capture.canonical || value.function != capture.function {
+                            reason = "capture target changed after the rename".to_string();
+                        } else if before.macro_replay.functions.get(&capture.function) != after.macro_replay.functions.get(&value.function) {
+                            reason = "capture target or another caller reference changed".to_string();
+                        }
+                    }
+                }
+            }
+            if !reason.is_empty() { return Some(Refusal { identity: identity.clone(), site: capture.site.clone(), reason }); }
+        }
+    }
+    None
+}

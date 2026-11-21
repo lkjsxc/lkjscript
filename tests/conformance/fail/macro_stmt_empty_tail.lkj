@@ -1,0 +1,5 @@
+// expect: reject E_MACRO_EXPANSION
+// witness: {"rustAccept":false}
+macro_rules! nothing { () => () }
+fn f() { nothing!() }
+pub fn probe() -> i32 { f(); 1 }

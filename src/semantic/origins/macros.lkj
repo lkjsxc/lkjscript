@@ -118,6 +118,7 @@ fn nodes(program: &a::Program) -> Result<(BTreeSet<usize>, BTreeSet<usize>, BTre
                     }
                     a::Stmt::Expr { value, .. } => pending.push((0usize, *value)),
                     a::Stmt::Item(_) => {}
+                    a::Stmt::MacroInvocation(_) => return Err(failure("macro", "an invocation remains in the expanded statement graph")),
                 }
             }
         } else {

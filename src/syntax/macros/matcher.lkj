@@ -157,6 +157,7 @@ fn rollback(program: &mut Program, input: &mut MatchInput, saved: Checkpoint) {
     program.modules.truncate(counts.modules); program.aliases.truncate(counts.aliases); program.constants.truncate(counts.constants);
     program.scopes.truncate(counts.scopes); program.attrs.truncate(counts.attrs);
     program.macro_definitions.truncate(counts.macro_definitions);
+    program.macro_identifier_uses.truncate(counts.identifier_uses);
     program.macro_invocations.truncate(counts.macro_invocations); program.macro_captures.truncate(counts.macro_captures);
     for id in 0usize..saved.captures.len() {
         program.macro_captures[id].expression = saved.captures[id].0;
@@ -435,8 +436,8 @@ fn transcribe(program: &Program, definition: &MacroDefinition, invocation: &Macr
     Ok(())
 }
 pub(super) fn apply(program: &mut Program, definition: &MacroDefinition, rules: &[Rule],
-    invocation: &MacroInvocation, context: usize) -> Result<Vec<MacroToken>, Diagnostic> {
-    for rule in rules {
+    invocation: &MacroInvocation, context: usize) -> Result<(Vec<MacroToken>, usize), Diagnostic> {
+    for (rule_index, rule) in rules.iter().enumerate() {
         let mut input = MatchInput { tokens: invocation.tokens.clone(), mutations: Vec::new() };
         let saved = checkpoint(program, &input);
         let mut bindings = rule.variables.clone();
@@ -444,7 +445,7 @@ pub(super) fn apply(program: &mut Program, definition: &MacroDefinition, rules: 
         if matches(program, invocation, &rule.pattern, &mut input, invocation.tokens.len(), &mut at, &[0usize; 0], &mut bindings)? && at == invocation.tokens.len() {
             let mut output = Vec::new();
             transcribe(program, definition, invocation, &rule.template, &bindings, &[0usize; 0], context, &mut output)?;
-            return Ok(output);
+            return Ok((output, rule_index));
         }
         rollback(program, &mut input, saved);
     }

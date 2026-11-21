@@ -1,0 +1,4 @@
+// expect: reject E_MACRO_EXPANSION
+// witness: {"rustAccept":false}
+macro_rules! two { () => { let a = 40; a + 2 } }
+pub fn probe() -> i32 { let v = two!(); v }

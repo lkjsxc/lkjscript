@@ -20,6 +20,7 @@ fn source_input(program: &Program) -> Result<(), Diagnostic> {
     if program.resolved || program.macros_expanded || program.macro_input.is_some()
         || !program.macro_expansions.is_empty() || !program.macro_aliases.is_empty()
         || !program.macro_inputs.is_empty() || !program.macro_captures.is_empty()
+            || !program.macro_identifier_uses.is_empty()
     {
         return Err(failure(Span::default(), "macro replay input is not an unexpanded source program"));
     }
@@ -38,6 +39,7 @@ fn source_input(program: &Program) -> Result<(), Diagnostic> {
     for invocation in &program.macro_invocations {
         if invocation.scope >= program.scopes.len() || invocation.span.file >= program.files.len()
             || invocation.parent.is_some() || invocation.destination != invocation.scope
+            || (matches!(invocation.position, crate::ast::MacroPosition::Statement { .. }) && invocation.block.is_none())
             || invocation.block.is_some_and(|id| id >= program.blocks.len()
                 || program.blocks[id].scope != invocation.destination)
         {
@@ -57,6 +59,7 @@ pub(crate) fn validate(program: &Program) -> Result<(), Diagnostic> {
         if !program.macro_definitions.is_empty() || !program.macro_invocations.is_empty()
             || !program.macro_expansions.is_empty() || !program.macro_aliases.is_empty()
             || !program.macro_inputs.is_empty() || !program.macro_captures.is_empty()
+            || !program.macro_identifier_uses.is_empty()
         {
             return Err(failure(Span::default(), "macro origins require their unexpanded token-bearing input"));
         }

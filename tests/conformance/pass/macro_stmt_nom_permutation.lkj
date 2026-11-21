@@ -1,0 +1,37 @@
+// expect: value 1201
+// witness: {}
+fn step(limit: u32, input: u32) -> Option<u32> { if input >= limit { Some(input - limit) } else { None } }
+macro_rules! succ (
+  (0, $m:ident ! ($($r:tt)*)) => ($m!(1, $($r)*));
+  (1, $m:ident ! ($($r:tt)*)) => ($m!(2, $($r)*));
+  (2, $m:ident ! ($($r:tt)*)) => ($m!(3, $($r)*));
+);
+macro_rules! inner (
+  ($it:tt, $self:expr, $input:ident, $res:expr, $head:ident $($item:ident)*) => (
+    if !$head {
+      match step($self.limits.$it, $input) {
+        Some(rest) => { $input = rest; $res = $res * 10 + $it + 1; $head = true; continue; }
+        None => {}
+      };
+    }
+    succ!($it, inner!($self, $input, $res, $($item)*));
+  );
+  ($it:tt, $self:expr, $input:ident, $res:expr,) => ();
+);
+macro_rules! make (
+  ($($item:ident)+) => (
+    struct P { limits: (u32, u32, u32) }
+    impl P {
+      fn run(&self, mut input: u32) -> u32 {
+        let mut res = 0;
+        $(let mut $item = false;)+
+        loop {
+          inner!(0, self, input, res, $($item)+);
+          return res * 100 + input;
+        }
+      }
+    }
+  );
+);
+make!(a b c);
+pub fn probe() -> u32 { P { limits: (5, 1, 100) }.run(7) }

@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+macro_rules! bind { ($n:ident, $v:expr) => { let $n = $v; } }
+pub fn probe() -> i32 { bind!(y, 41); bind!(y, y + 1); y }

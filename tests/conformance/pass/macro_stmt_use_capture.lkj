@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {}
+mod a { pub fn v() -> i32 { 42 } }
+fn v() -> i32 { 1 }
+macro_rules! m ( ($e:expr) => { use a::v; let r = $e; assert_eq!(r, 42); } );
+pub fn probe() -> i32 { m!(v()); 42 }

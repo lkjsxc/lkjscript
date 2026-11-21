@@ -1,0 +1,4 @@
+// expect: value 5
+// witness: {}
+macro_rules! nothing { () => () }
+pub fn probe() -> i32 { let x = 5; nothing!(); nothing!{} nothing![]; x }

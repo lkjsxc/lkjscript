@@ -1,0 +1,4 @@
+// expect: value 5
+// witness: {}
+macro_rules! val { () => { Some(5i32) } } fn g() -> Option<i32> { let v = val!{}?; Some(v) }
+pub fn probe() -> i32 { match g() { Some(v) => v, None => 0 } }

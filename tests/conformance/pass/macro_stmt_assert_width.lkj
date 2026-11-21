@@ -1,0 +1,8 @@
+// expect: value 2
+// witness: {}
+trait Width { fn width() -> usize; }
+impl Width for u32 { fn width() -> usize { 4 } }
+impl Width for (u8, u8) { fn width() -> usize { 2 } }
+fn width_of<T: Width>() -> usize { T::width() }
+macro_rules! assert_width ( ($t:ty, $sz:expr) => ( assert_eq!(width_of::<$t>(), $sz); ); );
+pub fn probe() -> i32 { assert_width!(u32, 4); assert_width!((u8, u8), 2); 2 }

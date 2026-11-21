@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED_MACRO
+// witness: {"rustAccept":true}
+macro_rules! branch ( ($v:expr) => { macro_rules! inner { () => { $v } } let r = inner!(); assert_eq!(r, 42); } );
+pub fn probe() -> i32 { branch!(42); 42 }

@@ -1,0 +1,4 @@
+// expect: value 1
+// witness: {}
+macro_rules! two { () => { let a = 40; a + 2 } }
+pub fn probe() -> i32 { two!{}; 1 }

@@ -1067,8 +1067,8 @@ Normal destructor order matches the supported Rust intersection; outputs/statuse
 
 ### Declarative source macros
 
-Module-scoped `macro_rules!` definitions produce ordinary source expressions or
-items. Matchers accept literal token trees and `expr`, `ty`, `ident`, and `tt`
+Module-scoped `macro_rules!` definitions produce ordinary source expressions,
+statement lists or items. Matchers accept literal token trees and `expr`, `ty`, `ident`, and `tt`
 fragments. `*`, `+`, and `?` repetitions preserve nesting and require matching
 capture lengths when several repeated names are emitted together. Separators,
 optional trailing commas, recursive item producers, and nested macro calls are
@@ -1107,12 +1107,24 @@ ownership, generic, capability and effect obligations use the normal frontend
 and independent IR checker. Expansion adds no runtime operation or checker
 privilege.
 
+Statement invocations splice their output directly into the destination block;
+they create no implicit scope. Empty output is valid there. A trailing invocation
+semicolon discards the final value; without one, a final expression becomes the
+block tail only at a terminal destination. Nested invocations inherit these rules.
+Brace-delimited invocations end a statement unless followed by `.` or `?`, so
+`call!{} - value` begins a separate unary-minus expression. Non-brace calls need a
+semicolon as statements or parse as a single tail expression. Expression-only
+positions reject empty or statement-list output with `E_MACRO_EXPANSION`.
+Expansion walks live syntax depth first, left to right, through one shared normal
+and replay traversal. Captured binders obey ordinary shadowing, block imports
+cover the destination block, and ownership, views and cleanup retain their ordinary
+rules. Local items and generated macro definitions keep their existing refusals.
+
 The current fragment set is deliberate. Other fragment kinds, procedural
 macros, block-local or generated macro definitions, selective `macro_use`
 imports, attributes on invocations, and expansion that discovers external
 source modules have located refusals. Built-in macro names remain reserved.
-Macro invocations in type, pattern, and multi-statement positions are not
-admitted by this slice. Captured types work in ordinary type positions,
+Macro invocations in type and pattern positions are not admitted by this slice. Captured types work in ordinary type positions,
 qualified receivers and generic arguments; they cannot become expression paths,
 struct literals or trait bounds. `impl $t for Target` with a captured trait type
 has a located unsupported diagnostic. Existing ordinary type and constant
@@ -1134,10 +1146,16 @@ The frontend delta-checkpoint format does not yet encode expansion dependency
 and hygiene identities. Programs with actual macro expansions therefore receive
 fresh frontend admission. Authenticated checked artifacts and source-unit
 linkage retain their normal checks. Exact source replay binds destination and
-textual scopes, structural block owners, split-token origins and every fragment
+textual scopes, structural block owners, statement positions and splice coordinates,
+selected matcher rules, identifier roles, split-token origins and every fragment
 materialization. Captured types belong to their expansion's generated syntax.
 Queries expose those references; renaming a declaration with generated capture
-references refuses rather than publishing an incomplete rewrite. An authored
+references refuses rather than publishing an incomplete rewrite. Authored local
+captures can be renamed only when every materialization is a complete value
+reference to the same binding or parameter. The candidate must preserve selected
+rules, capture topology and every caller reference target; mixed transactions
+also check the rename-only subset. A failed proof produces a located
+`E_EDIT_REFERENCES` and publishes no source or generation change. An authored
 body may replace its type arguments through the checked edit path.
 A macro definition or capture edit must reexpand the affected source before
 its checked result can be published.

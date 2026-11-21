@@ -475,6 +475,11 @@ pub fn plan(catalog: &semantic::Catalog,
     for operation in &request.operations {
         let selected = selected_operation(catalog, operation)?;
         let operation = &selected;
+        if operation.kind == "rename" {
+            if let Some(refusal) = semantic::macro_renames::refusal(catalog, &operation.identity) {
+                return Err(crate::structure_refactor::at_site(&refusal.identity, "REFERENCES", &refusal.site, &refusal.reason));
+            }
+        }
         if let Some(index) = catalog.by_identity.get(&operation.identity) {
             let selected = &catalog.items[*index];
             if !selected.generated_from.is_empty() { validate_item(selected, inputs, &operation.expected)?; }

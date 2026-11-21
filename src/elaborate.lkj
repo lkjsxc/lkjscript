@@ -2487,6 +2487,9 @@ impl Builder<'_, '_> {
                     }
                     self.cleanup(before, None, block.span.line);
                 }
+                a::Stmt::MacroInvocation(_) => {
+                    return Err(err(block.span, "E_MACRO_EXPANSION", "an invocation remains in the expanded statement graph"));
+                }
                 a::Stmt::Item(a::Item::Use(_)) => {}
                 a::Stmt::Item(a::Item::Constant(index)) => {
                     return Err(self.local_constant_diagnostic(index));

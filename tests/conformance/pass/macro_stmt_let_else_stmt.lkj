@@ -1,0 +1,5 @@
+// expect: value 419
+// witness: {}
+macro_rules! need ( ($x:ident, $e:expr, $d:expr) => { let Some($x) = $e else { return $d; }; } );
+fn f(v: Option<i32>) -> i32 { need!(x, v, -1); x + 1 }
+pub fn probe() -> i32 { f(Some(41)) * 10 + f(None) }

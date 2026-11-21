@@ -1,0 +1,4 @@
+// expect: value 7
+// witness: {}
+macro_rules! discard { ($e:expr) => { 7i64 }; }
+pub fn probe() -> i64 { discard!({ never_defined!(); 1i64 }) }

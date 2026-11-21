@@ -1,0 +1,4 @@
+// expect: value 1
+// witness: {}
+macro_rules! pair { ($a:ident) => { let ($a, b) = (1, 2); let _ = b; } }
+pub fn probe() -> i32 { pair!(a); a }

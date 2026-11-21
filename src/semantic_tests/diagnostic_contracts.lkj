@@ -66,6 +66,7 @@ fn recovery_reaches_independent_statements_items_and_nested_methods() {
     macro_recovery_rules_and_calls();
     macro_recovery_modules_and_discarded_captures();
     macro_recovery_rolls_back_failed_items();
+    macro_recovery_rolls_back_failed_statements();
 }
 
 fn diagnostic_code_count(report: &source::SourceReport, code: &str) -> usize {
@@ -104,8 +105,14 @@ fn macro_recovery_rules_and_calls() {
     assert_eq!(blocked_count(&report.blocked, "statement"), 5usize);
     assert_eq!(blocked_count(&report.blocked, "item"), 1usize);
     assert!(!report.program.macros_expanded);
-    assert_eq!(report.program.macro_expansions.len(), 1usize);
-    assert_eq!(report.program.macro_definitions[report.program.macro_expansions[0usize].definition].name, "good");
+    // A recursive generated leaf is blocked, but its successful parent expansion
+    // remains part of the completed depth-first recovery prefix.
+    assert_eq!(report.program.macro_expansions.len(), 2usize);
+    let mut retained: Vec<String> = Vec::new();
+    for expansion in &report.program.macro_expansions {
+        retained.push(report.program.macro_definitions[expansion.definition].name.clone());
+    }
+    assert_eq!(retained, vec!["cycle".to_string(), "good".to_string()]);
     assert_eq!(report.program.macro_aliases.len(), 1usize);
     assert!(report.program.macro_captures.is_empty());
     assert!(!report.program.macro_invocations.iter().any(|call| call.name == "not_materialized"));
@@ -512,4 +519,35 @@ pub fn run() -> usize {
     unsupported_diagnostics_preserve_specific_existing_errors();
     unsized_source_locals_keep_their_module_and_construction_location();
     13usize
+}
+
+fn macro_recovery_rolls_back_failed_statements() {
+    let input = one(r#"
+        macro_rules! broken { ($name:ident, $value:expr) => { let $name = $value; let = 1; }; }
+        macro_rules! keep { ($name:ident) => { let $name = 42i64; }; }
+        macro_rules! outer { () => { broken!(lost, 99i64); keep!(kept); }; }
+        fn root() { outer!(); missing_root!(); keep!(after); }
+    "#);
+    let report = source::parse_bundle_report(&input);
+    assert_eq!(report.diagnostics.len(), 2usize);
+    assert_eq!(diagnostic_code_count(&report, "E_PARSE"), 1usize);
+    assert_eq!(diagnostic_code_count(&report, "E_UNSUPPORTED_MACRO"), 1usize);
+    assert_eq!(blocked_count(&report.blocked, "statement"), 2usize);
+    assert!(!report.program.macros_expanded);
+    assert_eq!(report.program.macro_expansions.len(), 3usize);
+    // Identifiers stay as tokens; the failed expression capture must disappear.
+    assert!(report.program.macro_captures.is_empty());
+    let mut names: Vec<String> = Vec::new();
+    for pattern in &report.program.patterns {
+        if let crate::ast::Pattern::Bind { name, .. } = &pattern.kind {
+            names.push(crate::ast::macros::source_name(name).to_string());
+        }
+    }
+    assert!(names.contains(&"kept".to_string()));
+    assert!(names.contains(&"after".to_string()));
+    assert!(!names.contains(&"lost".to_string()));
+    assert!(!report.program.exprs.iter().any(|node|
+        matches!(&node.kind, crate::ast::Expr::Int(value) if value == "99i64")));
+    assert!(syntax::macros::provenance::validate(&report.program).is_err());
+    assert!(compiler::check_bundle(&input).is_err());
 }

@@ -3,6 +3,7 @@
 use crate::{ast as a, ir, json, names, resolve, sha256, syntax};
 use std::collections::{BTreeMap, BTreeSet};
 mod references;
+pub(crate) mod macro_renames;
 use references::*;
 
 #[derive(Clone)]
@@ -64,6 +65,7 @@ pub struct Catalog {
     pub module_sources: Vec<ModuleSource>,
     /// Whether reference discovery was requested; false is declarations-only.
     pub references_recorded: bool,
+    pub(crate) macro_replay: macro_renames::Proof,
     pub items: Vec<Item>,
     pub by_identity: BTreeMap<String, usize>,
     /// Resolver namespace slots, including a constructor's reserved value slot.
@@ -728,7 +730,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
     let mut result = Catalog {
         root: program.files[0usize].path.clone(), module_sources: Vec::new(), references_recorded: include_references,
         items: Vec::new(), by_identity: BTreeMap::new(), namespace_slots: BTreeMap::new(), selector_kinds: BTreeMap::new(), references: Vec::new(), generated_references: Vec::new(), unresolved: Vec::new(),
-        expression_types: BTreeMap::new(),
+        expression_types: BTreeMap::new(), macro_replay: macro_renames::Proof::default(),
         function_ids: Vec::new(), instance_ids: Vec::new(), instance_sources: Vec::new(),
         implementations: Vec::new(), instance_arguments: Vec::new(), input_digest: sha256::hex_digest(&input_identity),
     };
@@ -1062,6 +1064,9 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                 }
             }
         }
+        macro_sources::generated_bindings(&mut result, &files, program, &origins, &mut binding_ids, evidence)?;
+        macro_sources::generated_locals(&mut result, &files, program, &origins, &binding_ids, evidence);
+        macro_renames::append(&mut result, &files, program, &resolver, &origins, &binding_ids, evidence);
         let mut calls: BTreeMap<String, usize> = BTreeMap::new();
         for (expression, node) in program.exprs.iter().enumerate() {
             if origins.expressions.contains_key(&expression) || origins.macros.expressions.contains_key(&expression) { continue; }
@@ -1301,7 +1306,7 @@ fn generated_expression_owned(catalog: &mut Catalog, files: &[SourceText], progr
         a::Expr::Path(path) => {
             if path.declaration.is_none() && (path.name == "self" || path.name.starts_with("$debug_")) { return Ok(()); }
             if macro_expansion && evidence.as_ref().is_some_and(|value| value.locals.contains_key(&expression)) {
-                generated_reference(catalog, files, &owner, None, node.span, "local-value");
+                // Local targets are projected after both authored and generated bindings exist.
                 return Ok(());
             }
             let target = resolver.value_path(node.scope, path, node.span).ok()
