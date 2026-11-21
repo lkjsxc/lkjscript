@@ -162,6 +162,21 @@ pub(crate) fn selected_operation(catalog: &semantic::Catalog, operation: &Operat
     selected.data = json::stringify(&value).map_err(|problem| error(&operation.identity, "REQUEST", &problem.message))?;
     Ok(selected)
 }
+/// Resolve authored capture targets within the source-catalog trust boundary.
+/// The driver does not inspect private expansion evidence across crate layers.
+pub fn capture_rename_target(catalog: &semantic::Catalog, operation: &Operation) -> Result<Option<String>, String> {
+    let selected = selected_operation(catalog, operation)?;
+    if catalog.macro_replay.captures.contains_key(&selected.identity) {
+        Ok(Some(selected.identity))
+    } else { Ok(None) }
+}
+
+/// Report replay failure without exposing private expansion identities or proofs.
+pub fn capture_rename_refusal(before: &semantic::Catalog, after: &semantic::Catalog,
+    identities: &[String]) -> Option<String> {
+    let refusal = semantic::macro_renames::verify(before, after, identities)?;
+    Some(crate::structure_refactor::at_site(&refusal.identity, "REFERENCES", &refusal.site, &refusal.reason))
+}
 pub(crate) fn input<'a>(inputs: &'a [(String, Vec<u8>)], path: &str) -> Result<&'a [u8], String> {
     for (name, bytes) in inputs {
         if name == path { return Ok(bytes.as_slice()); }
