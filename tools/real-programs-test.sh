@@ -39,15 +39,23 @@ node tools/real-programs/census.mjs --self-test > "$work/census-controls.json"
 node tools/real-programs/project.mjs --self-test > "$work/projection-controls.json"
 node tools/real-programs/probe-test.mjs > "$work/probe-controls.json"
 node tools/real-programs/rerank-test.mjs > "$work/rerank-controls.json"
-node tools/real-programs/verify-levenshtein.mjs --self-test "$source" > "$work/provenance.json"
-node --input-type=module - "$work/provenance.json" <<'NODE'
-import fs from 'node:fs';
-const report = JSON.parse(fs.readFileSync(process.argv[2], 'utf8'));
-if (report.test_count !== 8 || report.assertion_count !== 26 ||
-    report.mutants_rejected !== 18 || report.malformed_manifests_rejected !== 4 || !report.exact_upstream_bytes) {
-    throw new Error('unexpected upstream inventory');
-}
-NODE
+"$compiler" build tools/real-programs/levenshtein-provenance.lkj --library-dir library --no-store \
+    --grant source=env:LKJSCRIPT_PROVENANCE_SOURCE --grant output --grant errors --grant status \
+    -o "$work/provenance" > "$work/provenance-build.out" 2> "$work/provenance-build.err"
+LKJSCRIPT_PROVENANCE_SOURCE="$PWD/$source" "$work/provenance" > "$work/provenance.json" 2> "$work/provenance.err"
+test ! -s "$work/provenance.err"
+# Recompute the inverse projection from the specimen, compare every report byte,
+# and run the independent mutation controls before consuming the native report.
+node tools/real-programs/verify-levenshtein.mjs --check-report "$work/provenance.json" "$source"
+mkdir "$work/changed"
+cp "$source/upstream.json" "$source/LICENSE" "$work/changed/"
+{ printf ' '; cat "$source/upstream.lkj"; } > "$work/changed/upstream.lkj"
+provenance_status=0
+LKJSCRIPT_PROVENANCE_SOURCE="$work/changed" "$work/provenance" \
+    > "$work/provenance-refused.out" 2> "$work/provenance-refused.reason" || provenance_status=$?
+test "$provenance_status" -eq 255
+test ! -s "$work/provenance-refused.out"
+printf 'provenance refusal: upstream bytes differ: src/lib.rs\n' | cmp - "$work/provenance-refused.reason"
 # Keep the checked import and its normalization receipt intact. The executed
 # specimen restores the original range syntax, then authenticates both complete
 # upstream sections before the compiler reads the temporary .lkj projection.
@@ -79,9 +87,7 @@ NODE_HASH
   printf '\n// UPSTREAM INTEGRATION TESTS: exact bodies, package header removed.\n'
   tail -n +3 "$import_source/tests/lib.rs"; } | cmp - "$original/upstream.lkj"
 # A refusal must precede publication of either restored file.
-mkdir "$work/changed" "$work/refused"
-cp "$source/upstream.json" "$work/changed/"
-{ printf ' '; cat "$source/upstream.lkj"; } > "$work/changed/upstream.lkj"
+mkdir "$work/refused"
 restore_status=0
 LKJSCRIPT_RESTORE_SOURCE="$work/changed" LKJSCRIPT_RESTORE_OUTPUT="$work/refused" \
     "$work/restore" --rust > "$work/refused.out" 2> "$work/refused.reason" || restore_status=$?
@@ -149,4 +155,4 @@ if [[ "$full_interpreter" == yes ]]; then
     test ! -s "$work/interpreter.err"
     printf 'ok real programs: full interpreted 7,239-row corpus\n'
 fi
-printf 'ok real programs: original library syntax, exact upstream hashes, native restorer with foreign hash check and refusal, 18 provenance and 4 manifest-shape controls, native/interpreter importer, 8 tests on each engine, pure algorithm authority and 7,239 native corpus rows\n'
+printf 'ok real programs: original library syntax, independently checked native provenance, 18 provenance and 4 manifest-shape controls, native restorer with foreign hash check and refusal, native/interpreter importer, 8 tests on each engine, pure algorithm authority and 7,239 native corpus rows\n'
