@@ -44,9 +44,21 @@ node tools/real-programs/rerank-test.mjs > "$work/rerank-controls.json"
     -o "$work/provenance" > "$work/provenance-build.out" 2> "$work/provenance-build.err"
 LKJSCRIPT_PROVENANCE_SOURCE="$PWD/$source" "$work/provenance" > "$work/provenance.json" 2> "$work/provenance.err"
 test ! -s "$work/provenance.err"
+"$compiler" build tools/real-programs/levenshtein-checksums.lkj --library-dir library --no-store \
+    --grant report --grant output --grant errors --grant status -o "$work/checksums" \
+    > "$work/checksums-build.out" 2> "$work/checksums-build.err"
+"$work/checksums" < "$work/provenance.json" > "$work/restored.sha256" 2> "$work/checksums.err"
+test ! -s "$work/checksums.err"
 # Recompute the inverse projection from the specimen, compare every report byte,
 # and run the independent mutation controls before consuming the native report.
-node tools/real-programs/verify-levenshtein.mjs --check-report "$work/provenance.json" "$source"
+node tools/real-programs/verify-levenshtein.mjs --check-report "$work/provenance.json" "$source" --checksums "$work/restored.sha256"
+# A malformed second digest must refuse before emitting the first checksum line.
+checksum_status=0
+printf '{"files":{"src/lib.rs":{"sha256":"%064d"},"tests/lib.rs":{"sha256":"bad"}}}\n' 0 |
+    "$work/checksums" > "$work/checksums-refused.out" 2> "$work/checksums-refused.err" || checksum_status=$?
+test "$checksum_status" -eq 255
+test ! -s "$work/checksums-refused.out"
+printf 'levenshtein-checksums: invalid SHA-256 for tests/lib.rs\n' | cmp - "$work/checksums-refused.err"
 mkdir "$work/changed"
 cp "$source/upstream.json" "$source/LICENSE" "$work/changed/"
 { printf ' '; cat "$source/upstream.lkj"; } > "$work/changed/upstream.lkj"
@@ -77,11 +89,6 @@ LKJSCRIPT_RESTORE_SOURCE="$PWD/$source" LKJSCRIPT_RESTORE_OUTPUT="$restored" "$w
 mv "$restored/upstream.rs" "$import_source/src/lib.rs"
 mv "$restored/upstream_tests.rs" "$import_source/tests/lib.rs"
 # The compiler under test builds the restorer; foreign tools check every byte.
-node --input-type=module - "$work/provenance.json" > "$work/restored.sha256" <<'NODE_HASH'
-import {readFileSync} from 'node:fs';
-const {files} = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-for (const name of ['src/lib.rs', 'tests/lib.rs']) console.log(files[name].sha256 + '  ' + name);
-NODE_HASH
 (cd "$import_source" && sha256sum --check --strict --quiet "$work/restored.sha256")
 { cat "$import_source/src/lib.rs"
   printf '\n// UPSTREAM INTEGRATION TESTS: exact bodies, package header removed.\n'

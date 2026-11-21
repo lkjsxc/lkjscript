@@ -1,0 +1,37 @@
+//! Render the two restored Rust checksums from the independent provenance report.
+use std::json::{self, Value};
+
+fn checksum(files: &Value, name: &str) -> Result<String, String> {
+    let digest = files.get(name)
+        .and_then(|file: &Value| file.get("sha256"))
+        .and_then(|value: &Value| value.as_str())
+        .ok_or(format!("invalid SHA-256 for {name}"))?;
+    if digest.len() != 64usize {
+        return Err(format!("invalid SHA-256 for {name}"));
+    }
+    for byte in digest.as_bytes() {
+        if !((*byte >= b'0' && *byte <= b'9') || (*byte >= b'a' && *byte <= b'f')) {
+            return Err(format!("invalid SHA-256 for {name}"));
+        }
+    }
+    Ok(digest.to_string())
+}
+
+fn render(report: &mut Stdin) -> Result<String, String> {
+    let bytes = report.read_to_end().map_err(|errno: i64| -> String { format!("read provenance: errno {errno}") })?;
+    let provenance = json::parse(&bytes).map_err(|problem| -> String { format!("invalid provenance: {problem}") })?;
+    let files = provenance.get("files").ok_or("missing provenance files".to_string())?;
+    let library = checksum(files, "src/lib.rs")?;
+    let tests = checksum(files, "tests/lib.rs")?;
+    Ok(format!("{library}  src/lib.rs\n{tests}  tests/lib.rs\n"))
+}
+
+pub fn main(mut report: Stdin, mut output: Stdout, mut errors: Stderr, mut status: ExitStatus) {
+    match render(&mut report) {
+        Ok(list) => { output.write(list.as_bytes()); }
+        Err(problem) => {
+            errors.write(format!("levenshtein-checksums: {problem}\n").as_bytes());
+            status.set_status(255);
+        }
+    }
+}

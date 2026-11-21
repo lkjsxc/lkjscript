@@ -91,13 +91,22 @@ function run(args) {
     const checkReport = args[0] === '--check-report';
     const self = args.includes('--self-test');
     args = args.filter(arg => arg !== '--self-test');
-    if (args.length !== (checkReport ? 3 : 1) || (!checkReport && args[0].startsWith('--'))) {
-        throw new Error('usage: node verify-levenshtein.mjs [--self-test | --check-report REPORT] SPECIMEN_DIRECTORY');
+    const checkChecksums = checkReport && args.length === 5 && args[3] === '--checksums';
+    if (args.length !== (checkChecksums ? 5 : checkReport ? 3 : 1) ||
+        (!checkReport && args[0].startsWith('--'))) {
+        throw new Error('usage: node verify-levenshtein.mjs [--self-test | --check-report REPORT] SPECIMEN_DIRECTORY [--checksums LIST]');
     }
     const {manifest, projection, license} = readSpecimen(args[checkReport ? 2 : 0]);
     const report = verify(manifest, projection, license);
     if (checkReport && !readRegular(args[1]).equals(Buffer.from(render(report)))) {
         throw new Error('provenance report bytes differ');
+    }
+    if (checkChecksums) {
+        const expected = ['src/lib.rs', 'tests/lib.rs']
+            .map(name => `${report.files[name].sha256}  ${name}\n`).join('');
+        if (!readRegular(args[4]).equals(Buffer.from(expected))) {
+            throw new Error('checksum list bytes differ');
+        }
     }
     if (self || checkReport) {
         const inputs = mutationInputs({manifest, projection, license});
