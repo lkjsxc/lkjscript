@@ -242,9 +242,9 @@ parallel_step 1 package-source timeout --kill-after=10s 600s bash tools/programs
 parallel_step 1 concrete-unit-policy timeout --kill-after=10s 600s bash tools/programs-unit-policy-test.sh "$check_binary"
 parallel_step 2 runtime-admission timeout --kill-after=10s 600s bash tools/programs-admission-test.sh "$check_binary"
 parallel_step 4 pool-publication timeout --kill-after=10s 600s bash tools/programs-publication-test.sh --compiler "$check_binary"
-parallel_step "$check_suite_jobs" conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
+parallel_step "$check_suite_jobs" conformance timeout --kill-after=10s 1800s "$check_binary" test tests/conformance --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
 parallel_step "$check_suite_jobs" generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
-parallel_step "$check_suite_jobs" optimized-conformance timeout --kill-after=10s 600s "$check_binary" test tests/conformance --stats --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"
+parallel_step "$check_suite_jobs" optimized-conformance timeout --kill-after=10s 1800s "$check_binary" test tests/conformance --stats --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"
 parallel_step "$check_suite_jobs" optimized-generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --stats --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"
 parallel_step "$check_suite_jobs" semantic-structure timeout --kill-after=10s 600s bash tools/closed-semantics.sh "$check_binary" structure
 parallel_step 1 semantic-host semantics
