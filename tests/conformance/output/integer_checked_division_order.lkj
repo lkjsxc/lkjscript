@@ -1,0 +1,10 @@
+// expect: output 4142434445464748
+// witness: {}
+fn value(out: &mut Stdout, tag: u8, value: i8) -> i8 { out.write(&[tag]); value }
+pub fn main(mut world: World) {
+    let mut out = world.stdout();
+    assert!(value(&mut out, 65, -128).checked_div(value(&mut out, 66, -1)).is_none());
+    assert!(value(&mut out, 67, -128).checked_rem(value(&mut out, 68, -1)).is_none());
+    assert!(value(&mut out, 69, 7).checked_div(value(&mut out, 70, 0)).is_none());
+    assert!(value(&mut out, 71, -7).checked_rem(value(&mut out, 72, 2)) == Some(-1));
+}

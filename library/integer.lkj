@@ -6,6 +6,8 @@ pub trait CheckedArithmetic: Copy {
     fn checked_add(self, other: Self) -> Option<Self>;
     fn checked_sub(self, other: Self) -> Option<Self>;
     fn checked_mul(self, other: Self) -> Option<Self>;
+    fn checked_div(self, other: Self) -> Option<Self>;
+    fn checked_rem(self, other: Self) -> Option<Self>;
 }
 
 fn add_unsigned(left: u64, right: u64, maximum: u64) -> Option<u64> {
@@ -82,6 +84,12 @@ impl CheckedArithmetic for u8 {
             None => None,
         }
     }
+    fn checked_div(self, other: u8) -> Option<u8> {
+        if other == 0 { None } else { Some(self / other) }
+    }
+    fn checked_rem(self, other: u8) -> Option<u8> {
+        if other == 0 { None } else { Some(self % other) }
+    }
 }
 
 impl CheckedArithmetic for u16 {
@@ -102,6 +110,12 @@ impl CheckedArithmetic for u16 {
             Some(value) => Some(value as u16),
             None => None,
         }
+    }
+    fn checked_div(self, other: u16) -> Option<u16> {
+        if other == 0 { None } else { Some(self / other) }
+    }
+    fn checked_rem(self, other: u16) -> Option<u16> {
+        if other == 0 { None } else { Some(self % other) }
     }
 }
 
@@ -124,6 +138,12 @@ impl CheckedArithmetic for u32 {
             None => None,
         }
     }
+    fn checked_div(self, other: u32) -> Option<u32> {
+        if other == 0 { None } else { Some(self / other) }
+    }
+    fn checked_rem(self, other: u32) -> Option<u32> {
+        if other == 0 { None } else { Some(self % other) }
+    }
 }
 
 impl CheckedArithmetic for u64 {
@@ -135,6 +155,12 @@ impl CheckedArithmetic for u64 {
     }
     fn checked_mul(self, other: u64) -> Option<u64> {
         mul_unsigned(self, other, 18446744073709551615u64)
+    }
+    fn checked_div(self, other: u64) -> Option<u64> {
+        if other == 0 { None } else { Some(self / other) }
+    }
+    fn checked_rem(self, other: u64) -> Option<u64> {
+        if other == 0 { None } else { Some(self % other) }
     }
 }
 
@@ -157,6 +183,12 @@ impl CheckedArithmetic for usize {
             None => None,
         }
     }
+    fn checked_div(self, other: usize) -> Option<usize> {
+        if other == 0 { None } else { Some(self / other) }
+    }
+    fn checked_rem(self, other: usize) -> Option<usize> {
+        if other == 0 { None } else { Some(self % other) }
+    }
 }
 
 impl CheckedArithmetic for i8 {
@@ -177,6 +209,12 @@ impl CheckedArithmetic for i8 {
             Some(value) => Some(value as i8),
             None => None,
         }
+    }
+    fn checked_div(self, other: i8) -> Option<i8> {
+        if other == 0 || (self == -128i8 && other == -1i8) { None } else { Some(self / other) }
+    }
+    fn checked_rem(self, other: i8) -> Option<i8> {
+        if other == 0 || (self == -128i8 && other == -1i8) { None } else { Some(self % other) }
     }
 }
 
@@ -199,6 +237,12 @@ impl CheckedArithmetic for i16 {
             None => None,
         }
     }
+    fn checked_div(self, other: i16) -> Option<i16> {
+        if other == 0 || (self == -32768i16 && other == -1i16) { None } else { Some(self / other) }
+    }
+    fn checked_rem(self, other: i16) -> Option<i16> {
+        if other == 0 || (self == -32768i16 && other == -1i16) { None } else { Some(self % other) }
+    }
 }
 
 impl CheckedArithmetic for i32 {
@@ -220,6 +264,12 @@ impl CheckedArithmetic for i32 {
             None => None,
         }
     }
+    fn checked_div(self, other: i32) -> Option<i32> {
+        if other == 0 || (self == -2147483648i32 && other == -1i32) { None } else { Some(self / other) }
+    }
+    fn checked_rem(self, other: i32) -> Option<i32> {
+        if other == 0 || (self == -2147483648i32 && other == -1i32) { None } else { Some(self % other) }
+    }
 }
 
 impl CheckedArithmetic for i64 {
@@ -231,6 +281,12 @@ impl CheckedArithmetic for i64 {
     }
     fn checked_mul(self, other: i64) -> Option<i64> {
         mul_signed(self, other, -9223372036854775808i64, 9223372036854775807i64)
+    }
+    fn checked_div(self, other: i64) -> Option<i64> {
+        if other == 0 || (self == -9223372036854775808i64 && other == -1i64) { None } else { Some(self / other) }
+    }
+    fn checked_rem(self, other: i64) -> Option<i64> {
+        if other == 0 || (self == -9223372036854775808i64 && other == -1i64) { None } else { Some(self % other) }
     }
 }
 
@@ -267,6 +323,12 @@ impl CheckedArithmetic for isize {
             Some(value) => Some(value as isize),
             None => None,
         }
+    }
+    fn checked_div(self, other: isize) -> Option<isize> {
+        if other == 0 || (self == -9223372036854775808isize && other == -1isize) { None } else { Some(self / other) }
+    }
+    fn checked_rem(self, other: isize) -> Option<isize> {
+        if other == 0 || (self == -9223372036854775808isize && other == -1isize) { None } else { Some(self % other) }
     }
 }
 

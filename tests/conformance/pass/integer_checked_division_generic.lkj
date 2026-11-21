@@ -1,0 +1,13 @@
+// expect: value 42
+fn divide<T: CheckedArithmetic>(left: T, right: T) -> (Option<T>, Option<T>) {
+    (left.checked_div(right), left.checked_rem(right))
+}
+pub fn probe() -> i64 {
+    let unsigned = divide(85u16, 2u16);
+    let signed = divide(-85i32, 2i32);
+    assert!(signed == (Some(-42i32), Some(-1i32)));
+    assert!(divide(-128i8, -1i8) == (None, None));
+    assert!(divide(1u64, 0u64) == (None, None));
+    assert!(unsigned.1 == Some(1u16));
+    unsigned.0.unwrap() as i64
+}
