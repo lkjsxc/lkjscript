@@ -2,25 +2,43 @@
 # Declarative expansions expose replayed facts and refuse invented edit spans.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+usage() { printf 'usage: %s [compiler [--native | --interpreter scope]]\n' "$0" >&2; exit 2; }
+mode=${2:-all}
+entry=${3:-main}
+case "$mode:$#" in
+    all:[01]|--native:2) ;;
+    --interpreter:3)
+        case "$entry" in
+            expression_origins) cases=20 ;;
+            type_origins) cases=13 ;;
+            fragment_token_origins) cases=1 ;;
+            lexical_origins) cases=3 ;;
+            statement_origins) cases=12 ;;
+            *) usage ;;
+        esac ;;
+    *) usage ;;
+esac
 compiler=$(realpath "${1:-target/lkjscript}")
 library="$PWD/library"
 mkdir -p target
 fixture=$(mktemp -d "$PWD/target/macro-origins.XXXXXX")
+macro_label=macro-origins
+if [[ $mode != all ]]; then macro_label+=" entry=$entry"; fi
 macro_started=$SECONDS
 macro_phase=setup
 macro_phase_started=$SECONDS
 phase() {
-    printf 'macro-origins phase=%s status=0 seconds=%s\n' "$macro_phase" "$((SECONDS - macro_phase_started))"
+    printf '%s phase=%s status=0 seconds=%s\n' "$macro_label" "$macro_phase" "$((SECONDS - macro_phase_started))"
     macro_phase=$1
     macro_phase_started=$SECONDS
-    printf 'macro-origins phase=%s started\n' "$macro_phase"
+    printf '%s phase=%s started\n' "$macro_label" "$macro_phase"
 }
 cleanup() {
     local status=$?
     set +e
     trap - EXIT HUP INT TERM
-    printf 'macro-origins phase=%s status=%s seconds=%s total_seconds=%s\n' \
-        "$macro_phase" "$status" "$((SECONDS - macro_phase_started))" "$((SECONDS - macro_started))"
+    printf '%s phase=%s status=%s seconds=%s total_seconds=%s\n' \
+        "$macro_label" "$macro_phase" "$status" "$((SECONDS - macro_phase_started))" "$((SECONDS - macro_started))"
     if ((status)); then
         # Only the synthetic contract output is exported, never the fixture key.
         for log in contracts-out contracts-error; do
@@ -42,9 +60,31 @@ trap 'exit 130' INT
 trap 'exit 129' HUP
 trap 'exit 143' TERM
 umask 077
-mkdir "$fixture/project" "$fixture/store" "$fixture/contracts"
-head -c 32 /dev/urandom > "$fixture/key"
 fail() { printf 'macro-origins: %s\n' "$*" >&2; exit 1; }
+prepare_contracts() {
+    mkdir "$fixture/contracts"
+    for source in ast diagnostic names syntax resolve source; do cp "src/$source.lkj" "$fixture/contracts/$source.lkj"; done
+    cp -R src/ast src/syntax src/resolve "$fixture/contracts/"
+    cp src/semantic/origins.lkj "$fixture/contracts/origins.lkj"
+    cp -R src/semantic/origins "$fixture/contracts/"
+    cp tests/fixtures/macro_origins.lkj "$fixture/contracts/main.lkj"
+}
+contracts=(main.lkj --source-dir "$fixture/contracts" --library-dir "$library" --no-store)
+run_interpreter() {
+    phase contracts-interpreter
+    "$compiler" run "${contracts[@]}" --engine interpreter "$@" >> "$fixture/contracts-out" 2>> "$fixture/contracts-error" \
+        || { cat "$fixture/contracts-error" >&2; fail 'interpreted origin contracts'; }
+}
+if [[ $mode == --interpreter ]]; then
+    prepare_contracts
+    run_interpreter --entry "$entry"
+    [[ $(<"$fixture/contracts-out") == "$cases" ]] || fail "expected $cases interpreted origin controls ($entry)"
+    printf 'macro-origins scope=%s cases=%s\n' "$entry" "$cases"
+    exit
+fi
+
+mkdir "$fixture/project" "$fixture/store"
+head -c 32 /dev/urandom > "$fixture/key"
 common=(main.lkj --source-dir "$fixture/project" --library-dir "$library" --store "$fixture/store" --store-key "$fixture/key")
 publish() {
     "$compiler" build "${common[@]}" --index -o "$fixture/image" > "$fixture/index" 2> "$fixture/error" || { cat "$fixture/error" >&2; fail build; }
@@ -267,14 +307,10 @@ fi
 grep -Eq 'E_BORROW|E_RETURN' "$fixture/forged-error" || fail 'independent return-origin refusal missing'
 
 phase contract-build
-for source in ast diagnostic names syntax resolve source; do cp "src/$source.lkj" "$fixture/contracts/$source.lkj"; done
-cp -R src/ast src/syntax src/resolve "$fixture/contracts/"
-cp src/semantic/origins.lkj "$fixture/contracts/origins.lkj"
-cp -R src/semantic/origins "$fixture/contracts/"
-cp tests/fixtures/macro_origins.lkj "$fixture/contracts/main.lkj"
-"$compiler" build main.lkj --source-dir "$fixture/contracts" --library-dir "$library" --no-store -o "$fixture/contracts-image" > "$fixture/contracts-out" 2> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract build'; }
+prepare_contracts
+"$compiler" build "${contracts[@]}" -o "$fixture/contracts-image" > "$fixture/contracts-out" 2> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract build'; }
 phase contracts-native
 "$fixture/contracts-image" >> "$fixture/contracts-out" 2>> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract execution'; }
-phase contracts-interpreter
-"$compiler" run main.lkj --source-dir "$fixture/contracts" --library-dir "$library" --no-store --engine interpreter >> "$fixture/contracts-out" 2>> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'interpreted origin contracts'; }
+if [[ $mode == --native ]]; then exit; fi
+run_interpreter
 printf 'ok declarative macro origins: authenticated source/topology and include replay; generated item, field, import, call and strict derive queries; checked authored rename/body edits; projection/reference refusals; template/include epochs; 49 malformed origins; statement positions/splices/roles/rules; typed capture queries/edits, structural block ownership and independent return-origin refusal; both engines\n'
