@@ -25,6 +25,12 @@ step() {
     local details="target/gate/details-$label.log"
     "$@" >"$details" 2>&1 || result=$?
     if ((result)); then
+        local ended_ns failure_timing=
+        if ended_ns=$(date +%s%N) && ((ended_ns >= started_ns)) && read -r load_end _ < /proc/loadavg; then
+            printf -v failure_timing '; elapsed_ns=%s offset_ns=%s load=%s -> %s' \
+                "$((ended_ns - started_ns))" "$offset_ns" "$load_start" "$load_end"
+        fi
+        printf 'FAIL %s (status %d, details %s)%s\n' "$label" "$result" "$details" "$failure_timing" >&2 || :
         cat "$details" >&2
         return "$result"
     fi
