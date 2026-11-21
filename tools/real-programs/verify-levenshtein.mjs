@@ -27,10 +27,17 @@ export function verify(manifest,projectionBytes,license){
  return{schema:1,kind:'levenshtein-upstream-provenance',commit:manifest.commit,files:verified,projection_sha256:sha(Buffer.from(projection,'latin1')),test_names:names,test_count:names.length,assertion_count:assertions,inverse_range_replacements:1,restored_header_lines:2,exact_upstream_bytes:true};
 }
 function replaceOnce(probe,old,value){if(occurrences(probe.projection,old)!==1)throw new Error('invalid mutation fixture: expected one '+old);probe.projection=probe.projection.replace(old,()=>value);}
-function run(args){
- const self=args.includes('--self-test');args=args.filter(a=>a!=='--self-test');if(args.length!==1||args[0].startsWith('--'))throw new Error('usage: node verify-levenshtein.mjs [--self-test] SPECIMEN_DIRECTORY');
- const directory=args[0],manifest=JSON.parse(new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(readRegular(path.join(directory,'upstream.json')))),projection=readRegular(path.join(directory,'upstream.lkj')).toString('latin1'),license=readRegular(path.join(directory,'LICENSE')),report=verify(manifest,projection,license);
- if(self){const assertion='    assert_eq!(levenshtein("", "a"), 1);\n',mutants=[
+export function readSpecimen(directory) {
+    return {
+        manifest: JSON.parse(new TextDecoder('utf-8', {fatal: true, ignoreBOM: true})
+            .decode(readRegular(path.join(directory, 'upstream.json')))),
+        projection: readRegular(path.join(directory, 'upstream.lkj')).toString('latin1'),
+        license: readRegular(path.join(directory, 'LICENSE')),
+    };
+}
+
+export function mutationInputs({manifest, projection, license}) {
+ const assertion='    assert_eq!(levenshtein("", "a"), 1);\n',mutants=[
  ['missing range normalization',p=>replaceOnce(p,normalized,original)],
  ['extra normalized expression',p=>{p.projection='// '+normalized+'\n'+p.projection;}],
  ['algorithm change',p=>replaceOnce(p,'cache[index_a] = result;','cache[index_a] = result + 1;')],
@@ -49,10 +56,66 @@ function run(args){
  ['false source count',p=>{p.manifest.source_lines++;}],
  ['wrong pinned commit',p=>{p.manifest.commit='0'.repeat(40);}],
  ['false adaptation count',p=>{p.manifest.adaptation.range_expression=0;}]];
- const results=[];for(const[name,mutate]of mutants){const probe={manifest:structuredClone(manifest),projection,license:Buffer.from(license)};mutate(probe);let reason;try{verify(probe.manifest,probe.projection,probe.license);}catch(error){reason=error.message;}if(reason===undefined)throw new Error('mutation escaped verification: '+name);fact(reason.startsWith('provenance refusal: '),'mutation did not reach a provenance refusal: '+name);results.push({name,rejected:true,reason});}report.mutation_controls=results;report.mutants_rejected=results.length;report.temporary_files_created=0;
  const shapes=[['array schema',m=>{m.schema=[m.schema];}],['array pinned commit',m=>{m.commit=[m.commit];}],['array source count',m=>{m.source_lines=[m.source_lines];}],['nested test names',m=>{m.test_names=m.test_names.map(name=>[name]);}]];
- report.manifest_shape_controls=[];for(const[name,mutate]of shapes){const altered=structuredClone(manifest);mutate(altered);let reason;try{verify(altered,projection,license);}catch(error){reason=error.message;}fact(reason?.startsWith('provenance refusal: '),'malformed manifest escaped verification: '+name);report.manifest_shape_controls.push({name,rejected:true,reason});}report.malformed_manifests_rejected=shapes.length;
- }
- console.log(JSON.stringify(sorted(report),null,3));
+ const copy = () => ({manifest: structuredClone(manifest), projection, license: Buffer.from(license)});
+ return {
+     provenance: mutants.map(([name, mutate]) => {
+         const specimen = copy();
+         mutate(specimen);
+         return {name, specimen};
+     }),
+     shapes: shapes.map(([name, mutate]) => {
+         const specimen = copy();
+         mutate(specimen.manifest);
+         return {name, specimen};
+     }),
+ };
+}
+
+function controls(inputs) {
+    return inputs.map(({name, specimen}) => {
+        let reason;
+        try {
+            verify(specimen.manifest, specimen.projection, specimen.license);
+        } catch (error) {
+            reason = error.message;
+        }
+        fact(reason?.startsWith('provenance refusal: '), 'expected a provenance refusal for ' + name);
+        return {name, rejected: true, reason};
+    });
+}
+
+const render = report => JSON.stringify(sorted(report), null, 3) + '\n';
+
+function run(args) {
+    const checkReport = args[0] === '--check-report';
+    const self = args.includes('--self-test');
+    args = args.filter(arg => arg !== '--self-test');
+    if (args.length !== (checkReport ? 3 : 1) || (!checkReport && args[0].startsWith('--'))) {
+        throw new Error('usage: node verify-levenshtein.mjs [--self-test | --check-report REPORT] SPECIMEN_DIRECTORY');
+    }
+    const {manifest, projection, license} = readSpecimen(args[checkReport ? 2 : 0]);
+    const report = verify(manifest, projection, license);
+    if (checkReport && !readRegular(args[1]).equals(Buffer.from(render(report)))) {
+        throw new Error('provenance report bytes differ');
+    }
+    if (self || checkReport) {
+        const inputs = mutationInputs({manifest, projection, license});
+        const provenance = controls(inputs.provenance);
+        const shapes = controls(inputs.shapes);
+        if (checkReport) {
+            if (report.test_count !== 8 || report.assertion_count !== 26 ||
+                provenance.length !== 18 || shapes.length !== 4 || !report.exact_upstream_bytes) {
+                throw new Error('unexpected upstream inventory');
+            }
+            return;
+        }
+        report.mutation_controls = provenance;
+        report.mutants_rejected = provenance.length;
+        report.temporary_files_created = 0;
+        report.manifest_shape_controls = shapes;
+        report.malformed_manifests_rejected = shapes.length;
+    }
+    process.stdout.write(render(report));
 }
 if(process.argv[1]&&import.meta.url===pathToFileURL(path.resolve(process.argv[1])).href){try{new TextDecoder('utf-8',{fatal:true,ignoreBOM:true}).decode(fs.readFileSync('/proc/self/cmdline'));run(process.argv.slice(2));}catch(error){console.error(error.message);process.exitCode=255;}}
