@@ -13,26 +13,15 @@ macro_rules! twice { ($value:expr) => { ($value, $value) }; }
 macro_rules! nested { ($value:expr) => { twice!($value) }; }
 macro_rules! text { () => { include_str!("payload.txt") }; }
 macro_rules! discard { ($value:expr) => { 0i64 }; }
-macro_rules! statements { ($name:ident, $value:expr) => { let $name = $value; }; }
 macro_rules! defaults { ($name:ident) => { struct $name<T = i64, U = T> { first: T, second: U } }; }
-macro_rules! typed { ($t:ty) => { fn typed(value: $t) -> ($t, $t) { (value, value) } }; }
-macro_rules! typed_relay { ($t:ty) => { typed!($t); }; }
-macro_rules! split_type { (<$t:ty>) => { type Split = $t; }; }
-macro_rules! discard_type { ($t:ty) => { 0i64 }; }
-macro_rules! block_import { ($e:expr) => {{ { use std::marker::Value; } $e }}; }
-typed_relay!(i64);
-split_type!(<Vec<i64>>);
 fn helper(value: i64) -> i64 { value + 1i64 }
 emit!(generated, helper(5i64));
 defaults!(GeneratedDefaults);
 fn type_anchor(_value: bool) {}
 fn source() -> i64 {
-    statements!(captured, 3i64);
     let pair = nested!(helper(7i64));
     let label = text!();
     let ignored = discard!(missing!());
-    let unused_type = discard_type!(UnresolvedUnused);
-    let scoped = block_import!(0i64);
     pair.0 + pair.1 + generated()
 }
 "#;
@@ -65,7 +54,31 @@ fn normalized(path: &str) -> String {
     if path.starts_with("$std/") { format!("/mounted/library/{}", &path[5usize..]) }
     else { format!("/project/{path}") }
 }
-fn main() {
+// Replay path identities as normalized by the driver.
+fn mounted_replay(program: &ast::Program, inputs: &[(String, Vec<u8>)]) {
+    let mut mounted = program.clone();
+    for index in 0usize..mounted.files.len() { mounted.files[index].path = normalized(&mounted.files[index].path); }
+    for index in 0usize..mounted.loaded_modules.len() {
+        if !mounted.loaded_modules[index].alternate.is_empty() {
+            mounted.loaded_modules[index].alternate = normalized(&mounted.loaded_modules[index].alternate);
+        }
+    }
+    for index in 0usize..mounted.macro_inputs.len() { mounted.macro_inputs[index].0 = normalized(&mounted.macro_inputs[index].0); }
+    let files = mounted.files.clone();
+    let modules = mounted.loaded_modules.clone();
+    {
+        let original = mounted.macro_input.as_mut().unwrap();
+        original.files = files;
+        original.loaded_modules = modules;
+    }
+    let mut mounted_inputs = Vec::new();
+    for (path, bytes) in inputs { mounted_inputs.push((normalized(path), bytes.clone())); }
+    syntax::macros::provenance::validate_inputs(&mounted, &mounted_inputs).unwrap();
+    let resolver = resolve::Resolver::new(&mounted).unwrap();
+    origins::collect(&mounted, &resolver).unwrap();
+}
+
+fn expression_origins() -> i64 {
     let inputs = inputs();
     let program = parsed(&inputs);
     syntax::macros::provenance::validate_inputs(&program, &inputs).unwrap();
@@ -88,58 +101,12 @@ fn main() {
     let repeated = program.macro_captures.iter().position(|capture| capture.materializations.len() > 1usize).unwrap();
     assert!(program.macro_captures[repeated].materializations[0usize]
         != program.macro_captures[repeated].materializations[1usize]);
-    let typed = program.macro_captures.iter().position(|capture| capture.type_materializations.len() > 1usize).unwrap();
-    let first_type = program.macro_captures[typed].type_materializations[0usize];
-    assert!(Some(first_type) == program.macro_captures[typed].ty);
-    assert!(first_type != program.macro_captures[typed].type_materializations[1usize]);
-    for ty in &program.macro_captures[typed].type_materializations {
-        assert!(relation.macros.types.contains_key(ty));
-    }
-    let split = program.macro_captures.iter().position(|capture|
-        capture.tokens.last().is_some_and(|token| token.text == ">")).unwrap();
-    let prefix = program.macro_captures[split].tokens.last().unwrap();
-    assert!(prefix.span.end - prefix.span.start == 1usize);
-    assert!(prefix.origin.end - prefix.origin.start == 1usize);
-    let unused = program.macro_captures.iter().find(|capture|
-        capture.tokens.first().is_some_and(|token| token.text == "UnresolvedUnused")).unwrap();
-    assert!(unused.ty.is_none() && unused.type_materializations.is_empty());
-    assert!(!program.types.iter().any(|node|
-        matches!(&node.kind, ast::Type::Path(path) if path.name == "UnresolvedUnused")));
-    let type_call = program.macro_invocations.iter().position(|call|
-        call.tokens.iter().any(|token| token.kind == 9u8)).unwrap();
-    let opaque_token = program.macro_invocations[type_call].tokens.iter().position(|token| token.kind == 9u8).unwrap();
-    let statement = program.macro_invocations.iter().position(|call|
-        matches!(call.position, ast::MacroPosition::Statement { .. })).unwrap();
-    let splice = program.macro_expansions.iter().position(|item| item.splice.is_some()).unwrap();
-    assert!(!program.macro_identifier_uses.is_empty());
-    let import = program.uses.iter().position(|item| item.block.is_some()).unwrap();
-    let import_block = program.uses[import].block.unwrap();
     let integer = relation.macros.expressions.keys().find(|index|
         matches!(program.exprs[**index].kind, ast::Expr::Int(_))).copied().unwrap();
     let included = relation.macros.expressions.keys().find(|index|
         matches!(&program.exprs[**index].kind, ast::Expr::String(value) if value == "retained input")).copied().unwrap();
 
-    // Driver-normalized source and library mounts retain the same exact proof.
-    let mut mounted = program.clone();
-    for index in 0usize..mounted.files.len() { mounted.files[index].path = normalized(&mounted.files[index].path); }
-    for index in 0usize..mounted.loaded_modules.len() {
-        if !mounted.loaded_modules[index].alternate.is_empty() {
-            mounted.loaded_modules[index].alternate = normalized(&mounted.loaded_modules[index].alternate);
-        }
-    }
-    for index in 0usize..mounted.macro_inputs.len() { mounted.macro_inputs[index].0 = normalized(&mounted.macro_inputs[index].0); }
-    let files = mounted.files.clone();
-    let modules = mounted.loaded_modules.clone();
-    {
-        let original = mounted.macro_input.as_mut().unwrap();
-        original.files = files;
-        original.loaded_modules = modules;
-    }
-    let mut mounted_inputs = Vec::new();
-    for (path, bytes) in &inputs { mounted_inputs.push((normalized(path), bytes.clone())); }
-    syntax::macros::provenance::validate_inputs(&mounted, &mounted_inputs).unwrap();
-    let resolver = resolve::Resolver::new(&mounted).unwrap();
-    origins::collect(&mounted, &resolver).unwrap();
+    mounted_replay(&program, &inputs);
 
     let mut count = 0usize;
     let mut literal = program.clone();
@@ -155,21 +122,6 @@ fn main() {
     let mut spelling = program.clone();
     spelling.macro_definitions[0usize].body[0usize].origin.start += 1usize;
     count += refused(&spelling);
-    let mut context = program.clone();
-    context.macro_expansions[0usize].context += 1usize;
-    count += refused(&context);
-    let mut parent = program.clone();
-    parent.macro_expansions[0usize].parent = Some(0usize);
-    count += refused(&parent);
-    let mut definition = program.clone();
-    definition.macro_expansions[0usize].definition = 0usize;
-    count += refused(&definition);
-    let mut invocation = program.clone();
-    invocation.macro_invocations[0usize].name = "invented".to_string();
-    count += refused(&invocation);
-    let mut extent = program.clone();
-    extent.macro_expansions[0usize].end.exprs += 1usize;
-    count += refused(&extent);
     let mut alias = program.clone();
     alias.macro_aliases[0usize].expanded = integer;
     count += refused(&alias);
@@ -221,9 +173,6 @@ fn main() {
     let mut scope = program.clone();
     scope.macro_input.as_mut().unwrap().scopes[0usize].path = "forged".to_string();
     count += unauthenticated(&scope, &inputs);
-    let mut source_token = program.clone();
-    source_token.macro_input.as_mut().unwrap().macro_invocations[0usize].tokens[0usize].text = "invented".to_string();
-    count += unauthenticated(&source_token, &inputs);
     let mut wrong_span = program.clone();
     wrong_span.exprs[included].span.start += 1usize;
     count += refused(&wrong_span);
@@ -233,8 +182,58 @@ fn main() {
     let mut changed_default = program.clone();
     changed_default.structs[generated_type].generics[0usize].default = Some(program.functions[anchor].params[0usize].ty);
     count += refused(&changed_default);
+    assert!(count == 20usize);
+    count as i64
+}
+
+// Keep each replay input scoped to the feature its cases exercise. Growing one
+// specimen should not make every unrelated refusal replay its extra syntax.
+fn parsed_fixture(text: &str) -> (ast::Program, Vec<(String, Vec<u8>)>) {
+    let inputs = vec![("main.lkj".to_string(), text.as_bytes().to_vec()),
+        ("$std/lib.lkj".to_string(), b"pub mod marker { pub struct Value; }"[..].to_vec())];
+    let program = parsed(&inputs);
+    syntax::macros::provenance::validate_inputs(&program, &inputs).unwrap();
+    (program, inputs)
+}
+fn type_origins() -> i64 {
+    let (program, inputs) = parsed_fixture(r#"
+#[macro_export(local_inner_macros)]
+macro_rules! exported { () => { 9i64 }; }
+macro_rules! emit { ($name:ident, $value:expr) => { fn $name() -> i64 { $value } }; }
+macro_rules! twice { ($value:expr) => { ($value, $value) }; }
+macro_rules! typed { ($t:ty) => { fn typed(value: $t) -> ($t, $t) { (value, value) } }; }
+macro_rules! typed_relay { ($t:ty) => { typed!($t); }; }
+typed_relay!(i64);
+emit!(generated, 5i64);
+fn type_anchor(_value: bool) {}
+fn source() -> (i64, i64) { twice!(7i64) }
+"#);
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    let relation = origins::collect(&program, &resolver).unwrap();
+    let repeated = program.macro_captures.iter().position(|capture| capture.materializations.len() > 1usize).unwrap();
+    let typed = program.macro_captures.iter().position(|capture| capture.type_materializations.len() > 1usize).unwrap();
+    let first_type = program.macro_captures[typed].type_materializations[0usize];
+    assert!(Some(first_type) == program.macro_captures[typed].ty);
+    assert!(first_type != program.macro_captures[typed].type_materializations[1usize]);
+    for ty in &program.macro_captures[typed].type_materializations {
+        assert!(relation.macros.types.contains_key(ty));
+    }
+    let type_call = program.macro_invocations.iter().position(|call|
+        call.tokens.iter().any(|token| token.kind == 9u8)).unwrap();
+    let opaque_token = program.macro_invocations[type_call].tokens.iter().position(|token| token.kind == 9u8).unwrap();
+    let wrong_scope = program.scopes.iter().position(|scope| scope.path == "$std").unwrap();
+    let anchor = program.functions.iter().find(|function| function.name == "type_anchor").unwrap();
+    let generated = program.functions.iter().find(|function| function.name == "generated").unwrap();
+    let relay = program.macro_invocations.iter().position(|call| call.name == "typed_relay").unwrap();
+    let relay_expansion = program.macro_expansions.iter().position(|expansion| expansion.invocation == relay).unwrap();
+    let exported = program.macro_definitions.iter().position(|definition| definition.name == "exported").unwrap();
+    let source_relay = program.macro_input.as_ref().unwrap().macro_invocations.iter()
+        .position(|call| call.name == "typed_relay").unwrap();
+    mounted_replay(&program, &inputs);
+
+    let mut count = 0usize;
     let mut type_first = program.clone();
-    type_first.macro_captures[typed].ty = Some(program.functions[anchor].params[0usize].ty);
+    type_first.macro_captures[typed].ty = Some(anchor.params[0usize].ty);
     count += refused(&type_first);
     let mut type_list = program.clone();
     type_list.macro_captures[typed].type_materializations.push(first_type);
@@ -246,27 +245,125 @@ fn main() {
     opaque_index.macro_invocations[type_call].tokens[opaque_token].capture = Some(repeated);
     count += refused(&opaque_index);
     let mut destination = program.clone();
-    destination.macro_invocations[type_call].destination = 1usize;
+    destination.macro_invocations[type_call].destination = wrong_scope;
     count += refused(&destination);
     let mut textual_scope = program.clone();
-    textual_scope.macro_invocations[type_call].scope = 1usize;
+    textual_scope.macro_invocations[type_call].scope = wrong_scope;
     count += refused(&textual_scope);
+    let mut type_block = program.clone();
+    type_block.types[first_type].block = generated.body;
+    count += refused(&type_block);
+    let mut context = program.clone();
+    context.macro_expansions[relay_expansion].context += 1usize;
+    count += refused(&context);
+    let mut parent = program.clone();
+    parent.macro_expansions[relay_expansion].parent = Some(relay_expansion);
+    count += refused(&parent);
+    let mut definition = program.clone();
+    definition.macro_expansions[relay_expansion].definition = exported;
+    count += refused(&definition);
+    let mut invocation = program.clone();
+    invocation.macro_invocations[relay].name = "invented".to_string();
+    count += refused(&invocation);
+    let mut extent = program.clone();
+    extent.macro_expansions[relay_expansion].end.exprs += 1usize;
+    count += refused(&extent);
+    let mut source_token = program.clone();
+    source_token.macro_input.as_mut().unwrap().macro_invocations[source_relay].tokens[0usize].text = "invented".to_string();
+    count += unauthenticated(&source_token, &inputs);
+    assert!(count == 13usize);
+    count as i64
+}
+fn fragment_token_origins() -> i64 {
+    let (program, inputs) = parsed_fixture(r#"
+macro_rules! split_type { (<$t:ty>) => { type Split = $t; }; }
+macro_rules! discard_type { ($t:ty) => { 0i64 }; }
+split_type!(<Vec<i64>>);
+fn source() -> i64 { discard_type!(UnresolvedUnused) }
+"#);
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    origins::collect(&program, &resolver).unwrap();
+    mounted_replay(&program, &inputs);
+    let split = program.macro_captures.iter().position(|capture|
+        capture.tokens.last().is_some_and(|token| token.text == ">")).unwrap();
+    let prefix = program.macro_captures[split].tokens.last().unwrap();
+    assert!(prefix.span.end - prefix.span.start == 1usize);
+    assert!(prefix.origin.end - prefix.origin.start == 1usize);
+    let unused = program.macro_captures.iter().find(|capture|
+        capture.tokens.first().is_some_and(|token| token.text == "UnresolvedUnused")).unwrap();
+    assert!(unused.ty.is_none() && unused.type_materializations.is_empty());
+    assert!(!program.types.iter().any(|node|
+        matches!(&node.kind, ast::Type::Path(path) if path.name == "UnresolvedUnused")));
+
     let mut split_origin = program.clone();
     let last = split_origin.macro_captures[split].tokens.len() - 1usize;
     split_origin.macro_captures[split].tokens[last].origin.end += 1usize;
-    count += refused(&split_origin);
+    let count = refused(&split_origin);
+    assert!(count == 1usize);
+    count as i64
+}
+fn lexical_origins() -> i64 {
+    let (program, inputs) = parsed_fixture(r#"
+macro_rules! block_import { ($e:expr) => {{ { use std::marker::Value; } $e }}; }
+macro_rules! emit { ($name:ident) => { fn $name() -> bool { true } }; }
+emit!(unrelated);
+fn source() -> i64 { block_import!(0i64) }
+"#);
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    origins::collect(&program, &resolver).unwrap();
+    mounted_replay(&program, &inputs);
+    let import = program.uses.iter().position(|item| item.block.is_some()).unwrap();
+    let import_block = program.uses[import].block.unwrap();
+    let unrelated = program.functions.iter().find(|function| function.name == "unrelated").unwrap();
+
+    let mut count = 0usize;
     let mut import_owner = program.clone();
-    import_owner.uses[import].block = program.functions[generated].body;
+    import_owner.uses[import].block = unrelated.body;
     count += refused(&import_owner);
     let mut block_parent = program.clone();
     block_parent.blocks[import_block].parent = None;
     count += refused(&block_parent);
-    let mut type_block = program.clone();
-    type_block.types[first_type].block = program.functions[generated].body;
-    count += refused(&type_block);
     let mut absent_block = program.clone();
     absent_block.macro_input.as_mut().unwrap().types[0usize].block = Some(18446744073709551615usize);
     count += refused(&absent_block);
+    assert!(count == 3usize);
+    count as i64
+}
+fn statement_origins() -> i64 {
+    let (program, inputs) = parsed_fixture(r#"
+macro_rules! emit { ($name:ident, $value:expr) => { fn $name() -> i64 { $value } }; }
+macro_rules! statements { ($name:ident, $value:expr) => { let $name = $value; }; }
+macro_rules! block_import { ($e:expr) => {{ { use std::marker::Value; } $e }}; }
+emit!(generated, 5i64);
+fn source() -> i64 {
+    statements!(captured, 3i64);
+    let scoped = block_import!(0i64);
+    scoped + generated()
+}
+"#);
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    let relation = origins::collect(&program, &resolver).unwrap();
+    mounted_replay(&program, &inputs);
+    let generated = program.functions.iter().position(|function| function.name == "generated").unwrap();
+    let statement = program.macro_invocations.iter().position(|call| call.name == "statements").unwrap();
+    let invocation = &program.macro_invocations[statement];
+    let expected_position = ast::MacroPosition::Statement { semicolon: true, braces: false };
+    assert!(invocation.position == expected_position);
+    let splice = program.macro_expansions.iter().position(|item| item.invocation == statement).unwrap();
+    let placement = program.macro_expansions[splice].splice.as_ref().unwrap();
+    assert!(placement.tail.is_none() && placement.count > 0usize);
+    assert!(placement.first + placement.count < program.blocks[placement.block].statements.len());
+    let binder = &invocation.tokens[0usize];
+    assert!(binder.text == "captured" && program.macro_identifier_uses.contains(&binder.origin));
+    let foreign_block = program.functions[generated].body.unwrap();
+    assert!(foreign_block != placement.block);
+    let integer = program.blocks[foreign_block].tail.unwrap();
+    assert!(matches!(program.exprs[integer].kind, ast::Expr::Int(_)));
+    assert!(relation.macros.expressions.contains_key(&integer));
+    let source_calls = &program.macro_input.as_ref().unwrap().macro_invocations;
+    let source_statement = source_calls.iter().position(|call| call.name == "statements").unwrap();
+    assert!(source_calls[source_statement].position == expected_position && source_calls[source_statement].block.is_some());
+    let mut count = 0usize;
     let mut position = program.clone();
     position.macro_invocations[statement].position = ast::MacroPosition::Expression;
     count += refused(&position);
@@ -277,7 +374,7 @@ fn main() {
     absent_statement_block.macro_invocations[statement].block = None;
     count += refused(&absent_statement_block);
     let mut splice_block = program.clone();
-    splice_block.macro_expansions[splice].splice.as_mut().unwrap().block = program.functions[generated].body.unwrap();
+    splice_block.macro_expansions[splice].splice.as_mut().unwrap().block = foreign_block;
     count += refused(&splice_block);
     let mut splice_first = program.clone();
     splice_first.macro_expansions[splice].splice.as_mut().unwrap().first += 1usize;
@@ -299,10 +396,16 @@ fn main() {
     leftover.blocks[block].statements.push(ast::Stmt::MacroInvocation(statement));
     count += refused(&leftover);
     let mut original_position = program.clone();
-    original_position.macro_input.as_mut().unwrap().macro_invocations[statement].position = ast::MacroPosition::Expression;
+    original_position.macro_input.as_mut().unwrap().macro_invocations[source_statement].position = ast::MacroPosition::Expression;
     count += unauthenticated(&original_position, &inputs);
     let mut original_block = program.clone();
-    original_block.macro_input.as_mut().unwrap().macro_invocations[statement].block = None;
+    original_block.macro_input.as_mut().unwrap().macro_invocations[source_statement].block = None;
     count += unauthenticated(&original_block, &inputs);
-    assert!(count == 49usize);
+    assert!(count == 12usize);
+    count as i64
+}
+fn main() {
+    let count = expression_origins() + type_origins() + fragment_token_origins()
+        + lexical_origins() + statement_origins();
+    assert!(count == 49i64);
 }

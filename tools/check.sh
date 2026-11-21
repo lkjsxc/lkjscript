@@ -31,6 +31,7 @@ step() {
     elapsed_ns=$(($(date +%s%N)-started_ns))
     read -r load_end _ < /proc/loadavg
     awk -v label="$label" -v elapsed_ns="$elapsed_ns" -v before="$load_start" -v after="$load_end" -v offset_ns="$offset_ns" '
+        label ~ /^macro-origins-/ && /^macro-origins (shard |scope=|entry=)/ { print }
         /^LKJSCRIPT_STATS / {
             if (match($0, /"test_reused":[0-9]+/)) {
                 value=substr($0, RSTART, RLENGTH); sub(/^[^:]*:/, "", value)
@@ -132,6 +133,27 @@ parallel_step() {
     check_logs+=("$log")
     check_active=$((check_active + weight))
 }
+macro_origin_step() {
+    local engine=${1#--} entry=${2:-main} started_ns status=0
+    started_ns=$(date +%s%N)
+    timeout --kill-after=10s 1800s bash tools/macro-origin-test.sh "$check_binary" "$@" || status=$?
+    printf 'macro-origins shard path=tests/fixtures/macro_origins.lkj#%s engine=%s status=%d elapsed_ns=%d\n' \
+        "$entry" "$engine" "$status" "$(($(date +%s%N) - started_ns))"
+    return "$status"
+}
+macro_origin_type_fragment_lexical() {
+    local scope status=0
+    for scope in type_origins fragment_token_origins lexical_origins; do
+        macro_origin_step --interpreter "$scope" || status=$?
+    done
+    return "$status"
+}
+# Start the macro suites before other workers queue. Each uses one worker and
+# has the existing watchdog. The native suite still runs the full aggregate.
+parallel_step 1 macro-origins-native macro_origin_step --native
+parallel_step 1 macro-origins-expression macro_origin_step --interpreter expression_origins
+parallel_step 1 macro-origins-statement macro_origin_step --interpreter statement_origins
+parallel_step 1 macro-origins-type-fragment-lexical macro_origin_type_fragment_lexical
 parallel_step 1 closed-semantics timeout --kill-after=10s 600s bash tools/closed-semantics.sh "$check_binary" run
 parallel_step 1 closed-proof-attacks timeout --kill-after=10s 600s bash tools/gate-reuse-test.sh "$check_binary"
 parallel_step 1 toolchain toolchain
@@ -149,9 +171,6 @@ parallel_step 1 outlives-where timeout --kill-after=10s 600s bash tools/outlives
 parallel_step 1 debug-format timeout --kill-after=10s 600s bash tools/debug-format-test.sh "$check_binary"
 parallel_step 1 declarative-macros timeout --kill-after=10s 600s bash tools/declarative-macro-test.sh "$check_binary"
 parallel_step 1 macro-statements timeout --kill-after=10s 600s bash tools/macro-statement-test.sh "$check_binary"
-# The complete macro-origin host suite took 580.842 s in CI; retain a
-# finite watchdog with headroom while preserving every native/interpreter check.
-parallel_step 1 macro-origins timeout --kill-after=10s 1800s bash tools/macro-origin-test.sh "$check_binary"
 parallel_step 1 type-outlives timeout --kill-after=10s 600s bash tools/type-outlives-test.sh "$check_binary"
 parallel_step 1 core-facade timeout --kill-after=10s 600s bash tools/core-facade-test.sh "$check_binary"
 parallel_step 1 query-signature timeout --kill-after=10s 600s bash tools/query-signature-test.sh "$check_binary"
@@ -237,6 +256,23 @@ awk '
     END { printf "ok gate selection: skipped %d case requests on authenticated exact compiler/input closure or stable runner/sealed ELF/checked closure/closed contract equality; reran %d misses/open effects; host suites rerun\n", reused, rerun }
 ' "${check_logs[@]}"
 if ((check_failed)); then exit 1; fi
+if ! awk '
+    /^macro-origins scope=/ && $3 ~ /^cases=[0-9]+$/ {
+        scopes[$2]++
+        records++
+        total += substr($3, length("cases=") + 1)
+    }
+    END {
+        if (records != 5 || total != 49) exit 1
+        if (scopes["scope=expression_origins"] != 1 || scopes["scope=statement_origins"] != 1 ||
+            scopes["scope=type_origins"] != 1 || scopes["scope=fragment_token_origins"] != 1 ||
+            scopes["scope=lexical_origins"] != 1) exit 1
+    }
+' "${check_logs[@]}"; then
+    echo 'FAIL macro-origins (expected five interpreter scopes and 49 controls)' >&2
+    exit 1
+fi
+printf 'ok macro-origins (49 malformed origins; statement positions/splices/roles/rules; both engines)\n'
 step ir-mutation timeout --kill-after=10s 600s "$check_binary" mutate 1701 128 --jobs "$check_jobs" "${check_reuse[@]}"
 check_elapsed_ns=$(($(date +%s%N)-check_started_ns))
 read -r check_load_end _ < /proc/loadavg

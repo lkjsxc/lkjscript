@@ -249,6 +249,17 @@ renaming a helper or field with a proven generated reference refuses with
 expression and nested expansions, both engines, source-preserving refusals,
 template/include epoch changes and 49 malformed-origin cases.
 
+The gate starts four workers for macro origins. One runs source queries and
+the aggregate native contract. The interpreter uses one worker for expression
+origins, one for statement origins, and one for type, fragment token and lexical
+origins. The native job and each interpreter scope have a 1,800-second
+watchdog with a 10-second kill grace. Shard records include the fixture path
+and entry, engine, exit status and elapsed nanoseconds. The `setup`,
+`source-queries`, `contract-build`, `contracts-native` and
+`contracts-interpreter` phase records include the entry on split runs. A
+direct invocation of `tools/macro-origin-test.sh` runs the full suite on both
+engines and retains the aggregate phase records.
+
 `references-complete=false` and unresolved-reference facts are explicit limits,
 not evidence that an item has no uses. Declaration-only capture deliberately
 omits body references and never permits a rename proof from their absence.
