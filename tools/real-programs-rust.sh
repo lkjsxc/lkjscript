@@ -8,6 +8,7 @@ command -v "$rustc_bin" >/dev/null || { printf 'Rust witness compiler unavailabl
 source=examples/real_programs/levenshtein
 golden=tests/fixtures/real_programs_levenshtein.output.gz
 [[ -f "$golden" ]] || { printf 'missing checked corpus: %s\n' "$golden" >&2; exit 1; }
+if [[ ! -x target/lkjscript ]]; then sh tools/bootstrap.sh; fi
 mkdir -p target
 work=$(mktemp -d "$PWD/target/real-programs-rust.XXXXXX")
 cleanup() {
@@ -36,9 +37,20 @@ for foreign_case in macro_rules impl_trait qualified_type qualified_call nested_
         > "$work/foreign_$foreign_case.out" 2> "$work/foreign_$foreign_case.err"
 done
 node tools/real-programs/verify-levenshtein.mjs "$source" > "$work/provenance.json"
-# Invert the single recorded expression and restore the exact integration header.
-# Hash the reconstructed files again before rustc receives either one.
-node tools/real-programs/restore-levenshtein.mjs "$source" "$work" --rust
+# Check the files rustc will read against the independent provenance report.
+node --input-type=module - "$work/provenance.json" > "$work/restored.sha256" <<'NODE'
+import {readFileSync} from 'node:fs';
+const {files} = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+console.log(files['src/lib.rs'].sha256 + '  upstream.rs');
+console.log(files['tests/lib.rs'].sha256 + '  upstream_tests.rs');
+NODE
+restored="$work/restored"
+mkdir "$restored"
+target/lkjscript build tools/real-programs/restore-levenshtein.lkj --no-store \
+    --grant arguments --grant source="$PWD/$source" --grant output="$restored" \
+    --grant errors --grant status -o "$work/restore" > "$work/restore-build.out" 2> "$work/restore-build.err"
+"$work/restore" --rust
+(cd "$restored" && sha256sum --check --strict --quiet "$work/restored.sha256")
 cp "$source/LICENSE" "$work/LICENSE"
 cp "$source/corpus.lkj" "$work/corpus.rs"
 cat > "$work/main.rs" <<'RUST'
@@ -57,8 +69,8 @@ awk -F: 'NF != 2 || $1 != NR-1 || $2 !~ /^[0-9]+$/ { exit 1 } END { if (NR != 72
 for optimization in 0 3; do
     mkdir "$work/opt-$optimization"
     library="$work/opt-$optimization/liblevenshtein.rlib"
-    "$rustc_bin" --edition=2015 --crate-name levenshtein --crate-type rlib -C "opt-level=$optimization" "$work/upstream.rs" -o "$library" > "$work/opt-$optimization-library.out" 2> "$work/opt-$optimization-library.err"
-    "$rustc_bin" --edition=2015 --crate-name upstream_levenshtein_tests --test -C "opt-level=$optimization" --extern "levenshtein=$library" "$work/upstream_tests.rs" -o "$work/opt-$optimization/tests" > "$work/opt-$optimization-test-build.out" 2> "$work/opt-$optimization-test-build.err"
+    "$rustc_bin" --edition=2015 --crate-name levenshtein --crate-type rlib -C "opt-level=$optimization" "$restored/upstream.rs" -o "$library" > "$work/opt-$optimization-library.out" 2> "$work/opt-$optimization-library.err"
+    "$rustc_bin" --edition=2015 --crate-name upstream_levenshtein_tests --test -C "opt-level=$optimization" --extern "levenshtein=$library" "$restored/upstream_tests.rs" -o "$work/opt-$optimization/tests" > "$work/opt-$optimization-test-build.out" 2> "$work/opt-$optimization-test-build.err"
     "$work/opt-$optimization/tests" --test-threads=1 --color never > "$work/opt-$optimization-tests.out" 2> "$work/opt-$optimization-tests.err"
     grep -Fq 'test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out;' "$work/opt-$optimization-tests.out"
     test ! -s "$work/opt-$optimization-tests.err"

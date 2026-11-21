@@ -1,0 +1,448 @@
+//! Fixture-side checks and byte edits for tools/profile-test.sh.
+use std::json::{self, Value};
+
+const SITE_BYTES: usize = 72;
+
+struct Metadata {
+    sites: usize,
+    count: usize,
+    map: usize,
+    functions: usize,
+}
+
+fn require(condition: bool, message: &str) -> Result<(), String> {
+    if condition { Ok(()) } else { Err(message.to_string()) }
+}
+
+fn read(files: &mut Directory, path: &str) -> Result<Vec<u8>, String> {
+    let mut file = files.open(path).map_err(|errno: i64| -> String { format!("{path}: open errno {errno}") })?;
+    file.read_to_end().map_err(|errno: i64| -> String { format!("{path}: read errno {errno}") })
+}
+
+fn write(files: &mut Directory, path: &str, data: &[u8]) -> Result<(), String> {
+    let mut file = files.create(path).map_err(|errno: i64| -> String { format!("{path}: create errno {errno}") })?;
+    file.write_all(data).map_err(|errno: i64| -> String { format!("{path}: write errno {errno}") })
+}
+
+fn text(bytes: Vec<u8>) -> Result<String, String> {
+    String::from_utf8(bytes).map_err(|_| -> String { "fixture text is not UTF-8".to_string() })
+}
+
+fn word(bytes: &[u8], at: usize) -> u64 {
+    let mut value = 0u64;
+    for index in 0usize..8usize {
+        value |= (bytes[at + index] as u64) << (index * 8usize) as u64;
+    }
+    value
+}
+
+fn put(bytes: &mut [u8], at: usize, value: u64) {
+    for index in 0usize..8usize {
+        bytes[at + index] = (value >> (index * 8usize) as u64) as u8;
+    }
+}
+
+fn metadata(bytes: &[u8]) -> Result<Metadata, String> {
+    require(bytes.len() >= 160 && &bytes[..8] == b"LKJPROF4", "not v4")?;
+    let sites = word(bytes, 112) as usize;
+    let count = word(bytes, 120) as usize;
+    let map = word(bytes, 128) as usize;
+    let functions = word(bytes, 136) as usize;
+    require(count > 1 && count.checked_mul(SITE_BYTES).and_then(|size| sites.checked_add(size)) == Some(map)
+        && functions.checked_mul(16).and_then(|size| map.checked_add(size)) == Some(bytes.len()),
+        "bad fixture extent")?;
+    Ok(Metadata { sites, count, map, functions })
+}
+
+fn digest_matches(bytes: &[u8], expected: &str) -> bool {
+    // The shell supplies these digests from sha256sum independently of the producer.
+    let mut hex = String::new();
+    for byte in bytes {
+        hex.push_str(&format!("{:02x}", *byte));
+    }
+    hex.as_str() == expected
+}
+
+fn names(ir: &str, prefix: &str) -> Vec<String> {
+    let mut result = Vec::new();
+    for line in ir.split('\n') {
+        if let Some(rest) = line.strip_prefix(prefix) {
+            if let Some((name, suffix)) = rest.split_once('"') {
+                if suffix.starts_with(' ') { result.push(name.to_string()); }
+            }
+        }
+    }
+    result
+}
+
+fn decimal(field: &str) -> bool {
+    !field.is_empty() && field.bytes().all(|byte| byte >= b'0' && byte <= b'9')
+}
+
+fn operation(line: &str, opcode: &str, operand: &str) -> bool {
+    let mut fields = line.split(' ');
+    let Some(location) = fields.next() else { return false; };
+    if !location.starts_with('@') || location.len() == 1 || fields.next() != Some(opcode) { return false; }
+    let Some(result) = fields.next() else { return false; };
+    decimal(result) && fields.next() == Some(operand)
+}
+
+fn has_operation(ir: &str, opcode: &str, operand: &str) -> bool {
+    for line in ir.split('\n') {
+        if operation(line, opcode, operand) { return true; }
+    }
+    false
+}
+
+fn stats(log: &str) -> Result<Value, String> {
+    let mut record: Option<String> = None;
+    for line in log.split('\n') {
+        if let Some(payload) = line.strip_prefix("LKJSCRIPT_STATS ") {
+            if payload.is_empty() { continue; }
+            require(record.is_none(), "one stats record required")?;
+            record = Some(payload.to_string());
+        }
+    }
+    let payload = record.ok_or("one stats record required".to_string())?;
+    json::parse(payload.as_bytes()).map_err(|error: json::Error| -> String { format!("{error}") })
+}
+
+fn stat(record: &Value, key: &str) -> Result<usize, String> {
+    record.get(key).and_then(|value: &Value| value.as_usize()).ok_or(format!("missing numeric stat {key}"))
+}
+
+fn selection(original: &str, selected: &str, log: &str) -> Result<(), String> {
+    let before = names(original, "fn \"");
+    require(before == names(selected, "fn \""), "selected function slots changed")?;
+    let mut targets = before.iter().enumerate().filter(|row: &(usize, &String)| row.1.as_str() == "profile_value");
+    let (target, _) = targets.next().ok_or("profile_value identity".to_string())?;
+    require(targets.next().is_none(), "profile_value identity")?;
+    let operand = format!("{target}");
+    require(has_operation(original, "call", &operand), "original call missing")?;
+    require(!has_operation(selected, "call", &operand), "inline selection not exposed")?;
+    require(selected != original, "companion unexpectedly original")?;
+    let record = stats(log)?;
+    require(stat(&record, "inline_calls")? > 0 && stat(&record, "inline_accepted")? > 0,
+        "inlining was not accepted")?;
+    require(stat(&record, "profile_ir_bytes")? == selected.len(), "companion byte count")
+}
+
+fn warm(cold: &str, warm: &str, ir_bytes: usize) -> Result<(), String> {
+    let cold = stats(cold)?;
+    let warm = stats(warm)?;
+    require(stat(&cold, "build_reused")? == 0 && stat(&warm, "build_reused")? == 0, "unexpected whole-image return")?;
+    require(stat(&cold, "emitted_reused")? == 0, "cold fragments were not isolated")?;
+    require(stat(&warm, "emitted_reused")? > 0, "warm fragments were not used")?;
+    require(stat(&warm, "profile_ir_bytes")? == ir_bytes, "companion not regenerated")
+}
+
+fn binding(sample: &[u8], ir_id: &str) -> Result<usize, String> {
+    let meta = metadata(sample)?;
+    require(digest_matches(&sample[80..112], ir_id), "selected digest mismatch")?;
+    let mapped = (0usize..meta.count).any(|index: usize| -> bool { word(sample, meta.sites + index * SITE_BYTES + 16) > 0 });
+    let counters = word(sample, 48) as usize;
+    require(mapped && word(sample, counters + 8) > 0, "copy workload produced no mapped observation")?;
+    Ok(meta.count)
+}
+
+fn continuation_number(field: Option<&str>, prefix: &str) -> Result<usize, String> {
+    if let Some(number) = field.and_then(|field: &str| field.strip_prefix(prefix)) {
+        if decimal(number) {
+            if let Ok(value) = number.parse::<usize>() { return Ok(value); }
+        }
+    }
+    Err("one terminal continuation".to_string())
+}
+
+fn page(reply: &str, count: usize, args: &[String]) -> Result<(String, String), String> {
+    let profile_id = &args[0];
+    let ir_id = &args[1];
+    let start = args[2].as_str().parse::<usize>().map_err(|_| -> String { "invalid page start".to_string() })?;
+    let limit = args[3].as_str().parse::<usize>().map_err(|_| -> String { "invalid page limit".to_string() })?;
+    let bound = args[4].as_str().parse::<usize>().map_err(|_| -> String { "invalid page bound".to_string() })?;
+    require(reply.len() <= bound, "reply bound")?;
+    require(reply.ends_with('\n'), "one terminal continuation")?;
+    let mut lines = reply[..reply.len() - 1usize].split('\n');
+    let header = format!("copy-sites version=4 profile={profile_id} companion={ir_id} companion-check=checked-ir ");
+    require(lines.next().unwrap_or("").starts_with(header.as_str()), "reply pins")?;
+    require(lines.next().unwrap_or("").starts_with("scope=existing-kind-copy "), "reply kind")?;
+
+    let mut rows = String::new();
+    let mut listed = 0usize;
+    let mut terminal = lines.next().unwrap_or("");
+    while terminal.starts_with("copy ") {
+        rows.push_str(terminal);
+        rows.push('\n');
+        listed += 1;
+        terminal = lines.next().unwrap_or("");
+    }
+    require(lines.next().is_none(), "unexpected protocol line")?;
+    let mut fields = terminal.strip_prefix("continuation cursor=")
+        .ok_or("one terminal continuation".to_string())?.split(' ');
+    let cursor = fields.next().unwrap_or("");
+    let emitted = continuation_number(fields.next(), "rows=")?;
+    let next = continuation_number(fields.next(), "next=")?;
+    let total = continuation_number(fields.next(), "total-sites=")?;
+    require(fields.next().is_none(), "one terminal continuation")?;
+    require(emitted == listed && emitted <= limit && start.checked_add(emitted) == Some(next)
+        && total == count && next <= count, "pagination accounting")?;
+    let expected = if next == count { "none".to_string() } else { format!("4:{profile_id}:{ir_id}:{next}") };
+    require(cursor == expected.as_str(), "continuation pin")?;
+    require(start >= count || emitted > 0, "zero progress")?;
+    Ok((format!("{cursor} {next} {total}\n"), rows))
+}
+
+// Find the first serialized local's type ordinal, respecting quoted escapes.
+fn local_type(line: &str) -> Option<(usize, usize)> {
+    let bytes = line.strip_prefix("local \"")?.as_bytes();
+    let mut end = 0usize;
+    while end < bytes.len() && bytes[end] != b'"' {
+        if bytes[end] == b'\\' { end += 1; }
+        end += 1;
+    }
+    let start = "local \"".len() + end + 2usize;
+    if start >= line.len() || line.as_bytes()[start - 1usize] != b' ' { return None; }
+    let (ordinal, binding) = line[start..].split_once(' ')?;
+    if decimal(ordinal) && (binding == "let" || binding == "mut") {
+        Some((start, start + ordinal.len()))
+    } else { None }
+}
+
+fn unchecked_ir(ir: &str) -> Result<String, String> {
+    let mut offset = 0usize;
+    for line in ir.split('\n') {
+        if let Some((start, end)) = local_type(line) {
+            return Ok(format!("{}999999999{}", &ir[..offset + start], &ir[offset + end..]));
+        }
+        offset += line.len() + 1usize;
+    }
+    Err("invalid checked companion fixture".to_string())
+}
+
+fn count_fixture(zero: &[u8], counters: usize, sites: usize, serial: u64, mapped: u64, unmapped: u64) -> Vec<u8> {
+    let mut copy = zero.to_vec();
+    put(&mut copy, 24, serial);
+    put(&mut copy, counters + 8, 4);
+    put(&mut copy, sites + 16, mapped);
+    put(&mut copy, 144, unmapped);
+    copy
+}
+
+fn mutate(files: &mut Directory, sample: &[u8], ir: &str, dir: &str) -> Result<(), String> {
+    let meta = metadata(sample)?;
+    let body = (0usize..meta.count).find(|index: &usize| word(sample, meta.sites + *index * SITE_BYTES + 64) & 255 == 1)
+        .ok_or("no body copy fixture".to_string())?;
+    let at = meta.sites + body * SITE_BYTES;
+    let types = ir.split('\n').filter(|line: &&str| line.starts_with("type ")).count() as u64;
+    for (name, offset, value) in vec![
+        ("range".to_string(), at + 8, word(sample, at)),
+        ("owner".to_string(), at + 24, meta.functions as u64),
+        ("type".to_string(), at + 48, types),
+        ("width".to_string(), at + 56, word(sample, at + 56) + 1),
+        ("instruction".to_string(), at + 32, !1u64), ("subsite".to_string(), at + 40, !1u64),
+        ("sentinel".to_string(), at + 32, !0u64),
+        ("tag".to_string(), at + 64, word(sample, at + 64) | (1u64 << 63u64)),
+        ("map".to_string(), meta.map, 1u64),
+    ] {
+        let mut copy = sample.to_vec();
+        put(&mut copy, offset, value);
+        write(files, &format!("{dir}/bad-{name}"), &copy)?;
+    }
+    let mut tail = sample.to_vec();
+    tail.push(0u8);
+    write(files, &format!("{dir}/bad-tail"), &tail)?;
+    write(files, &format!("{dir}/bad-short"), &sample[..sample.len() - 1usize])?;
+    write(files, &format!("{dir}/wrong.lkjir"), format!("{ir}\n").as_bytes())?;
+    let invalid = unchecked_ir(ir)?;
+    write(files, &format!("{dir}/unchecked.lkjir"), invalid.as_bytes())?;
+    let mut bound = sample.to_vec();
+    bound[80..112].copy_from_slice(&std::sha256::digest(invalid.as_bytes()));
+    write(files, &format!("{dir}/unchecked.samples"), &bound)?;
+
+    let mut zero = sample.to_vec();
+    let symbols = word(sample, 8) as usize;
+    for index in 0usize..symbols {
+        for field in 2usize..5usize { put(&mut zero, 160 + index * 64 + field * 8, 0); }
+    }
+    let counters = word(sample, 48) as usize;
+    for index in 0usize..16usize { put(&mut zero, counters + index * 8, 0); }
+    for index in 0usize..meta.count { put(&mut zero, meta.sites + index * SITE_BYTES + 16, 0); }
+    put(&mut zero, 144, 0);
+    for (name, serial, mapped, unmapped) in vec![
+        ("complete".to_string(), 4u64, 4u64, 0u64), ("serial-leading".to_string(), 5, 4, 0),
+        ("site-leading".to_string(), 5, 5, 0), ("unmapped-leading".to_string(), 5, 4, 1),
+        ("detail-early".to_string(), 4, 5, 0), ("detail-two".to_string(), 5, 6, 0),
+        ("detail-missing".to_string(), 4, 3, 0), ("serial-behind".to_string(), 3, 4, 0),
+        ("serial-two".to_string(), 6, 4, 0),
+    ] {
+        let copy = count_fixture(&zero, counters, meta.sites, serial, mapped, unmapped);
+        write(files, &format!("{dir}/count-{name}"), &copy)?;
+    }
+    let mut overflow = count_fixture(&zero, counters, meta.sites, 5, !0u64, 0);
+    put(&mut overflow, meta.sites + SITE_BYTES + 16, 1);
+    write(files, &format!("{dir}/count-overflow"), &overflow)
+}
+
+struct Site {
+    function: usize,
+    instruction: u64,
+    subsite: u64,
+    ty: usize,
+    width: u64,
+    origin: u8,
+    source: u8,
+    destination: u8,
+    source_flags: u64,
+    destination_flags: u64,
+}
+
+enum Detail {
+    Incoming(u64), Result(u64), Subsite(u64), Constructor(u64, u64), Width(u64), ReadFlags(u64), WriteFlags(u64),
+}
+
+impl Site {
+    fn has_detail(&self, detail: &Detail) -> bool {
+        match detail {
+            Detail::Incoming(width) => self.origin == 2 && self.subsite == 0 && self.instruction == !0u64 && self.width == *width,
+            Detail::Result(width) => self.origin == 1 && self.width == *width,
+            Detail::Subsite(subsite) => self.subsite == *subsite,
+            Detail::Constructor(subsite, width) => self.subsite == *subsite && self.width == *width,
+            Detail::Width(width) => self.width == *width,
+            Detail::ReadFlags(flags) => self.source_flags == *flags,
+            Detail::WriteFlags(flags) => self.destination_flags == *flags,
+        }
+    }
+}
+
+struct Roles {
+    functions: Vec<String>,
+    types: Vec<String>,
+    sites: Vec<Site>,
+}
+
+enum Owner<'a> { Function(&'a str), Type(&'a str) }
+
+impl Roles {
+    fn need(&self, label: &str, owner: Owner, source: u8, destination: u8, detail: Detail) -> Result<(), String> {
+        for site in &self.sites {
+            let name_matches = match &owner {
+                Owner::Function(name) => self.functions[site.function].as_str() == *name,
+                Owner::Type(name) => self.types[site.ty].as_str() == *name,
+            };
+            if name_matches && site.source == source && site.destination == destination && site.has_detail(&detail) {
+                return Ok(());
+            }
+        }
+        Err(format!("missing retained role {label}"))
+    }
+}
+
+fn no_replace(sites: &[Site], ir: &str) -> Result<(), String> {
+    // Compound-reference/indexed Replace uses a byte swap outside KIND_COPY.
+    let mut functions = 0usize;
+    let mut instruction = 0u64;
+    let mut found = false;
+    for line in ir.split('\n') {
+        if line.starts_with("fn ") {
+            functions += 1;
+            instruction = 0;
+        } else if line.starts_with('@') {
+            if operation(line, "intrinsic", "\"replace\"") {
+                found = true;
+                for site in sites {
+                    require(site.function + 1 != functions || site.instruction != instruction,
+                        "Replace incorrectly attributed as copy")?;
+                }
+            }
+            instruction += 1;
+        }
+    }
+    require(found, "Replace control missing")
+}
+
+fn roles(sample: &[u8], ir: &str, ir_id: &str) -> Result<(), String> {
+    let meta = metadata(sample)?;
+    require(digest_matches(&sample[80..112], ir_id), "roles digest")?;
+    let functions = names(ir, "fn \"");
+    let types = names(ir, "type \"");
+    let mut sites = Vec::new();
+    for index in 0usize..meta.count {
+        let at = meta.sites + index * SITE_BYTES;
+        let tags = word(sample, at + 64);
+        sites.push(Site {
+            function: word(sample, at + 24) as usize, instruction: word(sample, at + 32),
+            subsite: word(sample, at + 40), ty: word(sample, at + 48) as usize, width: word(sample, at + 56),
+            origin: tags as u8, source: (tags >> 8u64) as u8, destination: (tags >> 16u64) as u8,
+            source_flags: (tags >> 24u64) & 7, destination_flags: (tags >> 32u64) & 7,
+        });
+    }
+    let roles = Roles { functions, types, sites };
+    for (function, width) in vec![("copy_role_byte".to_string(), 1u64), ("copy_role_pair".to_string(), 16),
+        ("copy_role_wide".to_string(), 256), ("copy_role_text".to_string(), 16)] {
+        roles.need(&format!("{function} incoming"), Owner::Function(&function), 5, 6, Detail::Incoming(width))?;
+        roles.need(&format!("{function} result"), Owner::Function(&function), 1, 7, Detail::Result(width))?;
+    }
+    let owner = "copy_roles";
+    for &(subsite, width) in &[(1u64, 16u64), (3, 256)][..] {
+        roles.need(&format!("constructor original subsite {subsite}"), Owner::Function(owner), 1, 3,
+            Detail::Constructor(subsite, width))?;
+    }
+    roles.need("whole local", Owner::Function(owner), 1, 1, Detail::Width(16))?;
+    for flags in 1u64..5u64 {
+        roles.need(&format!("projected read flags {flags}"), Owner::Function(owner), 2, 1, Detail::ReadFlags(flags))?;
+    }
+    for flags in 1u64..3u64 {
+        roles.need(&format!("projected write flags {flags}"), Owner::Function(owner), 1, 2, Detail::WriteFlags(flags))?;
+    }
+    no_replace(&roles.sites, ir)?;
+    for subsite in 0u64..2u64 {
+        roles.need(&format!("array original subsite {subsite}"), Owner::Function(owner), 1, 4, Detail::Subsite(subsite))?;
+    }
+    for (source, destination, label) in vec![(1u8, 8u8, "vector push".to_string()), (8, 9, "vector pop".to_string()),
+        (1, 10, "array repeat".to_string()), (1, 11, "box payload".to_string())] {
+        roles.need(&label, Owner::Type("CopyRolePair"), source, destination, Detail::Width(16))?;
+    }
+    roles.need("view header", Owner::Function(owner), 13, 13, Detail::Width(16))
+}
+
+fn run(files: &mut Directory, output: &mut Stdout, args: &[String]) -> Result<(), String> {
+    match (args[0].as_str(), args.len()) {
+        ("selection", 4) => selection(&text(read(files, &args[1])?)?, &text(read(files, &args[2])?)?, &text(read(files, &args[3])?)?),
+        ("warm", 4) => warm(&text(read(files, &args[1])?)?, &text(read(files, &args[2])?)?, read(files, &args[3])?.len()),
+        ("binding", 3) => {
+            let count = binding(&read(files, &args[1])?, &args[2])?;
+            output.write(format!("{count}\n").as_bytes());
+            Ok(())
+        }
+        ("page", 9) => {
+            let reply = text(read(files, &args[1])?)?;
+            let count = metadata(&read(files, &args[2])?)?.count;
+            let (continuation, rows) = page(&reply, count, &args[3..8])?;
+            let path = args[8].as_str();
+            let mut file = files.open_append(path).map_err(|errno: i64| -> String { format!("{path}: append errno {errno}") })?;
+            file.write_all(rows.as_bytes()).map_err(|errno: i64| -> String { format!("{path}: write errno {errno}") })?;
+            output.write(continuation.as_bytes());
+            Ok(())
+        }
+        ("mutate", 4) => {
+            let sample = read(files, &args[1])?;
+            let ir = text(read(files, &args[2])?)?;
+            mutate(files, &sample, &ir, &args[3])
+        }
+        ("roles", 4) => roles(&read(files, &args[1])?, &text(read(files, &args[2])?)?, &args[3]),
+        _ => Err("invalid profiler fixture invocation".to_string()),
+    }
+}
+
+pub fn main(mut argv: Arguments, mut files: Directory, mut output: Stdout, mut error: Stderr, mut status: ExitStatus) {
+    let result = (|| -> Result<(), String> {
+        let mut args = Vec::new();
+        for arg in argv.args() { args.push(text(arg)?); }
+        require(!args.is_empty(), "mode")?;
+        run(&mut files, &mut output, &args)
+    })();
+    if let Err(problem) = result {
+        error.write(format!("{problem}\n").as_bytes());
+        status.set_status(255);
+    }
+}

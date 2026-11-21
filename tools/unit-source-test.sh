@@ -2,6 +2,7 @@
 # Source-unit cache/link integration, kept small; scale and agent trials are separate.
 set -euo pipefail
 cd "$(dirname "$0")/.."
+source tools/fixture-bytes.sh
 unit_compiler=$(realpath "${LKJSCRIPT_BINARY:-target/lkjscript}")
 unit_fixture=$(mktemp -d target/unit-source.XXXXXX)
 # Keep the key outside the source grant but on its filesystem for the hard-link attack.
@@ -76,33 +77,33 @@ grep -Fq -- 'checked=0 reused=3 emitted=0' "$unit_root/warm.out"
 cmp "$unit_root/program" "$unit_root/warm"
 # The local use in sum belongs to the erased body; it creates no second range.
 # Private helpers and nongeneric methods cross the same authenticated boundary.
-perl -0pi -e 's/adjustment\(\) -> i64 \{ 0i64 \}/adjustment() -> i64 { 1i64 }/' "$unit_root/base.lkj"
+sed -i 's/adjustment() -> i64 { 0i64 }/adjustment() -> i64 { 1i64 }/' "$unit_root/base.lkj"
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/helper" > "$unit_root/helper.out" 2> "$unit_root/helper.err"
 grep -Fq -- 'checked=1 reused=2 emitted=1' "$unit_root/helper.out"
 [[ $("$unit_root/helper") == 43 ]]
-perl -0pi -e 's/self.left \+ self.right \+ adjustment\(\)/self.left + self.right + adjustment() + 1i64/' "$unit_root/base.lkj"
+sed -i 's/self\.left + self\.right + adjustment()/self.left + self.right + adjustment() + 1i64/' "$unit_root/base.lkj"
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/method" > "$unit_root/method.out" 2> "$unit_root/method.err"
 grep -Fq -- 'checked=1 reused=2 emitted=1' "$unit_root/method.out"
 [[ $("$unit_root/method") == 44 ]]
-perl -0pi -e 's/value.total\(\)/value.total() + 1i64/' "$unit_root/base.lkj"
+sed -i 's/value\.total()/value.total() + 1i64/' "$unit_root/base.lkj"
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/edited" > "$unit_root/edit.out" 2> "$unit_root/edit.err"
 grep -Fq -- 'checked=1 reused=2 emitted=1' "$unit_root/edit.out"
 [[ $("$unit_root/edited") == 45 ]]
 # Generic templates are producer inputs, not proofs of future instantiations.
-perl -0pi -e 's/identity<T: Copy>\(value: T\) -> T \{ value \}/identity<T: Copy>(value: T) -> T { let result = value; result }/' "$unit_root/base.lkj"
+sed -i 's/identity<T: Copy>(value: T) -> T { value }/identity<T: Copy>(value: T) -> T { let result = value; result }/' "$unit_root/base.lkj"
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/template" > "$unit_root/template.out" 2> "$unit_root/template.err"
 grep -Fq -- 'checked=2 reused=1 emitted=2' "$unit_root/template.out"
 [[ $("$unit_root/template") == 45 ]]
 # Including a source that is also projected must preserve its original bytes.
-perl -0pi -e 's/include_str!\("message.txt"\)/include_str!("base.lkj")/' "$unit_root/base.lkj"
-perl -0pi -e 's/assert_eq!\(original, "unit include"\);/assert!(original.contains("value.total() + 1i64"));/' "$unit_root/geometry.lkj"
+sed -i 's/include_str!("message\.txt")/include_str!("base.lkj")/' "$unit_root/base.lkj"
+sed -i 's/assert_eq!(original, "unit include");/assert!(original.contains("value.total() + 1i64"));/' "$unit_root/geometry.lkj"
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/include" > "$unit_root/include.out" 2> "$unit_root/include.err"
 [[ $("$unit_root/include") == 45 ]]
 # Corrupt every retained interface, including the currently selected versions.
 unit_interfaces=("$unit_root/store"/lkjscript-unit-interface-1-*)
 [[ -f ${unit_interfaces[0]} ]] || { echo 'no retained interfaces to corrupt' >&2; exit 1; }
 for unit_interface in "${unit_interfaces[@]}"; do
-    perl -e 'open my $f,"+<",$ARGV[0] or die $!; binmode $f; seek $f,-1,2 or die $!; read $f,my $b,1; seek $f,-1,2; print {$f} chr(ord($b)^1);' "$unit_interface"
+    fixture_flip_last_byte "$unit_interface"
 done
 "$unit_compiler" check-units "${unit_options[@]}" > "$unit_root/corrupt.out" 2> "$unit_root/corrupt.err"
 grep -Fq -- 'checked=3 reused=0' "$unit_root/corrupt.out"
@@ -128,7 +129,7 @@ grep -Fq -- 'private unit authentication key' "$unit_root/key.err"
 mv "$unit_root/base.saved" "$unit_root/base.lkj"
 rm "$unit_root/private.key"
 cp "$unit_root/units.lkj" "$unit_root/units.saved"
-perl -0pi -e 's/"geometry=base"/"base=app", "geometry=base"/' "$unit_root/units.lkj"
+sed -i 's/"geometry=base"/"base=app", "geometry=base"/' "$unit_root/units.lkj"
 if "$unit_compiler" check-units "${unit_options[@]}" > "$unit_root/cycle.out" 2> "$unit_root/cycle.err"; then
     echo 'cyclic units were accepted' >&2; exit 1
 fi
@@ -164,7 +165,7 @@ done
 grep -Fq -- 'checked=3 reused=0' "$unit_root/ancestor-cold.out"
 grep -Fq -- '"units_max_import_interfaces":2' "$unit_root/ancestor-cold.err"
 grep -Fq -- 'checked=0 reused=3' "$unit_root/ancestor-warm.out"
-perl -0pi -e 's/-> T \{ value \}/-> T { let output = value; output }/' "$unit_root/ancestor/base.lkj"
+sed -i 's/-> T { value }/-> T { let output = value; output }/' "$unit_root/ancestor/base.lkj"
 "$unit_compiler" build-units "${ancestor_options[@]}" --grant out -o "$unit_root/ancestor/edited" > "$unit_root/ancestor-edited.out" 2> "$unit_root/ancestor-edited.err"
 grep -Fq -- 'checked=3 reused=0' "$unit_root/ancestor-edited.out"
 [[ $("$unit_root/ancestor/edited") == 42 ]]
@@ -172,7 +173,7 @@ grep -Fq -- 'checked=3 reused=0' "$unit_root/ancestor-edited.out"
 ancestor_projections=("$unit_root/ancestor/store"/unit-source-*)
 [[ -f ${ancestor_projections[0]} ]] || { echo 'no retained source projections to corrupt' >&2; exit 1; }
 for ancestor_projection in "${ancestor_projections[@]}"; do
-    perl -e 'open my $f,"+<",$ARGV[0] or die $!; binmode $f; seek $f,-1,2 or die $!; read $f,my $b,1; seek $f,-1,2; print {$f} chr(ord($b)^1);' "$ancestor_projection"
+    fixture_flip_last_byte "$ancestor_projection"
 done
 "$unit_compiler" build-units "${ancestor_options[@]}" --grant out -o "$unit_root/ancestor/recovered" > "$unit_root/ancestor-recovered.out" 2> "$unit_root/ancestor-recovered.err"
 grep -Fq -- 'checked=3 reused=0' "$unit_root/ancestor-recovered.out"

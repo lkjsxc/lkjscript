@@ -60,7 +60,7 @@ unit_options=(units.lkj --source-dir "$unit_root" --store "$unit_root/store" --s
 grep -Fq -- 'checked=0 reused=3 emitted=0' "$unit_root/warm.out"
 cmp "$unit_root/program" "$unit_root/warm"
 # The same public interface must link the freshly checked implementation.
-perl -0pi -e "s/tag: b'B'/tag: b'C'/" "$unit_root/provider.lkj"
+sed -i "s/tag: b'B'/tag: b'C'/" "$unit_root/provider.lkj"
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/edited" > "$unit_root/edit.out" 2> "$unit_root/edit.err"
 grep -Fq -- 'checked=1 reused=2 emitted=1' "$unit_root/edit.out"
 [[ $("$unit_root/edited") == AC ]]
@@ -71,7 +71,8 @@ if "$unit_compiler" build-units "${unit_options[@]}" -o "$unit_root/edited" > "$
 fi
 [[ $("$unit_root/edited") == AC ]]
 # A caller cannot mutate the owner while an imported returned field is live.
-perl -0pi -e 's/let pair =/let mut pair =/; s/assert_eq!\(\*first, 17i64\);/pair.left = 19i64; assert_eq!(*first, 17i64);/' "$unit_root/app.lkj"
+sed -i -e 's/let pair =/let mut pair =/' \
+    -e 's/assert_eq!(\*first, 17i64);/pair.left = 19i64; assert_eq!(*first, 17i64);/' "$unit_root/app.lkj"
 if "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/edited" > "$unit_root/borrow.out" 2> "$unit_root/borrow.err"; then
     echo 'mutation through a live imported returned view was accepted' >&2
     exit 1
