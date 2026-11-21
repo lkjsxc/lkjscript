@@ -73,10 +73,10 @@ Reference examples are executable cases; language.md stays below 500 lines with
 form, meaning, lowering, rejection and rewrite. Port language/IR contracts; drop host tests.
 Holder liveness is conservative; its rejection names the lexical-scope rewrite.
 borrowed_closure_escape remains pending; obsolete prose about three absent scoped-concurrency cases is not a contract.
-Cargo, bridge and rustc shim stay in witness/. CI gates from an empty store and seed
-without cargo/rustc/node; inspect the nonblocking witness job and never constrain
-language design for Rust. Accepted programs agree; delete the witness when it blocks
-needed forms or ceases to find useful differences. Source uses .lkj to identify lkjscript before reading; only actual Rust witness code uses .rs. Retain Rust shape; child.lkj/child/mod.lkj and program.lkj have no .rs alias or fallback.
+Cargo, bridge and rustc shim stay in witness/. CI bootstraps from the seed and an empty
+store without Cargo, rustc or Node. The full native gate uses Node and Perl for fixtures.
+The advisory witness must never constrain language design. Accepted programs agree;
+delete the witness if it blocks needed forms or stops finding differences. Source uses .lkj to identify lkjscript before reading; only actual Rust witness code uses .rs. Retain Rust shape; child.lkj/child/mod.lkj and program.lkj have no .rs alias or fallback.
 
 ## Program specimens (programs stream)
 [Independent upstream programs](real-programs.md) now lead the programs stream; the [runtime demand table](runtime-demands.md) remains its runtime map. Applications, including site, journal and desk, stay unchanged specimens. First-frontier language refusals from nom, the DOM/parser/selector stack and Sōzu precede optimizer work. Exact source-package identity/authentication and opt-in concrete unit policy are separate foundations; package principals must survive generic instantiation before claiming per-package authority. Untrusted macro/build producers receive explicit grants and all output is checked.

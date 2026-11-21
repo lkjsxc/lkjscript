@@ -155,10 +155,10 @@ includes a generated-traffic harness with memory measurement and CPU profiling.
 - [Status](docs/status.md): current milestone, measurements and known gaps.
 - [Direction](docs/direction.md): the ordered development course.
 
-The development gate bootstraps from the stored seed. Its real-program provenance
-and inventory tools use Node; Rust remains an optional witness. The compiler and
-bootstrap do not depend on either.
-Its HTTP test uses an explicit lkjscript client:
+The development gate bootstraps from the stored seed without Rust or Node.
+The full gate uses Node for fixture byte checks and real-program tooling.
+Perl serves package checks and other fixtures. Rust remains an optional witness.
+The gate exercises HTTP with an explicit lkjscript client.
 
 ```sh
 LKJSCRIPT_GATE_JOBS=4 bash tools/check.sh
