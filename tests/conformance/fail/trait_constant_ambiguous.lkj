@@ -1,3 +1,3 @@
-// expect: reject E_UNSUPPORTED
+// expect: reject E_TYPE
 // witness: {}
 trait Flag { const VALUE: i64; } trait Other { const VALUE: i64; } struct Ready; impl Flag for Ready { const VALUE: i64 = 40; } impl Other for Ready { const VALUE: i64 = 2; } pub fn probe() -> i64 { Ready::VALUE }
