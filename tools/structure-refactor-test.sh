@@ -56,7 +56,8 @@ SOURCE
 apply '{"op":"inline-function","id":"increment","remove":true}'
 value 42
 if grep -q '^fn increment' "$fixture/project/main.lkj"; then exit 1; fi
-printf '%s\n' 'pub fn probe() -> i64 { 20i64 + 22i64 }' > "$fixture/project/main.lkj"
+extract_item='pub fn probe() -> i64 { 20i64 + 22i64 }'
+printf '%s\n' "$extract_item" > "$fixture/project/main.lkj"
 mkdir "$fixture/store"
 "$compiler" build main.lkj --source-dir "$fixture/project" --no-library --store "$fixture/store" --store-key "$fixture/key" --index -o "$fixture/extract-program" > "$fixture/index" 2>&1
 snapshot=$(awk '$1 == "LKJSCRIPT_SNAPSHOT" { print $2 }' "$fixture/index")
@@ -73,6 +74,13 @@ my $expression='20i64 + 22i64'; my $start=index($text,$expression); die "missing
 printf '{"version":1,"operations":[{"op":"extract-function","id":"probe","expect":"%s","name":"calculate","start":%d,"end":%d,"parameters":[],"result":"i64"}]}', $digest,$start,$start+length($expression);
 print "\n";
 PERL
+# Reconstruct the exact request from the authored item, independently of query metadata.
+extract_expression='20i64 + 22i64'
+extract_prefix=${extract_item%%"$extract_expression"*}
+extract_digest=$(printf '%s' "$extract_item" | sha256sum)
+printf '{"version":1,"operations":[{"op":"extract-function","id":"probe","expect":"%s","name":"calculate","start":%d,"end":%d,"parameters":[],"result":"i64"}]}\n' \
+    "${extract_digest%% *}" "${#extract_prefix}" "$((${#extract_prefix} + ${#extract_expression}))" > "$fixture/expected-request.json"
+cmp "$fixture/expected-request.json" "$fixture/request.json"
 "$compiler" edit "${common[@]}" --request "$fixture/request.json" > "$fixture/plan"
 value 42
 grep -q 'fn calculate' "$fixture/project/main.lkj"
