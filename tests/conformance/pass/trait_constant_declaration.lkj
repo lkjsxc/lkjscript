@@ -1,5 +1,5 @@
-// expect: reject E_UNSUPPORTED
-// witness: {"rustAccept":true}
+// expect: value 42
+// witness: {}
 trait Flag { const VALUE: u16; }
 struct Ready;
 impl Flag for Ready { const VALUE: u16 = 42; }
