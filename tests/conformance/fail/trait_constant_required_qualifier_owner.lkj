@@ -1,0 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {}
+mod other { pub trait Flag { type Item; } }
+trait Flag { type Item; const VALUE: <Self as crate::other::Flag>::Item; }
+pub fn probe() -> i64 { 42 }

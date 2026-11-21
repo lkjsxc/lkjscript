@@ -1,0 +1,4 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Flag { type Item; const VALUE: <Self as Flag::Missing>::Item; }
+pub fn probe() -> i64 { 42 }

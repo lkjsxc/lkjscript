@@ -88,7 +88,9 @@ The initializer checks in its declaring module even when unused. Cycles are
 rejected. Each use constructs the value with ordinary IR, including inside a
 const function. The catalog records value identities such as `value@Ready::EMPTY`.
 A nongeneric trait may require a constant with an exact declared type, including
-`Self` and its associated types under the exact declaring trait. Each concrete
+`Self` and its associated types under the exact declaring trait. A projection's
+`as` clause may use an import alias of the trait and rejects an extra path suffix,
+even when the required constant is unused. Each concrete
 primitive or nongeneric nominal implementation must supply
 that member once, with the same type. A fully qualified value path such as
 `<Ready as Flag>::EMPTY` selects the exact receiver and trait; unrelated traits

@@ -1,0 +1,7 @@
+// expect: reject E_TRAIT
+// witness: {}
+mod flags {
+    use self::Flag as Alias;
+    trait Flag { type Item; const VALUE: (u8, <Self as Alias::Missing>::Item); }
+}
+pub fn probe() -> i64 { 42 }
