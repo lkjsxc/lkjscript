@@ -3,6 +3,7 @@
 set -euo pipefail
 cd "$(dirname "$0")/.."
 compiler=$(realpath "${1:-target/lkjscript}")
+authored="$PWD/tools/fixtures/structure-call"
 mkdir -p target
 fixture=$(mktemp -d "$PWD/target/compiler-structure-call.XXXXXX")
 cleanup() {
@@ -23,6 +24,14 @@ umask 077
 head -c 32 /dev/urandom > "$fixture/key"
 mkdir "$fixture/store"
 fail() { printf 'structure-call: %s\n' "$*" >&2; exit 1; }
+replace_fixture() {
+    local name=$1 source=$2
+    if ! cmp -s -- "$source" "$authored/$name.before.lkj"; then
+        printf 'structure-call fixture: %s: unexpected input bytes\n' "$name" >&2
+        return 1
+    fi
+    cat < "$authored/$name.after.lkj" > "$source"
+}
 setup() {
     project="$fixture/$1"
     mkdir -p "$project"
@@ -190,7 +199,7 @@ fn escaped() -> i64 { 9i64 }
 { 1i64 } ) + (2i64
 FRAGMENTS
 # A token edit elsewhere in the same function invalidates the old body epoch.
-perl -0pi -e 's/left::run\(\)/left::run() + 0i64/' "$project/main.lkj"
+replace_fixture body-epoch "$project/main.lkj"
 request "$(operation "$current" '0i64')"
 refuse E_EDIT_IDENTITY
 
@@ -201,17 +210,27 @@ cat > "$project/main.lkj" <<'SOURCE'
 fn step(value: i64) -> i64 { value + 1i64 }
 fn main() -> i64 { step(1i64) }
 SOURCE
+# A one-byte change outside the trivia insertion point must leave the input intact.
+changed_source='fn step(value: i64) -> i64 { value + 2i64 }
+fn main() -> i64 { step(1i64) }'
+printf '%s\n' "$changed_source" > "$fixture/changed.lkj"
+substitution_status=0
+substitution_error=$(replace_fixture body-trivia "$fixture/changed.lkj" 2>&1) || substitution_status=$?
+[[ $substitution_status == 1 ]] || fail "expected changed source refusal, got exit $substitution_status"
+[[ $substitution_error == 'structure-call fixture: body-trivia: unexpected input bytes' ]] ||
+    fail "unexpected substitution diagnostic: $substitution_error"
+cmp "$fixture/changed.lkj" <(printf '%s\n' "$changed_source")
 index
 selected=$(call_id main 'step(1i64)')
 expected=$(digest "$selected")
-perl -0pi -e 's/fn main\(\) -> i64 \{/fn main() -> i64 { \/\* body trivia \*\//' "$project/main.lkj"
+replace_fixture body-trivia "$project/main.lkj"
 request "$(operation "$selected" 'step(2i64)' "$expected")"
 apply
 value 3
 index
 selected=$(call_id main 'step(2i64)')
 expected=$(digest "$selected")
-perl -0pi -e 's/step\(2i64\)/step(\/\* call trivia \*\/ 2i64)/' "$project/main.lkj"
+replace_fixture call-trivia "$project/main.lkj"
 request "$(operation "$selected" 'step(4i64)' "$expected")"
 refuse E_EDIT_STALE
 request "$(operation "$selected" 'step(4i64)')"

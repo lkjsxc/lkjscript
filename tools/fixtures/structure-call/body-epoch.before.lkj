@@ -1,0 +1,7 @@
+mod left;
+mod right;
+mod untouched;
+fn step(value: i64) -> i64 { value + 1i64 }
+fn main() -> i64 { left::run() + right::run() + step(4i64) + (
+10i64
+) }
