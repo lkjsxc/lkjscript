@@ -434,6 +434,23 @@ fn term_head(terms: &[Term], term: usize) -> Option<String> {
     }
 }
 
+// Constant-bearing implementations have already established direct nongeneric
+// receivers. Their nominal/primitive distinction survives approximate name keys.
+fn constant_receiver_nominal(source: &Program, target: TypeId) -> Option<bool> {
+    let Type::Path(path) = &source.types[target].kind else { return None; };
+    if path.qualification.is_some() || !path.args.is_empty() || !path.bindings.is_empty() { return None; }
+    if let Some(declaration) = path.declaration {
+        let declaration = &source.declarations[declaration];
+        if path.name == declaration.name && matches!(declaration.item, Item::Struct(_) | Item::Enum(_)) {
+            return Some(true);
+        }
+    } else if matches!(path.name.as_str(), "u8" | "u16" | "u32" | "u64" | "usize"
+        | "i8" | "i16" | "i32" | "i64" | "isize" | "bool" | "char" | "f64") {
+        return Some(false);
+    }
+    None
+}
+
 fn coherence(source: &Program) -> Result<(), Diagnostic> {
     for declaration in &source.traits {
         let mut members = BTreeSet::<String>::new();
@@ -447,7 +464,7 @@ fn coherence(source: &Program) -> Result<(), Diagnostic> {
     let mut by_trait: BTreeMap<TraitIdentity, Candidates> = BTreeMap::new();
     let mut terms = Vec::new();
     let mut next = 0;
-    let mut normalized = Vec::<(usize, usize)>::new();
+    let mut normalized = Vec::<(usize, usize, usize)>::new();
     for i in 0..source.impls.len() {
         let implementation = &source.impls[i];
         let trait_ty = match implementation.trait_ty {
@@ -464,7 +481,14 @@ fn coherence(source: &Program) -> Result<(), Diagnostic> {
         let head = term_head(&terms, a);
         if let Some(previous) = by_trait.get(&identity) {
             for j in previous.matching(optional_name(&head)) {
-                let (b, bt) = normalized[j];
+                let (b, bt, previous_index) = normalized[j];
+                let previous = &source.impls[previous_index];
+                if !implementation.constants.is_empty() && !previous.constants.is_empty() {
+                    if let (Some(left), Some(right)) = (constant_receiver_nominal(source, implementation.target),
+                        constant_receiver_nominal(source, previous.target)) {
+                        if left != right { continue; }
+                    }
+                }
                 if unify(&terms, vec![(a, b), (at, bt)]) {
                     return Err(Diagnostic::new(
                         implementation.span,
@@ -475,7 +499,7 @@ fn coherence(source: &Program) -> Result<(), Diagnostic> {
             }
         }
         let index = normalized.len();
-        normalized.push((a, at));
+        normalized.push((a, at, i));
         if !by_trait.contains_key(&identity) {
             by_trait.insert(identity.clone(), Candidates::default());
         }
@@ -1938,6 +1962,17 @@ pub(crate) fn select_implementation(
             if !matches!(&source.types[*argument].kind, Type::Path(path) if path.name.starts_with('\'')) { written.push(*argument); }
         }
         if written.len() != arguments.len() { continue; }
+        if !implementation.constants.is_empty() {
+            if let Some(nominal) = constant_receiver_nominal(source, implementation.target) {
+                // Nominal applications take priority over their storage representation.
+                let actual = if applications.contains_key(&ty) { Some(true) }
+                    else if types.get(ty).is_some_and(|value| matches!(value.kind,
+                        crate::ir::TypeKind::Int { .. } | crate::ir::TypeKind::Bool
+                        | crate::ir::TypeKind::Char | crate::ir::TypeKind::F64)) { Some(false) }
+                    else { None };
+                if actual.is_some_and(|actual| actual != nominal) { continue; }
+            }
+        }
         let mut pairs = vec![(implementation.target, ty)];
         for index in 0..written.len() { pairs.push((written[index], arguments[index])); }
         if let Some(substitutions) = impl_arguments(source, types, applications, implementation, pairs)

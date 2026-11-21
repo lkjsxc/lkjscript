@@ -362,6 +362,16 @@ fn append_generics(result: &mut Catalog, files: &[SourceText], owner: &str, valu
     }
     Ok(())
 }
+fn receiver_identity_type_name(program: &a::Program, ty: usize) -> String {
+    let name = identity_type_name(program, ty);
+    if let a::Type::Path(path) = &program.types[ty].kind {
+        if path.declaration.is_some_and(|declaration| matches!(program.declarations[declaration].item,
+            a::Item::Struct(_) | a::Item::Enum(_))) {
+            return resolve::nominal_receiver_name(&name);
+        }
+    }
+    name
+}
 fn function_identity(program: &a::Program, index: usize) -> String {
     let function = &program.functions[index];
     match program.function_owner(a::FunctionId { index }) {
@@ -372,7 +382,7 @@ fn function_identity(program: &a::Program, index: usize) -> String {
         }
         a::FunctionOwner::Implementation(owner) => {
             let owner = &program.impls[owner.index];
-            let target = identity_type_name(program, owner.target);
+            let target = receiver_identity_type_name(program, owner.target);
             match owner.trait_ty {
                 Some(trait_ty) => format!("<{} as {}>::{}", target, identity_type_name(program, trait_ty), function.name),
                 None => format!("{}::{}", target, function.name),
@@ -382,7 +392,7 @@ fn function_identity(program: &a::Program, index: usize) -> String {
 }
 fn implementation_identity(program: &a::Program, index: usize) -> String {
     let value = &program.impls[index];
-    let target = identity_type_name(program, value.target);
+    let target = receiver_identity_type_name(program, value.target);
     let mut members: Vec<String> = Vec::new();
     for index in &value.methods { members.push(program.functions[*index].name.clone()); }
     for associated in &value.associated { members.push(format!("type:{}", associated.name)); }
@@ -405,7 +415,7 @@ fn constant_identity(program: &a::Program, index: usize) -> String {
     if let Some(owner) = program.constant_implementation(index) {
         let implementation = &program.impls[owner];
         if let Some(trait_ty) = implementation.trait_ty {
-            return format!("<{} as {}>::{}", identity_type_name(program, implementation.target),
+            return format!("<{} as {}>::{}", receiver_identity_type_name(program, implementation.target),
                 identity_type_name(program, trait_ty), value.name);
         }
     }

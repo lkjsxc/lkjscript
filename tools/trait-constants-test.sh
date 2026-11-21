@@ -108,3 +108,40 @@ for engine in native interpreter; do
         --store "$fixture/header-store" --store-key "$fixture/key" --engine "$engine") == 43 ]]
 done
 printf 'ok trait constants: exact owners/types/member spans, idle uses, rename rollback and warm initializer invalidation\n'
+# Equal spelling cannot merge primitive and nominal implementation identities.
+mkdir "$fixture/collisions"
+cp tests/conformance/pass/trait_constant_receiver_identity.lkj "$fixture/collisions/main.lkj"
+"$compiler" build main.lkj --source-dir "$fixture/collisions" --no-library --store "$fixture/store" --store-key "$fixture/key" --index \
+    -o "$fixture/collision-program" > "$fixture/collision-index.log"
+collision_snapshot=$(awk '$1=="LKJSCRIPT_SNAPSHOT" { print $2 }' "$fixture/collision-index.log")
+[[ "$collision_snapshot" =~ ^[0-9a-f]{64}$ ]]
+"$compiler" query main.lkj --source-dir "$fixture/collisions" --no-library --store "$fixture/store" --store-key "$fixture/key" \
+    --snapshot "$collision_snapshot" --kind outline --id crate --depth 8 --limit 128 --bytes 100000 > "$fixture/collision-outline.query"
+"$compiler" query main.lkj --source-dir "$fixture/collisions" --no-library --store "$fixture/store" --store-key "$fixture/key" \
+    --snapshot "$collision_snapshot" --kind uses --id '<crate::u8 as Flag>::VALUE' --limit 128 --bytes 100000 > "$fixture/collision-nominal.query"
+"$compiler" query main.lkj --source-dir "$fixture/collisions" --no-library --store "$fixture/store" --store-key "$fixture/key" \
+    --snapshot "$collision_snapshot" --kind uses --id '<u8 as Flag>::VALUE' --limit 128 --bytes 100000 > "$fixture/collision-primitive.query"
+node --input-type=module - "$fixture" <<'COLLISIONS'
+import {readFileSync} from 'node:fs';
+import assert from 'node:assert/strict';
+const dir=process.argv[2];
+const outline=readFileSync(dir+'/collision-outline.query','utf8').split('\n');
+const source=readFileSync(dir+'/collisions/main.lkj');
+for(const [kind,receiver,spelling] of [
+  ['nominal','crate::u8','<u8 as Flag>::VALUE'],
+  ['primitive','u8','<u8 as super::Flag>::VALUE'],
+]) {
+  const id='<'+receiver+' as Flag>::VALUE';
+  assert.equal(outline.filter(line=>line.startsWith(JSON.stringify(id)+'\t')&&line.includes('kind=associated-constant')).length,1,'one distinct member '+id);
+  assert.equal(outline.filter(line=>line.startsWith('"impl:<'+receiver+' as Flag>#')).length,1,'one distinct implementation '+receiver);
+  const rows=readFileSync(dir+'/collision-'+kind+'.query','utf8').split('\n').filter(line=>line.includes('fact=uses')&&line.includes('kind=associated-constant'));
+  assert.equal(rows.length,1,'one exact use for '+receiver);
+  const span=rows[0].match(/start=(\d+) end=(\d+)/);
+  assert(span,'selected member span');
+  const start=source.indexOf(spelling)+Buffer.byteLength(spelling)-5;
+  assert.equal(Number(span[1]),start,'receiver-specific use offset');
+  assert.equal(Number(span[2]),start+5,'member end');
+  assert.equal(source.subarray(Number(span[1]),Number(span[2])).toString(),'VALUE');
+}
+COLLISIONS
+printf 'ok trait constants: distinct nominal/primitive catalog identities and exact receiver uses\n'

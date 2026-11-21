@@ -100,7 +100,14 @@ impl Compiler<'_> {
         for index in 0..self.source.traits.len() {
             let declaration = self.source.traits[index].clone();
             self.validate_trait_families(index)?;
-            if !declaration.predicates.is_empty() { let _ = self.trait_parameters(index)?; }
+            if !declaration.predicates.is_empty() || !declaration.constants.is_empty() {
+                let environment = self.trait_parameters(index)?;
+                let self_type = environment.get(&"Self".to_string()).copied();
+                for member in &declaration.constants {
+                    let ty = self.resolve(member.ty, &environment)?;
+                    if Some(ty) != self_type { self.require_source_sized(ty, member.span)?; }
+                }
+            }
             for method in &declaration.methods {
                 let function = self.source.functions[*method].clone();
                 if function.body.is_some() { continue; }

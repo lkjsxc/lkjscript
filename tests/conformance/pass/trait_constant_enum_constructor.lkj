@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {}
+trait Flag { const Value: i64; }
+enum Ready { Value(i64) }
+impl Flag for Ready { const Value: i64 = 7; }
+pub fn probe() -> i64 { let value = Ready::Value(42); match value { Ready::Value(n) => n } }

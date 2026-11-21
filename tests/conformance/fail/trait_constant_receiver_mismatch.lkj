@@ -1,0 +1,9 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Flag { const VALUE: i64; }
+struct u8;
+impl Flag for u8 { const VALUE: i64 = 42; }
+mod child {
+    pub fn probe() -> i64 { <u8 as super::Flag>::VALUE }
+}
+pub fn probe() -> i64 { child::probe() }

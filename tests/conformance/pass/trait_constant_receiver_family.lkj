@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+trait Flag { type Item; const VALUE: Self::Item; }
+struct u8;
+impl Flag for u8 { type Item = bool; const VALUE: bool = false; }
+mod child {
+    impl super::Flag for u8 { type Item = i64; const VALUE: i64 = 42; }
+    pub fn answer() -> i64 { <u8 as super::Flag>::VALUE }
+}
+pub fn probe() -> i64 { if <u8 as Flag>::VALUE { 0 } else { child::answer() } }

@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+mod hidden { trait Flag { const make: i64; } impl Flag for super::Ready { const make: i64 = 99; } }
+trait Maker { fn make() -> i64; }
+struct Ready;
+impl Maker for Ready { fn make() -> i64 { 42 } }
+pub fn probe() -> i64 { Ready::make() }

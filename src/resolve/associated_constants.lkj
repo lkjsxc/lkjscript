@@ -1,10 +1,16 @@
 //! Inherent constants occupy the value namespace of one resolved nominal type.
 use super::*;
 
+#[derive(Clone, PartialEq, Eq, PartialOrd, Ord)]
+pub(super) enum Receiver {
+    Primitive(String),
+    Nominal(DeclarationId),
+}
+
 #[derive(Default)]
 pub(super) struct Constants {
     pub(super) members: BTreeMap<(DeclarationId, String), Binding>,
-    pub(super) trait_members: BTreeMap<(String, usize, String), Binding>,
+    pub(super) trait_members: BTreeMap<(Receiver, usize, String), Binding>,
     pub(super) trait_implementations: BTreeMap<usize, usize>,
     initializers: BTreeMap<FileId, Vec<(Span, Binding)>>,
     implementations: BTreeMap<FileId, Vec<(Span, DeclarationId)>>,

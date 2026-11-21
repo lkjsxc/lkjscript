@@ -10,6 +10,14 @@ use import_scopes::ImportScopes;
 use std::collections::{BTreeMap, BTreeSet};
 
 type Result<T> = std::result::Result<T, Diagnostic>;
+// A root nominal can share a primitive spelling; associated owner identities
+// retain its stable declaration qualification rather than a parse-order ID.
+pub(crate) fn nominal_receiver_name(name: &str) -> String {
+    if matches!(name, "u8" | "u16" | "u32" | "u64" | "usize"
+        | "i8" | "i16" | "i32" | "i64" | "isize" | "bool" | "char" | "f64") {
+        format!("crate::{name}")
+    } else { name.to_string() }
+}
 #[derive(Clone)]
 struct Binding {
     declaration: DeclarationId,
@@ -721,7 +729,6 @@ impl<'a> Resolver<'a> {
             if namespace == Namespace::Value { self.resolve_trait_constant(path, span)?; }
             return Ok(());
         }
-        if namespace == Namespace::Value { self.refuse_relative_trait_constant(scope, path, span)?; }
         if let Some(resolved) = self.path(scope, &path.name, namespace, span, true)? {
             path.name = resolved.name;
             path.declaration = resolved.binding.map(|binding| binding.declaration);

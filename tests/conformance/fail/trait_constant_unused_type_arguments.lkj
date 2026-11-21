@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {}
+trait Flag { const VALUE: bool<u8>; }
+pub fn probe() -> i64 { 42 }

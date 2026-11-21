@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+trait Flag { type Item; const OWNED: Self; const ITEM: Self::Item; }
+pub fn probe() -> i64 { 42 }
