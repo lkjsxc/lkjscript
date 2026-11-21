@@ -162,7 +162,6 @@ File drop, independent aliases and identical errno behavior.
 
 ## Reproduce
 
-The complete focused process gate passed in 20.498 s, load 18.07 → 15.12.
 The default gate uses fresh state and an OS-assigned loopback port, cleans its
 own files, and runs beneath a private Perl subreaper that kills/reaps any
 leaked test descendants. A Bash loopback client compares the exact HTTP

@@ -25,11 +25,12 @@ jobs:
         env:
           LKJSCRIPT_GATE_JOBS: '4'
         run: |
-          for tool in cargo rustc; do
+          for tool in cargo rustc curl; do
             if command -v "$tool" >/dev/null 2>&1; then
               printf 'unexpected gate tool: %s\n' "$tool" >&2
               exit 1
             fi
+            printf 'gate tool absent: %s\n' "$tool"
           done
           node --version
           bash tools/check.sh

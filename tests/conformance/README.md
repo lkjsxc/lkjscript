@@ -47,10 +47,11 @@ Only borrowed_closure_escape remains pending. The former claim of three scoped-t
 cases was stale; concurrency now uses isolated processes, without shared-address-space
 thread rules. Unrelated rejection, wrong results and malformed worker output fail.
 
-The mandatory gate requires no Rust or Node. `bash witness/check.sh` optionally
-builds the Rust witness, compares complete compiler bytes, and checks every
-marked case with overflow checks enabled. Its native test coordinator keeps
-program stderr and Rust trap/status records separate.
+The mandatory gate bootstraps from the seed without Rust or Node and uses Node
+for host-side fixture checks and real-program tooling. `bash witness/check.sh`
+optionally builds the Rust witness, compares complete compiler bytes, and checks
+every marked case with overflow checks enabled. Its native test coordinator
+keeps program stderr and Rust trap/status records separate.
 
 Use `// witness: {"root":true}` for a self-contained source case that needs
 Rust crate-root resolution, such as a macro using `$crate`. Rust compiles the
@@ -67,6 +68,6 @@ address bounds, failed-acquisition cleanup, affine ownership, and drop/rebind.
 startup/reservation reuse under explicit test limits.
 `tools/http-test.sh --seconds 0` retains all functional HTTP requests in the gate:
 large bodies/headers, binary bytes, GET/HEAD, framing and Directory confinement.
-It uses curl as an explicit test client, starts a fresh local server with stdin
+Its clients are native lkjscript. It starts a fresh local server with stdin
 closed, profiles that server, and closes every child before returning. The full
 hour load and focused interpreter route run use the same supervisor separately.
