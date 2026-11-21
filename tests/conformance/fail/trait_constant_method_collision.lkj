@@ -1,0 +1,3 @@
+// expect: reject E_NAME
+// witness: {}
+trait Flag { const value: i64; fn value() -> i64; } pub fn probe() -> i64 { 42 }

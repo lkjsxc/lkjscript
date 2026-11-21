@@ -87,8 +87,24 @@ scalar literals, tuples, data constructors and paths to other inherent constants
 The initializer checks in its declaring module even when unused. Cycles are
 rejected. Each use constructs the value with ordinary IR, including inside a
 const function. The catalog records value identities such as `value@Ready::EMPTY`.
-Trait constants, generic owners, type-alias owners, constant patterns and calls
-that require compile-time evaluation remain source boundaries.
+A nongeneric trait may require a constant with an exact declared type, including
+`Self` and its associated types under the exact declaring trait. Each concrete
+primitive or nongeneric nominal implementation must supply
+that member once, with the same type. A fully qualified value path such as
+`<Ready as Flag>::EMPTY` selects the exact receiver and trait; unrelated traits
+or receivers with the same member spelling remain distinct. Implementation
+constants have the trait's member visibility and may not add `pub`. Their inert
+initializers use the same ordinary IR and cycle checks as inherent constants,
+including paths to other accepted associated constants. No evaluator or IR
+operation is added. The catalog exposes `Flag::EMPTY` and
+`<Ready as Flag>::EMPTY`, and qualified uses identify the selected implementation
+at the authored member token. Renaming these members refuses until a complete
+trait-member edit cohort is supported.
+
+Trait constant defaults, generic trait/implementation selection, type-relative
+trait selection, type-alias owners, type-level uses, constant patterns and calls that require
+compile-time evaluation remain source boundaries. Existing inherent member and
+generic method lookup keeps its own rules.
 
 Free functions and inherent methods may be declared `const fn`. Ordinary runtime
 calls use the same concrete functions and checked IR as other calls. Every

@@ -1,0 +1,3 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Flag { const VALUE: i64; } struct Ready; impl Flag for Ready { const VALUE: i64 = 42; } pub fn probe() -> i64 { Ready::VALUE }

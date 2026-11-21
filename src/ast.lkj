@@ -222,6 +222,13 @@ pub struct AssociatedType {
 }
 
 #[derive(Clone, PartialEq, Eq)]
+pub struct AssociatedConstant {
+    pub name: String,
+    pub ty: TypeId,
+    pub span: Span,
+}
+
+#[derive(Clone, PartialEq, Eq)]
 pub struct Trait {
     pub name: String,
     pub module: String,
@@ -230,6 +237,7 @@ pub struct Trait {
     pub bounds: Vec<TypeId>,
     pub methods: Vec<usize>,
     pub associated: Vec<AssociatedType>,
+    pub constants: Vec<AssociatedConstant>,
     pub public: Visibility,
     pub span: Span,
 }
@@ -599,5 +607,11 @@ impl Program {
     /// The caller supplies a resolved program, whose owner table covers every function.
     pub fn function_owner(&self, function: FunctionId) -> FunctionOwner {
         self.function_owners[function.index]
+    }
+}
+
+impl Program {
+    pub fn constant_implementation(&self, constant: usize) -> Option<usize> {
+        self.impls.iter().position(|implementation| implementation.constants.contains(&constant))
     }
 }

@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {}
+mod values { pub trait Flag { const VALUE: i64; } pub struct Ready;
+    mod implementation { impl super::Flag for super::Ready { const VALUE: i64 = 42; } }
+}
+pub fn probe() -> i64 { <values::Ready as values::Flag>::VALUE }

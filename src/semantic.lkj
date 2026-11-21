@@ -400,7 +400,15 @@ fn constant_owner(program: &a::Program, value: &a::Constant) -> Option<String> {
     let a::Type::Path(path) = &program.types[value.owner?].kind else { return None; };
     Some(program.declarations[path.declaration?].name.clone())
 }
-fn constant_identity(program: &a::Program, value: &a::Constant) -> String {
+fn constant_identity(program: &a::Program, index: usize) -> String {
+    let value = &program.constants[index];
+    if let Some(owner) = program.constant_implementation(index) {
+        let implementation = &program.impls[owner];
+        if let Some(trait_ty) = implementation.trait_ty {
+            return format!("<{} as {}>::{}", identity_type_name(program, implementation.target),
+                identity_type_name(program, trait_ty), value.name);
+        }
+    }
     let owner = constant_owner(program, value).unwrap_or_else(|| value.module.clone());
     source_identity(resolve::Namespace::Value, &qualified(&owner, &value.name))
 }
@@ -415,7 +423,7 @@ fn item_identity(program: &a::Program, item: a::Item, function_ids: &[String]) -
         a::Item::Use(index) => format!("{}::use:{}", source_path(&root_parent(&program.uses[index].module)), program.uses[index].alias),
         a::Item::Module(index) => type_identity(&program.modules[index].parent, &program.modules[index].name),
         a::Item::Alias(index) => type_identity(&program.aliases[index].module, &program.aliases[index].name),
-        a::Item::Constant(index) => constant_identity(program, &program.constants[index]),
+        a::Item::Constant(index) => constant_identity(program, index),
     }
 }
 fn declaration_identity(program: &a::Program, index: usize, function_ids: &[String]) -> Option<String> {
@@ -825,6 +833,10 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         append(&mut result, &files, identity.clone(), root_parent(&value.module), "trait", &value.name,
             value.span, None, source_path(&identity).to_string(), true)?;
         append_generics(&mut result, &files, &identity, &value.generics)?;
+        for constant in &value.constants {
+            append_typed(&mut result, &files, program, format!("{}::{}", qualified(&value.module, &value.name), constant.name),
+                identity.clone(), "associated-constant", &constant.name, constant.span, Some(constant.ty), false)?;
+        }
         for associated in &value.associated {
             append_typed(&mut result, &files, program, format!("{}::type:{}", identity, associated.name), identity.clone(),
                 "associated-type", &associated.name, associated.span, associated.value, false)?;
@@ -862,10 +874,13 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             &value.name, value.span, Some(value.ty), true)?;
         append_generics(&mut result, &files, &type_identity(&value.module, &value.name), &value.generics)?;
     }
-    for value in &program.constants {
-        let owner = constant_owner(program, value).map_or_else(|| root_parent(&value.module),
-            |owner: String| source_identity(resolve::Namespace::Type, &owner));
-        append_typed(&mut result, &files, program, constant_identity(program, value), owner, "constant",
+    for (index, value) in program.constants.iter().enumerate() {
+        let implementation = program.constant_implementation(index)
+            .filter(|owner| program.impls[*owner].trait_ty.is_some());
+        let owner = implementation.map_or_else(|| constant_owner(program, value).map_or_else(|| root_parent(&value.module),
+            |owner: String| source_identity(resolve::Namespace::Type, &owner)), |owner| implementation_identity(program, owner));
+        let kind = if implementation.is_some() { "associated-constant" } else { "constant" };
+        append_typed(&mut result, &files, program, constant_identity(program, index), owner, kind,
             &value.name, value.span, Some(value.ty), true)?;
     }
     macro_sources::project_items(&mut result, &files, program, &origins)?;
@@ -1095,6 +1110,15 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
                         continue;
                     }
                     if let Some(qualification) = &path.qualification {
+                        let resolved = resolver.value_path(node.scope, path, node.span).ok();
+                        if let Some(declaration) = resolved.and_then(|resolved| resolved.declaration) {
+                            if let a::Item::Constant(index) = program.declarations[declaration].item {
+                                let target = constant_identity(program, index);
+                                record_site(&mut result, &files, owner.clone(), target, qualification.member_span, "associated-constant", true);
+                                path_qualifications(&mut result, &files, program, &resolver, &owner, node.scope, node.span);
+                                continue;
+                            }
+                        }
                         let Some(trait_ty) = qualification.trait_ty else {
                             let closed = source_functions.get(&owner).is_some_and(|function|
                                 crate::elaborate::semantic::closed_source_owner(program, *function));

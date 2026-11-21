@@ -1,0 +1,8 @@
+// expect: reject E_TYPE
+// witness: {}
+trait A { type Item; const VALUE: Self::Item; }
+trait B { type Item; }
+struct Ready;
+impl A for Ready { type Item = i64; const VALUE: <Ready as B>::Item = 42u8; }
+impl B for Ready { type Item = u8; }
+pub fn probe() -> i64 { 42 }

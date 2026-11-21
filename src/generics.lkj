@@ -435,6 +435,15 @@ fn term_head(terms: &[Term], term: usize) -> Option<String> {
 }
 
 fn coherence(source: &Program) -> Result<(), Diagnostic> {
+    for declaration in &source.traits {
+        let mut members = BTreeSet::<String>::new();
+        for method in &declaration.methods { members.insert(source.functions[*method].name.clone()); }
+        for constant in &declaration.constants {
+            if !members.insert(constant.name.clone()) {
+                return Err(Diagnostic::new(constant.span, "E_NAME", "trait function and constant names must be unique"));
+            }
+        }
+    }
     let mut by_trait: BTreeMap<TraitIdentity, Candidates> = BTreeMap::new();
     let mut terms = Vec::new();
     let mut next = 0;
@@ -473,6 +482,21 @@ fn coherence(source: &Program) -> Result<(), Diagnostic> {
         by_trait.get_mut(&identity).unwrap().insert(head, index);
         if let TraitIdentity::Declared(t) = identity {
             let trait_def = &source.traits[t];
+            let mut constants = BTreeSet::<String>::new();
+            for constant in &implementation.constants {
+                let constant = &source.constants[*constant];
+                if !constants.insert(constant.name.clone()) {
+                    return Err(Diagnostic::new(constant.span, "E_NAME", "duplicate implementation constant"));
+                }
+                if !trait_def.constants.iter().any(|member| member.name == constant.name) {
+                    return Err(Diagnostic::new(constant.span, "E_TRAIT", "implementation constant is not declared by trait"));
+                }
+            }
+            for member in &trait_def.constants {
+                if !constants.contains(&member.name) {
+                    return Err(Diagnostic::new(implementation.span, "E_TRAIT", "implementation is missing a required constant"));
+                }
+            }
             let mut names = BTreeMap::new();
             for method in &implementation.methods {
                 let f = &source.functions[*method];

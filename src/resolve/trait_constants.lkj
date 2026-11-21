@@ -1,0 +1,126 @@
+//! Required nongeneric constants use exact concrete implementation identities.
+//! This source selection grants no IR authority and performs no evaluation.
+use super::*;
+
+impl Resolver<'_> {
+    fn constant_trait(&self, ty: TypeId) -> Result<Option<usize>> {
+        let node = &self.program.types[ty];
+        let Type::Path(path) = &node.kind else { return Ok(None); };
+        if path.qualification.is_some() { return Ok(None); }
+        let declaration = if let Some(declaration) = path.declaration { Some(declaration) }
+            else {
+                let scope = node.block.map(|id| self.program.scopes.len() + id).unwrap_or(node.scope);
+                self.path(scope, &path.name, Namespace::Type, node.span, false)?
+                    .and_then(|resolved| resolved.binding).map(|binding| binding.declaration)
+            };
+        let Some(declaration) = declaration else { return Ok(None); };
+        match self.declarations[declaration].item {
+            Item::Trait(index) => Ok(Some(index)),
+            _ => Ok(None),
+        }
+    }
+
+    fn constant_target(&self, ty: TypeId) -> Result<Option<String>> {
+        let node = &self.program.types[ty];
+        let Type::Path(path) = &node.kind else { return Ok(None); };
+        if path.qualification.is_some() || !path.args.is_empty() || !path.bindings.is_empty() { return Ok(None); }
+        if let Some(owner) = self.constant_owner(ty)? {
+            return Ok(Some(self.declarations[owner.declaration].name.clone()));
+        }
+        let scope = node.block.map(|id| self.program.scopes.len() + id).unwrap_or(node.scope);
+        if path.declaration.is_none() && !self.generic(node.span, &path.name)
+            && self.path(scope, &path.name, Namespace::Type, node.span, true)?.is_some_and(|resolved| resolved.binding.is_none())
+            && matches!(path.name.as_str(),
+                "u8" | "u16" | "u32" | "u64" | "usize" | "i8" | "i16" | "i32" | "i64" | "isize" | "bool" | "char" | "f64") {
+            return Ok(Some(path.name.clone()));
+        }
+        Ok(None)
+    }
+
+    pub(super) fn index_trait_constants(&mut self) -> Result<()> {
+        for (index, implementation) in self.program.impls.iter().enumerate() {
+            let Some(trait_ty) = implementation.trait_ty else { continue; };
+            let Some(trait_index) = self.constant_trait(trait_ty)? else {
+                if !implementation.constants.is_empty() {
+                    return Err(Diagnostic::new(implementation.span, "E_TRAIT", "this trait declares no associated constants"));
+                }
+                continue;
+            };
+            let declaration = &self.program.traits[trait_index];
+            if declaration.constants.is_empty() && implementation.constants.is_empty() { continue; }
+            if !implementation.generics.is_empty() || !implementation.predicates.is_empty() {
+                return Err(Diagnostic::new(implementation.span, "E_UNSUPPORTED", "trait constants require a nongeneric implementation"));
+            }
+            let Some(target) = self.constant_target(implementation.target)? else {
+                return Err(Diagnostic::new(implementation.span, "E_UNSUPPORTED", "trait constants require a concrete primitive or nongeneric nominal receiver"));
+            };
+            let trait_name = qualified(&declaration.module, &declaration.name);
+            for constant in &implementation.constants {
+                let value = &self.program.constants[*constant];
+                let name = format!("<{target} as {trait_name}>::{}", value.name);
+                let scope = self.scope(&value.module);
+                let id = self.declarations.len();
+                let binding = Binding { declaration: id, target: name.clone(), scope, public: Visibility::Public,
+                    glob: false, ambiguous: false, semantic_alias: false };
+                if self.associated_constants.trait_members.insert((target.clone(), trait_index, value.name.clone()), binding).is_some() {
+                    return Err(Diagnostic::new(value.span, "E_NAME", "duplicate trait implementation constant"));
+                }
+                self.associated_constants.trait_implementations.insert(*constant, index);
+                self.declarations.push(Declaration { name, scope, item: Item::Constant(*constant), public: Visibility::Public, span: value.span });
+            }
+        }
+        Ok(())
+    }
+
+    pub(super) fn resolve_trait_constant(&self, path: &mut Path, span: Span) -> Result<()> {
+        let Some(qualification) = &path.qualification else { return Ok(()); };
+        let Some(trait_ty) = qualification.trait_ty else { return Ok(()); };
+        let Some(trait_index) = self.constant_trait(trait_ty)? else { return Ok(()); };
+        let name = match path.name.rfind("::") { Some(at) => path.name[at + 2usize..].to_string(), None => path.name.clone() };
+        let mut declared = false;
+        for member in &self.program.traits[trait_index].constants {
+            if member.name == name { declared = true; break; }
+        }
+        if !declared { return Ok(()); }
+        if !path.args.is_empty() || !path.bindings.is_empty() {
+            return Err(Diagnostic::new(span, "E_TYPE", "associated constants take no generic arguments"));
+        }
+        let Some(target) = self.constant_target(qualification.receiver)? else {
+            return Err(Diagnostic::new(span, "E_UNSUPPORTED", "trait constant selection requires a concrete primitive or nongeneric nominal receiver"));
+        };
+        let Some(binding) = self.associated_constants.trait_members.get(&(target, trait_index, name)) else {
+            return Err(Diagnostic::new(span, "E_TRAIT", "no exact implementation supplies this required trait constant"));
+        };
+        path.name = binding.target.clone();
+        path.declaration = Some(binding.declaration);
+        Ok(())
+    }
+
+    pub(super) fn refuse_relative_trait_constant(&self, scope: ModuleId, path: &Path, span: Span) -> Result<()> {
+        if self.associated_constants.trait_members.is_empty() { return Ok(()); }
+        let Some(at) = path.name.rfind("::") else { return Ok(()); };
+        let owner = &path.name[..at];
+        let name = &path.name[at + 2usize..];
+        if !self.program.traits.iter().any(|declaration| declaration.constants.iter().any(|member| member.name == name)) { return Ok(()); }
+        // Existing Self and generic method/constant lookup keeps its own rules.
+        // An unrelated trait member spelling cannot change that lookup.
+        if owner == "Self" || self.generic(span, owner) { return Ok(()); }
+        let Some(resolved) = self.path(scope, owner, Namespace::Type, span, false)? else { return Ok(()); };
+        let target = resolved.name;
+        if let Some(binding) = resolved.binding {
+            if self.associated_constants.members.contains_key(&(binding.declaration, name.to_string())) { return Ok(()); }
+        }
+        // Inherent functions retain their existing priority over trait members.
+        for implementation in &self.program.impls {
+            if implementation.trait_ty.is_none()
+                && implementation.methods.iter().any(|method| self.program.functions[*method].name == name)
+                && self.constant_target(implementation.target)? == Some(target.clone()) { return Ok(()); }
+        }
+        for key in self.associated_constants.trait_members.keys() {
+            if key.0 == target && key.2 == name {
+                return Err(Diagnostic::new(span, "E_UNSUPPORTED", "trait constants require a concrete fully qualified path"));
+            }
+        }
+        Ok(())
+    }
+}

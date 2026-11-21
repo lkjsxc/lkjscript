@@ -163,7 +163,7 @@ pub(super) fn validate(program: &a::Program, resolver: &crate::resolve::Resolver
     let mut requests = 0usize;
     for attr in attrs { if attr.name == "derive" { for name in &attr.args { if name == "Debug" { requests += 1usize; } } } }
     ensure(requests == 1usize && same_span(value.span, span) && same_span(target.span, span)
-        && value.module == *module && value.methods.len() == 1usize && value.associated.is_empty()
+        && value.module == *module && value.methods.len() == 1usize && value.associated.is_empty() && value.constants.is_empty()
         && value.generics.len() == generics.len() && path.args.len() == generics.len()
         && value.predicates.len() == predicates.len(), "unwritten implementation differs from its defining Debug request")?;
     for (at, predicate) in predicates.iter().enumerate() {

@@ -2431,6 +2431,7 @@ impl Parser {
         &mut self,
         methods: &mut Vec<usize>,
         associated: &mut Vec<AssociatedType>,
+        constants: &mut Vec<AssociatedConstant>,
     ) -> Result<(), Diagnostic> {
         let attrs = self.attrs()?;
         if !self.enabled(&attrs)? {
@@ -2442,7 +2443,14 @@ impl Parser {
         } else if self.is("type") {
             associated.push(self.associated_type()?);
         } else if self.is("const") {
-            return Err(self.unsupported("trait associated constants"));
+            let span = self.token().span;
+            self.expect("const")?;
+            let name = self.ident()?;
+            self.expect(":")?;
+            let ty = self.ty()?;
+            if self.is("=") { return Err(self.unsupported("trait constant defaults require per-receiver selection")); }
+            self.expect(";")?;
+            constants.push(AssociatedConstant { name, ty, span: self.finish_span(span) });
         } else {
             return Err(self.unsupported("trait item"));
         }
@@ -2462,17 +2470,21 @@ impl Parser {
         self.expect("{")?;
         let mut methods = Vec::new();
         let mut associated = Vec::new();
+        let mut constants = Vec::new();
         while !self.is("}") {
             if self.token().kind == TokenKind::End {
                 return Err(self.err("unterminated trait"));
             }
             let start = self.at;
-            let result = self.trait_member(&mut methods, &mut associated);
+            let result = self.trait_member(&mut methods, &mut associated, &mut constants);
             if let Err(error) = result {
                 self.recover_region(start, "item", error);
             }
         }
         self.expect("}")?;
+        if !constants.is_empty() && (!generics.is_empty() || !predicates.is_empty()) {
+            return Err(Diagnostic::new(constants[0usize].span, "E_UNSUPPORTED", "associated constants require a nongeneric trait"));
+        }
         let id = self.program.traits.len();
         self.program.traits.push(Trait {
             name,
@@ -2482,6 +2494,7 @@ impl Parser {
             bounds,
             methods,
             associated,
+            constants,
             public,
             span: self.finish_span(span),
         });
@@ -2493,6 +2506,7 @@ impl Parser {
         associated: &mut Vec<AssociatedType>,
         constants: &mut Vec<usize>,
         constant_owner: Option<TypeId>,
+        trait_impl: bool,
     ) -> Result<(), Diagnostic> {
         let attrs = self.attrs()?;
         if !self.enabled(&attrs)? {
@@ -2506,8 +2520,11 @@ impl Parser {
             associated.push(self.associated_type()?);
         } else if self.is("const") {
             let Some(owner) = constant_owner else {
-                return Err(self.unsupported("associated constants require a nongeneric inherent implementation"));
+                return Err(self.unsupported("associated constants require a nongeneric implementation"));
             };
+            if trait_impl && public != Visibility::Private {
+                return Err(Diagnostic::new(self.token().span, "E_TYPE", "a trait implementation constant cannot have visibility"));
+            }
             constants.push(self.constant(public, Some(owner))?);
         } else {
             return Err(self.unsupported("impl item"));
@@ -2537,7 +2554,7 @@ impl Parser {
         let mut methods = Vec::new();
         let mut associated = Vec::new();
         let mut constants = Vec::new();
-        let constant_owner = if trait_ty.is_none() && generics.is_empty() && predicates.is_empty() {
+        let constant_owner = if generics.is_empty() && predicates.is_empty() {
             Some(target)
         } else { None };
         while !self.is("}") {
@@ -2545,7 +2562,7 @@ impl Parser {
                 return Err(self.err("unterminated impl"));
             }
             let start = self.at;
-            let result = self.implementation_member(&mut methods, &mut associated, &mut constants, constant_owner);
+            let result = self.implementation_member(&mut methods, &mut associated, &mut constants, constant_owner, trait_ty.is_some());
             if let Err(error) = result {
                 self.recover_region(start, "item", error);
             }

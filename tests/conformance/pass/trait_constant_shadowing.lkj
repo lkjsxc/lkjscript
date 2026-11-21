@@ -1,0 +1,19 @@
+// expect: value 42
+// witness: {}
+trait Flag { const BASE: i64; }
+trait Maker { fn BASE() -> i64; }
+struct Ready;
+impl Ready { const BASE: i64 = 40; fn base() -> i64 { Self::BASE } }
+impl Flag for Ready { const BASE: i64 = 99; }
+impl Maker for Ready { fn BASE() -> i64 { 2 } }
+fn make<T: Maker>() -> i64 { T::BASE() }
+mod shadow {
+    pub struct u8;
+    impl super::Flag for u8 { const BASE: i64 = 7; }
+    pub fn value() -> i64 { <u8 as super::Flag>::BASE }
+}
+pub fn probe() -> i64 {
+    assert!(shadow::value() == 7);
+    assert!(<Ready as Flag>::BASE == 99);
+    Ready::base() + make::<Ready>()
+}

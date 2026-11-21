@@ -143,7 +143,7 @@ fn derived_default(program: &a::Program, resolver: &crate::resolve::Resolver<'_>
             for name in &attribute.args { if name == "Default" { requests += 1usize; } }
         }
     }
-    if requests != 1usize || value.methods.len() != 1usize || !value.associated.is_empty()
+    if requests != 1usize || value.methods.len() != 1usize || !value.associated.is_empty() || !value.constants.is_empty()
         || value.generics.len() != definition.generics.len() || target_name.args.len() != definition.generics.len() {
         return Err(failure(&identity, "unwritten implementation is not the recorded Default expansion shape"));
     }

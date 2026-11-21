@@ -1,0 +1,3 @@
+// expect: reject E_TYPE
+// witness: {}
+trait Flag { const VALUE: i64; } struct Ready; impl Flag for Ready { pub const VALUE: i64 = 42; } pub fn probe() -> i64 { 42 }

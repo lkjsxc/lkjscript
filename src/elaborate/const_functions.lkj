@@ -6,6 +6,32 @@ use std::collections::{BTreeMap, BTreeSet};
 
 impl Compiler<'_> {
     pub(super) fn check_associated_constants(&mut self) -> Result<()> {
+        for index in 0usize..self.source.impls.len() {
+            let implementation = self.source.impls[index].clone();
+            let Some(trait_ty) = implementation.trait_ty else { continue; };
+            if implementation.constants.is_empty() { continue; }
+            let a::Type::Path(path) = self.source.types[trait_ty].kind.clone() else { continue; };
+            let TraitIdentity::Declared(trait_index) = crate::generics::bound_identity(self.source, &path) else { continue; };
+            let receiver = self.resolve(implementation.target, &BTreeMap::new())?;
+            let declared = self.trait_environment(receiver, &TraitIdentity::Declared(trait_index));
+            let mut substitution = declared.clone();
+            substitution.insert(format!("$family::implementation:{index}"), receiver);
+            for constant in &implementation.constants {
+                let constant = self.source.constants[*constant].clone();
+                let mut member_type = None;
+                for member in &self.source.traits[trait_index].constants {
+                    if member.name == constant.name { member_type = Some(member.ty); break; }
+                }
+                let Some(member_type) = member_type else {
+                    return Err(err(constant.span, "E_TRAIT", "constant is not declared by the trait"));
+                };
+                let expected = self.resolve(member_type, &declared)?;
+                let actual = self.resolve(constant.ty, &substitution)?;
+                if actual != expected {
+                    return Err(err(constant.span, "E_TYPE", "implementation constant type differs from its exact trait member"));
+                }
+            }
+        }
         for index in 0usize..self.source.constants.len() {
             if self.source.constants[index].owner.is_none() { continue; }
             let constant = self.source.constants[index].clone();
@@ -26,7 +52,7 @@ impl Compiler<'_> {
                 inferred: definition_types::Types::default(), live: super::Facts::new(0),
                 definite_live: super::Facts::new(0), written: super::Facts::new(0), loops: Vec::new(), reachable: true,
             };
-            let (_, ty) = builder.associated_constant(&constant)?;
+            let (_, ty) = builder.associated_constant(index)?;
             drop(builder);
             scratch.result = ty;
             self.check_sized_function(&scratch, constant.span)?;
@@ -152,14 +178,25 @@ impl Compiler<'_> {
 }
 
 impl Builder<'_, '_> {
-    pub(super) fn associated_constant(&mut self, constant: &a::Constant) -> Result<(usize, usize)> {
-        let ty = self.compiler.resolve(constant.ty, &BTreeMap::new())?;
+    pub(super) fn associated_constant(&mut self, index: usize) -> Result<(usize, usize)> {
+        let constant = self.compiler.source.constants[index].clone();
+        let mut substitution = BTreeMap::new();
+        if let Some(owner) = constant.owner {
+            let receiver = self.compiler.resolve(owner, &BTreeMap::new())?;
+            substitution.insert("Self".to_string(), receiver);
+            if let Some(implementation) = self.compiler.source.constant_implementation(index) {
+                if self.compiler.source.impls[implementation].trait_ty.is_some() {
+                    substitution.insert(format!("$family::implementation:{implementation}"), receiver);
+                }
+            }
+        }
+        let ty = self.compiler.resolve(constant.ty, &substitution)?;
         // A use constructs the same value in the declaration's lexical context.
         let previous_scope = self.scope;
         let previous_file = self.file;
         self.scope = self.compiler.names.scope(&constant.module);
         self.file = constant.span.file;
-        let previous_sub = std::mem::replace(&mut self.sub, BTreeMap::new());
+        let previous_sub = std::mem::replace(&mut self.sub, substitution);
         let previous_bindings = std::mem::replace(&mut self.bindings, Bindings::default());
         let previous_guards = std::mem::replace(&mut self.guard_aliases, BTreeMap::new());
         let result = self.expr(constant.value, Some(ty));

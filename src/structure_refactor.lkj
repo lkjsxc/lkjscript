@@ -1521,6 +1521,9 @@ pub mod relocation {
     }
     fn cohort(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)],
         target: &semantic::Item) -> Result<BTreeSet<String>, String> {
+        if target.kind == "associated-constant" {
+            return Err(fail(&target.identity, "REFERENCES", "trait constant renaming requires a complete trait member cohort"));
+        }
         let mut result = BTreeSet::new(); result.insert(target.identity.clone());
         if !matches!(target.kind.as_str(), "function" | "associated-type") || free(catalog, target) { return Ok(result); }
         let parent = edit::item(catalog, &target.parent)?;

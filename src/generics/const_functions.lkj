@@ -86,7 +86,7 @@ fn associated_initializer(source: &Program, names: &crate::resolve::Resolver<'_>
             _ => {}
         }
         return Err(Diagnostic::new(node.span, "E_UNSUPPORTED",
-            "associated constant initializer requires literal data, data constructors or another inherent constant"));
+            "associated constant initializer requires literal data, data constructors or another associated constant"));
     }
     Ok(())
 }

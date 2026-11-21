@@ -1,0 +1,3 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Flag { const VALUE: i64; } struct Ready; struct Other; impl Flag for Ready { const VALUE: i64 = 42; } pub fn probe() -> i64 { <Other as Flag>::VALUE }

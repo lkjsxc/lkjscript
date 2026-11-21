@@ -1,5 +1,6 @@
 //! Module and declaration identity. Later phases consume resolved paths, never bare-name guesses.
 mod associated_constants;
+mod trait_constants;
 mod import_scopes;
 mod iteration;
 mod primitive_limits;
@@ -716,7 +717,11 @@ impl<'a> Resolver<'a> {
     ) -> Result<()> {
         // Receiver and trait have their own arena nodes and lexical scopes.
         // The member is selected only after the receiver's trait proof exists.
-        if path.qualification.is_some() { return Ok(()); }
+        if path.qualification.is_some() {
+            if namespace == Namespace::Value { self.resolve_trait_constant(path, span)?; }
+            return Ok(());
+        }
+        if namespace == Namespace::Value { self.refuse_relative_trait_constant(scope, path, span)?; }
         if let Some(resolved) = self.path(scope, &path.name, namespace, span, true)? {
             path.name = resolved.name;
             path.declaration = resolved.binding.map(|binding| binding.declaration);

@@ -6,8 +6,9 @@ Only the checker can produce the `CheckedProgram` or `CheckedUnit` accepted by a
 [Authenticated units](units.md) independently verify imported interface contracts;
 a unit never fabricates a whole-program admission.
 Parsing text, producing transformed IR and loading store bytes grant no authority.
-Inherent associated constants are a source producer form. Their uses produce
-ordinary literal and constructor instructions subject to the same independent check.
+Inherent and required trait associated constants are source producer forms.
+Their uses produce ordinary literal and constructor instructions subject to the
+same independent check.
 The source producer resolves named literal array lengths to concrete counts that
 use the existing checked array type and layout rules.
 Debug builders are ordinary source aggregates holding exclusive formatter views.

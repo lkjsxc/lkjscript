@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {}
+trait A { type Item; const VALUE: Self::Item; }
+trait B { type Item; const VALUE: Self::Item; }
+struct Ready;
+impl A for Ready { type Item = i64; const VALUE: Self::Item = 40i64; }
+impl B for Ready { type Item = u8; const VALUE: <Self as B>::Item = 2u8; }
+pub fn probe() -> i64 { <Ready as A>::VALUE + <Ready as B>::VALUE as i64 }

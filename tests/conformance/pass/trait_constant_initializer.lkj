@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+trait Count { const VALUE: i64; }
+struct First; struct Second; struct Last;
+impl Count for First { const VALUE: i64 = 42; }
+impl Count for Second { const VALUE: i64 = <First as Count>::VALUE; }
+impl Last { const VALUE: i64 = <Second as Count>::VALUE; }
+const VALUE: i64 = <Second as Count>::VALUE;
+const fn read() -> i64 { <First as Count>::VALUE }
+pub fn probe() -> i64 { assert!(Last::VALUE == VALUE && read() == VALUE); VALUE }

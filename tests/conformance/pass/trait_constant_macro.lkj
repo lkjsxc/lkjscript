@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+trait Integer { const MAX_STR_LEN: usize; }
+macro_rules! integer { ($t:ty, $n:expr) => { impl Integer for $t { const MAX_STR_LEN: usize = $n; } }; }
+integer!(u8, 3usize);
+integer!(u16, 5usize);
+pub fn probe() -> i64 {
+    assert!(<u8 as Integer>::MAX_STR_LEN == 3);
+    assert!(<u16 as Integer>::MAX_STR_LEN == 5);
+    42
+}

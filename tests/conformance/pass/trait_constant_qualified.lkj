@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+mod left { pub trait Flag { const VALUE: u16; } }
+mod right { pub trait Flag { const VALUE: u16; } }
+struct Ready;
+impl Ready { const VALUE: u16 = 1000; }
+impl left::Flag for Ready { const VALUE: u16 = 40; }
+impl right::Flag for Ready { const VALUE: u16 = 2; }
+impl left::Flag for u8 { const VALUE: u16 = 7; }
+pub fn probe() -> i64 {
+    assert!(Ready::VALUE == 1000);
+    assert!(<u8 as left::Flag>::VALUE == 7);
+    (<Ready as left::Flag>::VALUE + <Ready as right::Flag>::VALUE) as i64
+}

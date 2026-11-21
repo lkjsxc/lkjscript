@@ -1,0 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {}
+struct Ready;
+impl Clone for Ready { const EXTRA: i64 = 42; fn clone(&self) -> Self { Ready } }
+pub fn probe() -> i64 { Ready::EXTRA }

@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+#[derive(Clone, Copy)]
+struct Packet(i64);
+trait Data { const ITEM: Self; const PAIR: (i64, bool); }
+impl Data for Packet { const ITEM: Packet = Packet(40); const PAIR: (i64, bool) = (2, true); }
+pub fn probe() -> i64 {
+    let pair = <Packet as Data>::PAIR;
+    assert!(pair.1);
+    <Packet as Data>::ITEM.0 + pair.0
+}
