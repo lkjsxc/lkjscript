@@ -76,6 +76,8 @@ the already-executed full interpreted corpus is an explicit slow option.
 
 ### Reproduction and boundaries
 
+The granted lkjscript restorer is built by the compiler under test. The unchanged Node provenance verifier and coreutils hashes check its restored bytes before either engine or rustc reads them; the normal gate also checks an exact refusal with no output publication.
+
 `bash tools/real-programs-test.sh target/lkjscript` is offline and needs no Rust.
 `bash tools/real-programs-rust.sh` reconstructs and hash-checks the original
 upstream files, then reruns both Rust profiles. The optional witness gate calls it.

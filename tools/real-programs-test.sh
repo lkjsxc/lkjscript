@@ -53,10 +53,10 @@ NODE
 # upstream sections before the compiler reads the temporary .lkj projection.
 restored="$work/restored"
 mkdir "$restored"
-"$compiler" build tools/real-programs/restore-levenshtein.lkj --no-store \
-    --grant arguments --grant source="$PWD/$source" --grant output="$restored" \
+"$compiler" build tools/real-programs/restore-levenshtein.lkj --library-dir library --no-store \
+    --grant arguments --grant source=env:LKJSCRIPT_RESTORE_SOURCE --grant output=env:LKJSCRIPT_RESTORE_OUTPUT \
     --grant errors --grant status -o "$work/restore" > "$work/restore-build.out" 2> "$work/restore-build.err"
-"$work/restore"
+LKJSCRIPT_RESTORE_SOURCE="$PWD/$source" LKJSCRIPT_RESTORE_OUTPUT="$restored" "$work/restore"
 original="$work/original"
 mkdir "$original"
 mv "$restored/upstream.lkj" "$original/upstream.lkj"
@@ -65,9 +65,30 @@ cp "$source/main.lkj" "$source/corpus.lkj" "$original/"
 # restored upstream tree and refuse a changed digest before writing a request.
 import_source="$work/import-upstream"
 mkdir -p "$import_source/src" "$import_source/tests"
-"$work/restore" --rust
+LKJSCRIPT_RESTORE_SOURCE="$PWD/$source" LKJSCRIPT_RESTORE_OUTPUT="$restored" "$work/restore" --rust
 mv "$restored/upstream.rs" "$import_source/src/lib.rs"
 mv "$restored/upstream_tests.rs" "$import_source/tests/lib.rs"
+# The compiler under test builds the restorer; foreign tools check every byte.
+node --input-type=module - "$work/provenance.json" > "$work/restored.sha256" <<'NODE_HASH'
+import {readFileSync} from 'node:fs';
+const {files} = JSON.parse(readFileSync(process.argv[2], 'utf8'));
+for (const name of ['src/lib.rs', 'tests/lib.rs']) console.log(files[name].sha256 + '  ' + name);
+NODE_HASH
+(cd "$import_source" && sha256sum --check --strict --quiet "$work/restored.sha256")
+{ cat "$import_source/src/lib.rs"
+  printf '\n// UPSTREAM INTEGRATION TESTS: exact bodies, package header removed.\n'
+  tail -n +3 "$import_source/tests/lib.rs"; } | cmp - "$original/upstream.lkj"
+# A refusal must precede publication of either restored file.
+mkdir "$work/changed" "$work/refused"
+cp "$source/upstream.json" "$work/changed/"
+{ printf ' '; cat "$source/upstream.lkj"; } > "$work/changed/upstream.lkj"
+restore_status=0
+LKJSCRIPT_RESTORE_SOURCE="$work/changed" LKJSCRIPT_RESTORE_OUTPUT="$work/refused" \
+    "$work/restore" --rust > "$work/refused.out" 2> "$work/refused.reason" || restore_status=$?
+test "$restore_status" -eq 1
+test ! -s "$work/refused.out"
+test -z "$(ls -A "$work/refused")"
+printf 'restore-levenshtein: original library bytes differ\n' | cmp - "$work/refused.reason"
 cp "$source/LICENSE" "$import_source/license"
 "$compiler" build tools/real-programs/levenshtein-import.lkj --source-dir . --library-dir library --no-store -o "$work/importer" > "$work/import-build.out" 2> "$work/import-build.err"
 "$work/importer" "$import_source" "$source/upstream.json" "$work/import-native.json" > "$work/import-native.out" 2> "$work/import-native.err"
@@ -128,4 +149,4 @@ if [[ "$full_interpreter" == yes ]]; then
     test ! -s "$work/interpreter.err"
     printf 'ok real programs: full interpreted 7,239-row corpus\n'
 fi
-printf 'ok real programs: original library syntax, exact upstream hashes, 18 provenance and 4 manifest-shape controls, native/interpreter importer, 8 tests on each engine, pure algorithm authority and 7,239 native corpus rows\n'
+printf 'ok real programs: original library syntax, exact upstream hashes, native restorer with foreign hash check and refusal, 18 provenance and 4 manifest-shape controls, native/interpreter importer, 8 tests on each engine, pure algorithm authority and 7,239 native corpus rows\n'
