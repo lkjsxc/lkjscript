@@ -1,5 +1,5 @@
 name: release
-# Publishes the compiler built from a main commit that passed the gate, at most
+# Publishes the compiler built from a main commit that passed both checks, at most
 # once in twenty hours. Nothing else creates releases or tags.
 on:
   workflow_run:
@@ -9,9 +9,10 @@ on:
   workflow_dispatch:
     inputs:
       commit:
-        description: A main commit that passed the gate; empty means the branch head
+        description: A main commit that passed both checks (empty means main HEAD)
         required: false
 permissions:
+  actions: read
   contents: write
 concurrency:
   group: release
@@ -23,9 +24,60 @@ jobs:
     runs-on: ubuntu-latest
     env:
       GH_TOKEN: ${{ github.token }}
-      RELEASE_COMMIT: ${{ inputs.commit || github.event.workflow_run.head_sha || github.sha }}
       RELEASE_FORCED: ${{ github.event_name == 'workflow_dispatch' }}
     steps:
+      - name: Verify both checks on the release commit
+        id: checks
+        shell: bash
+        env:
+          REQUESTED_COMMIT: ${{ inputs.commit || github.event.workflow_run.head_sha }}
+          CHECK_RUN: ${{ github.event.workflow_run.id }}
+          CHECK_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: |
+          repo="repos/$GITHUB_REPOSITORY"
+          commit=$REQUESTED_COMMIT
+          if [ "$RELEASE_FORCED" = true ] && [ -z "$commit" ]; then
+            commit=$(gh api "$repo/git/ref/heads/main" | jq -er '.object.sha')
+          fi
+          if ! [[ $commit =~ ^[0-9a-f]{40}$ ]]; then
+            echo 'Expected a full main commit SHA' >&2
+            exit 1
+          fi
+          if [ "$RELEASE_FORCED" = true ]; then
+            completed=$(gh api "$repo/actions/workflows/check.yml/runs" --method GET \
+              -f branch=main -f event=push -f status=success -f head_sha="$commit" -f per_page=1 |
+              jq -er '.workflow_runs[0] | [.id, .run_attempt] | @tsv')
+            read -r CHECK_RUN CHECK_ATTEMPT <<< "$completed"
+          fi
+          if ! [[ $CHECK_RUN =~ ^[1-9][0-9]*$ && $CHECK_ATTEMPT =~ ^[1-9][0-9]*$ ]]; then
+            echo 'Expected a completed check workflow attempt' >&2
+            exit 1
+          fi
+          attempt="$repo/actions/runs/$CHECK_RUN/attempts/$CHECK_ATTEMPT"
+          if ! gh api "$attempt" |
+            jq -e --arg sha "$commit" --argjson run "$CHECK_RUN" --argjson attempt "$CHECK_ATTEMPT" '
+              (.path | split("@")[0]) == ".github/workflows/check.yml" and .name == "check" and
+              .id == $run and .run_attempt == $attempt and .head_sha == $sha and
+              .head_branch == "main" and .event == "push" and
+              .status == "completed" and .conclusion == "success"
+          ' > /dev/null; then
+            echo 'Expected a successful check workflow on a push of the release commit to main' >&2
+            exit 1
+          fi
+          if ! gh api "$attempt/jobs?per_page=100" |
+            jq -e --arg sha "$commit" --argjson run "$CHECK_RUN" --argjson attempt "$CHECK_ATTEMPT" '
+              def passed($name):
+                [.jobs[] | select(.name == $name)] |
+                length == 1 and (.[0] |
+                  .head_sha == $sha and .run_id == $run and .run_attempt == $attempt and
+                  .status == "completed" and .conclusion == "success");
+              .total_count == (.jobs | length) and passed("gate") and passed("real-program-host-tools")
+            ' > /dev/null; then
+            echo 'The native gate and real-program host-tool job must both pass in the same check attempt' >&2
+            exit 1
+          fi
+          printf 'Check run %s attempt %s passed for %s\n' "$CHECK_RUN" "$CHECK_ATTEMPT" "$commit"
+          printf 'commit=%s\n' "$commit" >> "$GITHUB_OUTPUT"
       - name: Decide whether a release is due
         id: due
         run: |
@@ -40,7 +92,7 @@ jobs:
       - uses: actions/checkout@v4
         if: steps.due.outputs.due == 'yes'
         with:
-          ref: ${{ env.RELEASE_COMMIT }}
+          ref: ${{ steps.checks.outputs.commit }}
       - name: Build from the seed and prove the fixed point
         if: steps.due.outputs.due == 'yes'
         run: sh tools/bootstrap.sh
@@ -49,6 +101,8 @@ jobs:
         run: target/lkjscript run examples/hello.lkj
       - name: Publish
         if: steps.due.outputs.due == 'yes'
+        env:
+          RELEASE_COMMIT: ${{ steps.checks.outputs.commit }}
         run: |
           tag="$(date -u +%Y.%m.%d)-$(printf %s "$RELEASE_COMMIT" | cut -c1-9)"
           mkdir release
@@ -56,7 +110,7 @@ jobs:
           gzip -9 -c target/lkjscript > release/lkjscript-x86_64-linux.gz
           (cd release && sha256sum lkjscript-x86_64-linux lkjscript-x86_64-linux.gz > SHA256SUMS)
           {
-            printf 'The lkjscript toolchain as one static Linux x86-64 executable, built from commit %s after the gate passed.\n\n' "$RELEASE_COMMIT"
+            printf 'The lkjscript toolchain as one static Linux x86-64 executable, built from commit %s after both checks passed.\n\n' "$RELEASE_COMMIT"
             printf '```sh\ncurl -fL -o lkjscript https://github.com/%s/releases/latest/download/lkjscript-x86_64-linux\nchmod +x lkjscript\n./lkjscript run hello.lkj\n```\n\n' "$GITHUB_REPOSITORY"
             printf 'It needs no adjacent compiler or library files. Releases named v0.1.x are the earlier, incompatible generation.\n'
           } > notes.md

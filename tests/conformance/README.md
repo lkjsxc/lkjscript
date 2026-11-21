@@ -47,11 +47,13 @@ Only borrowed_closure_escape remains pending. The former claim of three scoped-t
 cases was stale; concurrency now uses isolated processes, without shared-address-space
 thread rules. Unrelated rejection, wrong results and malformed worker output fail.
 
-The mandatory gate bootstraps from the seed without Rust or Node and uses Node
-for host-side fixture checks and real-program tooling. `bash witness/check.sh`
-optionally builds the Rust witness, compares complete compiler bytes, and checks
-every marked case with overflow checks enabled. Its native test coordinator
-keeps program stderr and Rust trap/status records separate.
+The mandatory native gate bootstraps from the seed and runs without Rust or Node.
+The mandatory real-program host-tool job uses Node to test census, projection,
+probe and reranking.
+
+`bash witness/check.sh` optionally builds the Rust witness, compares complete
+compiler bytes, and checks every marked case with overflow checks enabled. Its
+native test coordinator keeps program stderr and Rust trap/status records separate.
 
 Use `// witness: {"root":true}` for a self-contained source case that needs
 Rust crate-root resolution, such as a macro using `$crate`. Rust compiles the

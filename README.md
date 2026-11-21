@@ -155,9 +155,10 @@ includes a generated-traffic harness with memory measurement and CPU profiling.
 - [Status](docs/status.md): current milestone, measurements and known gaps.
 - [Direction](docs/direction.md): the ordered development course.
 
-The development gate bootstraps from the stored seed without Rust or Node.
-The full gate uses Node for fixture byte checks and real-program tooling.
-Perl serves package checks and other fixtures. Rust remains an optional witness.
+The native gate bootstraps from the stored seed and runs without Rust or Node.
+Perl serves package checks and other fixtures. The separate required
+real-program host-tool job uses Node to test census, projection, probe and
+reranking. A release requires both jobs to pass on the same check attempt.
 The gate exercises HTTP with an explicit lkjscript client.
 
 ```sh
@@ -175,4 +176,5 @@ no checker or backend implementation.
 
 Rust is an optional witness under `witness/`; the repository root is not a Cargo
 package. `bash witness/check.sh` compares compiler bytes and marked source cases
-using Rust, with a native coordinator. Its CI job is advisory.
+using Rust, with a native coordinator. Its real-program comparison uses Node,
+and its CI job is advisory.

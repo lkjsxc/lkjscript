@@ -34,11 +34,6 @@ cleanup() {
 trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' HUP TERM
-# The untrusted source inventory/projection tools must preserve Git bytes and context.
-node tools/real-programs/census.mjs --self-test > "$work/census-controls.json"
-node tools/real-programs/project.mjs --self-test > "$work/projection-controls.json"
-node tools/real-programs/probe-test.mjs > "$work/probe-controls.json"
-node tools/real-programs/rerank-test.mjs > "$work/rerank-controls.json"
 "$compiler" build tools/real-programs/levenshtein-provenance.lkj --library-dir library --no-store \
     --grant source=env:LKJSCRIPT_PROVENANCE_SOURCE --grant output --grant errors --grant status \
     -o "$work/provenance" > "$work/provenance-build.out" 2> "$work/provenance-build.err"
