@@ -20,19 +20,8 @@ trap cleanup EXIT
 trap 'exit 130' HUP INT TERM
 mkdir "$fixture/source" "$fixture/store"
 head -c 32 /dev/urandom > "$fixture/key"
-cat > "$fixture/source/main.lkj" <<'SOURCE'
-mod left { pub trait Flag { const VALUE: u16; } }
-mod right { pub trait Flag { const VALUE: u16; } }
-struct Ready;
-struct Other;
-impl left::Flag for Ready { const VALUE: u16 = 40; }
-impl right::Flag for Ready { const VALUE: u16 = 2; }
-impl left::Flag for Other { const VALUE: u16 = 999; }
-fn idle() -> u16 { <Ready as left::Flag>::VALUE }
-fn main() -> i64 {
-    (<Ready as left::Flag>::VALUE + <Ready as right::Flag>::VALUE) as i64
-}
-SOURCE
+specimen=tests/fixtures/trait-constants
+cp "$specimen/before.lkj" "$fixture/source/main.lkj"
 common=(main.lkj --source-dir "$fixture/source" --no-library --store "$fixture/store" --store-key "$fixture/key")
 "$compiler" build "${common[@]}" --index -o "$fixture/program" > "$fixture/index.log"
 snapshot=$(awk '$1=="LKJSCRIPT_SNAPSHOT" { print $2 }' "$fixture/index.log")
@@ -49,35 +38,64 @@ query references value@main > "$fixture/references.query"
 query uses '<Ready as left::Flag>::VALUE' > "$fixture/left.query"
 query uses '<Ready as right::Flag>::VALUE' > "$fixture/right.query"
 query uses '<Other as left::Flag>::VALUE' > "$fixture/other.query"
-node --input-type=module - "$fixture" <<'CHECK'
-import {readFileSync} from 'node:fs';
-import assert from 'node:assert/strict';
-const dir=process.argv[2], read=name=>readFileSync(`${dir}/${name}.query`,'utf8');
-for(const [file,id] of [['required','left::Flag::VALUE'],['provided','<Ready as left::Flag>::VALUE']]) {
-  assert(read(file).includes(JSON.stringify(id)), `${file}: exact identity`);
-  assert(read(file).includes('value="u16"'), `${file}: exact type`);
+compare_facts() {
+    local name=$1
+    # Keep the semantic rows and omit the scratch path and opaque impl discriminator.
+    awk -F '\t' -v name="$name" '
+        BEGIN { OFS = FS }
+        $3 == "fact=declared-type" ||
+        ($3 == "fact=signature" && $4 ~ /^kind=associated-constant /) ||
+        ($3 == "fact=references" && $4 ~ / kind=associated-constant$/) ||
+        $3 == "fact=uses" ||
+        ($3 == "fact=empty-indexed-result" && $4 ~ /^kind=uses /) {
+            sub(/ file="([^"\\]|\\.)*"/, "", $0)
+            print
+        }
+        name == "collision-outline" && $3 == "fact=signature" && $4 ~ /^kind=implementation / {
+            if (!sub(/#[0-9a-f]+"$/, "\"", $1)) exit 1
+            print
+        }
+    ' "$fixture/$name.query" > "$fixture/$name.facts"
+    cmp - "$fixture/$name.facts"
 }
-for(const id of ['left::Flag::VALUE','right::Flag::VALUE','<Ready as left::Flag>::VALUE','<Ready as right::Flag>::VALUE','<Other as left::Flag>::VALUE']) {
-  assert(read('outline').split('\n').some(line=>line.startsWith(JSON.stringify(id)+'\t') && line.includes('kind=associated-constant')), `missing declaration ${id}`);
-}
-const source=Buffer.from(readFileSync(`${dir}/source/main.lkj`));
-const refs=read('references').split('\n').filter(line=>line.includes('kind=associated-constant'));
-assert.equal(refs.length,2,'main has exactly its two selected constant references');
-for(const id of ['<Ready as left::Flag>::VALUE','<Ready as right::Flag>::VALUE']) {
-  const row=refs.find(line=>line.startsWith(JSON.stringify(id)+'\t'));
-  assert(row, `missing selected owner ${id}`);
-  const span=row.match(/start=(\d+) end=(\d+)/); assert(span,'member span');
-  assert.equal(source.subarray(Number(span[1]),Number(span[2])).toString(),'VALUE','only the authored member token is referenced');
-}
-for(const [name,count] of [['left',2],['right',1],['other',0]]) {
-  assert.equal(read(name).split('\n').filter(line=>line.includes('fact=uses')&&line.includes('kind=associated-constant')).length,count,`${name}: exact source uses, including idle function`);
-}
+compare_facts required <<'CHECK'
+"left::Flag::VALUE"	level=source-claim	fact=declared-type	value="u16"
 CHECK
+compare_facts provided <<'CHECK'
+"<Ready as left::Flag>::VALUE"	level=source-claim	fact=declared-type	value="u16"
+CHECK
+compare_facts outline <<'CHECK'
+"<Other as left::Flag>::VALUE"	level=source-claim	fact=signature	kind=associated-constant text="const VALUE: u16 = 999;" bytes=23 complete=true
+"<Ready as left::Flag>::VALUE"	level=source-claim	fact=signature	kind=associated-constant text="const VALUE: u16 = 40;" bytes=22 complete=true
+"<Ready as right::Flag>::VALUE"	level=source-claim	fact=signature	kind=associated-constant text="const VALUE: u16 = 2;" bytes=21 complete=true
+"left::Flag::VALUE"	level=source-claim	fact=signature	kind=associated-constant text="const VALUE: u16;" bytes=17 complete=true
+"right::Flag::VALUE"	level=source-claim	fact=signature	kind=associated-constant text="const VALUE: u16;" bytes=17 complete=true
+CHECK
+compare_facts references <<'CHECK'
+"<Ready as left::Flag>::VALUE"	level=source-claim	fact=references	from="value@main" start=386 end=391 kind=associated-constant
+"<Ready as right::Flag>::VALUE"	level=source-claim	fact=references	from="value@main" start=418 end=423 kind=associated-constant
+CHECK
+compare_facts left <<'CHECK'
+"value@idle"	level=source-claim	fact=uses	target="<Ready as left::Flag>::VALUE" start=331 end=336 kind=associated-constant
+"value@main"	level=source-claim	fact=uses	target="<Ready as left::Flag>::VALUE" start=386 end=391 kind=associated-constant
+CHECK
+compare_facts right <<'CHECK'
+"value@main"	level=source-claim	fact=uses	target="<Ready as right::Flag>::VALUE" start=418 end=423 kind=associated-constant
+CHECK
+compare_facts other <<'CHECK'
+"<Other as left::Flag>::VALUE"	level=protocol	fact=empty-indexed-result	kind=uses claim=recorded-facts-only
+CHECK
+check_member() {
+    local source=$1 start=$2
+    dd if="$source" bs=1 skip="$start" count=5 status=none | cmp - <(printf VALUE)
+}
+for start in 331 386 418; do
+    check_member "$fixture/source/main.lkj" "$start"
+done
 for identity in 'left::Flag::VALUE' '<Ready as left::Flag>::VALUE'; do
     cp "$fixture/source/main.lkj" "$fixture/unchanged"
-    node --input-type=module - "$identity" > "$fixture/request.json" <<'REQUEST'
-console.log(JSON.stringify({version:1,operations:[{op:'rename',id:process.argv[2],name:'CHANGED'}]}));
-REQUEST
+    printf '{"version":1,"operations":[{"op":"rename","id":"%s","name":"CHANGED"}]}\n' \
+        "$identity" > "$fixture/request.json"
     if "$compiler" edit "${common[@]}" --request "$fixture/request.json" > "$fixture/rename.log" 2>&1; then
         echo 'trait constant rename published an incomplete member cohort' >&2; exit 1
     fi
@@ -94,12 +112,8 @@ headers=(main.lkj --source-dir "$fixture/source" --no-library --store "$fixture/
 "$compiler" build "${headers[@]}" > "$fixture/cold.log" 2>&1
 "$compiler" build "${headers[@]}" > "$fixture/warm.log" 2>&1
 grep -Eq '"build_reused":1' "$fixture/warm.log"
-node --input-type=module - "$fixture/source/main.lkj" <<'CHANGE'
-import {readFileSync,writeFileSync} from 'node:fs';
-const file=process.argv[2], source=readFileSync(file,'utf8');
-if(source.split('const VALUE: u16 = 40;').length!==2) throw new Error('expected unique initializer');
-writeFileSync(file,source.replace('const VALUE: u16 = 40;','const VALUE: u16 = 41;'));
-CHANGE
+cmp "$specimen/before.lkj" "$fixture/source/main.lkj"
+cp "$specimen/after.lkj" "$fixture/source/main.lkj"
 "$compiler" build "${headers[@]}" > "$fixture/changed.log" 2>&1
 grep -Eq '"build_reused":0' "$fixture/changed.log"
 grep -Eq '"front_reused":0' "$fixture/changed.log"
@@ -121,27 +135,20 @@ collision_snapshot=$(awk '$1=="LKJSCRIPT_SNAPSHOT" { print $2 }' "$fixture/colli
     --snapshot "$collision_snapshot" --kind uses --id '<crate::u8 as Flag>::VALUE' --limit 128 --bytes 100000 > "$fixture/collision-nominal.query"
 "$compiler" query main.lkj --source-dir "$fixture/collisions" --no-library --store "$fixture/store" --store-key "$fixture/key" \
     --snapshot "$collision_snapshot" --kind uses --id '<u8 as Flag>::VALUE' --limit 128 --bytes 100000 > "$fixture/collision-primitive.query"
-node --input-type=module - "$fixture" <<'COLLISIONS'
-import {readFileSync} from 'node:fs';
-import assert from 'node:assert/strict';
-const dir=process.argv[2];
-const outline=readFileSync(dir+'/collision-outline.query','utf8').split('\n');
-const source=readFileSync(dir+'/collisions/main.lkj');
-for(const [kind,receiver,spelling] of [
-  ['nominal','crate::u8','<u8 as Flag>::VALUE'],
-  ['primitive','u8','<u8 as super::Flag>::VALUE'],
-]) {
-  const id='<'+receiver+' as Flag>::VALUE';
-  assert.equal(outline.filter(line=>line.startsWith(JSON.stringify(id)+'\t')&&line.includes('kind=associated-constant')).length,1,'one distinct member '+id);
-  assert.equal(outline.filter(line=>line.startsWith('"impl:<'+receiver+' as Flag>#')).length,1,'one distinct implementation '+receiver);
-  const rows=readFileSync(dir+'/collision-'+kind+'.query','utf8').split('\n').filter(line=>line.includes('fact=uses')&&line.includes('kind=associated-constant'));
-  assert.equal(rows.length,1,'one exact use for '+receiver);
-  const span=rows[0].match(/start=(\d+) end=(\d+)/);
-  assert(span,'selected member span');
-  const start=source.indexOf(spelling)+Buffer.byteLength(spelling)-5;
-  assert.equal(Number(span[1]),start,'receiver-specific use offset');
-  assert.equal(Number(span[2]),start+5,'member end');
-  assert.equal(source.subarray(Number(span[1]),Number(span[2])).toString(),'VALUE');
-}
+compare_facts collision-outline <<'COLLISIONS'
+"impl:<crate::u8 as Flag>"	level=source-claim	fact=signature	kind=implementation text="impl Flag for u8" bytes=16 complete=true
+"<crate::u8 as Flag>::VALUE"	level=source-claim	fact=signature	kind=associated-constant text="const VALUE: i64 = 40;" bytes=22 complete=true
+"Flag::VALUE"	level=source-claim	fact=signature	kind=associated-constant text="const VALUE: i64;" bytes=17 complete=true
+"impl:<u8 as Flag>"	level=source-claim	fact=signature	kind=implementation text="impl super::Flag for u8" bytes=23 complete=true
+"<u8 as Flag>::VALUE"	level=source-claim	fact=signature	kind=associated-constant text="const VALUE: i64 = 2;" bytes=21 complete=true
 COLLISIONS
+compare_facts collision-nominal <<'COLLISIONS'
+"value@probe"	level=source-claim	fact=uses	target="<crate::u8 as Flag>::VALUE" start=286 end=291 kind=associated-constant
+COLLISIONS
+compare_facts collision-primitive <<'COLLISIONS'
+"value@child::probe"	level=source-claim	fact=uses	target="<u8 as Flag>::VALUE" start=238 end=243 kind=associated-constant
+COLLISIONS
+# Include the qualifier in the independent span check for each receiver.
+dd if="$fixture/collisions/main.lkj" bs=1 skip=272 count=19 status=none | cmp - <(printf '%s' '<u8 as Flag>::VALUE')
+dd if="$fixture/collisions/main.lkj" bs=1 skip=217 count=26 status=none | cmp - <(printf '%s' '<u8 as super::Flag>::VALUE')
 printf 'ok trait constants: distinct nominal/primitive catalog identities and exact receiver uses\n'

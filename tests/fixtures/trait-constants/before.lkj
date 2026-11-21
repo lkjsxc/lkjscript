@@ -1,0 +1,11 @@
+mod left { pub trait Flag { const VALUE: u16; } }
+mod right { pub trait Flag { const VALUE: u16; } }
+struct Ready;
+struct Other;
+impl left::Flag for Ready { const VALUE: u16 = 40; }
+impl right::Flag for Ready { const VALUE: u16 = 2; }
+impl left::Flag for Other { const VALUE: u16 = 999; }
+fn idle() -> u16 { <Ready as left::Flag>::VALUE }
+fn main() -> i64 {
+    (<Ready as left::Flag>::VALUE + <Ready as right::Flag>::VALUE) as i64
+}
