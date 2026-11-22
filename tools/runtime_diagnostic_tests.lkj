@@ -11,7 +11,11 @@ fn execute(world: &mut World, executable: &File, config: &Config, name: &str,
         arguments.push("--".as_bytes().to_vec());
         for value in extra { arguments.push(value.clone()); }
     }
-    invoke(world, executable, &arguments, b"")
+    let outcome = invoke(world, executable, &arguments, b"")?;
+    if outcome.status == 1 && contains(&outcome.errors, b": R") {
+        super::residual_trap(world, executable, config, name, &outcome.errors)?;
+    }
+    Ok(outcome)
 }
 
 fn locations(world: &mut World, executable: &File, directory: &mut Directory,

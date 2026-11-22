@@ -1,5 +1,6 @@
 // Run with a compiler executable and an existing empty work directory.
 // This suite uses only lkjscript capabilities and leaves that directory empty.
+mod residual_witness;
 struct Outcome {
     status: i64,
     output: Vec<u8>,
@@ -135,6 +136,17 @@ fn invoke(
         errors,
         result,
     })
+}
+
+
+fn residual_trap(world: &mut World, compiler: &File, name: &str, diagnostic: &[u8]) -> Result<(), String> {
+    let arguments = vec!["residual".as_bytes().to_vec(), format!("tests/fixtures/world/{name}.lkj").into_bytes()];
+    residual_witness::contracts();
+    let listed = invoke(world, compiler, &arguments, b"")?;
+    if listed.status != 0 || !residual_witness::matches(&listed.output, diagnostic) {
+        return Err(format!("E_RESIDUAL World trap unmatched for {name}"));
+    }
+    Ok(())
 }
 
 fn path(config: &Config, name: &str) -> String {
@@ -359,6 +371,7 @@ fn exercise(
                 let close = if mode == 0 { format!("close{fd}") } else { format!("pipe{fd}") };
                 let outcome = execute(world, compiler, config, "output_failure", route, &arguments, b"", &close)?;
                 let diagnostic = if fd == 1 { &outcome.errors } else { &outcome.output };
+                residual_trap(world, compiler, "output_failure", diagnostic)?;
                 let capability = if fd == 1 { "Stdout" } else { "Stderr" };
                 let errno = if mode == 0 { "EBADF (9)" } else { "EPIPE (32)" };
                 let line = if fd == 1 { 10 } else { 14 };
@@ -377,6 +390,7 @@ fn exercise(
         report.outcome(&format!("arguments/{route}"), &outcome, 0, b"arguments ok\n", b"");
         let outcome = execute(world, compiler, config, "invalid_argument", route, &empty, b"", "")?;
         report.require(outcome.status != 0 && contains(&outcome.errors, b"R0003"), format!("invalid arguments/{route}"));
+        residual_trap(world, compiler, "invalid_argument", &outcome.errors)?;
         let outcome = execute(world, compiler, config, "status_marker", route, &empty, b"", "")?;
         report.outcome(&format!("status marker/{route}"), &outcome, 101, b"", b"LKJSCRIPT_RUST_TRAP R0005\n");
         let outcome = execute(world, compiler, config, "status", route, &empty, b"", "")?;

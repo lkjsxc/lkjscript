@@ -965,3 +965,61 @@ thread races. Durable publication belongs to the sole parent storage owner:
 write a private file, sync it, rename, then sync the directory. The retained
 pool publication specimen checks complete old/new results under parent kills;
 that is process-kill atomicity, not a sudden-power-loss experiment.
+
+
+## Residual instruction report
+
+`lkjscript residual SOURCE_OR_IR --entry FUNCTION` lists instruction traps in
+any checked function's call and owned-cleanup closure, using the existing
+`authority::relations` graph. Arguments are already supplied. Executable entries
+start after grant acquisition, before the first user instruction. Grant failures,
+including an explicitly granted native profiling prefix, belong to a separate
+pre-entry execution phase. They are not synthetic IR sites.
+
+The report is untrusted metadata. It changes no IR or native code and confers no
+checked judgment of trap freedom or functional correctness. Both checked branches
+and loop edges are followed without source exhaustiveness or constant assumptions.
+The table below comes from the language-trap paths in `interpreter.lkj`,
+`interpreter/scalar.lkj` and `interpreter/io.lkj`. Invariant errors from malformed
+unchecked IR are outside this checked-program contract. Allocation and stack
+exhaustion are named exclusions; allocation includes allocation/borrow identity
+representation exhaustion in the interpreter.
+
+| Instruction or kind | Report class | Trap condition |
+| --- | --- | --- |
+| `trap` | `explicit-trap` | Every explicit message, including producer fallback messages; text grants no authority. |
+| Integer `unary -` | `checked-arithmetic` | Negation overflow. |
+| Integer `binary +`, `-`, `*` | `checked-arithmetic` | Checked integer result is unrepresentable. |
+| Integer `binary /`, `%` | `division-remainder` | Zero divisor, or signed minimum divided/reduced by -1. |
+| Integer `binary <<`, `>>` | `shift` | Amount outside the type width, including a negative signed amount. |
+| Indexed `read`, `borrow`, `slice-borrow`, `view-range`, `assign`, `drop`, `drop-if`, `tag-test-place` | `index-bounds` | Any index projection fails during place resolution. |
+| `view-range` | `range-bounds` | Reversed/out-of-bounds range or unrepresentable inclusive endpoint. |
+| `view-range` on text | `utf8-boundary` | An endpoint is not a UTF-8 character boundary. |
+| Intrinsic `assert` | `assert` | False condition. |
+| Intrinsics `world_arg_len`, `world_arg_copy` | `argument-bounds` | Invocation argument index is out of bounds. |
+| Intrinsics `stdout_write`, `stderr_write` | `host-write` | A strict output write fails. Other fallible host operations return error values. |
+| `call`; owned `drop` and `drop-if` | Follow callee/destructor instructions | The authority graph supplies edges; do not count a call again as a trap site. Structural host-handle cleanup itself returns no language trap. |
+| `text`, `int`, `float`, `unit`, `array`, `struct`, `variant`, `discriminant`; non-indexed place operations; remaining unary/binary operations; `if`, `else`, `end`, `loop`, `break`, `continue`, depth-selecting transfers, `return`; remaining intrinsics | None outside resource exclusions and followed cleanup/calls | Wrapping, bitwise and floating arithmetic, comparisons and casts add no language trap. Invalid UTF-8/character construction and empty-vector pop return values. |
+
+Rows count instruction/class pairs: one instruction may contribute several
+classes, but multiple index projections contribute one index class. `kind` rows
+give raw and residual counts. `function` rows give the current index, quoted name
+and whether its closure is nonempty before/after the discount. `site` rows give
+function/instruction indices, class, disposition, file index, line, column,
+quoted path and, for explicit traps, the message. Coordinates describe this
+input only and are not persistent site identities.
+
+The tag discount marks an explicit trap `discharged` only when false branches
+of direct tag tests on one unchanged enum place exclude every variant. An
+immediately preceding tag test with an immutable Boolean result supplies the
+fact. Writes, moves, borrows, calls, intrinsics, joins and loop boundaries forget
+facts, even when unrelated. False branches use the state from before their
+condition, never the true arm's mutations. The trap remains in IR and native code.
+
+The ordinary test batch matches observed trap diagnostics to residual instructions
+in each engine's exact checked selection, including rechecked inlining. Its
+`--stats` reports instruction matches, pre-entry cases and excluded resources.
+Matching uses file/line plus class and complete explicit-trap message; several
+instructions may share a line. Fresh execution is needed: reused observations do
+not rerun this witness. These finite checks falsify errors; they prove no universal
+property.

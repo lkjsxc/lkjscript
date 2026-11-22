@@ -43,7 +43,7 @@ fn mismatched_grants_do_not_acquire_authority() {
     ];
     for grants in cases {
         let mut host = FailingHost(Vec::new());
-        let error = interpreter::run_granted(checked.program(), 0, &grants, &mut host)
+        let error = crate::semantic_tests::residual::observed_run_granted(checked.program(), 0, &grants, &mut host)
             .err()
             .expect("interpreter accepted mismatched entry grants");
         assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
@@ -60,7 +60,7 @@ fn mismatched_grants_do_not_acquire_authority() {
 fn acquisition_failure_closes_the_preceding_directory() {
     let checked = entry();
     let mut host = FailingHost(Vec::new());
-    let error = interpreter::run_granted(
+    let error = crate::semantic_tests::residual::observed_run_granted(
         checked.program(),
         0,
         &vec![directory(), listener()],
@@ -77,7 +77,7 @@ fn listener_cannot_be_forged_from_raw_scalar_arguments() {
     let runtime = prepared();
     for argument in vec![0u64, 41u64] {
         let mut host = FailingHost(Vec::new());
-        let error = interpreter::run(checked.program(), 1, &[argument], &mut host)
+        let error = crate::semantic_tests::residual::observed_run(checked.program(), 1, &[argument], &mut host)
             .err()
             .expect("interpreter accepted raw Listener bits");
         assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
@@ -98,7 +98,7 @@ fn non_scalar_result_rejects_before_acquisition() {
     let runtime = prepared();
     let grants = vec![directory()];
     let mut host = FailingHost(Vec::new());
-    let error = interpreter::run_granted(checked.program(), 2, &grants, &mut host)
+    let error = crate::semantic_tests::residual::observed_run_granted(checked.program(), 2, &grants, &mut host)
         .err()
         .expect("interpreter accepted a capability entry result");
     assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
@@ -121,11 +121,11 @@ fn connector_grants_are_exact_and_unforgeable() {
         "target=127.000.0.1:443".to_string(),
     ]).unwrap();
     assert!(matches!(&grants[0], ir::EntryGrant::Connector(address) if *address == endpoint));
-    interpreter::run_granted(checked.program(), 0, &grants, &mut host).unwrap();
+    crate::semantic_tests::residual::observed_run_granted(checked.program(), 0, &grants, &mut host).unwrap();
     assert!(host.0.is_empty(), "granting an endpoint performs no socket acquisition");
     native::encode_granted(&checked, &runtime, 0, &grants, None, None).unwrap();
     for value in vec![0u64, 1u64, 65535u64] {
-        let error = interpreter::run(checked.program(), 0, &[value], &mut host)
+        let error = crate::semantic_tests::residual::observed_run(checked.program(), 0, &[value], &mut host)
             .err().expect("raw bits forged Connector");
         assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
         let selected = native::Entry { function: 0, arguments: vec![value as i64], result_fd: None };
@@ -138,7 +138,7 @@ fn connector_grants_are_exact_and_unforgeable() {
         assert!(crate::entry_grants::prepare(checked.program(), 0, &[text]).is_err());
     }
     let mismatched = vec![ir::EntryGrant::Listener(endpoint)];
-    assert!(interpreter::run_granted(checked.program(), 0, &mismatched, &mut host).is_err());
+    assert!(crate::semantic_tests::residual::observed_run_granted(checked.program(), 0, &mismatched, &mut host).is_err());
     assert!(native::encode_granted(&checked, &runtime, 0, &mismatched, None, None).is_err());
     assert!(host.0.is_empty());
 }
@@ -150,7 +150,7 @@ fn temporary_files_grants_are_narrow_and_unforgeable() {
     let mut host = FailingHost(Vec::new());
     let grants = crate::entry_grants::prepare(checked.program(), 0usize, &["storage".to_string()]).unwrap();
     assert!(matches!(grants[0usize], ir::EntryGrant::TemporaryFiles));
-    interpreter::run_granted(checked.program(), 0usize, &grants, &mut host).unwrap();
+    crate::semantic_tests::residual::observed_run_granted(checked.program(), 0usize, &grants, &mut host).unwrap();
     native::encode_granted(&checked, &runtime, 0usize, &grants, None, None).unwrap();
     assert!(host.0.is_empty(), "grant provisioning does not create storage");
     for supplied in vec![Vec::<String>::new(), vec!["storage=".to_string()],
@@ -160,13 +160,13 @@ fn temporary_files_grants_are_narrow_and_unforgeable() {
         assert!(crate::entry_grants::prepare(checked.program(), 0usize, &supplied).is_err());
     }
     for value in vec![0u64, 1u64, 65535u64] {
-        assert!(interpreter::run(checked.program(), 0usize, &[value], &mut host).is_err());
+        assert!(crate::semantic_tests::residual::observed_run(checked.program(), 0usize, &[value], &mut host).is_err());
         let selected = native::Entry { function: 0usize, arguments: vec![value as i64], result_fd: None };
         assert_eq!(native::encode(&checked, &runtime, selected).err().unwrap().code, "E_ENTRY");
     }
     for wrong in vec![ir::EntryGrant::World, ir::EntryGrant::Clock, ir::EntryGrant::Entropy,
         ir::EntryGrant::TcpPort(80u16), directory(), listener()] {
-        assert!(interpreter::run_granted(checked.program(), 0usize, &[wrong.clone()], &mut host).is_err());
+        assert!(crate::semantic_tests::residual::observed_run_granted(checked.program(), 0usize, &[wrong.clone()], &mut host).is_err());
         assert!(native::encode_granted(&checked, &runtime, 0usize, &[wrong], None, None).is_err());
     }
     assert!(host.0.is_empty(), "wrong kinds refuse before host acquisition");
@@ -181,7 +181,7 @@ fn tcp_port_grants_are_exact_and_unforgeable() {
     for port in vec![1u16, 53u16, 80u16, 443u16, 65535u16] {
         let grants = crate::entry_grants::prepare(checked.program(), 0, &[format!("target={port}")]).unwrap();
         assert!(matches!(grants[0], ir::EntryGrant::TcpPort(value) if value == port));
-        interpreter::run_granted(checked.program(), 0, &grants, &mut host).unwrap();
+        crate::semantic_tests::residual::observed_run_granted(checked.program(), 0, &grants, &mut host).unwrap();
         native::encode_granted(&checked, &runtime, 0, &grants, None, None).unwrap();
     }
     assert!(host.0.is_empty(), "a port grant does not open any socket");
@@ -191,12 +191,12 @@ fn tcp_port_grants_are_exact_and_unforgeable() {
         assert!(crate::entry_grants::prepare(checked.program(), 0, &[text]).is_err());
     }
     for value in vec![0u64, 1u64, 80u64, 65535u64] {
-        assert!(interpreter::run(checked.program(), 0, &[value], &mut host).is_err());
+        assert!(crate::semantic_tests::residual::observed_run(checked.program(), 0, &[value], &mut host).is_err());
         let selected = native::Entry { function: 0, arguments: vec![value as i64], result_fd: None };
         assert_eq!(native::encode(&checked, &runtime, selected).err().unwrap().code, "E_ENTRY");
     }
     for grant in vec![ir::EntryGrant::TcpPort(0u16), ir::EntryGrant::Clock] {
-        assert!(interpreter::run_granted(checked.program(), 0, &[grant.clone()], &mut host).is_err());
+        assert!(crate::semantic_tests::residual::observed_run_granted(checked.program(), 0, &[grant.clone()], &mut host).is_err());
         assert!(native::encode_granted(&checked, &runtime, 0, &[grant], None, None).is_err());
     }
     assert!(host.0.is_empty());
@@ -209,7 +209,7 @@ fn readiness_grants_are_owned_and_unforgeable() {
     let grants = crate::entry_grants::prepare(checked.program(), 0, &["ready".to_string()]).unwrap();
     assert!(matches!(&grants[0], ir::EntryGrant::Readiness));
     let mut host = FailingHost(Vec::new());
-    interpreter::run_granted(checked.program(), 0, &grants, &mut host).unwrap();
+    crate::semantic_tests::residual::observed_run_granted(checked.program(), 0, &grants, &mut host).unwrap();
     assert_eq!(host.0.as_slice(), b"Rr");
     native::encode_granted(&checked, &runtime, 0, &grants, None, None).unwrap();
     for supplied in vec![Vec::<String>::new(), vec!["ready=1".to_string()], vec!["ready".to_string(), "ready".to_string()]] {
@@ -217,7 +217,7 @@ fn readiness_grants_are_owned_and_unforgeable() {
     }
     for value in vec![0u64, 1u64, 65535u64] {
         let mut host = FailingHost(Vec::new());
-        let error = interpreter::run(checked.program(), 0, &[value], &mut host).err().unwrap();
+        let error = crate::semantic_tests::residual::observed_run(checked.program(), 0, &[value], &mut host).err().unwrap();
         assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
         assert!(host.0.is_empty());
         let selected = native::Entry { function: 0, arguments: vec![value as i64], result_fd: None };
@@ -225,10 +225,10 @@ fn readiness_grants_are_owned_and_unforgeable() {
     }
     let mut host = FailingHost(Vec::new());
     let mismatch = vec![ir::EntryGrant::Clock];
-    assert!(interpreter::run_granted(checked.program(), 0, &mismatch, &mut host).is_err());
+    assert!(crate::semantic_tests::residual::observed_run_granted(checked.program(), 0, &mismatch, &mut host).is_err());
     assert!(native::encode_granted(&checked, &runtime, 0, &mismatch, None, None).is_err());
     assert!(host.0.is_empty());
-    let error = interpreter::run_granted(checked.program(), 1, &vec![ir::EntryGrant::Readiness, listener()], &mut host).err().unwrap();
+    let error = crate::semantic_tests::residual::observed_run_granted(checked.program(), 1, &vec![ir::EntryGrant::Readiness, listener()], &mut host).err().unwrap();
     assert!(error.kind == ErrorKind::Trap(7));
     assert_eq!(host.0.as_slice(), b"RLr");
 }
@@ -241,7 +241,7 @@ fn lifecycle_grants_are_explicit_owned_and_unforgeable() {
         let name = if entry == 0 { "entropy" } else { "stop" };
         let grants = crate::entry_grants::prepare(checked.program(), entry, &[name.to_string()]).unwrap();
         let mut host = FailingHost(Vec::new());
-        interpreter::run_granted(checked.program(), entry, &grants, &mut host).unwrap();
+        crate::semantic_tests::residual::observed_run_granted(checked.program(), entry, &grants, &mut host).unwrap();
         assert_eq!(host.0.as_slice(), if entry == 0 { &b""[..] } else { &b"Qq"[..] });
         native::encode_granted(&checked, &runtime, entry, &grants, None, None).unwrap();
         for supplied in vec![Vec::<String>::new(), vec![format!("{name}=1")], vec![name.to_string(), name.to_string()]] {
@@ -249,7 +249,7 @@ fn lifecycle_grants_are_explicit_owned_and_unforgeable() {
         }
         for value in vec![0u64, 1u64, 65535u64] {
             let mut host = FailingHost(Vec::new());
-            let error = interpreter::run(checked.program(), entry, &[value], &mut host).err().unwrap();
+            let error = crate::semantic_tests::residual::observed_run(checked.program(), entry, &[value], &mut host).err().unwrap();
             assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
             assert!(host.0.is_empty());
             let selected = native::Entry { function: entry, arguments: vec![value as i64], result_fd: None };
@@ -257,12 +257,12 @@ fn lifecycle_grants_are_explicit_owned_and_unforgeable() {
         }
         let mut host = FailingHost(Vec::new());
         let mismatch = vec![ir::EntryGrant::Clock];
-        assert!(interpreter::run_granted(checked.program(), entry, &mismatch, &mut host).is_err());
+        assert!(crate::semantic_tests::residual::observed_run_granted(checked.program(), entry, &mismatch, &mut host).is_err());
         assert!(native::encode_granted(&checked, &runtime, entry, &mismatch, None, None).is_err());
         assert!(host.0.is_empty());
     }
     let mut host = FailingHost(Vec::new());
-    let error = interpreter::run_granted(checked.program(), 2, &vec![ir::EntryGrant::Stop, listener()], &mut host).err().unwrap();
+    let error = crate::semantic_tests::residual::observed_run_granted(checked.program(), 2, &vec![ir::EntryGrant::Stop, listener()], &mut host).err().unwrap();
     assert!(error.kind == ErrorKind::Trap(7));
     assert_eq!(host.0.as_slice(), b"QLq");
 }
@@ -282,7 +282,7 @@ fn command_grants_are_named_affine_and_unforgeable() {
         assert!(!check::is_data(&checked.program().types, ty));
     }
     let mut host = FailingHost(Vec::new());
-    interpreter::run_granted(checked.program(), 0, &grants, &mut host).unwrap();
+    crate::semantic_tests::residual::observed_run_granted(checked.program(), 0, &grants, &mut host).unwrap();
     native::encode_granted(&checked, &runtime, 0, &grants, None, None).unwrap();
     assert!(host.0.is_empty());
     for name in vec![
@@ -301,11 +301,11 @@ fn command_grants_are_named_affine_and_unforgeable() {
         ir::EntryGrant::EnvironmentValue(Some(b"A\0B"[..].to_vec())),
     ] {
         let malformed = vec![ir::EntryGrant::Arguments, bad, ir::EntryGrant::ExitStatus];
-        assert!(interpreter::run_granted(checked.program(), 0, &malformed, &mut host).is_err());
+        assert!(crate::semantic_tests::residual::observed_run_granted(checked.program(), 0, &malformed, &mut host).is_err());
         assert!(native::encode_granted(&checked, &runtime, 0, &malformed, None, None).is_err());
     }
     let raw = vec![1u64, 1u64, 1u64];
-    assert!(interpreter::run(checked.program(), 0, &raw, &mut host).is_err());
+    assert!(crate::semantic_tests::residual::observed_run(checked.program(), 0, &raw, &mut host).is_err());
     let selected = native::Entry { function: 0, arguments: vec![1i64, 1i64, 1i64], result_fd: None };
     assert!(native::encode(&checked, &runtime, selected).is_err());
     assert!(host.0.is_empty());
@@ -324,13 +324,13 @@ fn read_roots_reject_mutation_and_writable_grants() {
     let environment = crate::entry_grants::prepare(checked.program(), 0usize, &["root=env:READ_ROOT".to_string()]).unwrap();
     assert!(matches!(&environment[0usize], ir::EntryGrant::ReadDirectoryEnvironment(name) if name.as_slice() == b"READ_ROOT\0"));
     let mut host = FailingHost(Vec::new());
-    interpreter::run_granted(checked.program(), 0usize, &granted, &mut host).unwrap();
+    crate::semantic_tests::residual::observed_run_granted(checked.program(), 0usize, &granted, &mut host).unwrap();
     assert_eq!(host.0.as_slice(), b"DC");
     native::encode_granted(&checked, &runtime, 0usize, &granted, None, None).unwrap();
     for wrong in vec![ir::EntryGrant::Directory(b"docs\0"[..].to_vec()), ir::EntryGrant::Clock,
         ir::EntryGrant::ReadDirectoryEnvironment(b"BAD=NAME\0"[..].to_vec())] {
         let mut host = FailingHost(Vec::new());
-        assert!(interpreter::run_granted(checked.program(), 0usize, &[wrong.clone()], &mut host).is_err());
+        assert!(crate::semantic_tests::residual::observed_run_granted(checked.program(), 0usize, &[wrong.clone()], &mut host).is_err());
         assert!(native::encode_granted(&checked, &runtime, 0usize, &[wrong], None, None).is_err());
         assert!(host.0.is_empty());
     }
@@ -347,7 +347,7 @@ fn read_roots_reject_mutation_and_writable_grants() {
         };
         assert!(check::check(broken.clone()).is_err());
         let mut host = FailingHost(Vec::new());
-        let error = interpreter::run_granted(&broken, 1usize, &granted, &mut host).err().unwrap();
+        let error = crate::semantic_tests::residual::observed_run_granted(&broken, 1usize, &granted, &mut host).err().unwrap();
         assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
         assert_eq!(host.0.as_slice(), b"D");
     }
@@ -381,12 +381,12 @@ fn foreign_grants_are_exact_affine_and_unforgeable() {
         let mut wrong_grants = grants.clone();
         wrong_grants[0usize] = wrong;
         let mut host = FailingHost(Vec::new());
-        assert!(interpreter::run_granted(program, 0usize, &wrong_grants, &mut host).is_err());
+        assert!(crate::semantic_tests::residual::observed_run_granted(program, 0usize, &wrong_grants, &mut host).is_err());
         assert!(native::encode_granted(&checked, &runtime, 0usize, &wrong_grants, None, None).is_err());
         assert!(host.0.is_empty());
     }
     let mut host = FailingHost(Vec::new());
-    assert!(interpreter::run(program, 0usize, &[1u64, 1u64, 1u64], &mut host).is_err());
+    assert!(crate::semantic_tests::residual::observed_run(program, 0usize, &[1u64, 1u64, 1u64], &mut host).is_err());
     let selected = native::Entry { function: 0usize, arguments: vec![1i64, 1i64, 1i64], result_fd: None };
     assert!(native::encode(&checked, &runtime, selected).is_err());
     assert!(host.0.is_empty());
@@ -404,7 +404,7 @@ fn unix_grants_are_path_scoped_owned_and_unforgeable() {
     ]).unwrap();
     assert!(matches!(&grants[0usize], ir::EntryGrant::UnixStream(value) if *value == path));
     let mut host = FailingHost(Vec::new());
-    interpreter::run_granted(checked.program(), 0usize, &grants, &mut host).unwrap();
+    crate::semantic_tests::residual::observed_run_granted(checked.program(), 0usize, &grants, &mut host).unwrap();
     assert_eq!(host.0.as_slice(), b"UC");
     native::encode_granted(&checked, &runtime, 0usize, &grants, None, None).unwrap();
     for supplied in vec![Vec::<String>::new(), vec!["socket".to_string()],
@@ -414,7 +414,7 @@ fn unix_grants_are_path_scoped_owned_and_unforgeable() {
     }
     for value in vec![0u64, 3u64, 65535u64] {
         let mut host = FailingHost(Vec::new());
-        let error = interpreter::run(checked.program(), 0usize, &[value], &mut host).err().unwrap();
+        let error = crate::semantic_tests::residual::observed_run(checked.program(), 0usize, &[value], &mut host).err().unwrap();
         assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr));
         assert!(host.0.is_empty());
         let selected = native::Entry { function: 0usize, arguments: vec![value as i64], result_fd: None };
@@ -424,13 +424,13 @@ fn unix_grants_are_path_scoped_owned_and_unforgeable() {
         ir::EntryGrant::UnixStream(b"/socket\0extra\0"[..].to_vec())] {
         let mut host = FailingHost(Vec::new());
         let invalid = vec![grant];
-        assert!(interpreter::run_granted(checked.program(), 0usize, &invalid, &mut host).is_err());
+        assert!(crate::semantic_tests::residual::observed_run_granted(checked.program(), 0usize, &invalid, &mut host).is_err());
         assert!(native::encode_granted(&checked, &runtime, 0usize, &invalid, None, None).is_err());
         assert!(host.0.is_empty());
     }
     let mut host = FailingHost(Vec::new());
     let pair = vec![ir::EntryGrant::UnixStream(path), listener()];
-    let error = interpreter::run_granted(checked.program(), 1usize, &pair, &mut host).err().unwrap();
+    let error = crate::semantic_tests::residual::observed_run_granted(checked.program(), 1usize, &pair, &mut host).err().unwrap();
     assert!(error.kind == ErrorKind::Trap(7));
     assert_eq!(host.0.as_slice(), b"ULC");
 }

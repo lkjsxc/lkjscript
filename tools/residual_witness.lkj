@@ -1,0 +1,49 @@
+//! Test-only matching of existing located diagnostics to the public query.
+fn contains(bytes: &[u8], at: usize, needle: &[u8]) -> bool {
+    at <= bytes.len() && needle.len() <= bytes.len() - at && bytes[at..at + needle.len()] == needle[..]
+}
+pub fn matches(report: &[u8], diagnostic: &[u8]) -> bool {
+    let text = match String::from_utf8(report.to_vec()) { Ok(text) => text, Err(_) => return false };
+    for row in text.as_str().lines() {
+        if !row.starts_with("site\t") { continue; }
+        let mut fields: Vec<String> = Vec::new();
+        for part in row.split('\t') { fields.push(part.to_string()); }
+        if fields.len() < 9usize || fields[4] != "residual" { continue; }
+        let value = match std::json::parse(fields[8].as_bytes()) { Ok(value) => value, Err(_) => return false };
+        let path = match value.as_str() { Some(path) => path, None => return false };
+        // These test-created paths contain no diagnostic escape characters.
+        let prefix = format!("{path}:{}: R", fields[6]);
+        let kind = fields[3].as_str();
+        let mut at = 0usize;
+        while at < diagnostic.len() {
+            if contains(diagnostic, at, prefix.as_bytes()) {
+                let start = at + prefix.len();
+                let mut end = start;
+                while end < diagnostic.len() && diagnostic[end] >= b'0' && diagnostic[end] <= b'9' { end += 1usize; }
+                let digits = String::from_utf8(diagnostic[start..end].to_vec()).unwrap();
+                let code = match digits.as_str().parse::<u64>() { Ok(code) => code, Err(_) => return false };
+                let compatible = match code {
+                    1u64 => kind == "checked-arithmetic" || kind == "division-remainder" || kind == "shift",
+                    2u64 => kind == "division-remainder",
+                    3u64 => kind == "index-bounds" || kind == "range-bounds" || kind == "utf8-boundary" || kind == "argument-bounds",
+                    5u64 => kind == "assert",
+                    7u64 => kind == "host-write",
+                    _ => code >= 16u64 && kind == "explicit-trap",
+                };
+                if compatible { return true; }
+            }
+            at += 1usize;
+        }
+    }
+    false
+}
+
+pub fn contracts() {
+    let report = "site\t0\t0\tchecked-arithmetic\tresidual\t0\t5\t1\t\"probe.lkj\"\n";
+    assert!(matches(report.as_bytes(), b"probe.lkj:5: R0001 integer overflow"));
+    assert!(!matches(report.as_bytes(), b"probe.lkj:6: R0001 integer overflow"));
+    assert!(!matches(report.as_bytes(), b"other.lkj:5: R0001 integer overflow"));
+    assert!(!matches(report.as_bytes(), b"probe.lkj:5: R0003 index out of bounds"));
+    let discounted = "site\t0\t0\tchecked-arithmetic\tdischarged\t0\t5\t1\t\"probe.lkj\"\n";
+    assert!(!matches(discounted.as_bytes(), b"probe.lkj:5: R0001 integer overflow"));
+}

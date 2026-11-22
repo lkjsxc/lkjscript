@@ -1,0 +1,175 @@
+//! Checked-IR falsifiers for the untrusted residual query.
+use crate::{check, interpreter, ir, residual};
+use ir::{Function, Instruction, Local, Op, Place, Program, Type, TypeKind, Variant};
+fn local(ty: usize, mutable: bool) -> Local {
+    Local { name: String::new(), ty, mutable }
+}
+fn fixture(twin: usize) -> Program {
+    let mut types = ir::primitives();
+    types.push(Type { name: "UnaryOp".to_string(), kind: TypeKind::Enum {
+        variants: vec![Variant { name: "Neg".to_string(), fields: Vec::new() },
+            Variant { name: "Not".to_string(), fields: Vec::new() }], copy: true,
+    }});
+    types.push(Type { name: "str".to_string(), kind: TypeKind::Str });
+    types.push(Type { name: "&str".to_string(), kind: TypeKind::Ref { inner: 8usize, mutable: false } });
+    let mut ops = Vec::new();
+    // The fifth twin admits an input through an outer join without the first exclusion.
+    if twin == 5usize {
+        ops.push(Op::Int { dst: 5usize, value: 0 });
+        ops.push(Op::If { condition: 5usize });
+    }
+    ops.push(Op::TagTest { dst: 2usize, place: Place::local(0usize), variant: 0usize });
+    ops.push(Op::If { condition: 2usize });
+    ops.push(Op::Text { dst: 3usize, bytes: vec![45u8] });
+    ops.push(Op::Drop { place: Place::local(0usize) });
+    ops.push(Op::Drop { place: Place::local(1usize) });
+    ops.push(Op::Return { src: 3usize });
+    ops.push(Op::Else);
+    if twin == 5usize {
+        ops.push(Op::End);
+        ops.push(Op::Else);
+        ops.push(Op::End);
+    }
+    if twin == 3usize {
+        ops.push(Op::Drop { place: Place::local(0usize) });
+        ops.push(Op::Variant { dst: 0usize, variant: 0usize, fields: Vec::new() });
+    }
+    ops.push(Op::TagTest { dst: 4usize,
+        place: Place::local(if twin == 2usize { 1usize } else { 0usize }),
+        variant: if twin == 1usize { 0usize } else { 1usize },
+    });
+    if twin == 4usize {
+        ops.push(Op::Read { dst: 5usize, place: Place::local(4usize), moving: false });
+        ops.push(Op::Drop { place: Place::local(4usize) });
+        ops.push(Op::Drop { place: Place::local(5usize) });
+        ops.push(Op::Int { dst: 5usize, value: 0 });
+    }
+    ops.push(Op::If { condition: if twin == 4usize { 5usize } else { 4usize } });
+    ops.push(Op::Text { dst: 3usize, bytes: vec![33u8] });
+    ops.push(Op::Drop { place: Place::local(0usize) });
+    ops.push(Op::Drop { place: Place::local(1usize) });
+    ops.push(Op::Return { src: 3usize });
+    ops.push(Op::Else);
+    ops.push(Op::Trap { message: "unreachable match".to_string() });
+    ops.push(Op::End);
+    if twin != 5usize { ops.push(Op::End); }
+    let mut body = Vec::new();
+    for (index, op) in ops.into_iter().enumerate() {
+        let line = if matches!(op, Op::Trap { .. }) { 90usize } else { index + 1usize };
+        body.push(Instruction { op, file: None, line, column: 1usize });
+    }
+    let target = Function { file: 0usize, name: "UnaryOp::as_str".to_string(),
+        params: 2usize, result: 9usize, return_source: Some(ir::ReturnSource::Static),
+        locals: vec![local(7usize, true), local(7usize, false), local(ir::BOOL, false),
+            local(9usize, false), local(ir::BOOL, false), local(ir::BOOL, true)],
+        body, test: false,
+    };
+    let mut entry_body = Vec::new();
+    let entry_ops = vec![
+        Op::Variant { dst: 0usize, variant: if twin == 5usize { 0usize } else { 1usize }, fields: Vec::new() },
+        Op::Variant { dst: 1usize, variant: 0usize, fields: Vec::new() },
+        Op::Call { dst: 2usize, function: 0usize, args: vec![0usize, 1usize] },
+        Op::Drop { place: Place::local(2usize) },
+        Op::Int { dst: 3usize, value: 42 },
+        Op::Return { src: 3usize },
+    ];
+    for op in entry_ops { entry_body.push(Instruction { op, file: None, line: 100usize, column: 1usize }); }
+    let entry = Function { file: 0usize, name: "probe".to_string(), params: 0usize,
+        result: ir::I64, return_source: None,
+        locals: vec![local(7usize, false), local(7usize, false), local(9usize, false), local(ir::I64, false)],
+        body: entry_body, test: false,
+    };
+    Program { sources: vec!["residual-twins.lkj".to_string()], types,
+        functions: vec![target, entry], destructors: Vec::new() }
+}
+fn twin(case: usize) {
+    let admission = check::check(fixture(case));
+    assert!(admission.is_ok(), "residual twin admission failed");
+    let checked = admission.unwrap();
+    let report = residual::analyze(&checked, 1usize).unwrap();
+    let mut traps = 0usize;
+    for site in &report.sites[0] {
+        if site.kind == "explicit-trap" {
+            traps += 1usize;
+            assert_eq!(site.discharged, case == 0usize, "residual twin {case}");
+        }
+    }
+    assert_eq!(traps, 1usize);
+    assert!(report.raw_nonempty[1]);
+    assert_eq!(report.residual_nonempty[1], case != 0usize);
+    let mut output: Vec<u8> = Vec::new();
+    let arguments: Vec<u64> = Vec::new();
+    let outcome = interpreter::run(checked.program(), 1usize, &arguments, &mut output);
+    if case == 0usize { assert!(outcome.is_ok()); }
+    else {
+        let failure = outcome.err().unwrap();
+        assert!(matches!(failure.kind, interpreter::ErrorKind::Trap(_)));
+        assert_eq!(failure.function, 0usize);
+        assert_eq!(failure.line, 90usize);
+        assert_eq!(failure.message, "unreachable match");
+    }
+}
+fn cleanup_and_kinds() {
+    let checked = crate::frontend::check_bundle(&crate::source::SourceBundle {
+        root: "residual-cleanup.lkj".to_string(), library: None,
+        files: vec![crate::source::SourceInput { path: "residual-cleanup.lkj".to_string(),
+            text: "struct Guard { value:i64 } impl Drop for Guard { fn drop(&mut self) { let n=self.value/0; } } pub fn probe() { let guard=Guard{value:3}; }".to_string() }],
+    }).unwrap();
+    let mut entry = 0usize;
+    for (index, function) in checked.program().functions.iter().enumerate() {
+        if function.name == "probe" { entry = index; }
+    }
+    let report = residual::analyze(&checked, entry).unwrap();
+    assert!(report.raw_nonempty[entry] && report.residual_nonempty[entry]);
+    let mut found = false;
+    for sites in &report.sites { for site in sites {
+        if site.kind == "division-remainder" { found = true; }
+    }}
+    assert!(found);
+    let mut output: Vec<u8> = Vec::new();
+    let arguments: Vec<u64> = Vec::new();
+    let failure = interpreter::run(checked.program(), entry, &arguments, &mut output).err().unwrap();
+    assert!(matches!(failure.kind, interpreter::ErrorKind::Trap(2)));
+    assert!(report.reachable[failure.function]);
+}
+pub fn run() -> usize {
+    for case in 0usize..6usize { twin(case); }
+    cleanup_and_kinds();
+    7usize
+}
+
+
+fn observed(program: &ir::Program, entry: usize, result: &Result<interpreter::RunResult, interpreter::RunError>) {
+    if let Err(failure) = result {
+        if !matches!(failure.kind, interpreter::ErrorKind::Trap(_)) { return; }
+        // Several independent interpreter contracts intentionally execute rejected
+        // raw IR. Only admitted programs belong to the residual query's domain.
+        let checked = match check::check(program.clone()) { Ok(checked) => checked, Err(_) => return };
+        let path = program.sources.get(failure.file).map_or("raw-test.lkj", |path| path.as_str());
+        let message = match &failure.host {
+            Some(host) => format!("{} {}: {} ({})",
+                String::from_utf8(host.identity[..host.length].to_vec()).unwrap(),
+                crate::runtime_diagnostics::syscall_name(host.operation),
+                crate::runtime_diagnostics::errno_name(host.errno), host.errno),
+            None => failure.message.clone(),
+        };
+        let diagnostic = crate::runtime_diagnostics::full_located(path, failure.line, &failure.code(), &message);
+        let matched = residual::witness(&checked, entry, "raw-test.lkj", &diagnostic);
+        assert!(matched.is_ok(), "unmatched post-acquisition trap in an admitted semantic fixture");
+    }
+}
+pub fn observed_run<H: interpreter::Host>(program: &ir::Program, entry: usize, args: &[u64], host: &mut H) -> Result<interpreter::RunResult, interpreter::RunError> {
+    let result = interpreter::run(program, entry, args, host);
+    observed(program, entry, &result);
+    result
+}
+pub fn observed_run_granted<H: interpreter::Host>(program: &ir::Program, entry: usize, grants: &[ir::EntryGrant], host: &mut H) -> Result<interpreter::RunResult, interpreter::RunError> {
+    let result = interpreter::run_granted(program, entry, grants, host);
+    observed(program, entry, &result);
+    result
+}
+pub fn observed_run_runtime<H: interpreter::Host>(program: &ir::Program, entry: usize, args: &[u64], memory: &mut crate::runtime_memory::Memory, host: &mut H) -> Result<interpreter::RunResult, interpreter::RunError> {
+    let result = interpreter::run_runtime(program, entry, args, memory, host);
+    observed(program, entry, &result);
+    result
+}

@@ -14,6 +14,7 @@ mod resolver;
 mod reuse;
 mod ir_binary_admission;
 mod recheck;
+mod residual;
 mod scalar_clone;
 mod return_contracts;
 mod source_cases;
@@ -168,6 +169,7 @@ pub fn core() -> usize {
     count += reuse::run();
     count += ir_binary_admission::run();
     count += recheck::run();
+    count += residual::run();
     crate::interpreter::assert_reference_reuse();
     count += 1;
     count

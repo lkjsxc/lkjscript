@@ -179,6 +179,8 @@ pub fn fail(index: usize) -> i64 {
     values[index]
 }
 SOURCE
+"$compiler" residual "$source_directory/main.lkj" --source-dir "$source_directory" --no-library -o "$test_directory/trap-residual.report"
+awk -F '\t' -v path="$source_directory/helper.lkj" '$1=="site" && $4=="index-bounds" && $5=="residual" && $7==3 && $9=="\"" path "\"" {found=1} END {exit !found}' "$test_directory/trap-residual.report" || fail "copied bounds trap has no residual instruction"
 for limit in 0 64; do
     build "trap-$limit" --inline-limit "$limit" --grant _errors
     if "$test_directory/result" > "$test_directory/trap-$limit.out" 2> "$test_directory/trap-$limit.raw"; then

@@ -1,0 +1,337 @@
+//! An untrusted, read-only inventory of post-acquisition instruction traps.
+//! This consumes the authority graph, never changes IR, and proves no judgment.
+use crate::ir::{BinaryOp, CheckedProgram, Function, IntrinsicOp, Op, Place, Program, Projection, TypeKind, UnaryOp};
+
+#[derive(Clone)]
+pub struct Site {
+    pub instruction: usize,
+    pub kind: String,
+    pub discharged: bool,
+}
+pub struct Report {
+    pub entry: usize,
+    pub reachable: Vec<bool>,
+    pub sites: Vec<Vec<Site>>,
+    pub raw_nonempty: Vec<bool>,
+    pub residual_nonempty: Vec<bool>,
+}
+#[derive(Clone)]
+struct Exclusion {
+    place: Place,
+    variants: Vec<usize>,
+}
+struct Branch {
+    facts: Vec<Exclusion>,
+    predicate: Option<(Place, usize)>,
+}
+fn place_type(program: &Program, function: &Function, place: &Place) -> usize {
+    let mut ty = function.locals[place.local].ty;
+    for projection in &place.projections {
+        ty = match (projection, &program.types[ty].kind) {
+            (Projection::Deref, TypeKind::Ref { inner, .. } | TypeKind::Box { inner }) => *inner,
+            (Projection::Field(index), TypeKind::Struct { fields, .. }) => fields[*index].ty,
+            (Projection::VariantField(variant, index), TypeKind::Enum { variants, .. }) => variants[*variant].fields[*index].ty,
+            (Projection::Index(_), TypeKind::Array { inner, .. } | TypeKind::Vec { inner } | TypeKind::Slice { inner, .. }) => *inner,
+            _ => unreachable!(),
+        };
+    }
+    ty
+}
+fn exclude(facts: &mut Vec<Exclusion>, place: Place, variant: usize) {
+    for index in 0usize..facts.len() {
+        let fact = &mut facts[index];
+        if fact.place == place {
+            if !fact.variants.contains(&variant) { fact.variants.push(variant); }
+            return;
+        }
+    }
+    facts.push(Exclusion { place, variants: vec![variant] });
+}
+fn covered(program: &Program, function: &Function, facts: &[Exclusion]) -> bool {
+    for fact in facts {
+        let ty = place_type(program, function, &fact.place);
+        if let TypeKind::Enum { variants, .. } = &program.types[ty].kind {
+            if !variants.is_empty() && fact.variants.len() == variants.len() { return true; }
+        }
+    }
+    false
+}
+
+// Structured reachability mirrors the checked control-flow edges used by the
+// authority graph. It is local report logic, not a new call or cleanup analysis.
+struct Block {
+    start: usize,
+    otherwise: Option<usize>,
+    is_loop: bool,
+}
+fn reachable(function: &Function) -> Vec<bool> {
+    let count = function.body.len();
+    let mut ends = vec![count; count];
+    let mut alternatives = vec![count; count];
+    let mut starts = vec![count; count];
+    let mut loop_targets = vec![count; count];
+    let mut blocks: Vec<Block> = Vec::new();
+    let mut loops: Vec<usize> = Vec::new();
+    for (index, instruction) in function.body.iter().enumerate() {
+        match instruction.op {
+            Op::If { .. } => blocks.push(Block { start: index, otherwise: None, is_loop: false }),
+            Op::Loop => {
+                blocks.push(Block { start: index, otherwise: None, is_loop: true });
+                loops.push(index);
+            }
+            Op::Else => { let last = blocks.len() - 1usize; blocks[last].otherwise = Some(index); }
+            Op::End => {
+                let block = blocks.pop().unwrap();
+                starts[index] = block.start;
+                ends[block.start] = index;
+                alternatives[block.start] = block.otherwise.unwrap_or(index);
+                if let Some(otherwise) = block.otherwise { ends[otherwise] = index; }
+                if block.is_loop { loops.pop(); }
+            }
+            Op::Break | Op::Continue => loop_targets[index] = loops[loops.len() - 1usize],
+            Op::BreakTo { depth } | Op::ContinueTo { depth } => loop_targets[index] = loops[loops.len() - depth - 1usize],
+            _ => {}
+        }
+    }
+    let mut seen = vec![false; count];
+    let mut pending = vec![0usize];
+    while let Some(index) = pending.pop() {
+        if index == count || seen[index] { continue; }
+        seen[index] = true;
+        match function.body[index].op {
+            Op::Return { .. } | Op::Trap { .. } => {}
+            Op::If { .. } => { pending.push(index + 1usize); pending.push(alternatives[index] + 1usize); }
+            Op::Else => pending.push(ends[index] + 1usize),
+            Op::End if matches!(function.body[starts[index]].op, Op::Loop) => pending.push(starts[index] + 1usize),
+            Op::Break | Op::BreakTo { .. } => pending.push(ends[loop_targets[index]] + 1usize),
+            Op::Continue | Op::ContinueTo { .. } => pending.push(loop_targets[index] + 1usize),
+            _ => pending.push(index + 1usize),
+        }
+    }
+    seen
+}
+fn add(sites: &mut Vec<Site>, instruction: usize, kind: &str, discharged: bool) {
+    sites.push(Site { instruction, kind: kind.to_string(), discharged });
+}
+fn index_site(sites: &mut Vec<Site>, position: usize, place: &Place) {
+    for projection in &place.projections {
+        if matches!(projection, Projection::Index(_)) {
+            add(sites, position, "index-bounds", false);
+            return;
+        }
+    }
+}
+fn local_sites(program: &Program, function: &Function) -> Vec<Site> {
+    let live = reachable(function);
+    let mut sites = Vec::new();
+    let mut facts: Vec<Exclusion> = Vec::new();
+    let mut branches: Vec<Branch> = Vec::new();
+    for (position, instruction) in function.body.iter().enumerate() {
+        if live[position] {
+            match &instruction.op {
+                Op::Trap { .. } => add(&mut sites, position, "explicit-trap", covered(program, function, &facts)),
+                Op::Unary { op: UnaryOp::Neg, src, .. } if matches!(program.types[function.locals[*src].ty].kind, TypeKind::Int { .. }) =>
+                    add(&mut sites, position, "checked-arithmetic", false),
+                Op::Binary { op, left, .. } if matches!(program.types[function.locals[*left].ty].kind, TypeKind::Int { .. }) => {
+                    match op {
+                        BinaryOp::Add | BinaryOp::Sub | BinaryOp::Mul => add(&mut sites, position, "checked-arithmetic", false),
+                        BinaryOp::Div | BinaryOp::Rem => add(&mut sites, position, "division-remainder", false),
+                        BinaryOp::Shl | BinaryOp::Shr => add(&mut sites, position, "shift", false),
+                        _ => {}
+                    }
+                }
+                Op::ViewRange { place, .. } => {
+                    add(&mut sites, position, "range-bounds", false);
+                    if matches!(program.types[place_type(program, function, place)].kind, TypeKind::Str) {
+                        add(&mut sites, position, "utf8-boundary", false);
+                    }
+                }
+                Op::Intrinsic { name, .. } => {
+                    match name {
+                        IntrinsicOp::Assert => add(&mut sites, position, "assert", false),
+                        IntrinsicOp::WorldArgLen | IntrinsicOp::WorldArgCopy => add(&mut sites, position, "argument-bounds", false),
+                        IntrinsicOp::StdoutWrite | IntrinsicOp::StderrWrite => add(&mut sites, position, "host-write", false),
+                        _ => {}
+                    }
+                }
+                _ => {}
+            }
+            match &instruction.op {
+                Op::Read { place, .. } | Op::Borrow { place, .. } | Op::SliceBorrow { place, .. }
+                | Op::ViewRange { place, .. } | Op::Assign { place, .. } | Op::Drop { place }
+                | Op::DropIf { place } | Op::TagTest { place, .. } => index_site(&mut sites, position, place),
+                _ => {}
+            }
+        }
+        // Process lexical structure even when an individual instruction is dead.
+        // False branches restore facts from before the condition, not its true arm.
+        match &instruction.op {
+            Op::If { condition } => {
+                let mut predicate: Option<(Place, usize)> = None;
+                if position > 0usize && !function.locals[*condition].mutable {
+                    if let Op::TagTest { dst, place, variant } = &function.body[position - 1usize].op {
+                        if *dst == *condition { predicate = Some((place.clone(), *variant)); }
+                    }
+                }
+                branches.push(Branch { facts: facts.clone(), predicate });
+            }
+            Op::Else => {
+                let branch = &branches[branches.len() - 1usize];
+                facts = branch.facts.clone();
+                if let Some((place, variant)) = &branch.predicate { exclude(&mut facts, place.clone(), *variant); }
+            }
+            Op::Loop => {
+                facts.clear();
+                branches.push(Branch { facts: Vec::new(), predicate: None });
+            }
+            Op::End => { branches.pop(); facts.clear(); }
+            Op::TagTest { .. } => {}
+            // Includes writes, moves, calls, borrows, intrinsics and transfers.
+            // Forgetting unrelated facts too is intentional and conservative.
+            _ => facts.clear(),
+        }
+    }
+    sites
+}
+fn propagate(reverse: &[Vec<usize>], mut nonempty: Vec<bool>) -> Vec<bool> {
+    let mut pending: Vec<usize> = Vec::new();
+    for index in 0usize..nonempty.len() {
+        if nonempty[index] { pending.push(index); }
+    }
+    while let Some(callee) = pending.pop() {
+        for caller in &reverse[callee] {
+            if !nonempty[*caller] {
+                nonempty[*caller] = true;
+                pending.push(*caller);
+            }
+        }
+    }
+    nonempty
+}
+pub fn analyze(checked: &CheckedProgram, entry: usize) -> Result<Report, String> {
+    let program = checked.program();
+    if entry >= program.functions.len() { return Err("E_ENTRY unknown residual entry".to_string()); }
+    let relations = crate::authority::relations(checked);
+    let count = relations.len();
+    let mut reverse: Vec<Vec<usize>> = Vec::new();
+    for _ in 0usize..count { reverse.push(Vec::new()); }
+    for caller in 0usize..count {
+        for (callee, _) in &relations[caller].calls { reverse[*callee].push(caller); }
+    }
+    let mut live = vec![false; count];
+    let mut pending = vec![entry];
+    live[entry] = true;
+    while let Some(caller) = pending.pop() {
+        for (callee, _) in &relations[caller].calls {
+            if !live[*callee] { live[*callee] = true; pending.push(*callee); }
+        }
+    }
+    let mut sites: Vec<Vec<Site>> = Vec::new();
+    let mut raw = vec![false; count];
+    let mut residual = vec![false; count];
+    for index in 0usize..count {
+        let listed = if live[index] { local_sites(program, &program.functions[index]) } else { Vec::new() };
+        raw[index] = !listed.is_empty();
+        for site in &listed { if !site.discharged { residual[index] = true; } }
+        sites.push(listed);
+    }
+    Ok(Report {
+        entry, reachable: live, sites,
+        raw_nonempty: propagate(&reverse, raw),
+        residual_nonempty: propagate(&reverse, residual),
+    })
+}
+fn quoted(value: &str) -> String {
+    let mut bytes = Vec::new();
+    crate::json::write_string(&mut bytes, value);
+    String::from_utf8(bytes).unwrap()
+}
+pub fn render(checked: &CheckedProgram, report: &Report) -> String {
+    let program = checked.program();
+    let mut out = format!("residual entry {}\n", quoted(&program.functions[report.entry].name));
+    out.push_str("scope: checked instructions after entry grant acquisition; arguments already supplied\n");
+    out.push_str("excluded: allocation and stack exhaustion (including allocation identity representation exhaustion)\n");
+    out.push_str("status: untrusted conservative report; tag discount changes no IR or checked judgment\n");
+    out.push_str("coordinates: current input only; function/instruction indices are not persistent identities\n");
+    let kinds = vec!["explicit-trap".to_string(), "checked-arithmetic".to_string(), "division-remainder".to_string(), "shift".to_string(), "index-bounds".to_string(), "range-bounds".to_string(), "utf8-boundary".to_string(), "assert".to_string(), "argument-bounds".to_string(), "host-write".to_string()];
+    for kind in kinds {
+        let mut raw = 0usize;
+        let mut residual = 0usize;
+        for sites in &report.sites {
+            for site in sites {
+                if site.kind == kind {
+                    raw += 1usize;
+                    if !site.discharged { residual += 1usize; }
+                }
+            }
+        }
+        out.push_str(&format!("kind\t{kind}\t{raw}\t{residual}\n"));
+    }
+    for index in 0usize..program.functions.len() {
+        if !report.reachable[index] { continue; }
+        let function = &program.functions[index];
+        out.push_str(&format!("function\t{index}\t{}\t{}\t{}\n",
+            quoted(&function.name), report.raw_nonempty[index], report.residual_nonempty[index]));
+        for site in &report.sites[index] {
+            let instruction = &function.body[site.instruction];
+            let file = instruction.file.unwrap_or(function.file);
+            let path = program.sources.get(file).map_or("", |path| path.as_str());
+            out.push_str(&format!("site\t{index}\t{}\t{}\t{}\t{}\t{}\t{}\t{}",
+                site.instruction, site.kind, if site.discharged { "discharged" } else { "residual" },
+                file, instruction.line, instruction.column, quoted(path)));
+            if let Op::Trap { message } = &instruction.op { out.push_str(&format!("\t{}", quoted(message))); }
+            out.push('\n');
+        }
+    }
+    out
+}
+
+
+/// Finite gate witness. A diagnostic may identify several instructions on one
+/// source line; require a residual instruction with the matching trap class.
+/// This uses current source coordinates, not a persistent site identity.
+pub fn witness(checked: &CheckedProgram, entry: usize, fallback: &str, diagnostic: &str) -> Result<&'static str, String> {
+    let marker = match diagnostic.find(": R") { Some(marker) => marker, None => return Ok("not-trap") };
+    let tail = &diagnostic[marker + 2usize..];
+    let space = tail.find(' ').ok_or("E_RESIDUAL malformed trap diagnostic")?;
+    let code = match tail[1usize..space].parse::<u64>() {
+        Ok(code) => code,
+        Err(_) => return Err("E_RESIDUAL malformed trap code".to_string()),
+    };
+    if code == 6u64 || code == 8u64 { return Ok("excluded-resource"); }
+    let message = crate::runtime_diagnostics::decoded(&tail[space + 1usize..]).ok_or("E_RESIDUAL malformed trap message")?;
+    // These host identities are raised by entry acquisition, including an
+    // explicitly granted native profiling prefix; they execute before user IR.
+    if code == 7u64 {
+        for identity in vec!["Directory ".to_string(), "ReadDirectory ".to_string(), "ForeignCommand ".to_string(), "File unix:".to_string(), "Listener ".to_string(), "Readiness ".to_string(), "Stop ".to_string(), "NullDevice ".to_string(), "Profile ".to_string()] {
+            if message.starts_with(&identity) { return Ok("pre-entry"); }
+        }
+    }
+    let report = analyze(checked, entry)?;
+    let program = checked.program();
+    for function in 0usize..report.sites.len() {
+        for site in &report.sites[function] {
+            if site.discharged { continue; }
+            let kind = site.kind.as_str();
+            let compatible = match code {
+                1u64 => kind == "checked-arithmetic" || kind == "division-remainder" || kind == "shift",
+                2u64 => kind == "division-remainder",
+                3u64 => kind == "index-bounds" || kind == "range-bounds" || kind == "utf8-boundary" || kind == "argument-bounds",
+                5u64 => kind == "assert",
+                7u64 => kind == "host-write",
+                _ => code >= 16u64 && kind == "explicit-trap",
+            };
+            if !compatible { continue; }
+            let instruction = &program.functions[function].body[site.instruction];
+            let file = instruction.file.unwrap_or(program.functions[function].file);
+            let path = program.sources.get(file).map_or(fallback, |path| path.as_str());
+            let prefix = format!("{}:{}: ", crate::runtime_diagnostics::escaped(path, !0usize, true), instruction.line);
+            if !diagnostic.starts_with(&prefix) { continue; }
+            if let Op::Trap { message: expected } = &instruction.op {
+                if expected != &message { continue; }
+            }
+            return Ok("matched-instruction");
+        }
+    }
+    Err(format!("E_RESIDUAL observed trap has no residual instruction: {diagnostic}"))
+}

@@ -66,7 +66,7 @@ fn execute(
     let checked = compiled(text);
     let program = checked.program();
     let entry = function_index(program, name);
-    interpreter::run(program, entry, args, &mut Vec::<u8>::new())
+    crate::semantic_tests::residual::observed_run(program, entry, args, &mut Vec::<u8>::new())
 }
 fn must_run(
     result: Result<interpreter::RunResult, interpreter::RunError>,
@@ -121,7 +121,7 @@ fn model_float_negation_preserves_payload_bits() {
         "../../tests/conformance/migrated/backend_nan_negation.lkjir"
     ))
     .unwrap();
-    let result = must_run(interpreter::run(
+    let result = must_run(crate::semantic_tests::residual::observed_run(
         &program,
         0,
         &[0u64; 0],
@@ -164,7 +164,7 @@ fn model_uses_an_explicit_stack_for_non_tail_calls_and_deep_cleanup() {
     );
     let program = checked.program().clone();
     let entry = function_index(&program, "probe");
-    let result = must_run(interpreter::run(
+    let result = must_run(crate::semantic_tests::residual::observed_run(
         &program,
         entry,
         &[0u64; 0],
@@ -251,7 +251,7 @@ fn drop_local(local: usize) -> ir::Op {
     }
 }
 fn fails(program: ir::Program, expected: InterpreterError) {
-    let error = interpreter::run(&program, 0, &[0u64; 0], &mut Vec::<u8>::new())
+    let error = crate::semantic_tests::residual::observed_run(&program, 0, &[0u64; 0], &mut Vec::<u8>::new())
         .err()
         .expect("expected a interpreter failure");
     assert!(
@@ -415,7 +415,7 @@ fn raw_ir_cannot_fabricate_host_authority_or_supply_it_as_integer_argument() {
         let mut entry = program;
         entry.functions[0].params = 1;
         assert!(
-            interpreter::run(&entry, 0, &[0], &mut Vec::<u8>::new(),)
+            crate::semantic_tests::residual::observed_run(&entry, 0, &[0], &mut Vec::<u8>::new(),)
                 .err()
                 .expect("expected a interpreter failure")
                 .kind
@@ -431,7 +431,7 @@ fn run_output<H: interpreter::Host>(
     let checked = compiled(text);
     let program = checked.program();
     let entry = function_index(program, "main");
-    interpreter::run(program, entry, &[0u64; 0], host)
+    crate::semantic_tests::residual::observed_run(program, entry, &[0u64; 0], host)
 }
 
 fn model_output_preserves_bytes_drop_order_and_trap_prefix() {
@@ -742,7 +742,7 @@ fn conditional_projected_drop_clears_moves_while_strict_drop_rejects_repeated_de
         ops,
     );
     assert!(
-        must_run(interpreter::run(
+        must_run(crate::semantic_tests::residual::observed_run(
             &valid,
             0,
             &[0u64; 0],
@@ -806,7 +806,7 @@ fn strict_and_conditional_drops_have_independent_static_and_dynamic_checks() {
     crate::check::check(accepted.clone())
         .unwrap_or_else(|problem| panic!("{}: {}", problem.code, problem.message));
     assert!(
-        must_run(interpreter::run(
+        must_run(crate::semantic_tests::residual::observed_run(
             &accepted,
             0,
             &[0u64; 0],
@@ -879,7 +879,7 @@ fn shared_reference_copy_keeps_real_carrier_and_exclusive_parent_conflicts() {
         let program = crate::ir_text::read(&text).unwrap();
         let diagnostic = crate::check::check(program.clone()).err().unwrap();
         assert_eq!(diagnostic.code, "E_BORROW");
-        let error = interpreter::run(&program, 0, &[0u64; 0], &mut Vec::<u8>::new())
+        let error = crate::semantic_tests::residual::observed_run(&program, 0, &[0u64; 0], &mut Vec::<u8>::new())
             .err()
             .unwrap();
         assert!(
@@ -936,7 +936,7 @@ fn range_views_validate_types_loans_and_utf8_without_the_checker() {
     ];
     for (text, expected) in cases {
         let program = crate::ir_text::read(&text).unwrap();
-        let error = interpreter::run(&program, 0, &[0u64; 0], &mut Vec::<u8>::new())
+        let error = crate::semantic_tests::residual::observed_run(&program, 0, &[0u64; 0], &mut Vec::<u8>::new())
             .err()
             .unwrap();
         assert!(
@@ -953,7 +953,7 @@ fn temporary_files_intrinsics_reject_selector_and_wrong_authority() {
     let entry = function_index(checked.program(), "main");
     let grants = vec![ir::EntryGrant::TemporaryFiles];
     let mut host = FailingHost(Vec::new());
-    interpreter::run_granted(checked.program(), entry, &grants, &mut host).unwrap();
+    crate::semantic_tests::residual::observed_run_granted(checked.program(), entry, &grants, &mut host).unwrap();
     assert_eq!(host.0.as_slice(), b"FC");
 
     // Even selector zero is invalid on the narrow receiver. Selectors 1..4 must
@@ -990,7 +990,7 @@ fn temporary_files_intrinsics_reject_selector_and_wrong_authority() {
         assert_eq!(crate::check::check(program.clone()).err().unwrap().code, "E_TYPE");
         let mut host = FailingHost(Vec::new());
         // Deliberately bypass the checker: dynamic authority is independently enforced.
-        let failure = interpreter::run_granted(&program, entry, &grants, &mut host).err().unwrap();
+        let failure = crate::semantic_tests::residual::observed_run_granted(&program, entry, &grants, &mut host).err().unwrap();
         assert!(failure.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr), "{}", failure.message);
         assert!(host.0.is_empty(), "selector reached a host operation");
     }
@@ -1014,7 +1014,7 @@ fn temporary_files_intrinsics_reject_selector_and_wrong_authority() {
         };
         assert_eq!(crate::check::check(program.clone()).err().unwrap().code, "E_TYPE");
         let mut host = FailingHost(Vec::new());
-        let failure = interpreter::run_granted(&program, entry, &[grant], &mut host).err().unwrap();
+        let failure = crate::semantic_tests::residual::observed_run_granted(&program, entry, &[grant], &mut host).err().unwrap();
         let expected = if mode == 0 { InterpreterError::InvalidIr } else { InterpreterError::Unsupported };
         assert!(failure.kind == ErrorKind::Interpreter(expected), "{}", failure.message);
         assert!(host.0.is_empty(), "wrong authority or arity reached a host operation");
@@ -1034,7 +1034,7 @@ fn storage_intrinsics_validate_before_host_effects() {
         let checked = compiled(&source);
         let entry = function_index(checked.program(), "main");
         let mut host = FailingHost(Vec::new());
-        interpreter::run(checked.program(), entry, &[0u64; 0], &mut host).unwrap();
+        crate::semantic_tests::residual::observed_run(checked.program(), entry, &[0u64; 0], &mut host).unwrap();
         assert!(host.0.contains(&marker));
         for mode in 0usize..4usize {
             let mut program = checked.program().clone();
@@ -1073,7 +1073,7 @@ fn storage_intrinsics_validate_before_host_effects() {
             }
             assert_eq!(crate::check::check(program.clone()).err().unwrap().code, "E_TYPE");
             let mut host = FailingHost(Vec::new());
-            let error = interpreter::run(&program, entry, &[0u64; 0], &mut host).err().unwrap();
+            let error = crate::semantic_tests::residual::observed_run(&program, entry, &[0u64; 0], &mut host).err().unwrap();
             assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr), "{}", error.message);
             assert!(!host.0.contains(&marker));
         }
@@ -1098,7 +1098,7 @@ fn lifecycle_intrinsics_validate_before_host_effects() {
         let checked = compiled(&source);
         let entry = function_index(checked.program(), "main");
         let mut host = FailingHost(Vec::new());
-        interpreter::run(checked.program(), entry, &[0u64; 0], &mut host).unwrap();
+        crate::semantic_tests::residual::observed_run(checked.program(), entry, &[0u64; 0], &mut host).unwrap();
         assert!(host.0.contains(&marker));
         for mode in 0usize..4usize {
             if operation == ir::IntrinsicOp::WorldEntropy && mode == 1 { continue; }
@@ -1133,7 +1133,7 @@ fn lifecycle_intrinsics_validate_before_host_effects() {
             }
             assert_eq!(crate::check::check(program.clone()).err().unwrap().code, "E_TYPE");
             let mut host = FailingHost(Vec::new());
-            let error = interpreter::run(&program, entry, &[0u64; 0], &mut host).err().unwrap();
+            let error = crate::semantic_tests::residual::observed_run(&program, entry, &[0u64; 0], &mut host).err().unwrap();
             assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr), "{}", error.message);
             assert!(!host.0.contains(&marker));
         }
@@ -1142,7 +1142,7 @@ fn lifecycle_intrinsics_validate_before_host_effects() {
     let checked = compiled("fn main(mut world: World) { let mut entropy=world.entropy(); let mut bytes=[7u8;2]; assert_eq!(entropy.fill(&mut bytes), Err(13i64)); assert_eq!(bytes[0],42u8); assert_eq!(bytes[1],7u8); let mut clock=world.clock(); assert_eq!(clock.unix_seconds(),Ok(-1i64)); }");
     let entry = function_index(checked.program(), "main");
     let mut host = FailingHost(Vec::new());
-    interpreter::run(checked.program(), entry, &[0u64; 0], &mut host).unwrap();
+    crate::semantic_tests::residual::observed_run(checked.program(), entry, &[0u64; 0], &mut host).unwrap();
 }
 
 fn readiness_wait_rejects_forged_event_shapes_before_waiting() {
@@ -1173,7 +1173,7 @@ fn readiness_wait_rejects_forged_event_shapes_before_waiting() {
         }
         assert_eq!(crate::check::check(program.clone()).err().unwrap().code, "E_TYPE");
         let mut host = FailingHost(Vec::new());
-        let error = interpreter::run(&program, entry, &[0u64; 0], &mut host).err().unwrap();
+        let error = crate::semantic_tests::residual::observed_run(&program, entry, &[0u64; 0], &mut host).err().unwrap();
         assert!(error.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr), "{}", error.message);
         assert!(!host.0.contains(&b'W'));
     }
@@ -1244,7 +1244,7 @@ fn listener_intrinsics_reject_wrong_signatures_without_host_effects() {
         assert_eq!(changed, 1);
         let rejected = crate::check::check(program.clone()).err().unwrap();
         assert_eq!(rejected.code, "E_TYPE");
-        let failure = interpreter::run(&program, entry, &[0u64; 0], &mut Vec::<u8>::new()).err().unwrap();
+        let failure = crate::semantic_tests::residual::observed_run(&program, entry, &[0u64; 0], &mut Vec::<u8>::new()).err().unwrap();
         assert!(failure.kind == ErrorKind::Interpreter(InterpreterError::InvalidIr), "{}", failure.message);
     }
 }

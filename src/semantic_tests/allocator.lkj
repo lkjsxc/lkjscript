@@ -26,7 +26,7 @@ fn value(
     arguments: &[u64],
     memory: &mut runtime_memory::Memory,
 ) -> u64 {
-    let result = interpreter::run_runtime(
+    let result = crate::semantic_tests::residual::observed_run_runtime(
         runtime.checked_program(),
         runtime.function(name).unwrap(),
         arguments,
@@ -144,7 +144,7 @@ fn kernel_refusal_and_unrepresentable_allocation_report_heap_failure() {
     let runtime = prepared();
     let mut memory = runtime_memory::Memory::new();
     memory.refuse_mappings();
-    let refused = interpreter::run_runtime(
+    let refused = crate::semantic_tests::residual::observed_run_runtime(
         runtime.checked_program(),
         runtime.function("allocate").unwrap(),
         &[8],
@@ -154,7 +154,7 @@ fn kernel_refusal_and_unrepresentable_allocation_report_heap_failure() {
     .err()
     .unwrap();
     assert_eq!(refused.code(), "R0006");
-    let overflow = interpreter::run_runtime(
+    let overflow = crate::semantic_tests::residual::observed_run_runtime(
         runtime.checked_program(),
         runtime.function("probe_overflow").unwrap(),
         &[0u64; 0],
@@ -175,7 +175,7 @@ fn raw_names_require_an_explicit_checked_runtime_seal() {
         .iter()
         .position(|function| function.name == "probe_allocator")
         .unwrap();
-    let result = interpreter::run(checked.program(), entry, &[0u64; 0], &mut Vec::<u8>::new());
+    let result = crate::semantic_tests::residual::observed_run(checked.program(), entry, &[0u64; 0], &mut Vec::<u8>::new());
     assert!(matches!(result.err().unwrap().kind, interpreter::ErrorKind::Trap(code) if code >= 16));
     let replaced = replace_first(
         &input.files[0].text,
@@ -339,4 +339,5 @@ fn native_allocator_model(world: &mut World) {
     let raw = native_result(world, image.bytes).err().unwrap();
     let failure = crate::runtime_diagnostics::decode("runtime.lkj", ordinary.program(), &runtime, &raw).unwrap();
     assert_eq!(failure.0, 16u64);
+    crate::residual::witness(&ordinary, index, "runtime.lkj", &failure.1).unwrap();
 }

@@ -34,7 +34,7 @@ fn admitted(program: ir::Program) -> Result<reuse::Checked, Vec<crate::diagnosti
 fn value(program: &ir::Program) -> i64 {
     let arguments: Vec<u64> = Vec::new();
     let mut output: Vec<u8> = Vec::new();
-    let result = interpreter::run(
+    let result = crate::semantic_tests::residual::observed_run(
         program, index(program, "probe"), &arguments, &mut output,
     ).unwrap();
     match result.value {
@@ -64,7 +64,12 @@ fn native_result(
     ).unwrap();
     let status = child.wait().unwrap() as u8;
     result.rewind().unwrap();
-    (status, result.read_to_end().unwrap())
+    let raw = result.read_to_end().unwrap();
+    if status == 1u8 {
+        let diagnostic = crate::runtime_diagnostics::decode("optimizer.lkj", checked.program(), runtime, &raw).unwrap().1;
+        crate::residual::witness(checked.checked(), index(checked.program(), "probe"), "optimizer.lkj", &diagnostic).unwrap();
+    }
+    (status, raw)
 }
 fn native_value(world: &mut World, checked: &reuse::Checked, runtime: &runtime::Runtime) -> i64 {
     let (status, bytes) = native_result(world, checked, runtime);
@@ -250,7 +255,7 @@ fn copied_traps_keep_exact_file_and_line(world: &mut World, runtime: &runtime::R
     ]);
     let arguments: Vec<u64> = Vec::new();
     let mut output: Vec<u8> = Vec::new();
-    let error = interpreter::run(
+    let error = crate::semantic_tests::residual::observed_run(
         original.program(), index(original.program(), "probe"),
         &arguments, &mut output,
     ).err().unwrap();
@@ -283,7 +288,7 @@ fn copied_trap_messages_keep_exact_codes(world: &mut World, runtime: &runtime::R
     let original = admitted(raw).unwrap();
     let arguments: Vec<u64> = Vec::new();
     let mut output: Vec<u8> = Vec::new();
-    let error = interpreter::run(original.program(), entry, &arguments, &mut output).err().unwrap();
+    let error = crate::semantic_tests::residual::observed_run(original.program(), entry, &arguments, &mut output).err().unwrap();
     assert_eq!(error.message, "alpha");
     let interpreter::ErrorKind::Trap(code) = error.kind else { panic!("expected trap"); };
     assert_eq!(code, 16u64);

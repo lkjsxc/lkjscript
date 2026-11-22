@@ -6,6 +6,7 @@ mod borrow_edit_tests;
 mod consumer_edit_tests;
 mod iterator_edit_tests;
 mod runtime_diagnostic_tests;
+mod residual_witness;
 mod array_trim_edit_tests;
 struct Outcome {
     status: i64,
@@ -142,6 +143,17 @@ fn invoke(
         errors,
         result,
     })
+}
+
+
+fn residual_trap(world: &mut World, executable: &File, config: &Config, name: &str, diagnostic: &[u8]) -> Result<(), String> {
+    let arguments = command(config, "residual", name);
+    residual_witness::contracts();
+    let listed = invoke(world, executable, &arguments, b"")?;
+    if listed.status != 0 || !residual_witness::matches(&listed.output, diagnostic) {
+        return Err(format!("E_RESIDUAL standalone trap unmatched for {name}"));
+    }
+    Ok(())
 }
 
 fn path(config: &Config, name: &str) -> String {
@@ -803,6 +815,7 @@ fn exercise(
                 contains(&result.errors, b"prefix\0\xff"),
                 format!("{label}: missing stderr bytes before trap"),
             );
+            residual_trap(world, executable, config, &name, &result.errors)?;
             let location = ":5: R0001 ";
             report.require(
                 contains(&result.errors, location.as_bytes()),
