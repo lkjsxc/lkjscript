@@ -68,6 +68,25 @@ impl PatternPlan {
         self.nodes.push(PatternNode { ty, span, kind });
         id
     }
+    /// Root references only select the place. Payload tests and non-final
+    /// defaults stay on the general path, even when another arm is flat.
+    pub(super) fn flat_match_arm(&self, mut id: usize, final_arm: bool) -> bool {
+        loop {
+            match &self.nodes[id].kind {
+                PatternKind::Deref(inner) => id = *inner,
+                PatternKind::Any | PatternKind::Bind { .. } => return final_arm,
+                PatternKind::Variant { fields, .. } => {
+                    for (_, child) in fields {
+                        if !matches!(self.nodes[*child].kind, PatternKind::Any | PatternKind::Bind { .. }) {
+                            return false;
+                        }
+                    }
+                    return true;
+                }
+                _ => return false,
+            }
+        }
+    }
     pub(super) fn has_or(&self, root: usize) -> bool {
         let mut pending = vec![root];
         while let Some(id) = pending.pop() {
@@ -783,6 +802,37 @@ impl Builder<'_, '_> {
         );
         dst
     }
+    /// Called only after every arm passes flat_match_arm and has no guard.
+    /// The branch must consume this exact predicate so the checker sees the
+    /// tag witness before any payload binding.
+    pub(super) fn flat_pattern_condition(
+        &mut self,
+        plan: &PatternPlan,
+        id: usize,
+        mut place: ir::Place,
+    ) -> Option<usize> {
+        let node = &plan.nodes[id];
+        match &node.kind {
+            PatternKind::Any | PatternKind::Bind { .. } => None,
+            PatternKind::Deref(inner) => {
+                place.projections.push(ir::Projection::Deref);
+                self.flat_pattern_condition(plan, *inner, place)
+            }
+            PatternKind::Variant { tag, .. } => {
+                let condition = self.temp(ir::BOOL);
+                self.emit(
+                    ir::Op::TagTest {
+                        dst: condition,
+                        place,
+                        variant: *tag,
+                    },
+                    node.span.line,
+                );
+                Some(condition)
+            }
+            _ => unreachable!("non-flat pattern in a flat match"),
+        }
+    }
     pub(super) fn pattern_condition(
         &mut self,
         plan: &PatternPlan,
@@ -1126,6 +1176,13 @@ impl Builder<'_, '_> {
             BTreeSet::new()
         };
         self.establish_binding_tags(&bindings, &mut established, line);
+        self.bind_pattern_values(bindings, line)
+    }
+    pub(super) fn bind_pattern_values(
+        &mut self,
+        bindings: Vec<PatternBinding>,
+        line: usize,
+    ) -> Result<()> {
         for binding in bindings {
             let source = binding.place.clone();
             let value = match binding.borrow {

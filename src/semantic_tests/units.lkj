@@ -1361,6 +1361,83 @@ mod check_tests {
         p
     }
 
+    fn assert_flat_match_shape(text: &str, expected: [usize; 4]) {
+        let parsed = crate::source::parse_bundle(&crate::source::SourceBundle {
+            root: "flat-match.lkj".to_string(),
+            library: None,
+            files: vec![crate::source::SourceInput {
+                path: "flat-match.lkj".to_string(),
+                text: text.to_string(),
+            }],
+        }).unwrap();
+        let checked = crate::frontend::check_source(&parsed).unwrap();
+        let mut actual = [0usize; 4];
+        let mut found = false;
+        for function in &checked.program().functions {
+            if function.name != "target" {
+                continue;
+            }
+            found = true;
+            for instruction in &function.body {
+                match &instruction.op {
+                    Op::TagTest { .. } => actual[0] += 1,
+                    Op::Trap { message } => {
+                        if message == "unreachable selected pattern" {
+                            actual[1] += 1;
+                        } else if message == "unreachable arm after irrefutable pattern" {
+                            actual[2] += 1;
+                        } else if message == "unreachable match" {
+                            actual[3] += 1;
+                        }
+                    }
+                    _ => {}
+                }
+            }
+        }
+        assert!(found);
+        for index in 0..actual.len() {
+            assert_eq!(actual[index], expected[index], "shape {index}: {text}");
+        }
+    }
+
+    fn flat_matches_use_existing_tag_witnesses_and_keep_chain_ends() {
+        assert_flat_match_shape(
+            "enum E { A(i64), B } pub fn target(e:E)->i64 { match e { E::A(x)=>x, E::B=>0 } }",
+            [2, 0, 0, 1],
+        );
+        assert_flat_match_shape(
+            "enum E { A(i64), B } pub fn target(e:&E)->i64 { match e { E::A(x)=>*x, E::B=>0 } }",
+            [2, 0, 0, 1],
+        );
+        assert_flat_match_shape(
+            "enum E { A(i64), B } pub fn target(e:&mut E)->i64 { match e { E::A(x)=>{*x+=1;*x}, E::B=>0 } }",
+            [2, 0, 0, 1],
+        );
+        // Source exhaustiveness cannot justify skipping even the only tag.
+        assert_flat_match_shape(
+            "enum E { A(i64) } pub fn target(e:E)->i64 { match e { E::A(x)=>x } }",
+            [1, 0, 1, 0],
+        );
+        assert_flat_match_shape(
+            "pub fn target(value:i64)->i64 { match value { result=>result } }",
+            [0, 0, 0, 0],
+        );
+        assert_flat_match_shape(
+            "enum E { A(i64), B } pub fn target(e:E)->i64 { match e { E::A(x)=>x, _=>0 } }",
+            [1, 0, 0, 0],
+        );
+        // A nested payload test keeps the entire match on the general path.
+        assert_flat_match_shape(
+            "enum E { A(i64), B } pub fn target(e:E)->i64 { match e { E::A(0)=>0, E::A(x)=>x, E::B=>1 } }",
+            [6, 3, 0, 1],
+        );
+        // Arms after a default still use the existing checking/lowering path.
+        assert_flat_match_shape(
+            "enum E { A(i64), B } pub fn target(e:E)->i64 { match e { _=>0, E::A(x)=>x } }",
+            [2, 1, 1, 1],
+        );
+    }
+
     pub fn payload_moves_and_field_writes_preserve_the_enclosing_enum_tag() {
         for replace in vec![false, true] {
             check(enum_payload_operations(replace, None)).unwrap();
@@ -1381,6 +1458,7 @@ mod check_tests {
             !matches!(&instruction.op, Op::Drop { place } if *place == Place::local(2))
         });
         check(dropped).unwrap();
+        flat_matches_use_existing_tag_witnesses_and_keep_chain_ends();
     }
 
     pub fn whole_enum_mutation_invalidates_both_saved_predicates_and_proven_tags() {

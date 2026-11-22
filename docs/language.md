@@ -175,6 +175,12 @@ and destruction timing. Distinct fields of one proven variant permit exclusive
 borrows; other tags/same fields do not. Existing-place matches may move affine
 fields and borrow disjoint fields together. Projected tag tests retain owner cleanup.
 A selected constructor establishes its tag even if the pattern binds no fields.
+When every arm is unguarded and each enum payload contains only bindings or
+wildcards, lowering branches directly on the tag and binds within its checked
+branch. An optional final plain binding/wildcard arm needs no condition.
+Every variant arm retains its tag test, and a chain without a plain default
+retains a failure trap, including a one-variant enum. Nested payload tests,
+guards and arms after a default retain the general pattern path.
 
 ## Source graph and names
 

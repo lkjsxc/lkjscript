@@ -1,0 +1,58 @@
+// expect: value 42
+// witness: {}
+enum Packet {
+    Empty,
+    Pair(i64, i64),
+    Named { owner: Box<i64>, scalar: i64 },
+}
+enum Counter { Empty, Value(i64) }
+enum Only { Value(i64) }
+
+fn owned(packet: Packet) -> i64 {
+    match packet {
+        Packet::Empty => 0,
+        Packet::Pair(left, right) => left + right,
+        Packet::Named { owner, scalar } => *owner + scalar,
+    }
+}
+fn read(counter: &Counter) -> i64 {
+    match counter {
+        Counter::Empty => 0,
+        Counter::Value(value) => *value,
+    }
+}
+fn bump(counter: &mut Counter) -> i64 {
+    match counter {
+        Counter::Empty => 0,
+        Counter::Value(value) => {
+            *value += 1;
+            *value
+        }
+    }
+}
+fn fallback(counter: Counter) -> i64 {
+    match counter { Counter::Value(value) => value, _ => 0 }
+}
+fn only(value: Only) -> i64 {
+    match value { Only::Value(value) => value }
+}
+
+pub fn probe() -> i64 {
+    assert_eq!(owned(Packet::Empty), 0);
+    assert_eq!(owned(Packet::Pair(19, 23)), 42);
+    assert_eq!(owned(Packet::Named { owner: Box::new(20), scalar: 22 }), 42);
+    let mut counter = Counter::Value(41);
+    assert_eq!(read(&counter), 41);
+    assert_eq!(bump(&mut counter), 42);
+    assert_eq!(read(&counter), 42);
+    let mut empty = Counter::Empty;
+    assert_eq!(read(&empty), 0);
+    assert_eq!(bump(&mut empty), 0);
+    assert_eq!(fallback(Counter::Empty), 0);
+    assert_eq!(fallback(counter), 42);
+    assert_eq!(only(Only::Value(42)), 42);
+    let mut sum = 0;
+    let values = [19, 23];
+    for value in &values[..] { sum += *value; }
+    match sum { result => result }
+}

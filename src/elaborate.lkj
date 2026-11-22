@@ -5047,10 +5047,17 @@ impl Builder<'_, '_> {
         } else {
             None
         };
+        let mut flat = cache.is_none();
+        for index in 0..roots.len() {
+            if !plan.flat_match_arm(roots[index], index + 1 == roots.len()) {
+                flat = false;
+            }
+        }
         let binding_count = self.bindings.len();
         let mut result: Option<usize> = None;
         let mut exit_state: Option<Snapshot> = None;
         let mut exhausted = false;
+        let mut conditional_arms = 0usize;
         let extends_scrutinee = arms.iter().any(|arm| {
             matches!(
                 self.compiler.source.exprs[arm.value].kind,
@@ -5062,45 +5069,56 @@ impl Builder<'_, '_> {
             let pattern = roots[index];
             let test_start = self.live.len();
             let mut choices = None;
-            let condition = if let Some(guard) = arm.guard {
-                let cache = cache.as_ref().unwrap();
-                if plan.has_or(pattern) {
-                    let (condition, selected) = self.retry_pattern_guard(
-                        &plan,
-                        pattern,
-                        original.clone(),
-                        guard,
-                        cache,
-                        &tested_places,
-                    )?;
-                    choices = Some(selected);
-                    condition
-                } else {
-                    let condition = self.cached_pattern_condition(&plan, pattern, cache, None)?;
-                    self.pattern_guard(
-                        &plan,
-                        pattern,
-                        original.clone(),
-                        guard,
-                        condition,
-                        &tested_places,
-                    )?
-                }
-            } else if let Some(cache) = &cache {
-                self.cached_pattern_condition(&plan, pattern, cache, None)?
+            let condition = if flat {
+                self.flat_pattern_condition(&plan, pattern, original.clone())
             } else {
-                self.pattern_condition(&plan, pattern, original.clone())?
+                Some(if let Some(guard) = arm.guard {
+                    let cache = cache.as_ref().unwrap();
+                    if plan.has_or(pattern) {
+                        let (condition, selected) = self.retry_pattern_guard(
+                            &plan,
+                            pattern,
+                            original.clone(),
+                            guard,
+                            cache,
+                            &tested_places,
+                        )?;
+                        choices = Some(selected);
+                        condition
+                    } else {
+                        let condition = self.cached_pattern_condition(&plan, pattern, cache, None)?;
+                        self.pattern_guard(
+                            &plan,
+                            pattern,
+                            original.clone(),
+                            guard,
+                            condition,
+                            &tested_places,
+                        )?
+                    }
+                } else if let Some(cache) = &cache {
+                    self.cached_pattern_condition(&plan, pattern, cache, None)?
+                } else {
+                    self.pattern_condition(&plan, pattern, original.clone())?
+                })
             };
-            self.emit(ir::Op::If { condition }, arm.span.line);
+            if let Some(condition) = condition {
+                self.emit(ir::Op::If { condition }, arm.span.line);
+                conditional_arms += 1;
+            }
             let failure = self.snapshot();
-            self.bind_pattern_choice(
-                &plan,
-                pattern,
-                original.clone(),
-                choices.as_ref(),
-                cache.is_none(),
-                arm.span.line,
-            )?;
+            if flat {
+                self.bind_pattern_values(plan.bindings(pattern, original.clone()), arm.span.line)?;
+            } else {
+                self.bind_pattern_choice(
+                    &plan,
+                    pattern,
+                    original.clone(),
+                    choices.as_ref(),
+                    cache.is_none(),
+                    arm.span.line,
+                )?;
+            }
             let inferred = context.inferred.or(result.map(|id| self.ty(id)));
             let value = self.expr_with_inference(arm.value, context.expected, inferred)?;
             if self.reachable && !exhausted {
@@ -5134,28 +5152,36 @@ impl Builder<'_, '_> {
                 exit_state = Some(self.snapshot());
             }
             self.bindings.truncate(binding_count);
-            self.emit(ir::Op::Else, span.line);
-            if arm.guard.is_none() && self.pattern_irrefutable(&plan, pattern) {
-                self.emit(
-                    ir::Op::Trap {
-                        message: "unreachable arm after irrefutable pattern".to_string(),
-                    },
-                    span.line,
-                );
+            if condition.is_some() {
+                self.emit(ir::Op::Else, span.line);
+                if arm.guard.is_none() && self.pattern_irrefutable(&plan, pattern) {
+                    // A one-variant enum still needs its tag test and first
+                    // false-branch trap. Exhaustiveness is not a checked fact.
+                    self.emit(
+                        ir::Op::Trap {
+                            message: "unreachable arm after irrefutable pattern".to_string(),
+                        },
+                        span.line,
+                    );
+                    exhausted = true;
+                }
+                self.restore(&failure);
+                self.cleanup(test_start, None, span.line);
+                self.written.truncate(start);
+                self.written.resize(self.function.locals.len(), false);
+            } else {
                 exhausted = true;
             }
-            self.restore(&failure);
-            self.cleanup(test_start, None, span.line);
-            self.written.truncate(start);
-            self.written.resize(self.function.locals.len(), false);
         }
-        self.emit(
-            ir::Op::Trap {
-                message: "unreachable match".to_string(),
-            },
-            span.line,
-        );
-        for _ in arms {
+        if !flat || !exhausted {
+            self.emit(
+                ir::Op::Trap {
+                    message: "unreachable match".to_string(),
+                },
+                span.line,
+            );
+        }
+        for _ in 0..conditional_arms {
             self.emit(ir::Op::End, span.line);
         }
         if let Some(exit) = exit_state {
