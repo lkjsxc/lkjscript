@@ -150,7 +150,8 @@ fn main() -> io::Result<()> {
         mirror(&root.join(name), &source.join(name), name == "src")?;
     }
     for (file, module) in [("lib.rs", "language"), ("embedded.rs", "embedded"),
-        ("meaning.rs", "meaning"), ("semantic_store.rs", "semantic_store"), ("semantic_query.rs", "semantic_query"), ("units.rs", "units")] {
+        ("meaning.rs", "meaning"), ("semantic_store.rs", "semantic_store"), ("semantic_query.rs", "semantic_query"), ("units.rs", "units"),
+        ("residual.rs", "residual")] {
         let path = source.join("src").join(file);
         fs::write(
             output.join(format!("{module}-module.rs")),

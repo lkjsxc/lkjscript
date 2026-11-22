@@ -20,6 +20,7 @@ include!(concat!(env!("OUT_DIR"), "/meaning-module.rs"));
 include!(concat!(env!("OUT_DIR"), "/semantic_store-module.rs"));
 include!(concat!(env!("OUT_DIR"), "/semantic_query-module.rs"));
 include!(concat!(env!("OUT_DIR"), "/units-module.rs"));
+include!(concat!(env!("OUT_DIR"), "/residual-module.rs"));
 mod host_network {
     use super::host::{Child, File, World};
     include!(concat!(env!("OUT_DIR"), "/source/src/host_network.rs"));
