@@ -2,6 +2,7 @@
 //! It admits only zero-authority entries and contains each call in a sealed child.
 pub mod ast;
 pub mod authority;
+pub mod residual;
 pub mod child_image;
 mod admitted_image;
 pub mod entry_grants;
@@ -131,6 +132,8 @@ fn admit(world: &mut World, runtime: &runtime::Runtime, bytes: Vec<u8>, deadline
         return Err("E_ADMIT_CAPTURE zero-authority child wrote a standard stream".to_string());
     }
     if let Some((_, location, _)) = runtime_diagnostics::decode("<admitted-ir>", checked.program(), runtime, &capture.result) {
+        // Finite witness for this admitted specimen; it grants no authority.
+        residual::witness(&checked, entry, "<admitted-ir>", &location)?;
         return Ok(format!("trapped {location} image={digest}"));
     }
     if capture.status != 0i64 || capture.result.len() != 8usize {
