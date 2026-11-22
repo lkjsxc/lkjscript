@@ -230,11 +230,18 @@ fn parent(directory: &mut Directory, path: &str) -> Result<(Directory, Vec<u8>),
     let bytes = path.as_bytes();
     while index < bytes.len() {
         if bytes[index] == b'/' {
+            let component = &path[split..index];
+            if index == 0 || component == ".." {
+                return Result::Err(18);
+            }
+            if component.is_empty() {
+                return Result::Err(22);
+            }
             split = index + 1;
         }
         index += 1;
     }
-    let parent = if split == 0 { "." } else { &path[..split] };
+    let parent = if split == 0 { "." } else { &path[..split - 1] };
     let name = &path[split..];
     if name.is_empty() || name == "." || name == ".." {
         return Result::Err(22);
