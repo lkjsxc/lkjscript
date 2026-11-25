@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+pub fn probe() -> i64 {
+    let tuple = ((37i64, 39i64),);
+    let single = (41i64,);
+    assert_eq!(tuple.0. 1, 39);
+    assert_eq!(single.0. max(42), 42);
+    let mut sum = 0i64;
+    for value in 1..2 {
+        sum += value;
+    }
+    tuple.0.1 + (1.max(2) as i64) + sum
+}

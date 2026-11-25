@@ -1,0 +1,3 @@
+// expect: reject E_TYPE
+// witness: {"rustCode":"E0610"}
+pub fn probe() -> f64 { 1.e5 }

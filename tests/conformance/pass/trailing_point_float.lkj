@@ -1,0 +1,18 @@
+// expect: value 4607182418800017408
+// witness: {}
+macro_rules! one_token {
+    ($value:tt) => { $value };
+}
+
+pub fn probe() -> u64 {
+    let negative: f64 = -0.;
+    assert_eq!(negative.to_bits(), 9223372036854775808u64);
+    let thousands: f64 = 1_000.;
+    assert_eq!(thousands, 1000.0);
+    let values: [f64; 2] = [1., 2.];
+    assert_eq!(values[1], 2.0);
+    let product: f64 = 10. * 0.5;
+    assert_eq!(product, 5.0);
+    let captured: f64 = one_token!(1.);
+    captured.to_bits()
+}

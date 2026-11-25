@@ -389,6 +389,15 @@ impl Lexer<'_> {
                         break;
                     }
                 }
+                if self.byte(0) == b'.'
+                    && self.byte(1) != b'.'
+                    && !ident_start(self.byte(1))
+                    && self.source.as_bytes()[span.start..self.at]
+                        .iter()
+                        .all(|b| b.is_ascii_digit() || *b == b'_')
+                {
+                    self.advance();
+                }
                 kind = TokenKind::Number;
                 text = self.source[span.start..self.at].to_string();
             } else {
@@ -3017,27 +3026,22 @@ impl Parser {
         min: u8,
         allow_struct: bool,
     ) -> Result<ExprId, Diagnostic> {
+        let mut tuple_dot = false;
         loop {
             let span = self.program.exprs[left].span;
-            if self.take("(") {
-                let args = self.expr_list(")")?;
-                left = self.add_finished_expr(Expr::Call { callee: left, args }, span);
-                continue;
-            }
-            if self.take("[") {
-                let index = self.expr(true)?;
-                self.expect("]")?;
-                left = self.add_finished_expr(Expr::Index { value: left, index }, span);
-                continue;
-            }
-            if self.take(".") {
+            if tuple_dot || self.take(".") {
+                tuple_dot = false;
                 if self.is("await") {
                     return Err(self.unsupported("await"));
                 }
                 if self.token().kind == TokenKind::Number {
-                    // In postfix position 0.1 denotes two tuple projections,
-                    // even though the lexer can read it as a decimal token.
-                    let text = self.token().text.clone();
+                    // Split the numeric token in postfix position. A final dot
+                    // starts another member access, as in tuple.0. method().
+                    let token = self.token();
+                    let text = token.text.as_str();
+                    tuple_dot = text.ends_with('.');
+                    let text = if tuple_dot { &text[..text.len() - 1] } else { text };
+                    let authored_dot = tuple_dot && token.span == token.origin;
                     let mut indices = Vec::new();
                     let mut start = 0;
                     loop {
@@ -3057,8 +3061,12 @@ impl Parser {
                         start = end + 1;
                     }
                     self.at += 1;
+                    let mut field_span = self.finish_span(span);
+                    if authored_dot {
+                        field_span.end -= 1;
+                    }
                     for name in indices {
-                        left = self.add_finished_expr(Expr::Field { value: left, name }, span);
+                        left = self.add_expr(Expr::Field { value: left, name }, field_span);
                     }
                     continue;
                 }
@@ -3085,6 +3093,17 @@ impl Parser {
                     }
                     left = self.add_finished_expr(Expr::Field { value: left, name }, span);
                 }
+                continue;
+            }
+            if self.take("(") {
+                let args = self.expr_list(")")?;
+                left = self.add_finished_expr(Expr::Call { callee: left, args }, span);
+                continue;
+            }
+            if self.take("[") {
+                let index = self.expr(true)?;
+                self.expect("]")?;
+                left = self.add_finished_expr(Expr::Index { value: left, index }, span);
                 continue;
             }
             if self.take("?") {

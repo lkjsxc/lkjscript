@@ -14,7 +14,7 @@ Programs both compilers accept behave the same. [Status](status.md) records gaps
 | Shifts | Counts may have another integer width; validate sign and width before narrowing. | Negative or excessive counts trap; choose a valid count explicitly. |
 | Primitive references | Arithmetic, bitwise and unary operators forward one shared reference to a scalar. | Further indirection requires explicit dereferencing. |
 | bool and char | Distinct types; char is a four-byte Unicode scalar, ordered by scalar value. Cast char to integers or u8 to char; char::from_u32 returns Option. | Surrogates/values above U+10FFFF reject; other integer-to-char casts and character arithmetic reject. Use from_u32. |
-| f64 | Finite literals; explicit numeric casts follow Rust. Binary arithmetic canonicalizes NaNs; negation flips only the sign bit. | Nonfinite literals reject; construct special representations with from_bits. |
+| f64 | Finite literals include decimal forms with an empty fractional part, such as `1.`. Explicit numeric casts follow Rust. Binary arithmetic canonicalizes NaNs; negation flips only the sign bit. | Nonfinite literals reject; construct special representations with from_bits. |
 | f64::from_bits(u64), value.to_bits() | Preserve every bit, including signed zero, signaling state and NaN payloads, through dedicated checked operations. | Wrong receiver, argument/type-argument count or type rejects. Use casts for numeric conversion. |
 
 Expressions execute left to right; logical operators short circuit. Assignment
