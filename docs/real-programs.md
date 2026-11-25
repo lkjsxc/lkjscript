@@ -277,6 +277,28 @@ Separate probes on the pinned registry archives add the `html5ever` (90),
 `markup5ever` (6), `selectors` (37), and `cssparser` (38) library roots.
 The four archive counts are located nonblocked rows from isolated checks.
 Their commands supply each root's own source bytes and a suffix projection.
+All five DOM-stack roots and all four Sōzu roots retain byte-identical
+diagnostic streams. Both producers checked ten roots with the original suffix
+and the same ten through the byte-preserving projection.
+
+Sōzu gives 960 classified primary sites across its four roots, with 34 prior
+unclassified sites, 18 reviewed recovery diagnostics and 1,018 blocked rows.
+The main replay newly reaches a literal dollar passed by `StateMachineBuilder!`
+at `lib/src/lib.rs:520`. That macro-transcriber refusal remains in the candidate.
+The top three causes in the six established roots are the same before and after
+match-arm configuration.
+
+| Cause | Sites | Projected roots |
+| --- | ---: | --- |
+| Macro calls without a visible declarative definition | 478 | Sōzu bin, lib, command and e2e |
+| External prettytable declarative macro provider | 121 | Sōzu command |
+| Ambient effect calls | 96 | Sōzu bin, lib, command and e2e |
+
+The larger macro cohorts need package binding and authenticated providers.
+Ambient calls require capability-aware ports. Borrowed formatting arguments
+need a view and lifetime contract. Match-arm configuration removed the most
+primary sites among the changes that fit one parser slice. The next narrow
+candidate is trailing-point floating literals, with 13 located sites in cssparser.
 
 #### Earlier ordinary numeric traits frontier
 
