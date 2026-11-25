@@ -45,7 +45,7 @@ hello under a 4 GiB address-space limit.
 build --profile embeds function, operation-kind and copy-site maps and opts into OUTPUT.samples.PID; --profile-ir PATH exports the exact checked native selection. Explicit --copy-sites detail requires that companion and positive --limit/--bytes bounds.
 A Linux CPU timer samples instruction pointers and real frame chains without a depth cap. Reports survive exit/signals; default summaries show self/inclusive functions and exclusive kinds in at most 37 lines, without DWARF or perf; the explicit option grants instrumentation.
 No further sampling studies. Implement real untrusted passes, recheck their output, and measure the fixed source/output set against witness -O; the target is within twice -O.
-Keep only a pass gaining at least 10%. After three landed passes, if runtime remains above three times -O, explain the wall in ten status lines and stop this item until asked. Real-program language refusals precede this work.
+Since 2026-11-25, keep a pass only with about 5% or greater measured wall-time reduction and a passing native-versus-original-interpreter differential. Record every approach and verdict in the [optimization ledger](optimization-ledger.md). After three landed passes, if runtime remains above three times -O, explain the wall in ten status lines and stop this item until asked. Real-program language refusals precede this work.
 Scalar Clone lowers to Read. --inline-limit N copies small acyclic bodies and forwards dead temporaries.
 Recheck changed bodies; exact original bodies under unchanged shared graphs retain their proof.
 Keep the original interpreter/authority oracle and copied source locations; compare complete custom traps and reject the whole bad candidate.
