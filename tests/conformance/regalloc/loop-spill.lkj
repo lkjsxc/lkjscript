@@ -1,0 +1,17 @@
+// expect: value 68
+fn touch() -> i64 { 2 }
+
+fn work(a: i64, b: i64, c: i64) -> i64 {
+    let mut carried = 10i64;
+    let mut count = 0i64;
+    while count < 3 {
+        let temporary = count + 3i64;
+        let returned = touch();
+        carried += temporary * returned;
+        count += 1;
+    }
+    carried + a + b + c
+}
+pub fn probe() -> i64 {
+    work(11, 11, 12)
+}

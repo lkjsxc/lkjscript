@@ -1,0 +1,30 @@
+lkjscript-ir 1
+# expect: value 48
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "u32" int 32 unsigned
+fn "probe" 0 7
+local "a" 7 let
+local "b" 7 let
+local "c" 7 let
+local "left" 7 let
+local "right" 7 mut
+local "ab" 7 let
+local "abc" 7 let
+local "result" 7 let
+@1 int 0 1
+@2 int 1 2
+@3 int 2 3
+@4 int 3 50
+@5 int 4 8
+@6 binary 4 "wrapping_sub" 3 4
+@7 binary 5 "+" 0 1
+@8 binary 6 "+" 5 2
+@9 binary 7 "+" 6 4
+@10 return 7
+endfn

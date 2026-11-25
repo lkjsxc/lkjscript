@@ -1,0 +1,8 @@
+// expect: value f64:0xfff8000000001234
+pub fn probe() -> f64 {
+    let positive = f64::from_bits(0x7ff8000000001234);
+    let negative = -positive;
+    assert!(positive.to_bits() == 0x7ff8000000001234);
+    assert!(negative.to_bits() == 0xfff8000000001234);
+    negative
+}

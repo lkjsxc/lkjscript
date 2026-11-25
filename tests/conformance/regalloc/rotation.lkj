@@ -1,0 +1,7 @@
+// expect: value 2014458966
+fn rotate(value: u32) -> u32 {
+    (value >> 8u32) | (value << 24u32)
+}
+pub fn probe() -> u32 {
+    rotate(0x12345678)
+}

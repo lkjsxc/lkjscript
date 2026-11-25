@@ -1,0 +1,15 @@
+lkjscript-ir 1
+# expect: reject E_MOVE
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+fn "probe" 0 3
+local "source" 3 let
+local "destination" 3 let
+@23:4 read 1 copy 0
+@24:4 return 1
+endfn

@@ -1,0 +1,70 @@
+lkjscript-ir 1
+# expect: value 65
+# All eight sentinels remain live through the tag and indexed address calculations.
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "Choice" enum copy
+variant "First"
+variant "Second"
+endtype
+type "[i64; 2]" array 3 2
+fn "probe" 0 3
+local "choice" 7 let
+local "first" 3 let
+local "second" 3 let
+local "array" 8 let
+local "a" 3 let
+local "b" 3 let
+local "c" 3 let
+local "d" 3 let
+local "e" 3 let
+local "f" 3 let
+local "g" 3 let
+local "h" 3 let
+local "tag" 4 let
+local "tag_matches" 1 let
+local "assertion" 0 let
+local "projected" 3 let
+local "ab" 3 let
+local "abc" 3 let
+local "abcd" 3 let
+local "abcde" 3 let
+local "abcdef" 3 let
+local "abcdefg" 3 let
+local "abcdefgh" 3 let
+local "result" 3 let
+@1 variant 0 1
+@2 int 1 17
+@3 int 2 29
+@4 array 3 1 2
+@5 int 4 1
+@6 int 5 2
+@7 int 6 3
+@8 int 7 4
+@9 int 8 5
+@10 int 9 6
+@11 int 10 7
+@12 int 11 8
+@13 tag 12 0
+@14 tag-test 13 0 1
+@15 intrinsic 14 "assert" 13
+@16 read 15 copy 3 index 12
+@17 binary 16 "+" 4 5
+@18 binary 17 "+" 16 6
+@19 binary 18 "+" 17 7
+@20 binary 19 "+" 18 8
+@21 binary 20 "+" 19 9
+@22 binary 21 "+" 20 10
+@23 binary 22 "+" 21 11
+@24 binary 23 "+" 22 15
+@25 drop 0
+@26 drop 3
+@27 drop 12
+@28 drop 14
+@29 return 23
+endfn

@@ -1,0 +1,23 @@
+// expect: output 41424344
+struct Marker {
+    stream: Stdout,
+    byte: u8,
+}
+impl Drop for Marker {
+    fn drop(&mut self) {
+        self.stream.write(&[self.byte]);
+    }
+}
+fn selected<'a>(values: &'a [u8; 2], index: usize) -> &'a u8 {
+    &values[index]
+}
+pub fn main(mut world: World) {
+    let values = [b'A', b'C'];
+    let mut output = world.stdout();
+    {
+        let _marker = Marker { stream: world.stdout(), byte: b'B' };
+        output.write(&[*selected(&values, 0)]);
+    }
+    output.write(&[*selected(&values, 1)]);
+    output.write(b"D");
+}

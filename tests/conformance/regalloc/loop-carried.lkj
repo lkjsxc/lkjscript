@@ -1,0 +1,21 @@
+// expect: value 1353
+pub fn probe() -> i64 {
+    let mut accumulated = 2i64;
+    let mut iteration = 0i64;
+    while iteration < 4 {
+        let mut inner = 0i64;
+        iteration += 1;
+        while inner < 3 {
+            inner += 1;
+            if inner == 2 {
+                continue;
+            }
+            accumulated = accumulated * 2 + iteration + inner;
+        }
+        if iteration == 2 {
+            continue;
+        }
+        accumulated += iteration;
+    }
+    accumulated
+}

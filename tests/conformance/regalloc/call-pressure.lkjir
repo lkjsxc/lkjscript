@@ -1,0 +1,64 @@
+lkjscript-ir 1
+# expect: value 77
+# Two disjoint sets of call-crossing spills can reuse their frame homes.
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+fn "touch" 0 3
+local "result" 3 let
+@1 int 0 11
+@2 return 0
+endfn
+fn "probe" 0 3
+local "first_a" 3 let
+local "first_b" 3 let
+local "first_c" 3 let
+local "first_d" 3 let
+local "first_e" 3 let
+local "first_call" 3 let
+local "first_ab" 3 let
+local "first_abc" 3 let
+local "first_abcd" 3 let
+local "first_abcde" 3 let
+local "first_sum" 3 let
+local "second_a" 3 let
+local "second_b" 3 let
+local "second_c" 3 let
+local "second_d" 3 let
+local "second_e" 3 let
+local "second_call" 3 let
+local "second_ab" 3 let
+local "second_abc" 3 let
+local "second_abcd" 3 let
+local "second_abcde" 3 let
+local "second_sum" 3 let
+local "result" 3 let
+@1 int 0 1
+@2 int 1 2
+@3 int 2 3
+@4 int 3 4
+@5 int 4 5
+@6 call 5 0
+@7 binary 6 "+" 0 1
+@8 binary 7 "+" 6 2
+@9 binary 8 "+" 7 3
+@10 binary 9 "+" 8 4
+@11 binary 10 "+" 9 5
+@12 int 11 6
+@13 int 12 7
+@14 int 13 8
+@15 int 14 9
+@16 int 15 10
+@17 call 16 0
+@18 binary 17 "+" 11 12
+@19 binary 18 "+" 17 13
+@20 binary 19 "+" 18 14
+@21 binary 20 "+" 19 15
+@22 binary 21 "+" 20 16
+@23 binary 22 "+" 10 21
+@24 return 22
+endfn

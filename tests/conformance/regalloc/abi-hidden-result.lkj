@@ -1,0 +1,12 @@
+// expect: value 140
+struct Sum {
+    first: i64,
+    last: i64,
+}
+fn mix(a: i64, b: i64, c: i64, d: i64, e: i64, f: i64, g: i64) -> Sum {
+    Sum { first: a + 2 * b + 3 * c + 4 * d, last: 5 * e + 6 * f + 7 * g }
+}
+pub fn probe() -> i64 {
+    let result = mix(1, 2, 3, 4, 5, 6, 7);
+    result.first + result.last
+}

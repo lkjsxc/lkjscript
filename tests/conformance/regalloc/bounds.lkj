@@ -1,0 +1,5 @@
+// expect: trap R0003 2
+mod failing;
+pub fn probe() -> u8 {
+    failing::bounds(3)
+}

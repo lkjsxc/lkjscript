@@ -1,0 +1,16 @@
+// expect: value 30207
+struct Packed {
+    tiny_signed: i8,
+    tiny_unsigned: u8,
+    short_signed: i16,
+    short_unsigned: u16,
+}
+pub fn probe() -> i64 {
+    let input = Packed { tiny_signed: -43, tiny_unsigned: 250,
+                         short_signed: -30000, short_unsigned: 60000 };
+    let a = input.tiny_signed;
+    let b = input.tiny_unsigned;
+    let c = input.short_signed;
+    let d = input.short_unsigned;
+    a as i64 + b as i64 + c as i64 + d as i64
+}

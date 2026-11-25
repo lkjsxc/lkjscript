@@ -1,0 +1,7 @@
+// expect: trap R0001 3
+fn quotient(numerator: i64, denominator: i64) -> i64 {
+    numerator / denominator
+}
+pub fn probe() -> i64 {
+    quotient(i64::MIN, -1)
+}

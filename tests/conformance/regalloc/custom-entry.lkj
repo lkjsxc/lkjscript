@@ -1,0 +1,8 @@
+// expect: trap R0004 7
+// entry: failing
+pub fn probe() -> i64 {
+    42
+}
+pub fn failing() {
+    panic!("regalloc: ordered é");
+}

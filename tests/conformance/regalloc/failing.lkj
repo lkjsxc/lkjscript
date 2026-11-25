@@ -1,0 +1,3 @@
+pub fn bounds(index: usize) -> u8 {
+    [10u8, 20u8][index]
+}
