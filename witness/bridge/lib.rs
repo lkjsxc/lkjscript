@@ -74,6 +74,21 @@ pub fn structural_error(identity: &str, rule: &str, detail: &str) -> String {
     language::structure_edit::error(identity, rule, detail)
 }
 
+/// Bridge macro-provider validation across the witness's library/binary split.
+pub fn macro_provider_name(name: &str) -> bool {
+    syntax::macro_provider_name(name)
+}
+
+/// Bridge source loading with explicit macro providers across the same split.
+pub fn load_report_with_providers<F: FnMut(&str) -> Result<Option<Vec<u8>>, String>>(
+    root: &str,
+    standard: Option<&str>,
+    providers: &[ast::macros::MacroProviderInput],
+    read: &mut F,
+) -> source::SourceReport {
+    source::load_report_with_providers(root, standard, providers, read)
+}
+
 /// Preserve source-crate access across the optional witness crate split.
 pub fn proof_domain(producer: &[u8], secret: &[u8]) -> reuse::ProofDomain {
     reuse::ProofDomain::new(producer, secret)

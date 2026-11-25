@@ -3,7 +3,7 @@
 pub use lkjscript::{host, proof_domain, seal_header};
 pub use lkjscript::{
     ast, authority, child_image, entry_grants, backend, check, diagnostic, diagnostics, elaborate, frontend, generics, interpreter, ir,
-    ir_text, ir_binary, json, names, optimizer, resolve, reuse, runtime, runtime_memory, runtime_diagnostics, sha256, source, syntax, x86,
+    ir_text, ir_binary, json, names, optimizer, resolve, reuse, runtime, runtime_memory, runtime_diagnostics, sha256, x86,
     semantic, semantic_facts, structure_write, structure_replay, structure_refactor, source_json, trim_source_ascii,
 };
 // The source compiler is one crate; preserve its crate-local helper access here.
@@ -15,6 +15,14 @@ mod native {
 mod structure_edit {
     pub use lkjscript::structure_edit::*;
     pub use lkjscript::structural_error as error;
+}
+mod source {
+    pub use lkjscript::load_report_with_providers;
+    pub use lkjscript::source::*;
+}
+mod syntax {
+    pub use lkjscript::macro_provider_name;
+    pub use lkjscript::syntax::*;
 }
 include!(concat!(env!("OUT_DIR"), "/embedded-module.rs"));
 include!(concat!(env!("OUT_DIR"), "/meaning-module.rs"));
