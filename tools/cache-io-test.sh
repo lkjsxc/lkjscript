@@ -45,12 +45,13 @@ cached() {
         --store-key "$fixture/key" --inline-limit 0 -o "$fixture/image" "$@"
 }
 mkdir "$fixture/timing"
-cp src/diagnostic.lkj src/ir.lkj src/ir_binary.lkj src/reuse.lkj src/store.lkj "$fixture/timing/"
+bash tools/store-fixture-source.sh "$fixture/timing"
 cat > "$fixture/timing/main.lkj" <<'SOURCE'
 mod diagnostic;
 mod ir;
 mod ir_binary;
 mod reuse;
+mod native { pub mod records; }
 mod store;
 pub use std::sha256;
 fn main() { store::io_timing_contracts(); }

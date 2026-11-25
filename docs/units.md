@@ -15,9 +15,30 @@ const DEPENDS: &[&str] = &["app=math"];
 const ENTRY: &str = "app::main";
 ```
 
+The declarations are unconditional literals and may appear in any order.
+Ordinary and raw UTF-8 strings use the language's existing escape semantics.
+Nested comments, trailing commas, parenthesized types and values, reference
+lifetimes and visibility within the root crate are accepted. Attributes and
+`cfg` are refused with a diagnostic: select a separate manifest for each
+configuration. Computed constants, macros and other declarations are refused.
+
 Unit names are identifiers; sources are relative `.lkj` paths beneath
 `--source-dir`, without `..`. Dependencies must form a DAG. Mutually
-dependent modules belong to the same unit. The compiler orders units itself.
+dependent modules belong to the same unit. The compiler repeatedly selects the
+lexically smallest ready unit, including units made ready by the preceding
+selection. It constructs the complete schedule and refuses cycles before
+validating ENTRY or checking any unit source.
+
+Manifest capture streams UTF-8 validation and a complete source digest before
+the lexer can report input text. An exact private-key input is excluded first.
+Raw chunks, decoded token chunks and literal rows live in an authenticated
+command-local disk store. Only one lexeme or literal is decoded at a time.
+Individual definition, path, dependency and remaining-count records feed an
+on-disk ready heap. Completed ordinal rows are bound to each unit's stored rank.
+A caller restores one unit's definition and direct-dependency list. Final
+authentication includes the complete scratch file and exact inventory, followed
+by a streamed rehash of the original manifest before publication. There is no
+manifest-size or nesting policy cap.
 
 Each unit source is mounted as a module bearing its unit name. For example,
 `math.lkj` can declare `pub fn twice(value: i64) -> i64 { value + value }`,
@@ -46,6 +67,13 @@ the final sweep. Repeated cache lookups may share an observation within that
 command; fresh admission hashes the bytes it actually loads, and the final sweep
 always reads again. Failed cache candidates cannot supply fresh input identities.
 
+Selected records and the complete input-claim set live in separate command-local
+authenticated disk stores. Only the selected authenticated projection supplies a
+retained record's requirement list. The adjacent units' observation and
+selected-claim caches remain in RAM. Selected claims persist in scratch and
+participate in conflict checks after an observation leaves the cache. Both
+complete scratch files are verified before publication.
+
 ## What an interface proves
 
 `CheckedUnit` and `Interface` are separate from `CheckedProgram`. A bodyless
@@ -71,10 +99,10 @@ A wrong producer, key, unit, input, dependency, namespace, payload or framing
 cannot grant admission. A damaged cache entry is discarded and independently
 checked again when its source is available. When a dependent needs a record
 that the command has not already authenticated and retained, eviction or failed
-authentication refuses that read. No unsigned declaration replaces it. A small
-requirement list already obtained from an authenticated projection can remain
-valid in memory after its backing entry is evicted; it does not authorize a new
-interface or projection read. Repeated imports of a genuine reexport are accepted
+authentication refuses that read. No unsigned declaration replaces it. A
+requirement list already obtained from an authenticated projection remains valid
+in command scratch after its cache entry is evicted. Interface and projection
+reads still require their own authentication. Repeated imports of a genuine reexport are accepted
 only when their defining binding, exact signature and effects agree.
 
 Interface restoration reads the framed IR directly from its bounded payload
@@ -130,9 +158,9 @@ including when a later unit adds an earlier-sorting message.
 Version-two native objects store export offsets and sites in exact authenticated
 interface order. Their key also binds the ordered checked-body identity; an
 ordinal cannot select a different implementation. Per-object symbol and message
-tables supply checked relocation ordinals. The linker keeps each function name
-under its exact defining unit and semantic identity. Earlier object namespaces
-are cache misses, with no fallback admission.
+tables supply checked relocation ordinals. Each function name is bound to its
+exact defining unit and semantic identity in a stored per-unit claim. Earlier
+object namespaces are cache misses, with no fallback admission.
 
 The linker writes code and relocation spools incrementally and patches the
 unpublished output file through bounded buffers; it does not assemble a
@@ -140,23 +168,88 @@ whole-program IR or executable byte vector. A borrowed immutable runtime context
 reuses its exact identity within the command. Authenticated object payloads keep
 their validated code spans without copying the code into a second allocation.
 Each object's temporary relocation frame keeps its names once and uses ordinal
-rows. A table entry is resolved at first use and then reused within that frame;
-unresolved bindings retain the original full name and source location.
+rows. Symbol lookup groups entries by exact provider and interface identity,
+loading one provider claim at a time. Resolved offsets stay only in the current
+frame. The linker validates bindings at their relocation rows in original order.
+It reports a missing binding with the full name and source location of the first
+affected row.
 Initial and runtime-support records retain their named form. Frame and name
 allocations are bounded by maxima observed by the trusted writer, with local
 byte/count checks before allocation. These are extent facts, not resource policy.
 A failed object poisons the linker, and arrival order remains unrestricted.
 Relocation consumption still verifies the complete recorded extent, physical EOF
 and digest before the ELF header is written or the output can be published.
+
+`Linker::new(output, relocations, records)` takes a third scratch `File` for
+command-local claims and tables. The driver creates its scratch files as
+exclusive mode-0600 files beneath the selected `--store` Directory and
+immediately unlinks their names while retaining their open handles. The store
+must allow creation and removal even for an unchanged build. The unpublished
+output is a regular file managed by the atomic publication path.
+The ordinary-source `native::records::Store`
+provides insert, replace, lookup and ordered traversal through an append-only
+AVL index. The writer constructs the trusted root locator and digest and keeps
+them in RAM. Every node and value read checks its exact offset, length and
+digest before decoding. Read allocations use maxima observed by the writer.
+Child extents, heights, key order and local framing are checked independently.
+Insertion retains the authenticated index path, reusing small decoded nodes
+within one write. The complete file digest and physical EOF are verified before
+publication, including the header and superseded nodes. Any failed public store
+operation poisons further use.
+
+Stored claims preserve checked imports, dependencies, export offsets and sites,
+including private helper bindings and full generic instance names. Each unit also
+stores a small identity record binding its exact name, runtime context and semantic
+interface identity. Dependency checks read this record. Imports and relocation
+bindings load the complete provider claim. Finish compares every identity
+with its full claim in unit-name order and requires exactly one claim, identity
+and ordinal table per pushed unit. A separate authenticated ordinal key preserves
+the arrival order of source and message table validation. Registry corruption
+poisons the linker before ELF publication.
+
+`build-units` also supplies `ImageTables` with a separate private, unlinked
+regular scratch file. Source blocks bind their exact starting ordinal, count
+and ordered paths. Repeated paths keep distinct ordinals. At most one decoded
+source block is cached. Raw trap messages are exact keys in the authenticated
+store. Their lexical order assigns codes before display escaping or truncation,
+so distinct long messages with equal displays remain distinct.
+
+The final diagnostic data is streamed into the unpublished output. Count and
+pointer/length rows are reserved and patched through bounded buffers, followed
+by one escaped string at a time. Only runtime support code enters the ordinary
+assembler. The linker checks its fixed data exports against the written data
+extent.
+The table file's complete digest and physical EOF are checked with claims and
+relocations before writing the ELF header. `check-units` creates no final-image
+table file. Both the slice-based linker API and the unit driver's disk-backed
+API use the same validation and streaming path.
+
 Source AST, elaboration and IR storage are released after each unit. The source
 frontier includes needed declarations/templates and the standard library.
 
-The driver still retains unit/dependency/input/source metadata, and the linker
-retains a compact registry of exported and internal function symbols. These
-grow with the program. Thus bounded source/IR storage is an architectural fact;
-strict total-memory O(largest unit) is not asserted without measurement.
+The native linker keeps one decoded provider, the current relocation frame,
+runtime support symbols and bounded I/O windows in memory. The registry and its
+index grow in filesystem-backed scratch files. These files can occupy
+reclaimable operating-system page cache separately from process RSS.
+The manifest, its lexical schedule, selected records, input claims and final
+source/message tables grow in authenticated filesystem scratch storage. Manifest
+reading retains bounded chunks, the largest lexeme and an authenticated index
+path. Definition lookup restores one direct-dependency list. Only adjacent unit
+input caches remain resident. Reuse-store accounting streams its authenticated
+size index into command-local records. It scans directory entries one at a time
+and streams checkpoint rows under the existing writer lock. The persistent
+envelope and accounting format are unchanged. Scratch files and reclaimable
+page cache remain outside the published-byte quota and process RSS, respectively.
+
+The active unit still retains its exact transitive dependency vector and
+selected declaration/template interfaces. These can grow with the dependency
+closure of that unit. Record index paths also grow logarithmically with the
+number of stored records. Measurements hold the checking frontier fixed to
+isolate the removed program-wide retention.
 `--stats` reports maxima for definitions, IR functions/types, imported
 interfaces, projection bytes and source entries to make that distinction visible.
+It also reports the largest flat dependency vector and the count of input-cache
+entries sampled after each unit.
 
 The existing store default is 256 MiB. Large cohorts must explicitly provision
 enough `--store-bytes` for live interfaces, projections and objects; eviction
@@ -172,18 +265,46 @@ The ordinary gate runs:
   decoding, structural and ownership attacks, including a three-unit destructor
   reexport, canonical span identities and reauthenticated malformed payloads.
   The current focused run refuses 2,809 deliberate mutants.
-- `tools/unit-native.sh`: 76 native contract cases covering cross-unit
+- `tools/unit-native.sh`: 239 native contract cases covering cross-unit
   execution, wrong domains, stale bodies, ordinal tables, bounded spool frames,
   names larger than 64 KiB, unpublished headers on refusal and preserved custom
-  traps with exact unresolved-binding locations.
+  traps with exact unresolved-binding locations. Registry controls cover all
+  four AVL rotations, replacement and nonmembership at empty/UTF-8/prefix keys,
+  duplicate/missing-key poisoning, root/internal/value/obsolete-record changes,
+  swapped values, length/UTF-8 damage, truncation, trailing/sparse bytes and
+  rollback. Native controls also preserve source/message validation arrival
+  order, allow unused well-formed missing relocation names, reject missing/stale
+  declared dependencies despite an independent entry, and report the first
+  original unresolved row when provider sorting would select another name.
+  Identity records additionally reject malformed framing, context/name/digest
+  disagreement, every truncated prefix, invalid UTF-8, trailing bytes, extra or
+  missing records and backing-file tampering before an ELF header is written.
+  Eighteen table controls compare streamed support bytes, definitions and
+  relocation sites with the independent vector encoder. They compare complete
+  ELF images and their execution through both table adapters, and check duplicate
+  source ordinals, empty/Unicode/escaped strings, display limits and colliding
+  truncated displays. Damaged header/EOF/node/value data, cached-value changes
+  and poisoned tables refuse before publication. An out-of-range ordinary
+  assembler export also refuses.
 - `tools/unit-source-test.sh`: cold checking/building, byte-identical warm
   reuse, public/private/method body edits, generic invalidation, exact includes,
   corrupted interfaces, key exclusion, cycles and atomic rejection, plus eight
-  snapshot-consistency attacks on both engines, transitive generic requirements,
+  snapshot-consistency attacks on both engines, ten disk-retained input contract
+  groups on both engines, transitive generic requirements,
   corrupted source projections and failed-publication cleanup. The hard-link
   key attack keeps its key outside the source grant on the same filesystem.
+  Successful and refused unit builds must leave no named scratch spools.
+- `tools/unit-plan-test.sh`: the literal-parser oracle, semantic refusal order,
+  all declaration orders, lexical ready-heap changes, UTF-8/comment/escape/raw
+  string boundaries, oversized literals, retained-file mutations and poisoned
+  schedule reads. The actual unit commands exercise changed declaration order,
+  Unicode paths, warm reuse, attribute refusal, cycle refusal before ENTRY or
+  source reads, private-key manifest exclusion and unchanged published output.
+  Arbitrary malformed whole-language parser precedence is outside this grammar.
 - `tools/unit-boundaries-test.sh`: returned field views, imported destruction,
   narrow authority, fresh implementation linkage and rejected caller mutation.
+- `tools/budget-test.sh`: 809 authenticated accounting controls and 11 host
+  controls for index restore and checkpoint, traversal, eviction, and tampering.
 
 The size ladder and stranger trials are outside the gate. The ladder records
 exact source lines separately from manifest/driver lines, independently checks

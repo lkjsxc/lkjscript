@@ -1,0 +1,276 @@
+//! Bounded I/O for the unchanged authenticated size-index v2 payload.
+use crate::{reuse, sha256};
+use crate::native::records::Store as Records;
+use super::{read_exact, at_end};
+const CHUNK: usize = 65536usize;
+fn chunk_key(ordinal: usize) -> String { format!("B{ordinal:020}") }
+
+/// Parsing starts only after the complete original envelope has authenticated
+/// into fresh writer-owned chunks. The mutable original is never reread.
+pub(super) struct IndexReader {
+    records: Records,
+    chunks: usize,
+    next: usize,
+    buffer: Vec<u8>,
+    at: usize,
+    length: usize,
+    remaining: usize,
+    failure: Option<String>,
+}
+impl IndexReader {
+    pub(super) fn open(mut file: File, snapshot: File, secret: &[u8], capacity: usize)
+        -> Result<Option<Self>, String> {
+        let mut header = vec![0u8; reuse::header_size()];
+        if !read_exact(&mut file, &mut header) { return Ok(None); }
+        let identity = sha256::digest(b"lkjscript-store-size-index-1");
+        let Some(root) = reuse::AuthenticatedRoot::new(&identity, secret, "size-index", "1", &header) else {
+            return Ok(None);
+        };
+        let length = root.length();
+        let total = length.checked_add(header.len());
+        if match total { Some(total) => total > capacity, None => true } { return Ok(None); }
+        let offset = header.len() - 64usize;
+        let mut digest = [0u8; 32];
+        for index in 0usize..32usize { digest[index] = header[offset + index]; }
+        let mut records = Records::new(snapshot)?;
+        let mut hash = sha256::Sha256::new(); let mut remaining = length;
+        let mut buffer = vec![0u8; CHUNK]; let mut chunks = 0usize;
+        while remaining != 0usize {
+            let count = remaining.min(CHUNK);
+            if !read_exact(&mut file, &mut buffer[..count]) { return Ok(None); }
+            hash.update(&buffer[..count]);
+            records.insert(&chunk_key(chunks), &buffer[..count])?;
+            chunks = chunks.checked_add(1usize).ok_or("budget snapshot chunk count overflow")?;
+            remaining -= count;
+        }
+        if !at_end(&mut file) || hash.finish() != digest { return Ok(None); }
+        records.verify()?;
+        Ok(Some(Self { records, chunks, next: 0usize, buffer: Vec::new(),
+            at: 0usize, length, remaining: length, failure: None }))
+    }
+    pub(super) fn length(&self) -> usize { self.length }
+    pub(super) fn remaining(&self) -> usize { self.remaining }
+    fn reject(&mut self, detail: &str) -> Option<()> {
+        self.failure = Some(format!("budget snapshot: {detail}")); None
+    }
+    fn refill(&mut self) -> Option<()> {
+        if self.failure.is_some() { return None; }
+        if self.next >= self.chunks { return self.reject("lost an expected chunk"); }
+        let value = match self.records.get(&chunk_key(self.next)) {
+            Ok(Some(value)) => value,
+            Ok(None) => return self.reject("lost a selected chunk"),
+            Err(error) => { self.failure = Some(error); return None; }
+        };
+        let start = match self.next.checked_mul(CHUNK) {
+            Some(start) => start, None => return self.reject("chunk position overflow"),
+        };
+        if start > self.length || value.len() != (self.length - start).min(CHUNK) {
+            return self.reject("selected chunk changed its extent");
+        }
+        self.next += 1usize; self.buffer = value; self.at = 0usize;
+        Some(())
+    }
+    fn exact(&mut self, bytes: &mut [u8]) -> Option<()> {
+        if self.failure.is_some() || bytes.len() > self.remaining { return None; }
+        let mut written = 0usize;
+        while written < bytes.len() {
+            if self.at == self.buffer.len() { self.refill()?; }
+            let count = (bytes.len() - written).min(self.buffer.len() - self.at);
+            bytes[written..written + count].copy_from_slice(&self.buffer[self.at..self.at + count]);
+            self.at += count; written += count; self.remaining -= count;
+        }
+        Some(())
+    }
+    pub(super) fn word(&mut self) -> Option<usize> {
+        let mut bytes = [0u8; 8]; self.exact(&mut bytes)?;
+        let mut value = 0usize;
+        for index in 0usize..8usize { value |= (bytes[index] as usize) << (index * 8usize); }
+        Some(value)
+    }
+    pub(super) fn identity(&mut self) -> Option<String> {
+        if self.word()? != 64usize { return None; }
+        let mut bytes = [0u8; 64]; self.exact(&mut bytes)?;
+        String::from_utf8(bytes[..].to_vec()).ok()
+    }
+    pub(super) fn text(&mut self) -> Option<String> {
+        let length = self.word()?;
+        if length > self.remaining { return None; }
+        // This length belongs to the fully authenticated, writer-owned snapshot,
+        // not to bytes that merely share a valid outer envelope header.
+        let mut bytes = vec![0u8; length]; self.exact(&mut bytes)?;
+        String::from_utf8(bytes).ok()
+    }
+    pub(super) fn finish(self) -> Result<(), String> {
+        if let Some(error) = self.failure { return Err(error); }
+        self.records.finish()
+    }
+}
+
+/// Optional timing never changes accounting or adds an arithmetic trap.
+pub(super) struct WriteMetrics {
+    pub(super) seal_ns: usize,
+    pub(super) write_ns: usize,
+    pub(super) accounted_ns: usize,
+    pub(super) clock_failures: usize,
+    pub(super) completed_write_bytes: usize,
+    pub(super) sealed_payload_bytes: usize,
+    pub(super) sealed: bool,
+    pub(super) overflow: bool,
+}
+impl WriteMetrics {
+    pub(super) fn new() -> Self {
+        Self { seal_ns: 0usize, write_ns: 0usize, accounted_ns: 0usize,
+            clock_failures: 0usize, completed_write_bytes: 0usize,
+            sealed_payload_bytes: 0usize, sealed: false, overflow: false }
+    }
+}
+pub(super) struct IndexWriter<'a, 'b, 'c> {
+    file: &'a mut File,
+    clock: Option<&'b mut Clock>,
+    metrics: &'c mut WriteMetrics,
+    length: usize,
+    hash: sha256::Sha256,
+    buffer: Vec<u8>,
+    used: usize,
+}
+impl<'a, 'b, 'c> IndexWriter<'a, 'b, 'c> {
+    pub(super) fn new(file: &'a mut File, clock: Option<&'b mut Clock>,
+        metrics: &'c mut WriteMetrics) -> Result<Self, String> {
+        file.truncate(0usize).map_err(|errno: i64| -> String { format!("budget index truncate: {errno}") })?;
+        file.seek(0i64, 0u8).map_err(|errno: i64| -> String { format!("budget index rewind: {errno}") })?;
+        let mut output = Self { file, clock, metrics, length: 0usize,
+            hash: sha256::Sha256::new(), buffer: vec![0u8; CHUNK], used: 0usize };
+        // A pending file cannot acquire a MAC until all accounting verifies.
+        output.write(&vec![0u8; reuse::header_size()])?;
+        Ok(output)
+    }
+    fn begin(&mut self) -> Option<usize> {
+        let clock = self.clock.as_mut()?;
+        match clock.nanoseconds() {
+            Ok(now) => Some(now),
+            Err(_) => {
+                self.metrics.clock_failures = super::io_add(self.metrics.clock_failures, 1usize, &mut self.metrics.overflow);
+                None
+            }
+        }
+    }
+    fn end(&mut self, started: Option<usize>, seal: bool) {
+        let Some(started) = started else { return; };
+        let now = self.clock.as_mut().unwrap().nanoseconds().ok();
+        let elapsed = now.and_then(|now: usize| now.checked_sub(started));
+        let Some(elapsed) = elapsed else {
+            self.metrics.clock_failures = super::io_add(self.metrics.clock_failures, 1usize, &mut self.metrics.overflow);
+            return;
+        };
+        self.metrics.accounted_ns = super::io_add(self.metrics.accounted_ns, elapsed, &mut self.metrics.overflow);
+        if seal { self.metrics.seal_ns = super::io_add(self.metrics.seal_ns, elapsed, &mut self.metrics.overflow); }
+        else { self.metrics.write_ns = super::io_add(self.metrics.write_ns, elapsed, &mut self.metrics.overflow); }
+    }
+    fn completed(&mut self, count: usize, success: bool) {
+        if success {
+            self.metrics.completed_write_bytes = super::io_add(self.metrics.completed_write_bytes, count, &mut self.metrics.overflow);
+        }
+    }
+    fn write(&mut self, bytes: &[u8]) -> Result<(), String> {
+        let span = self.begin();
+        let result = self.file.write_all(bytes);
+        self.end(span, false);
+        self.completed(bytes.len(), result.is_ok());
+        result.map_err(|errno: i64| -> String { format!("budget index write: {errno}") })
+    }
+    fn flush(&mut self) -> Result<(), String> {
+        if self.used == 0usize { return Ok(()); }
+        let count = self.used;
+        let span = self.begin();
+        self.hash.update(&self.buffer[..count]);
+        self.end(span, true);
+        let span = self.begin();
+        let result = self.file.write_all(&self.buffer[..count]);
+        self.end(span, false);
+        self.completed(count, result.is_ok());
+        result.map_err(|errno: i64| -> String { format!("budget index write: {errno}") })?;
+        self.used = 0usize;
+        Ok(())
+    }
+    fn append(&mut self, bytes: &[u8]) -> Result<(), String> {
+        let length = self.length.checked_add(bytes.len()).ok_or("budget index length overflow")?;
+        let total = length.checked_add(reuse::header_size()).ok_or("budget index extent overflow")?;
+        if total > 9223372036854775807usize { return Err("budget index seek representation overflow".to_string()); }
+        let mut at = 0usize;
+        while at < bytes.len() {
+            let count = (bytes.len() - at).min(CHUNK - self.used);
+            self.buffer[self.used..self.used + count].copy_from_slice(&bytes[at..at + count]);
+            self.used += count; at += count;
+            if self.used == CHUNK { self.flush()?; }
+        }
+        self.length = length;
+        Ok(())
+    }
+    pub(super) fn word(&mut self, value: usize) -> Result<(), String> {
+        let mut bytes = [0u8; 8];
+        for index in 0usize..8usize { bytes[index] = (value >> (index * 8usize)) as u8; }
+        self.append(&bytes)
+    }
+    pub(super) fn text(&mut self, value: &str) -> Result<(), String> {
+        self.word(value.len())?; self.append(value.as_bytes())
+    }
+    pub(super) fn length(&self) -> usize { self.length }
+    pub(super) fn finish_payload(&mut self) -> Result<(), String> { self.flush() }
+    pub(super) fn finish(mut self, secret: &[u8]) -> Result<usize, String> {
+        if self.used != 0usize { return Err("budget index payload is not flushed".to_string()); }
+        let total = self.length.checked_add(reuse::header_size()).ok_or("budget index extent overflow")?;
+        if self.file.seek(0i64, 2u8).map_err(|errno: i64| -> String { format!("budget index extent: {errno}") })? != total {
+            return Err("budget index physical extent changed".to_string());
+        }
+        let span = self.begin();
+        let identity = sha256::digest(b"lkjscript-store-size-index-1");
+        let digest = self.hash.snapshot().finish();
+        let header = reuse::seal_header(&identity, secret, "size-index", "1", self.length, &digest);
+        self.end(span, true);
+        if header.len() != reuse::header_size() { return Err("budget index root sealing refused".to_string()); }
+        self.metrics.sealed = true; self.metrics.sealed_payload_bytes = self.length;
+        self.file.seek(0i64, 0u8).map_err(|errno: i64| -> String { format!("budget index rewind: {errno}") })?;
+        self.write(&header)?;
+        Ok(total)
+    }
+}
+
+/// Same getdents record decoding as Directory::list, one name at a time.
+/// The host first spools every name before it removes or creates entries.
+pub(super) struct DirectoryNames {
+    directory: Directory,
+    buffer: Vec<u8>,
+    at: usize,
+    available: usize,
+    ended: bool,
+}
+impl DirectoryNames {
+    pub(super) fn new(directory: &mut Directory) -> Result<Self, i64> {
+        Ok(Self { directory: directory.open_directory(".")?, buffer: vec![0u8; 8192],
+            at: 0usize, available: 0usize, ended: false })
+    }
+    pub(super) fn next(&mut self) -> Result<Option<Vec<u8>>, i64> {
+        loop {
+            if self.ended { return Ok(None); }
+            if self.at == self.available {
+                let count = self.directory.__lkjscript_read(&mut self.buffer);
+                if count < 0i64 { return Err(-count); }
+                self.at = 0usize; self.available = count as usize;
+                if self.available > self.buffer.len() { return Err(5i64); }
+                if self.available == 0usize { self.ended = true; return Ok(None); }
+            }
+            if self.available - self.at < 20usize { return Err(5i64); }
+            let record = self.buffer[self.at + 16usize] as usize
+                | ((self.buffer[self.at + 17usize] as usize) << 8usize);
+            if record < 20usize || record > self.available - self.at { return Err(5i64); }
+            let start = self.at + 19usize;
+            let limit = self.at + record;
+            let mut end = start;
+            while end < limit && self.buffer[end] != 0u8 { end += 1usize; }
+            self.at = limit;
+            let name = &self.buffer[start..end];
+            if name == b"." || name == b".." { continue; }
+            return Ok(Some(name.to_vec()));
+        }
+    }
+}

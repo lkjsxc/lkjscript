@@ -155,6 +155,10 @@ pub(super) fn data(a: &mut Assembler, p: Platform, bytes: &mut Vec<u8>, offset: 
     for source in sources { paths.push(crate::runtime_diagnostics::escaped(source, 512, true)); }
     if paths.is_empty() { paths.push("<ir>".to_string()); }
     table(a, p.sources, bytes, offset, &paths);
+    fixed_data(a, p, bytes, offset);
+}
+
+pub(super) fn fixed_data(a: &mut Assembler, p: Platform, bytes: &mut Vec<u8>, offset: usize) {
     let mut names = Vec::new();
     for number in 0..134 { names.push(crate::runtime_diagnostics::errno_name(number).to_string()); }
     table(a, p.errnos, bytes, offset, &names);

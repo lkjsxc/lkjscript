@@ -1,0 +1,271 @@
+//! Authenticated disk graph and lexical Kahn schedule. Only an edge, a heap
+//! path, or one returned definition is restored; no program-wide owner map.
+use super::*;
+const DEFINITION: &str = "LKJUNITDEFINITION1\n";
+const PATH: &str = "LKJUNITPATH1\n";
+const STATE: &str = "LKJUNITSTATE1\n";
+const EDGE: &str = "LKJUNITEDGE1\n";
+
+struct Metadata { name: String, source: String, dependencies: usize }
+#[derive(Clone, Copy)]
+struct State { done: bool, value: usize }
+fn named(prefix: &str, name: &str) -> String { format!("{prefix}{name}") }
+fn edge_key(prefix: &str, owner: &str, dependency: &str) -> String { format!("{prefix}{owner}\0{dependency}") }
+fn need(data: &mut records::Store, key: &str) -> Result<Vec<u8>, String> {
+    data.get(key).map_err(|message: String| record_error(message))?
+        .ok_or_else(|| issue("retained manifest record disappeared"))
+}
+fn insert(data: &mut records::Store, key: &str, bytes: &[u8]) -> Result<(), String> {
+    data.insert(key, bytes).map_err(|message: String| record_error(message))
+}
+fn replace(data: &mut records::Store, key: &str, bytes: &[u8]) -> Result<(), String> {
+    data.replace(key, bytes).map_err(|message: String| record_error(message))
+}
+fn contains(data: &mut records::Store, key: &str) -> Result<bool, String> {
+    data.contains(key).map_err(|message: String| record_error(message))
+}
+fn after(data: &mut records::Store, key: &str) -> Result<Option<String>, String> {
+    data.after(key).map_err(|message: String| record_error(message))
+}
+fn metadata_bytes(value: &Metadata) -> Vec<u8> {
+    let mut bytes = DEFINITION.as_bytes().to_vec();
+    store::push_bytes(&mut bytes, value.name.as_bytes()); store::push_bytes(&mut bytes, value.source.as_bytes());
+    store::push_word(&mut bytes, value.dependencies); bytes
+}
+fn decode_metadata(bytes: &[u8], name: &str, count: usize) -> Option<Metadata> {
+    if !bytes.starts_with(DEFINITION.as_bytes()) { return None; }
+    let mut reader = store::Reader::new(&bytes[DEFINITION.len()..]);
+    let actual = reader.text()?; let source = reader.text()?; let dependencies = reader.word()?;
+    if !reader.done() || actual.as_str() != name || !identifier(&actual)
+        || !beneath(&source) || !source.ends_with(".lkj") || dependencies > count { return None; }
+    Some(Metadata { name: actual, source, dependencies })
+}
+fn metadata(data: &mut records::Store, name: &str, count: usize) -> Result<Metadata, String> {
+    let bytes = need(data, &named("D", name))?;
+    decode_metadata(&bytes, name, count).ok_or_else(|| issue("malformed retained manifest definition"))
+}
+fn pair_bytes(magic: &str, first: &str, second: &str) -> Vec<u8> {
+    let mut bytes = magic.as_bytes().to_vec();
+    store::push_bytes(&mut bytes, first.as_bytes()); store::push_bytes(&mut bytes, second.as_bytes()); bytes
+}
+fn pair_matches(bytes: &[u8], magic: &str, first: &str, second: &str) -> bool {
+    if !bytes.starts_with(magic.as_bytes()) { return false; }
+    let mut reader = store::Reader::new(&bytes[magic.len()..]);
+    let Some(actual_first) = reader.text() else { return false; };
+    let Some(actual_second) = reader.text() else { return false; };
+    actual_first.as_str() == first && actual_second.as_str() == second && reader.done()
+}
+fn require_pair(data: &mut records::Store, key: &str, magic: &str, first: &str, second: &str) -> Result<(), String> {
+    let bytes = need(data, key)?;
+    if !pair_matches(&bytes, magic, first, second) { return Err(issue("retained manifest record changed its binding")); }
+    Ok(())
+}
+fn state_bytes(name: &str, value: State) -> Vec<u8> {
+    let mut bytes = STATE.as_bytes().to_vec();
+    store::push_bytes(&mut bytes, name.as_bytes());
+    store::push_word(&mut bytes, if value.done { 1usize } else { 0usize });
+    store::push_word(&mut bytes, value.value); bytes
+}
+fn state(data: &mut records::Store, name: &str, count: usize) -> Result<State, String> {
+    let bytes = need(data, &named("N", name))?;
+    if !bytes.starts_with(STATE.as_bytes()) { return Err(issue("malformed retained manifest state")); }
+    let mut reader = store::Reader::new(&bytes[STATE.len()..]);
+    let actual = reader.text().ok_or_else(|| issue("malformed retained manifest state"))?;
+    if actual.as_str() != name { return Err(issue("retained manifest state changed its unit")); }
+    let tag = reader.word().ok_or_else(|| issue("malformed retained manifest state"))?;
+    let value = reader.word().ok_or_else(|| issue("malformed retained manifest state"))?;
+    if !reader.done() || tag > 1usize || value > count || (tag == 1usize && value == count) {
+        return Err(issue("invalid retained manifest state"));
+    }
+    Ok(State { done: tag == 1usize, value })
+}
+fn set_state(data: &mut records::Store, name: &str, value: State) -> Result<(), String> {
+    replace(data, &named("N", name), &state_bytes(name, value))
+}
+fn staged(data: &mut records::Store, prefix: &str, kind: usize, index: usize) -> Result<String, String> {
+    let bytes = need(data, &ordinal_key(prefix, index))?;
+    row_value(&bytes, kind, index).ok_or_else(|| issue("malformed retained manifest literal row"))
+}
+fn definitions(data: &mut records::Store, count: usize) -> Result<(), String> {
+    for index in 0usize..count {
+        let value = staged(data, "U", 0usize, index)?;
+        let at = value.find('=').ok_or_else(|| issue("each UNITS entry is name=relative/source.lkj"))?;
+        let name = value[..at].to_string(); let source = value[at + 1usize..].to_string();
+        if !identifier(&name) || !beneath(&source) || !source.ends_with(".lkj") {
+            return Err(issue("unit names are identifiers and sources are relative .lkj paths without .."));
+        }
+        if contains(data, &named("D", &name))? || contains(data, &named("P", &source))? {
+            return Err(issue("duplicate unit name or source"));
+        }
+        let value = Metadata { name, source, dependencies: 0usize };
+        insert(data, &named("D", &value.name), &metadata_bytes(&value))?;
+        insert(data, &named("P", &value.source), &pair_bytes(PATH, &value.source, &value.name))?;
+        insert(data, &named("N", &value.name), &state_bytes(&value.name, State { done: false, value: 0usize }))?;
+    }
+    if count == 0usize { return Err(issue("UNITS must contain at least one unit")); }
+    Ok(())
+}
+fn dependencies(data: &mut records::Store, count: usize, edges: usize) -> Result<(), String> {
+    for index in 0usize..edges {
+        let value = staged(data, "V", 1usize, index)?;
+        let at = value.find('=').ok_or_else(|| issue("each DEPENDS entry is owner=dependency"))?;
+        let owner = value[..at].to_string(); let dependency = value[at + 1usize..].to_string();
+        if !contains(data, &named("D", &owner))? || !contains(data, &named("D", &dependency))? {
+            return Err(issue("dependency names must occur in UNITS"));
+        }
+        let forward = edge_key("E", &owner, &dependency);
+        if contains(data, &forward)? { return Err(issue("duplicate dependency edge")); }
+        let mut value = metadata(data, &owner, count)?; let mut remaining = state(data, &owner, count)?;
+        if remaining.done || remaining.value != value.dependencies { return Err(issue("invalid initial dependency count")); }
+        value.dependencies = next_count(value.dependencies)?; remaining.value = next_count(remaining.value)?;
+        if value.dependencies > count { return Err(issue("invalid direct dependency count")); }
+        insert(data, &forward, &pair_bytes(EDGE, &owner, &dependency))?;
+        insert(data, &edge_key("R", &dependency, &owner), &pair_bytes(EDGE, &dependency, &owner))?;
+        replace(data, &named("D", &owner), &metadata_bytes(&value))?; set_state(data, &owner, remaining)?;
+    }
+    Ok(())
+}
+
+/// Heap slots are ordinal records, not lexically encoded names. A name that
+/// becomes ready after a pop must compete with every already-ready name.
+struct Heap { length: usize, slots: usize }
+impl Heap {
+    fn new() -> Self { Self { length: 0usize, slots: 0usize } }
+    fn read(&self, data: &mut records::Store, index: usize) -> Result<String, String> {
+        if index >= self.length || index >= self.slots { return Err(issue("invalid manifest heap slot")); }
+        let bytes = need(data, &ordinal_key("H", index))?;
+        let value = row_value(&bytes, 3usize, index).ok_or_else(|| issue("malformed retained manifest heap slot"))?;
+        if !identifier(&value) { return Err(issue("invalid name in retained manifest heap")); }
+        Ok(value)
+    }
+    fn write(&mut self, data: &mut records::Store, index: usize, name: &str) -> Result<(), String> {
+        if index > self.slots || index >= self.length { return Err(issue("invalid manifest heap insertion")); }
+        let key = ordinal_key("H", index); let bytes = row_bytes(3usize, index, name);
+        if index == self.slots { insert(data, &key, &bytes)?; self.slots = next_count(self.slots)?; }
+        else { replace(data, &key, &bytes)?; }
+        Ok(())
+    }
+    fn push(&mut self, data: &mut records::Store, name: String) -> Result<(), String> {
+        let mut at = self.length; self.length = next_count(self.length)?;
+        while at != 0usize {
+            let parent = (at - 1usize) / 2usize; let value = self.read(data, parent)?;
+            if value <= name { break; }
+            self.write(data, at, &value)?; at = parent;
+        }
+        self.write(data, at, &name)
+    }
+    fn pop(&mut self, data: &mut records::Store) -> Result<Option<String>, String> {
+        if self.length == 0usize { return Ok(None); }
+        let result = self.read(data, 0usize)?; let last = self.read(data, self.length - 1usize)?;
+        self.length -= 1usize; if self.length == 0usize { return Ok(Some(result)); }
+        let mut at = 0usize;
+        loop {
+            let left = at.checked_mul(2usize).and_then(|value: usize| value.checked_add(1usize))
+                .ok_or_else(|| issue("manifest heap index overflow"))?;
+            if left >= self.length { break; }
+            let mut child = left; let mut value = self.read(data, left)?;
+            let right = left.checked_add(1usize).ok_or_else(|| issue("manifest heap index overflow"))?;
+            if right < self.length {
+                let other = self.read(data, right)?;
+                if other < value { child = right; value = other; }
+            }
+            if last <= value { break; }
+            self.write(data, at, &value)?; at = child;
+        }
+        self.write(data, at, &last)?; Ok(Some(result))
+    }
+}
+fn initial_ready(data: &mut records::Store, count: usize, heap: &mut Heap) -> Result<(), String> {
+    let mut previous = "D".to_string(); let mut seen = 0usize;
+    while let Some(key) = after(data, &previous)? {
+        if !key.starts_with("D") { break; }
+        {
+            let name = &key[1usize..]; let value = metadata(data, name, count)?; let remaining = state(data, name, count)?;
+            if remaining.done || remaining.value != value.dependencies { return Err(issue("invalid initial manifest state")); }
+            if remaining.value == 0usize { heap.push(data, name.to_string())?; }
+        }
+        seen = next_count(seen)?; if seen > count { return Err(issue("retained manifest has extra definitions")); }
+        previous = key;
+    }
+    if seen != count { return Err(issue("retained manifest definition count changed")); }
+    Ok(())
+}
+fn release(data: &mut records::Store, name: &str, count: usize, heap: &mut Heap) -> Result<(), String> {
+    let prefix = format!("R{name}\0"); let mut previous = prefix.clone();
+    while let Some(key) = after(data, &previous)? {
+        if !key.starts_with(&prefix) { break; }
+        {
+            let owner = &key[prefix.len()..];
+            if !identifier(owner) { return Err(issue("invalid retained reverse dependency")); }
+            require_pair(data, &key, EDGE, name, owner)?;
+            require_pair(data, &edge_key("E", owner, name), EDGE, owner, name)?;
+            let mut remaining = state(data, owner, count)?;
+            if remaining.done || remaining.value == 0usize { return Err(issue("invalid remaining dependency count")); }
+            remaining.value -= 1usize; set_state(data, owner, remaining)?;
+            if remaining.value == 0usize { heap.push(data, owner.to_string())?; }
+        }
+        previous = key;
+    }
+    Ok(())
+}
+fn total(values: &[usize]) -> Result<usize, String> {
+    let mut sum = 0usize;
+    for value in values { sum = sum.checked_add(*value).ok_or_else(|| issue("manifest record count overflow"))?; }
+    Ok(sum)
+}
+pub(super) fn construct(mut data: records::Store, captured: input::Captured, tape: tokens::Tape, parsed: parser::Parsed) -> Result<Plan, String> {
+    definitions(&mut data, parsed.units)?; dependencies(&mut data, parsed.units, parsed.dependencies)?;
+    let mut heap = Heap::new(); initial_ready(&mut data, parsed.units, &mut heap)?;
+    let mut completed = 0usize;
+    while let Some(name) = heap.pop(&mut data)? {
+        let remaining = state(&mut data, &name, parsed.units)?;
+        if remaining.done || remaining.value != 0usize || completed >= parsed.units {
+            return Err(issue("invalid ready unit in retained manifest"));
+        }
+        set_state(&mut data, &name, State { done: true, value: completed })?;
+        insert(&mut data, &ordinal_key("O", completed), &row_bytes(2usize, completed, &name))?;
+        completed = next_count(completed)?; release(&mut data, &name, parsed.units, &mut heap)?;
+    }
+    if completed != parsed.units { return Err(issue("unit dependency cycle; put mutually dependent modules in one unit")); }
+    let root = parsed.entry.as_str().split("::").next().unwrap_or("");
+    if !contains(&mut data, &named("D", root))? || !parsed.entry.contains("::")
+        || parsed.entry.as_str().bytes().any(|byte| byte <= 32u8 || byte == 127u8) {
+        return Err(issue("ENTRY must name unit::function"));
+    }
+    let inventory = total(&[captured.chunks, tape.chunks, parsed.units, parsed.dependencies,
+        parsed.units, parsed.units, parsed.units, parsed.dependencies, parsed.dependencies, heap.slots, parsed.units])?;
+    if data.len() != inventory { return Err(issue("retained manifest record inventory changed")); }
+    Ok(Plan { data, entry: parsed.entry, count: parsed.units, next: 0usize,
+        fingerprint: captured.fingerprint, inventory, failed: false })
+}
+
+/// Restores one unit and only its direct dependencies, in lexical order.
+/// Stored completion ranks independently bind O rows to their scheduled unit.
+pub(super) fn definition(data: &mut records::Store, name: &str, count: usize, ordinal: Option<usize>) -> Result<Option<Definition>, String> {
+    if !identifier(name) || !contains(data, &named("D", name))? { return Ok(None); }
+    let value = metadata(data, name, count)?; let own = state(data, name, count)?;
+    if !own.done || ordinal.is_some_and(|expected: usize| expected != own.value) {
+        return Err(issue("retained manifest schedule rank changed"));
+    }
+    require_pair(data, &named("P", &value.source), PATH, &value.source, name)?;
+    let prefix = format!("E{name}\0"); let mut previous = prefix.clone(); let mut dependencies = Vec::new();
+    while let Some(key) = after(data, &previous)? {
+        if !key.starts_with(&prefix) { break; }
+        {
+            let dependency = &key[prefix.len()..];
+            if !identifier(dependency) || !contains(data, &named("D", dependency))? {
+                return Err(issue("retained manifest dependency disappeared"));
+            }
+            require_pair(data, &key, EDGE, name, dependency)?;
+            require_pair(data, &edge_key("R", dependency, name), EDGE, dependency, name)?;
+            let completed = state(data, dependency, count)?;
+            if !completed.done || completed.value >= own.value || dependencies.len() >= value.dependencies {
+                return Err(issue("retained manifest dependency order changed"));
+            }
+            dependencies.push(dependency.to_string());
+        }
+        previous = key;
+    }
+    if dependencies.len() != value.dependencies { return Err(issue("retained manifest dependency count changed")); }
+    Ok(Some(Definition { name: value.name, source: value.source, dependencies }))
+}

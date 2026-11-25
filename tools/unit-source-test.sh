@@ -30,6 +30,16 @@ for unit_engine in native interpreter; do
         > "$unit_root/inputs-$unit_engine.out" 2> "$unit_root/inputs-$unit_engine.err"
     grep -Fxq -- 'ok 8 tests' "$unit_root/inputs-$unit_engine.out"
 done
+# Compare disk-retained selected inputs with the independent snapshot oracle.
+"$unit_compiler" build src/unit_input_records_cases.lkj --library-dir library \
+    --entry main --no-store -o "$unit_root/input-records" \
+    > "$unit_root/input-records-build.out" 2> "$unit_root/input-records-build.err"
+"$unit_root/input-records" > "$unit_root/input-records-native.out" 2> "$unit_root/input-records-native.err"
+grep -Fxq -- 'ok unit input records 10 contract groups' "$unit_root/input-records-native.out"
+"$unit_compiler" run src/unit_input_records_cases.lkj --library-dir library \
+    --entry main --engine interpreter --no-store \
+    > "$unit_root/input-records-interpreter.out" 2> "$unit_root/input-records-interpreter.err"
+grep -Fxq -- 'ok unit input records 10 contract groups' "$unit_root/input-records-interpreter.out"
 cat > "$unit_root/units.lkj" <<'SOURCE'
 const UNITS: &[&str] = &["base=base.lkj", "geometry=geometry.lkj", "app=app.lkj"];
 const DEPENDS: &[&str] = &["geometry=base", "app=geometry"];
@@ -67,11 +77,18 @@ pub fn main(mut out: Stdout) {
     out.write(format!("{answer}\n").as_bytes());
 }
 SOURCE
+unit_no_scratch() {
+    if compgen -G "$unit_root/store/.lkjscript-unit-*.scratch" > /dev/null; then
+        printf '%s unit build left a named scratch spool\n' "$1" >&2
+        exit 1
+    fi
+}
 unit_options=(units.lkj --source-dir "$unit_root" --store "$unit_root/store" --store-key "$unit_key" --stats)
 "$unit_compiler" check-units "${unit_options[@]}" > "$unit_root/check.out" 2> "$unit_root/check.err"
 grep -Fq -- 'checked=3 reused=0' "$unit_root/check.out"
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/program" > "$unit_root/build.out" 2> "$unit_root/build.err"
 [[ $("$unit_root/program") == 42 ]]
+unit_no_scratch successful
 "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/warm" > "$unit_root/warm.out" 2> "$unit_root/warm.err"
 grep -Fq -- 'checked=0 reused=3 emitted=0' "$unit_root/warm.out"
 cmp "$unit_root/program" "$unit_root/warm"
@@ -114,6 +131,7 @@ if "$unit_compiler" build-units "${unit_options[@]}" --grant out -o "$unit_root/
     echo 'ill-typed unit was accepted' >&2; exit 1
 fi
 [[ $("$unit_root/edited") == 45 ]]
+unit_no_scratch refused
 if compgen -G "$unit_root/.lkjscript-unit-*.tmp" > /dev/null; then
     echo 'refused unit build left an unpublished image' >&2; exit 1
 fi

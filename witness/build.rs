@@ -93,13 +93,51 @@ fn rust_bindings(input: &Path, text: String) -> String {
     }
     if input.ends_with("src/store.lkj") {
         out = out.replace("reuse::ProofDomain::new(", "crate::proof_domain(");
+        for module in ["budget", "budget_io", "budget_host"] {
+            out = out.replace(&format!("\nmod {module};\n"),
+                &format!("\n#[path = \"store/{module}.rs\"]\nmod {module};\n"));
+        }
+    }
+    if input.ends_with("src/store/budget_io.lkj") {
+        out = out.replace("reuse::seal_header(", "crate::seal_header(");
+    }
+    for module in ["budget", "budget_host"] {
+        if input.ends_with(format!("src/store/{module}.lkj")) {
+            out = out.replace("\nmod cases;\n",
+                &format!("\n#[path = \"{module}/cases.rs\"]\nmod cases;\n"));
+        }
+    }
+    if input.ends_with("src/units.lkj") {
+        out = out.replace("\npub(crate) mod plan_disk;\n",
+            "\n#[path = \"units/plan_disk.rs\"]\npub(crate) mod plan_disk;\n");
+    }
+    if input.ends_with("src/units/plan_disk.lkj") {
+        for module in ["input", "tokens", "parser", "schedule", "tests"] {
+            out = out.replace(&format!("\nmod {module};\n"),
+                &format!("\n#[path = \"plan_disk/{module}.rs\"]\nmod {module};\n"));
+        }
     }
     if input.ends_with("src/structure_write.lkj") {
         out = out.replace("use std::collections::BTreeSet;",
             "use std::collections::BTreeSet;\nuse crate::host::{Directory, Entropy, File, World};");
     }
     if input.ends_with("src/native/units.lkj") {
-        out = out.replacen("use super::*;", "use super::*;\nuse crate::host::File;", 1);
+        out = out.replacen("use super::*;", "use super::*;\nuse crate::host::{File, World};", 1);
+    }
+    // Source capability prelude names are explicit only in the Rust mirror.
+    // Child modules using super::* inherit these same real host types.
+    for (file, names) in [
+        ("src/native/records.lkj", "File, World"),
+        ("src/native/units/image_tables.lkj", "File"),
+        ("src/driver/units/inputs_disk.lkj", "File"),
+        ("src/driver/units/retained.lkj", "File"),
+        ("src/units/plan_disk.lkj", "File, World"),
+        ("src/store/budget.lkj", "Clock, File, World"),
+        ("src/store/budget_io.lkj", "Clock, Directory, File"),
+    ] {
+        if input.ends_with(file) {
+            out.push_str(&format!("\nuse crate::host::{{{names}}};\n"));
+        }
     }
     if input.ends_with("src/driver.lkj") {
         for module in ["structure", "units", "help"] {
@@ -108,7 +146,10 @@ fn rust_bindings(input: &Path, text: String) -> String {
         }
     }
     if input.ends_with("src/driver/units.lkj") {
-        out = out.replace("\nmod inputs;\n", "\n#[path = \"units/inputs.rs\"]\nmod inputs;\n");
+        for module in ["inputs", "inputs_disk", "retained"] {
+            out = out.replace(&format!("\nmod {module};\n"),
+                &format!("\n#[path = \"units/{module}.rs\"]\nmod {module};\n"));
+        }
     }
     if input.ends_with("src/driver/structure.lkj") {
         out = out.replace("use super::{Options, Stats, Memo};",

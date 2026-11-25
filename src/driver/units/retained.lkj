@@ -1,0 +1,39 @@
+//! Only the current unit's record is resident. The temporary store's root is
+//! constructed here; persisted cache records cannot supply authenticated requires.
+use super::{problem, read_strings, strings, store, Record};
+use crate::native::records as disk_records;
+
+pub(super) struct Records {
+    data: disk_records::Store,
+}
+impl Records {
+    pub(super) fn new(file: File) -> Result<Self, String> {
+        Ok(Self { data: disk_records::Store::new(file).map_err(|detail: String| problem(&detail))? })
+    }
+    pub(super) fn len(&self) -> usize { self.data.len() }
+    pub(super) fn insert(&mut self, record: &Record) -> Result<(), String> {
+        let required = record.requires.as_ref()
+            .ok_or_else(|| problem("selected projection requirements were not authenticated"))?;
+        let mut bytes = Vec::new();
+        store::push_bytes(&mut bytes, &record.encode());
+        strings(&mut bytes, required);
+        self.data.insert(&record.name, &bytes).map_err(|detail: String| problem(&detail))
+    }
+    pub(super) fn get(&mut self, name: &str) -> Result<Option<Record>, String> {
+        let Some(bytes) = self.data.get(name).map_err(|detail: String| problem(&detail))? else {
+            return Ok(None);
+        };
+        let mut reader = store::Reader::new(&bytes);
+        let encoded = reader.bytes().ok_or_else(|| problem("malformed retained unit record"))?;
+        let mut record = Record::decode(&encoded, name)
+            .ok_or_else(|| problem("retained unit record has a different identity"))?;
+        let required = read_strings(&mut reader, bytes.len())
+            .ok_or_else(|| problem("malformed retained projection requirements"))?;
+        if !reader.done() { return Err(problem("trailing retained unit record bytes")); }
+        record.requires = Some(required);
+        Ok(Some(record))
+    }
+    pub(super) fn finish(self) -> Result<(), String> {
+        self.data.finish().map_err(|detail: String| problem(&detail))
+    }
+}

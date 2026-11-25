@@ -945,6 +945,11 @@ pub fn data(
     offset: usize,
     messages: &[String],
 ) {
+    data_prefix(a, p, bytes, offset);
+    message_data(a, p.messages, bytes, offset, messages);
+}
+
+pub(super) fn data_prefix(a: &mut Assembler, p: Platform, bytes: &mut Vec<u8>, offset: usize) {
     a.data_label(p.context, offset + bytes.len());
     bytes.extend_from_slice(&[0u8; 208]);
     a.data_label(p.signal_action, offset + bytes.len());
@@ -960,7 +965,6 @@ pub fn data(
     for _ in 0..crate::runtime::ALLOCATOR_STATE_BYTES {
         bytes.push(0);
     }
-    message_data(a, p.messages, bytes, offset, messages);
 }
 pub(super) fn message_data(a: &mut Assembler, label: Label, bytes: &mut Vec<u8>, offset: usize, messages: &[String]) {
     a.data_label(label, offset + bytes.len());

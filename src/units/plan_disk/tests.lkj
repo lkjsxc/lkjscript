@@ -1,0 +1,244 @@
+//! Pure-parser oracle, scheduling invariants, and hostile retained-input controls.
+//! Test fixtures may own complete text; the production parser never does.
+use super::*;
+
+const SMALL: &str = "const UNITS: &[&str] = &[\"b=b.lkj\", \"z=z.lkj\", \"a=a.lkj\"]; const DEPENDS: &[&str] = &[\"a=z\"]; const ENTRY: &str = \"a::main\";";
+
+fn file(world: &mut World, bytes: &[u8]) -> File {
+    let mut result = world.temporary_file().unwrap();
+    result.write_all(bytes).unwrap(); result.seek(0i64, 0u8).unwrap(); result
+}
+fn opened(world: &mut World, text: &str) -> Plan {
+    let input = file(world, text.as_bytes()); let scratch = world.temporary_file().unwrap();
+    Plan::open(input, scratch, "manifest.lkj", &None).unwrap()
+}
+fn attached(world: &mut World, text: &str) -> (Plan, File) {
+    let input = file(world, text.as_bytes()); let mut scratch = world.temporary_file().unwrap();
+    let alias = scratch.duplicate().unwrap();
+    (Plan::open(input, scratch, "manifest.lkj", &None).unwrap(), alias)
+}
+fn consume(plan: &mut Plan) -> Result<(), String> {
+    while plan.next()?.is_some() {} Ok(())
+}
+fn same(world: &mut World, text: &str) {
+    let expected = crate::units::parse(text).unwrap(); let mut actual = opened(world, text);
+    assert_eq!(actual.len(), expected.units.len()); assert_eq!(actual.entry(), expected.entry.as_str());
+    assert_eq!(actual.fingerprint().bytes, text.len());
+    assert_eq!(actual.fingerprint().digest, sha256::digest(text.as_bytes()));
+    assert!(actual.get("absent").unwrap().is_none());
+    for unit in &expected.units {
+        let found = actual.get(&unit.name).unwrap().unwrap();
+        assert_eq!(found.name, unit.name); assert_eq!(found.source, unit.source);
+        assert_eq!(found.dependencies, unit.dependencies);
+    }
+    for expected in expected.units {
+        let unit = actual.next().unwrap().unwrap();
+        assert_eq!(unit.name, expected.name); assert_eq!(unit.source, expected.source);
+        assert_eq!(unit.dependencies, expected.dependencies);
+    }
+    assert!(actual.next().unwrap().is_none()); assert!(actual.next().unwrap().is_none());
+    actual.finish().unwrap();
+}
+fn refused(world: &mut World, text: &str) -> String {
+    let input = file(world, text.as_bytes()); let scratch = world.temporary_file().unwrap();
+    Plan::open(input, scratch, "manifest.lkj", &None).err().unwrap()
+}
+fn same_refusal(world: &mut World, text: &str) {
+    let expected = crate::units::parse(text).err().unwrap(); assert_eq!(refused(world, text), expected);
+}
+fn literal_cases(world: &mut World) -> usize {
+    let cases: Vec<String> = vec![
+        SMALL.to_string(),
+        "const ENTRY: &str = \"a::main\"; const DEPENDS: &[&str] = &[]; const UNITS: &[&str] = &[\"a=a.lkj\"];".to_string(),
+        "/* outer /* inner */ tail */ ; pub(crate) const UNITS: (&'static [(&'static str)]) = (&[(\"a=雪/é.lkj\"),]); // line\r\npub(self) const DEPENDS: &[&str] = &([]); pub(in crate) const ENTRY: (&str) = ((\"a::main\"));".to_string(),
+        r###"const UNITS: &[&str] = &[r##"a=雪/"#.lkj"##]; const DEPENDS: &[&str] = &[]; const ENTRY: &str = r#"a::main"#;"###.to_string(),
+        r###"const UNITS: &[&str] = &["a=\u{96ea}/\x65\u{301}.lkj"]; const DEPENDS: &[&str] = &[]; const ENTRY: &str = "a::main";"###.to_string(),
+        "const UNITS: &[&str] = &[\"root=root.lkj\", \"c=c.lkj\", \"a=a.lkj\", \"b=b.lkj\"]; const DEPENDS: &[&str] = &[\"root=c\", \"root=a\", \"c=b\", \"a=b\"]; const ENTRY: &str = \"root::main\";".to_string(),
+    ];
+    for text in &cases { same(world, text); } cases.len()
+}
+fn declaration_orders(world: &mut World) -> usize {
+    let units = "const UNITS: &[&str] = &[\"d=d.lkj\", \"a=a.lkj\", \"c=c.lkj\", \"b=b.lkj\"];";
+    let dependencies = "const DEPENDS: &[&str] = &[\"a=c\", \"d=b\", \"d=c\"];";
+    let entry = "const ENTRY: &str = \"d::main\";";
+    let parts: Vec<String> = vec![units.to_string(), dependencies.to_string(), entry.to_string()]; let mut count = 0usize;
+    for a in 0usize..3usize {
+        for b in 0usize..3usize {
+            if b == a { continue; }
+            let c = 3usize - a - b;
+            same(world, &format!("{} {} {}", parts[a], parts[b], parts[c])); count += 1usize;
+        }
+    }
+    // The new "a" becomes ready after "c"; an initial-only lexical queue
+    // would incorrectly emit "d" before "a".
+    let mut plan = opened(world, &format!("{units} {dependencies} {entry}"));
+    let order: Vec<String> = vec!["b".to_string(), "c".to_string(), "a".to_string(), "d".to_string()];
+    for name in order { assert_eq!(plan.next().unwrap().unwrap().name.as_str(), name.as_str()); }
+    plan.finish().unwrap(); count + 1usize
+}
+fn semantic_errors(world: &mut World) -> usize {
+    let one = "const UNITS: &[&str] = &[\"a=a.lkj\"];";
+    let none = "const DEPENDS: &[&str] = &[];";
+    let entry = "const ENTRY: &str = \"a::main\";";
+    let cases: Vec<String> = vec![
+        "".to_string(), one.to_string(), format!("{one} {none}"),
+        format!("{one} {one} {none} {entry}"), format!("{one} {none} {none} {entry}"),
+        format!("{one} {none} {entry} {entry}"),
+        format!("const UNITS: &[str] = &[\"a=a.lkj\"]; {none} {entry}"),
+        format!("const UNITS: &[&str] = [\"a=a.lkj\"]; {none} {entry}"),
+        format!("const UNITS: &[&str] = &[7usize]; {none} {entry}"),
+        format!("{one} {none} const ENTRY: &mut str = \"a::main\";"),
+        format!("{one} {none} const ENTRY: &str = 7usize;"),
+        format!("{one} {none} const OTHER: &str = \"x\"; {entry}"),
+        format!("const UNITS: &[&str] = &[]; {none} {entry}"),
+        format!("const UNITS: &[&str] = &[\"a\"]; {none} {entry}"),
+        format!("const UNITS: &[&str] = &[\"crate=a.lkj\"]; {none} {entry}"),
+        format!("const UNITS: &[&str] = &[\"a=../a.lkj\"]; {none} {entry}"),
+        format!("const UNITS: &[&str] = &[\"a=a.txt\"]; {none} {entry}"),
+        format!("const UNITS: &[&str] = &[\"a=a.lkj\", \"a=b.lkj\"]; {none} {entry}"),
+        format!("const UNITS: &[&str] = &[\"a=a.lkj\", \"b=a.lkj\"]; {none} {entry}"),
+        format!("{one} const DEPENDS: &[&str] = &[\"a\"]; {entry}"),
+        format!("{one} const DEPENDS: &[&str] = &[\"a=b\"]; {entry}"),
+        format!("{one} const DEPENDS: &[&str] = &[\"a=a\", \"a=a\"]; {entry}"),
+        format!("{one} const DEPENDS: &[&str] = &[\"a=a\"]; {entry}"),
+        format!("const UNITS: &[&str] = &[\"a=a.lkj\", \"b=b.lkj\"]; const DEPENDS: &[&str] = &[\"a=b\", \"b=a\"]; const ENTRY: &str = \"invalid\";"),
+        format!("{one} {none} const ENTRY: &str = \"absent::main\";"),
+        format!("{one} {none} const ENTRY: &str = \"a:: main\";"),
+        // Constant validation precedes row validation, regardless of declaration order.
+        format!("const UNITS: &[&str] = &[\"invalid\"]; {none}"),
+        format!("const DEPENDS: &[&str] = &[\"absent=also_absent\"]; const UNITS: &[&str] = &[\"invalid\"]; {entry}"),
+    ];
+    for text in &cases { same_refusal(world, text); }
+    let conditional: Vec<String> = vec![
+        format!("#[cfg(test)] {one} {none} {entry}"),
+        format!("#[allow(dead_code)] {one} {none} {entry}"),
+        format!("{one} #![cfg(test)] {none} {entry}"),
+    ];
+    for text in conditional {
+        let message = refused(world, &text);
+        assert!(message.contains("unconditional literal")); assert!(message.contains("select a separate manifest"));
+    }
+    cases.len() + 3usize
+}
+fn boundaries(world: &mut World) -> usize {
+    let suffixes: Vec<String> = vec![
+        "/* outer /* nested */ comment */".to_string(),
+        "// boundary\r\n".to_string(),
+        "const UNITS: &[&str] = &[\"a=雪.lkj\"]; const DEPENDS: &[&str] = &[]; const ENTRY: &str = \"a::main\";".to_string(),
+        r###"const UNITS: &[&str] = &[r##"a=雪/#".lkj"##]; const DEPENDS: &[&str] = &[]; const ENTRY: &str = "a::main";"###.to_string(),
+        r###"const UNITS: &[&str] = &["a=\u{96ea}.lkj"]; const DEPENDS: &[&str] = &[]; const ENTRY: &str = "a::main";"###.to_string(),
+    ];
+    let mut count = 0usize;
+    for suffix in suffixes {
+        // Delimiters, UTF-8 scalars and escape sequences occupy every side of
+        // the raw-input chunk boundary; the whole-source parser is the oracle.
+        let marker = if suffix.starts_with("/*") || suffix.starts_with("//") { 1usize }
+            else { suffix.find("a=").unwrap() + 2usize };
+        for crossing in 0usize..4usize {
+            let mut text = String::new();
+            for _ in 0usize..CHUNK - marker - crossing { text.push(' '); }
+            text.push_str(&suffix);
+            if suffix.starts_with("/*") || suffix.starts_with("//") { text.push_str(SMALL); }
+            same(world, &text); count += 1usize;
+        }
+    }
+    let raw = r###"const UNITS: &[&str] = &[r##"a=quoted"#.lkj"##]; const DEPENDS: &[&str] = &[]; const ENTRY: &str = "a::main";"###;
+    let marker = raw.find(".lkj").unwrap() + 4usize;
+    for crossing in 0usize..4usize {
+        let mut text = String::new();
+        for _ in 0usize..CHUNK - marker - crossing { text.push(' '); }
+        text.push_str(raw); same(world, &text); count += 1usize;
+    }
+    let mut path = String::new();
+    for _ in 0usize..CHUNK + 17usize { path.push('x'); }
+    let text = format!("const UNITS: &[&str] = &[\"a={path}.lkj\"]; const DEPENDS: &[&str] = &[]; const ENTRY: &str = \"a::main\";");
+    same(world, &text); count + 1usize
+}
+fn input_guards(world: &mut World) -> usize {
+    let secret = [255u8; 32]; let digest = Some(sha256::digest(&secret));
+    let input = file(world, &secret); let scratch = world.temporary_file().unwrap();
+    let error = Plan::open(input, scratch, "manifest.lkj", &digest).err().unwrap();
+    assert_eq!(error, "E_CHILD_IMAGE source or include attempted to read the private admission key");
+    let input = file(world, &secret);
+    assert!(fingerprint(input, "manifest.lkj", &digest).err().unwrap().contains("private admission key"));
+    let malformed: Vec<Vec<u8>> = vec![
+        vec![255u8], vec![192u8, 128u8], vec![237u8, 160u8, 128u8],
+        vec![244u8, 144u8, 128u8, 128u8], vec![226u8, 130u8],
+    ];
+    for value in &malformed {
+        let input = file(world, value); let scratch = world.temporary_file().unwrap();
+        let error = Plan::open(input, scratch, "manifest.lkj", &None).err().unwrap();
+        assert!(error.contains("input is not valid UTF-8"));
+    }
+    let mut input = file(world, SMALL.as_bytes()); let mut alias = input.duplicate().unwrap();
+    let scratch = world.temporary_file().unwrap(); let mut plan = Plan::open(input, scratch, "manifest.lkj", &None).unwrap();
+    alias.seek(0i64, 2u8).unwrap(); alias.write_all(b" ").unwrap(); alias.seek(0i64, 0u8).unwrap();
+    let changed = fingerprint(alias, "manifest.lkj", &None).unwrap();
+    assert!(changed != plan.fingerprint()); consume(&mut plan).unwrap(); plan.finish().unwrap();
+    malformed.len() + 3usize
+}
+fn overwrite(file: &mut File, at: usize, bytes: &[u8]) {
+    file.seek(at as i64, 0u8).unwrap(); file.write_all(bytes).unwrap();
+}
+fn flip(file: &mut File, at: usize) {
+    file.seek(at as i64, 0u8).unwrap(); let mut byte = [0u8; 1];
+    assert_eq!(file.read(&mut byte).unwrap(), 1usize); byte[0usize] ^= 1u8; overwrite(file, at, &byte);
+}
+fn corruption(world: &mut World) -> usize {
+    for attack in 0usize..6usize {
+        let (mut plan, mut alias) = attached(world, SMALL);
+        alias.seek(0i64, 0u8).unwrap(); let bytes = alias.read_to_end().unwrap();
+        match attack {
+            0usize => flip(&mut alias, 0usize),
+            1usize => overwrite(&mut alias, bytes.len(), &[0u8]),
+            2usize => alias.truncate(bytes.len() - 1usize).unwrap(),
+            3usize => {
+                // Raw input is no longer read by get/next. Final authentication
+                // must still detect its mutation before the caller publishes.
+                let mut at = 0usize;
+                while at <= bytes.len() - SMALL.len() && &bytes[at..at + SMALL.len()] != SMALL.as_bytes() { at += 1usize; }
+                assert!(at <= bytes.len() - SMALL.len()); flip(&mut alias, at);
+            }
+            4usize => {
+                let key = ordinal_key("O", 0usize);
+                plan.data.replace(&key, &row_bytes(2usize, 0usize, "a")).unwrap();
+            }
+            _ => {
+                plan.data.insert("unexpected-retained-row", b"extra").unwrap();
+            }
+        }
+        let immediate = consume(&mut plan).is_err();
+        if !immediate { assert!(plan.finish().is_err()); }
+        else {
+            // Restoring backing bytes cannot unpoison the Plan.
+            alias.truncate(0usize).unwrap(); overwrite(&mut alias, 0usize, &bytes);
+            assert!(plan.next().err().unwrap().contains("poisoned"));
+            assert!(plan.finish().err().unwrap().contains("poisoned"));
+        }
+    }
+    let mut plan = opened(world, SMALL); assert!(plan.finish().is_err());
+    let mut plan = opened(world, SMALL); let original = plan.data.get("Da").unwrap().unwrap();
+    plan.data.replace("Da", b"malformed definition").unwrap();
+    assert!(plan.get("a").is_err()); plan.data.replace("Da", &original).unwrap();
+    assert!(plan.get("a").err().unwrap().contains("poisoned"));
+    assert!(plan.finish().err().unwrap().contains("poisoned"));
+    8usize
+}
+
+/// Small interpreter entry: one literal oracle and a two-unit wrong-rank attack.
+/// Broader dependency, boundary and corruption populations run in the native entry.
+pub(super) fn smoke(world: &mut World) -> usize {
+    world.stderr().write(b"streaming manifest smoke: literal oracle begins\n");
+    same(world, "const UNITS: &[&str] = &[\"a=a.lkj\"]; const DEPENDS: &[&str] = &[]; const ENTRY: &str = \"a::main\";");
+    world.stderr().write(b"streaming manifest smoke: literal oracle passed; rank attack begins\n");
+    let mut plan = opened(world, "const UNITS: &[&str] = &[\"b=b.lkj\", \"a=a.lkj\"]; const DEPENDS: &[&str] = &[]; const ENTRY: &str = \"a::main\";");
+    plan.data.replace(&ordinal_key("O", 0usize), &row_bytes(2usize, 0usize, "b")).unwrap();
+    assert!(plan.next().err().unwrap().contains("schedule rank changed"));
+    assert!(plan.finish().err().unwrap().contains("poisoned"));
+    world.stderr().write(b"streaming manifest smoke: rank attack passed\n");
+    2usize
+}
+pub(super) fn run(world: &mut World) -> usize {
+    literal_cases(world) + declaration_orders(world) + semantic_errors(world)
+        + boundaries(world) + input_guards(world) + corruption(world)
+}

@@ -1,0 +1,498 @@
+//! Command-local records with an authenticated disk index and no resident key map.
+//! Only this writer constructs roots. Every random read authenticates its exact
+//! location and extent before decoding; finishing also checks the complete file.
+use crate::sha256::Sha256;
+
+
+mod tests;
+
+pub(crate) fn contracts(world: &mut World) -> usize { tests::run(world) }
+const MAGIC: &str = "LKJCOMMANDRECORDS1\n";
+const NODE: &str = "LKJCOMMANDNODE1\n";
+const VALUE: &str = "LKJCOMMANDVALUE1\n";
+const BUFFER: usize = 65536usize;
+
+#[derive(Clone, Copy)]
+struct Anchor {
+    offset: usize,
+    length: usize,
+    digest: [u8; 32],
+}
+#[derive(Clone, Copy)]
+struct Link {
+    anchor: Anchor,
+    height: usize,
+}
+struct Node {
+    key: String,
+    value: Anchor,
+    left: Option<Link>,
+    right: Option<Link>,
+    height: usize,
+}
+// One write owns these snapshots; no path node survives its public operation.
+enum Step {
+    Owned { node: Node, left: bool },
+    Located { link: Link, left: bool },
+}
+
+
+enum WriteMode {
+    Insert,
+    Replace,
+    InsertOrGet,
+}
+impl Step {
+    fn retain(link: Link, left: bool, node: Node, remaining: &mut usize) -> (Self, String) {
+        // Only freshly decoded keys enter here: Reader::text uses a fresh
+        // slice.to_vec(), whose byte capacity grows by powers of two. Charge
+        // the rounded payload (minimum 16), including unused vector capacity.
+        // This must not accept a shrunk/reused String with an older capacity.
+        let length = node.key.len();
+        if length > BUFFER { return (Self::Located { link, left }, node.key); }
+        let mut charge = if length == 0usize { 0usize } else { 16usize };
+        while charge < length { charge *= 2usize; }
+        if charge > *remaining { return (Self::Located { link, left }, node.key); }
+        *remaining -= charge;
+        let bound = node.key.clone();
+        (Self::Owned { node, left }, bound)
+    }
+}
+fn failure(message: &str) -> String { format!("command records: {message}") }
+fn io(operation: &str, errno: i64) -> String { failure(&format!("{operation}: errno {errno}")) }
+fn word(bytes: &mut Vec<u8>, value: usize) {
+    for index in 0usize..8usize { bytes.push((value >> (index * 8usize)) as u8); }
+}
+fn blob(bytes: &mut Vec<u8>, value: &[u8]) {
+    word(bytes, value.len()); bytes.extend_from_slice(value);
+}
+fn anchor(bytes: &mut Vec<u8>, value: Anchor) {
+    word(bytes, value.offset); word(bytes, value.length); bytes.extend_from_slice(&value.digest);
+}
+fn link(bytes: &mut Vec<u8>, value: Option<Link>) {
+    match value {
+        None => word(bytes, 0usize),
+        Some(value) => {
+            word(bytes, 1usize); anchor(bytes, value.anchor); word(bytes, value.height);
+        }
+    }
+}
+fn height(value: Option<Link>) -> usize { value.map_or(0usize, |value| value.height) }
+fn balanced(left: usize, right: usize) -> bool {
+    if left >= right { left - right <= 1usize } else { right - left <= 1usize }
+}
+fn record_digest(offset: usize, bytes: &[u8]) -> [u8; 32] {
+    let length = bytes.len();
+    let mut location = [0u8; 16];
+    for index in 0usize..8usize {
+        let shift = index * 8usize;
+        location[index] = (offset >> shift) as u8;
+        location[index + 8usize] = (length >> shift) as u8;
+    }
+    let mut hash = Sha256::new();
+    hash.update(b"lkjscript-command-record-location-1\0");
+    hash.update(&location); hash.update(bytes); hash.finish()
+}
+struct Reader<'a> {
+    bytes: &'a [u8],
+    at: usize,
+}
+impl<'a> Reader<'a> {
+    fn new(bytes: &'a [u8], magic: &[u8]) -> Option<Self> {
+        let mut result = Self { bytes, at: 0usize };
+        if result.word()? != bytes.len().checked_sub(8usize)? { return None; }
+        if result.take(magic.len())? != magic { return None; }
+        Some(result)
+    }
+    fn take(&mut self, length: usize) -> Option<&'a [u8]> {
+        if self.at > self.bytes.len() || length > self.bytes.len() - self.at { return None; }
+        let begin = self.at; self.at += length; Some(&self.bytes[begin..self.at])
+    }
+    fn word(&mut self) -> Option<usize> {
+        let bytes = self.take(8usize)?;
+        let mut value = 0u64;
+        for index in 0usize..8usize { value |= (bytes[index] as u64) << (index * 8usize); }
+        if value > (!0usize) as u64 { None } else { Some(value as usize) }
+    }
+    fn blob(&mut self) -> Option<Vec<u8>> {
+        let length = self.word()?; Some(self.take(length)?.to_vec())
+    }
+    fn text(&mut self) -> Option<String> { String::from_utf8(self.blob()?).ok() }
+    fn anchor(&mut self) -> Option<Anchor> {
+        let offset = self.word()?; let length = self.word()?;
+        let mut digest = [0u8; 32]; digest[..].copy_from_slice(self.take(32usize)?);
+        Some(Anchor { offset, length, digest })
+    }
+    fn link(&mut self) -> Option<Option<Link>> {
+        match self.word()? {
+            0usize => Some(None),
+            1usize => Some(Some(Link { anchor: self.anchor()?, height: self.word()? })),
+            _ => None,
+        }
+    }
+    fn done(&self) -> bool { self.at == self.bytes.len() }
+}
+fn decode_node(bytes: &[u8]) -> Option<Node> {
+    let mut reader = Reader::new(bytes, NODE.as_bytes())?;
+    let height = reader.word()?;
+    let key = reader.text()?;
+    let value = reader.anchor()?;
+    let left = reader.link()?; let right = reader.link()?;
+    if !reader.done() { return None; }
+    Some(Node { key, value, left, right, height })
+}
+fn decode_value(bytes: &[u8], key: &str) -> Option<Vec<u8>> {
+    let mut reader = Reader::new(bytes, VALUE.as_bytes())?;
+    if reader.text()?.as_str() != key { return None; }
+    let value = reader.blob()?;
+    if !reader.done() { return None; }
+    Some(value)
+}
+fn ordered(key: &str, lower: &Option<String>, upper: &Option<String>) -> bool {
+    if let Some(lower) = lower { if key <= lower.as_str() { return false; } }
+    if let Some(upper) = upper { if key >= upper.as_str() { return false; } }
+    true
+}
+
+/// A fresh scratch file, not a persistent cache or a checked-program proof.
+/// Keys and values are owned ordinary source data. No root can be opened from
+/// caller-supplied bytes. A failed operation permanently poisons this instance.
+pub struct Store {
+    file: File,
+    root: Option<Link>,
+    extent: usize,
+    count: usize,
+    maximum_node: usize,
+    maximum_value: usize,
+    maximum_height: usize,
+    hash: Sha256,
+    failed: bool,
+}
+
+
+
+impl Store {
+    pub fn new(mut file: File) -> Result<Self, String> {
+        file.truncate(0usize).map_err(|errno: i64| io("truncate scratch file", errno))?;
+        file.seek(0i64, 0u8).map_err(|errno: i64| io("seek scratch file", errno))?;
+        file.write_all(MAGIC.as_bytes()).map_err(|errno: i64| io("write scratch header", errno))?;
+        let mut hash = Sha256::new(); hash.update(MAGIC.as_bytes());
+        Ok(Self { file, root: None, extent: MAGIC.len(), count: 0usize,
+            maximum_node: 0usize, maximum_value: 0usize, maximum_height: 0usize,
+            hash, failed: false })
+    }
+    pub fn len(&self) -> usize { self.count }
+    fn valid_anchor(&self, value: Anchor, maximum: usize, before: usize) -> bool {
+        value.offset >= MAGIC.len() && value.length >= 8usize && value.length <= maximum
+            && value.offset <= before && value.length <= before - value.offset
+            && before <= self.extent
+    }
+    fn read(&mut self, value: Anchor, maximum: usize) -> Result<Vec<u8>, String> {
+        if !self.valid_anchor(value, maximum, self.extent) {
+            return Err(failure("invalid record extent"));
+        }
+        self.file.seek(value.offset as i64, 0u8).map_err(|errno: i64| io("seek record", errno))?;
+        let mut bytes = vec![0u8; value.length];
+        let mut at = 0usize;
+        while at < bytes.len() {
+            let count = self.file.read(&mut bytes[at..]).map_err(|errno: i64| io("read record", errno))?;
+            if count == 0usize { return Err(failure("truncated record")); }
+            at += count;
+        }
+        if record_digest(value.offset, &bytes) != value.digest {
+            return Err(failure("record changed after writing"));
+        }
+        Ok(bytes)
+    }
+    fn read_node(&mut self, expected: Link) -> Result<Node, String> {
+        if expected.height == 0usize || expected.height > self.maximum_height {
+            return Err(failure("invalid index height"));
+        }
+        let maximum = self.maximum_node;
+        let bytes = self.read(expected.anchor, maximum)?;
+        let node = decode_node(&bytes).ok_or_else(|| failure("malformed index node"))?;
+        if node.height != expected.height
+            || !self.valid_anchor(node.value, self.maximum_value, expected.anchor.offset) {
+            return Err(failure("invalid index value binding"));
+        }
+        for child in vec![node.left, node.right] {
+            if let Some(child) = child {
+                if child.height == 0usize || child.height >= node.height
+                    || !self.valid_anchor(child.anchor, self.maximum_node, expected.anchor.offset) {
+                    return Err(failure("invalid index child binding"));
+                }
+            }
+        }
+        let left = height(node.left); let right = height(node.right);
+        if !balanced(left, right) || left.max(right).checked_add(1usize) != Some(node.height) {
+            return Err(failure("unbalanced index node"));
+        }
+        Ok(node)
+    }
+    fn append(&mut self, payload: &[u8]) -> Result<Anchor, String> {
+        let length = payload.len().checked_add(8usize).ok_or_else(|| failure("record extent overflow"))?;
+        let end = self.extent.checked_add(length).ok_or_else(|| failure("scratch extent overflow"))?;
+        if end > 9223372036854775807usize { return Err(failure("scratch file exceeds seek representation")); }
+        let mut bytes = Vec::new(); word(&mut bytes, payload.len()); bytes.extend_from_slice(payload);
+        let result = Anchor { offset: self.extent, length, digest: record_digest(self.extent, &bytes) };
+        self.file.seek(self.extent as i64, 0u8).map_err(|errno: i64| io("seek scratch append", errno))?;
+        self.file.write_all(&bytes).map_err(|errno: i64| io("append scratch record", errno))?;
+        self.hash.update(&bytes); self.extent = end;
+        Ok(result)
+    }
+    fn write_value(&mut self, key: &str, value: &[u8]) -> Result<Anchor, String> {
+        let mut bytes = VALUE.as_bytes().to_vec(); blob(&mut bytes, key.as_bytes()); blob(&mut bytes, value);
+        let result = self.append(&bytes)?;
+        self.maximum_value = self.maximum_value.max(result.length);
+        Ok(result)
+    }
+    fn write_node(&mut self, node: Node) -> Result<Link, String> {
+        let left = height(node.left); let right = height(node.right);
+        if !balanced(left, right) { return Err(failure("index writer produced an unbalanced node")); }
+        let height = left.max(right).checked_add(1usize).ok_or_else(|| failure("index height overflow"))?;
+        if !self.valid_anchor(node.value, self.maximum_value, self.extent) {
+            return Err(failure("index writer has an invalid value"));
+        }
+        for child in vec![node.left, node.right] {
+            if let Some(child) = child {
+                if child.height == 0usize || child.height >= height
+                    || !self.valid_anchor(child.anchor, self.maximum_node, self.extent) {
+                    return Err(failure("index writer has an invalid child"));
+                }
+            }
+        }
+        let mut bytes = NODE.as_bytes().to_vec(); word(&mut bytes, height); blob(&mut bytes, node.key.as_bytes());
+        anchor(&mut bytes, node.value); link(&mut bytes, node.left); link(&mut bytes, node.right);
+        let result = self.append(&bytes)?;
+        self.maximum_node = self.maximum_node.max(result.length);
+        self.maximum_height = self.maximum_height.max(height);
+        Ok(Link { anchor: result, height })
+    }
+    fn balance(&mut self, node: Node) -> Result<Link, String> {
+        let left = height(node.left); let right = height(node.right);
+        if balanced(left, right) { return self.write_node(node); }
+        if left > right {
+            if left - right != 2usize { return Err(failure("invalid left index rotation")); }
+            let child = self.read_node(node.left.unwrap())?;
+            if child.key >= node.key { return Err(failure("invalid left index order")); }
+            if height(child.left) >= height(child.right) {
+                let right = self.write_node(Node { key: node.key, value: node.value,
+                    left: child.right, right: node.right, height: 0usize })?;
+                self.write_node(Node { key: child.key, value: child.value,
+                    left: child.left, right: Some(right), height: 0usize })
+            } else {
+                let middle = self.read_node(child.right.unwrap())?;
+                if middle.key <= child.key || middle.key >= node.key { return Err(failure("invalid double index order")); }
+                let left = self.write_node(Node { key: child.key, value: child.value,
+                    left: child.left, right: middle.left, height: 0usize })?;
+                let right = self.write_node(Node { key: node.key, value: node.value,
+                    left: middle.right, right: node.right, height: 0usize })?;
+                self.write_node(Node { key: middle.key, value: middle.value,
+                    left: Some(left), right: Some(right), height: 0usize })
+            }
+        } else {
+            if right - left != 2usize { return Err(failure("invalid right index rotation")); }
+            let child = self.read_node(node.right.unwrap())?;
+            if child.key <= node.key { return Err(failure("invalid right index order")); }
+            if height(child.right) >= height(child.left) {
+                let left = self.write_node(Node { key: node.key, value: node.value,
+                    left: node.left, right: child.left, height: 0usize })?;
+                self.write_node(Node { key: child.key, value: child.value,
+                    left: Some(left), right: child.right, height: 0usize })
+            } else {
+                let middle = self.read_node(child.left.unwrap())?;
+                if middle.key <= node.key || middle.key >= child.key { return Err(failure("invalid double index order")); }
+                let left = self.write_node(Node { key: node.key, value: node.value,
+                    left: node.left, right: middle.left, height: 0usize })?;
+                let right = self.write_node(Node { key: child.key, value: child.value,
+                    left: middle.right, right: child.right, height: 0usize })?;
+                self.write_node(Node { key: middle.key, value: middle.value,
+                    left: Some(left), right: Some(right), height: 0usize })
+            }
+        }
+    }
+    fn find(&mut self, key: &str) -> Result<Option<Node>, String> {
+        let mut current = self.root; let mut lower = None; let mut upper = None;
+        let mut visited = 0usize;
+        while let Some(link) = current {
+            visited += 1usize;
+            if visited > self.maximum_height { return Err(failure("index path exceeds its writer height")); }
+            let node = self.read_node(link)?;
+            if !ordered(&node.key, &lower, &upper) { return Err(failure("invalid index key order")); }
+            if key == node.key.as_str() { return Ok(Some(node)); }
+            if key < node.key.as_str() { current = node.left; upper = Some(node.key); }
+            else { current = node.right; lower = Some(node.key); }
+        }
+        Ok(None)
+    }
+    fn write(&mut self, key: &str, value: &[u8], mode: WriteMode) -> Result<Option<Vec<u8>>, String> {
+        let mut current = self.root; let mut lower = None; let mut upper = None;
+        let mut path = Vec::new(); let mut selected = None;
+        let mut remaining = BUFFER;
+        while let Some(link) = current {
+            if path.len() >= self.maximum_height { return Err(failure("index path exceeds its writer height")); }
+            let node = self.read_node(link)?;
+            if !ordered(&node.key, &lower, &upper) { return Err(failure("invalid index key order")); }
+            if key == node.key.as_str() { selected = Some(node); break; }
+            let left = key < node.key.as_str();
+            current = if left { node.left } else { node.right };
+            let (step, bound) = Step::retain(link, left, node, &mut remaining);
+            path.push(step);
+            if left { upper = Some(bound); } else { lower = Some(bound); }
+        }
+        let selected = match (mode, selected) {
+            (WriteMode::Insert, Some(_)) => return Err(failure("duplicate key")),
+            (WriteMode::Replace, None) => return Err(failure("replacement key is absent")),
+            (WriteMode::InsertOrGet, Some(node)) => {
+                let maximum = self.maximum_value;
+                let bytes = self.read(node.value, maximum)?;
+                let value = decode_value(&bytes, key)
+                    .ok_or_else(|| failure("malformed value or changed key"))?;
+                return Ok(Some(value));
+            }
+            (_, selected) => selected,
+        };
+        let next_count = if selected.is_some() { self.count } else {
+            self.count.checked_add(1usize).ok_or_else(|| failure("key count overflow"))?
+        };
+        let value = self.write_value(key, value)?;
+        let node = match selected {
+            Some(mut node) => { node.value = value; node }
+            None => Node { key: key.to_string(), value, left: None, right: None, height: 1usize },
+        };
+        let mut result = self.write_node(node)?;
+        while let Some(step) = path.pop() {
+            let (mut node, left) = match step {
+                Step::Owned { node, left } => (node, left),
+                Step::Located { link, left } => (self.read_node(link)?, left),
+            };
+            if left { node.left = Some(result); } else { node.right = Some(result); }
+            result = self.balance(node)?;
+        }
+        self.root = Some(result); self.count = next_count;
+        Ok(None)
+    }
+    pub fn insert(&mut self, key: &str, value: &[u8]) -> Result<(), String> {
+        if self.failed { return Err(failure("store is poisoned by an earlier failure")); }
+        self.failed = true;
+        let result = self.write(key, value, WriteMode::Insert).map(|_| ());
+        if result.is_ok() { self.failed = false; }
+        result
+    }
+    pub fn replace(&mut self, key: &str, value: &[u8]) -> Result<(), String> {
+        if self.failed { return Err(failure("store is poisoned by an earlier failure")); }
+        self.failed = true;
+        let result = self.write(key, value, WriteMode::Replace).map(|_| ());
+        if result.is_ok() { self.failed = false; }
+        result
+    }
+    /// Insert an absent key, or return its authenticated existing bytes.
+    /// An existing value leaves this writer's root, count and file unchanged.
+    pub fn insert_or_get(&mut self, key: &str, value: &[u8]) -> Result<Option<Vec<u8>>, String> {
+        if self.failed { return Err(failure("store is poisoned by an earlier failure")); }
+        self.failed = true;
+        let result = self.write(key, value, WriteMode::InsertOrGet);
+        if result.is_ok() { self.failed = false; }
+        result
+    }
+    pub fn contains(&mut self, key: &str) -> Result<bool, String> {
+        if self.failed { return Err(failure("store is poisoned by an earlier failure")); }
+        self.failed = true;
+        let result = self.find(key).map(|value| value.is_some());
+        if result.is_ok() { self.failed = false; }
+        result
+    }
+    fn get_value(&mut self, key: &str) -> Result<Option<Vec<u8>>, String> {
+        let Some(node) = self.find(key)? else { return Ok(None); };
+        let maximum = self.maximum_value;
+        let bytes = self.read(node.value, maximum)?;
+        let value = decode_value(&bytes, key).ok_or_else(|| failure("malformed value or changed key"))?;
+        Ok(Some(value))
+    }
+    pub fn get(&mut self, key: &str) -> Result<Option<Vec<u8>>, String> {
+        if self.failed { return Err(failure("store is poisoned by an earlier failure")); }
+        self.failed = true;
+        let result = self.get_value(key);
+        if result.is_ok() { self.failed = false; }
+        result
+    }
+    fn successor_node(&mut self, key: Option<&str>) -> Result<Option<Node>, String> {
+        let mut current = self.root; let mut lower = None; let mut upper = None;
+        let mut result = None; let mut visited = 0usize;
+        while let Some(link) = current {
+            visited += 1usize;
+            if visited > self.maximum_height { return Err(failure("index path exceeds its writer height")); }
+            let node = self.read_node(link)?;
+            if !ordered(&node.key, &lower, &upper) { return Err(failure("invalid index key order")); }
+            let before = match key { Some(key) => key < node.key.as_str(), None => true };
+            if before { current = node.left; upper = Some(node.key.clone()); result = Some(node); }
+            else { current = node.right; lower = Some(node.key); }
+        }
+        Ok(result)
+    }
+    fn successor(&mut self, key: Option<&str>) -> Result<Option<String>, String> {
+        match self.successor_node(key)? {
+            Some(node) => Ok(Some(node.key)),
+            None => Ok(None),
+        }
+    }
+    fn successor_value(&mut self, key: &str, prefix: &str) -> Result<Option<(String, Vec<u8>)>, String> {
+        let Some(node) = self.successor_node(Some(key))? else { return Ok(None); };
+        if !node.key.starts_with(prefix) { return Ok(None); }
+        let maximum = self.maximum_value;
+        let bytes = self.read(node.value, maximum)?;
+        let value = decode_value(&bytes, &node.key)
+            .ok_or_else(|| failure("malformed value or changed key"))?;
+        Ok(Some((node.key, value)))
+    }
+    pub fn first(&mut self) -> Result<Option<String>, String> {
+        if self.failed { return Err(failure("store is poisoned by an earlier failure")); }
+        self.failed = true;
+        let result = self.successor(None);
+        if result.is_ok() { self.failed = false; }
+        result
+    }
+    pub fn after(&mut self, key: &str) -> Result<Option<String>, String> {
+        if self.failed { return Err(failure("store is poisoned by an earlier failure")); }
+        self.failed = true;
+        let result = self.successor(Some(key));
+        if result.is_ok() { self.failed = false; }
+        result
+    }
+    /// Return the immediate successor and its authenticated value within prefix.
+    /// Prefix is a boundary check, not a search for a later matching key.
+    /// A nonmatching authenticated key ends the range without reading its value.
+    pub fn after_value(&mut self, key: &str, prefix: &str) -> Result<Option<(String, Vec<u8>)>, String> {
+        if self.failed { return Err(failure("store is poisoned by an earlier failure")); }
+        self.failed = true;
+        let result = self.successor_value(key, prefix);
+        if result.is_ok() { self.failed = false; }
+        result
+    }
+    fn verify_file(&mut self) -> Result<(), String> {
+        self.file.seek(0i64, 0u8).map_err(|errno: i64| io("rewind final file", errno))?;
+        let mut remaining = self.extent; let mut bytes = vec![0u8; BUFFER]; let mut actual = Sha256::new();
+        while remaining != 0usize {
+            let wanted = remaining.min(BUFFER);
+            let count = self.file.read(&mut bytes[..wanted]).map_err(|errno: i64| io("read final file", errno))?;
+            if count == 0usize { return Err(failure("final file was truncated")); }
+            actual.update(&bytes[..count]); remaining -= count;
+        }
+        let mut extra = [0u8; 1];
+        if self.file.read(&mut extra).map_err(|errno: i64| io("check final EOF", errno))? != 0usize {
+            return Err(failure("final file changed its extent"));
+        }
+        if actual.finish() != self.hash.snapshot().finish() { return Err(failure("final file changed after writing")); }
+        Ok(())
+    }
+    /// Verify every written byte without consuming this writer-owned root.
+    /// A failure is sticky even if an alias repairs the bytes afterward.
+    pub fn verify(&mut self) -> Result<(), String> {
+        if self.failed { return Err(failure("store is poisoned by an earlier failure")); }
+        self.failed = true;
+        let result = self.verify_file();
+        if result.is_ok() { self.failed = false; }
+        result
+    }
+    pub fn finish(mut self) -> Result<(), String> { self.verify() }
+}

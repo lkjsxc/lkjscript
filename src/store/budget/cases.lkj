@@ -1,0 +1,516 @@
+//! Focused controls. The unchanged resident map implementation is the oracle.
+use super::*;
+use crate::sha256;
+use std::collections::BTreeMap;
+
+struct OracleEntry { producer: String, bytes: usize }
+struct Oracle {
+    generations: Vec<String>,
+    entries: BTreeMap<String, OracleEntry>,
+    bytes: usize,
+    metadata: usize,
+}
+impl Oracle {
+    fn new() -> Self {
+        Self { generations: Vec::new(), entries: BTreeMap::new(), bytes: 0, metadata: 24 }
+    }
+    fn size(&self) -> usize { self.bytes + self.metadata + reuse::header_size() }
+    fn forget(&mut self, name: &str) {
+    if let Some(entry) = self.entries.remove(&name.to_string()) {
+        self.bytes -= entry.bytes;
+        self.metadata -= 24usize + name.len() + entry.producer.len();
+    }
+}
+    fn remember(&mut self, name: &str, producer: &str, bytes: usize) {
+    self.forget(name);
+    if !self.generations.contains(&producer.to_string()) {
+        self.generations.push(producer.to_string());
+        self.metadata += 8usize + producer.len();
+    }
+    self.bytes += bytes;
+    self.metadata += 24usize + name.len() + producer.len();
+    self.entries.insert(name.to_string(), OracleEntry { producer: producer.to_string(), bytes });
+}
+    fn growth(&self, name: &str, producer: &str, bytes: usize, current_index: usize) -> Option<usize> {
+    let generation = if self.generations.contains(&producer.to_string()) { 0usize } else { 8usize + producer.len() };
+    let index = self.metadata.checked_add(generation)?
+        .checked_add(24usize + name.len() + producer.len())?
+        .checked_add(reuse::header_size())?;
+    self.bytes.checked_add(bytes)?.checked_add(index.max(current_index))
+}
+    fn encode(&self) -> Vec<u8> {
+    let mut out = Vec::new();
+    push_word(&mut out, 2usize);
+    push_word(&mut out, self.generations.len());
+    for generation in &self.generations { push_bytes(&mut out, generation.as_bytes()); }
+    push_word(&mut out, self.entries.len());
+    for (name, entry) in &self.entries {
+        push_bytes(&mut out, name.as_bytes());
+        push_bytes(&mut out, entry.producer.as_bytes());
+        push_word(&mut out, entry.bytes);
+    }
+    out
+}
+    fn decode(bytes: &[u8]) -> Option<Self> {
+    let mut reader = Reader::new(bytes);
+    if reader.word()? != 2usize { return None; }
+    let count = reader.word()?;
+    if count > bytes.len() / 72usize { return None; }
+    let mut result = Self::new();
+    for _ in 0usize..count {
+        let producer = reader.text()?;
+        if !hex_identity(&producer) || result.generations.contains(&producer) { return None; }
+        result.metadata = result.metadata.checked_add(8usize + producer.len())?;
+        result.generations.push(producer);
+    }
+    let count = reader.word()?;
+    if count > bytes.len() / 24usize { return None; }
+    for _ in 0usize..count {
+        let name = reader.text()?;
+        let producer = reader.text()?;
+        let length = reader.word()?;
+        if !owned_entry(&name, &producer) || !result.generations.contains(&producer)
+            || result.entries.contains_key(&name) || length < reuse::header_size() { return None; }
+        if (query_locator_identity(&name).is_some() || legacy_query_locator_identity(&name).is_some())
+            && length != reuse::header_size() + 104usize { return None; }
+        result.bytes = result.bytes.checked_add(length)?;
+        result.metadata = result.metadata.checked_add(24usize + name.len() + producer.len())?;
+        result.entries.insert(name, OracleEntry { producer, bytes: length });
+    }
+    result.bytes.checked_add(result.metadata)?.checked_add(reuse::header_size())?;
+    if !reader.done() { return None; }
+    Some(result)
+}
+}
+
+
+fn producer(label: &str) -> String { sha256::hex_digest(label.as_bytes()) }
+fn name(producer: &str, label: &str) -> String { format!("capacity-{producer}-{}", sha256::hex_digest(label.as_bytes())) }
+fn secret() -> Vec<u8> { vec![41u8; 32] }
+fn sealed(payload: &[u8]) -> Vec<u8> {
+    reuse::seal(&sha256::digest(b"lkjscript-store-size-index-1"), &secret(), "size-index", "1", payload)
+}
+fn file_bytes(file: &mut File) -> Vec<u8> {
+    file.seek(0i64, 0u8).unwrap(); file.read_to_end().unwrap()
+}
+fn write(file: &mut File, bytes: &[u8]) {
+    file.truncate(0usize).unwrap(); file.seek(0i64, 0u8).unwrap(); file.write_all(bytes).unwrap();
+    file.seek(0i64, 0u8).unwrap();
+}
+fn restore(world: &mut World, bytes: &[u8]) -> Restored {
+    let mut input = world.temporary_file().unwrap(); write(&mut input, bytes);
+    Budget::restore(input, world.temporary_file().unwrap(), world.temporary_file().unwrap(), &secret(), 1024usize * 1024usize).unwrap()
+}
+fn same(world: &mut World, actual: &mut Budget, expected: &Oracle) {
+    assert_eq!(actual.size(), expected.size()); assert_eq!(actual.bytes(), expected.bytes);
+    assert_eq!(actual.metadata(), expected.metadata); assert_eq!(actual.entry_count(), expected.entries.len());
+    assert_eq!(actual.oldest().unwrap(), expected.generations.first().cloned());
+    let mut after = None;
+    for (name, entry) in &expected.entries {
+        let (next, value) = actual.next(&after).unwrap().unwrap();
+        assert_eq!(next, *name); assert_eq!(value.producer, entry.producer); assert_eq!(value.bytes, entry.bytes);
+        after = Some(next);
+    }
+    assert!(actual.next(&after).unwrap().is_none());
+    let producer = producer("growth");
+    let name = name(&producer, "next");
+    for current in vec![0usize, 90usize, 4096usize, !0usize] {
+        assert_eq!(actual.growth(&name, &producer, 512usize, current).unwrap(),
+            expected.growth(&name, &producer, 512usize, current));
+    }
+    let mut output = world.temporary_file().unwrap();
+    let length = match actual.write_index(&mut output, &secret()) { Ok(value) => value, Err(_) => panic!("index write refused") };
+    let bytes = file_bytes(&mut output); assert_eq!(bytes.len(), length);
+    assert_eq!(bytes, sealed(&expected.encode()));
+    actual.verify().unwrap();
+}
+fn evict(actual: &mut Budget, expected: &mut Oracle) {
+    let producer = actual.oldest().unwrap().unwrap();
+    assert_eq!(Some(producer.clone()), expected.generations.first().cloned());
+    let mut after = None;
+    while let Some((name, entry)) = actual.next(&after).unwrap() {
+        if entry.producer == producer { actual.forget(&name).unwrap(); }
+        after = Some(name);
+    }
+    actual.retire(&producer).unwrap();
+    let mut names: Vec<String> = Vec::new();
+    for (name, entry) in &expected.entries {
+        if entry.producer == producer { names.push(name.clone()); }
+    }
+    for name in names { expected.forget(&name); }
+    let generations = std::mem::replace(&mut expected.generations, Vec::new());
+    for generation in generations {
+        if generation != producer { expected.generations.push(generation); }
+    }
+    expected.metadata -= 8usize + producer.len();
+}
+fn histories(world: &mut World) -> usize {
+    let mut actual = Budget::new(world.temporary_file().unwrap()).unwrap();
+    let mut expected = Oracle::new();
+    let a = producer("A"); let b = producer("B");
+    let a0 = name(&a, "0"); let a1 = name(&a, "1"); let b0 = name(&b, "0");
+    let locator = format!("semantic-locator-v3-{}", producer("locator"));
+    same(world, &mut actual, &expected);
+    for (name, producer, length) in vec![
+        (a0.clone(), a.clone(), 512usize), (a1.clone(), a.clone(), 768usize),
+        (b0.clone(), b.clone(), 1024usize), (a0.clone(), a.clone(), 640usize),
+        (locator.clone(), a.clone(), reuse::header_size() + 104usize),
+        (locator.clone(), b.clone(), reuse::header_size() + 104usize),
+    ] {
+        actual.remember(&name, &producer, length).unwrap(); expected.remember(&name, &producer, length);
+        same(world, &mut actual, &expected);
+    }
+    actual.forget(&a1).unwrap(); expected.forget(&a1); same(world, &mut actual, &expected);
+    evict(&mut actual, &mut expected); same(world, &mut actual, &expected);
+    actual.remember(&a1, &a, 900usize).unwrap(); expected.remember(&a1, &a, 900usize);
+    same(world, &mut actual, &expected); // A returns after B, not at its old ordinal.
+    let restored = restore(world, &sealed(&expected.encode()));
+    assert_eq!(restored.authenticated_payload, Some(expected.encode().len()));
+    let mut restored = restored.budget.unwrap(); same(world, &mut restored, &expected);
+    restored.mark_present(&a1).unwrap(); assert!(restored.forget_absent().unwrap());
+    let mut retained = Oracle::new();
+    // Empty generations remain until explicit FIFO eviction.
+    retained.generations = expected.generations.clone();
+    retained.metadata = 24usize + retained.generations.len() * 72usize;
+    retained.remember(&a1, &a, 900usize);
+    same(world, &mut restored, &retained);
+    let mut read_only = world.executable().unwrap();
+    assert!(matches!(restored.write_index(&mut read_only, &secret()), Err(WriteError::Output(_))));
+    same(world, &mut restored, &retained); // Output failure is retryable, not scratch poisoning.
+    actual.finish().unwrap(); restored.finish().unwrap();
+    13usize
+}
+fn payload(version: usize, generations: &[String], entries: &[(String, String, usize)]) -> Vec<u8> {
+    let mut bytes = Vec::new(); push_word(&mut bytes, version); push_word(&mut bytes, generations.len());
+    for producer in generations { push_bytes(&mut bytes, producer.as_bytes()); }
+    push_word(&mut bytes, entries.len());
+    for (name, producer, length) in entries {
+        push_bytes(&mut bytes, name.as_bytes()); push_bytes(&mut bytes, producer.as_bytes()); push_word(&mut bytes, *length);
+    }
+    bytes
+}
+fn wire_mutants(world: &mut World) -> usize {
+    let a = producer("A"); let b = producer("B");
+    let valid_name = name(&a, "entry"); let other_name = name(&a, "other");
+    let row = (valid_name.clone(), a.clone(), 512usize);
+    let valid = payload(2usize, &vec![a.clone()], &vec![row.clone()]);
+    let mut cases: Vec<Vec<u8>> = Vec::new();
+    cases.push(payload(3usize, &vec![a.clone()], &vec![row.clone()]));
+    cases.push(payload(2usize, &vec![a.clone(), a.clone()], &vec![row.clone()]));
+    let no_entries: Vec<(String, String, usize)> = Vec::new();
+    cases.push(payload(2usize, &vec!["bad".to_string()], &no_entries));
+    cases.push(payload(2usize, &vec![b.clone()], &vec![row.clone()]));
+    cases.push(payload(2usize, &vec![a.clone()], &vec![row.clone(), row.clone()]));
+    cases.push(payload(2usize, &vec![a.clone(), b.clone()], &vec![(valid_name.clone(), b, 512usize)]));
+    cases.push(payload(2usize, &vec![a.clone()], &vec![(valid_name.clone(), a.clone(), reuse::header_size() - 1usize)]));
+    cases.push(payload(2usize, &vec![a.clone()],
+        &vec![(format!("semantic-locator-v3-{}", producer("locator")), a.clone(), 512usize)]));
+    cases.push(payload(2usize, &vec![a.clone()], &vec![
+        (valid_name.clone(), a.clone(), !0usize), (other_name.clone(), a.clone(), 512usize)]));
+    let mut trailing = valid.clone(); trailing.push(0u8); cases.push(trailing);
+    let mut invalid_utf8 = Vec::new();
+    push_word(&mut invalid_utf8, 2usize); push_word(&mut invalid_utf8, 1usize); push_bytes(&mut invalid_utf8, a.as_bytes());
+    push_word(&mut invalid_utf8, 1usize); push_bytes(&mut invalid_utf8, &[255u8]);
+    push_bytes(&mut invalid_utf8, a.as_bytes()); push_word(&mut invalid_utf8, 512usize); cases.push(invalid_utf8);
+    for index in 0usize..valid.len() { cases.push(valid[..index].to_vec()); }
+    for bytes in &cases {
+        assert!(Oracle::decode(bytes).is_none());
+        let restored = restore(world, &sealed(bytes));
+        assert!(restored.budget.is_none());
+        assert_eq!(restored.authenticated_payload, Some(bytes.len()));
+    }
+    // Noncanonical input entry order is accepted, then encoded lexically.
+    let unordered = payload(2usize, &vec![a.clone()], &vec![
+        (other_name, a.clone(), 612usize), (valid_name, a, 512usize)]);
+    let expected = Oracle::decode(&unordered).unwrap();
+    let mut actual = restore(world, &sealed(&unordered)).budget.unwrap();
+    same(world, &mut actual, &expected); actual.finish().unwrap();
+    cases.len() + 1usize
+}
+fn envelope_mutants(world: &mut World) -> usize {
+    let a = producer("A"); let valid = payload(2usize, &vec![a.clone()], &vec![(name(&a, "0"), a, 512usize)]);
+    let bytes = sealed(&valid);
+    for index in 0usize..bytes.len() {
+        let restored = restore(world, &bytes[..index]);
+        assert!(restored.budget.is_none()); assert!(restored.authenticated_payload.is_none());
+    }
+    for index in vec![0usize, 24usize, reuse::header_size() - 1usize, bytes.len() - 1usize] {
+        let mut changed = bytes.clone(); changed[index] ^= 1u8;
+        let restored = restore(world, &changed);
+        assert!(restored.budget.is_none()); assert!(restored.authenticated_payload.is_none());
+    }
+    let mut extra = bytes.clone(); extra.push(0u8);
+    let restored = restore(world, &extra); assert!(restored.budget.is_none()); assert!(restored.authenticated_payload.is_none());
+    let restored = restore(world, &reuse::seal(&sha256::digest(b"wrong-protocol"), &secret(), "size-index", "1", &valid));
+    assert!(restored.budget.is_none()); assert!(restored.authenticated_payload.is_none());
+    bytes.len() + 6usize
+}
+fn backing_mutants(world: &mut World) -> usize {
+    for attack in 0usize..6usize {
+        let mut file = world.temporary_file().unwrap(); let mut alias = file.duplicate().unwrap();
+        let mut budget = Budget::new(file).unwrap();
+        let a = producer("A"); let first = name(&a, "0"); let second = name(&a, "1");
+        budget.remember(&first, &a, 512usize).unwrap();
+        let before = file_bytes(&mut alias);
+        budget.remember(&first, &a, 640usize).unwrap(); budget.remember(&second, &a, 768usize).unwrap();
+        let correct = file_bytes(&mut alias); assert!(budget.entry(&first).unwrap().is_some());
+        if attack == 0usize { alias.seek(0i64, 0u8).unwrap(); alias.write_all(b"!").unwrap(); }
+        else if attack == 1usize { alias.seek(0i64, 2u8).unwrap(); alias.write_all(b"!").unwrap(); }
+        else if attack == 2usize { alias.truncate(correct.len() - 1usize).unwrap(); }
+        else if attack == 3usize { write(&mut alias, &before); }
+        else {
+            let position = if attack == 4usize { before.len() - 1usize } else { correct.len() - 1usize };
+            alias.seek(position as i64, 0u8).unwrap(); alias.write_all(&[correct[position] ^ 1u8]).unwrap();
+        }
+        let mut output = world.temporary_file().unwrap();
+        assert!(matches!(budget.write_index(&mut output, &secret()), Err(WriteError::Storage(_))));
+        let bytes = file_bytes(&mut output); assert!(bytes.len() >= reuse::header_size());
+        assert_eq!(&bytes[..4usize], &[0u8; 4]);
+        write(&mut alias, &correct);
+        assert!(budget.entry(&first).is_err()); assert!(budget.verify().is_err());
+    }
+    6usize
+}
+fn snapshot_mutants(world: &mut World) -> usize {
+    let a = producer("A");
+    let mut rows: Vec<(String, String, usize)> = Vec::new();
+    for index in 0usize..300usize { rows.push((name(&a, &format!("entry-{index}")), a.clone(), 512usize)); }
+    let bytes = payload(2usize, &vec![a], &rows); assert!(bytes.len() > 65536usize);
+    let expected = Oracle::decode(&bytes).unwrap();
+    let envelope = sealed(&bytes);
+    // The root remains authentic, but an internal producer length is changed
+    // to the whole remaining payload. Staging must refuse before parsing.
+    let mut forged = envelope.clone();
+    let at = reuse::header_size() + 16usize; let length = bytes.len() - 24usize;
+    for index in 0usize..8usize { forged[at + index] = (length >> (index * 8usize)) as u8; }
+    let restored = restore(world, &forged);
+    assert!(restored.budget.is_none()); assert!(restored.authenticated_payload.is_none());
+    // Later changes to the mutable source cannot alter the admitted snapshot.
+    let mut input = world.temporary_file().unwrap(); write(&mut input, &envelope);
+    let mut input_alias = input.duplicate().unwrap();
+    let mut reader = IndexReader::open(input, world.temporary_file().unwrap(), &secret(), 1024usize * 1024usize).unwrap().unwrap();
+    write(&mut input_alias, b"changed after envelope authentication");
+    let mut actual = Budget::new(world.temporary_file().unwrap()).unwrap();
+    assert!(actual.load(&mut reader).is_ok()); assert_eq!(reader.remaining(), 0usize);
+    reader.finish().unwrap(); same(world, &mut actual, &expected); actual.finish().unwrap();
+    // Cached first-chunk reads cannot hide snapshot damage at final verification.
+    for attack in 0usize..3usize {
+        let mut input = world.temporary_file().unwrap(); write(&mut input, &envelope);
+        let mut snapshot = world.temporary_file().unwrap(); let mut alias = snapshot.duplicate().unwrap();
+        let mut reader = IndexReader::open(input, snapshot, &secret(), 1024usize * 1024usize).unwrap().unwrap();
+        assert_eq!(reader.word(), Some(2usize));
+        let saved = file_bytes(&mut alias);
+        if attack == 0usize { alias.seek(0i64, 0u8).unwrap(); alias.write_all(b"!").unwrap(); }
+        else if attack == 1usize { alias.seek(0i64, 2u8).unwrap(); alias.write_all(b"!").unwrap(); }
+        else {
+            alias.seek((saved.len() - 1usize) as i64, 0u8).unwrap();
+            alias.write_all(&[saved[saved.len() - 1usize] ^ 1u8]).unwrap();
+        }
+        assert!(reader.finish().is_err());
+    }
+    5usize
+}
+fn observations(world: &mut World) -> usize {
+    let mut budget = Budget::new(world.temporary_file().unwrap()).unwrap();
+    let rows = vec![vec![255u8], b"ordinary"[..].to_vec(), b".tmp-old"[..].to_vec(), b"ordinary"[..].to_vec()];
+    for row in &rows { budget.snapshot_name(row).unwrap(); }
+    assert_eq!(budget.snapshot_count(), rows.len());
+    for index in 0usize..rows.len() { assert_eq!(budget.snapshot_at(index).unwrap(), rows[index]); }
+    budget.verify().unwrap(); budget.finish().unwrap();
+    1usize
+}
+fn hash_snapshots() -> usize {
+    for length in vec![0usize, 1usize, 63usize, 64usize, 65usize, 1000usize] {
+        let bytes = vec![7u8; length]; let mut hash = sha256::Sha256::new(); hash.update(&bytes);
+        let copied = hash.snapshot(); hash.update(b"tail");
+        let mut joined = bytes.clone(); joined.extend_from_slice(b"tail");
+        assert_eq!(copied.finish(), sha256::digest(&bytes)); assert_eq!(hash.finish(), sha256::digest(&joined));
+    }
+    6usize
+}
+
+fn original_entry(budget: &mut Budget, name: &str) -> Result<Option<Entry>, String> {
+        let Some(bytes) = budget.records.get(&entry_key(name))? else { return Ok(None); };
+        let mut reader = Reader::new(&bytes);
+        let tag = reader.word().ok_or_else(|| failure("truncated entry tag"))?;
+        if tag == 0usize {
+            if !reader.done() { return Err(failure("entry tombstone has trailing bytes")); }
+            return Ok(None);
+        }
+        if tag != 1usize { return Err(failure("invalid entry tag")); }
+        let producer = reader.text().ok_or_else(|| failure("malformed entry producer"))?;
+        let length = reader.word().ok_or_else(|| failure("truncated entry size"))?;
+        let present = reader.word().ok_or_else(|| failure("truncated entry observation"))?;
+        if !reader.done() || present > 1usize || !valid_entry(name, &producer, length) {
+            return Err(failure("malformed retained entry"));
+        }
+        let generation = budget.generation(&producer)?.ok_or_else(|| failure("entry producer is inactive"))?;
+        if generation.1 == 0usize { return Err(failure("active entry has an empty producer")); }
+        Ok(Some(Entry { producer, bytes: length, present: present == 1usize }))
+    }
+
+fn original_next_inner(budget: &mut Budget, after: &Option<String>) -> Result<Option<(String, Entry)>, String> {
+        let mut key = match after { Some(name) => budget.records.after(&entry_key(name))?, None => budget.records.after("E")? };
+        while let Some(current) = key {
+            if !current.starts_with("E") { return Ok(None); }
+            let name = current[1usize..].to_string();
+            if let Some(entry) = original_entry(budget, &name)? { return Ok(Some((name, entry))); }
+            key = budget.records.after(&current)?;
+        }
+        Ok(None)
+    }
+
+fn original_next(budget: &mut Budget, after: &Option<String>) -> Result<Option<(String, Entry)>, String> {
+    budget.begin()?; let result = original_next_inner(budget, after); budget.end(result)
+}
+
+fn next_bytes(value: Option<(String, Entry)>) -> Vec<u8> {
+    let mut bytes = Vec::new();
+    match value {
+        None => push_word(&mut bytes, 0usize),
+        Some((name, entry)) => {
+            push_word(&mut bytes, 1usize); push_bytes(&mut bytes, name.as_bytes());
+            push_bytes(&mut bytes, entry.producer.as_bytes()); push_word(&mut bytes, entry.bytes);
+            push_word(&mut bytes, if entry.present { 1usize } else { 0usize });
+        }
+    }
+    bytes
+}
+
+fn same_successors(budget: &mut Budget, alias: &mut File) {
+    let before = file_bytes(alias); let count = budget.entry_count(); let size = budget.size();
+    let mut after = None; let mut seen = 0usize;
+    loop {
+        let expected = original_next(budget, &after).unwrap();
+        let actual = budget.next(&after).unwrap();
+        let advance = match &actual { Some((name, _)) => Some(name.clone()), None => None };
+        assert_eq!(next_bytes(actual), next_bytes(expected));
+        if advance.is_none() { break; }
+        seen += 1usize; assert!(seen <= count); after = advance;
+    }
+    assert_eq!(seen, count); assert_eq!(budget.entry_count(), count); assert_eq!(budget.size(), size);
+    assert_eq!(file_bytes(alias), before);
+}
+
+fn successor_histories(world: &mut World) -> usize {
+    let mut file = world.temporary_file().unwrap(); let mut alias = file.duplicate().unwrap();
+    let mut budget = Budget::new(file).unwrap();
+    budget.snapshot_name(b"directory observation").unwrap();
+    same_successors(&mut budget, &mut alias);
+    let a = producer("successor-A"); let b = producer("successor-B");
+    let names: Vec<String> = vec![name(&a, "0"), name(&a, "1"), name(&b, "0")];
+    let mut checks = 1usize;
+    for index in 0usize..names.len() {
+        let producer = if index < 2usize { &a } else { &b };
+        budget.remember(&names[index], producer, 512usize + index).unwrap();
+        same_successors(&mut budget, &mut alias); checks += 1usize;
+    }
+    for name in &names {
+        budget.forget(name).unwrap(); same_successors(&mut budget, &mut alias); checks += 1usize;
+    }
+    budget.retire(&a).unwrap(); same_successors(&mut budget, &mut alias); checks += 1usize;
+    budget.retire(&b).unwrap(); same_successors(&mut budget, &mut alias); checks += 1usize;
+    budget.finish().unwrap();
+    checks
+}
+
+fn malformed_successor(world: &mut World, attack: usize) -> Budget {
+    let mut budget = Budget::new(world.temporary_file().unwrap()).unwrap();
+    let a = producer("successor-A"); let b = producer("successor-B"); let name = name(&a, "entry");
+    budget.remember(&name, &a, 512usize).unwrap();
+    let valid = entry_bytes(&Entry { producer: a.clone(), bytes: 512usize, present: true });
+    let lengths = vec![0usize, 8usize, 16usize, 80usize, 88usize];
+    let mut changed = if attack < 5usize { valid[..lengths[attack]].to_vec() } else { valid.clone() };
+    if attack == 5usize { changed = vec![0u8; 9]; }
+    else if attack == 6usize || attack == 13usize { changed = Vec::new(); push_word(&mut changed, 2usize); }
+    else if attack == 7usize { let at = changed.len() - 8usize; changed[at] = 2u8; }
+    else if attack == 8usize { changed.push(0u8); }
+    else if attack == 9usize { changed = entry_bytes(&Entry { producer: b, bytes: 512usize, present: true }); }
+    else if attack == 10usize { changed = entry_bytes(&Entry { producer: a.clone(), bytes: reuse::header_size() - 1usize, present: true }); }
+    budget.records.replace(&entry_key(&name), &changed).unwrap();
+    if attack == 11usize { budget.records.replace(&producer_key(&a), &[0u8; 8]).unwrap(); }
+    else if attack == 12usize { budget.records.replace(&producer_key(&a), &generation_bytes(0usize, 0usize)).unwrap(); }
+    else if attack == 13usize { budget.records.replace(&producer_key(&a), &[255u8]).unwrap(); }
+    budget
+}
+
+fn successor_error(attack: usize) -> String {
+    let detail = if attack == 0usize { "truncated entry tag" }
+        else if attack <= 2usize { "malformed entry producer" }
+        else if attack == 3usize { "truncated entry size" }
+        else if attack == 4usize { "truncated entry observation" }
+        else if attack == 5usize { "entry tombstone has trailing bytes" }
+        else if attack == 6usize || attack == 13usize { "invalid entry tag" }
+        else if attack <= 10usize { "malformed retained entry" }
+        else if attack == 11usize { "entry producer is inactive" }
+        else { "active entry has an empty producer" };
+    format!("budget records: {detail}")
+}
+
+fn successor_framing(world: &mut World) -> usize {
+    for attack in 0usize..14usize {
+        let mut original = malformed_successor(world, attack);
+        let mut actual = malformed_successor(world, attack);
+        let expected = original_next(&mut original, &None).err().unwrap();
+        assert_eq!(expected, successor_error(attack));
+        assert_eq!(actual.next(&None).err().unwrap(), expected);
+        assert!(original.next(&None).err().unwrap().contains("earlier failure"));
+        assert!(actual.next(&None).err().unwrap().contains("earlier failure"));
+        assert!(original.verify().is_err()); assert!(actual.verify().is_err());
+    }
+    14usize
+}
+
+fn unique_position(bytes: &[u8], marker: &[u8]) -> usize {
+    assert!(marker.len() <= bytes.len());
+    let mut found = None;
+    for index in 0usize..bytes.len() - marker.len() + 1usize {
+        if &bytes[index..index + marker.len()] == marker {
+            assert!(found.is_none()); found = Some(index);
+        }
+    }
+    found.unwrap()
+}
+
+fn successor_backing(world: &mut World) -> usize {
+    for attack in 0usize..2usize {
+        let mut old_file = world.temporary_file().unwrap(); let mut old_alias = old_file.duplicate().unwrap();
+        let mut new_file = world.temporary_file().unwrap(); let mut new_alias = new_file.duplicate().unwrap();
+        let mut original = Budget::new(old_file).unwrap(); let mut actual = Budget::new(new_file).unwrap();
+        let a = producer("successor-A"); let name = name(&a, "entry");
+        original.remember(&name, &a, 512usize).unwrap(); actual.remember(&name, &a, 512usize).unwrap();
+        let saved = file_bytes(&mut old_alias); assert_eq!(file_bytes(&mut new_alias), saved);
+        let marker = entry_bytes(&Entry { producer: a, bytes: 512usize, present: true });
+        let at = if attack == 0usize { unique_position(&saved, &marker) + marker.len() - 1usize }
+            else { saved.len() - 1usize };
+        old_alias.seek(at as i64, 0u8).unwrap(); old_alias.write_all(&[saved[at] ^ 1u8]).unwrap();
+        new_alias.seek(at as i64, 0u8).unwrap(); new_alias.write_all(&[saved[at] ^ 1u8]).unwrap();
+        let expected = original_next(&mut original, &None).err().unwrap();
+        assert_eq!(expected, "command records: record changed after writing");
+        assert_eq!(actual.next(&None).err().unwrap(), expected);
+        write(&mut old_alias, &saved); write(&mut new_alias, &saved);
+        assert!(original.next(&None).err().unwrap().contains("earlier failure"));
+        assert!(actual.next(&None).err().unwrap().contains("earlier failure"));
+        assert!(original.verify().is_err()); assert!(actual.verify().is_err());
+    }
+    // The first non-E key is a real generation record. Its value is not read
+    // by iteration even when damaged, while final file authentication refuses.
+    let mut file = world.temporary_file().unwrap(); let mut alias = file.duplicate().unwrap();
+    let mut budget = Budget::new(file).unwrap();
+    let a = producer("successor-A"); let name = name(&a, "entry");
+    budget.remember(&name, &a, 512usize).unwrap(); budget.forget(&name).unwrap();
+    let marker = b"unused generation boundary payload";
+    budget.records.replace(&generation_key(0usize), marker).unwrap();
+    let saved = file_bytes(&mut alias); let at = unique_position(&saved, marker);
+    alias.seek(at as i64, 0u8).unwrap(); alias.write_all(&[saved[at] ^ 1u8]).unwrap();
+    assert!(original_next(&mut budget, &None).unwrap().is_none());
+    assert!(budget.next(&None).unwrap().is_none());
+    assert!(budget.verify().is_err()); write(&mut alias, &saved);
+    assert!(budget.next(&None).err().unwrap().contains("earlier failure"));
+    3usize
+}
+pub(super) fn run(world: &mut World) -> usize {
+    histories(world) + wire_mutants(world) + envelope_mutants(world) + backing_mutants(world)
+        + snapshot_mutants(world) + observations(world) + hash_snapshots()
+        + successor_histories(world) + successor_framing(world) + successor_backing(world)
+}

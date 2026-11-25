@@ -1,0 +1,396 @@
+//! Authenticated command-local accounting; persistent format stays v2.
+use crate::native::records::Store as Records;
+use crate::reuse;
+use super::{Reader, push_word, push_bytes, hex_identity, owned_entry,
+    query_locator_identity, legacy_query_locator_identity};
+use super::budget_io::{IndexReader, IndexWriter, WriteMetrics};
+
+pub(super) struct Entry {
+    pub(super) producer: String,
+    pub(super) bytes: usize,
+    present: bool,
+}
+pub(super) struct Budget {
+    records: Records,
+    head: usize,
+    tail: usize,
+    entries: usize,
+    bytes: usize,
+    metadata: usize,
+    directory_names: usize,
+    failed: bool,
+}
+
+
+mod cases;
+
+pub(super) fn contracts(world: &mut World) -> usize { cases::run(world) }
+enum LoadError { Invalid, Storage(String) }
+pub(super) enum WriteError { Storage(String), Output(String) }
+pub(super) struct Restored {
+    pub(super) budget: Option<Budget>,
+    pub(super) authenticated_payload: Option<usize>,
+}
+
+fn entry_key(name: &str) -> String { format!("E{name}") }
+fn producer_key(producer: &str) -> String { format!("P{producer}") }
+fn generation_key(ordinal: usize) -> String { format!("G{ordinal:020}") }
+fn directory_key(ordinal: usize) -> String { format!("D{ordinal:020}") }
+fn failure(message: &str) -> String { format!("budget records: {message}") }
+fn entry_metadata(name: &str, producer: &str) -> Result<usize, String> {
+    24usize.checked_add(name.len()).and_then(|value: usize| value.checked_add(producer.len()))
+        .ok_or_else(|| failure("entry metadata overflow"))
+}
+fn valid_entry(name: &str, producer: &str, length: usize) -> bool {
+    owned_entry(name, producer) && length >= reuse::header_size()
+        && (!(query_locator_identity(name).is_some() || legacy_query_locator_identity(name).is_some())
+            || length == reuse::header_size() + 104usize)
+}
+fn entry_bytes(entry: &Entry) -> Vec<u8> {
+    let mut bytes = Vec::new(); push_word(&mut bytes, 1usize);
+    push_bytes(&mut bytes, entry.producer.as_bytes()); push_word(&mut bytes, entry.bytes);
+    push_word(&mut bytes, if entry.present { 1usize } else { 0usize });
+    bytes
+}
+fn generation_bytes(ordinal: usize, entries: usize) -> Vec<u8> {
+    let mut bytes = Vec::new(); push_word(&mut bytes, 1usize);
+    push_word(&mut bytes, ordinal); push_word(&mut bytes, entries); bytes
+}
+
+
+
+impl Budget {
+    pub(super) fn new(file: File) -> Result<Self, String> {
+        Ok(Self { records: Records::new(file)?, head: 0usize, tail: 0usize,
+            entries: 0usize, bytes: 0usize, metadata: 24usize, directory_names: 0usize, failed: false })
+    }
+    pub(super) fn bytes(&self) -> usize { self.bytes }
+    pub(super) fn metadata(&self) -> usize { self.metadata }
+    pub(super) fn entry_count(&self) -> usize { self.entries }
+    pub(super) fn size(&self) -> usize { self.bytes + self.metadata + reuse::header_size() }
+    fn begin(&mut self) -> Result<(), String> {
+        if self.failed { return Err(failure("earlier failure poisoned accounting")); }
+        self.failed = true; Ok(())
+    }
+    fn end<T>(&mut self, result: Result<T, String>) -> Result<T, String> {
+        if result.is_ok() { self.failed = false; } result
+    }
+    fn assign(&mut self, key: &str, value: &[u8]) -> Result<(), String> {
+        if self.records.contains(key)? { self.records.replace(key, value) }
+        else { self.records.insert(key, value) }
+    }
+    fn generation(&mut self, producer: &str) -> Result<Option<(usize, usize)>, String> {
+        let Some(bytes) = self.records.get(&producer_key(producer))? else { return Ok(None); };
+        let mut reader = Reader::new(&bytes);
+        let tag = reader.word().ok_or_else(|| failure("truncated producer membership"))?;
+        if tag == 0usize {
+            if !reader.done() { return Err(failure("producer tombstone has trailing bytes")); }
+            return Ok(None);
+        }
+        if tag != 1usize { return Err(failure("invalid producer membership tag")); }
+        let ordinal = reader.word().ok_or_else(|| failure("truncated generation ordinal"))?;
+        let entries = reader.word().ok_or_else(|| failure("truncated generation count"))?;
+        if !reader.done() || ordinal < self.head || ordinal >= self.tail {
+            return Err(failure("producer membership is outside the active FIFO"));
+        }
+        Ok(Some((ordinal, entries)))
+    }
+    fn queued(&mut self, ordinal: usize) -> Result<String, String> {
+        if ordinal < self.head || ordinal >= self.tail { return Err(failure("generation ordinal is outside FIFO")); }
+        let bytes = self.records.get(&generation_key(ordinal))?
+            .ok_or_else(|| failure("generation queue lost an entry"))?;
+        let producer = String::from_utf8(bytes).map_err(|_| failure("generation is not UTF-8"))?;
+        if !hex_identity(&producer) { return Err(failure("malformed queued producer")); }
+        let selected = self.generation(&producer)?.ok_or_else(|| failure("queued producer has no membership"))?;
+        if selected.0 != ordinal { return Err(failure("generation queue and membership disagree")); }
+        Ok(producer)
+    }
+    fn add_generation(&mut self, producer: &str) -> Result<usize, String> {
+        if !hex_identity(producer) || self.generation(producer)?.is_some() {
+            return Err(failure("invalid or duplicate generation"));
+        }
+        let tail = self.tail.checked_add(1usize).ok_or_else(|| failure("generation ordinal overflow"))?;
+        let metadata = self.metadata.checked_add(8usize + producer.len()).ok_or_else(|| failure("generation metadata overflow"))?;
+        self.bytes.checked_add(metadata).and_then(|value: usize| value.checked_add(reuse::header_size()))
+            .ok_or_else(|| failure("accounting extent overflow"))?;
+        let ordinal = self.tail;
+        self.records.insert(&generation_key(ordinal), producer.as_bytes())?;
+        self.assign(&producer_key(producer), &generation_bytes(ordinal, 0usize))?;
+        self.tail = tail; self.metadata = metadata;
+        Ok(ordinal)
+    }
+    fn decode_entry(&mut self, name: &str, bytes: &[u8]) -> Result<Option<Entry>, String> {
+        let mut reader = Reader::new(bytes);
+        let tag = reader.word().ok_or_else(|| failure("truncated entry tag"))?;
+        if tag == 0usize {
+            if !reader.done() { return Err(failure("entry tombstone has trailing bytes")); }
+            return Ok(None);
+        }
+        if tag != 1usize { return Err(failure("invalid entry tag")); }
+        let producer = reader.text().ok_or_else(|| failure("malformed entry producer"))?;
+        let length = reader.word().ok_or_else(|| failure("truncated entry size"))?;
+        let present = reader.word().ok_or_else(|| failure("truncated entry observation"))?;
+        if !reader.done() || present > 1usize || !valid_entry(name, &producer, length) {
+            return Err(failure("malformed retained entry"));
+        }
+        let generation = self.generation(&producer)?.ok_or_else(|| failure("entry producer is inactive"))?;
+        if generation.1 == 0usize { return Err(failure("active entry has an empty producer")); }
+        Ok(Some(Entry { producer, bytes: length, present: present == 1usize }))
+    }
+    fn entry_inner(&mut self, name: &str) -> Result<Option<Entry>, String> {
+        let Some(bytes) = self.records.get(&entry_key(name))? else { return Ok(None); };
+        self.decode_entry(name, &bytes)
+    }
+    pub(super) fn entry(&mut self, name: &str) -> Result<Option<Entry>, String> {
+        self.begin()?; let result = self.entry_inner(name); self.end(result)
+    }
+    fn forget_inner(&mut self, name: &str) -> Result<(), String> {
+        let Some(entry) = self.entry_inner(name)? else { return Ok(()); };
+        let (ordinal, count) = self.generation(&entry.producer)?.ok_or_else(|| failure("entry producer disappeared"))?;
+        let next_count = count.checked_sub(1usize).ok_or_else(|| failure("generation count underflow"))?;
+        let bytes = self.bytes.checked_sub(entry.bytes).ok_or_else(|| failure("entry byte underflow"))?;
+        let metadata = self.metadata.checked_sub(entry_metadata(name, &entry.producer)?)
+            .ok_or_else(|| failure("entry metadata underflow"))?;
+        let entries = self.entries.checked_sub(1usize).ok_or_else(|| failure("entry count underflow"))?;
+        self.records.replace(&entry_key(name), &[0u8; 8])?;
+        self.records.replace(&producer_key(&entry.producer), &generation_bytes(ordinal, next_count))?;
+        self.bytes = bytes; self.metadata = metadata; self.entries = entries;
+        Ok(())
+    }
+    pub(super) fn forget(&mut self, name: &str) -> Result<(), String> {
+        self.begin()?; let result = self.forget_inner(name); self.end(result)
+    }
+    fn remember_inner(&mut self, name: &str, producer: &str, length: usize, present: bool) -> Result<(), String> {
+        if !valid_entry(name, producer, length) { return Err(failure("invalid remembered entry")); }
+        self.forget_inner(name)?;
+        let (ordinal, count) = match self.generation(producer)? {
+            Some(value) => value, None => (self.add_generation(producer)?, 0usize),
+        };
+        let count = count.checked_add(1usize).ok_or_else(|| failure("generation count overflow"))?;
+        let entries = self.entries.checked_add(1usize).ok_or_else(|| failure("entry count overflow"))?;
+        let bytes = self.bytes.checked_add(length).ok_or_else(|| failure("entry bytes overflow"))?;
+        let metadata = self.metadata.checked_add(entry_metadata(name, producer)?).ok_or_else(|| failure("entry metadata overflow"))?;
+        bytes.checked_add(metadata).and_then(|value: usize| value.checked_add(reuse::header_size()))
+            .ok_or_else(|| failure("accounting extent overflow"))?;
+        let entry = Entry { producer: producer.to_string(), bytes: length, present };
+        self.assign(&entry_key(name), &entry_bytes(&entry))?;
+        self.records.replace(&producer_key(producer), &generation_bytes(ordinal, count))?;
+        self.entries = entries; self.bytes = bytes; self.metadata = metadata;
+        Ok(())
+    }
+    pub(super) fn remember(&mut self, name: &str, producer: &str, length: usize) -> Result<(), String> {
+        self.begin()?; let result = self.remember_inner(name, producer, length, true); self.end(result)
+    }
+    fn growth_inner(&mut self, name: &str, producer: &str, length: usize, current_index: usize)
+        -> Result<Option<usize>, String> {
+        let generation = if self.generation(producer)?.is_some() { 0usize } else { 8usize + producer.len() };
+        let added = entry_metadata(name, producer)?;
+        let index = self.metadata.checked_add(generation).and_then(|value: usize| value.checked_add(added))
+            .and_then(|value: usize| value.checked_add(reuse::header_size()));
+        let Some(index) = index else { return Ok(None); };
+        Ok(self.bytes.checked_add(length).and_then(|value: usize| value.checked_add(index.max(current_index))))
+    }
+    pub(super) fn growth(&mut self, name: &str, producer: &str, length: usize, current_index: usize)
+        -> Result<Option<usize>, String> {
+        self.begin()?; let result = self.growth_inner(name, producer, length, current_index); self.end(result)
+    }
+    fn next_inner(&mut self, after: &Option<String>) -> Result<Option<(String, Entry)>, String> {
+        let mut selected = match after {
+            Some(name) => self.records.after_value(&entry_key(name), "E")?,
+            None => self.records.after_value("E", "E")?,
+        };
+        while let Some((current, bytes)) = selected {
+            let name = current[1usize..].to_string();
+            if let Some(entry) = self.decode_entry(&name, &bytes)? { return Ok(Some((name, entry))); }
+            selected = self.records.after_value(&current, "E")?;
+        }
+        Ok(None)
+    }
+    pub(super) fn next(&mut self, after: &Option<String>) -> Result<Option<(String, Entry)>, String> {
+        self.begin()?; let result = self.next_inner(after); self.end(result)
+    }
+    pub(super) fn oldest(&mut self) -> Result<Option<String>, String> {
+        self.begin()?;
+        let head = self.head;
+        let result = if head == self.tail { Ok(None) } else {
+            self.queued(head).map(|value: String| -> Option<String> { Some(value) })
+        };
+        self.end(result)
+    }
+    fn retire_inner(&mut self, producer: &str) -> Result<(), String> {
+        let head = self.head;
+        if head == self.tail || self.queued(head)? != producer {
+            return Err(failure("retirement is not the oldest generation"));
+        }
+        let selected = self.generation(producer)?.ok_or_else(|| failure("retiring generation disappeared"))?;
+        if selected.1 != 0usize { return Err(failure("retiring generation still contains entries")); }
+        let metadata = self.metadata.checked_sub(8usize + producer.len()).ok_or_else(|| failure("generation metadata underflow"))?;
+        self.records.replace(&producer_key(producer), &[0u8; 8])?;
+        self.head += 1usize; self.metadata = metadata;
+        Ok(())
+    }
+    pub(super) fn retire(&mut self, producer: &str) -> Result<(), String> {
+        self.begin()?; let result = self.retire_inner(producer); self.end(result)
+    }
+    pub(super) fn snapshot_name(&mut self, name: &[u8]) -> Result<(), String> {
+        self.begin()?;
+        let result = self.snapshot_inner(name); self.end(result)
+    }
+    fn snapshot_inner(&mut self, name: &[u8]) -> Result<(), String> {
+        let next = self.directory_names.checked_add(1usize).ok_or_else(|| failure("directory snapshot count overflow"))?;
+        self.records.insert(&directory_key(self.directory_names), name)?;
+        self.directory_names = next; Ok(())
+    }
+    pub(super) fn snapshot_count(&self) -> usize { self.directory_names }
+    pub(super) fn snapshot_at(&mut self, ordinal: usize) -> Result<Vec<u8>, String> {
+        self.begin()?;
+        let result = if ordinal >= self.directory_names { Err(failure("directory ordinal is outside snapshot")) }
+            else { self.records.get(&directory_key(ordinal)).and_then(|value| value.ok_or_else(|| failure("directory snapshot lost a name"))) };
+        self.end(result)
+    }
+    pub(super) fn mark_present(&mut self, name: &str) -> Result<(), String> {
+        self.begin()?;
+        let result = self.mark_inner(name); self.end(result)
+    }
+    fn mark_inner(&mut self, name: &str) -> Result<(), String> {
+        let mut entry = self.entry_inner(name)?.ok_or_else(|| failure("observed entry is absent from accounting"))?;
+        entry.present = true; self.records.replace(&entry_key(name), &entry_bytes(&entry))
+    }
+    pub(super) fn forget_absent(&mut self) -> Result<bool, String> {
+        self.begin()?; let result = self.absent_inner(); self.end(result)
+    }
+    fn absent_inner(&mut self) -> Result<bool, String> {
+        let mut after = None; let mut changed = false;
+        while let Some((name, entry)) = self.next_inner(&after)? {
+            if !entry.present { self.forget_inner(&name)?; changed = true; }
+            after = Some(name);
+        }
+        Ok(changed)
+    }
+    // load has validated ownership, producer membership, absence and totals.
+    // Preserve the E-then-P writes without repeating generic replacement probes.
+    fn insert_loaded(&mut self, name: &str, producer: &str, length: usize,
+        generation: (usize, usize), bytes: usize, metadata: usize) -> Result<(), String> {
+        let count = generation.1.checked_add(1usize).ok_or_else(|| failure("generation count overflow"))?;
+        let entries = self.entries.checked_add(1usize).ok_or_else(|| failure("entry count overflow"))?;
+        let entry = Entry { producer: producer.to_string(), bytes: length, present: false };
+        self.records.insert(&entry_key(name), &entry_bytes(&entry))?;
+        self.records.replace(&producer_key(producer), &generation_bytes(generation.0, count))?;
+        self.entries = entries; self.bytes = bytes; self.metadata = metadata;
+        Ok(())
+    }
+    fn load(&mut self, reader: &mut IndexReader) -> Result<(), LoadError> {
+        if reader.word() != Some(2usize) { return Err(LoadError::Invalid); }
+        let count = reader.word().ok_or(LoadError::Invalid)?;
+        if count > reader.length() / 72usize { return Err(LoadError::Invalid); }
+        for _ in 0usize..count {
+            let producer = reader.identity().ok_or(LoadError::Invalid)?;
+            if !hex_identity(&producer) || self.generation(&producer).map_err(|detail: String| -> LoadError { LoadError::Storage(detail) })?.is_some() {
+                return Err(LoadError::Invalid);
+            }
+            self.add_generation(&producer).map_err(|detail: String| -> LoadError { LoadError::Storage(detail) })?;
+        }
+        let count = reader.word().ok_or(LoadError::Invalid)?;
+        if count > reader.length() / 24usize { return Err(LoadError::Invalid); }
+        for _ in 0usize..count {
+            let name = reader.text().ok_or(LoadError::Invalid)?;
+            let producer = reader.identity().ok_or(LoadError::Invalid)?;
+            let length = reader.word().ok_or(LoadError::Invalid)?;
+            if !valid_entry(&name, &producer, length) { return Err(LoadError::Invalid); }
+            let generation = self.generation(&producer)
+                .map_err(|detail: String| -> LoadError { LoadError::Storage(detail) })?
+                .ok_or(LoadError::Invalid)?;
+            if self.entry_inner(&name).map_err(|detail: String| -> LoadError { LoadError::Storage(detail) })?.is_some() {
+                return Err(LoadError::Invalid);
+            }
+            // Preserve decode's invalid-index result for arithmetic overflow;
+            // only backing-file failures are Storage errors.
+            let next_bytes = self.bytes.checked_add(length).ok_or(LoadError::Invalid)?;
+            let added = 24usize.checked_add(name.len()).and_then(|value: usize| value.checked_add(producer.len()))
+                .ok_or(LoadError::Invalid)?;
+            let next_metadata = self.metadata.checked_add(added).ok_or(LoadError::Invalid)?;
+            next_bytes.checked_add(next_metadata).and_then(|value: usize| value.checked_add(reuse::header_size()))
+                .ok_or(LoadError::Invalid)?;
+            self.insert_loaded(&name, &producer, length, generation, next_bytes, next_metadata)
+                .map_err(|detail: String| -> LoadError { LoadError::Storage(detail) })?;
+        }
+        Ok(())
+    }
+    /// Provisional rows are never installed in Store before authenticated EOF.
+    /// Invalid persistent bytes are disposable; scratch failures disable writing.
+    pub(super) fn restore(file: File, scratch: File, snapshot: File, secret: &[u8], capacity: usize)
+        -> Result<Restored, String> {
+        let Some(reader) = IndexReader::open(file, snapshot, secret, capacity)? else {
+            return Ok(Restored { budget: None, authenticated_payload: None });
+        };
+        Self::from_snapshot(reader, scratch)
+    }
+    /// IndexReader is an owned authenticated snapshot, never a boolean proof.
+    pub(super) fn from_snapshot(mut reader: IndexReader, scratch: File) -> Result<Restored, String> {
+        let length = reader.length();
+        let mut budget = Self::new(scratch)?;
+        let decoded = match budget.load(&mut reader) {
+            Ok(()) => reader.remaining() == 0usize,
+            Err(LoadError::Invalid) => false,
+            Err(LoadError::Storage(error)) => return Err(error),
+        };
+        reader.finish()?;
+        if decoded { budget.records.verify()?; }
+        Ok(Restored { budget: if decoded { Some(budget) } else { None },
+            authenticated_payload: Some(length) })
+    }
+    fn write_inner(&mut self, file: &mut File, secret: &[u8], clock: Option<&mut Clock>,
+        metrics: &mut WriteMetrics) -> Result<usize, WriteError> {
+        let mut output = IndexWriter::new(file, clock, metrics).map_err(|detail: String| -> WriteError { WriteError::Output(detail) })?;
+        output.word(2usize).map_err(|detail: String| -> WriteError { WriteError::Output(detail) })?;
+        output.word(self.tail - self.head).map_err(|detail: String| -> WriteError { WriteError::Output(detail) })?;
+        let mut generation_entries = 0usize;
+        for ordinal in self.head..self.tail {
+            let producer = self.queued(ordinal).map_err(|detail: String| -> WriteError { WriteError::Storage(detail) })?;
+            let count = self.generation(&producer).map_err(|detail: String| -> WriteError { WriteError::Storage(detail) })?
+                .ok_or_else(|| WriteError::Storage(failure("generation disappeared")))?.1;
+            generation_entries = generation_entries.checked_add(count)
+                .ok_or_else(|| WriteError::Storage(failure("generation inventory overflow")))?;
+            output.text(&producer).map_err(|detail: String| -> WriteError { WriteError::Output(detail) })?;
+        }
+        if generation_entries != self.entries { return Err(WriteError::Storage(failure("generation entry inventory changed"))); }
+        output.word(self.entries).map_err(|detail: String| -> WriteError { WriteError::Output(detail) })?;
+        let mut after = None; let mut entries = 0usize; let mut bytes = 0usize;
+        while let Some((name, entry)) = self.next_inner(&after).map_err(|detail: String| -> WriteError { WriteError::Storage(detail) })? {
+            output.text(&name).map_err(|detail: String| -> WriteError { WriteError::Output(detail) })?;
+            output.text(&entry.producer).map_err(|detail: String| -> WriteError { WriteError::Output(detail) })?;
+            output.word(entry.bytes).map_err(|detail: String| -> WriteError { WriteError::Output(detail) })?;
+            bytes = bytes.checked_add(entry.bytes).ok_or_else(|| WriteError::Storage(failure("encoded entry bytes overflow")))?;
+            entries = entries.checked_add(1usize).ok_or_else(|| WriteError::Storage(failure("encoded entry count overflow")))?;
+            after = Some(name);
+        }
+        if entries != self.entries || bytes != self.bytes || output.length() != self.metadata {
+            return Err(WriteError::Storage(failure("encoded inventory differs from trusted accounting")));
+        }
+        output.finish_payload().map_err(|detail: String| -> WriteError { WriteError::Output(detail) })?;
+        // verify is additive: fixed hash-state snapshot; it never accepts a root
+        // from disk and leaves the record store poisoned on any failure.
+        self.records.verify().map_err(|detail: String| -> WriteError { WriteError::Storage(detail) })?;
+        output.finish(secret).map_err(|detail: String| -> WriteError { WriteError::Output(detail) })
+    }
+    pub(super) fn write_index(&mut self, file: &mut File, secret: &[u8]) -> Result<usize, WriteError> {
+        self.write_index_profiled(file, secret, None).0
+    }
+    pub(super) fn write_index_profiled(&mut self, file: &mut File, secret: &[u8],
+        clock: Option<&mut Clock>) -> (Result<usize, WriteError>, WriteMetrics) {
+        let mut metrics = WriteMetrics::new();
+        if let Err(error) = self.begin() { return (Err(WriteError::Storage(error)), metrics); }
+        let result = self.write_inner(file, secret, clock, &mut metrics);
+        // Output failure keeps the old index and leaves checkpoint retryable.
+        // A failed accounting read/verification permanently disables this writer.
+        if !matches!(&result, Err(WriteError::Storage(_))) { self.failed = false; }
+        (result, metrics)
+    }
+    pub(super) fn verify(&mut self) -> Result<(), String> {
+        self.begin()?; let result = self.records.verify(); self.end(result)
+    }
+    pub(super) fn finish(self) -> Result<(), String> {
+        if self.failed { return Err(failure("earlier failure poisoned accounting")); }
+        self.records.finish()
+    }
+}

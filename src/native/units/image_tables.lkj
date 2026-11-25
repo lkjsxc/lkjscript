@@ -1,0 +1,219 @@
+//! Source/message table module introduced for checked operation replay.
+
+//! Exact source ordinals and raw trap messages in one writer-authenticated file.
+use crate::diagnostic::Diagnostic;
+
+use crate::native::records::Store;
+
+use std::collections::{BTreeMap, BTreeSet};
+
+use super::{error, string, take_string, take_word, word};
+
+fn source_key(end: usize) -> String { format!("S{end:020}") }
+
+fn message_key(value: &str) -> String { format!("M{value}") }
+
+struct SourceBlock {
+    base: usize,
+    paths: Vec<String>,
+}
+
+/// Callers supply a fresh command-local scratch capability. Source duplicates
+/// retain separate ordinals; messages are deduplicated before display escaping.
+pub struct ImageTables {
+    records: Store,
+    sources: usize,
+    source_blocks: usize,
+    source_cache: Option<SourceBlock>,
+    messages: usize,
+    prepared: bool,
+    failed: bool,
+}
+
+impl ImageTables {
+    pub fn new(file: File) -> Result<Self, Diagnostic> {
+        let records = Store::new(file).map_err(|detail: String| error(&detail))?;
+        Ok(Self { records, sources: 0usize, source_blocks: 0usize, source_cache: None,
+            messages: 0usize, prepared: false, failed: false })
+    }
+    pub fn source_count(&self) -> usize { self.sources }
+    fn push_values(&mut self, sources: &[String], messages: &[String]) -> Result<(), Diagnostic> {
+        if self.prepared { return Err(error("image tables were already prepared")); }
+        if !sources.is_empty() {
+            let end = self.sources.checked_add(sources.len()).ok_or_else(|| error("source ordinal overflow"))?;
+            let blocks = self.source_blocks.checked_add(1usize).ok_or_else(|| error("source block count overflow"))?;
+            let mut bytes = Vec::new(); word(&mut bytes, self.sources); word(&mut bytes, sources.len());
+            for path in sources { string(&mut bytes, path); }
+            self.records.insert(&source_key(end), &bytes).map_err(|detail: String| error(&detail))?;
+            self.sources = end; self.source_blocks = blocks;
+        }
+        for message in messages {
+            let key = message_key(message);
+            if !self.records.contains(&key).map_err(|detail: String| error(&detail))? {
+                let next = self.messages.checked_add(1usize).ok_or_else(|| error("message count overflow"))?;
+                self.records.insert(&key, &[0u8; 8]).map_err(|detail: String| error(&detail))?;
+                self.messages = next;
+            }
+        }
+        Ok(())
+    }
+    pub fn push(&mut self, sources: &[String], messages: &[String]) -> Result<(), Diagnostic> {
+        if self.failed { return Err(error("image tables are poisoned by an earlier failure")); }
+        self.failed = true;
+        let result = self.push_values(sources, messages);
+        if result.is_ok() { self.failed = false; }
+        result
+    }
+    fn source(&mut self, index: usize) -> Result<String, Diagnostic> {
+        if index >= self.sources { return Err(error("source ordinal is outside image tables")); }
+        if let Some(block) = &self.source_cache {
+            if index >= block.base && index - block.base < block.paths.len() {
+                return Ok(block.paths[index - block.base].clone());
+            }
+        }
+        let key = self.records.after(&source_key(index)).map_err(|detail: String| error(&detail))?
+            .ok_or_else(|| error("image source table lost an ordinal"))?;
+        if !key.starts_with("S") { return Err(error("image source block has a different key domain")); }
+        let bytes = self.records.get(&key).map_err(|detail: String| error(&detail))?
+            .ok_or_else(|| error("image source table lost a block"))?;
+        let mut at = 0usize;
+        let base = take_word(&bytes, &mut at).ok_or_else(|| error("malformed source block base"))?;
+        let count = take_word(&bytes, &mut at).ok_or_else(|| error("malformed source block count"))?;
+        let end = base.checked_add(count).ok_or_else(|| error("source block extent overflow"))?;
+        if count == 0usize || count > (bytes.len() - at) / 8usize || end > self.sources
+            || source_key(end) != key || index < base || index >= end {
+            return Err(error("image source block does not contain its selected ordinal"));
+        }
+        let mut paths = Vec::new();
+        for _ in 0usize..count {
+            paths.push(take_string(&bytes, &mut at).ok_or_else(|| error("malformed source block path"))?);
+        }
+        if at != bytes.len() { return Err(error("source block has trailing bytes")); }
+        let result = paths[index - base].clone();
+        self.source_cache = Some(SourceBlock { base, paths });
+        Ok(result)
+    }
+    fn next_message(&mut self, after: &Option<String>) -> Result<Option<String>, Diagnostic> {
+        let key = match after {
+            Some(previous) => self.records.after(&message_key(previous)),
+            None => self.records.first(),
+        }.map_err(|detail: String| error(&detail))?;
+        let Some(key) = key else { return Ok(None); };
+        if !key.starts_with("M") { return Ok(None); }
+        Ok(Some(key[1usize..].to_string()))
+    }
+    fn prepare(&mut self) -> Result<(), Diagnostic> {
+        if self.failed { return Err(error("image tables are poisoned by an earlier failure")); }
+        if self.prepared { return Ok(()); }
+        self.failed = true;
+        let mut previous = None;
+        let mut count = 0usize;
+        while let Some(message) = self.next_message(&previous)? {
+            let code = count.checked_add(16usize).ok_or_else(|| error("message code overflow"))?;
+            let mut value = Vec::new(); word(&mut value, code);
+            self.records.replace(&message_key(&message), &value).map_err(|detail: String| error(&detail))?;
+            count = count.checked_add(1usize).ok_or_else(|| error("message count overflow"))?;
+            previous = Some(message);
+        }
+        if count != self.messages || self.source_blocks.checked_add(self.messages) != Some(self.records.len()) {
+            return Err(error("image table inventory changed"));
+        }
+        self.prepared = true; self.failed = false;
+        Ok(())
+    }
+    fn code(&mut self, message: &str) -> Result<Option<usize>, Diagnostic> {
+        if !self.prepared { return Err(error("image message codes were not prepared")); }
+        let Some(value) = self.records.get(&message_key(message)).map_err(|detail: String| error(&detail))? else {
+            return Ok(None);
+        };
+        let mut at = 0usize;
+        let code = take_word(&value, &mut at).ok_or_else(|| error("malformed image message code"))?;
+        if at != value.len() || code < 16usize || code - 16usize >= self.messages {
+            return Err(error("image message code is outside its table"));
+        }
+        Ok(Some(code))
+    }
+    fn finish(self) -> Result<(), Diagnostic> {
+        if self.failed { return Err(error("image tables are poisoned by an earlier failure")); }
+        if !self.prepared { return Err(error("image tables were not prepared")); }
+        self.records.finish().map_err(|detail: String| error(&detail))
+    }
+}
+
+pub(super) struct MessageCursor {
+    index: usize,
+    previous: Option<String>,
+}
+
+impl MessageCursor {
+    pub(super) fn new() -> Self { Self { index: 0usize, previous: None } }
+}
+
+/// The old slice API and bounded driver API use the same validation, streamed
+/// encoding, and relocation path. Only the slice adapter retains global data.
+pub(super) enum Input<'a> {
+    Slice {
+        sources: &'a [String],
+        messages: &'a [String],
+        ordered: Vec<String>,
+        codes: BTreeMap<String, usize>,
+    },
+    Disk(ImageTables),
+}
+
+impl<'a> Input<'a> {
+    pub(super) fn slice(sources: &'a [String], messages: &'a [String]) -> Self {
+        Self::Slice { sources, messages, ordered: Vec::new(), codes: BTreeMap::new() }
+    }
+    pub(super) fn source_count(&self) -> usize {
+        match self { Self::Slice { sources, .. } => sources.len(), Self::Disk(value) => value.source_count() }
+    }
+    pub(super) fn source(&mut self, index: usize) -> Result<String, Diagnostic> {
+        match self {
+            Self::Slice { sources, .. } => sources.get(index).cloned().ok_or_else(|| error("source ordinal is outside image tables")),
+            Self::Disk(value) => value.source(index),
+        }
+    }
+    pub(super) fn contains_message(&mut self, message: &String) -> Result<bool, Diagnostic> {
+        match self {
+            Self::Slice { messages, .. } => Ok(messages.contains(message)),
+            Self::Disk(value) => value.records.contains(&message_key(message)).map_err(|detail: String| error(&detail)),
+        }
+    }
+    pub(super) fn prepare(&mut self) -> Result<(), Diagnostic> {
+        match self {
+            Self::Slice { messages, ordered, codes, .. } => {
+                let mut unique: BTreeSet<String> = BTreeSet::new();
+                for message in *messages { unique.insert(message.clone()); }
+                for message in unique {
+                    let code = ordered.len().checked_add(16usize).ok_or_else(|| error("message code overflow"))?;
+                    codes.insert(message.clone(), code); ordered.push(message);
+                }
+                Ok(())
+            }
+            Self::Disk(value) => value.prepare(),
+        }
+    }
+    pub(super) fn message_count(&self) -> usize {
+        match self { Self::Slice { ordered, .. } => ordered.len(), Self::Disk(value) => value.messages }
+    }
+    pub(super) fn next_message(&mut self, cursor: &mut MessageCursor) -> Result<Option<String>, Diagnostic> {
+        let next = match self {
+            Self::Slice { ordered, .. } => ordered.get(cursor.index).cloned(),
+            Self::Disk(value) => value.next_message(&cursor.previous)?,
+        };
+        if let Some(value) = &next {
+            cursor.index += 1usize; cursor.previous = Some(value.clone());
+        }
+        Ok(next)
+    }
+    pub(super) fn code(&mut self, message: &String) -> Result<Option<usize>, Diagnostic> {
+        match self {
+            Self::Slice { codes, .. } => Ok(codes.get(message).copied()),
+            Self::Disk(value) => value.code(message),
+        }
+    }
+    pub(super) fn finish(self) -> Result<(), Diagnostic> {
+        match self { Self::Slice { .. } => Ok(()), Self::Disk(value) => value.finish() }
+    }
+}

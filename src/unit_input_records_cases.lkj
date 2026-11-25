@@ -1,0 +1,185 @@
+//! Disk-backed source claims against the independent in-memory snapshot oracle.
+pub use std::sha256;
+mod native { pub(crate) mod records; }
+mod driver {
+    pub(crate) mod units {
+        pub(crate) mod inputs;
+        pub(crate) mod inputs_disk;
+    }
+}
+use driver::units::{inputs, inputs_disk};
+use inputs::Expectation;
+
+pub fn main(mut world: World) {
+    shared(&mut world);
+    changed_at_publication(&mut world);
+    changed_after_cache_eviction(&mut world);
+    speculative_is_not_selected(&mut world);
+    absent_is_not_empty(&mut world);
+    names_are_pairs(&mut world);
+    internal_conflict(&mut world);
+    unreadable(&mut world);
+    bounded_shared_cache(&mut world);
+    changed_backing_file(&mut world);
+    world.stdout().write(b"ok unit input records 10 contract groups\n");
+}
+
+fn claim(directory: &str, path: &str, digest: Option<&str>) -> Expectation {
+    Expectation { directory: directory.to_string(), path: path.to_string(),
+        digest: digest.map(|value: &str| value.to_string()) }
+}
+
+fn fresh(world: &mut World) -> inputs_disk::Snapshot {
+    inputs_disk::Snapshot::new(world.temporary_file().unwrap()).unwrap()
+}
+
+fn shared(world: &mut World) {
+    let values = vec![claim("root", "shared", Some("A")), claim("root", "shared", Some("A"))];
+    let mut disk = fresh(world); let mut memory = inputs::Snapshot::new();
+    let mut disk_reads = 0usize; let mut memory_reads = 0usize;
+    assert_eq!(disk.matches(&values, &mut |_: &str, _: &str| -> Option<Option<String>> {
+        disk_reads += 1usize; Some(Some("A".to_string()))
+    }), memory.matches(&values, &mut |_: &str, _: &str| -> Option<Option<String>> {
+        memory_reads += 1usize; Some(Some("A".to_string()))
+    }));
+    assert_eq!(disk_reads, 1usize); assert_eq!(memory_reads, disk_reads);
+    assert_eq!(disk.require(&values).unwrap(), memory.require(&values));
+    assert_eq!(disk.verify(&mut |_: &str, _: &str| -> Option<Option<String>> {
+        disk_reads += 1usize; Some(Some("A".to_string()))
+    }).unwrap(), memory.verify(&mut |_: &str, _: &str| -> Option<Option<String>> {
+        memory_reads += 1usize; Some(Some("A".to_string()))
+    }));
+    assert_eq!(disk_reads, 2usize); assert_eq!(memory_reads, disk_reads);
+    disk.finish().unwrap();
+}
+
+fn changed_at_publication(world: &mut World) {
+    let values = vec![claim("root", "shared", Some("A"))];
+    let mut disk = fresh(world); let mut memory = inputs::Snapshot::new();
+    assert_eq!(disk.require(&values).unwrap(), memory.require(&values));
+    assert_eq!(disk.verify(&mut |_: &str, _: &str| -> Option<Option<String>> {
+        Some(Some("B".to_string()))
+    }).unwrap(), memory.verify(&mut |_: &str, _: &str| -> Option<Option<String>> {
+        Some(Some("B".to_string()))
+    }));
+    assert!(disk.finish().is_err());
+}
+
+fn changed_after_cache_eviction(world: &mut World) {
+    let a = vec![claim("root", "shared", Some("A"))];
+    let other = vec![claim("root", "other", Some("X"))];
+    let b = vec![claim("root", "shared", Some("B"))];
+    let mut disk = fresh(world); let mut memory = inputs::Snapshot::new();
+    for values in vec![a, other] {
+        assert_eq!(disk.require(&values).unwrap(), memory.require(&values));
+    }
+    assert!(!disk.require(&b).unwrap()); assert!(!memory.require(&b));
+    assert!(!disk.verify(&mut |_: &str, _: &str| -> Option<Option<String>> {
+        Some(Some("A".to_string()))
+    }).unwrap());
+    assert!(disk.finish().is_err());
+}
+
+fn speculative_is_not_selected(world: &mut World) {
+    let older = vec![claim("root", "shared", Some("older"))];
+    let selected = vec![claim("root", "shared", Some("B"))];
+    let mut disk = fresh(world); let mut memory = inputs::Snapshot::new();
+    assert_eq!(disk.matches(&older, &mut |_: &str, _: &str| -> Option<Option<String>> {
+        Some(Some("A".to_string()))
+    }), memory.matches(&older, &mut |_: &str, _: &str| -> Option<Option<String>> {
+        Some(Some("A".to_string()))
+    }));
+    assert_eq!(disk.require(&selected).unwrap(), memory.require(&selected));
+    assert!(disk.matches(&selected, &mut |_: &str, _: &str| -> Option<Option<String>> { None }));
+    assert!(disk.verify(&mut |_: &str, _: &str| -> Option<Option<String>> {
+        Some(Some("B".to_string()))
+    }).unwrap());
+    disk.finish().unwrap();
+}
+
+fn absent_is_not_empty(world: &mut World) {
+    let missing = vec![claim("root", "maybe", None)];
+    let other = vec![claim("root", "other", Some("A"))];
+    let empty = vec![claim("root", "maybe", Some(""))];
+    let mut disk = fresh(world); let mut memory = inputs::Snapshot::new();
+    for values in vec![missing, other] {
+        assert_eq!(disk.require(&values).unwrap(), memory.require(&values));
+    }
+    assert_eq!(disk.require(&empty).unwrap(), memory.require(&empty));
+    assert!(disk.finish().is_err());
+}
+
+fn names_are_pairs(world: &mut World) {
+    let values = vec![claim("a", "bc", Some("A")), claim("ab", "c", Some("B")),
+        claim("雪:é", "\n0:entry", Some("C")), claim("", "", None)];
+    let mut disk = fresh(world); let mut memory = inputs::Snapshot::new();
+    assert_eq!(disk.require(&values).unwrap(), memory.require(&values));
+    assert_eq!(disk.required(), 4usize);
+    assert!(disk.verify(&mut |directory: &str, _: &str| -> Option<Option<String>> {
+        Some(if directory == "a" { Some("A".to_string()) }
+            else if directory == "ab" { Some("B".to_string()) }
+            else if directory == "雪:é" { Some("C".to_string()) } else { None })
+    }).unwrap());
+    disk.finish().unwrap();
+}
+
+fn internal_conflict(world: &mut World) {
+    let values = vec![claim("root", "same", Some("A")), claim("root", "same", Some("B"))];
+    let mut disk = fresh(world); let mut memory = inputs::Snapshot::new();
+    assert_eq!(disk.require(&values).unwrap(), memory.require(&values));
+    assert!(disk.finish().is_err());
+}
+
+fn unreadable(world: &mut World) {
+    let values = vec![claim("root", "maybe", None)];
+    let mut disk = fresh(world); let mut memory = inputs::Snapshot::new();
+    assert_eq!(disk.matches(&values, &mut |_: &str, _: &str| -> Option<Option<String>> { None }),
+        memory.matches(&values, &mut |_: &str, _: &str| -> Option<Option<String>> { None }));
+    assert_eq!(disk.require(&values).unwrap(), memory.require(&values));
+    assert_eq!(disk.verify(&mut |_: &str, _: &str| -> Option<Option<String>> { None }).unwrap(),
+        memory.verify(&mut |_: &str, _: &str| -> Option<Option<String>> { None }));
+    assert!(disk.finish().is_err());
+}
+
+fn bounded_shared_cache(world: &mut World) {
+    let mut disk = fresh(world); let mut memory = inputs::Snapshot::new();
+    let mut disk_reads = 0usize; let mut memory_reads = 0usize;
+    for index in 0usize..12usize {
+        let path = format!("unit-{index}");
+        let digest = format!("digest:{path}");
+        let values = vec![claim("root", "library", Some("L")), claim("root", &path, Some(&digest))];
+        assert_eq!(disk.matches(&values, &mut |_: &str, path: &str| -> Option<Option<String>> {
+            disk_reads += 1usize; Some(Some(if path == "library" { "L".to_string() } else { format!("digest:{path}") }))
+        }), memory.matches(&values, &mut |_: &str, path: &str| -> Option<Option<String>> {
+            memory_reads += 1usize; Some(Some(if path == "library" { "L".to_string() } else { format!("digest:{path}") }))
+        }));
+        assert_eq!(disk.require(&values).unwrap(), memory.require(&values));
+        assert_eq!(disk.cached_entries(), 4usize);
+        assert_eq!(disk.required(), index + 2usize);
+    }
+    assert_eq!(disk_reads, 13usize); assert_eq!(memory_reads, disk_reads);
+    assert!(disk.verify(&mut |_: &str, path: &str| -> Option<Option<String>> {
+        disk_reads += 1usize; Some(Some(if path == "library" { "L".to_string() } else { format!("digest:{path}") }))
+    }).unwrap());
+    assert_eq!(disk_reads, 26usize);
+    disk.finish().unwrap();
+}
+
+fn changed_backing_file(world: &mut World) {
+    for attack in 0usize..2usize {
+        let mut file = world.temporary_file().unwrap();
+        let mut alias = file.duplicate().unwrap();
+        let mut disk = inputs_disk::Snapshot::new(file).unwrap();
+        let values = vec![claim("root", "shared", Some("A"))];
+        assert!(disk.require(&values).unwrap());
+        assert!(disk.verify(&mut |_: &str, _: &str| -> Option<Option<String>> {
+            Some(Some("A".to_string()))
+        }).unwrap());
+        if attack == 0usize {
+            alias.seek(0i64, 0u8).unwrap(); alias.write_all(b"!").unwrap();
+        } else {
+            alias.seek(0i64, 2u8).unwrap(); alias.write_all(b"!").unwrap();
+        }
+        assert!(disk.finish().is_err());
+    }
+}

@@ -1,0 +1,186 @@
+//! Writer-bound per-unit linkage claims and arrival-ordered source tables.
+use super::*;
+
+
+mod tests;
+pub(super) struct StoredClaim {
+    pub(super) claim: Claim,
+    pub(super) base: usize,
+    pub(super) bytes: usize,
+    pub(super) source_base: usize,
+    pub(super) source_count: usize,
+}
+pub(super) fn claim_key(name: &str) -> String { format!("C{name}") }
+pub(super) fn table_key(ordinal: usize) -> String { format!("T{ordinal}") }
+fn identity(value: &str) -> bool {
+    if value.len() != 64usize { return false; }
+    for byte in value.bytes() {
+        if !byte.is_ascii_digit() && !(byte >= b'a' && byte <= b'f') { return false; }
+    }
+    true
+}
+pub(super) fn claim_bytes(value: &StoredClaim, context: &str) -> Vec<u8> {
+    let mut bytes = b"LKJUNITCLAIM1\n"[..].to_vec();
+    string(&mut bytes, context); string(&mut bytes, &value.claim.name);
+    string(&mut bytes, &value.claim.interface); string(&mut bytes, &value.claim.body);
+    word(&mut bytes, value.base); word(&mut bytes, value.bytes);
+    word(&mut bytes, value.source_base); word(&mut bytes, value.source_count);
+    word(&mut bytes, value.claim.dependencies.len());
+    for (name, identity) in &value.claim.dependencies { string(&mut bytes, name); string(&mut bytes, identity); }
+    word(&mut bytes, value.claim.imports.len());
+    for binding in &value.claim.imports {
+        string(&mut bytes, &binding.unit); string(&mut bytes, &binding.interface_identity); string(&mut bytes, &binding.name);
+    }
+    word(&mut bytes, value.claim.exports.len());
+    for (name, (position, value)) in &value.claim.exports {
+        string(&mut bytes, name); word(&mut bytes, *position); site(&mut bytes, *value);
+    }
+    bytes
+}
+fn decode_claim(bytes: &[u8], name: &str, context: &str) -> Option<StoredClaim> {
+    let magic = b"LKJUNITCLAIM1\n";
+    if !bytes.starts_with(magic) { return None; }
+    let mut at = magic.len();
+    if take_string(bytes, &mut at)?.as_str() != context || take_string(bytes, &mut at)?.as_str() != name { return None; }
+    let interface = take_string(bytes, &mut at)?; let body = take_string(bytes, &mut at)?;
+    if name.is_empty() || !identity(&interface) || !identity(&body) { return None; }
+    let base = take_word(bytes, &mut at)?; let length = take_word(bytes, &mut at)?;
+    let end = base.checked_add(length)?;
+    if end > 9223372036854775807usize - platform::CODE_OFFSET { return None; }
+    let source_base = take_word(bytes, &mut at)?; let source_count = take_word(bytes, &mut at)?;
+    let source_end = source_base.checked_add(source_count)?;
+    let count = take_word(bytes, &mut at)?;
+    if count > (bytes.len() - at) / 16usize { return None; }
+    let mut dependencies = Vec::new(); let mut previous: Option<String> = None;
+    for _ in 0usize..count {
+        let name = take_string(bytes, &mut at)?; let value = take_string(bytes, &mut at)?;
+        if name.is_empty() || !identity(&value) { return None; }
+        if let Some(last) = &previous { if last.as_str() >= name.as_str() { return None; } }
+        previous = Some(name.clone()); dependencies.push((name, value));
+    }
+    let count = take_word(bytes, &mut at)?;
+    if count > (bytes.len() - at) / 24usize { return None; }
+    let mut imports = Vec::new();
+    for _ in 0usize..count {
+        let unit = take_string(bytes, &mut at)?; let interface_identity = take_string(bytes, &mut at)?;
+        let name = take_string(bytes, &mut at)?;
+        if unit.is_empty() || !identity(&interface_identity) || name.is_empty() { return None; }
+        imports.push(Binding { unit, interface_identity, name });
+    }
+    let count = take_word(bytes, &mut at)?;
+    if count > (bytes.len() - at) / 40usize { return None; }
+    let mut exports = BTreeMap::new(); let mut previous: Option<String> = None;
+    for _ in 0usize..count {
+        let name = take_string(bytes, &mut at)?; let position = take_word(bytes, &mut at)?;
+        let value = take_site(bytes, &mut at)?;
+        if name.is_empty() || position < base || position >= end
+            || value.file < source_base || value.file >= source_end { return None; }
+        if let Some(last) = &previous { if last.as_str() >= name.as_str() { return None; } }
+        previous = Some(name.clone()); exports.insert(name, (position, value));
+    }
+    if at != bytes.len() { return None; }
+    Some(StoredClaim { claim: Claim { name: name.to_string(), interface, body, dependencies, imports,
+        definitions: Vec::new(), exports }, base, bytes: length, source_base, source_count })
+}
+pub(super) fn read_claim(records: &mut crate::native::records::Store, name: &str, context: &str) -> Result<Option<StoredClaim>, Diagnostic> {
+    let Some(bytes) = records.get(&claim_key(name)).map_err(|message: String| error(&message))? else { return Ok(None); };
+    Ok(Some(decode_claim(&bytes, name, context).ok_or_else(|| error("malformed stored unit claim"))?))
+}
+pub(super) fn provider(
+    records: &mut crate::native::records::Store, cached: &mut Option<StoredClaim>, name: &str, context: &str,
+) -> Result<bool, Diagnostic> {
+    let ready = cached.as_ref().is_some_and(|value: &StoredClaim| value.claim.name.as_str() == name);
+    if !ready { *cached = read_claim(records, name, context)?; }
+    Ok(cached.is_some())
+}
+pub(super) fn resolve_binding(
+    records: &mut crate::native::records::Store, cached: &mut Option<StoredClaim>, binding: &Binding, context: &str,
+) -> Result<Option<(usize, Span)>, Diagnostic> {
+    if !provider(records, cached, &binding.unit, context)? { return Ok(None); }
+    let claim = &cached.as_ref().unwrap().claim;
+    if claim.interface != binding.interface_identity { return Ok(None); }
+    Ok(claim.exports.get(&binding.name).copied())
+}
+pub(super) fn resolve_symbol(
+    records: &mut crate::native::records::Store, cached: &mut Option<StoredClaim>,
+    symbols: &BTreeMap<String, usize>, name: &String, context: &str,
+) -> Result<Option<usize>, Diagnostic> {
+    if name.as_str().starts_with("unit:") {
+        let Some(binding) = parse_symbol(name.as_str()) else { return Ok(None); };
+        Ok(resolve_binding(records, cached, &binding, context)?.map(|value: (usize, Span)| value.0))
+    } else { Ok(symbols.get(name).copied()) }
+}
+pub(super) fn check_claim_imports(
+    records: &mut crate::native::records::Store, cached: &mut Option<StoredClaim>, claim: &Claim, context: &str,
+) -> Result<(), Diagnostic> {
+    let mut groups: BTreeMap<(String, String), Vec<usize>> = BTreeMap::new();
+    for (index, binding) in claim.imports.iter().enumerate() {
+        let key = (binding.unit.clone(), binding.interface_identity.clone());
+            if !groups.contains_key(&key) { groups.insert(key.clone(), Vec::new()); }
+            groups.get_mut(&key).unwrap().push(index);
+    }
+    let mut present = vec![false; claim.imports.len()];
+    for (_, indices) in groups {
+        for index in indices { present[index] = resolve_binding(records, cached, &claim.imports[index], context)?.is_some(); }
+    }
+    // Provider grouping must not change the original first failing import.
+    for (index, binding) in claim.imports.iter().enumerate() {
+        if !present[index] {
+            return Err(error(&format!("unit {} has no exact implementation for {}", claim.name, symbol(binding))));
+        }
+    }
+    Ok(())
+}
+
+pub(super) fn table_bytes(value: &Tables, ordinal: usize, context: &str) -> Vec<u8> {
+    let mut bytes = b"LKJUNITTABLE1\n"[..].to_vec();
+    string(&mut bytes, context); word(&mut bytes, ordinal); word(&mut bytes, value.source_base);
+    word(&mut bytes, value.sources.len());
+    for path in &value.sources { string(&mut bytes, path); }
+    word(&mut bytes, value.messages.len());
+    for message in &value.messages { string(&mut bytes, message); }
+    bytes
+}
+pub(super) fn decode_table(bytes: &[u8], ordinal: usize, context: &str) -> Option<Tables> {
+    let magic = b"LKJUNITTABLE1\n"; if !bytes.starts_with(magic) { return None; }
+    let mut at = magic.len();
+    if take_string(bytes, &mut at)?.as_str() != context || take_word(bytes, &mut at)? != ordinal { return None; }
+    let source_base = take_word(bytes, &mut at)?;
+    let count = take_word(bytes, &mut at)?; if count > (bytes.len() - at) / 8usize { return None; }
+    let mut sources = Vec::new();
+    for _ in 0usize..count { sources.push(take_string(bytes, &mut at)?); }
+    let count = take_word(bytes, &mut at)?; if count > (bytes.len() - at) / 8usize { return None; }
+    let mut messages = Vec::new();
+    for _ in 0usize..count { messages.push(take_string(bytes, &mut at)?); }
+    if at != bytes.len() || source_base.checked_add(sources.len()).is_none() { return None; }
+    Some(Tables { source_base, sources, messages })
+}
+
+pub(super) fn identity_key(name: &str) -> String { format!("I{name}") }
+
+pub(super) fn identity_bytes(name: &str, interface: &str, context: &str) -> Vec<u8> {
+    let mut bytes = b"LKJUNITIDENTITY1\n"[..].to_vec();
+    string(&mut bytes, context); string(&mut bytes, name); string(&mut bytes, interface);
+    bytes
+}
+
+fn decode_identity(bytes: &[u8], name: &str, context: &str) -> Option<String> {
+    let magic = b"LKJUNITIDENTITY1\n";
+    if !bytes.starts_with(magic) || name.is_empty() { return None; }
+    let mut at = magic.len();
+    if take_string(bytes, &mut at)?.as_str() != context || take_string(bytes, &mut at)?.as_str() != name { return None; }
+    let interface = take_string(bytes, &mut at)?;
+    if !identity(&interface) || at != bytes.len() { return None; }
+    Some(interface)
+}
+
+pub(super) fn read_identity(
+    records: &mut crate::native::records::Store, name: &str, context: &str,
+) -> Result<Option<String>, Diagnostic> {
+    let Some(bytes) = records.get(&identity_key(name)).map_err(|message: String| error(&message))? else { return Ok(None); };
+    Ok(Some(decode_identity(&bytes, name, context).ok_or_else(|| error("malformed stored unit identity"))?))
+}
+
+pub(super) fn contracts(world: &mut World, context: &Context<'_>, unit: &CheckedUnit) -> usize {
+    tests::run(world, context, unit)
+}

@@ -1,0 +1,590 @@
+//! Exact scratch-tree contracts; aliases represent a changed backing file.
+use super::*;
+
+fn bytes(file: &mut File) -> Vec<u8> {
+    file.seek(0i64, 0u8).unwrap(); file.read_to_end().unwrap()
+}
+fn overwrite(file: &mut File, position: usize, value: &[u8]) {
+    file.seek(position as i64, 0u8).unwrap(); file.write_all(value).unwrap();
+}
+fn flip(file: &mut File, position: usize) {
+    file.seek(position as i64, 0u8).unwrap();
+    let mut byte = [0u8; 1]; assert_eq!(file.read(&mut byte).unwrap(), 1usize);
+    byte[0] ^= 1u8; overwrite(file, position, &byte);
+}
+fn restore(file: &mut File, value: &[u8]) {
+    file.truncate(0usize).unwrap(); overwrite(file, 0usize, value);
+}
+fn scratch(world: &mut World) -> (Store, File) {
+    let mut file = world.temporary_file().unwrap(); let alias = file.duplicate().unwrap();
+    (Store::new(file).unwrap(), alias)
+}
+fn rotations(world: &mut World) -> usize {
+    let orders: Vec<Vec<String>> = vec![
+        vec!["c".to_string(), "b".to_string(), "a".to_string()],
+        vec!["a".to_string(), "b".to_string(), "c".to_string()],
+        vec!["c".to_string(), "a".to_string(), "b".to_string()],
+        vec!["a".to_string(), "c".to_string(), "b".to_string()],
+    ];
+    for order in orders {
+        let (mut store, _) = scratch(world);
+        for key in order { store.insert(&key, key.as_bytes()).unwrap(); }
+        let root_link = store.root.unwrap();
+        let root = store.read_node(root_link).unwrap();
+        assert_eq!(root.key, "b"); assert_eq!(root.height, 2usize);
+        assert_eq!(store.read_node(root.left.unwrap()).unwrap().key, "a");
+        assert_eq!(store.read_node(root.right.unwrap()).unwrap().key, "c");
+        let expected: Vec<String> = vec!["a".to_string(), "b".to_string(), "c".to_string()];
+        for key in expected {
+            assert_eq!(store.get(&key).unwrap().unwrap(), key.as_bytes().to_vec());
+        }
+        assert_eq!(store.len(), 3usize); assert!(!store.contains("bb").unwrap());
+        assert_eq!(store.after("aa").unwrap().unwrap(), "b");
+        store.replace("b", b"replacement").unwrap();
+        assert_eq!(store.len(), 3usize);
+        assert_eq!(store.get("b").unwrap().unwrap(), b"replacement"[..].to_vec());
+        assert_eq!(store.first().unwrap().unwrap(), "a");
+        store.finish().unwrap();
+    }
+    4usize
+}
+fn keys(world: &mut World) -> usize {
+    let (mut store, _) = scratch(world);
+    assert!(store.first().unwrap().is_none());
+    assert!(store.get("").unwrap().is_none());
+    let inserted: Vec<String> = vec!["é".to_string(), "a::x".to_string(), "".to_string(), "雪".to_string(), "aa".to_string(), "a".to_string(), "é".to_string()];
+    for key in inserted {
+        store.insert(&key, format!("value:{key}").as_bytes()).unwrap();
+    }
+    let mut next = store.first().unwrap();
+    let expected: Vec<String> = vec!["".to_string(), "a".to_string(), "a::x".to_string(), "aa".to_string(), "é".to_string(), "é".to_string(), "雪".to_string()];
+    for key in expected {
+        assert_eq!(next.unwrap().as_str(), key.as_str());
+        assert_eq!(store.get(&key).unwrap().unwrap(), format!("value:{key}").as_bytes().to_vec());
+        next = store.after(&key).unwrap();
+    }
+    assert!(next.is_none());
+    assert!(!store.contains("a:").unwrap());
+    assert!(!store.contains("éx").unwrap());
+    assert_eq!(store.after("a:").unwrap().unwrap(), "a::x");
+    store.replace("", &[0u8, 255u8, 17u8]).unwrap();
+    assert_eq!(store.get("").unwrap().unwrap(), vec![0u8, 255u8, 17u8]);
+    store.replace("é", &[0u8; 0]).unwrap(); assert_eq!(store.get("é").unwrap().unwrap().len(), 0usize);
+    assert_eq!(store.len(), 7usize); store.finish().unwrap();
+    let (mut store, _) = scratch(world);
+    let mut long = "long::".to_string();
+    for _ in 0usize..65560usize { long.push('x'); }
+    let value = vec![37u8; 65539usize];
+    store.insert(&long, &value).unwrap();
+    assert_eq!(store.get(&long).unwrap().unwrap(), value);
+    assert_eq!(store.first().unwrap().unwrap(), long);
+    store.finish().unwrap();
+    2usize
+}
+fn poisoning(world: &mut World) -> usize {
+    for replacement in vec![false, true] {
+        let (mut store, _) = scratch(world);
+        store.insert("present", b"original").unwrap();
+        let result = if replacement { store.replace("missing", b"new") }
+            else { store.insert("present", b"new") };
+        assert!(result.is_err());
+        assert!(store.get("present").err().unwrap().contains("poisoned"));
+        assert!(store.insert("later", b"later").err().unwrap().contains("poisoned"));
+        assert!(store.finish().err().unwrap().contains("poisoned"));
+    }
+    2usize
+}
+fn corruption(world: &mut World) -> usize {
+    for attack in 0usize..14usize {
+        let (mut store, mut alias) = scratch(world);
+        store.insert("b", b"b").unwrap();
+        let old_file = bytes(&mut alias);
+        store.insert("a", b"a").unwrap(); store.insert("c", b"c").unwrap();
+        let root_link = store.root.unwrap();
+        let root = store.read_node(root_link).unwrap();
+        let left_link = root.left.unwrap();
+        let left = store.read_node(left_link).unwrap();
+        let right = store.read_node(root.right.unwrap()).unwrap();
+        let obsolete = root.value;
+        if attack == 5usize { store.replace("b", b"replacement").unwrap(); }
+        let original = bytes(&mut alias);
+        match attack {
+            0usize => flip(&mut alias, root_link.anchor.offset + 8usize),
+            1usize => overwrite(&mut alias, root_link.anchor.offset, &[255u8; 8]),
+            2usize => flip(&mut alias, left_link.anchor.offset + 8usize),
+            3usize => flip(&mut alias, root.value.offset + root.value.length - 1usize),
+            4usize => flip(&mut alias, right.value.offset + right.value.length - 1usize),
+            5usize => flip(&mut alias, obsolete.offset + obsolete.length - 1usize),
+            6usize => flip(&mut alias, 0usize),
+            7usize => alias.truncate(store.extent - 1usize).unwrap(),
+            8usize => overwrite(&mut alias, store.extent, &[0u8]),
+            9usize => overwrite(&mut alias, store.extent + 65536usize, &[0u8]),
+            10usize => {
+                let begin = left.value.offset; let end = begin + left.value.length;
+                overwrite(&mut alias, root.value.offset, &original[begin..end]);
+            }
+            11usize => overwrite(&mut alias, left.value.offset, &[255u8; 8]),
+            12usize => {
+                let key = left_link.anchor.offset + 8usize + NODE.len() + 16usize;
+                overwrite(&mut alias, key, &[255u8]);
+            }
+            _ => restore(&mut alias, &old_file),
+        }
+        let immediate = attack <= 3usize || attack == 7usize || attack >= 10usize;
+        if immediate {
+            let selected = if attack == 3usize || attack == 10usize { "b" } else { "a" };
+            assert!(store.get(selected).is_err());
+            restore(&mut alias, &original);
+            assert!(store.get("b").err().unwrap().contains("poisoned"));
+            assert!(store.finish().err().unwrap().contains("poisoned"));
+        } else {
+            let expected = if attack == 5usize { b"replacement"[..].to_vec() } else { b"b"[..].to_vec() };
+            assert_eq!(store.get("b").unwrap().unwrap(), expected);
+            assert!(store.finish().is_err());
+        }
+    }
+    14usize
+}
+
+struct OriginalStep {
+    link: Link,
+    left: bool,
+}
+
+// Frozen pre-cache write from 55c04348; shared append/balance readers remain unchanged.
+fn original_write(store: &mut Store, key: &str, value: &[u8], replace: bool) -> Result<(), String> {
+        let mut current = store.root; let mut lower = None; let mut upper = None;
+        let mut path = Vec::new(); let mut selected = None;
+        while let Some(link) = current {
+            if path.len() >= store.maximum_height { return Err(failure("index path exceeds its writer height")); }
+            let node = store.read_node(link)?;
+            if !ordered(&node.key, &lower, &upper) { return Err(failure("invalid index key order")); }
+            if key == node.key.as_str() { selected = Some(node); break; }
+            let left = key < node.key.as_str();
+            path.push(OriginalStep { link, left });
+            if left { current = node.left; upper = Some(node.key); }
+            else { current = node.right; lower = Some(node.key); }
+        }
+        if selected.is_some() && !replace { return Err(failure("duplicate key")); }
+        if selected.is_none() && replace { return Err(failure("replacement key is absent")); }
+        let next_count = if replace { store.count } else {
+            store.count.checked_add(1usize).ok_or_else(|| failure("key count overflow"))?
+        };
+        let value = store.write_value(key, value)?;
+        let node = match selected {
+            Some(mut node) => { node.value = value; node }
+            None => Node { key: key.to_string(), value, left: None, right: None, height: 1usize },
+        };
+        let mut result = store.write_node(node)?;
+        while let Some(step) = path.pop() {
+            let mut node = store.read_node(step.link)?;
+            if step.left { node.left = Some(result); } else { node.right = Some(result); }
+            result = store.balance(node)?;
+        }
+        store.root = Some(result); store.count = next_count;
+        Ok(())
+    }
+
+fn append_trace(world: &mut World, keys: &[String]) {
+    let (mut actual, mut actual_file) = scratch(world);
+    let (mut original, mut original_file) = scratch(world);
+    let mut ordinal = 0usize;
+    for key in keys {
+        let value = format!("insert:{ordinal}");
+        original_write(&mut original, key, value.as_bytes(), false).unwrap();
+        actual.insert(key, value.as_bytes()).unwrap();
+        assert_eq!(bytes(&mut actual_file), bytes(&mut original_file));
+        assert_eq!(actual.get(key).unwrap().unwrap(), value.as_bytes().to_vec());
+        ordinal += 1usize;
+    }
+    let mut at = keys.len();
+    while at != 0usize {
+        at -= 1usize;
+        let key = &keys[at];
+        let value = format!("replace:{at}");
+        original_write(&mut original, key, value.as_bytes(), true).unwrap();
+        actual.replace(key, value.as_bytes()).unwrap();
+        assert_eq!(bytes(&mut actual_file), bytes(&mut original_file));
+        assert_eq!(actual.get(key).unwrap().unwrap(), value.as_bytes().to_vec());
+        assert_eq!(original.get(key).unwrap().unwrap(), value.as_bytes().to_vec());
+        assert_eq!(actual.len(), keys.len());
+    }
+    actual.finish().unwrap(); original.finish().unwrap();
+}
+
+fn append_equivalence(world: &mut World) -> usize {
+    let rotations: Vec<Vec<String>> = vec![
+        vec!["c".to_string(), "b".to_string(), "a".to_string()],
+        vec!["a".to_string(), "b".to_string(), "c".to_string()],
+        vec!["c".to_string(), "a".to_string(), "b".to_string()],
+        vec!["a".to_string(), "c".to_string(), "b".to_string()],
+    ];
+    for order in rotations { append_trace(world, &order); }
+    for descending in vec![false, true] {
+        let mut keys = Vec::new();
+        for index in 0usize..17usize {
+            let value = if descending { 16usize - index } else { index };
+            let byte = b'a' + value as u8;
+            keys.push(String::from_utf8(vec![byte]).unwrap());
+        }
+        append_trace(world, &keys);
+    }
+    // These paths respectively exhaust the aggregate allowance, exceed one
+    // allowance in a single key, and hit its exact boundary. Acceptance stays
+    // identical to the original locator reader; the limit only selects reuse.
+    for length in vec![BUFFER / 2usize, BUFFER, BUFFER - 1usize] {
+        let prefix = "x".repeat(length);
+        let mut keys = Vec::new();
+        for index in 0usize..7usize { keys.push(format!("{prefix}{index}")); }
+        append_trace(world, &keys);
+    }
+    append_trace(world, &vec!["é".to_string(), "".to_string(), "雪".to_string(), "é".to_string(), "a".to_string()]);
+    10usize
+}
+
+fn path_allowance(world: &mut World) -> usize {
+    let cases: Vec<(usize, usize, bool, usize)> = vec![
+        (0usize, 0usize, true, 0usize),
+        (17usize, 32usize, true, 0usize),
+        (17usize, 31usize, false, 31usize),
+        (BUFFER, BUFFER, true, 0usize),
+        (BUFFER + 1usize, BUFFER, false, BUFFER),
+    ];
+    for (length, initial, cached, expected) in cases {
+        let (mut store, _) = scratch(world);
+        let key = "x".repeat(length);
+        store.insert(&key, b"value").unwrap();
+        let link = store.root.unwrap();
+        let node = store.read_node(link).unwrap();
+        let mut remaining = initial;
+        let (step, bound) = Step::retain(link, true, node, &mut remaining);
+        assert_eq!(bound, key); assert_eq!(remaining, expected);
+        let owned = match step {
+            Step::Owned { node, left } => { assert!(left); assert_eq!(node.key, key); true }
+            Step::Located { link: actual, left } => {
+                assert!(left); assert_eq!(actual.anchor.offset, link.anchor.offset); false
+            }
+        };
+        assert_eq!(owned, cached);
+        store.finish().unwrap();
+    }
+    let (mut store, _) = scratch(world);
+    let large = "x".repeat(BUFFER / 2usize + 1usize);
+    store.insert(&large, b"large").unwrap(); store.insert("a", b"small").unwrap();
+    let root_link = store.root.unwrap(); let root = store.read_node(root_link).unwrap();
+    let child_link = root.left.unwrap(); let child = store.read_node(child_link).unwrap();
+    let mut remaining = BUFFER;
+    let (first, first_bound) = Step::retain(root_link, true, root, &mut remaining);
+    let (second, second_bound) = Step::retain(child_link, true, child, &mut remaining);
+    assert_eq!(first_bound, large); assert_eq!(second_bound, "a"); assert_eq!(remaining, 0usize);
+    assert!(matches!(first, Step::Owned { .. }));
+    assert!(matches!(second, Step::Located { .. }));
+    store.finish().unwrap();
+    6usize
+}
+
+fn write_boundaries(world: &mut World) -> usize {
+    for replacement in vec![false, true] {
+        let (mut store, mut alias) = scratch(world);
+        store.insert("b", b"b").unwrap(); store.insert("a", b"a").unwrap(); store.insert("c", b"c").unwrap();
+        store.replace("a", b"cached path").unwrap();
+        let original = bytes(&mut alias); let root = store.root.unwrap();
+        flip(&mut alias, root.anchor.offset + 8usize);
+        let result = if replacement { store.replace("c", b"new") } else { store.insert("d", b"new") };
+        assert!(result.is_err());
+        restore(&mut alias, &original);
+        assert!(store.get("b").err().unwrap().contains("poisoned"));
+        assert!(store.finish().err().unwrap().contains("poisoned"));
+    }
+    // A path snapshot does not exempt an obsolete ancestor from full-file
+    // authentication after its replacement has been appended.
+    let (mut store, mut alias) = scratch(world);
+    store.insert("b", b"b").unwrap(); store.insert("a", b"a").unwrap(); store.insert("c", b"c").unwrap();
+    let obsolete = store.root.unwrap();
+    store.replace("a", b"new").unwrap();
+    let original = bytes(&mut alias);
+    flip(&mut alias, obsolete.anchor.offset + 8usize);
+    assert_eq!(store.get("a").unwrap().unwrap(), b"new"[..].to_vec());
+    assert!(store.verify().is_err());
+    restore(&mut alias, &original);
+    assert!(store.replace("a", b"later").err().unwrap().contains("poisoned"));
+    assert!(store.finish().err().unwrap().contains("poisoned"));
+    3usize
+}
+
+fn frozen_record_word(bytes: &mut Vec<u8>, value: usize) {
+    for index in 0usize..8usize { bytes.push((value >> (index * 8usize)) as u8); }
+}
+
+// Frozen pre-change encoder from 91ac8a13. Keep its prefix assembly and
+// word encoder independent of record_digest and the production word helper.
+fn frozen_record_digest(offset: usize, bytes: &[u8]) -> [u8; 32] {
+    let mut context = b"lkjscript-command-record-location-1\0"[..].to_vec();
+    frozen_record_word(&mut context, offset); frozen_record_word(&mut context, bytes.len());
+    let mut hash = Sha256::new(); hash.update(&context); hash.update(bytes); hash.finish()
+}
+
+fn digest_equivalence() -> usize {
+    // The old prefix plus two words occupies 52 bytes: payload lengths 3/4
+    // cross SHA padding, and 11/12 cross a complete block. Long cases cross
+    // the command buffer boundary. Distinct offset bytes cover LE order.
+    let lengths: Vec<usize> = vec![
+        0usize, 1usize, 3usize, 4usize, 5usize, 11usize, 12usize, 13usize,
+        63usize, 64usize, 65usize, 65535usize, 65536usize, 65537usize,
+    ];
+    let offsets = vec![0usize, 0x0102030405060708usize, (!0usize)];
+    let mut count = 0usize;
+    for length in lengths {
+        let mut bytes = Vec::new();
+        for index in 0usize..length { bytes.push(index as u8); }
+        for offset in &offsets {
+            assert_eq!(record_digest(*offset, &bytes), frozen_record_digest(*offset, &bytes));
+            count += 1usize;
+        }
+    }
+    assert_eq!(count, 42usize);
+    count
+}
+
+fn insert_or_get_trace(world: &mut World, keys: &[String]) {
+    let (mut actual, mut actual_file) = scratch(world);
+    let (mut original, mut original_file) = scratch(world);
+    let mut ordinal = 0usize;
+    for key in keys {
+        let value = format!("insert:{ordinal}");
+        original_write(&mut original, key, value.as_bytes(), false).unwrap();
+        assert!(actual.insert_or_get(key, value.as_bytes()).unwrap().is_none());
+        assert_eq!(bytes(&mut actual_file), bytes(&mut original_file));
+        let before = bytes(&mut actual_file);
+        let root = actual.root.unwrap(); let extent = actual.extent; let count = actual.len();
+        for incoming in vec![value.clone(), "different".to_string()] {
+            assert_eq!(actual.insert_or_get(key, incoming.as_bytes()).unwrap().unwrap(),
+                value.as_bytes().to_vec());
+            assert_eq!(actual.len(), count); assert_eq!(actual.extent, extent);
+            let after = actual.root.unwrap();
+            assert_eq!(after.anchor.offset, root.anchor.offset);
+            assert_eq!(after.anchor.digest, root.anchor.digest); assert_eq!(after.height, root.height);
+            assert_eq!(bytes(&mut actual_file), before);
+        }
+        ordinal += 1usize;
+    }
+    let last = &keys[keys.len() - 1usize];
+    original_write(&mut original, last, b"later replacement", true).unwrap();
+    actual.replace(last, b"later replacement").unwrap();
+    assert_eq!(bytes(&mut actual_file), bytes(&mut original_file));
+    assert_eq!(actual.insert_or_get(last, b"ignored").unwrap().unwrap(), b"later replacement"[..].to_vec());
+    assert_eq!(actual.len(), keys.len());
+    actual.finish().unwrap(); original.finish().unwrap();
+}
+
+fn insert_or_get_equivalence(world: &mut World) -> usize {
+    let rotations: Vec<Vec<String>> = vec![
+        vec!["c".to_string(), "b".to_string(), "a".to_string()],
+        vec!["a".to_string(), "b".to_string(), "c".to_string()],
+        vec!["c".to_string(), "a".to_string(), "b".to_string()],
+        vec!["a".to_string(), "c".to_string(), "b".to_string()],
+    ];
+    for order in rotations { insert_or_get_trace(world, &order); }
+    for descending in vec![false, true] {
+        let mut keys = Vec::new();
+        for index in 0usize..17usize {
+            let value = if descending { 16usize - index } else { index };
+            let byte = b'a' + value as u8;
+            keys.push(String::from_utf8(vec![byte]).unwrap());
+        }
+        insert_or_get_trace(world, &keys);
+    }
+    // These paths respectively exhaust the aggregate allowance, exceed one
+    // allowance in a single key, and hit its exact boundary. Acceptance stays
+    // identical to the original locator reader; the limit only selects reuse.
+    for length in vec![BUFFER / 2usize, BUFFER, BUFFER - 1usize] {
+        let prefix = "x".repeat(length);
+        let mut keys = Vec::new();
+        for index in 0usize..7usize { keys.push(format!("{prefix}{index}")); }
+        insert_or_get_trace(world, &keys);
+    }
+    insert_or_get_trace(world, &vec!["é".to_string(), "".to_string(), "雪".to_string(), "é".to_string(), "a".to_string()]);
+    10usize
+}
+
+fn insert_or_get_refusals(world: &mut World) -> usize {
+    for attack in 0usize..5usize {
+        let (mut store, mut alias) = scratch(world);
+        let names: Vec<String> = vec!["b".to_string(), "a".to_string(), "c".to_string()];
+        for name in names {
+            assert!(store.insert_or_get(&name, name.as_bytes()).unwrap().is_none());
+        }
+        assert_eq!(store.insert_or_get("a", b"ignored").unwrap().unwrap(), b"a"[..].to_vec());
+        let root_link = store.root.unwrap(); let root = store.read_node(root_link).unwrap();
+        let left_link = root.left.unwrap(); let left = store.read_node(left_link).unwrap();
+        let right = store.read_node(root.right.unwrap()).unwrap();
+        let original = bytes(&mut alias);
+        match attack {
+            0usize => flip(&mut alias, root_link.anchor.offset + 8usize),
+            1usize => flip(&mut alias, left_link.anchor.offset + 8usize),
+            2usize => flip(&mut alias, left.value.offset + left.value.length - 1usize),
+            3usize => overwrite(&mut alias, left.value.offset,
+                &original[right.value.offset..right.value.offset + right.value.length]),
+            _ => flip(&mut alias, root_link.anchor.offset + 8usize),
+        }
+        let damaged = bytes(&mut alias);
+        let name = if attack == 4usize { "d" } else { "a" };
+        assert_eq!(store.insert_or_get(name, b"new").err().unwrap(),
+            "command records: record changed after writing");
+        assert_eq!(bytes(&mut alias), damaged); assert_eq!(store.len(), 3usize);
+        restore(&mut alias, &original);
+        assert!(store.insert_or_get("a", b"later").err().unwrap().contains("poisoned"));
+        assert!(store.insert("d", b"later").err().unwrap().contains("poisoned"));
+        assert!(store.replace("b", b"later").err().unwrap().contains("poisoned"));
+        assert!(store.get("a").err().unwrap().contains("poisoned"));
+        assert!(store.finish().err().unwrap().contains("poisoned"));
+    }
+    5usize
+}
+
+fn legacy_refusal_priority(world: &mut World) -> usize {
+    for replacement in vec![false, true] {
+        let (mut store, mut alias) = scratch(world);
+        store.insert("present", b"original").unwrap();
+        let node = store.find("present").unwrap().unwrap();
+        let original = bytes(&mut alias);
+        flip(&mut alias, node.value.offset + node.value.length - 1usize);
+        let damaged = bytes(&mut alias);
+        let result = if replacement { store.replace("missing", b"new") }
+            else { store.insert("present", b"new") };
+        let expected = if replacement { "command records: replacement key is absent" }
+            else { "command records: duplicate key" };
+        assert_eq!(result.err().unwrap(), expected);
+        assert_eq!(bytes(&mut alias), damaged);
+        restore(&mut alias, &original);
+        assert!(store.insert_or_get("present", b"later").err().unwrap().contains("poisoned"));
+        assert!(store.finish().err().unwrap().contains("poisoned"));
+    }
+    2usize
+}
+
+fn original_successor(store: &mut Store, key: Option<&str>) -> Result<Option<String>, String> {
+        let mut current = store.root; let mut lower = None; let mut upper = None;
+        let mut result = None; let mut visited = 0usize;
+        while let Some(link) = current {
+            visited += 1usize;
+            if visited > store.maximum_height { return Err(failure("index path exceeds its writer height")); }
+            let node = store.read_node(link)?;
+            if !ordered(&node.key, &lower, &upper) { return Err(failure("invalid index key order")); }
+            let before = match key { Some(key) => key < node.key.as_str(), None => true };
+            if before { result = Some(node.key.clone()); current = node.left; upper = Some(node.key); }
+            else { current = node.right; lower = Some(node.key); }
+        }
+        Ok(result)
+    }
+
+fn original_after_value(store: &mut Store, key: &str, prefix: &str) -> Result<Option<(String, Vec<u8>)>, String> {
+    let Some(name) = original_successor(store, Some(key))? else { return Ok(None); };
+    if !name.starts_with(prefix) { return Ok(None); }
+    let value = store.get(&name)?.ok_or_else(|| failure("oracle successor lost its key"))?;
+    Ok(Some((name, value)))
+}
+
+fn successor_trace(world: &mut World, keys: &[String]) {
+    let (mut store, mut alias) = scratch(world);
+    for key in keys { store.insert(key, key.as_bytes()).unwrap(); }
+    store.replace(&keys[0usize], b"replacement").unwrap();
+    store.replace(&keys[keys.len() - 1usize], &[0u8; 0]).unwrap();
+    let before = bytes(&mut alias); let root = store.root.unwrap();
+    let extent = store.extent; let count = store.len();
+    assert_eq!(store.first().unwrap(), original_successor(&mut store, None).unwrap());
+    let mut queries: Vec<String> = vec!["".to_string(), "!".to_string(), "zz".to_string()];
+    for key in keys { queries.push(key.clone()); }
+    let prefixes: Vec<String> = vec!["".to_string(), "a".to_string(), "E".to_string(), "x".to_string()];
+    for query in queries {
+        assert_eq!(store.after(&query).unwrap(), original_successor(&mut store, Some(&query)).unwrap());
+        for prefix in &prefixes {
+            let expected = original_after_value(&mut store, &query, prefix).unwrap();
+            assert_eq!(store.after_value(&query, prefix).unwrap(), expected);
+        }
+    }
+    assert_eq!(bytes(&mut alias), before); assert_eq!(store.extent, extent); assert_eq!(store.len(), count);
+    assert_eq!(store.root.unwrap().anchor.digest, root.anchor.digest);
+    store.finish().unwrap();
+}
+
+fn successor_equivalence(world: &mut World) -> usize {
+    let rotations: Vec<Vec<String>> = vec![
+        vec!["c".to_string(), "b".to_string(), "a".to_string()],
+        vec!["a".to_string(), "b".to_string(), "c".to_string()],
+        vec!["c".to_string(), "a".to_string(), "b".to_string()],
+        vec!["a".to_string(), "c".to_string(), "b".to_string()],
+    ];
+    for order in rotations { successor_trace(world, &order); }
+    for descending in vec![false, true] {
+        let mut keys = Vec::new();
+        for index in 0usize..17usize {
+            let value = if descending { 16usize - index } else { index };
+            let byte = b'a' + value as u8;
+            keys.push(String::from_utf8(vec![byte]).unwrap());
+        }
+        successor_trace(world, &keys);
+    }
+    // These paths respectively exhaust the aggregate allowance, exceed one
+    // allowance in a single key, and hit its exact boundary. Acceptance stays
+    // identical to the original locator reader; the limit only selects reuse.
+    for length in vec![BUFFER / 2usize, BUFFER, BUFFER - 1usize] {
+        let prefix = "x".repeat(length);
+        let mut keys = Vec::new();
+        for index in 0usize..7usize { keys.push(format!("{prefix}{index}")); }
+        successor_trace(world, &keys);
+    }
+    successor_trace(world, &vec!["é".to_string(), "".to_string(), "雪".to_string(), "é".to_string(), "a".to_string()]);
+    10usize
+}
+
+fn successor_refusals(world: &mut World) -> usize {
+    for attack in 0usize..4usize {
+        let (mut store, mut alias) = scratch(world);
+        store.insert("Eb", b"b").unwrap(); store.insert("Ea", b"a").unwrap(); store.insert("Ec", b"c").unwrap();
+        let root_link = store.root.unwrap(); let root = store.read_node(root_link).unwrap();
+        let left_link = root.left.unwrap(); let left = store.read_node(left_link).unwrap();
+        let right = store.read_node(root.right.unwrap()).unwrap();
+        let original = bytes(&mut alias);
+        match attack {
+            0usize => flip(&mut alias, root_link.anchor.offset + 8usize),
+            1usize => flip(&mut alias, left_link.anchor.offset + 8usize),
+            2usize => flip(&mut alias, left.value.offset + left.value.length - 1usize),
+            _ => overwrite(&mut alias, left.value.offset,
+                &original[right.value.offset..right.value.offset + right.value.length]),
+        }
+        let damaged = bytes(&mut alias);
+        assert_eq!(store.after_value("E", "E").err().unwrap(), "command records: record changed after writing");
+        assert_eq!(bytes(&mut alias), damaged);
+        restore(&mut alias, &original);
+        assert!(store.after_value("E", "E").err().unwrap().contains("poisoned"));
+        assert!(store.after("E").err().unwrap().contains("poisoned"));
+        assert!(store.first().err().unwrap().contains("poisoned"));
+        assert!(store.finish().err().unwrap().contains("poisoned"));
+    }
+    // Key-only callers and the E boundary do not read this corrupted G value.
+    let (mut store, mut alias) = scratch(world);
+    store.insert("Ea", b"a").unwrap(); store.insert("Gtail", b"unused").unwrap();
+    let node = store.find("Gtail").unwrap().unwrap(); let original = bytes(&mut alias);
+    flip(&mut alias, node.value.offset + node.value.length - 1usize);
+    assert_eq!(store.after("Ea").unwrap().unwrap(), "Gtail");
+    assert!(store.after_value("Ea", "E").unwrap().is_none());
+    assert_eq!(store.after_value("D", "E").unwrap().unwrap(), ("Ea".to_string(), b"a"[..].to_vec()));
+    assert_eq!(store.after_value("Ea", "G").err().unwrap(), "command records: record changed after writing");
+    restore(&mut alias, &original);
+    assert!(store.after_value("Ea", "E").err().unwrap().contains("poisoned"));
+    assert!(store.finish().err().unwrap().contains("poisoned"));
+
+    let (mut store, _) = scratch(world);
+    store.insert("a", b"a").unwrap(); store.insert("z", b"z").unwrap();
+    assert!(store.after_value("", "z").unwrap().is_none());
+    assert_eq!(store.after_value("a", "z").unwrap().unwrap(), ("z".to_string(), b"z"[..].to_vec()));
+    store.finish().unwrap();
+    6usize
+}
+pub(super) fn run(world: &mut World) -> usize {
+    rotations(world) + keys(world) + poisoning(world) + corruption(world)
+        + path_allowance(world) + append_equivalence(world) + write_boundaries(world)
+        + insert_or_get_equivalence(world) + insert_or_get_refusals(world) + legacy_refusal_priority(world)
+        + successor_equivalence(world) + successor_refusals(world) + digest_equivalence()
+}

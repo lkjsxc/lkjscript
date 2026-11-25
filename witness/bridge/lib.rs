@@ -83,3 +83,15 @@ pub fn proof_domain(producer: &[u8], secret: &[u8]) -> reuse::ProofDomain {
 pub fn native_messages(program: &ir::Program) -> Vec<String> {
     native::messages(program)
 }
+
+/// Preserve the command-record type across the witness's library/binary split.
+pub mod command_records {
+    pub use crate::language::native::records::Store;
+}
+
+/// Preserve the crate-local envelope-header helper at the witness boundary.
+pub fn seal_header(
+    producer: &[u8], secret: &[u8], namespace: &str, key: &str, length: usize, digest: &[u8],
+) -> Vec<u8> {
+    reuse::seal_header(producer, secret, namespace, key, length, digest)
+}

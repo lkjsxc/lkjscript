@@ -1,0 +1,150 @@
+//! Required source claims live in a command-local authenticated disk map.
+//! Only the previous/current unit's observation and selected-claim caches stay
+//! in RAM. Cached observations never supply a fresh admission's source identity.
+use crate::native::records as disk_records;
+use super::inputs::Expectation;
+use std::collections::BTreeMap;
+
+type Key = (String, String);
+fn key(directory: &str, path: &str) -> String {
+    format!("{}:{directory}{path}", directory.len())
+}
+fn split_key(value: &str) -> Result<Key, String> {
+    let at = value.find(':').ok_or_else(|| -> String { "input record has no directory length".to_string() })?;
+    let length = value[..at].parse::<usize>()
+        .map_err(|_| -> String { "input record has an invalid directory length".to_string() })?;
+    let bytes = &value.as_bytes()[at + 1usize..];
+    if length > bytes.len() { return Err("input record directory exceeds its key".to_string()); }
+    let directory = String::from_utf8(bytes[..length].to_vec())
+        .map_err(|_| -> String { "input record directory is not UTF-8".to_string() })?;
+    let path = String::from_utf8(bytes[length..].to_vec())
+        .map_err(|_| -> String { "input record path is not UTF-8".to_string() })?;
+    if key(&directory, &path) != value { return Err("input record key is not canonical".to_string()); }
+    Ok((directory, path))
+}
+fn encode(value: &Option<String>) -> Vec<u8> {
+    match value {
+        None => vec![0u8],
+        Some(value) => {
+            let mut result = vec![1u8]; result.extend_from_slice(value.as_bytes()); result
+        }
+    }
+}
+fn decode(bytes: &[u8]) -> Result<Option<String>, String> {
+    if bytes.is_empty() { return Err("empty input expectation record".to_string()); }
+    match bytes[0usize] {
+        0u8 => {
+            if bytes.len() != 1usize { return Err("absent input expectation has trailing bytes".to_string()); }
+            Ok(None)
+        }
+        1u8 => Ok(Some(String::from_utf8(bytes[1usize..].to_vec())
+            .map_err(|_| -> String { "input digest is not UTF-8".to_string() })?)),
+        _ => Err("unknown input expectation tag".to_string()),
+    }
+}
+
+pub struct Snapshot {
+    required: disk_records::Store,
+    observed: BTreeMap<Key, Option<String>>,
+    recent: BTreeMap<Key, Option<String>>,
+    conflicted: bool,
+    reads: usize,
+    reused: usize,
+}
+impl Snapshot {
+    pub fn new(file: File) -> Result<Self, String> {
+        Ok(Self { required: disk_records::Store::new(file)?, observed: BTreeMap::new(),
+            recent: BTreeMap::new(), conflicted: false, reads: 0usize, reused: 0usize })
+    }
+    pub fn matches<F: FnMut(&str, &str) -> Option<Option<String>>>(
+        &mut self, inputs: &[Expectation], read: &mut F,
+    ) -> bool {
+        if self.conflicted { return false; }
+        let mut current: BTreeMap<Key, Option<String>> = BTreeMap::new();
+        for input in inputs {
+            let name = (input.directory.clone(), input.path.clone());
+            let known = match current.get(&name) {
+                Some(value) => Some(value.clone()),
+                None => self.observed.get(&name).cloned(),
+            };
+            let actual = match known {
+                Some(value) => { self.reused += 1usize; value }
+                None => {
+                    let Some(value) = read(&input.directory, &input.path) else {
+                        self.observed = current; return false;
+                    };
+                    self.reads += 1usize; value
+                }
+            };
+            current.insert(name, actual.clone());
+            if actual != input.digest { self.observed = current; return false; }
+        }
+        self.observed = current;
+        true
+    }
+    fn require_values(&mut self, inputs: &[Expectation]) -> Result<bool, String> {
+        let mut current: BTreeMap<Key, Option<String>> = BTreeMap::new();
+        for input in inputs {
+            let name = (input.directory.clone(), input.path.clone());
+            let prior = match current.get(&name) {
+                Some(value) => Some(value.clone()),
+                None => match self.recent.get(&name) {
+                    Some(value) => Some(value.clone()),
+                    None => match self.required.insert_or_get(
+                        &key(&input.directory, &input.path), &encode(&input.digest),
+                    )? {
+                        Some(bytes) => Some(decode(&bytes)?), None => None,
+                    },
+                },
+            };
+            if let Some(prior) = prior {
+                if prior != input.digest { return Ok(false); }
+            }
+            current.insert(name, input.digest.clone());
+        }
+        // Only selected claims enter this cache. Failed speculative reuse
+        // observations cannot stand for what fresh admission actually loaded.
+        self.observed = current.clone();
+        self.recent = current;
+        Ok(true)
+    }
+    pub fn require(&mut self, inputs: &[Expectation]) -> Result<bool, String> {
+        if self.conflicted { return Ok(false); }
+        let result = self.require_values(inputs);
+        let accepted = match &result { Ok(value) => *value, Err(_) => false };
+        if !accepted { self.conflicted = true; }
+        result
+    }
+    fn verify_values<F: FnMut(&str, &str) -> Option<Option<String>>>(
+        &mut self, read: &mut F,
+    ) -> Result<bool, String> {
+        let mut next = self.required.first()?;
+        while let Some(name) = next {
+            let (directory, path) = split_key(&name)?;
+            let bytes = self.required.get(&name)?
+                .ok_or_else(|| -> String { "selected input disappeared from its retained index".to_string() })?;
+            let expected = decode(&bytes)?;
+            let Some(actual) = read(&directory, &path) else { return Ok(false); };
+            if actual != expected { return Ok(false); }
+            next = self.required.after(&name)?;
+        }
+        Ok(true)
+    }
+    pub fn verify<F: FnMut(&str, &str) -> Option<Option<String>>>(
+        &mut self, read: &mut F,
+    ) -> Result<bool, String> {
+        if self.conflicted { return Ok(false); }
+        let result = self.verify_values(read);
+        let accepted = match &result { Ok(value) => *value, Err(_) => false };
+        if !accepted { self.conflicted = true; }
+        result
+    }
+    pub fn reads(&self) -> usize { self.reads }
+    pub fn reused(&self) -> usize { self.reused }
+    pub fn required(&self) -> usize { self.required.len() }
+    pub fn cached_entries(&self) -> usize { self.observed.len() + self.recent.len() }
+    pub fn finish(self) -> Result<(), String> {
+        if self.conflicted { return Err("input snapshot is poisoned by an earlier failure".to_string()); }
+        self.required.finish()
+    }
+}

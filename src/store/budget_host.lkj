@@ -1,0 +1,371 @@
+//! Fallible host integration for authenticated disk-backed accounting.
+use super::*;
+
+
+mod cases;
+
+impl Store {
+    pub(crate) fn budget_host_contracts(world: &mut World, parent: &str) -> Result<String, String> {
+        cases::run(world, parent)
+    }
+
+    pub(super) fn budget_failure(&mut self) { self.write_state = 2u8; }
+    pub(super) fn budget_bytes(&self) -> usize {
+        match &self.budget { Some(budget) => budget.bytes(), None => 0usize }
+    }
+    pub(super) fn budget_entry(&mut self, name: &str) -> Result<Option<budget::Entry>, ()> {
+        let result = match self.budget.as_mut() {
+            Some(budget) => budget.entry(name),
+            None => { self.budget_failure(); return Err(()); }
+        };
+        match result { Ok(value) => Ok(value), Err(_) => { self.budget_failure(); Err(()) } }
+    }
+    pub(super) fn budget_growth(&mut self, name: &str, length: usize) -> Result<Option<usize>, ()> {
+        let producer = self.producer_slot.clone();
+        let current_index = self.index_bytes;
+        let result = match self.budget.as_mut() {
+            Some(budget) => budget.growth(name, &producer, length, current_index),
+            None => { self.budget_failure(); return Err(()); }
+        };
+        match result { Ok(value) => Ok(value), Err(_) => { self.budget_failure(); Err(()) } }
+    }
+    pub(super) fn budget_remember(&mut self, name: &str, length: usize) -> bool {
+        let producer = self.producer_slot.clone();
+        let result = match self.budget.as_mut() {
+            Some(budget) => budget.remember(name, &producer, length),
+            None => { self.budget_failure(); return false; }
+        };
+        match result { Ok(()) => true, Err(_) => { self.budget_failure(); false } }
+    }
+    pub(super) fn budget_scratch(&mut self) -> Option<File> {
+        let stamp = self.clock.nanoseconds().ok()?;
+        loop {
+            self.sequence = self.sequence.wrapping_add(1usize);
+            let name = format!(".lkjscript-budget-{stamp}-{}.scratch", self.sequence);
+            let file = match self.directory.create_private(&name) {
+                Ok(file) => file, Err(17) => continue, Err(_) => return None,
+            };
+            if self.directory.remove(&name).is_err() { return None; }
+            return Some(file);
+        }
+    }
+    pub(super) fn empty_budget(&mut self) -> bool {
+        let Some(file) = self.budget_scratch() else { self.budget_failure(); return false; };
+        match budget::Budget::new(file) {
+            Ok(budget) => { self.budget = Some(budget); true }
+            Err(_) => { self.budget_failure(); false }
+        }
+    }
+    pub(super) fn erase(&mut self, name: &str) -> bool {
+        if self.write_state != 1u8 { return false; }
+        // Authenticate membership/nonmembership and complete fallible command-
+        // local accounting before deleting any external cache entry.
+        let result = match self.budget.as_mut() {
+            Some(budget) => budget.forget(name),
+            None => { self.budget_failure(); return false; }
+        };
+        if result.is_err() { self.budget_failure(); return false; }
+        match self.directory.remove(name) {
+            Ok(()) | Err(2) => {
+                self.dirty = true; self.evicted += 1usize; true
+            }
+            // The provisional forget is never checkpointed after this failure.
+            Err(_) => { self.budget_failure(); false }
+        }
+    }
+    pub(super) fn evict_oldest(&mut self) -> bool {
+        if self.write_state != 1u8 { return false; }
+        if self.budget.is_none() { self.budget_failure(); return false; }
+        let oldest = self.budget.as_mut().unwrap().oldest();
+        let producer = match oldest {
+            Ok(Some(producer)) => producer, Ok(None) => return false,
+            Err(_) => { self.budget_failure(); return false; }
+        };
+        let mut after = None;
+        loop {
+            let selected = self.budget.as_mut().unwrap().next(&after);
+            let next = match selected {
+                Ok(next) => next, Err(_) => { self.budget_failure(); return false; }
+            };
+            let Some((name, entry)) = next else { break; };
+            if entry.producer == producer && !self.erase(&name) { return false; }
+            after = Some(name);
+        }
+        let retired = self.budget.as_mut().unwrap().retire(&producer);
+        if retired.is_err() {
+            self.budget_failure(); return false;
+        }
+        self.dirty = true; true
+    }
+    pub(super) fn snapshot_budget_names(&mut self) -> bool {
+        let mut names = match budget_io::DirectoryNames::new(&mut self.directory) {
+            Ok(names) => names, Err(_) => { self.budget_failure(); return false; }
+        };
+        loop {
+            let next = match names.next() {
+                Ok(next) => next, Err(_) => { self.budget_failure(); return false; }
+            };
+            let Some(name) = next else {
+                let verified = self.budget.as_mut().unwrap().verify();
+                if verified.is_err() { self.budget_failure(); return false; }
+                return true;
+            };
+            let saved = self.budget.as_mut().unwrap().snapshot_name(&name);
+            if saved.is_err() {
+                self.budget_failure(); return false;
+            }
+        }
+    }
+    pub(super) fn mark_budget_present(&mut self, name: &str) -> bool {
+        let marked = self.budget.as_mut().unwrap().mark_present(name);
+        if marked.is_err() {
+            self.budget_failure(); return false;
+        }
+        true
+    }
+    pub(super) fn forget_absent_budget_entries(&mut self) -> bool {
+        let forgotten = self.budget.as_mut().unwrap().forget_absent();
+        match forgotten {
+            Ok(changed) => { self.dirty = self.dirty || changed; true }
+            Err(_) => { self.budget_failure(); false }
+        }
+    }
+
+    /// Called only after acquiring .budget-lock and setting write_state = 1.
+    /// false means an invalid/missing persistent index, not a scratch failure.
+    pub(super) fn restore_budget_index(&mut self) -> Result<bool, ()> {
+        let span = self.io_begin();
+        let staged: Result<Option<budget_io::IndexReader>, String> =
+            match cache_file(&mut self.directory, ".budget-index") {
+                Some(file) => match self.budget_scratch() {
+                    Some(snapshot) => budget_io::IndexReader::open(file, snapshot, &self.secret, self.capacity),
+                    None => Err("budget snapshot scratch is unavailable".to_string()),
+                }
+                None => Ok(None),
+            };
+        let elapsed = self.io_end(span);
+        let authenticated_payload = match &staged {
+            Ok(Some(reader)) => Some(reader.length()), _ => None,
+        };
+        if let Some(row) = self.io_row("size-index") {
+            row.read_attempts = io_add(row.read_attempts, 1usize, &mut row.overflow);
+            row.read_ns = io_add(row.read_ns, elapsed, &mut row.overflow);
+            if let Some(length) = authenticated_payload {
+                row.authenticated_reads = io_add(row.authenticated_reads, 1usize, &mut row.overflow);
+                row.authenticated_payload_bytes = io_add(row.authenticated_payload_bytes, length, &mut row.overflow);
+                row.authenticated_envelope_bytes = io_add(row.authenticated_envelope_bytes,
+                    length + reuse::header_size(), &mut row.overflow);
+            }
+        }
+        // IndexReader owns authenticated chunks; the original index descriptor
+        // has closed before accounting claims another scratch descriptor.
+        let reader = match staged {
+            Ok(Some(reader)) => reader,
+            Ok(None) => return Ok(false),
+            Err(_) => { self.budget_failure(); return Err(()); }
+        };
+        let Some(scratch) = self.budget_scratch() else { self.budget_failure(); return Err(()); };
+        // Parsing and command-local indexing are metadata work outside read_ns.
+        let restored = budget::Budget::from_snapshot(reader, scratch);
+        match restored {
+            Ok(restored) => match restored.budget {
+                Some(budget) => {
+                    self.index_bytes = restored.authenticated_payload.unwrap() + reuse::header_size();
+                    self.budget = Some(budget); Ok(true)
+                }
+                None => Ok(false),
+            }
+            Err(_) => { self.budget_failure(); Err(()) }
+        }
+    }
+    pub(super) fn writable_inner(&mut self) -> bool {
+        if self.write_state != 0u8 { return self.write_state == 1u8; }
+        self.write_state = 2u8;
+        let mut lock = match self.directory.open_append(".budget-lock") { Ok(file) => file, Err(_) => return false };
+        match lock.lock_exclusive() {
+            Ok(()) => {}
+            Err(11) => { self.write_state = 0u8; return false; }
+            Err(_) => return false,
+        }
+        self.writer = Some(lock);
+        self.write_state = 1u8;
+        let valid_index = match self.restore_budget_index() {
+            Ok(valid) => valid, Err(()) => return false,
+        };
+        if !valid_index {
+            if !self.empty_budget() { return false; }
+            match self.directory.remove(".budget-index") {
+                Ok(()) | Err(2) => {}
+                Err(_) => { self.budget_failure(); return false; }
+            }
+        }
+        // Capture the complete directory before any reconciliation deletes files.
+        if !self.snapshot_budget_names() { return false; }
+        let count = self.budget.as_ref().unwrap().snapshot_count();
+        for ordinal in 0usize..count {
+            let selected = self.budget.as_mut().unwrap().snapshot_at(ordinal);
+            let bytes = match selected {
+                Ok(bytes) => bytes, Err(_) => { self.budget_failure(); return false; }
+            };
+            let Ok(name) = String::from_utf8(bytes) else { continue; };
+            if legacy_query_entry(&name) {
+                if !self.erase(&name) { return false; }
+                continue;
+            }
+            if indexed_name(&name) {
+                let expected = match self.budget_entry(&name) {
+                    Ok(Some(entry)) => Some(entry.bytes), Ok(None) => None, Err(()) => return false,
+                };
+                let mut valid = false;
+                if let Some(expected) = expected {
+                    if let Some(mut file) = cache_file(&mut self.directory, &name) {
+                        if let Some(identity) = query_container_identity(&name) {
+                            let slot = entry_producer(&name).unwrap();
+                            let mut counts = QueryHeaderRead::new();
+                            let manifest = read_query_manifest(&mut file, &self.secret, &slot, identity,
+                                self.capacity, &mut counts);
+                            if let Some(row) = self.io_row("size-index") {
+                                row.budget_headers = io_add(row.budget_headers, counts.headers, &mut row.overflow);
+                                row.budget_header_bytes = io_add(row.budget_header_bytes, counts.headers * 90usize, &mut row.overflow);
+                                row.budget_manifest_bytes = io_add(row.budget_manifest_bytes, counts.manifest_bytes, &mut row.overflow);
+                                row.budget_container_authenticated = io_add(row.budget_container_authenticated, counts.authenticated, &mut row.overflow);
+                                row.budget_container_extent_checks = io_add(row.budget_container_extent_checks, counts.extent_checks, &mut row.overflow);
+                            }
+                            valid = match manifest {
+                                Some(manifest) => manifest.total_bytes == expected,
+                                None => false,
+                            };
+                        } else {
+                            let mut header = vec![0u8; reuse::header_size()];
+                            if read_exact(&mut file, &mut header) {
+                                if let Some(row) = self.io_row("size-index") {
+                                    row.budget_headers = io_add(row.budget_headers, 1usize, &mut row.overflow);
+                                    row.budget_header_bytes = io_add(row.budget_header_bytes, header.len(), &mut row.overflow);
+                                }
+                                if let Some(payload) = reuse::payload_length(&header) {
+                                    valid = payload.checked_add(header.len()) == Some(expected);
+                                }
+                            }
+                        }
+                    }
+                }
+                // A failed prior index checkpoint can leave a larger valid pack.
+                // Its old accounting is a miss; never undercharge the replacement.
+                if valid { if !self.mark_budget_present(&name) { return false; } }
+                else if !self.erase(&name) { return false; }
+            } else if name.starts_with(".tmp-") {
+                if let Ok(mut temporary) = self.directory.open_directory(&name) { let _ = temporary.remove("entry"); }
+                let _ = self.directory.remove_directory(&name);
+            }
+        }
+        if !self.forget_absent_budget_entries() { return false; }
+        while self.budget.as_ref().unwrap().size() > self.capacity {
+            if !self.evict_oldest() {
+                if self.write_state != 1u8 { return false; }
+                let _ = self.directory.remove(".budget-index");
+                self.write_state = 2u8;
+                self.retained_bytes = 0usize;
+                return false;
+            }
+        }
+        self.retained_bytes = self.budget_bytes() + self.index_bytes;
+        true
+    }
+
+    pub(super) fn checkpoint(&mut self) {
+        if self.write_state != 1u8 || !self.dirty { return; }
+        let outer = self.io_begin();
+        self.checkpoint_write();
+        if self.write_state == 1u8 { self.retained_bytes = self.budget_bytes() + self.index_bytes; }
+        let elapsed = self.io_end(outer);
+        if let Some(row) = self.io_row("size-index") {
+            row.metadata_ns = io_add(row.metadata_ns, elapsed, &mut row.overflow);
+        }
+    }
+    fn record_budget_metrics(&mut self, metrics: budget_io::WriteMetrics) {
+        if let Some(io) = self.io_stats.as_mut() {
+            io.accounted_ns = io_add(io.accounted_ns, metrics.accounted_ns, &mut io.overflow);
+            io.clock_failures = io_add(io.clock_failures, metrics.clock_failures, &mut io.overflow);
+            io.overflow = io.overflow || metrics.overflow;
+        }
+        if let Some(row) = self.io_row("size-index") {
+            row.seal_ns = io_add(row.seal_ns, metrics.seal_ns, &mut row.overflow);
+            row.stream_write_ns = io_add(row.stream_write_ns, metrics.write_ns, &mut row.overflow);
+            row.stream_completed_write_bytes = io_add(row.stream_completed_write_bytes, metrics.completed_write_bytes, &mut row.overflow);
+            row.overflow = row.overflow || metrics.overflow;
+            if metrics.sealed {
+                row.seals = io_add(row.seals, 1usize, &mut row.overflow);
+                row.sealed_payload_bytes = io_add(row.sealed_payload_bytes, metrics.sealed_payload_bytes, &mut row.overflow);
+            }
+        }
+    }
+    fn checkpoint_write(&mut self) {
+        if self.budget.is_none() { self.budget_failure(); return; }
+        let span = self.io_begin();
+        let staged = self.stage_budget_index();
+        let elapsed = self.io_end(span);
+        if let Some(row) = self.io_row("size-index") {
+            row.publish_attempts = io_add(row.publish_attempts, 1usize, &mut row.overflow);
+            row.publish_ns = io_add(row.publish_ns, elapsed, &mut row.overflow);
+        }
+        let Ok((mut temporary, mut file, temporary_name)) = staged else { return; };
+        let profile = self.io_stats.is_some();
+        let clock = if profile { Some(&mut self.clock) } else { None };
+        let (result, metrics) = self.budget.as_mut().unwrap()
+            .write_index_profiled(&mut file, &self.secret, clock);
+        self.record_budget_metrics(metrics);
+        let span = self.io_begin();
+        let published = match result {
+            Ok(length) => {
+                if temporary.__lkjscript_rename(b"entry\0", &mut self.directory, b".budget-index\0") == 0i64 {
+                    Some(length)
+                } else { None }
+            }
+            Err(budget::WriteError::Output(_)) => None,
+            Err(budget::WriteError::Storage(_)) => { self.budget_failure(); None }
+        };
+        let _ = temporary.remove("entry");
+        let _ = self.directory.remove_directory(&temporary_name);
+        let elapsed = self.io_end(span);
+        if let Some(row) = self.io_row("size-index") {
+            row.publish_ns = io_add(row.publish_ns, elapsed, &mut row.overflow);
+            if let Some(length) = published {
+                row.published = io_add(row.published, 1usize, &mut row.overflow);
+                row.published_payload_bytes = io_add(row.published_payload_bytes, length - reuse::header_size(), &mut row.overflow);
+                row.published_envelope_bytes = io_add(row.published_envelope_bytes, length, &mut row.overflow);
+            }
+        }
+        if let Some(length) = published { self.dirty = false; self.index_bytes = length; }
+    }
+    // Match the ordinary publisher's 0666-and-umask mode while claiming an
+    // exclusive leaf. Scratch accounting itself remains create_private/unlinked.
+    fn stage_budget_index(&mut self) -> Result<(Directory, File, String), String> {
+        let stamp = self.clock.nanoseconds().map_err(|_: i64| -> String {
+            "E_STORE budget index staging clock is unavailable".to_string()
+        })?;
+        let temporary_name: String = loop {
+            self.sequence = self.sequence.wrapping_add(1usize);
+            let name = format!(".tmp-{stamp}-{}", self.sequence);
+            match self.directory.create_directory(&name) {
+                Ok(()) => break name,
+                Err(17) => continue,
+                Err(_) => return Err("E_STORE cannot claim a budget index staging directory".to_string()),
+            }
+        };
+        let mut temporary = match self.directory.open_directory(&temporary_name) {
+            Ok(directory) => directory,
+            Err(_) => {
+                let _ = self.directory.remove_directory(&temporary_name);
+                return Err("E_STORE cannot retain the budget index staging directory".to_string());
+            }
+        };
+        let file = match temporary.create_new("entry") {
+            Ok(file) => file,
+            Err(_) => {
+                let _ = self.directory.remove_directory(&temporary_name);
+                return Err("E_STORE cannot create a private budget index stream".to_string());
+            }
+        };
+        Ok((temporary, file, temporary_name))
+    }
+}

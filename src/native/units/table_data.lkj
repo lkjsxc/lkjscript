@@ -1,0 +1,135 @@
+//! Source/message table module introduced for checked operation replay.
+
+//! Bounded encoding of the final diagnostic tables into unpublished output.
+use super::*;
+
+use super::image_tables::{Input, MessageCursor};
+
+struct Output<'a> {
+    file: &'a mut File,
+    start: usize,
+    position: usize,
+}
+
+impl<'a> Output<'a> {
+    fn new(file: &'a mut File, start: usize) -> Self { Self { file, start, position: start } }
+    fn write_at(&mut self, position: usize, bytes: &[u8]) -> Result<(), Diagnostic> {
+        let absolute = position.checked_add(platform::CODE_OFFSET).ok_or_else(|| error("image data address overflow"))?;
+        if absolute > 9223372036854775807usize { return Err(error("image data exceeds file seek representation")); }
+        self.file.seek(absolute as i64, 0u8).map_err(|errno: i64| io("seek image data", errno))?;
+        self.file.write_all(bytes).map_err(|errno: i64| io("write image data", errno))
+    }
+    fn append(&mut self, bytes: &[u8]) -> Result<(), Diagnostic> {
+        let end = self.position.checked_add(bytes.len()).ok_or_else(|| error("image data extent overflow"))?;
+        if end > 9223372036854775807usize - platform::CODE_OFFSET {
+            return Err(error("image data exceeds file seek representation"));
+        }
+        let position = self.position;
+        self.write_at(position, bytes)?; self.position = end;
+        Ok(())
+    }
+    fn zeros(&mut self, length: usize) -> Result<(), Diagnostic> {
+        let bytes = vec![0u8; LINK_BUFFER];
+        let mut remaining = length;
+        while remaining != 0usize {
+            let count = remaining.min(bytes.len()); self.append(&bytes[..count])?; remaining -= count;
+        }
+        Ok(())
+    }
+    fn patch_word(&mut self, position: usize, value: usize) -> Result<(), Diagnostic> {
+        if position < self.start || position > self.position || self.position - position < 8usize {
+            return Err(error("image data patch is outside its written extent"));
+        }
+        let mut bytes = Vec::new(); word(&mut bytes, value);
+        self.write_at(position, &bytes)
+    }
+    fn table(&mut self, a: &mut Assembler, label: Label, count: usize) -> Result<usize, Diagnostic> {
+        let size = count.checked_mul(16usize).and_then(|value: usize| value.checked_add(8usize))
+            .ok_or_else(|| error("diagnostic table extent overflow"))?;
+        let start = self.position;
+        a.data_label(label, start); self.zeros(size)?; self.patch_word(start, count)?;
+        Ok(start)
+    }
+    fn row(&mut self, table: usize, index: usize, value: &str, newline: bool) -> Result<(), Diagnostic> {
+        let offset = index.checked_mul(16usize).and_then(|value: usize| value.checked_add(8usize))
+            .and_then(|value: usize| table.checked_add(value)).ok_or_else(|| error("diagnostic row address overflow"))?;
+        let pointer = (platform::IMAGE_BASE as usize).checked_add(platform::CODE_OFFSET)
+            .and_then(|value: usize| value.checked_add(self.position)).ok_or_else(|| error("diagnostic text address overflow"))?;
+        let length = value.len().checked_add(if newline { 1usize } else { 0usize })
+            .ok_or_else(|| error("diagnostic text length overflow"))?;
+        let length_at = offset.checked_add(8usize).ok_or_else(|| error("diagnostic row length address overflow"))?;
+        self.patch_word(offset, pointer)?; self.patch_word(length_at, length)?;
+        self.append(value.as_bytes())?;
+        if newline { self.append(b"\n")?; }
+        Ok(())
+    }
+}
+
+fn custom_messages(a: &mut Assembler, p: platform::Platform, output: &mut Output<'_>,
+    tables: &mut Input<'_>,
+) -> Result<(), Diagnostic> {
+    let count = tables.message_count().checked_add(16usize).ok_or_else(|| error("diagnostic message count overflow"))?;
+    let start = output.table(a, p.messages, count)?;
+    let defaults = vec![
+        "completed".to_string(), "integer overflow".to_string(), "division by zero".to_string(),
+        "index out of bounds".to_string(), "explicit trap".to_string(), "assertion failed".to_string(),
+        "heap allocation failed".to_string(), "host operation failed".to_string(), "stack exhausted".to_string(),
+    ];
+    for index in 0usize..16usize {
+        let raw = if index < defaults.len() { defaults[index].as_str() } else { "trap" };
+        let text = crate::runtime_diagnostics::escaped(raw, 1024usize, false);
+        output.row(start, index, &text, true)?;
+    }
+    let mut cursor = MessageCursor::new();
+    for index in 16usize..count {
+        let raw = tables.next_message(&mut cursor)?.ok_or_else(|| error("image message table lost an entry"))?;
+        let text = crate::runtime_diagnostics::escaped(&raw, 1024usize, false);
+        output.row(start, index, &text, true)?;
+    }
+    if tables.next_message(&mut cursor)?.is_some() { return Err(error("image message table gained an entry")); }
+    Ok(())
+}
+
+fn sources(a: &mut Assembler, p: platform::Platform, output: &mut Output<'_>,
+    tables: &mut Input<'_>, runtime_sources: &[String],
+) -> Result<(), Diagnostic> {
+    let own = tables.source_count();
+    let total = own.checked_add(runtime_sources.len()).ok_or_else(|| error("diagnostic source count overflow"))?;
+    let count = total.max(1usize);
+    let start = output.table(a, p.sources, count)?;
+    for index in 0usize..count {
+        let raw = if total == 0usize { "<ir>".to_string() }
+            else if index < own { tables.source(index)? }
+            else { runtime_sources[index - own].clone() };
+        let text = crate::runtime_diagnostics::escaped(&raw, 512usize, true);
+        output.row(start, index, &text, false)?;
+    }
+    Ok(())
+}
+
+pub(super) fn support(
+    file: &mut File, a: &mut Assembler, p: platform::Platform, offset: usize,
+    tables: &mut Input<'_>, runtime_sources: &[String], runtime_messages: &[String],
+    flags: u64, plan: &entry::Plan, literals: &BTreeMap<Vec<u8>, Label>,
+) -> Result<usize, Diagnostic> {
+    let mut output = Output::new(file, offset);
+    let mut fixed = Vec::new();
+    platform::data_prefix(a, p, &mut fixed, output.position);
+    output.append(&fixed)?;
+    custom_messages(a, p, &mut output, tables)?;
+    fixed = Vec::new();
+    platform::message_data(a, p.runtime_messages, &mut fixed, output.position, runtime_messages);
+    output.append(&fixed)?;
+    sources(a, p, &mut output, tables, runtime_sources)?;
+    fixed = Vec::new();
+    diagnostics::fixed_data(a, p, &mut fixed, output.position);
+    output.append(&fixed)?;
+    fixed = Vec::new();
+    if flags & STOP != 0u64 { lifecycle::data(a, p, &mut fixed, output.position); }
+    plan.data(a, &mut fixed, output.position);
+    output.append(&fixed)?;
+    for (bytes, label) in literals {
+        a.data_label(*label, output.position); output.append(bytes)?;
+    }
+    Ok(output.position)
+}

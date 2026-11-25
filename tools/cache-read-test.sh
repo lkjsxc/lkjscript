@@ -32,7 +32,7 @@ trap 'exit 130' HUP INT TERM
 umask 077
 mkdir "$fixture/source" "$fixture/seed" "$fixture/empty-ordinary" "$fixture/empty-locator"
 head -c 32 /dev/urandom > "$fixture/key"
-cp src/diagnostic.lkj src/ir.lkj src/ir_binary.lkj src/reuse.lkj src/store.lkj "$fixture/source/"
+bash tools/store-fixture-source.sh "$fixture/source"
 # An explicit saved source is used only for the retained pre-fix refusal control.
 if [[ -n ${LKJSCRIPT_CACHE_READ_SOURCE:-} ]]; then cp "$LKJSCRIPT_CACHE_READ_SOURCE" "$fixture/source/store.lkj"; fi
 cat > "$fixture/source/main.lkj" <<'SOURCE'
@@ -40,6 +40,7 @@ mod diagnostic;
 mod ir;
 mod ir_binary;
 mod reuse;
+mod native { pub mod records; }
 mod store;
 pub use std::sha256;
 use store::QueryAccess;

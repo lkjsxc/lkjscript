@@ -19,6 +19,8 @@ mod reuse;
 
 mod sha256 { pub use std::sha256::{Sha256, digest, hex_digest}; }
 
+
+mod native { pub mod records; }
 mod store;
 
 mod cases {

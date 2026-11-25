@@ -6,6 +6,8 @@ pub mod diagnostic;
 pub mod ir;
 pub mod ir_binary;
 pub mod reuse;
+
+mod native { pub mod records; }
 pub mod store;
 pub use std::sha256;
 

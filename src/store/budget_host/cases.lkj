@@ -1,0 +1,267 @@
+//! Actual host controls. Every named operation is beneath a fresh exclusive child.
+use super::*;
+
+fn file_bytes(file: &mut File) -> Vec<u8> {
+    file.seek(0i64, 0u8).unwrap(); file.read_to_end().unwrap()
+}
+fn index_bytes(store: &mut Store) -> Vec<u8> {
+    file_bytes(&mut store.directory.open_regular(".budget-index").unwrap())
+}
+fn fixture(world: &mut World, directory: &mut Directory, path: &str, key: &str, label: &str) -> Store {
+    directory.create_directory(label).unwrap();
+    Store::open_bounded(world, &Some(format!("{path}/{label}")), &Some(key.to_string()),
+        1024usize * 1024usize).unwrap()
+}
+fn tracked_budget(store: &mut Store) -> File {
+    assert!(store.writable());
+    assert_eq!(store.budget.as_ref().unwrap().entry_count(), 0usize);
+    let mut file = store.budget_scratch().unwrap();
+    let alias = file.duplicate().unwrap();
+    store.budget = Some(budget::Budget::new(file).unwrap());
+    alias
+}
+fn put(store: &mut Store, label: &str) -> String {
+    let key = sha256::hex_digest(label.as_bytes());
+    let name = format!("capacity-{}-{key}", store.producer_slot);
+    store.put("capacity", &key, label.as_bytes());
+    assert!(store.directory.open_regular(&name).is_ok());
+    assert!(store.budget_entry(&name).unwrap().is_some());
+    name
+}
+fn erase_poison(world: &mut World, directory: &mut Directory, path: &str, key: &str) {
+    let mut store = fixture(world, directory, path, key, "erase-poison");
+    let mut alias = tracked_budget(&mut store);
+    let name = put(&mut store, "retained entry");
+    store.finish();
+    let index = index_bytes(&mut store);
+    let saved = file_bytes(&mut alias);
+    alias.truncate(0usize).unwrap();
+    assert!(!store.erase(&name));
+    assert!(store.directory.open_regular(&name).is_ok());
+    assert_eq!(store.write_state, 2u8);
+    alias.seek(0i64, 0u8).unwrap(); alias.write_all(&saved).unwrap();
+    assert!(!store.erase(&name));
+    assert!(store.directory.open_regular(&name).is_ok());
+    store.finish(); assert_eq!(index_bytes(&mut store), index);
+}
+fn erase_missing(world: &mut World, directory: &mut Directory, path: &str, key: &str) {
+    let mut store = fixture(world, directory, path, key, "erase-missing");
+    let name = put(&mut store, "retained entry");
+    store.finish();
+    let index = index_bytes(&mut store);
+    store.budget = None;
+    assert!(!store.erase(&name));
+    assert!(store.directory.open_regular(&name).is_ok());
+    assert_eq!(store.write_state, 2u8);
+    store.finish(); assert_eq!(index_bytes(&mut store), index);
+}
+fn unlink_failure(world: &mut World, directory: &mut Directory, path: &str, key: &str) {
+    let mut store = fixture(world, directory, path, key, "unlink-failure");
+    let name = put(&mut store, "retained entry");
+    store.finish();
+    let index = index_bytes(&mut store);
+    store.directory.remove(&name).unwrap();
+    store.directory.create_directory(&name).unwrap();
+    assert!(!store.erase(&name));
+    assert_eq!(store.write_state, 2u8);
+    assert!(store.directory.open_directory(&name).is_ok());
+    store.finish(); assert_eq!(index_bytes(&mut store), index);
+}
+fn checkpoint_output(world: &mut World, directory: &mut Directory, path: &str, key: &str) {
+    let mut store = fixture(world, directory, path, key, "checkpoint-output");
+    let name = put(&mut store, "pending entry");
+    store.directory.create_directory(".budget-index").unwrap();
+    store.finish();
+    assert_eq!(store.write_state, 1u8); assert!(store.dirty);
+    assert_eq!(store.index_bytes, 0usize);
+    assert!(store.directory.open_regular(&name).is_ok());
+    store.budget.as_mut().unwrap().verify().unwrap();
+    for raw in store.directory.list().unwrap() {
+        let name = String::from_utf8(raw).unwrap();
+        assert!(!name.starts_with(".tmp-"));
+    }
+    store.directory.remove_directory(".budget-index").unwrap();
+    store.finish();
+    assert_eq!(store.write_state, 1u8); assert!(!store.dirty);
+    assert_eq!(index_bytes(&mut store).len(), store.index_bytes);
+}
+fn checkpoint_storage(world: &mut World, directory: &mut Directory, path: &str, key: &str) {
+    let mut store = fixture(world, directory, path, key, "checkpoint-storage");
+    let mut alias = tracked_budget(&mut store);
+    let first = put(&mut store, "first entry"); store.finish();
+    let index = index_bytes(&mut store);
+    let second = put(&mut store, "second entry");
+    let saved = file_bytes(&mut alias);
+    alias.truncate(0usize).unwrap();
+    store.finish();
+    assert_eq!(store.write_state, 2u8); assert!(store.dirty);
+    assert_eq!(index_bytes(&mut store), index);
+    assert!(store.directory.open_regular(&first).is_ok());
+    assert!(store.directory.open_regular(&second).is_ok());
+    alias.seek(0i64, 0u8).unwrap(); alias.write_all(&saved).unwrap();
+    store.finish(); assert_eq!(store.write_state, 2u8);
+    assert_eq!(index_bytes(&mut store), index);
+    for raw in store.directory.list().unwrap() {
+        assert!(!String::from_utf8(raw).unwrap().starts_with(".tmp-"));
+    }
+}
+fn output_file(world: &mut World, directory: &mut Directory) {
+    let mut file = directory.create_private("read-only-output").unwrap();
+    file.write_all(b"untouched").unwrap(); drop(file);
+    let mut read_only = directory.open_regular("read-only-output").unwrap();
+    let mut budget = budget::Budget::new(world.temporary_file().unwrap()).unwrap();
+    assert!(matches!(budget.write_index(&mut read_only, &vec![41u8; 32]),
+        Err(budget::WriteError::Output(_))));
+    budget.verify().unwrap();
+    assert_eq!(file_bytes(&mut read_only), b"untouched"[..].to_vec());
+    let mut output = world.temporary_file().unwrap();
+    assert!(budget.write_index(&mut output, &vec![41u8; 32]).is_ok());
+    budget.finish().unwrap();
+}
+fn directory_snapshot(world: &mut World, directory: &mut Directory, path: &str, key: &str) {
+    let mut store = fixture(world, directory, path, key, "directory-snapshot");
+    let mut names: Vec<String> = Vec::new();
+    for index in 0usize..300usize {
+        let name = format!(".snapshot-{index}-{}", sha256::hex_digest(format!("name {index}").as_bytes()));
+        let file = store.directory.create_private(&name).unwrap(); drop(file);
+        names.push(name);
+    }
+    assert!(store.writable());
+    let count = store.budget.as_ref().unwrap().snapshot_count();
+    assert_eq!(count, 301usize); // Three hundred names and the writer lock.
+    let mut snapshot: Vec<Vec<u8>> = Vec::new();
+    for ordinal in 0usize..count {
+        snapshot.push(store.budget.as_mut().unwrap().snapshot_at(ordinal).unwrap());
+    }
+    for name in names { assert!(snapshot.contains(&name.as_bytes().to_vec())); }
+    let file = store.directory.create_private(".after-snapshot").unwrap(); drop(file);
+    let selected = String::from_utf8(snapshot[0usize].clone()).unwrap();
+    if selected != ".budget-lock" { store.directory.remove(&selected).unwrap(); }
+    for ordinal in 0usize..count {
+        assert_eq!(store.budget.as_mut().unwrap().snapshot_at(ordinal).unwrap(), snapshot[ordinal]);
+    }
+    store.budget.as_mut().unwrap().verify().unwrap();
+}
+fn reconcile_pages(world: &mut World, directory: &mut Directory, path: &str, key: &str) {
+    let mut store = fixture(world, directory, path, key, "reconcile-pages");
+    let mut names: Vec<String> = Vec::new();
+    for index in 0usize..300usize {
+        let key = sha256::hex_digest(format!("orphan {index}").as_bytes());
+        let name = format!("capacity-{}-{key}", store.producer_slot);
+        let bytes = reuse::seal(&store.producer, &store.secret, "capacity", &key, b"orphan");
+        store.directory.create_private(&name).unwrap().write_all(&bytes).unwrap();
+        names.push(name);
+    }
+    assert!(store.writable()); assert_eq!(store.evicted, 300usize);
+    for name in names { assert!(store.directory.open_regular(&name).is_err()); }
+    assert_eq!(store.budget.as_ref().unwrap().entry_count(), 0usize);
+    store.finish();
+    assert_eq!(store.index_bytes, 24usize + reuse::header_size());
+}
+fn producer_fifo(world: &mut World, directory: &mut Directory, path: &str, key: &str) {
+    let mut store = fixture(world, directory, path, key, "producer-fifo");
+    let first = put(&mut store, "A first");
+    let original = store.producer.clone(); let original_slot = store.producer_slot.clone();
+    store.producer = sha256::digest(b"fixture producer B")[..].to_vec();
+    store.producer_slot = sha256::hex_digest(&store.producer);
+    let second = put(&mut store, "B first");
+    assert!(store.evict_oldest());
+    assert!(store.directory.open_regular(&first).is_err());
+    assert!(store.directory.open_regular(&second).is_ok());
+    store.producer = original; store.producer_slot = original_slot;
+    let returned = put(&mut store, "A returns");
+    assert!(store.evict_oldest());
+    assert!(store.directory.open_regular(&second).is_err());
+    assert!(store.directory.open_regular(&returned).is_ok());
+    assert_eq!(store.budget.as_mut().unwrap().oldest().unwrap(), Some(store.producer_slot.clone()));
+    store.finish();
+}
+fn profiling(world: &mut World, directory: &mut Directory, path: &str, key: &str) {
+    let mut store = fixture(world, directory, path, key, "profiling");
+    store.enable_io_stats();
+    let _ = put(&mut store, "profiled entry"); store.finish();
+    let metadata = store.budget.as_ref().unwrap().metadata();
+    let io = store.io_stats.as_ref().unwrap();
+    assert_eq!(io.clock_failures, 0usize); assert!(!io.overflow);
+    let mut summed = 0usize;
+    for (_, row) in &io.rows {
+        assert!(!row.overflow);
+        summed += row.read_ns + row.pack_decode_ns + row.pack_retain_ns + row.seal_ns
+            + row.pack_reseal_ns + row.publish_ns + row.prepare_ns + row.metadata_ns + row.stream_write_ns;
+    }
+    assert_eq!(summed, io.accounted_ns);
+    let row = io.rows.get(&"metadata".to_string()).unwrap();
+    assert_eq!(row.seals, 1usize); assert_eq!(row.sealed_payload_bytes, metadata);
+    assert_eq!(row.published, 1usize); assert_eq!(row.publish_attempts, 1usize);
+    assert_eq!(row.published_payload_bytes, metadata);
+    assert_eq!(row.published_envelope_bytes, store.index_bytes);
+    assert_eq!(row.stream_completed_write_bytes, store.index_bytes + reuse::header_size());
+    assert!(!store.dirty);
+}
+fn restore_and_reconcile(world: &mut World, directory: &mut Directory, path: &str, key: &str) {
+    let mut store = fixture(world, directory, path, key, "restore");
+    let first = put(&mut store, "restore first");
+    let second = put(&mut store, "restore second");
+    store.finish();
+    let original = index_bytes(&mut store);
+    drop(store);
+    let store_path = Some(format!("{path}/restore")); let key_path = Some(key.to_string());
+    let mut store = Store::open_bounded(world, &store_path, &key_path, 1024usize * 1024usize).unwrap();
+    store.enable_io_stats(); assert!(store.writable());
+    assert!(store.budget_entry(&first).unwrap().is_some());
+    assert!(store.budget_entry(&second).unwrap().is_some());
+    assert!(!store.dirty); store.finish();
+    assert_eq!(index_bytes(&mut store), original);
+    let row = store.io_stats.as_ref().unwrap().rows.get(&"metadata".to_string()).unwrap();
+    assert_eq!(row.authenticated_reads, 1usize);
+    assert_eq!(row.authenticated_envelope_bytes, original.len());
+    let producer = store.producer.clone(); let slot = store.producer_slot.clone();
+    drop(store);
+    let mut files = directory.open_directory("restore").unwrap();
+    files.remove(&first).unwrap();
+    let orphan_key = sha256::hex_digest(b"restored orphan");
+    let orphan = format!("capacity-{slot}-{orphan_key}");
+    let bytes = reuse::seal(&producer, &vec![41u8; 32], "capacity", &orphan_key, b"orphan");
+    files.create_private(&orphan).unwrap().write_all(&bytes).unwrap();
+    let mut store = Store::open_bounded(world, &store_path, &key_path, 1024usize * 1024usize).unwrap();
+    assert!(store.writable());
+    assert!(store.budget_entry(&first).unwrap().is_none());
+    assert!(store.budget_entry(&second).unwrap().is_some());
+    assert!(store.budget_entry(&orphan).unwrap().is_none());
+    assert!(store.directory.open_regular(&orphan).is_err());
+    assert!(store.directory.open_regular(&second).is_ok());
+    assert!(store.dirty); assert_eq!(store.evicted, 1usize);
+    store.finish(); assert!(index_bytes(&mut store) != original);
+}
+
+pub(super) fn run(world: &mut World, parent: &str) -> Result<String, String> {
+    let mut owner = world.directory(parent).map_err(|errno: i64| -> String { format!("fixture parent: {errno}") })?;
+    let mut clock = world.clock();
+    let stamp = clock.nanoseconds().map_err(|errno: i64| -> String { format!("fixture clock: {errno}") })?;
+    let mut sequence = 0usize;
+    let child: String = loop {
+        let name = format!(".unit-budget-controls-{stamp}-{sequence}");
+        match owner.create_directory(&name) {
+            Ok(()) => break name,
+            Err(17) => { sequence += 1usize; }
+            Err(errno) => return Err(format!("fixture child: {errno}")),
+        }
+    };
+    let mut directory = owner.open_directory(&child)
+        .map_err(|errno: i64| -> String { format!("fixture child handle: {errno}") })?;
+    let path = format!("{parent}/{child}");
+    let key = format!("{path}/key");
+    directory.create_private("key").unwrap().write_all(&vec![41u8; 32]).unwrap();
+    erase_poison(world, &mut directory, &path, &key);
+    erase_missing(world, &mut directory, &path, &key);
+    unlink_failure(world, &mut directory, &path, &key);
+    checkpoint_output(world, &mut directory, &path, &key);
+    checkpoint_storage(world, &mut directory, &path, &key);
+    output_file(world, &mut directory);
+    directory_snapshot(world, &mut directory, &path, &key);
+    reconcile_pages(world, &mut directory, &path, &key);
+    producer_fifo(world, &mut directory, &path, &key);
+    profiling(world, &mut directory, &path, &key);
+    restore_and_reconcile(world, &mut directory, &path, &key);
+    Ok(format!("ok budget host 11 controls; owned fixture {path}\n"))
+}

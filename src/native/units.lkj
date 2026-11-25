@@ -3,6 +3,16 @@ use super::*;
 use crate::check::units::{Binding, CheckedUnit, Interface};
 use crate::reuse::{ProofDomain, VerifiedPayload};
 
+
+mod claims;
+
+mod image_tables;
+
+mod table_data;
+
+mod table_tests;
+
+pub use image_tables::ImageTables;
 const NAMESPACE: &str = "unit-native-2";
 const LISTENER: u64 = 1u64 << 0u32;
 const CONNECTOR: u64 = 1u64 << 1u32;
@@ -179,18 +189,7 @@ fn claim(interface: &Interface) -> Claim {
         body: interface.body_identity().to_string(), dependencies, imports, definitions, exports: BTreeMap::new() }
 }
 
-fn resolve_binding(claims: &BTreeMap<String, Claim>, binding: &Binding) -> Option<(usize, Span)> {
-    let claim = claims.get(&binding.unit)?;
-    if claim.interface != binding.interface_identity { return None; }
-    claim.exports.get(&binding.name).copied()
-}
 
-fn resolve_symbol(claims: &BTreeMap<String, Claim>, symbols: &BTreeMap<String, usize>, name: &String) -> Option<usize> {
-    if name.as_str().starts_with("unit:") {
-        let binding = parse_symbol(name.as_str())?;
-        resolve_binding(claims, &binding).map(|value: (usize, Span)| value.0)
-    } else { symbols.get(name).copied() }
-}
 
 struct ObjectReference {
     at: usize,
@@ -469,7 +468,9 @@ pub struct Linker {
     position: usize,
     context: Option<String>,
     flags: u64,
-    claims: BTreeMap<String, Claim>,
+    claims: super::records::Store,
+    provider: Option<claims::StoredClaim>,
+    units: usize,
     symbols: BTreeMap<String, usize>,
     relocations: File,
     record_count: usize,
@@ -478,26 +479,25 @@ pub struct Linker {
     maximum_name_bytes: usize,
     relocation_hash: crate::sha256::Sha256,
     failed: bool,
-    tables: Vec<Tables>,
 }
 
 
 
 
 impl Linker {
-    pub fn new(mut output: File, mut relocations: File) -> Result<Self, Diagnostic> {
+    pub fn new(mut output: File, mut relocations: File, records: File) -> Result<Self, Diagnostic> {
         output.truncate(0usize).map_err(|errno: i64| io("truncate unit output", errno))?;
         output.seek(0i64, 0u8).map_err(|errno: i64| io("seek unit output", errno))?;
         relocations.truncate(0usize).map_err(|errno: i64| io("truncate relocation spool", errno))?;
         relocations.seek(0i64, 0u8).map_err(|errno: i64| io("seek relocation spool", errno))?;
         output.write_all(&vec![0u8; platform::CODE_OFFSET]).map_err(|errno: i64| io("reserve ELF header", errno))?;
         output.write_all(&[0xe9u8, 0u8, 0u8, 0u8, 0u8]).map_err(|errno: i64| io("write entry branch", errno))?;
+        let claims = super::records::Store::new(records).map_err(|message: String| error(&message))?;
         let mut result = Self { output, position: 5usize, context: None, flags: 0u64,
-            claims: BTreeMap::new(), symbols: BTreeMap::new(),
+            claims, provider: None, units: 0usize, symbols: BTreeMap::new(),
             relocations, record_count: 0usize, relocation_bytes: 0usize,
             maximum_packet_bytes: 0usize, maximum_name_bytes: 0usize,
-            relocation_hash: crate::sha256::Sha256::new(), failed: false,
-            tables: Vec::new() };
+            relocation_hash: crate::sha256::Sha256::new(), failed: false };
         result.reference(0usize, 1usize, "entry", Span::default())?;
         Ok(result)
     }
@@ -600,7 +600,7 @@ impl Linker {
         if let Some(context) = existing_context {
             if context != object.context { return Err(error("unit objects use different runtime or target identities")); }
         } else { self.context = Some(object.context.clone()); }
-        if self.claims.contains_key(&object.claim.name) {
+        if self.claims.contains(&claims::claim_key(&object.claim.name)).map_err(|message: String| error(&message))? {
             return Err(error(&format!("duplicate unit implementation {}", object.claim.name)));
         }
         if object.code.definitions.len() != object.claim.definitions.len()
@@ -613,6 +613,7 @@ impl Linker {
             }
         }
         let base = self.position;
+        let code_length = object.bytes();
         self.append_object(&object)?;
         self.flags |= object.flags;
         let mut claim = object.claim;
@@ -623,66 +624,115 @@ impl Linker {
             }
             index += 1usize;
         }
-        // The exact ordinal/name comparison is finished. Retain each raw name
-        // once, under the one defining unit and semantic identity.
+        // The exact ordinal/name comparison is finished. Release every function
+        // name after writing this unit's writer-bound claim.
         claim.definitions = Vec::new();
-        self.tables.push(Tables { source_base: object.source_base, sources: object.sources, messages: object.messages });
-        self.claims.insert(claim.name.clone(), claim);
+        let stored = claims::StoredClaim { claim, base, bytes: code_length, source_base: object.source_base,
+            source_count: object.sources.len() };
+        self.claims.insert(&claims::claim_key(&stored.claim.name), &claims::claim_bytes(&stored, &object.context))
+            .map_err(|message: String| error(&message))?;
+        self.claims.insert(&claims::identity_key(&stored.claim.name),
+            &claims::identity_bytes(&stored.claim.name, &stored.claim.interface, &object.context))
+            .map_err(|message: String| error(&message))?;
+        let table = Tables { source_base: object.source_base, sources: object.sources, messages: object.messages };
+        self.claims.insert(&claims::table_key(self.units), &claims::table_bytes(&table, self.units, &object.context))
+            .map_err(|message: String| error(&message))?;
+        self.units = self.units.checked_add(1usize).ok_or_else(|| error("unit registry count overflow"))?;
         Ok(())
     }
-    pub fn finish(mut self, context: &Context<'_>, entry: &Interface, entry_name: &str,
+    pub fn finish(self, context: &Context<'_>, entry: &Interface, entry_name: &str,
         grants: &[ir::EntryGrant], sources: &[String], messages: &[String], result_fd: Option<u32>,
     ) -> Result<(File, usize), Diagnostic> {
+        self.finish_input(context, entry, entry_name, grants, image_tables::Input::slice(sources, messages), result_fd)
+    }
+    pub fn finish_with_tables(self, context: &Context<'_>, entry: &Interface, entry_name: &str,
+        grants: &[ir::EntryGrant], tables: ImageTables, result_fd: Option<u32>,
+    ) -> Result<(File, usize), Diagnostic> {
+        self.finish_input(context, entry, entry_name, grants, image_tables::Input::Disk(tables), result_fd)
+    }
+    fn finish_input(mut self, context: &Context<'_>, entry: &Interface, entry_name: &str,
+        grants: &[ir::EntryGrant], mut tables: image_tables::Input<'_>, result_fd: Option<u32>,
+    ) -> Result<(File, usize), Diagnostic> {
         let runtime = context.runtime;
+        let source_count = tables.source_count();
         if self.failed { return Err(error("unit linker is poisoned by an earlier failure")); }
         if self.context.as_ref() != Some(&context.identity) {
             return Err(error("linked runtime differs from unit object runtime"));
         }
         let entry_unit_name = entry.name().to_string();
-        let selected_claim = self.claims.get(&entry_unit_name).ok_or_else(|| error("entry unit has no implementation"))?;
-        if selected_claim.interface.as_str() != entry.identity() || selected_claim.body.as_str() != entry.body_identity() {
-            return Err(error("entry interface or implementation is stale"));
-        }
-        for (_, claim) in &self.claims {
-            for (name, identity) in &claim.dependencies {
-                let actual = self.claims.get(name).ok_or_else(|| error(&format!("unit {} is missing dependency {name}", claim.name)))?;
-                if actual.interface != *identity { return Err(error(&format!("unit {} has a stale dependency interface {name}", claim.name))); }
+        {
+            let selected = claims::read_claim(&mut self.claims, &entry_unit_name, &context.identity)?
+                .ok_or_else(|| error("entry unit has no implementation"))?;
+            if selected.claim.interface.as_str() != entry.identity() || selected.claim.body.as_str() != entry.body_identity() {
+                return Err(error("entry interface or implementation is stale"));
             }
-            for imported in &claim.imports {
-                if resolve_binding(&self.claims, imported).is_none() {
-                    return Err(error(&format!("unit {} has no exact implementation for {}", claim.name, symbol(imported))));
+        }
+        let mut key = self.claims.first().map_err(|message: String| error(&message))?;
+        let mut checked_claims = 0usize;
+        while let Some(current) = key {
+            if !current.as_str().starts_with("C") { break; }
+            let stored = claims::read_claim(&mut self.claims, &current[1usize..], &context.identity)?
+                .ok_or_else(|| error("unit registry lost a selected claim"))?;
+            let claim = stored.claim;
+            let stored_identity = claims::read_identity(&mut self.claims, &claim.name, &context.identity)?
+                .ok_or_else(|| error("unit registry lost an identity"))?;
+            if stored_identity != claim.interface { return Err(error("unit registry identity differs from its claim")); }
+            for (name, identity) in &claim.dependencies {
+                let Some(actual) = claims::read_identity(&mut self.claims, name, &context.identity)? else {
+                    return Err(error(&format!("unit {} is missing dependency {name}", claim.name)));
+                };
+                if actual != *identity {
+                    return Err(error(&format!("unit {} has a stale dependency interface {name}", claim.name)));
                 }
             }
+            claims::check_claim_imports(&mut self.claims, &mut self.provider, &claim, &context.identity)?;
+            checked_claims += 1usize;
+            key = self.claims.after(&current).map_err(|message: String| error(&message))?;
         }
-        for table in &self.tables {
-            if table.source_base > sources.len() || table.sources.len() > sources.len() - table.source_base {
+        if checked_claims != self.units || self.units.checked_mul(3usize) != Some(self.claims.len()) {
+            return Err(error("unit registry inventory changed"));
+        }
+        self.provider = None;
+        // Preserve arrival order independently of lexicographic claim order.
+        for ordinal in 0usize..self.units {
+            let bytes = self.claims.get(&claims::table_key(ordinal)).map_err(|message: String| error(&message))?
+                .ok_or_else(|| error("unit registry lost a source table"))?;
+            let table = claims::decode_table(&bytes, ordinal, &context.identity).ok_or_else(|| error("malformed stored unit table"))?;
+            if table.source_base > source_count || table.sources.len() > source_count - table.source_base {
                 return Err(error("unit source table does not fit the final image"));
             }
             for (index, path) in table.sources.iter().enumerate() {
-                if *path != sources[table.source_base + index] { return Err(error("unit source table changed after emission")); }
+                if *path != tables.source(table.source_base + index)? { return Err(error("unit source table changed after emission")); }
             }
             for message in &table.messages {
-                if !messages.contains(message) { return Err(error("unit trap message is absent from the final image")); }
+                if !tables.contains_message(message)? { return Err(error("unit trap message is absent from the final image")); }
             }
         }
-        let mut message_set: BTreeSet<String> = BTreeSet::new();
-        for message in messages { message_set.insert(message.clone()); }
-        let mut message_names = Vec::new();
-        let mut message_codes = BTreeMap::new();
-        for message in message_set {
-            message_codes.insert(message.clone(), message_names.len() + 16usize);
-            message_names.push(message);
-        }
+        tables.prepare()?;
         let program = entry.program();
         let selected = program.functions.iter().position(|function| function.name == entry_name)
             .ok_or_else(|| error(&format!("unknown unit entry {entry_name}")))?;
         if !entry.defined(selected) { return Err(error("entry must be defined by its selected unit")); }
         let selected_binding = entry.binding(selected);
         let binding = symbol(&selected_binding);
-        let (_, site) = resolve_binding(&self.claims, &selected_binding).ok_or_else(|| error("entry site has no implementation"))?;
-        let (support, data_offset) = support(runtime, program, selected, &binding, site, grants,
-            sources, &message_names, result_fd, self.flags, self.position)?;
-        self.append(&support, &support.bytes)?;
+        let (_, site) = claims::resolve_binding(&mut self.claims, &mut self.provider, &selected_binding, &context.identity)?
+            .ok_or_else(|| error("entry site has no implementation"))?;
+        let support = support_stream(runtime, program, selected, &binding, site, grants,
+            &mut tables, result_fd, self.flags, self.position, &mut self.output)?;
+        let data_offset = support.data_offset;
+        self.append(&support.code, &support.code.bytes)?;
+        if self.position != data_offset || support.end < data_offset {
+            return Err(error("streamed support code differs from its data boundary"));
+        }
+        // Only the support writer may export these already-written data labels.
+        // Ordinary object and assembler definition bounds remain unchanged.
+        for (name, position) in &support.data_definitions {
+            if *position < data_offset || *position > support.end || self.symbols.contains_key(name) {
+                return Err(error(&format!("duplicate or out-of-range unit data symbol {name}")));
+            }
+            self.symbols.insert(name.clone(), *position);
+        }
+        self.position = support.end;
         self.relocations.seek(0i64, 0u8).map_err(|errno: i64| io("rewind relocation spool", errno))?;
         let expected_hash = std::mem::replace(&mut self.relocation_hash, crate::sha256::Sha256::new()).finish();
         {
@@ -691,22 +741,24 @@ impl Linker {
             for _ in 0usize..self.record_count {
                 let kind = records.word()?;
                 if kind == 2usize {
-                    records.packet(self.maximum_packet_bytes, &self.claims, &self.symbols, &message_codes,
-                        &mut patches, data_offset, sources.len())?;
+                    records.packet(self.maximum_packet_bytes, &mut self.claims, &mut self.provider, &context.identity,
+                        &self.symbols, &mut tables, &mut patches, data_offset, source_count)?;
                 } else {
                     if kind > 1usize { return Err(error("unknown unit relocation kind")); }
                     let (position, name, site) = records.named_record(self.maximum_name_bytes)?;
                     relocation_position(kind, position, data_offset)?;
                     let target = if kind == 0usize {
-                        resolve_symbol(&self.claims, &self.symbols, &name)
+                        claims::resolve_symbol(&mut self.claims, &mut self.provider, &self.symbols, &name, &context.identity)?
                             .ok_or_else(|| Diagnostic::new(site, "E_UNIT_LINK", &format!("unresolved unit symbol {name}")))?
                     } else {
-                        *message_codes.get(&name).ok_or_else(|| error("unit message relocation is absent from final table"))?
+                        tables.code(&name)?.ok_or_else(|| error("unit message relocation is absent from final table"))?
                     };
                     apply_relocation(&mut patches, kind, position, target, site)?;
                 }
             }
             records.finish(expected_hash)?;
+            self.claims.finish().map_err(|message: String| error(&message))?;
+            tables.finish()?;
             patches.flush()?;
         }
         let header = platform::elf_header(self.position, data_offset)?;
@@ -804,8 +856,9 @@ impl<'a> Relocations<'a> {
         }
         Ok(names)
     }
-    fn packet(&mut self, maximum_packet_bytes: usize, claims: &BTreeMap<String, Claim>,
-        symbols: &BTreeMap<String, usize>, message_codes: &BTreeMap<String, usize>,
+    fn packet(&mut self, maximum_packet_bytes: usize, claims: &mut super::records::Store,
+        cached: &mut Option<claims::StoredClaim>, context: &str,
+        symbols: &BTreeMap<String, usize>, tables: &mut image_tables::Input<'_>,
         patches: &mut PatchWindow<'_>, data_offset: usize, source_count: usize,
     ) -> Result<(), Diagnostic> {
         let length = self.word()?;
@@ -815,6 +868,7 @@ impl<'a> Relocations<'a> {
         let mut remaining = length;
         let mut names = self.packet_names(&mut remaining, true)?;
         let mut messages = self.packet_names(&mut remaining, false)?;
+        prepare_names(&mut names, claims, cached, symbols, context)?;
         let count = self.packet_word(&mut remaining)?;
         if remaining % 48usize != 0usize || count != remaining / 48usize {
             return Err(error("invalid relocation packet rows"));
@@ -831,10 +885,10 @@ impl<'a> Relocations<'a> {
             if site.file >= source_count { return Err(error("invalid relocation reference site")); }
             let target = if kind == 0usize {
                 if ordinal >= names.len() { return Err(error("invalid relocation symbol ordinal")); }
-                names[ordinal].resolve(claims, symbols, message_codes, false, site)?
+                names[ordinal].resolve(tables, false, site)?
             } else {
                 if ordinal >= messages.len() { return Err(error("invalid relocation message ordinal")); }
-                messages[ordinal].resolve(claims, symbols, message_codes, true, site)?
+                messages[ordinal].resolve(tables, true, site)?
             };
             apply_relocation(patches, kind, position, target, site)?;
         }
@@ -860,19 +914,43 @@ struct RelocationName {
     value: Option<usize>,
 }
 
+
+fn prepare_names(names: &mut [RelocationName], claims: &mut super::records::Store,
+    cached: &mut Option<claims::StoredClaim>, symbols: &BTreeMap<String, usize>, context: &str,
+) -> Result<(), Diagnostic> {
+    let mut groups: BTreeMap<(String, String), Vec<usize>> = BTreeMap::new();
+    for (index, name) in names.iter().enumerate() {
+        if let Some(binding) = &name.binding {
+            let key = (binding.unit.clone(), binding.interface_identity.clone());
+            if !groups.contains_key(&key) { groups.insert(key.clone(), Vec::new()); }
+            groups.get_mut(&key).unwrap().push(index);
+        }
+    }
+    for (_, indices) in groups {
+        for index in indices {
+            let binding = names[index].binding.as_ref().unwrap();
+            let target = claims::resolve_binding(claims, cached, binding, context)?.map(|value: (usize, Span)| value.0);
+            names[index].value = target;
+        }
+    }
+    for index in 0usize..names.len() {
+        if names[index].binding.is_none() {
+            let value = symbols.get(&names[index].name).copied();
+            names[index].value = value;
+        }
+    }
+    Ok(())
+}
 impl RelocationName {
-    fn resolve(&mut self, claims: &BTreeMap<String, Claim>, symbols: &BTreeMap<String, usize>,
-        message_codes: &BTreeMap<String, usize>, message: bool, site: Span,
+    fn resolve(&mut self, tables: &mut image_tables::Input<'_>, message: bool, site: Span,
     ) -> Result<usize, Diagnostic> {
         if let Some(value) = self.value { return Ok(value); }
         let value = if message {
-            *message_codes.get(&self.name).ok_or_else(|| error("unit message relocation is absent from final table"))?
+            tables.code(&self.name)?.ok_or_else(|| error("unit message relocation is absent from final table"))?
         } else {
-            let target = match &self.binding {
-                Some(binding) => resolve_binding(claims, binding).map(|value: (usize, Span)| value.0),
-                None => symbols.get(&self.name).copied(),
-            };
-            target.ok_or_else(|| Diagnostic::new(site, "E_UNIT_LINK", &format!("unresolved unit symbol {}", self.name)))?
+            // A missing target is reported only by its first original row,
+            // including when an earlier unused table entry has no provider.
+            return Err(Diagnostic::new(site, "E_UNIT_LINK", &format!("unresolved unit symbol {}", self.name)));
         };
         self.value = Some(value);
         Ok(value)
@@ -952,10 +1030,29 @@ impl<'a> PatchWindow<'a> {
         Ok(())
     }
 }
-fn support(runtime: &Runtime, program: &Program, selected: usize, binding: &str, site: Span,
-    grants: &[ir::EntryGrant], sources: &[String], messages: &[String], result_fd: Option<u32>,
+
+struct SupportCode {
+    assembler: Assembler,
+    platform: platform::Platform,
+    names: Vec<(Label, String)>,
+    plan: entry::Plan,
+    literals: BTreeMap<Vec<u8>, Label>,
+    runtime_messages: Vec<String>,
+    flags: u64,
+    data_offset: usize,
+}
+
+struct SupportImage {
+    code: Linkable,
+    data_definitions: Vec<(String, usize)>,
+    data_offset: usize,
+    end: usize,
+}
+
+fn support_code(runtime: &Runtime, program: &Program, selected: usize, binding: &str, site: Span,
+    grants: &[ir::EntryGrant], source_count: usize, result_fd: Option<u32>,
     mut flags: u64, base: usize,
-) -> Result<(Linkable, usize), Diagnostic> {
+) -> Result<SupportCode, Diagnostic> {
     let function = &program.functions[selected];
     if !scalar_entry(&program.types[function.result].kind) || grants.len() != function.params {
         return Err(error("unit entry must return a scalar and have exactly its declared grants"));
@@ -975,7 +1072,7 @@ fn support(runtime: &Runtime, program: &Program, selected: usize, binding: &str,
     }
     let mut a = Assembler::at_base(base);
     let mut p = platform::Platform::new(&mut a);
-    p.source_base = sources.len();
+    p.source_base = source_count;
     p.stop_signals = flags & STOP != 0u64;
     p.listener_reuse = flags & LISTENER != 0u64;
     p.command_environment = flags & ENVIRONMENT != 0u64;
@@ -1018,11 +1115,12 @@ fn support(runtime: &Runtime, program: &Program, selected: usize, binding: &str,
     let mut emitted_drops = vec![false; drops.len()];
     let mut literals = BTreeMap::new();
     let runtime_messages = super::messages(runtime_program);
+    {
     let selection = Selection { program: runtime_program, layout: &layout, functions: &runtime_functions,
-        drops: &drops, runtime: runtime_labels, messages: &runtime_messages, source_base: sources.len() };
+        drops: &drops, runtime: runtime_labels, messages: &runtime_messages, source_base: source_count };
     for index in 0usize..runtime_functions.len() {
         if let Some(primitive) = runtime.primitive(index) {
-            let mut site = first_site(&runtime_program.functions[index]); site.file += sources.len();
+            let mut site = first_site(&runtime_program.functions[index]); site.file += source_count;
             emit_primitive(&mut a, p, runtime_functions[index], primitive, site);
         } else {
             emit_function(&mut a, p, &selection, index, &mut needed, &mut needed_drops, &mut literals)?;
@@ -1038,8 +1136,21 @@ fn support(runtime: &Runtime, program: &Program, selected: usize, binding: &str,
         }
         if !progress { break; }
     }
+    }
     let code_end = base.checked_add(a.bytes.len()).ok_or_else(|| error("unit runtime extent overflow"))?;
     let data_offset = code_end.checked_add(4095usize).ok_or_else(|| error("unit data alignment overflow"))? & !4095usize;
+    Ok(SupportCode { assembler: a, platform: p, names, plan, literals, runtime_messages, flags, data_offset })
+}
+// Preserve the vector encoder as an independent small-input byte oracle.
+fn support(runtime: &Runtime, program: &Program, selected: usize, binding: &str, site: Span,
+    grants: &[ir::EntryGrant], sources: &[String], messages: &[String], result_fd: Option<u32>,
+    flags: u64, base: usize,
+) -> Result<(Linkable, usize), Diagnostic> {
+    let code = support_code(runtime, program, selected, binding, site, grants, sources.len(), result_fd, flags, base)?;
+    let mut a = code.assembler; let p = code.platform; let names = code.names;
+    let plan = code.plan; let literals = code.literals; let runtime_messages = code.runtime_messages;
+    let flags = code.flags; let data_offset = code.data_offset;
+    let runtime_program = runtime.checked_program();
     let mut data = Vec::new();
     platform::data(&mut a, p, &mut data, data_offset, messages);
     platform::message_data(&mut a, p.runtime_messages, &mut data, data_offset, &runtime_messages);
@@ -1054,4 +1165,41 @@ fn support(runtime: &Runtime, program: &Program, selected: usize, binding: &str,
     while a.bytes.len() < data_offset - base { a.bytes.push(0u8); }
     a.bytes.extend_from_slice(&data);
     Ok((a.linkable(&names)?, data_offset))
+}
+
+
+fn support_stream(runtime: &Runtime, program: &Program, selected: usize, binding: &str, site: Span,
+    grants: &[ir::EntryGrant], tables: &mut image_tables::Input<'_>, result_fd: Option<u32>,
+    flags: u64, base: usize, output: &mut File,
+) -> Result<SupportImage, Diagnostic> {
+    let code = support_code(runtime, program, selected, binding, site, grants, tables.source_count(), result_fd, flags, base)?;
+    let mut a = code.assembler;
+    let data_offset = code.data_offset;
+    let end = table_data::support(output, &mut a, code.platform, data_offset, tables,
+        &runtime.checked_program().sources, &code.runtime_messages, code.flags, &code.plan, &code.literals)?;
+    while a.bytes.len() < data_offset - base { a.bytes.push(0u8); }
+    for label in 0usize..a.label_count() {
+        if let Some(position) = a.position(label) {
+            if position < base || position > end { return Err(error("support label is outside its written image extent")); }
+        }
+    }
+    let mut code_names = Vec::new();
+    let mut data_definitions = Vec::new();
+    for (label, name) in code.names {
+        let data = match a.position(label) { Some(position) => position >= data_offset, None => false };
+        if data {
+            let position = a.position(label).unwrap();
+            if position > end { return Err(error("support data label is outside its written extent")); }
+            data_definitions.push((name, position));
+        } else { code_names.push((label, name)); }
+    }
+    let code = a.linkable(&code_names)?;
+    Ok(SupportImage { code, data_definitions, data_offset, end })
+}
+
+pub(crate) fn table_contracts(world: &mut World, runtime: &Context<'_>, entry: &CheckedUnit) -> usize {
+    table_tests::run(world, runtime, entry)
+}
+pub(crate) fn identity_contracts(world: &mut World, context: &Context<'_>, unit: &CheckedUnit) -> usize {
+    claims::contracts(world, context, unit)
 }

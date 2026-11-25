@@ -525,3 +525,5 @@ pub fn normalize(source: &ast::Program, program: &mut ir::Program) -> Result<Vec
     for (index, name) in functions.into_iter().enumerate() { program.functions[index].name = name; }
     Ok(instances)
 }
+
+pub(crate) mod plan_disk;

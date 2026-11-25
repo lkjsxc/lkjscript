@@ -94,10 +94,10 @@ fn request_key(unit: &Definition, root: &str, options: &Options) -> String {
     store::push_word(&mut result, options.no_library as usize);
     sha256::hex_digest(&result)
 }
-fn dependencies(unit: &Definition, records: &BTreeMap<String, Record>) -> Result<Vec<Dependency>, String> {
+fn dependencies(unit: &Definition, records: &mut Records) -> Result<Vec<Dependency>, String> {
     let mut identities: BTreeMap<String, String> = BTreeMap::new();
     for name in &unit.dependencies {
-        let record = records.get(name).ok_or_else(|| problem("dependency has not been admitted"))?;
+        let record = records.get(name)?.ok_or_else(|| problem("dependency has not been admitted"))?;
         identities.insert(name.clone(), record.interface.clone());
         for dependency in &record.dependencies {
             if let Some(prior) = identities.insert(dependency.name.clone(), dependency.identity.clone()) {
@@ -110,7 +110,7 @@ fn dependencies(unit: &Definition, records: &BTreeMap<String, Record>) -> Result
     Ok(result)
 }
 fn source_dependencies(
-    unit: &Definition, expected: &[Dependency], records: &BTreeMap<String, Record>,
+    unit: &Definition, expected: &[Dependency], records: &mut Records,
 ) -> Result<(Vec<String>, String), String> {
     let mut allowed: BTreeSet<String> = BTreeSet::new();
     for dependency in expected { allowed.insert(dependency.name.clone()); }
@@ -118,7 +118,7 @@ fn source_dependencies(
     let mut pending = unit.dependencies.clone();
     while let Some(name) = pending.pop() {
         if !selected.insert(name.clone()) { continue; }
-        let record = records.get(&name).ok_or_else(|| problem("missing dependency source projection"))?;
+        let record = records.get(&name)?.ok_or_else(|| problem("missing dependency source projection"))?;
         let required = record.requires.as_ref().ok_or_else(|| problem("dependency projection has not been admitted"))?;
         for needed in required {
             if allowed.contains(needed) && !selected.contains(needed) { pending.push(needed.clone()); }
@@ -127,7 +127,7 @@ fn source_dependencies(
     let mut names = Vec::new();
     let mut bytes = Vec::new();
     for name in selected {
-        let record = records.get(&name).unwrap();
+        let record = records.get(&name)?.ok_or_else(|| problem("missing retained dependency record"))?;
         store::push_bytes(&mut bytes, name.as_bytes());
         store::push_bytes(&mut bytes, record.interface.as_bytes());
         store::push_bytes(&mut bytes, record.projection.as_bytes());
@@ -186,7 +186,7 @@ fn current_input(
 }
 
 fn reusable_inputs(
-    world: &mut World, snapshot: &mut inputs::Snapshot, bytes: &[u8],
+    world: &mut World, snapshot: &mut inputs_disk::Snapshot, bytes: &[u8],
     secret: &Option<[u8; 32]>,
 ) -> bool {
     let Some(expected) = input_expectations(bytes) else { return false; };
@@ -196,11 +196,11 @@ fn reusable_inputs(
 }
 
 fn final_inputs_match(
-    world: &mut World, snapshot: &inputs::Snapshot, secret: &Option<[u8; 32]>,
-) -> bool {
+    world: &mut World, snapshot: &mut inputs_disk::Snapshot, secret: &Option<[u8; 32]>,
+) -> Result<bool, String> {
     snapshot.verify(&mut |root: &str, path: &str| -> Option<Option<String>> {
         current_input(world, root, path, secret)
-    })
+    }).map_err(|detail: String| problem(&detail))
 }
 fn type_children(value: &ir::Type, pending: &mut Vec<usize>) {
     match &value.kind {
@@ -286,18 +286,24 @@ fn exported_types(source: &ast::Program, program: &ir::Program, name: &str) -> V
     for (index, value) in program.types.iter().enumerate() { if names.contains(&value.name) { result.push(index); } }
     result
 }
-fn display_path(plan: &Plan, root: &str, path: &str, manifest: &str) -> String {
-    if path == "$units/root.lkj" { return manifest.to_string(); }
-    for unit in &plan.units {
-        if let Some(path) = crate::units::physical(unit, path) {
-            return if root == "." { path } else { format!("{root}/{path}") };
+fn display_path(plan: &mut crate::units::plan_disk::Plan, root: &str, path: &str, manifest: &str) -> Result<String, String> {
+    if path == "$units/root.lkj" { return Ok(manifest.to_string()); }
+    let prefix = "$units/";
+    if path.starts_with(prefix) {
+        let suffix = &path[prefix.len()..];
+        if let Some(at) = suffix.find('/') {
+            if let Some(unit) = plan.get(&suffix[..at])? {
+                if let Some(physical) = crate::units::physical(&unit, path) {
+                    return Ok(if root == "." { physical } else { format!("{root}/{physical}") });
+                }
+            }
         }
     }
-    path.to_string()
+    Ok(path.to_string())
 }
 fn admit(
-    world: &mut World, unit: &Definition, plan: &Plan, root: &str, manifest: &str,
-    expected: &[Dependency], source_names: &[String], source_identity: &str, records: &BTreeMap<String, Record>,
+    world: &mut World, unit: &Definition, plan: &mut crate::units::plan_disk::Plan, root: &str, manifest: &str,
+    expected: &[Dependency], source_names: &[String], source_identity: &str, records: &mut Records,
     options: &Options, stats: &mut Stats, memo: &mut Memo,
 ) -> Result<(CheckedUnit, Record, Projection), String> {
     let mut interfaces = Vec::new();
@@ -305,11 +311,11 @@ fn admit(
     {
         let store = memo.store.as_mut().ok_or_else(|| problem("unit checking requires --store and --store-key"))?;
         for name in source_names {
-            let record = records.get(name).ok_or_else(|| problem("missing dependency record"))?;
-            let interface = interface(store, record).ok_or_else(|| problem("dependency interface was evicted or failed authentication; increase --store-bytes or retry"))?;
+            let record = records.get(name)?.ok_or_else(|| problem("missing dependency record"))?;
+            let interface = interface(store, &record).ok_or_else(|| problem("dependency interface was evicted or failed authentication; increase --store-bytes or retry"))?;
             if interface.identity() != record.interface.as_str() { return Err(problem("dependency interface changed during checking")); }
             interfaces.push(interface);
-            projections.push(projection(store, record).ok_or_else(|| problem("dependency projection was evicted or failed authentication; increase --store-bytes or retry"))?);
+            projections.push(projection(store, &record).ok_or_else(|| problem("dependency projection was evicted or failed authentication; increase --store-bytes or retry"))?);
         }
     }
     let mut directory = world.directory(root).map_err(|errno: i64| io(root, "open unit source root", errno))?;
@@ -373,7 +379,7 @@ fn admit(
     let types = exported_types(&source, &program, &unit.name);
     let imported = imports(&mut program, interfaces, &projections)?;
     for index in 0usize..program.sources.len() {
-        program.sources[index] = display_path(plan, root, &program.sources[index], manifest);
+        program.sources[index] = display_path(plan, root, &program.sources[index], manifest)?;
     }
     let unit = crate::check::units::check_unit_with_exports(&unit.name, &input, program, &imported, &exports, &types)
         .map_err(|problems: Vec<ast::Diagnostic>| -> String { ir_failure(manifest, problems) })?;
@@ -437,10 +443,10 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
     let root = options.source_directory.as_ref().map_or(".", |value| value.as_str()).to_string();
     if !crate::units::beneath(&options.path) { return Err(problem("unit manifest must be a relative path beneath --source-dir")); }
     let manifest_path = if root == "." { options.path.clone() } else { format!("{root}/{}", options.path) };
-    let manifest_bytes = read_path(world, &manifest_path)?;
-    memo.protect_source(&manifest_bytes)?;
-    let manifest_digest = sha256::hex_digest(&manifest_bytes);
-    let plan = crate::units::parse(&text(manifest_bytes, &manifest_path)?)?;
+    let manifest = open_manifest(world, &manifest_path)?;
+    let plan_file = scratch_file(world, options, "plan")?;
+    let mut plan = crate::units::plan_disk::Plan::open(manifest, plan_file, &manifest_path, &private_source_digest)?;
+    let manifest_fingerprint = plan.fingerprint();
     let build = options.command == "build-units";
     let runtime: Option<runtime::Runtime> = if build { Some(load_runtime(world, &options.runtime_source)?) } else { None };
     let context: Option<crate::native::units::Context<'_>> = match runtime.as_ref() {
@@ -451,24 +457,33 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
     let mut linker: Option<crate::native::units::Linker> = if build {
         let (pending, output) = Publication::new(world, &output_path)?;
         publication = Some(pending);
-        let relocations = world.temporary_file().map_err(|errno: i64| io("unit relocations", "create", errno))?;
-        let linked = match crate::native::units::Linker::new(output, relocations) {
+        let relocations = scratch_file(world, options, "relocations")?;
+        let bindings = scratch_file(world, options, "bindings")?;
+        let linked = match crate::native::units::Linker::new(output, relocations, bindings) {
             Ok(linked) => linked,
             Err(error) => return Err(report(&manifest_path, error)),
         };
         Some(linked)
     } else { None };
-    let mut records: BTreeMap<String, Record> = BTreeMap::new();
-    let mut snapshot = inputs::Snapshot::new();
-    let mut sources = Vec::new();
-    let mut messages: BTreeSet<String> = BTreeSet::new();
+    let record_file = scratch_file(world, options, "records")?;
+    let input_file = scratch_file(world, options, "inputs")?;
+    let mut records = Records::new(record_file)?;
+    let mut snapshot = inputs_disk::Snapshot::new(input_file).map_err(|detail: String| problem(&detail))?;
+    // Checking needs no final-image tables or table scratch capability.
+    let mut tables: Option<crate::native::units::ImageTables> = if build {
+        let file = scratch_file(world, options, "tables")?;
+        match crate::native::units::ImageTables::new(file) {
+            Ok(value) => Some(value),
+            Err(error) => return Err(report(&manifest_path, error)),
+        }
+    } else { None };
     let mut reused = 0usize;
     let mut checked = 0usize;
     let mut emitted = 0usize;
-    for definition in &plan.units {
-        let expected = dependencies(definition, &records)?;
-        let (source_names, source_identity) = source_dependencies(definition, &expected, &records)?;
-        let request = request_key(definition, &root, options);
+    while let Some(definition) = plan.next()? {
+        let expected = dependencies(&definition, &mut records)?;
+        let (source_names, source_identity) = source_dependencies(&definition, &expected, &mut records)?;
+        let request = request_key(&definition, &root, options);
         let cached = memo.store.as_mut().unwrap().get(RECORDS, &request)
             .and_then(|bytes: Vec<u8>| Record::decode(&bytes, &definition.name));
         let mut ready: Option<(Interface, Record)> = None;
@@ -486,7 +501,7 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
                 }
             }
         }
-        let source_base = sources.len();
+        let source_base = match tables.as_ref() { Some(value) => value.source_count(), None => 0usize };
         let mut object: Option<crate::native::units::Object> = None;
         if let Some((interface, record)) = &ready {
             if build {
@@ -503,7 +518,7 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
         let record = match ready {
             Some((_, record)) => { reused += 1usize; record }
             None => {
-                let (unit, record, _) = admit(world, definition, &plan, &root, &manifest_path, &expected, &source_names, &source_identity, &records, options, stats, memo)?;
+                let (unit, record, _) = admit(world, &definition, &mut plan, &root, &manifest_path, &expected, &source_names, &source_identity, &mut records, options, stats, memo)?;
                 checked += 1usize;
                 if build {
                     let context = context.as_ref().unwrap();
@@ -524,15 +539,18 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
         // admit; the cached observation never supplies a fresh input identity.
         let required = input_expectations(&record.inputs)
             .ok_or_else(|| problem("malformed selected unit input record"))?;
-        if !snapshot.require(&required) {
+        if !snapshot.require(&required).map_err(|detail: String| problem(&detail))? {
             return Err(problem("conflicting source snapshots across units; linked output was not published"));
         }
-        for path in &record.sources { sources.push(path.clone()); }
-        for message in &record.messages { messages.insert(message.clone()); }
+        if let Some(tables) = tables.as_mut() {
+            if let Err(error) = tables.push(&record.sources, &record.messages) { return Err(report(&manifest_path, error)); }
+        }
         if let Some(object) = object {
             if let Err(error) = linker.as_mut().unwrap().push(object) { return Err(report(&manifest_path, error)); }
         }
-        records.insert(definition.name.clone(), record);
+        maximum(stats, "unit_input_cached_entries", snapshot.cached_entries());
+        maximum(stats, "units_max_dependency_identities", record.dependencies.len());
+        records.insert(&record)?;
         stats.mark("unit_store_link")?;
     }
     stats.count("units_checked", checked);
@@ -540,16 +558,15 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
     stats.count("units_emitted", emitted);
     let mut linked_image: Option<File> = None;
     if build {
-        let owner = plan.entry.as_str().split("::").next().unwrap_or("").to_string();
-        let record = records.get(&owner).ok_or_else(|| problem("entry unit was not checked"))?;
-        let interface = interface(memo.store.as_mut().unwrap(), record)
+        let owner = plan.entry().split("::").next().unwrap_or("").to_string();
+        let record = records.get(&owner)?.ok_or_else(|| problem("entry unit was not checked"))?;
+        let interface = interface(memo.store.as_mut().unwrap(), &record)
             .ok_or_else(|| problem("entry interface was evicted before linking; increase --store-bytes"))?;
-        let selected = interface.program().functions.iter().position(|function| function.name == plan.entry)
+        let selected = interface.program().functions.iter().position(|function| function.name.as_str() == plan.entry())
             .ok_or_else(|| problem("ENTRY must name an exported nongeneric free function"))?;
         let grants = crate::entry_grants::prepare(interface.program(), selected, &options.grants)?;
-        let mut message_list = Vec::new();
-        for message in messages { message_list.push(message); }
-        let (output, bytes) = match linker.unwrap().finish(context.as_ref().unwrap(), &interface, &plan.entry, &grants, &sources, &message_list, None) {
+        let (output, bytes) = match linker.unwrap().finish_with_tables(context.as_ref().unwrap(), &interface,
+            plan.entry(), &grants, tables.unwrap(), None) {
             Ok(value) => value,
             Err(error) => return Err(report(&manifest_path, error)),
         };
@@ -558,17 +575,56 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
     }
     // Publication is bound to one coherent source snapshot. No stored interface
     // can silently stand for a source file changed since its unit was visited.
-    if !final_inputs_match(world, &snapshot, &private_source_digest) { return Err(problem("source changed after unit checking; linked output was not published")); }
+    if !final_inputs_match(world, &mut snapshot, &private_source_digest)? { return Err(problem("source changed after unit checking; linked output was not published")); }
     stats.count("unit_input_reads", snapshot.reads());
     stats.count("unit_input_reused", snapshot.reused());
     stats.count("unit_input_final", snapshot.required());
-    if sha256::hex_digest(&read_path(world, &manifest_path)?) != manifest_digest {
+    let total = records.len();
+    if total != plan.len() { return Err(problem("retained unit count differs from the manifest schedule")); }
+    snapshot.finish().map_err(|detail: String| problem(&detail))?;
+    records.finish()?;
+    plan.finish()?;
+    let manifest = open_manifest(world, &manifest_path)?;
+    if crate::units::plan_disk::fingerprint(manifest, &manifest_path, &private_source_digest)? != manifest_fingerprint {
         return Err(problem("unit manifest changed during checking"));
     }
     if let Some(output) = linked_image {
         publication.as_mut().unwrap().finish(output)?;
         stats.mark("unit_publish")?;
     }
-    world.stdout().write(format!("LKJSCRIPT_UNITS checked={checked} reused={reused} emitted={emitted} total={}\n", records.len()).as_bytes());
+    world.stdout().write(format!("LKJSCRIPT_UNITS checked={checked} reused={reused} emitted={emitted} total={total}\n").as_bytes());
     Ok(0u8)
+}
+
+fn scratch_file(world: &mut World, options: &Options, kind: &str) -> Result<File, String> {
+    let root = options.store_directory.as_ref()
+        .ok_or_else(|| problem("unit scratch files require the selected store directory"))?;
+    let mut directory = world.directory(root.as_str())
+        .map_err(|errno: i64| io(root.as_str(), "open scratch directory", errno))?;
+    let mut clock = world.clock();
+    let stamp = clock.nanoseconds().map_err(|errno: i64| io("unit scratch clock", "read", errno))?;
+    let name = format!(".lkjscript-unit-{stamp}-{kind}.scratch");
+    let path = format!("{root}/{name}");
+    let file = match directory.create_private(&name) {
+        Ok(file) => file,
+        Err(errno) => return Err(io(&path, "create private scratch file", errno)),
+    };
+    match directory.remove(&name) {
+        Ok(()) => Ok(file),
+        Err(errno) => Err(io(&path, "unlink scratch file", errno)),
+    }
+}
+
+
+mod inputs_disk;
+
+mod retained;
+
+use retained::Records;
+
+fn open_manifest(world: &mut World, path: &str) -> Result<File, String> {
+    let (parent, name) = location(path);
+    let mut directory = world.directory(&parent)
+        .map_err(|errno: i64| io(&parent, "open directory", errno))?;
+    directory.open(&name).map_err(|errno: i64| io(path, "open", errno))
 }

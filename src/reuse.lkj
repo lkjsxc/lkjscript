@@ -317,18 +317,23 @@ impl VerifiedPayload {
 
 /// A key is separate trusted authority; it must never reside in the store or a
 /// source Directory granted to an untrusted producer. Both identities are 32 bytes.
+
+pub(crate) fn seal_header(
+    producer: &[u8], secret: &[u8], namespace: &str, key: &str, length: usize, digest: &[u8],
+) -> Vec<u8> {
+    if producer.len() != 32usize || secret.len() != 32usize || digest.len() != 32usize { return Vec::new(); }
+    let tag = root_tag(producer, secret, namespace, key, length, digest);
+    let mut bytes = magic().to_vec();
+    for index in 0usize..8usize { bytes.push(((length as u64) >> (index * 8usize)) as u8); }
+    bytes.extend_from_slice(digest); bytes.extend_from_slice(&tag);
+    bytes
+}
 pub fn seal(
     producer: &[u8], secret: &[u8], namespace: &str, key: &str, payload: &[u8],
 ) -> Vec<u8> {
     if producer.len() != 32 || secret.len() != 32 { return Vec::new(); }
     let digest = sha256::digest(payload);
-    let tag = root_tag(producer, secret, namespace, key, payload.len(), &digest);
-    let mut bytes = magic().to_vec();
-    for index in 0..8 {
-        bytes.push(((payload.len() as u64) >> (index * 8)) as u8);
-    }
-    bytes.extend_from_slice(&digest);
-    bytes.extend_from_slice(&tag);
+    let mut bytes = seal_header(producer, secret, namespace, key, payload.len(), &digest);
     bytes.extend_from_slice(payload);
     bytes
 }

@@ -1,0 +1,159 @@
+//! Literal-only manifest parser. Rows stay in the authenticated store until the
+//! later validation phase so declaration order cannot change validation order.
+use super::*;
+
+const ITEMS: &str = "manifest accepts only UNITS, DEPENDS and ENTRY literal constants";
+const LIST_TYPE: &str = "UNITS and DEPENDS must have type &[&str]";
+const LIST_VALUE: &str = "UNITS and DEPENDS must be arrays of string literals";
+const ENTRY_TYPE: &str = "ENTRY must occur once with type &str";
+const ENTRY_VALUE: &str = "ENTRY must be a string literal";
+const ATTRIBUTES: &str = "unit manifests are unconditional literal constants; attributes and cfg are unsupported; select a separate manifest for each configuration";
+
+pub(super) struct Parsed {
+    pub(super) units: usize,
+    pub(super) dependencies: usize,
+    pub(super) entry: String,
+}
+struct Parser {
+    cursor: tokens::Cursor,
+    pending: Option<tokens::Token>,
+    ended: bool,
+}
+impl Parser {
+    fn new(tape: tokens::Tape) -> Self {
+        Self { cursor: tokens::Cursor::new(tape), pending: None, ended: false }
+    }
+    fn fill(&mut self, data: &mut records::Store) -> Result<(), String> {
+        if self.pending.is_none() && !self.ended {
+            self.pending = self.cursor.next(data)?;
+            if let Some(token) = &self.pending {
+                if token.kind == 6u8 && token.text == "#" { return Err(issue(ATTRIBUTES)); }
+            } else { self.ended = true; }
+        }
+        Ok(())
+    }
+    fn take(&mut self, data: &mut records::Store) -> Result<Option<tokens::Token>, String> {
+        self.fill(data)?; Ok(std::mem::replace(&mut self.pending, None))
+    }
+    fn is(&mut self, data: &mut records::Store, kind: u8, text: &str) -> Result<bool, String> {
+        self.fill(data)?;
+        Ok(self.pending.as_ref().is_some_and(|token| token.kind == kind && token.text.as_str() == text))
+    }
+    fn accept(&mut self, data: &mut records::Store, kind: u8, text: &str) -> Result<bool, String> {
+        if !self.is(data, kind, text)? { return Ok(false); }
+        self.take(data)?; Ok(true)
+    }
+    fn require(&mut self, data: &mut records::Store, kind: u8, text: &str, message: &str) -> Result<(), String> {
+        if self.accept(data, kind, text)? { Ok(()) } else { Err(issue(message)) }
+    }
+    fn groups(&mut self, data: &mut records::Store) -> Result<usize, String> {
+        let mut count = 0usize;
+        while self.accept(data, 6u8, "(")? { count = next_count(count)?; }
+        Ok(count)
+    }
+    fn close_groups(&mut self, data: &mut records::Store, count: usize, message: &str) -> Result<(), String> {
+        for _ in 0usize..count { self.require(data, 6u8, ")", message)?; }
+        Ok(())
+    }
+    fn lifetime(&mut self, data: &mut records::Store) -> Result<(), String> {
+        self.fill(data)?;
+        let present = { self.pending.as_ref().is_some_and(|token| token.kind == 5u8) };
+        if present { self.take(data)?; }
+        Ok(())
+    }
+    fn string_type(&mut self, data: &mut records::Store, message: &str) -> Result<(), String> {
+        let outer = self.groups(data)?;
+        self.require(data, 6u8, "&", message)?; self.lifetime(data)?;
+        let inner = self.groups(data)?;
+        self.require(data, 0u8, "str", message)?;
+        self.close_groups(data, inner, message)?; self.close_groups(data, outer, message)
+    }
+    fn list_type(&mut self, data: &mut records::Store) -> Result<(), String> {
+        let outer = self.groups(data)?;
+        self.require(data, 6u8, "&", LIST_TYPE)?; self.lifetime(data)?;
+        let inner = self.groups(data)?;
+        self.require(data, 6u8, "[", LIST_TYPE)?;
+        self.string_type(data, LIST_TYPE)?;
+        self.require(data, 6u8, "]", LIST_TYPE)?;
+        self.close_groups(data, inner, LIST_TYPE)?; self.close_groups(data, outer, LIST_TYPE)
+    }
+    fn literal(&mut self, data: &mut records::Store, message: &str) -> Result<String, String> {
+        let groups = self.groups(data)?;
+        let token = self.take(data)?.ok_or_else(|| issue(message))?;
+        if token.kind != 2u8 { return Err(issue(message)); }
+        self.close_groups(data, groups, message)?; Ok(token.text)
+    }
+    fn list(&mut self, data: &mut records::Store, prefix: &str, kind: usize, retain: bool) -> Result<usize, String> {
+        let outer = self.groups(data)?;
+        self.require(data, 6u8, "&", LIST_VALUE)?;
+        let inner = self.groups(data)?;
+        self.require(data, 6u8, "[", LIST_VALUE)?;
+        let mut count = 0usize;
+        if !self.accept(data, 6u8, "]")? {
+            loop {
+                let value = self.literal(data, LIST_VALUE)?;
+                if retain {
+                    data.insert(&ordinal_key(prefix, count), &row_bytes(kind, count, &value))
+                        .map_err(|message: String| record_error(message))?;
+                }
+                count = next_count(count)?;
+                if self.accept(data, 6u8, "]")? { break; }
+                self.require(data, 6u8, ",", LIST_VALUE)?;
+                if self.accept(data, 6u8, "]")? { break; }
+            }
+        }
+        self.close_groups(data, inner, LIST_VALUE)?; self.close_groups(data, outer, LIST_VALUE)?;
+        Ok(count)
+    }
+    fn visibility(&mut self, data: &mut records::Store) -> Result<(), String> {
+        if !self.accept(data, 0u8, "pub")? { return Ok(()); }
+        if !self.accept(data, 6u8, "(")? { return Ok(()); }
+        let token = self.take(data)?.ok_or_else(|| issue(ITEMS))?;
+        if token.kind != 0u8 { return Err(issue(ITEMS)); }
+        if token.text == "in" {
+            let part = self.take(data)?.ok_or_else(|| issue(ITEMS))?;
+            if part.kind != 0u8 || !matches!(part.text.as_str(), "crate" | "self") {
+                return Err(issue("unit manifest visibility must name the root crate; use pub(crate)"));
+            }
+        } else if !matches!(token.text.as_str(), "crate" | "self") {
+            return Err(issue("unit manifest visibility must name the root crate; use pub(crate)"));
+        }
+        self.require(data, 6u8, ")", ITEMS)
+    }
+}
+pub(super) fn parse(data: &mut records::Store, tape: tokens::Tape) -> Result<Parsed, String> {
+    let mut parser = Parser::new(tape);
+    let mut units = None; let mut dependencies = None; let mut entry = None;
+    loop {
+        parser.fill(data)?; if parser.ended { break; }
+        if parser.accept(data, 6u8, ";")? { continue; }
+        parser.visibility(data)?;
+        parser.require(data, 0u8, "const", ITEMS)?;
+        let name = parser.take(data)?.ok_or_else(|| issue(ITEMS))?;
+        if name.kind != 0u8 { return Err(issue(ITEMS)); }
+        match name.text.as_str() {
+            "UNITS" | "DEPENDS" => {
+                parser.require(data, 6u8, ":", LIST_TYPE)?; parser.list_type(data)?;
+                parser.require(data, 6u8, "=", LIST_VALUE)?;
+                let unit = name.text == "UNITS";
+                let duplicate = if unit { units.is_some() } else { dependencies.is_some() };
+                let count = parser.list(data, if unit { "U" } else { "V" }, if unit { 0usize } else { 1usize }, !duplicate)?;
+                parser.require(data, 6u8, ";", ITEMS)?;
+                if duplicate { return Err(issue(if unit { "duplicate UNITS" } else { "duplicate DEPENDS" })); }
+                if unit { units = Some(count); } else { dependencies = Some(count); }
+            }
+            "ENTRY" => {
+                if entry.is_some() { return Err(issue(ENTRY_TYPE)); }
+                parser.require(data, 6u8, ":", ENTRY_TYPE)?; parser.string_type(data, ENTRY_TYPE)?;
+                parser.require(data, 6u8, "=", ENTRY_VALUE)?;
+                entry = Some(parser.literal(data, ENTRY_VALUE)?);
+                parser.require(data, 6u8, ";", ITEMS)?;
+            }
+            _ => return Err(issue(&format!("unknown manifest constant {}", name.text))),
+        }
+    }
+    let units = units.ok_or_else(|| issue("missing UNITS: &[&str]"))?;
+    let dependencies = dependencies.ok_or_else(|| issue("missing DEPENDS: &[&str]"))?;
+    let entry = entry.ok_or_else(|| issue("missing ENTRY: &str"))?;
+    Ok(Parsed { units, dependencies, entry })
+}

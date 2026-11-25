@@ -64,7 +64,7 @@ fn execute(world: &mut World, mut file: File) -> i64 {
 }
 fn linked(world: &mut World, runtime: &runtime::Runtime, interface: &Interface,
     object: native::units::Object, sources: &[String], messages: &[String]) -> i64 {
-    let mut linker = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();
+    let mut linker = native::units::Linker::new(world.temporary_file().unwrap(), world.temporary_file().unwrap(), world.temporary_file().unwrap()).unwrap();
     linker.push(object).unwrap();
     let grants: Vec<ir::EntryGrant> = Vec::new();
     let context = native::units::Context::new(runtime);

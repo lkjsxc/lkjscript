@@ -84,7 +84,13 @@ fn compress(state: &mut [u32; 8], block: &[u8]) {
     state[7] = state[7].wrapping_add(h);
 }
 
+
+
 impl Sha256 {
+    /// Copy only the fixed hash state, for nondestructive writer verification.
+    pub fn snapshot(&self) -> Self {
+        Self { state: self.state, block: self.block, used: self.used, bytes: self.bytes }
+    }
     pub fn new() -> Self {
         Sha256 {
             state: [
@@ -156,7 +162,6 @@ impl Sha256 {
         result
     }
 }
-
 pub fn digest(input: &[u8]) -> [u8; 32] {
     let mut hash = Sha256::new();
     hash.update(input);

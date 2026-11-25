@@ -1,0 +1,194 @@
+//! One raw lexeme at a time uses the existing lexer; token chunks stay on disk.
+use super::*;
+const MAGIC: &str = "LKJUNITTOKENS1\n";
+
+#[derive(Clone, Copy)]
+pub(super) struct Tape { pub(super) chunks: usize, pub(super) tokens: usize }
+pub(super) struct Token { pub(super) kind: u8, pub(super) text: String }
+
+fn ident(byte: u8) -> bool { byte.is_ascii_alphabetic() || byte == b'_' }
+fn continuation(byte: u8) -> bool { ident(byte) || byte.is_ascii_digit() }
+fn append(input: &mut input::Bytes, data: &mut records::Store, out: &mut Vec<u8>) -> Result<Option<u8>, String> {
+    let value = input.take(data)?; if let Some(byte) = value { out.push(byte); } Ok(value)
+}
+fn quoted(input: &mut input::Bytes, data: &mut records::Store, out: &mut Vec<u8>, quote: u8) -> Result<(), String> {
+    append(input, data, out)?;
+    while let Some(byte) = append(input, data, out)? {
+        if byte == quote { break; }
+        if byte != b'\\' { continue; }
+        let Some(escape) = append(input, data, out)? else { break; };
+        if escape == b'u' && input.peek(data, 0usize)? == Some(b'{') {
+            append(input, data, out)?;
+            while let Some(byte) = append(input, data, out)? { if byte == b'}' { break; } }
+        } else if escape == b'x' {
+            append(input, data, out)?; append(input, data, out)?;
+        }
+    }
+    Ok(())
+}
+fn raw_string(input: &mut input::Bytes, data: &mut records::Store, out: &mut Vec<u8>) -> Result<(), String> {
+    append(input, data, out)?; let mut hashes = 0usize;
+    while input.peek(data, 0usize)? == Some(b'#') {
+        append(input, data, out)?; hashes = next_count(hashes)?;
+    }
+    if input.peek(data, 0usize)? != Some(b'"') { return Ok(()); }
+    append(input, data, out)?;
+    while let Some(byte) = append(input, data, out)? {
+        if byte != b'"' { continue; }
+        let mut matched = 0usize;
+        while matched < hashes && input.peek(data, 0usize)? == Some(b'#') {
+            append(input, data, out)?; matched += 1usize;
+        }
+        if matched == hashes { break; }
+    }
+    Ok(())
+}
+fn next_lexeme(input: &mut input::Bytes, data: &mut records::Store) -> Result<Option<Vec<u8>>, String> {
+    loop {
+        let Some(byte) = input.peek(data, 0usize)? else {
+            if !input.done() { return Err(issue("retained manifest input ended early")); }
+            return Ok(None);
+        };
+        if byte.is_ascii_whitespace() { input.take(data)?; continue; }
+        if byte == b'/' && input.peek(data, 1usize)? == Some(b'/') {
+            while let Some(byte) = input.take(data)? { if byte == b'\n' { break; } }
+            continue;
+        }
+        if byte == b'/' && input.peek(data, 1usize)? == Some(b'*') {
+            input.take(data)?; input.take(data)?; let mut depth = 1usize;
+            while depth != 0usize {
+                let Some(current) = input.take(data)? else { return Err(issue("unterminated block comment")); };
+                if current == b'/' && input.peek(data, 0usize)? == Some(b'*') {
+                    input.take(data)?; depth = next_count(depth)?;
+                } else if current == b'*' && input.peek(data, 0usize)? == Some(b'/') {
+                    input.take(data)?; depth -= 1usize;
+                }
+            }
+            continue;
+        }
+        let mut out = Vec::new();
+        if byte == b'b' && input.peek(data, 1usize)? == Some(b'r')
+            && matches!(input.peek(data, 2usize)?, Some(b'"') | Some(b'#')) {
+            // The shared lexer diagnoses raw byte strings before scanning them.
+            append(input, data, &mut out)?; append(input, data, &mut out)?; append(input, data, &mut out)?;
+        } else if byte == b'b' && matches!(input.peek(data, 1usize)?, Some(b'"') | Some(b'\'')) {
+            append(input, data, &mut out)?;
+            let quote = input.peek(data, 0usize)?.unwrap(); quoted(input, data, &mut out, quote)?;
+        } else if byte == b'r' && matches!(input.peek(data, 1usize)?, Some(b'"') | Some(b'#')) {
+            raw_string(input, data, &mut out)?;
+        } else if byte == b'"' { quoted(input, data, &mut out, b'"')?; }
+        else if byte == b'\'' {
+            if input.peek(data, 1usize)?.is_some_and(|value: u8| continuation(value)) {
+                append(input, data, &mut out)?;
+                while input.peek(data, 0usize)?.is_some_and(|value: u8| continuation(value)) {
+                    append(input, data, &mut out)?;
+                }
+                if input.peek(data, 0usize)? == Some(b'\'') { append(input, data, &mut out)?; }
+            } else { quoted(input, data, &mut out, b'\'')?; }
+        } else if ident(byte) {
+            append(input, data, &mut out)?;
+            while input.peek(data, 0usize)?.is_some_and(|value: u8| continuation(value)) {
+                append(input, data, &mut out)?;
+            }
+        } else if byte.is_ascii_digit() {
+            append(input, data, &mut out)?;
+            while let Some(current) = input.peek(data, 0usize)? {
+                let decimal = current == b'.' && input.peek(data, 1usize)?.is_some_and(|value: u8| value.is_ascii_digit());
+                let exponent = (current == b'+' || current == b'-')
+                    && matches!(out.last().copied(), Some(b'e') | Some(b'E'))
+                    && out[..out.len() - 1usize].iter().all(|value| value.is_ascii_digit() || *value == b'_' || *value == b'.');
+                if continuation(current) || decimal || exponent { append(input, data, &mut out)?; } else { break; }
+            }
+        } else {
+            append(input, data, &mut out)?;
+            if byte >= 128u8 {
+                let width = if byte < 224u8 { 2usize } else if byte < 240u8 { 3usize } else { 4usize };
+                for _ in 1usize..width { append(input, data, &mut out)?; }
+            } else {
+                let second = input.peek(data, 0usize)?; let third = input.peek(data, 1usize)?;
+                let triple = (byte == b'<' && second == Some(b'<') && third == Some(b'='))
+                    || (byte == b'>' && second == Some(b'>') && third == Some(b'='))
+                    || (byte == b'.' && second == Some(b'.') && third == Some(b'='));
+                let pair = (byte == b':' && second == Some(b':')) || (byte == b'-' && second == Some(b'>'))
+                    || (byte == b'=' && second == Some(b'>'))
+                    || (matches!(byte, b'=' | b'!' | b'<' | b'>' | b'+' | b'-' | b'*' | b'/' | b'%' | b'&' | b'|' | b'^') && second == Some(b'='))
+                    || (matches!(byte, b'&' | b'|' | b'<' | b'>' | b'.') && second == Some(byte));
+                if pair || triple { append(input, data, &mut out)?; }
+                if triple { append(input, data, &mut out)?; }
+            }
+        }
+        return Ok(Some(out));
+    }
+}
+fn flush(data: &mut records::Store, buffer: &mut Vec<u8>, count: &mut usize, tape: &mut Tape) -> Result<(), String> {
+    if *count == 0usize { return Ok(()); }
+    let mut bytes = MAGIC.as_bytes().to_vec();
+    store::push_word(&mut bytes, tape.chunks); store::push_word(&mut bytes, tape.tokens - *count);
+    store::push_word(&mut bytes, *count); bytes.extend_from_slice(buffer);
+    data.insert(&ordinal_key("T", tape.chunks), &bytes).map_err(|message: String| record_error(message))?;
+    tape.chunks = next_count(tape.chunks)?; *buffer = Vec::new(); *count = 0usize; Ok(())
+}
+pub(super) fn produce(data: &mut records::Store, captured: input::Captured) -> Result<Tape, String> {
+    let mut input = input::Bytes::new(captured); let mut buffer = Vec::new(); let mut count = 0usize;
+    let mut tape = Tape { chunks: 0usize, tokens: 0usize };
+    while let Some(raw) = next_lexeme(&mut input, data)? {
+        let raw = String::from_utf8(raw).map_err(|_| issue("retained manifest lexeme is not UTF-8"))?;
+        let mut parsed = syntax::semantic_tokens(&raw).map_err(|problem: crate::ast::Diagnostic| issue(&problem.message))?;
+        if parsed.len() != 1usize { return Err(issue("manifest scanner did not isolate one token")); }
+        let token = parsed.pop().unwrap(); let mut encoded = Vec::new();
+        store::push_word(&mut encoded, token.kind as usize); store::push_bytes(&mut encoded, token.text.as_bytes());
+        let combined = buffer.len().checked_add(encoded.len()).ok_or_else(|| issue("manifest token extent overflow"))?;
+        if !buffer.is_empty() && combined > CHUNK { flush(data, &mut buffer, &mut count, &mut tape)?; }
+        buffer.extend_from_slice(&encoded); count = next_count(count)?; tape.tokens = next_count(tape.tokens)?;
+    }
+    flush(data, &mut buffer, &mut count, &mut tape)?; Ok(tape)
+}
+pub(super) struct Cursor {
+    tape: Tape,
+    next_chunk: usize,
+    seen: usize,
+    remaining: usize,
+    bytes: Vec<u8>,
+    at: usize,
+}
+impl Cursor {
+    pub(super) fn new(tape: Tape) -> Self {
+        Self { tape, next_chunk: 0usize, seen: 0usize, remaining: 0usize, bytes: Vec::new(), at: 0usize }
+    }
+    pub(super) fn next(&mut self, data: &mut records::Store) -> Result<Option<Token>, String> {
+        if self.remaining == 0usize {
+            if self.at != self.bytes.len() { return Err(issue("manifest token chunk has trailing bytes")); }
+            if self.next_chunk == self.tape.chunks {
+                if self.seen != self.tape.tokens { return Err(issue("manifest token count changed")); }
+                return Ok(None);
+            }
+            if self.next_chunk > self.tape.chunks { return Err(issue("manifest token chunk count changed")); }
+            self.bytes = data.get(&ordinal_key("T", self.next_chunk)).map_err(|message: String| record_error(message))?
+                .ok_or_else(|| issue("retained manifest token chunk disappeared"))?;
+            if !self.bytes.starts_with(MAGIC.as_bytes()) { return Err(issue("malformed manifest token chunk")); }
+            let mut reader = store::Reader::new(&self.bytes[MAGIC.len()..]);
+            if reader.word() != Some(self.next_chunk) || reader.word() != Some(self.seen) {
+                return Err(issue("manifest token chunk order changed"));
+            }
+            let count = reader.word().ok_or_else(|| issue("malformed manifest token count"))?;
+            self.at = MAGIC.len() + 24usize;
+            if self.at > self.bytes.len() || count == 0usize || count > (self.bytes.len() - self.at) / 16usize
+                || self.seen > self.tape.tokens || count > self.tape.tokens - self.seen
+                || (self.bytes.len() - self.at > CHUNK && count != 1usize) {
+                return Err(issue("invalid manifest token chunk extent"));
+            }
+            self.remaining = count; self.next_chunk = next_count(self.next_chunk)?;
+        }
+        let mut reader = store::Reader::new(&self.bytes[self.at..]);
+        let kind = reader.word().ok_or_else(|| issue("malformed retained manifest token"))?;
+        let text = reader.text().ok_or_else(|| issue("malformed retained manifest token"))?;
+        if kind > 6usize || (text.is_empty() && kind != 2usize && kind != 4usize) {
+            return Err(issue("invalid retained manifest token kind"));
+        }
+        let extent = 16usize.checked_add(text.len()).ok_or_else(|| issue("manifest token extent overflow"))?;
+        self.at = self.at.checked_add(extent).ok_or_else(|| issue("manifest token extent overflow"))?;
+        if self.at > self.bytes.len() { return Err(issue("manifest token extent changed")); }
+        self.remaining -= 1usize; self.seen = next_count(self.seen)?;
+        Ok(Some(Token { kind: kind as u8, text }))
+    }
+}

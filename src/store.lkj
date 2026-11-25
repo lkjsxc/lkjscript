@@ -6,13 +6,14 @@ use std::collections::{BTreeMap, BTreeSet};
 
 // This bounds published authenticated file contents, including the index.
 // The index controls eviction only; it never admits a program or a result.
-struct StoredEntry { producer: String, bytes: usize }
-struct Budget {
-    generations: Vec<String>,
-    entries: BTreeMap<String, StoredEntry>,
-    bytes: usize,
-    metadata: usize,
-}
+
+mod budget;
+
+mod budget_io;
+
+mod budget_host;
+
+pub(crate) fn budget_contracts(world: &mut World) -> usize { budget::contracts(world) }
 fn hex_identity(text: &str) -> bool {
     if text.len() != 64usize { return false; }
     for byte in text.bytes() {
@@ -32,78 +33,6 @@ fn entry_producer(name: &str) -> Option<String> {
     }
     Some(name[producer..key - 1usize].to_string())
 }
-impl Budget {
-    fn new() -> Self {
-        Self { generations: Vec::new(), entries: BTreeMap::new(), bytes: 0, metadata: 24 }
-    }
-    fn size(&self) -> usize { self.bytes + self.metadata + reuse::header_size() }
-    fn forget(&mut self, name: &str) {
-    if let Some(entry) = self.entries.remove(&name.to_string()) {
-        self.bytes -= entry.bytes;
-        self.metadata -= 24usize + name.len() + entry.producer.len();
-    }
-}
-    fn remember(&mut self, name: &str, producer: &str, bytes: usize) {
-    self.forget(name);
-    if !self.generations.contains(&producer.to_string()) {
-        self.generations.push(producer.to_string());
-        self.metadata += 8usize + producer.len();
-    }
-    self.bytes += bytes;
-    self.metadata += 24usize + name.len() + producer.len();
-    self.entries.insert(name.to_string(), StoredEntry { producer: producer.to_string(), bytes });
-}
-    fn growth(&self, name: &str, producer: &str, bytes: usize, current_index: usize) -> Option<usize> {
-    let generation = if self.generations.contains(&producer.to_string()) { 0usize } else { 8usize + producer.len() };
-    let index = self.metadata.checked_add(generation)?
-        .checked_add(24usize + name.len() + producer.len())?
-        .checked_add(reuse::header_size())?;
-    self.bytes.checked_add(bytes)?.checked_add(index.max(current_index))
-}
-    fn encode(&self) -> Vec<u8> {
-    let mut out = Vec::new();
-    push_word(&mut out, 2usize);
-    push_word(&mut out, self.generations.len());
-    for generation in &self.generations { push_bytes(&mut out, generation.as_bytes()); }
-    push_word(&mut out, self.entries.len());
-    for (name, entry) in &self.entries {
-        push_bytes(&mut out, name.as_bytes());
-        push_bytes(&mut out, entry.producer.as_bytes());
-        push_word(&mut out, entry.bytes);
-    }
-    out
-}
-    fn decode(bytes: &[u8]) -> Option<Self> {
-    let mut reader = Reader::new(bytes);
-    if reader.word()? != 2usize { return None; }
-    let count = reader.word()?;
-    if count > bytes.len() / 72usize { return None; }
-    let mut result = Self::new();
-    for _ in 0usize..count {
-        let producer = reader.text()?;
-        if !hex_identity(&producer) || result.generations.contains(&producer) { return None; }
-        result.metadata = result.metadata.checked_add(8usize + producer.len())?;
-        result.generations.push(producer);
-    }
-    let count = reader.word()?;
-    if count > bytes.len() / 24usize { return None; }
-    for _ in 0usize..count {
-        let name = reader.text()?;
-        let producer = reader.text()?;
-        let length = reader.word()?;
-        if !owned_entry(&name, &producer) || !result.generations.contains(&producer)
-            || result.entries.contains_key(&name) || length < reuse::header_size() { return None; }
-        if (query_locator_identity(&name).is_some() || legacy_query_locator_identity(&name).is_some())
-            && length != reuse::header_size() + 104usize { return None; }
-        result.bytes = result.bytes.checked_add(length)?;
-        result.metadata = result.metadata.checked_add(24usize + name.len() + producer.len())?;
-        result.entries.insert(name, StoredEntry { producer, bytes: length });
-    }
-    result.bytes.checked_add(result.metadata)?.checked_add(reuse::header_size())?;
-    if !reader.done() { return None; }
-    Some(result)
-}
-}
 
 pub struct Store {
     io_stats: Option<IoStats>,
@@ -117,7 +46,7 @@ pub struct Store {
     index_bytes: usize,
     writer: Option<File>,
     write_state: u8,
-    budget: Budget,
+    budget: Option<budget::Budget>,
     dirty: bool,
     query_container: Option<QueryContainerRead>,
     pub retained_bytes: usize,
@@ -149,9 +78,9 @@ impl Store {
     pub fn query_container_retained(&mut self, identity: &str, total_bytes: usize) -> bool {
         if self.write_state != 1u8 || !hex_identity(identity) { return false; }
         let name = query_container_name(&self.producer_slot, identity);
-        let retained = match self.budget.entries.get(&name) {
-            Some(entry) => entry.bytes == total_bytes && entry.producer == self.producer_slot,
-            None => false,
+        let retained = match self.budget_entry(&name) {
+            Ok(Some(entry)) => entry.bytes == total_bytes && entry.producer == self.producer_slot,
+            Ok(None) | Err(()) => false,
         };
         if !retained { return false; }
         match self.load_query_container(identity) {
@@ -197,7 +126,7 @@ impl Store {
             directory, clock: world.clock(), producer: producer[..].to_vec(),
             producer_slot: sha256::hex_digest(&producer), secret,
             sequence: 0, hits: 0, misses: 0, rejected: 0, writes: 0,
-            capacity, index_bytes: 0, writer: None, write_state: 0u8, budget: Budget::new(), dirty: false, query_container: None,
+            capacity, index_bytes: 0, writer: None, write_state: 0u8, budget: None, dirty: false, query_container: None,
             retained_bytes: 0, evicted: 0,
         })
     }
@@ -269,34 +198,6 @@ impl Store {
     records
 }
 
-    fn erase(&mut self, name: &str) -> bool {
-        match self.directory.remove(name) {
-            Ok(()) | Err(2) => {
-                self.budget.forget(name);
-                self.dirty = true;
-                self.evicted += 1usize;
-                true
-            }
-            Err(_) => { self.write_state = 2u8; false }
-        }
-    }
-
-    fn evict_oldest(&mut self) -> bool {
-        let Some(producer) = ({ self.budget.generations.first().cloned() }) else { return false; };
-        let mut names: Vec<String> = Vec::new();
-        for (name, entry) in &self.budget.entries {
-            if entry.producer == producer { names.push(name.clone()); }
-        }
-        for name in names { if !self.erase(&name) { return false; } }
-        let generations = std::mem::replace(&mut self.budget.generations, Vec::new());
-        for generation in generations {
-            if generation == producer { self.budget.metadata -= 8usize + generation.len(); }
-            else { self.budget.generations.push(generation); }
-        }
-        self.dirty = true;
-        true
-    }
-
     fn writable(&mut self) -> bool {
     let span = self.io_begin();
     let result = self.writable_inner();
@@ -324,28 +225,6 @@ impl Store {
         }
     }
     published
-}
-
-    fn checkpoint(&mut self) {
-    if self.write_state != 1u8 || !self.dirty { return; }
-    let outer = self.io_begin();
-    let payload = self.budget.encode();
-    let identity = sha256::digest(b"lkjscript-store-size-index-1");
-    let span = self.io_begin();
-    let bytes = reuse::seal(&identity[..], &self.secret, "size-index", "1", &payload);
-    let elapsed = self.io_end(span);
-    if let Some(row) = self.io_row("size-index") {
-        row.seals = io_add(row.seals, 1usize, &mut row.overflow);
-        row.sealed_payload_bytes = io_add(row.sealed_payload_bytes, payload.len(), &mut row.overflow);
-        row.seal_ns = io_add(row.seal_ns, elapsed, &mut row.overflow);
-    }
-    if self.atomic_publish("size-index", ".budget-index", &bytes) {
-        self.dirty = false;
-        self.index_bytes = bytes.len();
-    }
-    self.retained_bytes = self.budget.bytes + self.index_bytes;
-    let elapsed = self.io_end(outer);
-    if let Some(row) = self.io_row("size-index") { row.metadata_ns = io_add(row.metadata_ns, elapsed, &mut row.overflow); }
 }
 
     fn publish(&mut self, namespace: &str, key: &str, bytes: &[u8]) {
@@ -803,7 +682,10 @@ fn invalidate_store_query_snapshot(store: &mut Store, identity: &str, selector: 
     store.discard("semantic-container-v3", identity);
     if latest_matches { store.discard("semantic-latest-v3", selector); }
     let name = query_locator_name(identity);
-    let owned = store.budget.entries.get(&name).is_some_and(|entry| entry.producer == store.producer_slot);
+    let owned = match store.budget_entry(&name) {
+        Ok(Some(entry)) => entry.producer == store.producer_slot,
+        Ok(None) | Err(()) => false,
+    };
     if owned { let _ = store.erase(&name); }
 }
 
@@ -998,115 +880,6 @@ impl Store {
         }
         output
     }
-    fn writable_inner(&mut self) -> bool {
-        if self.write_state != 0u8 { return self.write_state == 1u8; }
-        self.write_state = 2u8;
-        let mut lock = match self.directory.open_append(".budget-lock") { Ok(file) => file, Err(_) => return false };
-        match lock.lock_exclusive() {
-            Ok(()) => {}
-            Err(11) => { self.write_state = 0u8; return false; }
-            Err(_) => return false,
-        }
-        self.writer = Some(lock);
-        self.write_state = 1u8;
-        let identity = sha256::digest(b"lkjscript-store-size-index-1");
-        let mut valid_index = false;
-        let span = self.io_begin();
-        let raw = match cache_file(&mut self.directory, ".budget-index") {
-            Some(mut file) => read_envelope(&mut file, &identity[..], &self.secret, "size-index", "1", self.capacity),
-            None => None,
-        };
-        let elapsed = self.io_end(span);
-        if let Some(row) = self.io_row("size-index") {
-            row.read_attempts = io_add(row.read_attempts, 1usize, &mut row.overflow);
-            row.read_ns = io_add(row.read_ns, elapsed, &mut row.overflow);
-            if let Some(payload) = &raw {
-                row.authenticated_reads = io_add(row.authenticated_reads, 1usize, &mut row.overflow);
-                row.authenticated_payload_bytes = io_add(row.authenticated_payload_bytes, payload.bytes().len(), &mut row.overflow);
-                row.authenticated_envelope_bytes = io_add(row.authenticated_envelope_bytes, payload.bytes().len() + reuse::header_size(), &mut row.overflow);
-            }
-        }
-        if let Some(raw) = raw {
-            if let Some(budget) = Budget::decode(raw.bytes()) {
-                self.budget = budget;
-                self.index_bytes = raw.bytes().len() + reuse::header_size();
-                valid_index = true;
-            }
-        }
-        if !valid_index {
-            match self.directory.remove(".budget-index") {
-                Ok(()) | Err(2) => {}
-                Err(_) => { self.write_state = 2u8; return false; }
-            }
-        }
-        let names = match self.directory.list() { Ok(names) => names, Err(_) => { self.write_state = 2u8; return false; } };
-        let mut present: BTreeSet<String> = BTreeSet::new();
-        for bytes in names {
-            let Ok(name) = String::from_utf8(bytes) else { continue; };
-            if legacy_query_entry(&name) {
-                if !self.erase(&name) { return false; }
-                continue;
-            }
-            if indexed_name(&name) {
-                let expected = match self.budget.entries.get(&name) { Some(entry) => Some(entry.bytes), None => None };
-                let mut valid = false;
-                if let Some(expected) = expected {
-                    if let Some(mut file) = cache_file(&mut self.directory, &name) {
-                        if let Some(identity) = query_container_identity(&name) {
-                            let slot = entry_producer(&name).unwrap();
-                            let mut counts = QueryHeaderRead::new();
-                            let manifest = read_query_manifest(&mut file, &self.secret, &slot, identity,
-                                self.capacity, &mut counts);
-                            if let Some(row) = self.io_row("size-index") {
-                                row.budget_headers = io_add(row.budget_headers, counts.headers, &mut row.overflow);
-                                row.budget_header_bytes = io_add(row.budget_header_bytes, counts.headers * 90usize, &mut row.overflow);
-                                row.budget_manifest_bytes = io_add(row.budget_manifest_bytes, counts.manifest_bytes, &mut row.overflow);
-                                row.budget_container_authenticated = io_add(row.budget_container_authenticated, counts.authenticated, &mut row.overflow);
-                                row.budget_container_extent_checks = io_add(row.budget_container_extent_checks, counts.extent_checks, &mut row.overflow);
-                            }
-                            valid = match manifest {
-                                Some(manifest) => manifest.total_bytes == expected,
-                                None => false,
-                            };
-                        } else {
-                            let mut header = vec![0u8; reuse::header_size()];
-                            if read_exact(&mut file, &mut header) {
-                                if let Some(row) = self.io_row("size-index") {
-                                    row.budget_headers = io_add(row.budget_headers, 1usize, &mut row.overflow);
-                                    row.budget_header_bytes = io_add(row.budget_header_bytes, header.len(), &mut row.overflow);
-                                }
-                                if let Some(payload) = reuse::payload_length(&header) {
-                                    valid = payload.checked_add(header.len()) == Some(expected);
-                                }
-                            }
-                        }
-                    }
-                }
-                // A failed prior index checkpoint can leave a larger valid pack.
-                // Its old accounting is a miss; never undercharge the replacement.
-                if valid { present.insert(name); }
-                else if !self.erase(&name) { return false; }
-            } else if name.starts_with(".tmp-") {
-                if let Ok(mut temporary) = self.directory.open_directory(&name) { let _ = temporary.remove("entry"); }
-                let _ = self.directory.remove_directory(&name);
-            }
-        }
-        let mut absent: Vec<String> = Vec::new();
-        for (name, _) in &self.budget.entries {
-            if !present.contains(name) { absent.push(name.clone()); }
-        }
-        for name in absent { self.budget.forget(&name); self.dirty = true; }
-        while self.budget.size() > self.capacity {
-            if !self.evict_oldest() {
-                let _ = self.directory.remove(".budget-index");
-                self.write_state = 2u8;
-                self.retained_bytes = 0usize;
-                return false;
-            }
-        }
-        self.retained_bytes = self.budget.bytes + self.index_bytes;
-        true
-    }
     fn atomic_publish_inner(&mut self, name: &str, bytes: &[u8]) -> bool {
         let stamp = match self.clock.nanoseconds() { Ok(stamp) => stamp, Err(_) => return false };
         let temporary: String = loop {
@@ -1131,28 +904,32 @@ impl Store {
     fn publish_named_inner(&mut self, namespace: &str, name: &str, bytes: &[u8]) {
         let valid = owned_entry(name, &self.producer_slot);
         if !valid || query_container_identity(name).is_some() || !self.writable() { return; }
-        if self.budget.entries.contains_key(&name.to_string()) && !self.erase(name) { return; }
+        match self.budget_entry(name) {
+            Ok(Some(_)) => { if !self.erase(name) { return; } }
+            Ok(None) => {}
+            Err(()) => return,
+        }
         loop {
-            let fits = match self.budget.growth(name, &self.producer_slot, bytes.len(), self.index_bytes) {
-                Some(size) => size <= self.capacity, None => false,
+            let fits = match self.budget_growth(name, bytes.len()) {
+                Ok(Some(size)) => size <= self.capacity, Ok(None) => false, Err(()) => return,
             };
             if fits { break; }
             if !self.evict_oldest() {
                 if self.write_state != 1u8 { return; }
                 self.checkpoint();
                 if self.write_state != 1u8 { return; }
-                let fits = match self.budget.growth(name, &self.producer_slot, bytes.len(), self.index_bytes) {
-                    Some(size) => size <= self.capacity, None => false,
+                let fits = match self.budget_growth(name, bytes.len()) {
+                    Ok(Some(size)) => size <= self.capacity, Ok(None) => false, Err(()) => return,
                 };
                 if fits { break; }
                 return;
             }
         }
         if self.atomic_publish(namespace, name, bytes) {
-            self.budget.remember(name, &self.producer_slot, bytes.len());
+            if !self.budget_remember(name, bytes.len()) { return; }
             self.dirty = true;
             self.writes += 1usize;
-            self.retained_bytes = self.budget.bytes + self.index_bytes;
+            self.retained_bytes = self.budget_bytes() + self.index_bytes;
         }
     }
 }
@@ -1375,17 +1152,19 @@ impl<'a> QueryContainerWriter<'a> {
     fn reserve_inner(&mut self, total: usize) -> bool {
         if self.failed || total > 0x7fffffffffffffffusize || self.store.write_state != 1u8 { return false; }
         loop {
-            let size = self.store.budget.growth(&self.reservation_name, &self.store.producer_slot,
-                total, self.store.index_bytes);
-            let fits = match size { Some(value) => value <= self.store.capacity, None => false };
+            let size = self.store.budget_growth(&self.reservation_name, total);
+            let fits = match size {
+                Ok(Some(value)) => value <= self.store.capacity, Ok(None) => false, Err(()) => return false,
+            };
             if fits { return true; }
             if !self.store.evict_oldest() {
                 if self.store.write_state != 1u8 { return false; }
                 self.store.checkpoint();
                 if self.store.write_state != 1u8 { return false; }
-                let size = self.store.budget.growth(&self.reservation_name, &self.store.producer_slot,
-                    total, self.store.index_bytes);
-                return match size { Some(value) => value <= self.store.capacity, None => false };
+                let size = self.store.budget_growth(&self.reservation_name, total);
+                return match size {
+                    Ok(Some(value)) => value <= self.store.capacity, Ok(None) | Err(()) => false,
+                };
             }
         }
     }
@@ -1493,10 +1272,12 @@ impl<'a> QueryContainerWriter<'a> {
             }
         }
         if !published { return Err("E_QUERY_STORE container publication failed".to_string()); }
-        self.store.budget.remember(&name, &self.store.producer_slot, self.position);
+        if !self.store.budget_remember(&name, self.position) {
+            return Err("E_QUERY_STORE container accounting failed".to_string());
+        }
         self.store.dirty = true;
         self.store.writes += 1usize;
-        self.store.retained_bytes = self.store.budget.bytes + self.store.index_bytes;
+        self.store.retained_bytes = self.store.budget_bytes() + self.store.index_bytes;
         Ok(manifest)
     }
 }

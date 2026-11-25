@@ -215,6 +215,8 @@ parallel_step 1 optimizer timeout --kill-after=10s 600s bash tools/optimizer-tes
 parallel_step 1 checked-units timeout --kill-after=10s 600s env LKJSCRIPT_BINARY="$check_binary" sh tools/check-units.sh
 parallel_step 1 unit-native timeout --kill-after=10s 600s env LKJSCRIPT_COMPILER="$check_binary" bash tools/unit-native.sh
 parallel_step 1 source-units timeout --kill-after=10s 600s env LKJSCRIPT_BINARY="$check_binary" bash tools/unit-source-test.sh
+parallel_step 1 unit-manifest timeout --kill-after=10s 600s env LKJSCRIPT_BINARY="$check_binary" bash tools/unit-plan-test.sh
+parallel_step 1 cache-budget timeout --kill-after=10s 600s bash tools/budget-test.sh "$check_binary"
 parallel_step 1 unit-boundaries timeout --kill-after=10s 600s env LKJSCRIPT_BINARY="$check_binary" bash tools/unit-boundaries-test.sh
 parallel_step 1 resources timeout --kill-after=10s 600s bash tools/resource-test.sh "$check_binary"
 parallel_step 1 diagnostic-cases diagnostic_cases

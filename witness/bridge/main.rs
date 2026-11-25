@@ -1,6 +1,6 @@
 //! Rust witness entry over exactly the owned command-line implementation.
 #![allow(dead_code, unused_imports)]
-pub use lkjscript::{host, proof_domain};
+pub use lkjscript::{host, proof_domain, seal_header};
 pub use lkjscript::{
     ast, authority, child_image, entry_grants, backend, check, diagnostic, diagnostics, elaborate, frontend, generics, interpreter, ir,
     ir_text, ir_binary, json, names, optimizer, resolve, reuse, runtime, runtime_memory, runtime_diagnostics, sha256, source, syntax, x86,
@@ -9,6 +9,7 @@ pub use lkjscript::{
 // The source compiler is one crate; preserve its crate-local helper access here.
 mod native {
     pub use lkjscript::native::*;
+    pub mod records { pub use lkjscript::command_records::*; }
     pub use lkjscript::native_messages as messages;
 }
 mod structure_edit {

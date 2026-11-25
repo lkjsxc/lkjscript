@@ -1,0 +1,132 @@
+//! Bounded manifest capture and final rehash. Bytes are never collected as a file.
+use super::*;
+
+#[derive(Clone, Copy)]
+pub(super) struct Captured {
+    pub(super) chunks: usize,
+    pub(super) fingerprint: Fingerprint,
+}
+struct Utf8 {
+    remaining: usize,
+    value: u32,
+    minimum: u32,
+    valid: bool,
+}
+impl Utf8 {
+    fn new() -> Self { Self { remaining: 0usize, value: 0u32, minimum: 0u32, valid: true } }
+    fn accept(&mut self, bytes: &[u8]) {
+        for byte in bytes {
+            if !self.valid { return; }
+            if self.remaining == 0usize {
+                if *byte <= 127u8 { continue; }
+                if *byte >= 194u8 && *byte <= 223u8 {
+                    self.remaining = 1usize; self.value = (*byte & 31u8) as u32; self.minimum = 128u32;
+                } else if *byte >= 224u8 && *byte <= 239u8 {
+                    self.remaining = 2usize; self.value = (*byte & 15u8) as u32; self.minimum = 2048u32;
+                } else if *byte >= 240u8 && *byte <= 244u8 {
+                    self.remaining = 3usize; self.value = (*byte & 7u8) as u32; self.minimum = 65536u32;
+                } else { self.valid = false; }
+            } else if *byte < 128u8 || *byte > 191u8 { self.valid = false; }
+            else {
+                self.value = (self.value << 6u32) | ((*byte & 63u8) as u32);
+                self.remaining -= 1usize;
+                if self.remaining == 0usize && (self.value < self.minimum || self.value > 1114111u32
+                    || (self.value >= 55296u32 && self.value <= 57343u32)) { self.valid = false; }
+            }
+        }
+    }
+    fn complete(&self) -> bool { self.valid && self.remaining == 0usize }
+}
+fn private_guard(value: Fingerprint, private: &Option<[u8; 32]>) -> Result<(), String> {
+    if let Some(expected) = private {
+        if value.bytes == 32usize && value.digest == *expected {
+            return Err("E_CHILD_IMAGE source or include attempted to read the private admission key".to_string());
+        }
+    }
+    Ok(())
+}
+pub(super) fn capture(
+    mut file: File, data: &mut records::Store, path: &str, private: &Option<[u8; 32]>,
+) -> Result<Captured, String> {
+    let mut buffer = vec![0u8; CHUNK]; let mut count = 0usize; let mut length = 0usize;
+    let mut hash = sha256::Sha256::new(); let mut utf8 = Utf8::new();
+    loop {
+        let mut used = 0usize;
+        while used != buffer.len() {
+            let read = file.read(&mut buffer[used..]).map_err(|errno: i64| io(path, "read manifest", errno))?;
+            if read == 0usize { break; }
+            used = used.checked_add(read).ok_or_else(|| issue("manifest read count overflow"))?;
+            if used > buffer.len() { return Err(issue("manifest read exceeded its buffer")); }
+        }
+        if used == 0usize { break; }
+        length = length.checked_add(used).ok_or_else(|| issue("manifest byte count overflow"))?;
+        hash.update(&buffer[..used]); utf8.accept(&buffer[..used]);
+        // Exact private-key input is one final short chunk. Refuse before even
+        // placing that input in the private raw-input spool.
+        if count == 0usize && used == 32usize {
+            private_guard(Fingerprint { bytes: used, digest: sha256::digest(&buffer[..used]) }, private)?;
+        }
+        data.insert(&ordinal_key("B", count), &buffer[..used]).map_err(|message: String| record_error(message))?;
+        count = next_count(count)?;
+        if used < buffer.len() { break; }
+    }
+    let fingerprint = Fingerprint { bytes: length, digest: hash.finish() };
+    private_guard(fingerprint, private)?;
+    if !utf8.complete() { return Err(format!("{path}:1:1: E_IO input is not valid UTF-8")); }
+    Ok(Captured { chunks: count, fingerprint })
+}
+pub(super) fn fingerprint(
+    mut file: File, path: &str, private: &Option<[u8; 32]>,
+) -> Result<Fingerprint, String> {
+    let mut buffer = vec![0u8; CHUNK]; let mut bytes = 0usize; let mut hash = sha256::Sha256::new();
+    loop {
+        let count = file.read(&mut buffer).map_err(|errno: i64| io(path, "rehash manifest", errno))?;
+        if count == 0usize { break; }
+        if count > buffer.len() { return Err(issue("manifest rehash exceeded its buffer")); }
+        bytes = bytes.checked_add(count).ok_or_else(|| issue("manifest byte count overflow"))?;
+        hash.update(&buffer[..count]);
+    }
+    let result = Fingerprint { bytes, digest: hash.finish() }; private_guard(result, private)?; Ok(result)
+}
+
+/// At most one raw chunk plus a short lookahead crosses a chunk boundary.
+pub(super) struct Bytes {
+    captured: Captured,
+    next: usize,
+    buffer: Vec<u8>,
+    at: usize,
+    consumed: usize,
+}
+impl Bytes {
+    pub(super) fn new(captured: Captured) -> Self {
+        Self { captured, next: 0usize, buffer: Vec::new(), at: 0usize, consumed: 0usize }
+    }
+    fn fill(&mut self, data: &mut records::Store, lookahead: usize) -> Result<(), String> {
+        if lookahead > 3usize { return Err(issue("invalid manifest lexer lookahead")); }
+        while self.buffer.len() - self.at <= lookahead && self.next < self.captured.chunks {
+            let bytes = data.get(&ordinal_key("B", self.next)).map_err(|message: String| record_error(message))?
+                .ok_or_else(|| issue("retained manifest input chunk disappeared"))?;
+            let offset = self.next.checked_mul(CHUNK).ok_or_else(|| issue("manifest input extent overflow"))?;
+            if offset > self.captured.fingerprint.bytes { return Err(issue("invalid manifest input extent")); }
+            let expected = CHUNK.min(self.captured.fingerprint.bytes - offset);
+            if bytes.is_empty() || bytes.len() != expected { return Err(issue("retained manifest input chunk changed its extent")); }
+            let remaining = { self.buffer[self.at..].to_vec() };
+            self.buffer = remaining; self.at = 0usize;
+            self.buffer.extend_from_slice(&bytes); self.next = next_count(self.next)?;
+        }
+        Ok(())
+    }
+    pub(super) fn peek(&mut self, data: &mut records::Store, ahead: usize) -> Result<Option<u8>, String> {
+        self.fill(data, ahead)?;
+        if ahead < self.buffer.len() - self.at { Ok(Some(self.buffer[self.at + ahead])) } else { Ok(None) }
+    }
+    pub(super) fn take(&mut self, data: &mut records::Store) -> Result<Option<u8>, String> {
+        let value = self.peek(data, 0usize)?;
+        if value.is_some() { self.at += 1usize; self.consumed = next_count(self.consumed)?; }
+        Ok(value)
+    }
+    pub(super) fn done(&self) -> bool {
+        self.next == self.captured.chunks && self.at == self.buffer.len()
+            && self.consumed == self.captured.fingerprint.bytes
+    }
+}

@@ -26,7 +26,8 @@ trap 'exit 130' HUP INT TERM
 mkdir "$fixture/store"
 head -c 32 /dev/urandom > "$fixture/key"
 mkdir "$fixture/build-source"
-cp src/query_store_cases.lkj src/diagnostic.lkj src/ir.lkj src/ir_binary.lkj src/reuse.lkj src/store.lkj "$fixture/build-source/"
+bash tools/store-fixture-source.sh "$fixture/build-source"
+cp src/query_store_cases.lkj "$fixture/build-source/"
 "$compiler" build query_store_cases.lkj --source-dir "$fixture/build-source" --no-store --library-dir library \
     --runtime-source library/runtime.lkj -o "$fixture/producer-a"
 cp "$fixture/producer-a" "$fixture/reader-b"
@@ -215,7 +216,8 @@ done
 # There is no public arbitrary-namespace read/write/record conversion on the
 # restricted reader, even in an otherwise well-typed consumer.
 mkdir "$fixture/source"
-cp src/query_store_cases.lkj src/diagnostic.lkj src/ir.lkj src/ir_binary.lkj src/reuse.lkj src/store.lkj "$fixture/source/"
+bash tools/store-fixture-source.sh "$fixture/source"
+cp src/query_store_cases.lkj "$fixture/source/"
 cat >> "$fixture/source/query_store_cases.lkj" <<'SOURCE'
 fn cannot_read_proofs(reader: &mut store::QueryReader) {
     let _ = reader.get("check", "untrusted");

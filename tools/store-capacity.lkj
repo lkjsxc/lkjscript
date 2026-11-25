@@ -5,6 +5,8 @@ mod ir_text;
 mod ir_binary;
 mod reuse;
 mod sha256;
+
+mod native { pub mod records; }
 mod store;
 
 fn number(bytes: &[u8]) -> usize {
