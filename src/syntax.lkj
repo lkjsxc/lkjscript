@@ -21,6 +21,7 @@ enum TokenKind {
     Symbol,
     Expression(usize),
     Type(usize),
+    Block(usize),
     End,
 }
 #[derive(Clone)]
@@ -466,6 +467,7 @@ impl Lexer<'_> {
                         | b'='
                         | b'<'
                         | b'>'
+                        | b'@'
                         | b'$'
                 ) {
                     return Err(self.error("unsupported character in source"));
@@ -572,7 +574,7 @@ pub fn semantic_tokens(source: &str) -> Result<Vec<SemanticToken>, Diagnostic> {
             TokenKind::String => 2u8, TokenKind::Char => 3u8,
             TokenKind::Bytes => 4u8, TokenKind::Lifetime => 5u8,
             TokenKind::Symbol => 6u8, TokenKind::End => continue,
-            TokenKind::Expression(_) | TokenKind::Type(_) => unreachable!(),
+            TokenKind::Expression(_) | TokenKind::Type(_) | TokenKind::Block(_) => unreachable!(),
         };
         result.push(SemanticToken { kind, text: token.text, span: token.span });
     }
@@ -2679,7 +2681,15 @@ impl Parser {
         });
         Ok(())
     }
+    fn block_start(&self) -> bool {
+        self.is("{") || matches!(self.token().kind, TokenKind::Block(_))
+    }
     fn block(&mut self) -> Result<BlockId, Diagnostic> {
+        let captured = self.token().kind.clone();
+        if let TokenKind::Block(id) = captured {
+            self.at += 1usize;
+            return self.macro_capture_block(id);
+        }
         let span = self.token().span;
         self.expect("{")?;
         let id = self.program.blocks.len();
@@ -2945,7 +2955,7 @@ impl Parser {
     /// expression; grouping starts an ordinary value expression instead. Keep
     /// the written-form distinction here because parentheses have no AST node.
     fn statement_expr(&mut self) -> Result<(ExprId, bool), Diagnostic> {
-        let block = self.is("{")
+        let block = self.block_start()
             || self.is("if")
             || self.is("while")
             || self.is("loop")
@@ -3152,7 +3162,7 @@ impl Parser {
             }
             self.at += 1;
             if prec == 2 {
-                let end = if self.expression_end() || (!allow_struct && self.is("{")) {
+                let end = if self.expression_end() || (!allow_struct && self.block_start()) {
                     None
                 } else {
                     Some(self.expr_bp(3, allow_struct)?)
@@ -3250,6 +3260,7 @@ impl Parser {
         let context = self.token().context;
         let captured = self.tokens[self.at].kind.clone();
         if let TokenKind::Expression(id) = captured { self.at += 1usize; return self.macro_capture_expression(id); }
+        if let TokenKind::Block(id) = captured { self.at += 1usize; return self.macro_capture_block_expression(id); }
         if matches!(captured, TokenKind::Type(_)) { return Err(Diagnostic::new(span,
             "E_MACRO_EXPANSION", "an opaque type capture cannot be used as an expression")); }
         if self.token().kind == TokenKind::Number
@@ -3333,7 +3344,7 @@ impl Parser {
             let condition = self.expr(false)?;
             let then_block = self.block()?;
             let otherwise = if self.take("else") {
-                if self.is("if") || self.is("{") {
+                if self.is("if") || self.block_start() {
                     Some(self.atom(true)?)
                 } else {
                     return Err(self.err("expected `if` or a block after `else`"));

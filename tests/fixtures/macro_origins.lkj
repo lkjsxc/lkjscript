@@ -298,8 +298,8 @@ fn source() -> i64 { discard_type!(UnresolvedUnused) }
     let mut split_origin = program.clone();
     let last = split_origin.macro_captures[split].tokens.len() - 1usize;
     split_origin.macro_captures[split].tokens[last].origin.end += 1usize;
-    let count = refused(&split_origin) + lifetime_token_origins();
-    assert!(count == 5usize);
+    let count = refused(&split_origin) + lifetime_token_origins() + block_and_tree_origins();
+    assert!(count == 8usize);
     count as i64
 }
 fn lifetime_token_origins() -> usize {
@@ -335,6 +335,32 @@ fn source() -> i64 { let value = 42i64; *selected(&value) }
     count += unauthenticated(&source_token, &inputs);
     assert!(count == 4usize);
     count
+}
+fn block_and_tree_origins() -> usize {
+    let (program, _) = parsed_fixture(r#"
+macro_rules! leaf { (@tag $body:block) => { $body + $body }; }
+macro_rules! relay { ([$($head:tt)+] $body:block) => { leaf!($($head)+ $body) }; }
+fn source() -> i64 { let value = 21i64; relay!([@tag] {value}) }
+"#);
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    origins::collect(&program, &resolver).unwrap();
+    let relay = program.macro_invocations.iter().find(|call| call.name == "relay").unwrap();
+    let leaf = program.macro_invocations.iter().position(|call| call.name == "leaf").unwrap();
+    let source_at = relay.tokens.iter().find(|token| token.text == "@").unwrap();
+    assert!(*source_at == program.macro_invocations[leaf].tokens[0usize]);
+    let capture = program.macro_captures.iter().position(|capture|
+        capture.tokens.first().is_some_and(|token| token.text == "{")).unwrap();
+    assert!(program.macro_captures[capture].materializations.len() == 2usize);
+    let first = program.macro_captures[capture].materializations[0usize];
+    let second = program.macro_captures[capture].materializations[1usize];
+    assert!(first != second);
+    let mut punctuation = program.clone();
+    punctuation.macro_invocations[leaf].tokens[0usize].origin.start += 1usize;
+    let mut block = program.clone();
+    block.macro_captures[capture].tokens[0usize].context += 1usize;
+    let mut reused = program.clone();
+    reused.macro_captures[capture].materializations[1usize] = first;
+    refused(&punctuation) + refused(&block) + refused(&reused)
 }
 fn lexical_origins() -> i64 {
     let (program, inputs) = parsed_fixture(r#"
@@ -441,5 +467,5 @@ fn source() -> i64 {
 fn main() {
     let count = expression_origins() + type_origins() + fragment_token_origins()
         + lexical_origins() + statement_origins();
-    assert!(count == 53i64);
+    assert!(count == 56i64);
 }

@@ -1,0 +1,35 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! inspect {
+    ({ 99i64 }) => { 0i64 };
+    ($body:block) => { $body };
+}
+macro_rules! via_tt {
+    ($tree:tt) => { inspect!($tree) };
+}
+macro_rules! opaque {
+    ($body:block) => { via_tt!($body) };
+}
+macro_rules! receive {
+    ($fallback:block, [$($fields:tt)*]) => {
+        via_tt!($fallback) + inspect!({ $($fields)* })
+    };
+}
+macro_rules! access {
+    ($enabled:expr, on_failure: $fallback:block, $($fields:tt)*) => {{
+        let value = 100i64;
+        let unused = if $enabled $fallback else { value };
+        receive!($fallback, [$($fields)*])
+    }};
+}
+macro_rules! discard {
+    ($body:block) => { 0i64 };
+    (other) => { 1i64 };
+}
+pub fn probe() -> i64 {
+    let value = 38i64;
+    assert!(via_tt!({ 99i64 }) == 0i64);
+    assert!(opaque!({ 99i64 }) == 99i64);
+    access!(true, on_failure: { value }, 3i64)
+        + discard!({ missing!() }) + discard!(other)
+}

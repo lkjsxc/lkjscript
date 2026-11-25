@@ -1104,13 +1104,20 @@ Normal destructor order matches the supported Rust intersection; outputs/statuse
 ### Declarative source macros
 
 Module-scoped `macro_rules!` definitions produce ordinary source expressions,
-statement lists or items. Matchers accept literal token trees and `expr`, `ty`, `ident`, `lifetime`, and `tt`
-fragments. `*`, `+`, and `?` repetitions preserve nesting and require matching
+statement lists or items. Matchers accept literal token trees and `expr`, `ty`,
+`block`, `ident`, `lifetime` and `tt` fragments. `*`, `+`, and `?` repetitions
+preserve nesting and require matching
 capture lengths when several repeated names are emitted together. Separators,
 optional trailing commas, recursive item producers, and nested macro calls are
-supported. Expression and type captures remain distinct opaque fragments when
+supported. When a repetition requires input after a comma and the only
+following matcher is `$(,)?`, the final comma can end the list. Both a comma
+separator and an explicit comma before a capture can introduce another member.
+Expression, block and type captures remain distinct opaque fragments when
 forwarded. Substitution preserves precedence; later literal-token or identifier
-arms cannot inspect them. A `tt` capture forwards either as one opaque tree. Literal forms follow the ordinary source lexer; unsupported literal
+arms cannot inspect them. A `tt` capture forwards any of them as one opaque tree.
+A literal `@` is punctuation in a token tree. A repeated `tt` consumes one
+punctuation token, opaque fragment or whole delimited group per iteration.
+Literal forms follow the ordinary source lexer; unsupported literal
 prefixes fail before matching. Literal matcher tokens retain their exact spelling, including raw
 string delimiters and byte escapes. Unused expression captures do not expand
 nested macros or read includes. Unused type captures do not resolve their names.
@@ -1132,9 +1139,11 @@ and remains transparent through nested calls and `tt` forwarding: literal
 lifetime arms can inspect it. Unused captures need no lifetime binding; emitted
 occurrences follow ordinary lifetime and borrow rules, including the existing
 labeled-loop refusal. Repetition lookahead uses the same token classification as
-capture matching. Captured identifiers, lifetimes, expressions and types retain
-their source syntax contexts.
-Ordinary names inside expression and type captures resolve in the destination
+capture matching. A `block` capture parses one braced block and can be forwarded
+as a block, expression or token tree. Each use materializes a fresh block,
+including in positions that require a block such as an `if` body.
+Captures retain their source syntax contexts.
+Ordinary names inside parsed captures resolve in the destination
 module and `Self` environment. Nested macro calls inside captures retain their
 original textual macro scope. Introduced local bindings have a separate syntax
 context for each expansion; repeating a binding preserves ordinary lexical

@@ -73,8 +73,8 @@ fn variables(tokens: &[MacroToken], depth: usize, expr_end: bool, ty_end: bool,
             let name = tokens[at + 1usize].text.clone();
             let fragment = tokens[at + 3usize].text.clone();
             if name == "crate" { return Err(error(tokens[at + 1usize].span, "E_MACRO_RULE", "$crate is reserved for the defining crate")); }
-            if !matches!(fragment.as_str(), "expr" | "ty" | "ident" | "lifetime" | "tt") {
-                return Err(error(tokens[at + 3usize].span, "E_UNSUPPORTED_MACRO", "supported declarative fragments are expr, ty, ident, lifetime, and tt"));
+            if !matches!(fragment.as_str(), "expr" | "ty" | "block" | "ident" | "lifetime" | "tt") {
+                return Err(error(tokens[at + 3usize].span, "E_UNSUPPORTED_MACRO", "supported declarative fragments are expr, ty, block, ident, lifetime, and tt"));
             }
             for binding in &*bindings {
                 if binding.name == name { return Err(error(tokens[at + 1usize].span, "E_MACRO_RULE", "duplicate matcher binding")); }
@@ -141,6 +141,18 @@ fn same(left: &MacroToken, right: &MacroToken) -> bool {
     left.kind == right.kind && left.kind < 8u8 && left.text == right.text
         && left.literal_spelling == right.literal_spelling
 }
+fn trailing_comma(pattern: &[MacroToken]) -> bool {
+    pattern.len() == 5usize && symbol(&pattern[0usize], "$") && symbol(&pattern[1usize], "(")
+        && symbol(&pattern[2usize], ",") && symbol(&pattern[3usize], ")") && symbol(&pattern[4usize], "?")
+}
+fn requires_input_after_comma(repeat: &Repetition, count: usize) -> bool {
+    if count != 0usize {
+        if let Some(separator) = &repeat.separator { return symbol(separator, ","); }
+    }
+    // A comma followed by a required capture cannot finish at the comma itself.
+    repeat.body.len() >= 5usize && symbol(&repeat.body[0usize], ",")
+        && symbol(&repeat.body[1usize], "$") && repeat.body[2usize].kind == 0u8
+}
 fn may_begin(token: &MacroToken, typed: bool) -> bool {
     if typed {
         if token.kind == 9u8 { return true; }
@@ -157,11 +169,16 @@ fn may_begin(token: &MacroToken, typed: bool) -> bool {
         token.text != "_" && !super::super::keyword_cannot_begin_expression(&token.text)
     } else if token.kind == 6u8 {
         matches!(token.text.as_str(), "::" | "<" | "<<" | "(" | "[" | "{" | "-" | "!" | "*" | "&" | "&&" | ".." | "..=" | "|" | "||")
-    } else { matches!(token.kind, 1u8 | 2u8 | 3u8 | 4u8 | 5u8 | 8u8) }
+    } else { matches!(token.kind, 1u8 | 2u8 | 3u8 | 4u8 | 5u8 | 8u8) || token.kind == BLOCK_FRAGMENT }
 }
-fn transparent_start(fragment: &str, token: &MacroToken) -> bool {
-    fragment == "ident" && token.kind == 0u8 && token.text != "_"
-        || fragment == "lifetime" && token.kind == 5u8
+fn fragment_start(fragment: &str, token: &MacroToken) -> bool {
+    match fragment {
+        "ident" => token.kind == 0u8 && token.text != "_",
+        "lifetime" => token.kind == 5u8,
+        "tt" => token.kind != 7u8 && !(token.kind == 6u8 && closing(&token.text)),
+        "block" => token.kind == BLOCK_FRAGMENT || symbol(token, "{") || token.kind == 8u8,
+        _ => may_begin(token, fragment == "ty"),
+    }
 }
 // Repetition heads must determine whether to continue without speculative capture choices.
 // Pure literal overlaps can be legal in Rust's NFA matcher; this bounded reader locates them
@@ -177,9 +194,7 @@ fn starts(pattern: &[MacroToken], at: usize, token: &MacroToken) -> Result<(bool
     }
     if symbol(&pattern[at], "$") {
         let fragment = pattern[at + 3usize].text.as_str();
-        let accepts = if matches!(fragment, "ident" | "lifetime") { transparent_start(fragment, token) }
-            else if fragment == "tt" { true }
-            else { may_begin(token, fragment == "ty") };
+        let accepts = fragment_start(fragment, token);
         return Ok((accepts, accepts));
     }
     Ok((same(&pattern[at], token), false))
@@ -207,7 +222,10 @@ fn matches(program: &mut Program, invocation: &MacroInvocation, pattern: &[Macro
                         (same(repeat.separator.as_ref().unwrap(), token), false)
                     } else { starts(&repeat.body, 0usize, token)? };
                     let (after, after_fragment) = starts(pattern, repeat.next, token)?;
-                    if next && after {
+                    if next && after && trailing_comma(&pattern[repeat.next..]) && requires_input_after_comma(&repeat, count) {
+                        // Only the continuation can consume a suffix beyond this comma.
+                        if *position + 1usize == end { break; }
+                    } else if next && after {
                         let mut fragment_overlap = false;
                         if *position + 1usize < end && repeat.next < pattern.len()
                             && same(&pattern[repeat.next], token) {
@@ -255,21 +273,24 @@ fn matches(program: &mut Program, invocation: &MacroInvocation, pattern: &[Macro
             let binding = bindings.iter().position(|binding| binding.name == *name).unwrap();
             let fragment = bindings[binding].fragment.clone();
             let start = *position;
+            if !fragment_start(&fragment, &input.tokens[start]) { return Ok(false); }
             let captured: Vec<MacroToken>;
             if matches!(fragment.as_str(), "ident" | "lifetime") {
-                if !transparent_start(&fragment, &input.tokens[start]) { return Ok(false); }
                 *position += 1usize; captured = input.tokens[start..*position].to_vec();
             } else if fragment == "tt" {
                 *position = if input.tokens[start].kind == 6u8 && opening(&input.tokens[start].text) { group_end(&input.tokens, start)? + 1usize } else { start + 1usize };
                 captured = input.tokens[start..*position].to_vec();
             } else {
-                let typed = fragment == "ty";
-                if !may_begin(&input.tokens[start], typed) { return Ok(false); }
-                let (consumed, remainder) = if typed && input.tokens[start].kind == 9u8 {
+                let (parsed_kind, token_kind) = match fragment.as_str() {
+                    "ty" => (ParsedFragment::Type, 9u8),
+                    "block" => (ParsedFragment::Block, BLOCK_FRAGMENT),
+                    _ => (ParsedFragment::Expression, 8u8),
+                };
+                let (consumed, remainder) = if parsed_kind != ParsedFragment::Expression && input.tokens[start].kind == token_kind {
                     (1usize, None)
                 } else {
                     let saved = checkpoint(program, input);
-                    let parsed = probe_fragment(program, &input.tokens[start..end], invocation, typed);
+                    let parsed = probe_fragment(program, &input.tokens[start..end], invocation, parsed_kind);
                     rollback(program, input, saved);
                     let (_, consumed, remainder) = parsed?;
                     (consumed, remainder)
@@ -278,7 +299,7 @@ fn matches(program: &mut Program, invocation: &MacroInvocation, pattern: &[Macro
                 let mut tokens = input.tokens[start..*position].to_vec();
                 if let Some(remainder) = remainder {
                     let original = input.tokens[*position].clone();
-                    if !typed || original.kind != 6u8
+                    if parsed_kind != ParsedFragment::Type || original.kind != 6u8
                         || !matches!(original.text.as_str(), ">>" | ">=" | ">>=") {
                         return Err(error(original.span, "E_UNSUPPORTED_MACRO",
                             "expression fragments cannot end inside a split token"));
@@ -306,7 +327,7 @@ fn matches(program: &mut Program, invocation: &MacroInvocation, pattern: &[Macro
                     type_materializations: Vec::new(), ty: None, name: name.clone(),
                     path: path.to_vec(), invocation: owner, tokens, scope: invocation.scope, span,
                     parent: invocation.parent, expression: None });
-                captured = vec![MacroToken { kind: if typed { 9u8 } else { 8u8 },
+                captured = vec![MacroToken { kind: token_kind,
                     text: String::new(), literal_spelling: String::new(), span,
                     origin: input.tokens[start].origin, context: input.tokens[start].context, capture: Some(id) }];
             }

@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! choose {
+    (@key [value (4i64)] { 2i64 }) => { 40i64 };
+    (@empty []) => { 2i64 };
+}
+macro_rules! forward {
+    ([$($head:tt)+] [$($body:tt)*]) => { choose!($($head)+ [$($body)*]) };
+    ($($body:tt)+) => { choose!($($body)+) };
+}
+pub fn probe() -> i64 {
+    forward!(@key [value (4i64)] { 2i64 }) + forward!([@empty] [])
+}

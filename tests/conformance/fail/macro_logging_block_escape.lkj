@@ -1,0 +1,7 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+macro_rules! emit { ($body:block) => { $body }; }
+fn escaped<'a>(_input: &'a i64) -> &'a i64 {
+    emit!({ let local = 42i64; &local })
+}
+pub fn probe() -> i64 { *escaped(&0i64) }

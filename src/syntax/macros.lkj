@@ -72,18 +72,20 @@ pub(crate) fn builtin_macro(name: &str) -> bool {
 fn partner(text: &str) -> String {
     match text { "(" => ")".to_string(), "[" => "]".to_string(), "{" => "}".to_string(), _ => String::new() }
 }
+const BLOCK_FRAGMENT: u8 = 10u8;
+
 fn token_kind(kind: &TokenKind) -> u8 {
     match kind {
         TokenKind::Ident => 0u8, TokenKind::Number => 1u8, TokenKind::String => 2u8,
         TokenKind::Char => 3u8, TokenKind::Bytes => 4u8, TokenKind::Lifetime => 5u8,
         TokenKind::Symbol => 6u8, TokenKind::End => 7u8, TokenKind::Expression(_) => 8u8,
-        TokenKind::Type(_) => 9u8,
+        TokenKind::Type(_) => 9u8, TokenKind::Block(_) => BLOCK_FRAGMENT,
     }
 }
 fn capture_token(token: &Token) -> MacroToken {
     MacroToken { kind: token_kind(&token.kind), text: token.text.clone(), literal_spelling: token.literal_spelling.clone(), span: token.span,
         origin: token.origin, context: token.context,
-        capture: match token.kind { TokenKind::Expression(id) | TokenKind::Type(id) => Some(id), _ => None } }
+        capture: match token.kind { TokenKind::Expression(id) | TokenKind::Type(id) | TokenKind::Block(id) => Some(id), _ => None } }
 }
 fn restore_token(token: MacroToken) -> Token {
     let kind = match token.kind {
@@ -91,6 +93,7 @@ fn restore_token(token: MacroToken) -> Token {
         3u8 => TokenKind::Char, 4u8 => TokenKind::Bytes, 5u8 => TokenKind::Lifetime,
         6u8 => TokenKind::Symbol, 8u8 => TokenKind::Expression(token.capture.unwrap()),
         9u8 => TokenKind::Type(token.capture.unwrap()),
+        kind if kind == BLOCK_FRAGMENT => TokenKind::Block(token.capture.unwrap()),
         _ => TokenKind::End,
     };
     Token { kind, text: token.text, literal_spelling: token.literal_spelling, span: token.span, origin: token.origin, context: token.context }
@@ -299,23 +302,36 @@ fn parser(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvoca
         diagnostics: Vec::new(), blocked: Vec::<BlockedRegion>::new(), diagnostic_keys: BTreeSet::new(),
         self_context: invocation.self_context, expansion, probing: false, fragment: true, macro_carriers: Vec::new() }
 }
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum ParsedFragment { Expression, Type, Block }
+
 fn fragment_mode(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation,
-    expansion: Option<usize>, typed: bool, complete: bool, probing: bool,
+    expansion: Option<usize>, fragment: ParsedFragment, complete: bool, probing: bool,
     macro_scope: Option<ModuleId>) -> Result<(usize, usize, Option<MacroToken>), Diagnostic> {
     let mut parser = parser(program, tokens, invocation, expansion);
     parser.probing = probing;
     parser.macro_scope = macro_scope;
     let span = parser.token().span;
-    let mut result = if typed { parser.ty() } else { parser.expr(true) };
+    let mut result = match fragment {
+        ParsedFragment::Expression => parser.expr(true),
+        ParsedFragment::Type => parser.ty(),
+        ParsedFragment::Block => parser.block().map(|block| {
+            let span = parser.program.blocks[block].span;
+            parser.add_expr(Expr::Block(block), span)
+        }),
+    };
     let inferred = match &result { Ok(id) => *id == 0usize, Err(_) => false };
-    if typed && inferred {
+    if fragment == ParsedFragment::Type && inferred {
         result = Ok(parser.add_type(Type::Infer, span));
     }
     if let Some(diagnostic) = parser.diagnostics.first().cloned() { result = Err(diagnostic); }
     if result.is_ok() && complete && parser.token().kind != TokenKind::End {
         result = Err(error(parser.token().span, "E_MACRO_EXPANSION",
-            if typed { "macro capture must be one complete type" }
-            else { "statement-list expansion needs statement position; help: use a brace call, a semicolon after the call, or a block template" }));
+            match fragment {
+                ParsedFragment::Type => "macro capture must be one complete type",
+                ParsedFragment::Block => "macro capture must be one complete block",
+                ParsedFragment::Expression => "statement-list expansion needs statement position; help: use a brace call, a semicolon after the call, or a block template",
+            }));
     }
     let consumed = parser.at;
     let remainder = if consumed < tokens.len() && parser.token().text != tokens[consumed].text {
@@ -331,18 +347,18 @@ fn expression(program: &mut Program, tokens: &[MacroToken], invocation: &MacroIn
     if tokens.first().is_some_and(|token| token.kind == 0u8 && matches!(token.text.as_str(), "let" | "use" | "fn" | "struct" | "enum" | "type")) {
         return Err(error(invocation.span, "E_MACRO_EXPANSION", "statement-list expansion needs statement position; help: use a brace call, a semicolon after the call, or a block template"));
     }
-    fragment_mode(program, tokens, invocation, expansion, false, complete, false, None)
+    fragment_mode(program, tokens, invocation, expansion, ParsedFragment::Expression, complete, false, None)
         .map(|(id, consumed, _)| (id, consumed))
 }
-fn probe_fragment(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation, typed: bool)
+fn probe_fragment(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation, fragment: ParsedFragment)
     -> Result<(usize, usize, Option<MacroToken>), Diagnostic> {
-    fragment_mode(program, tokens, invocation, invocation.parent, typed, false, true, None)
+    fragment_mode(program, tokens, invocation, invocation.parent, fragment, false, true, None)
 }
 impl Parser {
     pub(super) fn macro_type_materialization(&self, id: TypeId) -> bool {
         self.program.macro_captures.iter().any(|capture| capture.type_materializations.contains(&id))
     }
-    fn macro_capture(&mut self, id: usize, typed: bool) -> Result<usize, Diagnostic> {
+    fn macro_capture(&mut self, id: usize, fragment: ParsedFragment) -> Result<usize, Diagnostic> {
         let tokens = self.program.macro_captures[id].tokens.clone();
         let scope = self.program.macro_captures[id].scope;
         let span = self.program.macro_captures[id].span;
@@ -351,9 +367,9 @@ impl Parser {
             destination: self.scope, block: self.block, span, name_span: span, tokens: Vec::new(),
             self_context: self.self_context, parent, position: MacroPosition::Expression };
         let (node, _, _) = fragment_mode(&mut self.program, &tokens, &invocation,
-            parent, typed, true, self.probing, Some(scope))?;
+            parent, fragment, true, self.probing, Some(scope))?;
         let capture = &mut self.program.macro_captures[id];
-        if typed {
+        if fragment == ParsedFragment::Type {
             if capture.ty.is_none() { capture.ty = Some(node); }
             capture.type_materializations.push(node);
         } else {
@@ -363,10 +379,18 @@ impl Parser {
         Ok(node)
     }
     pub(super) fn macro_capture_expression(&mut self, id: usize) -> Result<ExprId, Diagnostic> {
-        self.macro_capture(id, false)
+        self.macro_capture(id, ParsedFragment::Expression)
     }
     pub(super) fn macro_capture_type(&mut self, id: usize) -> Result<TypeId, Diagnostic> {
-        self.macro_capture(id, true)
+        self.macro_capture(id, ParsedFragment::Type)
+    }
+    pub(super) fn macro_capture_block_expression(&mut self, id: usize) -> Result<ExprId, Diagnostic> {
+        self.macro_capture(id, ParsedFragment::Block)
+    }
+    pub(super) fn macro_capture_block(&mut self, id: usize) -> Result<BlockId, Diagnostic> {
+        let expression = self.macro_capture_block_expression(id)?;
+        let Expr::Block(block) = self.program.exprs[expression].kind else { unreachable!() };
+        Ok(block)
     }
 }
 fn items(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation,

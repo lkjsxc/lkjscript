@@ -1,0 +1,19 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! separated {
+    ($($value:expr),* $(,)?) => { 0i64 $(+ $value)* };
+}
+macro_rules! prefixed {
+    ($base:expr $(, $value:expr)* $(,)?) => {
+        separated!($base $(, $value)*)
+    };
+    ($($other:tt)*) => { 12i64 };
+}
+macro_rules! required {
+    ($($value:expr),+ $(,)?) => { 0i64 $(+ $value)* };
+}
+pub fn probe() -> i64 {
+    separated!() + separated!(,) + prefixed!(1i64) + prefixed!(2i64,)
+        + prefixed!(3i64, { 4i64 }, 5i64) + prefixed!(6i64, 7i64,)
+        + required!(2i64,) + prefixed!(1i64,,)
+}
