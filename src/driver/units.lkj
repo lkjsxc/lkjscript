@@ -286,26 +286,30 @@ fn exported_types(source: &ast::Program, program: &ir::Program, name: &str) -> V
     for (index, value) in program.types.iter().enumerate() { if names.contains(&value.name) { result.push(index); } }
     result
 }
-fn display_path(plan: &mut crate::units::plan_disk::Plan, root: &str, path: &str, manifest: &str) -> Result<String, String> {
-    if path == "$units/root.lkj" { return Ok(manifest.to_string()); }
+fn display_path(
+    plan: &mut crate::units::plan_disk::Plan, unit: &Definition,
+    imported: &mut BTreeMap<String, Option<String>>, root: &str, path: &str, manifest: &str,
+) -> Result<Option<String>, String> {
+    if path == "$units/root.lkj" { return Ok(Some(manifest.to_string())); }
     let prefix = "$units/";
-    if path.starts_with(prefix) {
-        let suffix = &path[prefix.len()..];
-        if let Some(at) = suffix.find('/') {
-            if let Some(unit) = plan.get(&suffix[..at])? {
-                if let Some(physical) = crate::units::physical(&unit, path) {
-                    return Ok(if root == "." { physical } else { format!("{root}/{physical}") });
-                }
-            }
+    if !path.starts_with(prefix) { return Ok(None); }
+    let Some((owner, suffix)) = path[prefix.len()..].split_once('/') else { return Ok(None); };
+    let source = if owner == unit.name.as_str() { unit.source.as_str() } else {
+        let name = owner.to_string();
+        if !imported.contains_key(&name) {
+            imported.insert(name.clone(), plan.get(owner)?.map(|definition: Definition| definition.source));
         }
-    }
-    Ok(path.to_string())
+        let Some(source) = imported.get(&name).unwrap() else { return Ok(None); };
+        source.as_str()
+    };
+    let Some(physical) = crate::units::physical_suffix(source, suffix) else { return Ok(None); };
+    Ok(Some(if root == "." { physical } else { format!("{root}/{physical}") }))
 }
 fn admit(
     world: &mut World, unit: &Definition, plan: &mut crate::units::plan_disk::Plan, root: &str, manifest: &str,
     expected: &[Dependency], source_names: &[String], source_identity: &str, records: &mut Records,
     options: &Options, stats: &mut Stats, memo: &mut Memo,
-) -> Result<(CheckedUnit, Record, Projection), String> {
+) -> Result<(CheckedUnit, Record), String> {
     let mut interfaces = Vec::new();
     let mut projections = Vec::new();
     {
@@ -355,6 +359,8 @@ fn admit(
         .map_err(|problems: Vec<ast::Diagnostic>| -> String { ir_failure(manifest, problems) })?;
     let instances = crate::units::normalize(&source, &mut program)?;
     let projected = crate::units::project(&unit.name, &source, &files, &instances)?;
+    drop(files);
+    drop(instances);
     let projection_bytes = projected.encode();
     let projection_key = sha256::hex_digest(&projection_bytes);
     let input_bytes = store::encode_inputs(&inputs);
@@ -377,9 +383,13 @@ fn admit(
         if projected.opaque.contains(&function.name) { exports.push(index); }
     }
     let types = exported_types(&source, &program, &unit.name);
+    drop(source);
     let imported = imports(&mut program, interfaces, &projections)?;
+    drop(projections);
+    let mut display_sources = BTreeMap::new();
     for index in 0usize..program.sources.len() {
-        program.sources[index] = display_path(plan, root, &program.sources[index], manifest)?;
+        let display = display_path(plan, unit, &mut display_sources, root, &program.sources[index], manifest)?;
+        if let Some(path) = display { program.sources[index] = path; }
     }
     let unit = crate::check::units::check_unit_with_exports(&unit.name, &input, program, &imported, &exports, &types)
         .map_err(|problems: Vec<ast::Diagnostic>| -> String { ir_failure(manifest, problems) })?;
@@ -391,7 +401,7 @@ fn admit(
         projection: projection_key, dependency_sources: source_identity.to_string(),
         dependencies: expected.to_vec(), inputs: input_bytes, sources,
         messages: crate::native::messages(unit.program()),
-        requires: Some(projected.requires.clone()),
+        requires: Some(projected.requires),
     };
     if !store::inputs_match(world, &record.inputs) { return Err(problem("unit sources changed during checking")); }
     {
@@ -400,7 +410,7 @@ fn admit(
         store.put(PROJECTIONS, &record.projection, &projection_bytes);
         store.put(crate::check::units::STORE_NAMESPACE, &key, &unit.interface().encode());
     }
-    Ok((unit, record, projected))
+    Ok((unit, record))
 }
 
 struct Publication {
@@ -468,7 +478,9 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
     let record_file = scratch_file(world, options, "records")?;
     let input_file = scratch_file(world, options, "inputs")?;
     let mut records = Records::new(record_file)?;
-    let mut snapshot = inputs_disk::Snapshot::new(input_file).map_err(|detail: String| problem(&detail))?;
+    let mut directories = vec![root.clone()];
+    if let Some(directory) = &options.library_directory { directories.push(directory.clone()); }
+    let mut snapshot = inputs_disk::Snapshot::new(input_file, directories).map_err(|detail: String| problem(&detail))?;
     // Checking needs no final-image tables or table scratch capability.
     let mut tables: Option<crate::native::units::ImageTables> = if build {
         let file = scratch_file(world, options, "tables")?;
@@ -518,7 +530,7 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
         let record = match ready {
             Some((_, record)) => { reused += 1usize; record }
             None => {
-                let (unit, record, _) = admit(world, &definition, &mut plan, &root, &manifest_path, &expected, &source_names, &source_identity, &mut records, options, stats, memo)?;
+                let (unit, record) = admit(world, &definition, &mut plan, &root, &manifest_path, &expected, &source_names, &source_identity, &mut records, options, stats, memo)?;
                 checked += 1usize;
                 if build {
                     let context = context.as_ref().unwrap();

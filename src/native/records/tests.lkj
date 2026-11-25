@@ -582,9 +582,51 @@ fn successor_refusals(world: &mut World) -> usize {
     store.finish().unwrap();
     6usize
 }
+fn ordered_visit(world: &mut World) -> usize {
+    let (mut store, mut alias) = scratch(world);
+    assert!(store.visit(&mut |_: &str, _: &[u8]| -> Result<bool, String> {
+        panic!("empty index visited a row")
+    }).unwrap());
+    store.insert("b", b"second").unwrap();
+    store.insert("c", b"third").unwrap();
+    store.insert("", b"first").unwrap();
+    let mut keys: Vec<String> = Vec::new();
+    assert!(store.visit(&mut |key: &str, value: &[u8]| -> Result<bool, String> {
+        assert_eq!(value, store_visit_value(key));
+        keys.push(key.to_string());
+        Ok(true)
+    }).unwrap());
+    assert_eq!(keys, vec!["".to_string(), "b".to_string(), "c".to_string()]);
+    keys.clear();
+    assert!(!store.visit(&mut |key: &str, _: &[u8]| -> Result<bool, String> {
+        keys.push(key.to_string());
+        Ok(false)
+    }).unwrap());
+    assert_eq!(keys, vec!["".to_string()]);
+
+    let root = store.root.unwrap();
+    let original = bytes(&mut alias);
+    assert_eq!(store.visit(&mut |key: &str, _: &[u8]| -> Result<bool, String> {
+        assert_eq!(key, "");
+        flip(&mut alias, root.anchor.offset + 8usize);
+        Ok(true)
+    }).err().unwrap(), "command records: record changed after writing");
+    restore(&mut alias, &original);
+    assert!(store.get("b").err().unwrap().contains("poisoned"));
+    assert!(store.finish().err().unwrap().contains("poisoned"));
+    4usize
+}
+fn store_visit_value(key: &str) -> &[u8] {
+    match key {
+        "" => b"first",
+        "b" => b"second",
+        "c" => b"third",
+        _ => panic!("unexpected ordered visit key"),
+    }
+}
 pub(super) fn run(world: &mut World) -> usize {
     rotations(world) + keys(world) + poisoning(world) + corruption(world)
         + path_allowance(world) + append_equivalence(world) + write_boundaries(world)
         + insert_or_get_equivalence(world) + insert_or_get_refusals(world) + legacy_refusal_priority(world)
-        + successor_equivalence(world) + successor_refusals(world) + digest_equivalence()
+        + successor_equivalence(world) + successor_refusals(world) + digest_equivalence() + ordered_visit(world)
 }

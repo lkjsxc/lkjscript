@@ -54,6 +54,7 @@ fn literal_cases(world: &mut World) -> usize {
         r###"const UNITS: &[&str] = &[r##"a=雪/"#.lkj"##]; const DEPENDS: &[&str] = &[]; const ENTRY: &str = r#"a::main"#;"###.to_string(),
         r###"const UNITS: &[&str] = &["a=\u{96ea}/\x65\u{301}.lkj"]; const DEPENDS: &[&str] = &[]; const ENTRY: &str = "a::main";"###.to_string(),
         "const UNITS: &[&str] = &[\"root=root.lkj\", \"c=c.lkj\", \"a=a.lkj\", \"b=b.lkj\"]; const DEPENDS: &[&str] = &[\"root=c\", \"root=a\", \"c=b\", \"a=b\"]; const ENTRY: &str = \"root::main\";".to_string(),
+        "const UNITS: &[&str] = &[\"a=a.lkj\", \"b=b.lkj\", \"c=c.lkj\", \"d=d.lkj\", \"e=e.lkj\", \"f=f.lkj\"]; const DEPENDS: &[&str] = &[\"c=a\", \"d=a\", \"f=a\"]; const ENTRY: &str = \"f::main\";".to_string(),
     ];
     for text in &cases { same(world, text); } cases.len()
 }

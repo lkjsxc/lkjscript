@@ -154,10 +154,13 @@ impl Heap {
         }
         self.write(data, at, &name)
     }
-    fn pop(&mut self, data: &mut records::Store) -> Result<Option<String>, String> {
-        if self.length == 0usize { return Ok(None); }
-        let result = self.read(data, 0usize)?; let last = self.read(data, self.length - 1usize)?;
-        self.length -= 1usize; if self.length == 0usize { return Ok(Some(result)); }
+    fn remove_first(&mut self, data: &mut records::Store) -> Result<(), String> {
+        if self.length == 1usize {
+            self.length = 0usize;
+            return Ok(());
+        }
+        let last = self.read(data, self.length - 1usize)?;
+        self.length -= 1usize;
         let mut at = 0usize;
         loop {
             let left = at.checked_mul(2usize).and_then(|value: usize| value.checked_add(1usize))
@@ -172,23 +175,27 @@ impl Heap {
             if last <= value { break; }
             self.write(data, at, &value)?; at = child;
         }
-        self.write(data, at, &last)?; Ok(Some(result))
+        self.write(data, at, &last)
     }
 }
-fn initial_ready(data: &mut records::Store, count: usize, heap: &mut Heap) -> Result<(), String> {
+fn initial_ready(data: &mut records::Store, count: usize) -> Result<usize, String> {
     let mut previous = "D".to_string(); let mut seen = 0usize;
+    let mut ready = 0usize;
     while let Some(key) = after(data, &previous)? {
         if !key.starts_with("D") { break; }
         {
             let name = &key[1usize..]; let value = metadata(data, name, count)?; let remaining = state(data, name, count)?;
             if remaining.done || remaining.value != value.dependencies { return Err(issue("invalid initial manifest state")); }
-            if remaining.value == 0usize { heap.push(data, name.to_string())?; }
+            if remaining.value == 0usize {
+                insert(data, &ordinal_key("I", ready), &row_bytes(4usize, ready, name))?;
+                ready = next_count(ready)?;
+            }
         }
         seen = next_count(seen)?; if seen > count { return Err(issue("retained manifest has extra definitions")); }
         previous = key;
     }
     if seen != count { return Err(issue("retained manifest definition count changed")); }
-    Ok(())
+    Ok(ready)
 }
 fn release(data: &mut records::Store, name: &str, count: usize, heap: &mut Heap) -> Result<(), String> {
     let prefix = format!("R{name}\0"); let mut previous = prefix.clone();
@@ -215,9 +222,28 @@ fn total(values: &[usize]) -> Result<usize, String> {
 }
 pub(super) fn construct(mut data: records::Store, captured: input::Captured, tape: tokens::Tape, parsed: parser::Parsed) -> Result<Plan, String> {
     definitions(&mut data, parsed.units)?; dependencies(&mut data, parsed.units, parsed.dependencies)?;
-    let mut heap = Heap::new(); initial_ready(&mut data, parsed.units, &mut heap)?;
+    let initial_count = initial_ready(&mut data, parsed.units)?;
+    let mut initial_next = 0usize;
+    let mut initial: Option<String> = None;
+    let mut heap = Heap::new();
     let mut completed = 0usize;
-    while let Some(name) = heap.pop(&mut data)? {
+    loop {
+        // Definitions are visited in lexical order. Keep their initially
+        // ready rows sorted and heapify only units released by an edge.
+        if initial.is_none() && initial_next < initial_count {
+            let name = staged(&mut data, "I", 4usize, initial_next)?;
+            if !identifier(&name) { return Err(issue("invalid name in initial ready manifest row")); }
+            initial = Some(name);
+            initial_next = next_count(initial_next)?;
+        }
+        let next = if heap.length == 0usize { None } else { Some(heap.read(&mut data, 0usize)?) };
+        let name = match next {
+            Some(name) if initial.as_ref().is_none_or(|first: &String| &name < first) => {
+                heap.remove_first(&mut data)?;
+                name
+            }
+            _ => match initial.take() { Some(name) => name, None => break },
+        };
         let remaining = state(&mut data, &name, parsed.units)?;
         if remaining.done || remaining.value != 0usize || completed >= parsed.units {
             return Err(issue("invalid ready unit in retained manifest"));
@@ -233,7 +259,7 @@ pub(super) fn construct(mut data: records::Store, captured: input::Captured, tap
         return Err(issue("ENTRY must name unit::function"));
     }
     let inventory = total(&[captured.chunks, tape.chunks, parsed.units, parsed.dependencies,
-        parsed.units, parsed.units, parsed.units, parsed.dependencies, parsed.dependencies, heap.slots, parsed.units])?;
+        parsed.units, parsed.units, parsed.units, parsed.dependencies, parsed.dependencies, initial_count, heap.slots, parsed.units])?;
     if data.len() != inventory { return Err(issue("retained manifest record inventory changed")); }
     Ok(Plan { data, entry: parsed.entry, count: parsed.units, next: 0usize,
         fingerprint: captured.fingerprint, inventory, failed: false })
@@ -242,8 +268,10 @@ pub(super) fn construct(mut data: records::Store, captured: input::Captured, tap
 /// Restores one unit and only its direct dependencies, in lexical order.
 /// Stored completion ranks independently bind O rows to their scheduled unit.
 pub(super) fn definition(data: &mut records::Store, name: &str, count: usize, ordinal: Option<usize>) -> Result<Option<Definition>, String> {
-    if !identifier(name) || !contains(data, &named("D", name))? { return Ok(None); }
-    let value = metadata(data, name, count)?; let own = state(data, name, count)?;
+    if !identifier(name) { return Ok(None); }
+    let Some(bytes) = data.get(&named("D", name)).map_err(|message: String| record_error(message))? else { return Ok(None); };
+    let value = decode_metadata(&bytes, name, count).ok_or_else(|| issue("malformed retained manifest definition"))?;
+    let own = state(data, name, count)?;
     if !own.done || ordinal.is_some_and(|expected: usize| expected != own.value) {
         return Err(issue("retained manifest schedule rank changed"));
     }

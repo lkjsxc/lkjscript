@@ -26,7 +26,7 @@ plan_root=$(realpath "$plan_fixture")
 "$plan_compiler" build src/main.lkj --library-dir library --entry units::plan_disk::contracts_main --no-store \
     -o "$plan_root/contracts" > "$plan_root/contracts-build.out" 2> "$plan_root/contracts-build.err"
 "$plan_root/contracts" > "$plan_root/contracts-native.out" 2> "$plan_root/contracts-native.err"
-grep -Fxq -- 'ok streaming manifest 85 controls' "$plan_root/contracts-native.out"
+grep -Fxq -- 'ok streaming manifest 86 controls' "$plan_root/contracts-native.out"
 cat "$plan_root/contracts-native.out"
 "$plan_compiler" run src/main.lkj --library-dir library --entry units::plan_disk::smoke_main \
     --engine interpreter --no-store \

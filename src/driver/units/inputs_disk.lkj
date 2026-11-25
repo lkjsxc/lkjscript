@@ -6,21 +6,20 @@ use super::inputs::Expectation;
 use std::collections::BTreeMap;
 
 type Key = (String, String);
-fn key(directory: &str, path: &str) -> String {
-    format!("{}:{directory}{path}", directory.len())
+const DIRECTORY_ORDINAL_WIDTH: usize = 20usize;
+fn retained_key(directories: &[String], directory: &str, path: &str) -> Result<String, String> {
+    let Some(ordinal) = directories.iter().position(|label: &String| label.as_str() == directory) else {
+        return Err("selected input has an unknown directory".to_string());
+    };
+    Ok(format!("{ordinal:020}{path}"))
 }
-fn split_key(value: &str) -> Result<Key, String> {
-    let at = value.find(':').ok_or_else(|| -> String { "input record has no directory length".to_string() })?;
-    let length = value[..at].parse::<usize>()
-        .map_err(|_| -> String { "input record has an invalid directory length".to_string() })?;
-    let bytes = &value.as_bytes()[at + 1usize..];
-    if length > bytes.len() { return Err("input record directory exceeds its key".to_string()); }
-    let directory = String::from_utf8(bytes[..length].to_vec())
-        .map_err(|_| -> String { "input record directory is not UTF-8".to_string() })?;
-    let path = String::from_utf8(bytes[length..].to_vec())
-        .map_err(|_| -> String { "input record path is not UTF-8".to_string() })?;
-    if key(&directory, &path) != value { return Err("input record key is not canonical".to_string()); }
-    Ok((directory, path))
+fn directory_ordinal(key: &str) -> Result<usize, String> {
+    if key.len() < DIRECTORY_ORDINAL_WIDTH
+        || !key.as_bytes()[..DIRECTORY_ORDINAL_WIDTH].iter().all(|byte: &u8| byte.is_ascii_digit()) {
+        return Err("input record has an invalid directory ordinal".to_string());
+    }
+    key[..DIRECTORY_ORDINAL_WIDTH].parse::<usize>()
+        .map_err(|_| -> String { "input record has an invalid directory ordinal".to_string() })
 }
 fn encode(value: &Option<String>) -> Vec<u8> {
     match value {
@@ -45,6 +44,7 @@ fn decode(bytes: &[u8]) -> Result<Option<String>, String> {
 
 pub struct Snapshot {
     required: disk_records::Store,
+    directories: Vec<String>,
     observed: BTreeMap<Key, Option<String>>,
     recent: BTreeMap<Key, Option<String>>,
     conflicted: bool,
@@ -52,8 +52,14 @@ pub struct Snapshot {
     reused: usize,
 }
 impl Snapshot {
-    pub fn new(file: File) -> Result<Self, String> {
-        Ok(Self { required: disk_records::Store::new(file)?, observed: BTreeMap::new(),
+    pub fn new(file: File, directories: Vec<String>) -> Result<Self, String> {
+        // Preserve the key order of length-prefixed directory names while
+        // keeping the invocation's full labels out of every index node.
+        let mut ordered: BTreeMap<String, String> = BTreeMap::new();
+        for label in directories { ordered.insert(format!("{}:{label}", label.len()), label); }
+        let mut directories = Vec::new();
+        for (_, directory) in ordered { directories.push(directory); }
+        Ok(Self { required: disk_records::Store::new(file)?, directories, observed: BTreeMap::new(),
             recent: BTreeMap::new(), conflicted: false, reads: 0usize, reused: 0usize })
     }
     pub fn matches<F: FnMut(&str, &str) -> Option<Option<String>>>(
@@ -91,7 +97,7 @@ impl Snapshot {
                 None => match self.recent.get(&name) {
                     Some(value) => Some(value.clone()),
                     None => match self.required.insert_or_get(
-                        &key(&input.directory, &input.path), &encode(&input.digest),
+                        &retained_key(&self.directories, &input.directory, &input.path)?, &encode(&input.digest),
                     )? {
                         Some(bytes) => Some(decode(&bytes)?), None => None,
                     },
@@ -118,17 +124,15 @@ impl Snapshot {
     fn verify_values<F: FnMut(&str, &str) -> Option<Option<String>>>(
         &mut self, read: &mut F,
     ) -> Result<bool, String> {
-        let mut next = self.required.first()?;
-        while let Some(name) = next {
-            let (directory, path) = split_key(&name)?;
-            let bytes = self.required.get(&name)?
-                .ok_or_else(|| -> String { "selected input disappeared from its retained index".to_string() })?;
-            let expected = decode(&bytes)?;
-            let Some(actual) = read(&directory, &path) else { return Ok(false); };
-            if actual != expected { return Ok(false); }
-            next = self.required.after(&name)?;
-        }
-        Ok(true)
+        let directories = &self.directories;
+        self.required.visit(&mut |name: &str, bytes: &[u8]| -> Result<bool, String> {
+            let Some(directory) = directories.get(directory_ordinal(name)?) else {
+                return Err("input record has an unknown directory ordinal".to_string());
+            };
+            let expected = decode(bytes)?;
+            let Some(actual) = read(directory, &name[DIRECTORY_ORDINAL_WIDTH..]) else { return Ok(false); };
+            Ok(actual == expected)
+        })
     }
     pub fn verify<F: FnMut(&str, &str) -> Option<Option<String>>>(
         &mut self, read: &mut F,

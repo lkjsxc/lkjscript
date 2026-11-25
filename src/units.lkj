@@ -127,11 +127,13 @@ pub fn virtual_root(name: &str) -> String { format!("$units/{name}/mod.lkj") }
 pub fn physical(unit: &Definition, path: &str) -> Option<String> {
     let prefix = virtual_prefix(&unit.name);
     if !path.starts_with(&prefix) { return None; }
-    let suffix = &path[prefix.len()..];
-    if suffix == "mod.lkj" { return Some(unit.source.clone()); }
+    physical_suffix(&unit.source, &path[prefix.len()..])
+}
+pub(crate) fn physical_suffix(source: &str, suffix: &str) -> Option<String> {
+    if suffix == "mod.lkj" { return Some(source.to_string()); }
     if !beneath(suffix) { return None; }
-    match unit.source.rfind('/') {
-        Some(at) => Some(format!("{}/{}", &unit.source[..at], suffix)),
+    match source.rfind('/') {
+        Some(at) => Some(format!("{}/{}", &source[..at], suffix)),
         None => Some(suffix.to_string()),
     }
 }

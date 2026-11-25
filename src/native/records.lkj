@@ -143,14 +143,31 @@ fn decode_node(bytes: &[u8]) -> Option<Node> {
 }
 fn decode_value(bytes: &[u8], key: &str) -> Option<Vec<u8>> {
     let mut reader = Reader::new(bytes, VALUE.as_bytes())?;
-    if reader.text()?.as_str() != key { return None; }
+    let key_length = reader.word()?;
+    if reader.take(key_length)? != key.as_bytes() { return None; }
     let value = reader.blob()?;
     if !reader.done() { return None; }
     Some(value)
 }
+// Keys are UTF-8 strings ordered by bytes. One comparison suffices for both
+// equality and branch direction, even when many keys share a long prefix.
+fn key_order(left: &str, right: &str) -> i32 {
+    let left = left.as_bytes();
+    let right = right.as_bytes();
+    let common = left.len().min(right.len());
+    let mut index = 0usize;
+    while index < common {
+        let difference = left[index] as i32 - right[index] as i32;
+        if difference != 0i32 { return difference; }
+        index += 1usize;
+    }
+    if left.len() < right.len() { -1i32 }
+    else if left.len() > right.len() { 1i32 }
+    else { 0i32 }
+}
 fn ordered(key: &str, lower: &Option<String>, upper: &Option<String>) -> bool {
-    if let Some(lower) = lower { if key <= lower.as_str() { return false; } }
-    if let Some(upper) = upper { if key >= upper.as_str() { return false; } }
+    if let Some(lower) = lower { if key_order(key, lower) <= 0i32 { return false; } }
+    if let Some(upper) = upper { if key_order(key, upper) >= 0i32 { return false; } }
     true
 }
 
@@ -229,11 +246,12 @@ impl Store {
         }
         Ok(node)
     }
-    fn append(&mut self, payload: &[u8]) -> Result<Anchor, String> {
-        let length = payload.len().checked_add(8usize).ok_or_else(|| failure("record extent overflow"))?;
+    fn append(&mut self, mut bytes: Vec<u8>) -> Result<Anchor, String> {
+        let length = bytes.len();
         let end = self.extent.checked_add(length).ok_or_else(|| failure("scratch extent overflow"))?;
         if end > 9223372036854775807usize { return Err(failure("scratch file exceeds seek representation")); }
-        let mut bytes = Vec::new(); word(&mut bytes, payload.len()); bytes.extend_from_slice(payload);
+        let payload_length = length.checked_sub(8usize).ok_or_else(|| failure("record has no length field"))?;
+        for index in 0usize..8usize { bytes[index] = (payload_length >> (index * 8usize)) as u8; }
         let result = Anchor { offset: self.extent, length, digest: record_digest(self.extent, &bytes) };
         self.file.seek(self.extent as i64, 0u8).map_err(|errno: i64| io("seek scratch append", errno))?;
         self.file.write_all(&bytes).map_err(|errno: i64| io("append scratch record", errno))?;
@@ -241,8 +259,9 @@ impl Store {
         Ok(result)
     }
     fn write_value(&mut self, key: &str, value: &[u8]) -> Result<Anchor, String> {
-        let mut bytes = VALUE.as_bytes().to_vec(); blob(&mut bytes, key.as_bytes()); blob(&mut bytes, value);
-        let result = self.append(&bytes)?;
+        let mut bytes = vec![0u8; 8];
+        bytes.extend_from_slice(VALUE.as_bytes()); blob(&mut bytes, key.as_bytes()); blob(&mut bytes, value);
+        let result = self.append(bytes)?;
         self.maximum_value = self.maximum_value.max(result.length);
         Ok(result)
     }
@@ -261,9 +280,10 @@ impl Store {
                 }
             }
         }
-        let mut bytes = NODE.as_bytes().to_vec(); word(&mut bytes, height); blob(&mut bytes, node.key.as_bytes());
+        let mut bytes = vec![0u8; 8];
+        bytes.extend_from_slice(NODE.as_bytes()); word(&mut bytes, height); blob(&mut bytes, node.key.as_bytes());
         anchor(&mut bytes, node.value); link(&mut bytes, node.left); link(&mut bytes, node.right);
-        let result = self.append(&bytes)?;
+        let result = self.append(bytes)?;
         self.maximum_node = self.maximum_node.max(result.length);
         self.maximum_height = self.maximum_height.max(height);
         Ok(Link { anchor: result, height })
@@ -319,8 +339,9 @@ impl Store {
             if visited > self.maximum_height { return Err(failure("index path exceeds its writer height")); }
             let node = self.read_node(link)?;
             if !ordered(&node.key, &lower, &upper) { return Err(failure("invalid index key order")); }
-            if key == node.key.as_str() { return Ok(Some(node)); }
-            if key < node.key.as_str() { current = node.left; upper = Some(node.key); }
+            let order = key_order(key, &node.key);
+            if order == 0i32 { return Ok(Some(node)); }
+            if order < 0i32 { current = node.left; upper = Some(node.key); }
             else { current = node.right; lower = Some(node.key); }
         }
         Ok(None)
@@ -333,8 +354,9 @@ impl Store {
             if path.len() >= self.maximum_height { return Err(failure("index path exceeds its writer height")); }
             let node = self.read_node(link)?;
             if !ordered(&node.key, &lower, &upper) { return Err(failure("invalid index key order")); }
-            if key == node.key.as_str() { selected = Some(node); break; }
-            let left = key < node.key.as_str();
+            let order = key_order(key, &node.key);
+            if order == 0i32 { selected = Some(node); break; }
+            let left = order < 0i32;
             current = if left { node.left } else { node.right };
             let (step, bound) = Step::retain(link, left, node, &mut remaining);
             path.push(step);
@@ -404,10 +426,12 @@ impl Store {
     }
     fn get_value(&mut self, key: &str) -> Result<Option<Vec<u8>>, String> {
         let Some(node) = self.find(key)? else { return Ok(None); };
+        Ok(Some(self.read_value(node.value, key)?))
+    }
+    fn read_value(&mut self, anchor: Anchor, key: &str) -> Result<Vec<u8>, String> {
         let maximum = self.maximum_value;
-        let bytes = self.read(node.value, maximum)?;
-        let value = decode_value(&bytes, key).ok_or_else(|| failure("malformed value or changed key"))?;
-        Ok(Some(value))
+        let bytes = self.read(anchor, maximum)?;
+        decode_value(&bytes, key).ok_or_else(|| failure("malformed value or changed key"))
     }
     pub fn get(&mut self, key: &str) -> Result<Option<Vec<u8>>, String> {
         if self.failed { return Err(failure("store is poisoned by an earlier failure")); }
@@ -424,7 +448,7 @@ impl Store {
             if visited > self.maximum_height { return Err(failure("index path exceeds its writer height")); }
             let node = self.read_node(link)?;
             if !ordered(&node.key, &lower, &upper) { return Err(failure("invalid index key order")); }
-            let before = match key { Some(key) => key < node.key.as_str(), None => true };
+            let before = match key { Some(key) => key_order(key, &node.key) < 0i32, None => true };
             if before { current = node.left; upper = Some(node.key.clone()); result = Some(node); }
             else { current = node.right; lower = Some(node.key); }
         }
@@ -439,10 +463,7 @@ impl Store {
     fn successor_value(&mut self, key: &str, prefix: &str) -> Result<Option<(String, Vec<u8>)>, String> {
         let Some(node) = self.successor_node(Some(key))? else { return Ok(None); };
         if !node.key.starts_with(prefix) { return Ok(None); }
-        let maximum = self.maximum_value;
-        let bytes = self.read(node.value, maximum)?;
-        let value = decode_value(&bytes, &node.key)
-            .ok_or_else(|| failure("malformed value or changed key"))?;
+        let value = self.read_value(node.value, &node.key)?;
         Ok(Some((node.key, value)))
     }
     pub fn first(&mut self) -> Result<Option<String>, String> {
@@ -466,6 +487,45 @@ impl Store {
         if self.failed { return Err(failure("store is poisoned by an earlier failure")); }
         self.failed = true;
         let result = self.successor_value(key, prefix);
+        if result.is_ok() { self.failed = false; }
+        result
+    }
+    fn visit_values<F: FnMut(&str, &[u8]) -> Result<bool, String>>(&mut self, visit: &mut F) -> Result<bool, String> {
+        let mut pending = Vec::new();
+        let mut current = self.root;
+        let mut previous: Option<String> = None;
+        let mut seen = 0usize;
+        loop {
+            let node = if let Some(link) = current {
+                let node = self.read_node(link)?;
+                if let Some(left) = node.left {
+                    if pending.len() >= self.maximum_height { return Err(failure("index path exceeds its writer height")); }
+                    pending.push(link);
+                    current = Some(left);
+                    continue;
+                }
+                node
+            } else if let Some(link) = pending.pop() {
+                self.read_node(link)?
+            } else { break; };
+            if seen >= self.count || previous.as_ref().is_some_and(|prior: &String| key_order(prior, &node.key) >= 0i32) {
+                return Err(failure("invalid ordered index inventory"));
+            }
+            let value = self.read_value(node.value, &node.key)?;
+            if !visit(&node.key, &value)? { return Ok(false); }
+            seen += 1usize;
+            current = node.right;
+            previous = Some(node.key);
+        }
+        if seen != self.count { return Err(failure("incomplete ordered index inventory")); }
+        Ok(true)
+    }
+    /// Visit authenticated rows in key order, stopping when the visitor returns false.
+    /// Keep only ancestor locators and recheck their bytes before visiting them.
+    pub fn visit<F: FnMut(&str, &[u8]) -> Result<bool, String>>(&mut self, visit: &mut F) -> Result<bool, String> {
+        if self.failed { return Err(failure("store is poisoned by an earlier failure")); }
+        self.failed = true;
+        let result = self.visit_values(visit);
         if result.is_ok() { self.failed = false; }
         result
     }

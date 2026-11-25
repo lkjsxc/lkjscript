@@ -30,7 +30,7 @@ fn claim(directory: &str, path: &str, digest: Option<&str>) -> Expectation {
 }
 
 fn fresh(world: &mut World) -> inputs_disk::Snapshot {
-    inputs_disk::Snapshot::new(world.temporary_file().unwrap()).unwrap()
+    inputs_disk::Snapshot::new(world.temporary_file().unwrap(), vec!["root".to_string()]).unwrap()
 }
 
 fn shared(world: &mut World) {
@@ -112,15 +112,23 @@ fn absent_is_not_empty(world: &mut World) {
 fn names_are_pairs(world: &mut World) {
     let values = vec![claim("a", "bc", Some("A")), claim("ab", "c", Some("B")),
         claim("雪:é", "\n0:entry", Some("C")), claim("", "", None)];
-    let mut disk = fresh(world); let mut memory = inputs::Snapshot::new();
+    let directories = vec!["ab".to_string(), "雪:é".to_string(), "a".to_string(), "".to_string(), "ab".to_string()];
+    let mut disk = inputs_disk::Snapshot::new(world.temporary_file().unwrap(), directories).unwrap();
+    let mut memory = inputs::Snapshot::new();
     assert_eq!(disk.require(&values).unwrap(), memory.require(&values));
     assert_eq!(disk.required(), 4usize);
+    let mut seen: Vec<String> = Vec::new();
     assert!(disk.verify(&mut |directory: &str, _: &str| -> Option<Option<String>> {
+        seen.push(directory.to_string());
         Some(if directory == "a" { Some("A".to_string()) }
             else if directory == "ab" { Some("B".to_string()) }
             else if directory == "雪:é" { Some("C".to_string()) } else { None })
     }).unwrap());
+    assert_eq!(seen, vec!["".to_string(), "a".to_string(), "ab".to_string(), "雪:é".to_string()]);
     disk.finish().unwrap();
+    let mut disk = fresh(world);
+    assert!(disk.require(&values).err().unwrap().contains("unknown directory"));
+    assert!(disk.finish().is_err());
 }
 
 fn internal_conflict(world: &mut World) {
@@ -169,7 +177,7 @@ fn changed_backing_file(world: &mut World) {
     for attack in 0usize..2usize {
         let mut file = world.temporary_file().unwrap();
         let mut alias = file.duplicate().unwrap();
-        let mut disk = inputs_disk::Snapshot::new(file).unwrap();
+        let mut disk = inputs_disk::Snapshot::new(file, vec!["root".to_string()]).unwrap();
         let values = vec![claim("root", "shared", Some("A"))];
         assert!(disk.require(&values).unwrap());
         assert!(disk.verify(&mut |_: &str, _: &str| -> Option<Option<String>> {

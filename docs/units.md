@@ -33,9 +33,12 @@ Manifest capture streams UTF-8 validation and a complete source digest before
 the lexer can report input text. An exact private-key input is excluded first.
 Raw chunks, decoded token chunks and literal rows live in an authenticated
 command-local disk store. Only one lexeme or literal is decoded at a time.
-Individual definition, path, dependency and remaining-count records feed an
-on-disk ready heap. Completed ordinal rows are bound to each unit's stored rank.
-A caller restores one unit's definition and direct-dependency list. Final
+Individual definition, path, dependency and remaining-count records feed the
+schedule. Initially ready units form a sorted disk stream. The scheduler merges
+its head with the minimum of a disk heap for newly ready units. Completed
+ordinal rows are bound to each unit's stored rank. A caller restores one unit's
+definition and direct-dependency list. Diagnostic paths reuse that active
+definition and restore an imported unit's source root once per checking unit. Final
 authentication includes the complete scratch file and exact inventory, followed
 by a streamed rehash of the original manifest before publication. There is no
 manifest-size or nesting policy cap.
@@ -72,7 +75,11 @@ authenticated disk stores. Only the selected authenticated projection supplies a
 retained record's requirement list. The adjacent units' observation and
 selected-claim caches remain in RAM. Selected claims persist in scratch and
 participate in conflict checks after an observation leaves the cache. Both
-complete scratch files are verified before publication.
+complete scratch files are verified before publication. Scratch keys bind paths
+to ordinals for the invocation's exact source and library directories. The final input sweep
+walks the selected-claim index in key order, authenticating each row and
+rereading its corresponding source input. The walk retains only ancestor
+locators, the previous key and one current row.
 
 ## What an interface proves
 
@@ -265,14 +272,16 @@ The ordinary gate runs:
   decoding, structural and ownership attacks, including a three-unit destructor
   reexport, canonical span identities and reauthenticated malformed payloads.
   The current focused run refuses 2,809 deliberate mutants.
-- `tools/unit-native.sh`: 239 native contract cases covering cross-unit
+- `tools/unit-native.sh`: 243 native contract cases covering cross-unit
   execution, wrong domains, stale bodies, ordinal tables, bounded spool frames,
   names larger than 64 KiB, unpublished headers on refusal and preserved custom
   traps with exact unresolved-binding locations. Registry controls cover all
   four AVL rotations, replacement and nonmembership at empty/UTF-8/prefix keys,
   duplicate/missing-key poisoning, root/internal/value/obsolete-record changes,
   swapped values, length/UTF-8 damage, truncation, trailing/sparse bytes and
-  rollback. Native controls also preserve source/message validation arrival
+  rollback. The ordered walk covers empty and early-stop visits, exact row
+  order and payloads, and an ancestor changed after descent. Native controls
+  also preserve source/message validation arrival
   order, allow unused well-formed missing relocation names, reject missing/stale
   declared dependencies despite an independent entry, and report the first
   original unresolved row when provider sorting would select another name.

@@ -600,6 +600,8 @@ fn prepare_runtime(code: String, actual_path: &str) -> Result<runtime::Runtime, 
     if !parsed.files.is_empty() { parsed.files[0].path = actual_path.to_string(); }
     let meaning = elaborate::elaborate(&parsed)
         .map_err(|problem| located(actual_path, &parsed, problem))?;
+    drop(parsed);
+    drop(code);
     let checked =
         check::check(meaning).map_err(|problem| report("$runtime/runtime.lkj", problem))?;
     runtime::seal(checked).map_err(|problem| report("$runtime/runtime.lkj", problem))
