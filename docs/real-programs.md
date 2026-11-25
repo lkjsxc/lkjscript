@@ -300,6 +300,21 @@ need a view and lifetime contract. Match-arm configuration removed the most
 primary sites among the changes that fit one parser slice. The next narrow
 candidate is trailing-point floating literals, with 13 located sites in cssparser.
 
+#### Declarative macro binding review
+
+Of the 478 reviewed sites, 472 request the Sōzu command crate's logging macros
+and four request the Sōzu library crate's metrics macros. Both imports use
+`#[macro_use] extern crate`, and the projected checks have no external crate
+bindings. The other two sites are `info!` in the command crate, whose local
+provider file is blocked by lexing, and Rust's standard `unimplemented!` in the
+e2e crate.
+
+Admitting `@` as a token lets the command root reach the logging definitions.
+All 19 affected logging calls still refuse at a repetition that starts with a
+comma and precedes an optional trailing comma. The provider also reaches
+unsupported `block` fragments and logger dependencies. The experiment exposed
+additional diagnostic sites and yielded no admitted calls from the 478-site group.
+
 #### Earlier ordinary numeric traits frontier
 
 <!-- numeric-evidence-v1 sha256:53c52136581be3be25a96ff0bfa4e7077207da1e8f75548cc3aaa456e746a484 -->
