@@ -88,9 +88,7 @@ The initializer checks in its declaring module even when unused. Cycles are
 rejected. Each use constructs the value with ordinary IR, including inside a
 const function. The catalog records value identities such as `value@Ready::EMPTY`.
 A nongeneric trait may require a constant with an exact declared type, including
-`Self` and its associated types under the exact declaring trait. A projection's
-`as` clause may use an import alias of the trait and rejects an extra path suffix,
-even when the required constant is unused. Each concrete
+`Self` and its associated types under the exact declaring trait. Each concrete
 primitive or nongeneric nominal implementation must supply
 that member once, with the same type. A fully qualified value path such as
 `<Ready as Flag>::EMPTY` selects the exact receiver and trait; unrelated traits
@@ -499,6 +497,10 @@ selected trait's parameter scope; an implementation's generic names cannot
 capture the provided method's own parameters. Associated equality constraints belong on
 bounds; bindings in an `as` clause, such as `<T as Source<Item = i64>>::Item`,
 are located refusals.
+
+An `as` clause, impl header or bound names the trait declaration through its
+module path or an exact import alias. A member suffix inside the trait path
+produces a diagnostic at that path, including in unused declarations.
 
 Associated definitions resolve one requested member at a time. Finite sibling
 chains, decreasing generic families and nominal recursion through indirection

@@ -716,6 +716,16 @@ impl<'a> Resolver<'a> {
         }
         Ok(Some(Resolved::item(binding)))
     }
+    fn exact_trait(&self, declaration: DeclarationId, target: &str, span: Span) -> Result<Option<usize>> {
+        let entry = &self.declarations[declaration];
+        let Item::Trait(index) = entry.item else { return Ok(None); };
+        // A member path carries its owner ID, but only an exact path (including
+        // an import alias) has the canonical name of the trait itself.
+        if target != entry.name {
+            return Err(Diagnostic::new(span, "E_TRAIT", "trait path has an unexpected member suffix"));
+        }
+        Ok(Some(index))
+    }
     fn resolve_path(
         &self,
         scope: ModuleId,
@@ -730,6 +740,11 @@ impl<'a> Resolver<'a> {
             return Ok(());
         }
         if let Some(resolved) = self.path(scope, &path.name, namespace, span, true)? {
+            if namespace == Namespace::Type {
+                if let Some(binding) = &resolved.binding {
+                    self.exact_trait(binding.declaration, &resolved.name, span)?;
+                }
+            }
             path.name = resolved.name;
             path.declaration = resolved.binding.map(|binding| binding.declaration);
             Ok(())

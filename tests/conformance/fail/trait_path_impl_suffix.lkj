@@ -1,0 +1,7 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Flag { type Item; }
+struct Ready;
+use self::Flag as Selected;
+impl Selected::Item for Ready { type Item = i64; }
+pub fn probe() -> i64 { 42 }

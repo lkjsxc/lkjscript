@@ -7,29 +7,15 @@ impl Resolver<'_> {
         let node = &self.program.types[ty];
         let Type::Path(path) = &node.kind else { return Ok(None); };
         if path.qualification.is_some() { return Ok(None); }
-        let binding = if let Some(declaration) = path.declaration {
-            let entry = &self.declarations[declaration];
-            Some(Binding { declaration, target: path.name.clone(), scope: entry.scope,
-                public: entry.public, glob: false, ambiguous: false, semantic_alias: false })
-        } else {
-            let scope = node.block.map(|id| self.program.scopes.len() + id).unwrap_or(node.scope);
-            self.path(scope, &path.name, Namespace::Type, node.span, false)?
-                .and_then(|resolved| resolved.binding)
-        };
-        let Some(binding) = binding else { return Ok(None); };
-        let entry = &self.declarations[binding.declaration];
-        if binding.target != entry.name {
-            if let Item::Trait(index) = entry.item {
-                if !self.program.traits[index].constants.is_empty() {
-                    return Err(Diagnostic::new(node.span, "E_TRAIT", "trait constant qualifier must name its exact trait declaration"));
-                }
-            }
-            return Ok(None);
+        if let Some(declaration) = path.declaration {
+            // Index only exact resolved identities. Origin validation still
+            // checks the identity relation of an already resolved program.
+            return Ok(self.exact_trait(declaration, &path.name, node.span).unwrap_or(None));
         }
-        match entry.item {
-            Item::Trait(index) => Ok(Some(index)),
-            _ => Ok(None),
-        }
+        let scope = node.block.map(|id| self.program.scopes.len() + id).unwrap_or(node.scope);
+        let Some(binding) = self.path(scope, &path.name, Namespace::Type, node.span, false)?
+            .and_then(|resolved| resolved.binding) else { return Ok(None); };
+        self.exact_trait(binding.declaration, &binding.target, node.span)
     }
 
     fn constant_trait_arguments(&self, ty: TypeId) -> Result<()> {

@@ -91,32 +91,7 @@ fn associated_initializer(source: &Program, names: &crate::resolve::Resolver<'_>
     Ok(())
 }
 
-fn validate_required_constant_qualifiers(source: &Program, ty: TypeId) -> Result<(), Diagnostic> {
-    let mut pending = vec![ty];
-    while let Some(ty) = pending.pop() {
-        pending.extend_from_slice(&type_children(source, ty));
-        let Type::Path(projection) = &source.types[ty].kind else { continue; };
-        let Some(qualifier) = projection.qualification.as_ref().and_then(|path| path.trait_ty) else { continue; };
-        let node = &source.types[qualifier];
-        let Type::Path(path) = &node.kind else { continue; };
-        let Some(id) = path.declaration else { continue; };
-        let declaration = &source.declarations[id];
-        // Resolution retains the owner ID even for a member suffix.
-        // An import alias of the trait resolves to its canonical name.
-        if matches!(declaration.item, Item::Trait(_)) && path.name != declaration.name {
-            return Err(Diagnostic::new(node.span, "E_TRAIT",
-                "associated type qualifier must name its exact trait declaration"));
-        }
-    }
-    Ok(())
-}
-
 pub(super) fn validate(source: &Program) -> Result<(), Diagnostic> {
-    for declaration in &source.traits {
-        for member in &declaration.constants {
-            validate_required_constant_qualifiers(source, member.ty)?;
-        }
-    }
     for (index, function) in source.functions.iter().enumerate() {
         if !function.const_qualified { continue; }
         match source.function_owner(FunctionId { index }) {

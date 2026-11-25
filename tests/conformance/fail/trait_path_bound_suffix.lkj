@@ -1,0 +1,5 @@
+// expect: reject E_TRAIT
+// witness: {}
+mod flags { pub trait Flag { type Item; } }
+fn unused<T: self::flags::Flag::Item>() {}
+pub fn probe() -> i64 { 42 }

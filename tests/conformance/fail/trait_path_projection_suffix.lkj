@@ -1,0 +1,6 @@
+// expect: reject E_TRAIT
+// witness: {}
+trait Flag { type Item; }
+use self::Flag as Selected;
+fn unused<T: Selected>(value: <T as Selected::Item>::Item) -> T::Item { value }
+pub fn probe() -> i64 { 42 }

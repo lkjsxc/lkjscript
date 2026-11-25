@@ -1,0 +1,18 @@
+// expect: value 42
+// witness: {}
+mod flags { pub trait Flag<T> { type Item; fn value() -> Self::Item; } }
+mod other { pub trait Flag {} }
+use self::flags::Flag;
+use self::other::*;
+use self::flags::Flag as Selected;
+
+fn Selected() -> i64 { 2 }
+struct Ready;
+impl Flag<u8> for Ready { type Item = i64; fn value() -> i64 { 40 } }
+impl other::Flag for Ready {}
+
+fn value<T: Selected<u8, Item = i64>>() -> <T as self::flags::Flag<u8>>::Item {
+    <T as Selected<u8>>::value()
+}
+
+pub fn probe() -> i64 { value::<Ready>() + Selected() }
