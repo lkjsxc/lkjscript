@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {}
+macro_rules! borrowed {
+    ($name:ident, $short:lifetime, $long:lifetime) => {
+        fn $name<$short, $long: $short>(first: &$short i64, second: &$long i64) -> &$short i64 { second }
+    };
+}
+borrowed!(selected, 'short, 'long);
+pub fn probe() -> i64 { let first = 1i64; let second = 42i64; *selected(&first, &second) }

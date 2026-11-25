@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {}
+macro_rules! borrowed {
+    ($( [ $( $name:ident : $lt:lifetime ),* ] )*) => {
+        $( $( fn $name<$lt>(value: &$lt i64) -> &$lt i64 { value } )* )*
+    };
+}
+borrowed!([] [first: 'one, second: 'two] [] [third: 'three] []);
+pub fn probe() -> i64 {
+    let a = 10i64; let b = 12i64; let c = 20i64;
+    *first(&a) + *second(&b) + *third(&c)
+}

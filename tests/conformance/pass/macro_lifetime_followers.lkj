@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {}
+macro_rules! adjacent { ($a:lifetime $b:lifetime) => { 10i64 }; }
+macro_rules! symbols { ($a:lifetime + $b:lifetime = $n:expr) => { $n }; }
+macro_rules! optional { ($($lt:lifetime)? ; $n:expr) => { $n }; }
+pub fn probe() -> i64 {
+    adjacent!('a 'b) + symbols!('a + 'b = 20i64)
+        + optional!('c ; 8i64) + optional!(; 4i64)
+}

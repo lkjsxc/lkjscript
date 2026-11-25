@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {}
+macro_rules! selected {
+    ($lt:lifetime) => { 10i64 };
+    ($name:ident) => { 20i64 };
+    ($token:tt) => { 3i64 };
+}
+macro_rules! opaque { ($value:expr) => { selected!($value) }; }
+pub fn probe() -> i64 {
+    selected!('a) + selected!(name) + selected!('a')
+        + selected!("text") + selected!({}) + opaque!(1i64 + 2i64)
+}

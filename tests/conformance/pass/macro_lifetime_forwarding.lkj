@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+macro_rules! selected {
+    ('named) => { 10i64 };
+    ('static) => { 20i64 };
+    ('_) => { 8i64 };
+    ($lt:lifetime) => { 4i64 };
+}
+macro_rules! relay { ($token:tt) => { selected!($token) }; }
+macro_rules! outer { ($lt:lifetime) => { relay!($lt) }; }
+pub fn probe() -> i64 {
+    outer!('named) + outer!('static) + outer!('_) + outer!('other)
+}

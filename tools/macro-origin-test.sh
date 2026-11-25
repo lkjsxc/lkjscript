@@ -11,7 +11,7 @@ case "$mode:$#" in
         case "$entry" in
             expression_origins) cases=20 ;;
             type_origins) cases=13 ;;
-            fragment_token_origins) cases=1 ;;
+            fragment_token_origins) cases=5 ;;
             lexical_origins) cases=3 ;;
             statement_origins) cases=12 ;;
             *) usage ;;
@@ -313,4 +313,4 @@ phase contracts-native
 "$fixture/contracts-image" >> "$fixture/contracts-out" 2>> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract execution'; }
 if [[ $mode == --native ]]; then exit; fi
 run_interpreter
-printf 'ok declarative macro origins: authenticated source/topology and include replay; generated item, field, import, call and strict derive queries; checked authored rename/body edits; projection/reference refusals; template/include epochs; 49 malformed origins; statement positions/splices/roles/rules; typed capture queries/edits, structural block ownership and independent return-origin refusal; both engines\n'
+printf 'ok declarative macro origins: authenticated source/topology and include replay; generated item, field, import, call and strict derive queries; checked authored rename/body edits; projection/reference refusals; template/include epochs; 53 malformed origins; statement positions/splices/roles/rules; typed capture queries/edits, structural block ownership and independent return-origin refusal; both engines\n'

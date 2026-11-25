@@ -1,0 +1,7 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false,"rustCode":"E0308"}
+macro_rules! borrowed {
+    ($lt:lifetime) => { fn invalid<$lt>(value: &$lt i64) -> &$lt bool { value } };
+}
+borrowed!('value);
+pub fn probe() -> bool { let value = 42i64; *invalid(&value) }

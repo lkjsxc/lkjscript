@@ -1092,7 +1092,7 @@ Normal destructor order matches the supported Rust intersection; outputs/statuse
 ### Declarative source macros
 
 Module-scoped `macro_rules!` definitions produce ordinary source expressions,
-statement lists or items. Matchers accept literal token trees and `expr`, `ty`, `ident`, and `tt`
+statement lists or items. Matchers accept literal token trees and `expr`, `ty`, `ident`, `lifetime`, and `tt`
 fragments. `*`, `+`, and `?` repetitions preserve nesting and require matching
 capture lengths when several repeated names are emitted together. Separators,
 optional trailing commas, recursive item producers, and nested macro calls are
@@ -1115,7 +1115,13 @@ Separated repetitions use the same follow set. Nested generic closers can split
 the suffix, and failed arms or repetition iterations restore the exact input.
 Splitting preserves source origins and never joins separate tokens.
 
-Captured identifiers, expressions and types retain their source syntax contexts.
+A `lifetime` capture consumes one lifetime token, including `'static` or `'_`,
+and remains transparent through nested calls and `tt` forwarding: literal
+lifetime arms can inspect it. Unused captures need no lifetime binding; emitted
+occurrences follow ordinary lifetime and borrow rules, including the existing
+labeled-loop refusal. Repetition lookahead uses the same token classification as
+capture matching. Captured identifiers, lifetimes, expressions and types retain
+their source syntax contexts.
 Ordinary names inside expression and type captures resolve in the destination
 module and `Self` environment. Nested macro calls inside captures retain their
 original textual macro scope. Introduced local bindings have a separate syntax

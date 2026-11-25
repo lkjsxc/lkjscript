@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+macro_rules! unused { ($lt:lifetime) => { 14i64 }; }
+pub fn probe() -> i64 { unused!('undeclared) + unused!('static) + unused!('_) }

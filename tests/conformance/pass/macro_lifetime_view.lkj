@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+macro_rules! borrowed {
+    ($lt:lifetime) => { struct View<$lt> { value: &$lt i64 } };
+}
+borrowed!('view);
+pub fn probe() -> i64 {
+    let value = 42i64;
+    let view = View { value: &value };
+    *view.value
+}

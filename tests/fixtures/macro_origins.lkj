@@ -298,9 +298,43 @@ fn source() -> i64 { discard_type!(UnresolvedUnused) }
     let mut split_origin = program.clone();
     let last = split_origin.macro_captures[split].tokens.len() - 1usize;
     split_origin.macro_captures[split].tokens[last].origin.end += 1usize;
-    let count = refused(&split_origin);
-    assert!(count == 1usize);
+    let count = refused(&split_origin) + lifetime_token_origins();
+    assert!(count == 5usize);
     count as i64
+}
+fn lifetime_token_origins() -> usize {
+    let (program, inputs) = parsed_fixture(r#"
+macro_rules! borrowed {
+    ($lt:lifetime) => { fn selected<$lt>(value: &$lt i64) -> &$lt i64 { value } };
+}
+borrowed!('capture);
+fn source() -> i64 { let value = 42i64; *selected(&value) }
+"#);
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    origins::collect(&program, &resolver).unwrap();
+    mounted_replay(&program, &inputs);
+    let invocation = program.macro_invocations.iter().position(|candidate|
+        candidate.name == "borrowed").unwrap();
+    let token = program.macro_invocations[invocation].tokens.iter().position(|token|
+        token.kind == 5u8).unwrap();
+
+    let mut kind = program.clone();
+    kind.macro_invocations[invocation].tokens[token].kind = 0u8;
+    let mut count = refused(&kind);
+    let mut context = program.clone();
+    context.macro_invocations[invocation].tokens[token].context += 1usize;
+    count += refused(&context);
+    let mut origin = program.clone();
+    origin.macro_invocations[invocation].tokens[token].origin.start += 1usize;
+    count += refused(&origin);
+    let source_invocation = program.macro_input.as_ref().unwrap().macro_invocations.iter()
+        .position(|candidate: &ast::MacroInvocation| candidate.name == "borrowed").unwrap();
+    let mut source_token = program.clone();
+    source_token.macro_input.as_mut().unwrap().macro_invocations[source_invocation].tokens[token].text =
+        "'changed".to_string();
+    count += unauthenticated(&source_token, &inputs);
+    assert!(count == 4usize);
+    count
 }
 fn lexical_origins() -> i64 {
     let (program, inputs) = parsed_fixture(r#"
@@ -407,5 +441,5 @@ fn source() -> i64 {
 fn main() {
     let count = expression_origins() + type_origins() + fragment_token_origins()
         + lexical_origins() + statement_origins();
-    assert!(count == 49i64);
+    assert!(count == 53i64);
 }

@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {}
+macro_rules! borrowed {
+    ($lt:lifetime) => { fn text() -> &$lt str { "retained" } };
+}
+borrowed!('static);
+pub fn probe() -> i64 { assert_eq!(text().len(), 8usize); 42i64 }

@@ -1,0 +1,5 @@
+// expect: reject E_MACRO_MATCH
+// witness: {"rustAccept":false}
+macro_rules! selected { ($lt:lifetime) => { 42i64 }; }
+macro_rules! opaque { ($value:expr) => { selected!($value) }; }
+pub fn probe() -> i64 { opaque!(1i64 + 2i64) }

@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+macro_rules! labeled {
+    ($label:lifetime) => { $label: loop { break $label 42i64; } };
+}
+pub fn probe() -> i64 { labeled!('selected) }

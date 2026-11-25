@@ -1,0 +1,4 @@
+// expect: reject E_MACRO_MATCH
+// witness: {"rustAccept":false}
+macro_rules! selected { ($($lt:lifetime)+) => { 42i64 }; }
+pub fn probe() -> i64 { selected!() }

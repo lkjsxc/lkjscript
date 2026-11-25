@@ -73,8 +73,8 @@ fn variables(tokens: &[MacroToken], depth: usize, expr_end: bool, ty_end: bool,
             let name = tokens[at + 1usize].text.clone();
             let fragment = tokens[at + 3usize].text.clone();
             if name == "crate" { return Err(error(tokens[at + 1usize].span, "E_MACRO_RULE", "$crate is reserved for the defining crate")); }
-            if !matches!(fragment.as_str(), "expr" | "ty" | "ident" | "tt") {
-                return Err(error(tokens[at + 3usize].span, "E_UNSUPPORTED_MACRO", "supported declarative fragments are expr, ty, ident, and tt"));
+            if !matches!(fragment.as_str(), "expr" | "ty" | "ident" | "lifetime" | "tt") {
+                return Err(error(tokens[at + 3usize].span, "E_UNSUPPORTED_MACRO", "supported declarative fragments are expr, ty, ident, lifetime, and tt"));
             }
             for binding in &*bindings {
                 if binding.name == name { return Err(error(tokens[at + 1usize].span, "E_MACRO_RULE", "duplicate matcher binding")); }
@@ -193,6 +193,10 @@ fn may_begin(token: &MacroToken, typed: bool) -> bool {
         matches!(token.text.as_str(), "::" | "<" | "<<" | "(" | "[" | "{" | "-" | "!" | "*" | "&" | "&&" | ".." | "..=" | "|" | "||")
     } else { matches!(token.kind, 1u8 | 2u8 | 3u8 | 4u8 | 5u8 | 8u8) }
 }
+fn transparent_start(fragment: &str, token: &MacroToken) -> bool {
+    fragment == "ident" && token.kind == 0u8 && token.text != "_"
+        || fragment == "lifetime" && token.kind == 5u8
+}
 // Repetition heads must determine whether to continue without speculative capture choices.
 // Pure literal overlaps can be legal in Rust's NFA matcher; this bounded reader locates them
 // explicitly instead of choosing a later rule after a greedy mis-match.
@@ -207,7 +211,7 @@ fn starts(pattern: &[MacroToken], at: usize, token: &MacroToken) -> Result<(bool
     }
     if symbol(&pattern[at], "$") {
         let fragment = pattern[at + 3usize].text.as_str();
-        let accepts = if fragment == "ident" { token.kind == 0u8 && token.text != "_" }
+        let accepts = if matches!(fragment, "ident" | "lifetime") { transparent_start(fragment, token) }
             else if fragment == "tt" { true }
             else { may_begin(token, fragment == "ty") };
         return Ok((accepts, accepts));
@@ -286,8 +290,8 @@ fn matches(program: &mut Program, invocation: &MacroInvocation, pattern: &[Macro
             let fragment = bindings[binding].fragment.clone();
             let start = *position;
             let captured: Vec<MacroToken>;
-            if fragment == "ident" {
-                if input.tokens[start].kind != 0u8 || input.tokens[start].text == "_" { return Ok(false); }
+            if matches!(fragment.as_str(), "ident" | "lifetime") {
+                if !transparent_start(&fragment, &input.tokens[start]) { return Ok(false); }
                 *position += 1usize; captured = input.tokens[start..*position].to_vec();
             } else if fragment == "tt" {
                 *position = if input.tokens[start].kind == 6u8 && opening(&input.tokens[start].text) { group_end(&input.tokens, start)? + 1usize } else { start + 1usize };

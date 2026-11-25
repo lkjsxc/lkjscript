@@ -1,0 +1,4 @@
+// expect: reject E_MACRO_AMBIGUITY
+// witness: {"rustAccept":false}
+macro_rules! selected { ($($many:lifetime)* $last:lifetime) => { 42i64 }; }
+pub fn probe() -> i64 { selected!('a) }

@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {}
+macro_rules! borrowed {
+    ($lt:lifetime) => {
+        fn increment<$lt>(value: &$lt mut i64) -> &$lt mut i64 {
+            *value += 1i64;
+            value
+        }
+    };
+}
+borrowed!('value);
+pub fn probe() -> i64 { let mut value = 41i64; *increment(&mut value) }
