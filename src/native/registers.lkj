@@ -1,7 +1,59 @@
 //! Scalar storage selection. Intervals preserve loop-carried values and addresses.
-//! Caller-saved registers are used only across scalar instructions; three saved
-//! registers also carry values through calls. This does not rewrite checked IR.
+//! Volatile registers may hold values across instructions that preserve them.
+//! Three saved registers can also carry values through calls.
 use super::*;
+
+const POOL: [u8; 8] = [R8, R9, R10, DI, SI, B, R14, R15];
+const VOLATILE_COUNT: usize = 5;
+
+fn primitive(program: &Program, ty: usize) -> bool {
+    matches!(program.types[ty].kind, TypeKind::Bool | TypeKind::Char | TypeKind::Int { .. }
+        | TypeKind::F64)
+}
+
+// Prefix entries contain the point just after the last clobber. The baseline
+// barrier preserves the existing linear-scan assignments. The other entries
+// distinguish the common barrier and the two additional address temporaries.
+#[derive(Clone, Copy)]
+struct Clobbers {
+    baseline: usize,
+    all: usize,
+    r10: usize,
+    si: usize,
+}
+
+impl Clobbers {
+    fn preserves(self, register: u8, begin: usize) -> bool {
+        self.all <= begin && (register != R10 || self.r10 <= begin)
+            && (register != SI || self.si <= begin)
+    }
+}
+
+// The order of decisions is the order of interval starts. For each register
+// only the latest accepted interval and the next incumbent can overlap a
+// proposed interval. A decision removes its own incumbent before choosing.
+struct Reservations {
+    future: Vec<Vec<usize>>,
+    next: [usize; 8],
+    past_end: [usize; 8],
+}
+
+impl Reservations {
+    fn new(order: &[(usize, usize)], assigned: &[Option<usize>]) -> Self {
+        let mut future = vec![Vec::new(); POOL.len()];
+        for (first, local) in order {
+            if let Some(register) = assigned[*local] {
+                future[register].push(*first);
+            }
+        }
+        Self { future, next: [0; 8], past_end: [0; 8] }
+    }
+
+    fn available(&self, register: usize, first: usize, last: usize) -> bool {
+        self.past_end[register] <= first
+            && self.future[register].get(self.next[register]).is_none_or(|next| *next > last)
+    }
+}
 
 struct Intervals {
     first: Vec<usize>,
@@ -72,7 +124,8 @@ impl Registers {
             }
         }
         let mut loops: Vec<usize> = Vec::new();
-        let mut blocked = vec![0usize];
+        let mut clobbers = vec![Clobbers { baseline: 0, all: 0, r10: 0, si: 0 }];
+        let mut blocks = vec![0usize];
         for index in 0..function.body.len() {
             let op = &function.body[index].op;
             let read = index * 2;
@@ -207,7 +260,22 @@ impl Registers {
                 } => true,
                 _ => false,
             };
-            blocked.push(blocked[index] + if scalar { 0 } else { 1 });
+            let mut clobber = clobbers[index];
+            if !scalar {
+                clobber.baseline = index + 1;
+                match op {
+                    Op::Discriminant { .. } => {}
+                    Op::TagTest { .. } => clobber.r10 = index + 1,
+                    Op::Read { dst, place, .. } if !place.projections.is_empty()
+                        && primitive(program, function.locals[*dst].ty) => {
+                        clobber.r10 = index + 1;
+                        clobber.si = index + 1;
+                    }
+                    _ => clobber.all = index + 1,
+                }
+            }
+            clobbers.push(clobber);
+            blocks.push(if storage_plan::ends_block(op) { index + 1 } else { blocks[index] });
         }
         let mut order = Vec::new();
         for local in 0..count {
@@ -221,33 +289,87 @@ impl Registers {
             }
         }
         order.sort();
-        let pool = [R8, R9, R10, DI, SI, B, R14, R15];
-        let mut occupied: Vec<Option<usize>> = vec![None; pool.len()];
-        let mut result = Self {
-            locals: vec![None; count],
-            saved: Vec::new(),
-            storage: storage_plan::coalesce(function, layout, &spans.first, &spans.last, &spans.borrowed),
-        };
-        for (first, local) in order {
+        let mut occupied: Vec<Option<usize>> = vec![None; POOL.len()];
+        let mut assigned = vec![None; count];
+        let mut saved = Vec::new();
+        for (first, local) in &order {
             let begin = first / 2 + first % 2;
-            let end = (spans.last[local] / 2 + 1).min(function.body.len());
-            let volatile =
-                local >= function.params && (begin >= end || blocked[begin] == blocked[end]);
-            for index in 0..pool.len() {
+            let end = (spans.last[*local] / 2 + 1).min(function.body.len());
+            let volatile = *local >= function.params && clobbers[end].baseline <= begin;
+            for index in 0..POOL.len() {
                 let available = match occupied[index] {
-                    Some(previous) => spans.last[previous] < first,
+                    Some(previous) => spans.last[previous] < *first,
                     None => true,
                 };
-                if available && (index >= 5 || volatile) {
-                    result.locals[local] = Some(pool[index]);
-                    occupied[index] = Some(local);
-                    if index >= 5 && !result.saved.contains(&pool[index]) {
-                        result.saved.push(pool[index]);
+                if available && (index >= VOLATILE_COUNT || volatile) {
+                    assigned[*local] = Some(index);
+                    occupied[index] = Some(*local);
+                    if index >= VOLATILE_COUNT && !saved.contains(&POOL[index]) {
+                        saved.push(POOL[index]);
                     }
                     break;
                 }
             }
         }
-        result
+        let mut reservations = Reservations::new(&order, &assigned);
+        for (first, local) in &order {
+            if let Some(mut register) = assigned[*local] {
+                reservations.next[register] += 1;
+                let index = *first / 2;
+                if *first % 2 == 1 && primitive(program, function.locals[*local].ty) {
+                    if let Some((destination, source)) =
+                        storage_plan::direct_transfer(&function.body[index].op)
+                    {
+                        if let Some(preferred) = assigned[source] {
+                            if destination == *local && preferred != register
+                                && (preferred < VOLATILE_COUNT) == (register < VOLATILE_COUNT)
+                                && function.locals[source].ty == function.locals[*local].ty
+                                && spans.last[source] == index * 2
+                                && spans.first[source] >= blocks[index] * 2 + 1
+                                && spans.first[source] < index * 2
+                                && spans.first[source] % 2 == 1
+                                && reservations.available(preferred, *first, spans.last[*local])
+                            {
+                                assigned[*local] = Some(preferred);
+                                register = preferred;
+                            }
+                        }
+                    }
+                }
+                reservations.past_end[register] = spans.last[*local] + 1;
+            }
+        }
+        let mut reservations = Reservations::new(&order, &assigned);
+        let mut spills = Vec::new();
+        for (first, local) in &order {
+            let last = spans.last[*local];
+            if let Some(register) = assigned[*local] {
+                reservations.next[register] += 1;
+                reservations.past_end[register] = last + 1;
+            } else if *local >= function.params && primitive(program, function.locals[*local].ty) {
+                let begin = first / 2 + first % 2;
+                let end = (last / 2 + 1).min(function.body.len());
+                for register in 0..VOLATILE_COUNT {
+                    if clobbers[end].preserves(POOL[register], begin)
+                        && reservations.available(register, *first, last)
+                    {
+                        assigned[*local] = Some(register);
+                        reservations.past_end[register] = last + 1;
+                        break;
+                    }
+                }
+                if assigned[*local].is_none() {
+                    spills.push((*first, *local));
+                }
+            }
+        }
+        let mut storage =
+            storage_plan::coalesce(function, layout, &spans.first, &spans.last, &spans.borrowed);
+        storage_plan::reuse_spill_homes(function, layout, &spills, &spans.last, &blocks, &mut storage);
+        let mut locals = Vec::new();
+        for register in assigned {
+            locals.push(register.map(|index| POOL[index]));
+        }
+        Self { locals, saved, storage }
     }
 }
