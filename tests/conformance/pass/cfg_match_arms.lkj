@@ -1,0 +1,32 @@
+// expect: value 42
+// witness: {}
+enum Endianness { Big, Little, Native }
+
+fn select(endian: Endianness, counter: &mut i64) -> i64 {
+    match endian {
+        Endianness::Big => 10i64,
+        Endianness::Little => 20i64,
+        #[cfg(target_endian = "big")]
+        Endianness::Native if missing_guard!() => {
+            use std::cell::RefCell;
+            println!("disabled");
+            missing::<i64, i64>()
+        }
+        #[cfg(test)]
+        Endianness::Native => missing::<i64, i64>(),
+        #[cfg(all(unix, any(test, target_endian = "little")))]
+        #[cfg(not(windows))]
+        Endianness::Native => {
+            *counter += 1i64;
+            11i64
+        }
+    }
+}
+
+pub fn probe() -> i64 {
+    let mut counter = 0i64;
+    select(Endianness::Big, &mut counter)
+        + select(Endianness::Little, &mut counter)
+        + select(Endianness::Native, &mut counter)
+        + counter
+}

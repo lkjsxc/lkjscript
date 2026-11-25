@@ -7,6 +7,58 @@ use crate::ast::*;
 use crate::diagnostics::BlockedRegion;
 use std::collections::BTreeSet;
 
+/// State appended or materialized by a speculative syntax parse.
+pub(super) struct ParseCheckpoint {
+    inventory: MacroInventory,
+    captures: Vec<(Option<ExprId>, usize, Option<TypeId>, usize)>,
+    origins: Vec<(usize, usize, usize)>,
+}
+impl ParseCheckpoint {
+    pub(super) fn new(program: &Program) -> Self {
+        let mut captures = Vec::new();
+        for capture in &program.macro_captures {
+            captures.push((capture.expression, capture.materializations.len(),
+                capture.ty, capture.type_materializations.len()));
+        }
+        let mut origins = Vec::new();
+        for origin in &program.macro_expansions {
+            origins.push((origin.types.len(), origin.expressions.len(), origin.patterns.len()));
+        }
+        Self { inventory: crate::ast::macros::inventory(program), captures, origins }
+    }
+
+    pub(super) fn rollback(self, program: &mut Program) {
+        let counts = self.inventory;
+        for id in counts.types..program.types.len() {
+            program.impl_traits.remove(&id); program.constant_arguments.remove(&id);
+            program.value_argument_lists.remove(&id); program.array_length_spans.remove(&id); program.relaxed_bounds.remove(&id);
+            program.array_length_constants.remove(&id);
+        }
+        for id in counts.patterns..program.patterns.len() { program.macro_pattern_bindings.remove(&id); }
+        for id in counts.scopes..program.scopes.len() { program.macro_use_modules.remove(&id); }
+        program.types.truncate(counts.types); program.exprs.truncate(counts.exprs);
+        program.patterns.truncate(counts.patterns); program.blocks.truncate(counts.blocks);
+        program.functions.truncate(counts.functions); program.structs.truncate(counts.structs); program.enums.truncate(counts.enums);
+        program.traits.truncate(counts.traits); program.impls.truncate(counts.impls); program.uses.truncate(counts.uses);
+        program.modules.truncate(counts.modules); program.aliases.truncate(counts.aliases); program.constants.truncate(counts.constants);
+        program.scopes.truncate(counts.scopes); program.attrs.truncate(counts.attrs);
+        program.macro_definitions.truncate(counts.macro_definitions);
+        program.macro_identifier_uses.truncate(counts.identifier_uses);
+        program.macro_invocations.truncate(counts.macro_invocations); program.macro_captures.truncate(counts.macro_captures);
+        for id in 0usize..self.captures.len() {
+            program.macro_captures[id].expression = self.captures[id].0;
+            program.macro_captures[id].materializations.truncate(self.captures[id].1);
+            program.macro_captures[id].ty = self.captures[id].2;
+            program.macro_captures[id].type_materializations.truncate(self.captures[id].3);
+        }
+        for id in 0usize..self.origins.len() {
+            let (types, expressions, patterns) = self.origins[id];
+            let origin = &mut program.macro_expansions[id]; origin.types.truncate(types);
+            origin.expressions.truncate(expressions); origin.patterns.truncate(patterns);
+        }
+    }
+}
+
 fn error(span: Span, code: &str, message: &str) -> Diagnostic {
     Diagnostic::new(span, code, message)
 }

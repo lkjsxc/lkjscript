@@ -50,6 +50,23 @@ value 7
 apply '{"op":"remove-variant","id":"Choice::variant:Ready","replacement":"Choice::Later"}'
 value 0
 cat > "$fixture/project/main.lkj" <<'SOURCE'
+enum Choice { Ready(i64), Other }
+pub fn probe() -> i64 {
+    match Choice::Ready(7i64) {
+        #[cfg(unix)]
+        Choice::Ready(value) => value,
+        #[cfg(unix)]
+        _ => 9i64,
+    }
+}
+SOURCE
+apply '{"op":"add-variant","id":"Choice","source":"Later","arm":"#[cfg(unix)] Choice::Later => 0i64"}'
+value 7
+test "$(grep -Fc '#[cfg(unix)]' "$fixture/project/main.lkj")" = 3
+apply '{"op":"remove-variant","id":"Choice::variant:Ready","replacement":"Choice::Later"}'
+value 0
+test "$(grep -Fc '#[cfg(unix)]' "$fixture/project/main.lkj")" = 2
+cat > "$fixture/project/main.lkj" <<'SOURCE'
 fn increment(value: i64) -> i64 { value + 1i64 }
 pub fn probe() -> i64 { increment(41i64) }
 SOURCE

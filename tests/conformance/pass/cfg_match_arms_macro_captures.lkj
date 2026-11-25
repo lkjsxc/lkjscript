@@ -1,0 +1,28 @@
+// expect: value 42
+// witness: {}
+macro_rules! select {
+    ($t:ty, $value:expr) => {
+        match true {
+            #[cfg(windows)]
+            true => {
+                let unused: $t = $value;
+                missing!(unused)
+            }
+            #[cfg(unix)]
+            true => {
+                let selected: $t = $value;
+                selected
+            }
+            false => 0i64,
+        }
+    };
+}
+
+pub fn probe() -> i64 {
+    let mut value = 40i64;
+    let selected = {
+        let reference = &mut value;
+        select!(i64, { *reference += 1i64; *reference })
+    };
+    selected + value - 40i64
+}

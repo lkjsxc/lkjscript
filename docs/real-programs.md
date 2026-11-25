@@ -259,7 +259,26 @@ still under `target/` is a temporary candidate observation, not a durable eviden
 link. Fresh observations additionally require the original/projected trees to pass
 `node tools/real-programs/project.mjs --verify`; use `node tools/real-programs/probe.mjs --help` for its exact entry and package options.
 
-#### Current ordinary numeric traits frontier
+#### Match-arm configuration
+
+The replay from main `f6c1e77fe` gives nom 44 distinct primary sites and
+41 blocked rows. The former statement-list macro site is already absent on
+this producer. Its leading causes are match-arm `cfg` (16), higher-ranked
+lifetime trait bounds (13), and the namespaced rustfmt attribute (6).
+
+The match-arm change removes all 16 nom sites and their 16 blocked rows. The
+same unmodified root now reports 28 primary sites and 25 blocked rows, with
+no newly observed primary diagnostic. Higher-ranked lifetime trait bounds
+(13), the rustfmt attribute (6), and function-pointer result types (4) now
+lead nom's frontier. These are counts from observed diagnostics on one root.
+
+For the DOM stack, the existing `dom_query` root gives 39 primary sites.
+Separate probes on the pinned registry archives add the `html5ever` (90),
+`markup5ever` (6), `selectors` (37), and `cssparser` (38) library roots.
+The four archive counts are located nonblocked rows from isolated checks.
+Their commands supply each root's own source bytes and a suffix projection.
+
+#### Earlier ordinary numeric traits frontier
 
 <!-- numeric-evidence-v1 sha256:53c52136581be3be25a96ff0bfa4e7077207da1e8f75548cc3aaa456e746a484 -->
 

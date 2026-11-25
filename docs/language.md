@@ -218,6 +218,9 @@ Types/instances use structural declaration/child IDs and substitutions. Printabl
 names, including compact child IDs, are labels rather than semantic identity.
 Non-test compilation evaluates cfg(test) as false, including all/any/not; excluded
 declarations never enter resolution.
+Match arms accept outer `#[cfg(...)]` with the same predicates. Disabled arms
+must parse as arms and contribute no names, macro expansions or pattern coverage.
+Enabled arms keep their source order and ordinary guard, ownership and exhaustiveness rules.
 
 ## Ownership, storage and views
 

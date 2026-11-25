@@ -21,6 +21,7 @@ There is no unsafe surface, FFI, ambient authority or unwinding. Views may occup
 Apply the two-way rule: use existing IR/library contracts for everyday forms and rewrite rare consumers that would enlarge trusted semantics.
 Advertised opaque callable origins come from signature positions. Verify concrete containment before admitting the source program.
 Resolve inherent constants and literal module constants used as array lengths in the source producer. Lower through ordinary IR. General compile-time evaluation needs its own design decision. Opaque macro fragments resolve ordinary names at their destination; structural ownership governs block imports and constant initializers. Statement output splices into that block through ordered expansion and exact replay. Captured-local rename requires unchanged rules, roles and reference targets, including the preserving subset of mixed transactions.
+Apply the declaration cfg predicates to match arms in the parser. Parse disabled arms for syntax and discard their speculative syntax and macro state before coverage or name resolution.
 
 ## Direct native execution (6.1, complete)
 Keep direct x86-64 instruction selection plain. Materialize source paths/lines on
@@ -75,8 +76,7 @@ Holder liveness is conservative; its rejection names the lexical-scope rewrite.
 borrowed_closure_escape remains pending; obsolete prose about three absent scoped-concurrency cases is not a contract.
 Cargo, bridge and rustc shim stay in witness/. The native gate bootstraps from an empty store and runs without Cargo, rustc or Node. It uses Perl for fixtures.
 The required real-program host-tool job uses Node. Release requires both jobs on the same check attempt.
-The advisory witness must never constrain language design. Accepted programs agree; delete the witness when it blocks
-needed forms or ceases to find useful differences. Source uses .lkj to identify lkjscript before reading; only actual Rust witness code uses .rs. Retain Rust shape; child.lkj/child/mod.lkj and program.lkj have no .rs alias or fallback.
+The advisory witness must never constrain language design. Accepted programs agree; delete the witness when it blocks needed forms or ceases to find useful differences. Source uses .lkj to identify lkjscript before reading; only actual Rust witness code uses .rs. Retain Rust shape; child.lkj/child/mod.lkj and program.lkj have no .rs alias or fallback.
 
 ## Program specimens (programs stream)
 [Independent upstream programs](real-programs.md) now lead the programs stream; the [runtime demand table](runtime-demands.md) remains its runtime map. Applications, including site, journal and desk, stay unchanged specimens. First-frontier language refusals from nom, the DOM/parser/selector stack and Sōzu precede optimizer work. Exact source-package identity/authentication and opt-in concrete unit policy are separate foundations; package principals must survive generic instantiation before claiming per-package authority. Untrusted macro/build producers receive explicit grants and all output is checked.

@@ -124,52 +124,18 @@ struct MatchInput {
     mutations: Vec<(usize, MacroToken)>,
 }
 struct Checkpoint {
-    inventory: MacroInventory,
+    parse: ParseCheckpoint,
     mutations: usize,
-    captures: Vec<(Option<ExprId>, usize, Option<TypeId>, usize)>,
-    origins: Vec<(usize, usize, usize)>,
 }
 fn checkpoint(program: &Program, input: &MatchInput) -> Checkpoint {
-    let mut captures = Vec::new();
-    for capture in &program.macro_captures { captures.push((capture.expression, capture.materializations.len(),
-        capture.ty, capture.type_materializations.len())); }
-    let mut origins = Vec::new();
-    for origin in &program.macro_expansions { origins.push((origin.types.len(), origin.expressions.len(), origin.patterns.len())); }
-    Checkpoint { inventory: crate::ast::macros::inventory(program), mutations: input.mutations.len(), captures, origins }
+    Checkpoint { parse: ParseCheckpoint::new(program), mutations: input.mutations.len() }
 }
 fn rollback(program: &mut Program, input: &mut MatchInput, saved: Checkpoint) {
     while input.mutations.len() > saved.mutations {
         let (position, token) = input.mutations.pop().unwrap();
         input.tokens[position] = token;
     }
-    let counts = saved.inventory;
-    for id in counts.types..program.types.len() {
-        program.impl_traits.remove(&id); program.constant_arguments.remove(&id);
-        program.value_argument_lists.remove(&id); program.array_length_spans.remove(&id); program.relaxed_bounds.remove(&id);
-        program.array_length_constants.remove(&id);
-    }
-    for id in counts.patterns..program.patterns.len() { program.macro_pattern_bindings.remove(&id); }
-    for id in counts.scopes..program.scopes.len() { program.macro_use_modules.remove(&id); }
-    program.types.truncate(counts.types); program.exprs.truncate(counts.exprs);
-    program.patterns.truncate(counts.patterns); program.blocks.truncate(counts.blocks);
-    program.functions.truncate(counts.functions); program.structs.truncate(counts.structs); program.enums.truncate(counts.enums);
-    program.traits.truncate(counts.traits); program.impls.truncate(counts.impls); program.uses.truncate(counts.uses);
-    program.modules.truncate(counts.modules); program.aliases.truncate(counts.aliases); program.constants.truncate(counts.constants);
-    program.scopes.truncate(counts.scopes); program.attrs.truncate(counts.attrs);
-    program.macro_definitions.truncate(counts.macro_definitions);
-    program.macro_identifier_uses.truncate(counts.identifier_uses);
-    program.macro_invocations.truncate(counts.macro_invocations); program.macro_captures.truncate(counts.macro_captures);
-    for id in 0usize..saved.captures.len() {
-        program.macro_captures[id].expression = saved.captures[id].0;
-        program.macro_captures[id].materializations.truncate(saved.captures[id].1);
-        program.macro_captures[id].ty = saved.captures[id].2;
-        program.macro_captures[id].type_materializations.truncate(saved.captures[id].3);
-    }
-    for id in 0usize..saved.origins.len() {
-        let (types, expressions, patterns) = saved.origins[id];
-        let origin = &mut program.macro_expansions[id]; origin.types.truncate(types);
-        origin.expressions.truncate(expressions); origin.patterns.truncate(patterns);
-    }
+    saved.parse.rollback(program);
 }
 fn same(left: &MacroToken, right: &MacroToken) -> bool {
     left.kind == right.kind && left.kind < 8u8 && left.text == right.text

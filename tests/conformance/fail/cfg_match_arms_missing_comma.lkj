@@ -1,0 +1,9 @@
+// expect: reject E_PARSE
+// witness: {}
+pub fn probe(value: bool) -> i64 {
+    match value {
+        #[cfg(windows)]
+        false => 0i64
+        _ => 1i64,
+    }
+}

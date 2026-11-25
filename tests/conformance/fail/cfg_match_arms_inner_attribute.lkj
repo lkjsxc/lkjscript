@@ -1,0 +1,8 @@
+// expect: reject E_PARSE
+// witness: {"rustAccept":true}
+pub fn probe(value: bool) -> i64 {
+    match value {
+        #![cfg(unix)]
+        _ => 1i64,
+    }
+}

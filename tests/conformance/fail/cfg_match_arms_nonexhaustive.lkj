@@ -1,0 +1,9 @@
+// expect: reject E_TYPE
+// witness: {"rustCode":"E0004"}
+pub fn probe(value: bool) -> i64 {
+    match value {
+        true => 1i64,
+        #[cfg(windows)]
+        false => 0i64,
+    }
+}

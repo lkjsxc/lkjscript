@@ -1015,11 +1015,14 @@ impl Parser {
         let span = self.finish_span(span);
         self.add_pattern(kind, span)
     }
-    fn attrs(&mut self) -> Result<Vec<Attribute>, Diagnostic> {
+    fn attrs(&mut self, allow_inner: bool) -> Result<Vec<Attribute>, Diagnostic> {
         let mut attrs = Vec::new();
         while self.take("#") {
             let span = self.tokens[self.at - 1].span;
             let inner = self.take("!");
+            if inner && !allow_inner {
+                return Err(Diagnostic::new(span, "E_PARSE", "match arms require outer attributes"));
+            }
             self.expect("[")?;
             let name = self.ident()?;
             let mut args = Vec::new();
@@ -1245,7 +1248,7 @@ impl Parser {
     }
 
     fn next_item(&mut self, disabled: &mut bool) -> Result<Option<Item>, Diagnostic> {
-        let attrs = self.attrs()?;
+        let attrs = self.attrs(true)?;
         if attrs.iter().any(|attribute| attribute.name.starts_with("proc_macro")) {
             return Err(Diagnostic::new(self.token().span, "E_UNSUPPORTED_MACRO", "procedural macros require an explicit untrusted source producer"));
         }
@@ -2262,7 +2265,7 @@ impl Parser {
         let mut fields = Vec::new();
         while !self.is(end) {
             let span = self.token().span;
-            for attr in self.attrs()? {
+            for attr in self.attrs(true)? {
                 if attr.name == "cfg" {
                     return Err(Diagnostic::new(
                         attr.span,
@@ -2433,7 +2436,7 @@ impl Parser {
         associated: &mut Vec<AssociatedType>,
         constants: &mut Vec<AssociatedConstant>,
     ) -> Result<(), Diagnostic> {
-        let attrs = self.attrs()?;
+        let attrs = self.attrs(true)?;
         if !self.enabled(&attrs)? {
             self.skip_disabled()?;
             return Ok(());
@@ -2508,7 +2511,7 @@ impl Parser {
         constant_owner: Option<TypeId>,
         trait_impl: bool,
     ) -> Result<(), Diagnostic> {
-        let attrs = self.attrs()?;
+        let attrs = self.attrs(true)?;
         if !self.enabled(&attrs)? {
             self.skip_disabled()?;
             return Ok(());
@@ -2884,7 +2887,7 @@ impl Parser {
             || self.is("type")
             || self.is("#")
         {
-            let attrs = self.attrs()?;
+            let attrs = self.attrs(true)?;
             if !self.enabled(&attrs)? {
                 self.skip_disabled()?;
                 return Ok(BlockPart::Skipped);
@@ -2939,6 +2942,27 @@ impl Parser {
         } else {
             Ok((self.expr(true)?, false))
         }
+    }
+    fn match_arm(&mut self, span: Span) -> Result<(Arm, bool), Diagnostic> {
+        let pattern = self.pattern()?;
+        let guard = if self.take("if") { Some(self.expr(false)?) } else { None };
+        self.expect("=>")?;
+        let (value, block_like) = self.statement_expr()?;
+        Ok((Arm { pattern, guard, value, span: self.finish_span(span) }, block_like))
+    }
+
+    fn skip_match_arm(&mut self) -> Result<bool, Diagnostic> {
+        // Parse to the ordinary arm boundary without resolving names or expanding macros.
+        let start = self.at;
+        let saved = macros::ParseCheckpoint::new(&self.program);
+        let probing = self.probing;
+        let span = self.token().span;
+        self.probing = true;
+        let result = self.match_arm(span);
+        self.probing = probing;
+        saved.rollback(&mut self.program);
+        self.macro_carriers.push((start, self.at));
+        result.map(|(_, block_like)| block_like)
     }
     fn expr(&mut self, allow_struct: bool) -> Result<ExprId, Diagnostic> {
         self.expr_bp(1, allow_struct)
@@ -3394,24 +3418,21 @@ impl Parser {
             let mut arms = Vec::new();
             while !self.is("}") {
                 let start = self.token().span;
-                let pattern = self.pattern()?;
-                let guard = if self.take("if") {
-                    Some(self.expr(false)?)
-                } else {
-                    None
-                };
-                self.expect("=>")?;
-                let (arm_value, block_like) = self.statement_expr()?;
-                arms.push(Arm {
-                    pattern,
-                    guard,
-                    value: arm_value,
-                    span: self.finish_span(start),
-                });
-                if !self.take(",") && !self.is("}") {
-                    if !block_like {
-                        return Err(self.err("expected `,` between match arms"));
+                let attrs = self.attrs(false)?;
+                for attr in &attrs {
+                    if attr.name != "cfg" {
+                        return Err(Diagnostic::new(attr.span, "E_UNSUPPORTED", "match arms support only cfg attributes"));
                     }
+                }
+                let block_like = if self.enabled(&attrs)? {
+                    let (arm, block_like) = self.match_arm(start)?;
+                    arms.push(arm);
+                    block_like
+                } else {
+                    self.skip_match_arm()?
+                };
+                if !self.take(",") && !self.is("}") && !block_like {
+                    return Err(self.err("expected `,` between match arms"));
                 }
             }
             self.expect("}")?;
