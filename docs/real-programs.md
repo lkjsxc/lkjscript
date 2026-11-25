@@ -304,8 +304,8 @@ candidate is trailing-point floating literals, with 13 located sites in cssparse
 
 Of the 478 reviewed sites, 472 request the Sōzu command crate's logging macros
 and four request the Sōzu library crate's metrics macros. Both imports use
-`#[macro_use] extern crate`, and the projected checks have no external crate
-bindings. The other two sites are `info!` in the command crate, whose local
+`#[macro_use] extern crate`. The baseline projected checks selected one source
+root. The other two sites are `info!` in the command crate, whose local
 provider file is blocked by lexing, and Rust's standard `unimplemented!` in the
 e2e crate.
 
@@ -314,6 +314,28 @@ All 19 affected logging calls still refuse at a repetition that starts with a
 comma and precedes an optional trailing comma. The provider also reaches
 unsupported `block` fragments and logger dependencies. The experiment exposed
 additional diagnostic sites and yielded no admitted calls from the 478-site group.
+
+#### Declared Sōzu metrics provider
+
+Checking the pinned bin projection with
+`--macro-provider sozu_lib:sozu=lib/src/lib.lkj` under its source directory
+loads the unchanged Sōzu library root. With the selector omitted, the baseline
+and candidate have byte-identical stdout and diagnostics and both refuse.
+
+| Bin invocation | Selected export in `lib/src/metrics/mod.lkj` |
+| --- | --- |
+| `bin/src/command/server.lkj:613:9` | `gauge` at 332:14 |
+| `bin/src/command/server.lkj:614:9` | `gauge` at 332:14 |
+| `bin/src/command/server.lkj:615:9` | `gauge` at 332:14 |
+| `bin/src/main.lkj:198:9` | `incr` at 313:14, then unqualified `count` at 302:14 |
+
+All four calls expand to a reference to the defining crate's `metrics::METRICS`.
+The selected replay removes just ten bin rows. These are four missing-binding
+diagnostics, their four blocked statements and the import diagnostic with its
+blocked item. The loaded provider contributes 530 diagnostic lines and 532
+blocked lines, including `RefCell` at 6:18 and `thread_local!` at 22:1 in the
+metrics module. The bin still refuses, with zero checked or executed metrics
+calls. The logging calls retain their baseline diagnostic rows.
 
 #### Earlier ordinary numeric traits frontier
 

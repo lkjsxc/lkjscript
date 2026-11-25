@@ -1155,7 +1155,7 @@ A compiler invocation can select a declarative provider with
 `#[macro_use] extern crate CRATE as ALIAS;` declaration. When the names match,
 `as ALIAS` is optional. Repeat the flag for each declared provider. The loader
 reads the selected root and its declared modules through the ordinary source
-directory capability. It does not consult Cargo or discover ambient crates.
+directory capability. The invocation supplies the complete provider selection.
 Each provider has a separate crate identity. Its `#[macro_export]` definitions
 enter unqualified lookup after the consumer's ordinary macro bindings. When
 two imports export the same spelling, the later source declaration wins.
@@ -1163,9 +1163,9 @@ two imports export the same spelling, the later source declaration wins.
 alias is free of possible lexical shadowing. Built-in macro names remain
 reserved. `$crate` still names the defining root and observes ordinary privacy.
 Provider source and expanded calls undergo ordinary diagnostics and checking.
-This selector works with source check, build, run, ir, authority and residual.
-Structural snapshots and ordinary authored external item paths are outside
-this macro input route.
+Use the selector with source `check`, `build` without `--index`, `run`, `ir`,
+`authority` or `residual`. Authored provider paths select macros. Generated
+`$crate` paths may also reach ordinary items in the defining crate.
 
 Statement invocations splice their output directly into the destination block;
 they create no implicit scope. Empty output is valid there. A trailing invocation
