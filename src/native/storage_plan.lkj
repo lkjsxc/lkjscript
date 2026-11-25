@@ -2,19 +2,6 @@
 //! Borrowed sources and every transfer crossing a control boundary stay apart.
 use super::*;
 
-pub(super) fn direct_transfer(op: &Op) -> Option<(usize, usize)> {
-    match op {
-        Op::Read { dst, place, .. } if place.projections.is_empty() => Some((*dst, place.local)),
-        Op::Assign { place, src } if place.projections.is_empty() => Some((place.local, *src)),
-        _ => None,
-    }
-}
-
-pub(super) fn ends_block(op: &Op) -> bool {
-    matches!(op, Op::If { .. } | Op::Else | Op::End | Op::Loop | Op::Break | Op::Continue
-        | Op::BreakTo { .. } | Op::ContinueTo { .. } | Op::Return { .. } | Op::Trap { .. })
-}
-
 pub(super) fn coalesce(
     function: &Function, layout: &Layouts, first: &[usize], last: &[usize],
     borrowed: &[bool],
@@ -23,7 +10,12 @@ pub(super) fn coalesce(
     for local in 0..function.locals.len() { storage.push(local); }
     let mut block = 0;
     for (index, instruction) in function.body.iter().enumerate() {
-        if let Some((destination, source)) = direct_transfer(&instruction.op) {
+        let transfer = match &instruction.op {
+            Op::Read { dst, place, .. } if place.projections.is_empty() => Some((*dst, place.local)),
+            Op::Assign { place, src } if place.projections.is_empty() => Some((place.local, *src)),
+            _ => None,
+        };
+        if let Some((destination, source)) = transfer {
             let ty = function.locals[source].ty;
             // A Copy read is eligible too, but only when every future use and
             // definition of its source is absent. Earlier projected accesses
@@ -40,47 +32,12 @@ pub(super) fn coalesce(
                 storage[destination] = storage[source];
             }
         }
-        if ends_block(&instruction.op) { block = index + 1; }
+        match instruction.op {
+            Op::If { .. } | Op::Else | Op::End | Op::Loop | Op::Break | Op::Continue
+                | Op::BreakTo { .. } | Op::ContinueTo { .. } | Op::Return { .. }
+                | Op::Trap { .. } => block = index + 1,
+            _ => {}
+        }
     }
     storage
-}
-
-struct SpillHome {
-    representative: usize,
-    end: usize,
-    bytes: u64,
-    alignment: u8,
-}
-
-pub(super) fn reuse_spill_homes(
-    function: &Function, layout: &Layouts, spills: &[(usize, usize)], last: &[usize],
-    blocks: &[usize], storage: &mut [usize],
-) {
-    let mut homes: Vec<SpillHome> = Vec::new();
-    let mut block = 0;
-    for (first, local) in spills {
-        let begin_block = blocks[*first / 2];
-        let end = last[*local];
-        if begin_block != blocks[end / 2] {
-            continue;
-        }
-        if block != begin_block {
-            homes.clear();
-            block = begin_block;
-        }
-        let shape = layout.storage(function.locals[*local].ty);
-        for index in 0..homes.len() {
-            let home = &mut homes[index];
-            if home.end < *first && home.bytes == shape.bytes && home.alignment == shape.alignment {
-                storage[*local] = home.representative;
-                home.end = end;
-                break;
-            }
-        }
-        if storage[*local] == *local {
-            homes.push(SpillHome {
-                representative: *local, end, bytes: shape.bytes, alignment: shape.alignment,
-            });
-        }
-    }
 }
