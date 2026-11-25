@@ -70,6 +70,102 @@ fn edge(result: &mut Facts, kind: &str, from: &str, to: &str, level: &str, detai
     result.add(kind, from, fact(to, level, kind, detail));
     result.add(&format!("@{kind}"), from, to.to_string());
 }
+/// Reachable effect names of every checked function, including ownership cleanup.
+pub fn reachable_effects(relations: &[authority::Relations]) -> Vec<BTreeSet<String>> {
+    let mut effects: Vec<BTreeSet<String>> = Vec::new();
+    let mut parents: Vec<Vec<usize>> = vec![Vec::new(); relations.len()];
+    for (index, relation) in relations.iter().enumerate() {
+        let mut names = BTreeSet::new();
+        for operation in &relation.operations { names.insert(operation.name.clone()); }
+        effects.push(names);
+        for (callee, _) in &relation.calls { parents[*callee].push(index); }
+    }
+    // Effects form a finite set; propagate changed summaries to immediate users.
+    // This stores no transitive all-pairs function relation.
+    let mut pending: Vec<usize> = Vec::new();
+    for index in 0usize..relations.len() { pending.push(index); }
+    let mut queued = vec![true; relations.len()];
+    while let Some(index) = pending.pop() {
+        queued[index] = false;
+        let mut inherited: Vec<String> = Vec::new();
+        for effect in &effects[index] { inherited.push(effect.clone()); }
+        for parent in &parents[index] {
+            let mut changed = false;
+            for effect in &inherited { if effects[*parent].insert(effect.clone()) { changed = true; } }
+            if changed && !queued[*parent] { queued[*parent] = true; pending.push(*parent); }
+        }
+    }
+    effects
+}
+
+/// The exact checked contract of one function instance. Types compare by
+/// representation identity; origins compare as checked return contracts.
+struct Contract {
+    parameters: Vec<String>,
+    result: String,
+    origins: Option<ir::ReturnSource>,
+    effects: BTreeSet<String>,
+}
+/// Contracts keyed by checked instance identity, with the source-claim owner.
+pub struct Contracts { instances: BTreeMap<String, (String, Contract)> }
+pub fn contracts(catalog: &semantic::Catalog, checked: &ir::CheckedProgram) -> Result<Contracts, String> {
+    let program = checked.program();
+    let type_ids = crate::meaning::verified::type_identities(checked)?;
+    let effects = reachable_effects(&authority::relations(checked));
+    let mut instances: BTreeMap<String, (String, Contract)> = BTreeMap::new();
+    for (index, function) in program.functions.iter().enumerate() {
+        let mut parameters: Vec<String> = Vec::new();
+        for local in 0usize..function.params { parameters.push(type_ids[function.locals[local].ty].clone()); }
+        let contract = Contract { parameters, result: type_ids[function.result].clone(),
+            origins: function.return_source.clone(), effects: effects[index].clone() };
+        instances.insert(catalog.instance_ids[index].clone(), (catalog.instance_sources[index].clone(), contract));
+    }
+    Ok(Contracts { instances })
+}
+pub fn predicate(name: &str) -> bool { matches!(name, "same-signature" | "same-return-origins" | "same-effect-summary") }
+/// None means the instance pair cannot be compared under this predicate.
+fn same(predicate: &str, old: &Contract, new: &Contract) -> Option<bool> {
+    let signature = old.parameters == new.parameters && old.result == new.result;
+    match predicate {
+        "same-signature" => Some(signature),
+        // Origin projections index the declared parameter and result types.
+        "same-return-origins" => if old.origins != new.origins { Some(false) } else if signature { Some(true) } else { None },
+        _ => Some(old.effects == new.effects),
+    }
+}
+/// PROVEN requires one exact equal contract for every checked instance on both
+/// sides. Any unequal instance is VIOLATED; incomplete coverage is UNKNOWN.
+pub fn require(predicate: &str, identity: &str, before: &Contracts, after: &Contracts) -> (String, String) {
+    let mut old_ids: BTreeSet<String> = BTreeSet::new();
+    let mut new_ids: BTreeSet<String> = BTreeSet::new();
+    for (id, (source, _)) in &before.instances { if source == identity { old_ids.insert(id.clone()); } }
+    for (id, (source, _)) in &after.instances { if source == identity { new_ids.insert(id.clone()); } }
+    let mut incomparable = false;
+    for id in &old_ids {
+        if !new_ids.contains(id) { continue; }
+        let old = &before.instances.get(id).unwrap().1;
+        let new = &after.instances.get(id).unwrap().1;
+        match same(predicate, old, new) {
+            Some(false) => {
+                let mut detail = format!("instance={}", semantic::quote(id));
+                if predicate == "same-effect-summary" {
+                    detail.push_str(&format!(" before={} after={}", semantic::quote(&join(&old.effects)), semantic::quote(&join(&new.effects))));
+                }
+                return ("VIOLATED".to_string(), detail);
+            }
+            None => incomparable = true,
+            Some(true) => {}
+        }
+    }
+    if old_ids.is_empty() && new_ids.is_empty() {
+        return ("UNKNOWN".to_string(), "reason=no-checked-instance".to_string());
+    }
+    if old_ids != new_ids {
+        return ("UNKNOWN".to_string(), format!("reason=instance-coverage-changed before={} after={}", old_ids.len(), new_ids.len()));
+    }
+    if incomparable { return ("UNKNOWN".to_string(), "reason=signature-changed".to_string()); }
+    ("PROVEN".to_string(), format!("instances={}", old_ids.len()))
+}
 pub fn build(catalog: &semantic::Catalog, checked: &ir::CheckedProgram) -> Result<Facts, String> {
     build_emitted(catalog, checked, &BTreeMap::new())
 }
@@ -183,29 +279,7 @@ pub fn build_emitted(catalog: &semantic::Catalog, checked: &ir::CheckedProgram, 
     }
     let program = checked.program();
     let relations = authority::relations(checked);
-    let mut effects: Vec<BTreeSet<String>> = Vec::new();
-    let mut parents: Vec<Vec<usize>> = vec![Vec::new(); program.functions.len()];
-    for (index, relation) in relations.iter().enumerate() {
-        let mut names = BTreeSet::new();
-        for operation in &relation.operations { names.insert(operation.name.clone()); }
-        effects.push(names);
-        for (callee, _) in &relation.calls { parents[*callee].push(index); }
-    }
-    // Effects form a finite set; propagate changed summaries to immediate users.
-    // This stores no transitive all-pairs function relation.
-    let mut pending: Vec<usize> = Vec::new();
-    for index in 0usize..program.functions.len() { pending.push(index); }
-    let mut queued = vec![true; program.functions.len()];
-    while let Some(index) = pending.pop() {
-        queued[index] = false;
-        let mut inherited: Vec<String> = Vec::new();
-        for effect in &effects[index] { inherited.push(effect.clone()); }
-        for parent in &parents[index] {
-            let mut changed = false;
-            for effect in &inherited { if effects[*parent].insert(effect.clone()) { changed = true; } }
-            if changed && !queued[*parent] { queued[*parent] = true; pending.push(*parent); }
-        }
-    }
+    let effects = reachable_effects(&relations);
     for (index, function) in program.functions.iter().enumerate() {
         let identity = &catalog.instance_ids[index];
         let source = &catalog.instance_sources[index];

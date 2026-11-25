@@ -13,7 +13,7 @@ mod ast; mod check; mod diagnostic; mod diagnostics; mod elaborate; mod facts;
 mod frontend; mod generics; mod interpreter; mod ir; mod ir_binary; mod ir_text;
 mod json; mod names; mod optimizer; mod resolve; mod reuse; mod runtime_memory;
 mod native; mod x86; mod child_image; mod entry_grants; mod runtime;
-mod runtime_diagnostics; mod semantic; mod source; mod syntax;
+mod authority; mod meaning; mod runtime_diagnostics; mod semantic; mod semantic_facts; mod source; mod syntax;
 mod structure_edit; mod structure_refactor; mod structure_replay;
 pub use std::sha256;
 pub fn main(mut world: World) { match cases::run() { Ok(()) => { let mut output = world.stdout(); output.write(b"ok module projection: loader provenance, strict declaration/path checks and scoped replay\n"); }, Err(error) => { let mut output = world.stdout(); output.write(format!("{error}\n").as_bytes()); panic!("module projection cases failed") } } }

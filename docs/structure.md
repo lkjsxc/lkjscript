@@ -365,6 +365,20 @@ The optional request `snapshot` is the source-input digest printed as
 scope, incomplete required references and overlapping writes produce
 identity-addressed `E_EDIT_*` refusals.
 
+The optional `require` field states contracts the edit must keep, for example
+`"require": [{"predicate": "same-effect-summary", "id": "math::increment"}]`.
+`same-signature` compares parameter and result type representation IDs,
+`same-return-origins` the checked returned-view contract and `same-effect-summary`
+the reachable effects including ownership cleanup. Each predicate compares every
+checked instance mapped to the selected declaration in the original and the freshly
+checked candidate, by exact equality, never source text or request claims.
+Each prints one `require` row. `PROVEN` needs equal contracts for an identical,
+nonempty instance set. `VIOLATED` names the first unequal instance. `UNKNOWN`
+covers no checked instance, a changed instance set and origins across a changed
+signature. Anything but `PROVEN` refuses with `E_EDIT_REQUIRE` before
+publication; source and writer state are unchanged. The twelve frozen cases and
+two omitted-fact mutants are in [the require test](../tools/structure-require-test.sh).
+
 The basic operations are `replace-body`, `replace-item`, `replace-call`, `add-item`,
 `remove-item`, `rename` and `move`. Replacement source must parse as exactly
 one body, one item or one expression as the operation requires, and is elaborated

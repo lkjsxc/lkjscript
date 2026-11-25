@@ -1,6 +1,6 @@
 //! Checked structural transactions plan exact byte patches against one source snapshot.
 //! Planning is pure. The driver checks the complete candidate before publication.
-use crate::{semantic, sha256, syntax};
+use crate::{ir, semantic, semantic_facts, sha256, syntax};
 use std::collections::{BTreeMap, BTreeSet};
 use std::json::{self, Value};
 
@@ -17,6 +17,13 @@ pub struct Operation {
 pub struct Request {
     pub snapshot: String,
     pub operations: Vec<Operation>,
+    pub require: Vec<Requirement>,
+}
+/// A checked-contract predicate over every checked instance of one source item.
+#[derive(Clone)]
+pub struct Requirement {
+    pub identity: String,
+    pub predicate: String,
 }
 #[derive(Clone)]
 pub struct Patch {
@@ -75,7 +82,7 @@ pub fn parse(bytes: &[u8]) -> Result<Request, String> {
     let value = json::parse(bytes).map_err(|problem| error("transaction", "REQUEST", &problem.message))?;
     let fields = value.as_object().ok_or_else(|| error("transaction", "REQUEST", "expected an object"))?;
     for (key, _) in fields {
-        if key != "version" && key != "snapshot" && key != "operations" {
+        if key != "version" && key != "snapshot" && key != "operations" && key != "require" {
             return Err(error("transaction", "REQUEST", &format!("unknown field {key}")));
         }
     }
@@ -117,7 +124,58 @@ pub fn parse(bytes: &[u8]) -> Result<Request, String> {
         let data = json::stringify(operation).map_err(|problem| error(&identity, "REQUEST", &problem.message))?;
         parsed.push(Operation { data, kind, identity, source, name, parent, expected });
     }
-    Ok(Request { snapshot, operations: parsed })
+    let mut require: Vec<Requirement> = Vec::new();
+    if let Some(field) = value.get("require") {
+        let entries = field.as_array().ok_or_else(|| error("transaction", "REQUEST", "require must be an array"))?;
+        if entries.is_empty() { return Err(error("transaction", "REQUEST", "require names no predicate")); }
+        for entry in entries {
+            let fields = entry.as_object().ok_or_else(|| error("transaction", "REQUEST", "require entry must be an object"))?;
+            for (key, _) in fields {
+                if key != "predicate" && key != "id" {
+                    return Err(error("transaction", "REQUEST", &format!("unknown require field {key}")));
+                }
+            }
+            let identity = string(entry, "id", true)?;
+            let predicate = string(entry, "predicate", true)?;
+            if !semantic_facts::predicate(&predicate) {
+                return Err(error(&identity, "REQUEST", &format!("unknown require predicate {predicate}")));
+            }
+            require.push(Requirement { identity, predicate });
+        }
+    }
+    Ok(Request { snapshot, operations: parsed, require })
+}
+/// Resolve requirement selectors against the original snapshot before checking.
+pub fn select_requirements(catalog: &semantic::Catalog, require: &[Requirement]) -> Result<Vec<Requirement>, String> {
+    let mut selected: Vec<Requirement> = Vec::new();
+    for entry in require {
+        let identity = catalog.select(&entry.identity, "EDIT")?;
+        for previous in &selected {
+            if previous.identity == identity && previous.predicate == entry.predicate {
+                return Err(error(&identity, "REQUEST", &format!("duplicate require predicate {}", entry.predicate)));
+            }
+        }
+        selected.push(Requirement { identity, predicate: entry.predicate.clone() });
+    }
+    Ok(selected)
+}
+/// Evaluate selected requirements over both independently checked programs.
+/// Every verdict is reported; anything other than PROVEN refuses publication.
+pub fn require(selected: &[Requirement], before: &semantic::Catalog, old: &ir::CheckedProgram,
+    after: &semantic::Catalog, new: &ir::CheckedProgram) -> Result<String, String> {
+    if selected.is_empty() { return Ok(String::new()); }
+    let old_contracts = semantic_facts::contracts(before, old)?;
+    let new_contracts = semantic_facts::contracts(after, new)?;
+    let mut report = String::new();
+    let mut proven = true;
+    for entry in selected {
+        let (verdict, detail) = semantic_facts::require(&entry.predicate, &entry.identity, &old_contracts, &new_contracts);
+        if verdict != "PROVEN" { proven = false; }
+        report.push_str(&format!("require {} predicate={} verdict={} level=checked-ir {}\n",
+            semantic::quote(&entry.identity), entry.predicate, verdict, detail));
+    }
+    if proven { Ok(report) }
+    else { Err(format!("transaction E_EDIT_REQUIRE a required checked contract is not PROVEN; no source was published\n{}", &report[..report.len() - 1usize])) }
 }
 fn select_value(catalog: &semantic::Catalog, value: &mut Value, optional: bool) -> Result<(), String> {
     if let Value::String(selector) = value {

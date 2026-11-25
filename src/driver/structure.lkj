@@ -283,7 +283,8 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
     }
     let mut operations = if request.against.is_empty() {
         structure_edit::parse(&super::read_path(world, &request.request)?)?
-    } else { structure_edit::Request { snapshot: String::new(), operations: Vec::new() } };
+    } else { structure_edit::Request { snapshot: String::new(), operations: Vec::new(), require: Vec::new() } };
+    let requirements = operations.require.clone();
     let mut desired_identity = String::new();
     let mut desired_read: Option<Memo> = None;
     let mut items_only = true;
@@ -321,6 +322,7 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
         draft = structure_edit::plan(&old_catalog, &before.source_inputs, &operations)?;
         prepare_projections(world, &active_options, &mut before, &old_catalog, &mut draft)?;
     }
+    let required = structure_edit::select_requirements(&old_catalog, &requirements)?;
     let mut capture_targets: Vec<String> = Vec::new();
     preserving.clear();
     for operation in &operations.operations {
@@ -337,7 +339,7 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
     };
     let original_identity = meaning::identity(old.original().checked());
     if !preserving.is_empty() && preserving.len() != operations.operations.len() {
-        let preserving_request = structure_edit::Request { snapshot: operations.snapshot.clone(), operations: preserving.clone() };
+        let preserving_request = structure_edit::Request { snapshot: operations.snapshot.clone(), operations: preserving.clone(), require: Vec::new() };
         let preserving_draft = structure_edit::plan(&old_catalog, &before.source_inputs, &preserving_request)?;
         let mut proof_options = active_options.clone(); proof_options.store_directory = None;
         let mut proof = Memo::new(world, &proof_options);
@@ -382,10 +384,14 @@ fn edit(world: &mut World, request: &Request, stats: &mut Stats) -> Result<u8, S
         return Err(format!("transaction E_REPLAY_MEANING desired={} candidate={}; no source was published",
             desired_identity, candidate_identity));
     }
+    // Contracts are recomputed from both independently checked programs only.
+    let verdicts = structure_edit::require(&required, &old_catalog, old.original().checked(),
+        &new_catalog, new.original().checked())?;
     prepared.verify(&draft)?;
     unchanged_inputs(world, &before, &after, Some(&prepared))?;
     if let Some(desired_memo) = &desired_read { unchanged_inputs(world, desired_memo, desired_memo, None)?; }
     let mut report = structure_edit::report(&draft);
+    report.push_str(&verdicts);
     report.push_str(&source_delta(&old_catalog, &new_catalog));
     report.push_str(&authority_delta(old.original().checked(), &old_catalog, new.original().checked(), &new_catalog));
     let total = new.original().program().functions.len();
