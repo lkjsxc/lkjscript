@@ -24,6 +24,16 @@ finish() {
     exit "$status"
 }
 trap finish EXIT
+# GNU time records evidence only when it is requested; ordinary gates need no extra host tool.
+measured() {
+    local record=$1
+    shift
+    if [[ -n ${LKJSCRIPT_BUDGET_EVIDENCE:-} ]]; then
+        /usr/bin/time -f 'elapsed_seconds=%e\nmaximum_resident_kib=%M\nexit_status=%x' -o "$record" "$@"
+    else
+        "$@"
+    fi
+}
 trap 'exit 130' HUP INT TERM
 umask 022
 mkdir "$fixture/source" "$fixture/owned"
@@ -72,17 +82,14 @@ fn main(mut world: World) {
 HOST_SOURCE
 sha256sum "$compiler" > "$fixture/compiler.sha256"
 for entry in unit_budget_main unit_budget_host_main; do
-    /usr/bin/time -f 'elapsed_seconds=%e\nmaximum_resident_kib=%M\nexit_status=%x' \
-        -o "$fixture/$entry.build.time" "$compiler" build "$entry.lkj" \
+    measured "$fixture/$entry.build.time" "$compiler" build "$entry.lkj" \
         --source-dir "$fixture/source" --library-dir "$PWD/library" --no-store \
         -o "$fixture/$entry" > "$fixture/$entry.build.stdout" 2> "$fixture/$entry.build.stderr"
     sha256sum "$fixture/$entry" > "$fixture/$entry.sha256"
 done
-/usr/bin/time -f 'elapsed_seconds=%e\nmaximum_resident_kib=%M\nexit_status=%x' \
-    -o "$fixture/anonymous.time" "$fixture/unit_budget_main" \
+measured "$fixture/anonymous.time" "$fixture/unit_budget_main" \
     > "$fixture/anonymous.stdout" 2> "$fixture/anonymous.stderr"
-/usr/bin/time -f 'elapsed_seconds=%e\nmaximum_resident_kib=%M\nexit_status=%x' \
-    -o "$fixture/host.time" "$fixture/unit_budget_host_main" "$fixture/owned" \
+measured "$fixture/host.time" "$fixture/unit_budget_host_main" "$fixture/owned" \
     > "$fixture/host.stdout" 2> "$fixture/host.stderr"
 # Index replacement preserves the ordinary publisher's mode under this umask.
 owned=$(sed -n 's/^ok budget host 11 controls; owned fixture //p' "$fixture/host.stdout")
