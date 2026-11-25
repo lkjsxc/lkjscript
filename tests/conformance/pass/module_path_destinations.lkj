@@ -1,0 +1,20 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! leaf { () => { module_path!() }; }
+macro_rules! nested { () => { leaf!() }; }
+macro_rules! discard { ($value:expr) => { 42i64 }; }
+mod first { pub fn value() -> &'static str { nested!() } }
+mod second { pub fn value() -> &'static str { nested!() } }
+const ROOT: &str = module_path!();
+pub fn probe() -> i64 {
+    let root = module_path!();
+    assert!(!root.contains("::"));
+    assert_eq!(ROOT, root);
+    assert_eq!(module_path![], root);
+    assert_eq!(module_path!{}, root);
+    let first = format!("{root}::first");
+    let second = format!("{root}::second");
+    assert_eq!(first::value(), first.as_str());
+    assert_eq!(second::value(), second.as_str());
+    discard!(module_path!(unexpanded))
+}

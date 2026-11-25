@@ -3589,8 +3589,12 @@ impl Parser {
         if self.token().kind == TokenKind::Ident && keyword_cannot_begin_expression(&self.token().text) {
             return Err(self.err("keyword cannot begin this expression"));
         }
+        let path_start = self.at;
         let path = self.value_path()?;
         if self.token().kind == TokenKind::Symbol && self.take("!") {
+            if path.name == "module_path" && self.at != path_start + 2usize {
+                return Err(Diagnostic::new(span, "E_PARSE", "module_path! requires an unqualified macro name"));
+            }
             // Fragment matching recognizes syntax without executing any nested producer.
             if self.probing {
                 let name_span = self.tokens[self.at - 2usize].span;
@@ -3631,6 +3635,11 @@ impl Parser {
             } else {
                 return Err(self.err("expected macro delimiter"));
             };
+            if path.name == "module_path" {
+                self.expect(end)?;
+                let value = self.module_path_value(span)?;
+                return Ok(self.add_finished_expr(Expr::String(value), span));
+            }
             if path.name == "matches" {
                 let value = self.expr(true)?;
                 self.expect(",")?;

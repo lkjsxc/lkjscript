@@ -31,7 +31,7 @@ Work on main inside /home/coder/workspace/lkjscript. Preserve .generation-one,
 other projects, running services and their data. No GitHub releases or tags by hand:
 `.github/workflows/release.yml` publishes the gated compiler from main daily.
 Never restore WebAssembly, a Node execution host, or backward compatibility.
-Before the full gate, compare lookup changes with prior behavior and Rust where shared. Cover name collisions, malformed qualifiers and namespace precedence. Compiler owns transparent macro fragments: share repetition/capture classification and verify unchanged token provenance and ordinary lifetime checks.
+Before the full gate, compare lookup changes with prior behavior and Rust where shared. Cover name collisions, malformed qualifiers and namespace precedence. Compiler owns transparent macro fragments: share repetition/capture classification and verify unchanged token provenance and ordinary lifetime checks. Module-path strings follow expansion destinations; test generated modules and preserve checked-rename meaning refusals.
 Run bash tools/check.sh with LKJSCRIPT_GATE_JOBS=4 after coherent changes and before pushing. Keep fixed points.
 Prefix compiler gateway IDs with compiler-; recover uncertain operations before retrying.
 Compiler owns main; programs owns its worktree and status Programs section. Recheck

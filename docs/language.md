@@ -1158,6 +1158,19 @@ ownership, generic, capability and effect obligations use the normal frontend
 and independent IR checker. Expansion adds no runtime operation or checker
 privilege.
 
+Bare `module_path!()` produces a static string for its expansion destination,
+including modules created by declarative output and the destination of forwarded
+expression, block and token-tree captures. The first component is the selected
+root file's stem with hyphens changed to underscores, matching Rust's default
+crate naming; provider-owned code uses the declared provider crate name, and
+library-owned code uses `std`. Provider aliases and internal lookup names never
+appear. Nested provider macros still use the consumer's destination. Empty
+parentheses, brackets and braces are accepted; arguments, generic qualifiers and
+qualified builtin names are refused. Lowering is an ordinary string expression,
+with unchanged token-origin replay and independent IR checking. A checked module
+rename that changes this observable string refuses with `E_EDIT_MEANING`, also
+inside a mixed transaction. Body replacements reparse in their actual module.
+
 A compiler invocation can select a declarative provider with
 `--source-dir DIR --macro-provider CRATE:ALIAS=PATH`. Use a separate relative
 `.lkj` root under DIR and an exact consumer-root

@@ -341,27 +341,43 @@ calls. The logging calls retain their baseline diagnostic rows.
 
 Use `--macro-provider sozu_command_lib:sozu_command_lib=command/src/lib.lkj`
 for the bin and `--macro-provider sozu_command_lib:sozu_command=command/src/lib.lkj`
-for the lib. Their unselected baseline and candidate checks have identical
-stdout, stderr and exit status on the pinned projection.
+for the lib. The pinned source is Sōzu 1.0.6 at
+`c5ff06a12bd514e06ab28965052d0ad1e19c45b3`; the byte-preserving projection
+verifies all 196 tracked files and 92 suffix aliases.
 
-An isolated site replay uses the ordinary loader and expansion walker with
-the selected provider. On the baseline, lexing the provider still stops at
-the first `@` in its logging module, so all 472 authored locations retain
-their missing binding. The candidate replay records each site's first
-matcher and nested refusal.
+The token-tree/block slice matched the first provider rule at 470 of the
+original 472 missing bindings. Its isolated nested replay stopped at
+`module_path!` for 280 sites, including all three access-log calls; 190
+stopped at `cfg(debug_assertions)` and two at unsafe argument syntax.
 
-| Root | Missing binding before | First rule matched | Nested `module_path!` refusal | `cfg(debug_assertions)` refusal | `unsafe` argument refusal |
-| --- | ---: | ---: | ---: | ---: | ---: |
-| Bin | 115 | 113 | 68 | 45 | 2 |
-| Lib | 357 | 357 | 212 | 145 | 0 |
+A fresh before/after isolated replay against `d138ee770` retains exactly the
+same 115 bin and 357 lib identities. Both producers use the same instrumentation
+around the ordinary expansion walker, with a separate source clone per authored
+call. Call-site module paths now include the expansion destination through nested
+provider calls and forwarded captures, using ordinary static-string lowering.
 
-The new source forms let all three access-log sites forward their blocks and
-repeated token trees into the nested logger. They reach the same
-`module_path!` refusal as ordinary logging. All 75 existing consumer
-capability diagnostics retain their bytes. The provider exposes additional
-refusals for shared interior mutation, ambient streams and socket types.
-The isolated replay records zero complete expansions and zero checked or
-executed original calls.
+| Root | Replayed sites | module_path before → after | format_args after | file after | cfg(debug_assertions) | unsafe argument | Complete syntax after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Bin | 115 | 68 → 0 | 68 | 0 | 45 | 2 | 0 |
+| Lib | 357 | 212 → 0 | 204 | 5 | 145 | 0 | 3 |
+| Total | 472 | 280 → 0 | 272 | 5 | 190 | 2 | 3 |
+
+All three newly complete expansions are the original access-log calls:
+`log_access!` at `lib/src/protocol/kawa_h1/mod.lkj:944:9` and
+`lib/src/protocol/pipe.lkj:239:9`, and `info_access!` at
+`lib/src/tcp.lkj:219:9`. The 190 configuration and two unsafe-argument
+frontiers remain unchanged. All 75 existing consumer capability rows (20 bin,
+55 lib) are byte-identical across both fresh audits and the frozen ordinary
+baseline. Provider interior mutation, ambient streams and socket types retain
+their refusals. Syntax completion grants no checking or execution authority;
+this replay checks and executes zero original logging calls.
+
+The candidate isolated replay takes 45.78 s for bin and 221.11 s for lib while
+reaching the later syntax above. The supplementary ordinary unselected lib
+check was stopped during diagnostic recovery after more than 267 s; it gives
+no terminal verdict or fresh whole-root comparison. The exact-site audit and
+capability-row comparison are complete. Borrowed `format_args!`, call-site
+`file!` and explicit debug-configuration inputs remain distinct next slices.
 
 #### Earlier ordinary numeric traits frontier
 

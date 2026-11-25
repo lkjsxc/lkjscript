@@ -1,0 +1,24 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! leaf { () => { module_path!() }; }
+macro_rules! make {
+    ($value:expr, $body:block, $($tokens:tt)+) => {
+        mod generated {
+            pub fn template() -> &'static str { module_path!() }
+            pub fn expression() -> &'static str { $value }
+            pub fn block() -> &'static str { $body }
+            pub fn tokens() -> &'static str { $($tokens)+ }
+            pub fn nested() -> &'static str { leaf!() }
+        }
+    };
+}
+make!(module_path!(), { module_path!() }, module_path!());
+pub fn probe() -> i64 {
+    let expected = format!("{}::generated", module_path!());
+    assert_eq!(generated::template(), expected.as_str());
+    assert_eq!(generated::expression(), expected.as_str());
+    assert_eq!(generated::block(), expected.as_str());
+    assert_eq!(generated::tokens(), expected.as_str());
+    assert_eq!(generated::nested(), expected.as_str());
+    42i64
+}

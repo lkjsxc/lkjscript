@@ -67,7 +67,7 @@ fn closing(text: &str) -> bool { text == ")" || text == "]" || text == "}" }
 pub(crate) fn builtin_macro(name: &str) -> bool {
     matches!(name, "assert" | "assert_eq" | "assert_ne" | "panic" | "vec" | "format"
         | "write" | "writeln" | "matches" | "unreachable" | "debug_assert" | "debug_assert_eq"
-        | "debug_assert_ne" | "include_str" | "include_bytes" | "print" | "println" | "eprint" | "eprintln")
+        | "debug_assert_ne" | "include_str" | "include_bytes" | "module_path" | "print" | "println" | "eprint" | "eprintln")
 }
 fn partner(text: &str) -> String {
     match text { "(" => ")".to_string(), "[" => "]".to_string(), "{" => "}".to_string(), _ => String::new() }
@@ -122,6 +122,43 @@ fn group_end(tokens: &[MacroToken], start: usize) -> Result<usize, Diagnostic> {
     Err(error(tokens[start].span, "E_MACRO_RULE", "unclosed token-tree delimiter"))
 }
 impl Parser {
+    /// Presentation uses the expansion destination, never a token's lookup context.
+    /// Internal crate roots remain unchanged for resolution and exact origin replay.
+    pub(super) fn module_path_value(&self, span: Span) -> Result<String, Diagnostic> {
+        let scope = self.program.scopes.get(self.scope)
+            .ok_or_else(|| error(span, "E_PARSE", "module_path! has no destination module"))?;
+        let root = self.program.scopes.get(scope.crate_root)
+            .ok_or_else(|| error(span, "E_PARSE", "module_path! has no destination crate"))?;
+        let name = if let Some(provider) = self.program.macro_providers.iter()
+            .find(|provider| provider.root == Some(scope.crate_root)) {
+            provider.input.name.clone()
+        } else if root.path == "$std" {
+            "std".to_string()
+        } else {
+            let file = if let Some(loaded) = self.program.loaded_modules.iter()
+                .find(|loaded| loaded.scope == scope.crate_root) { loaded.file }
+            else { self.program.files.iter().position(|file| file.crate_root == scope.crate_root)
+                .ok_or_else(|| error(span, "E_PARSE", "module_path! has no crate source"))? };
+            let file = self.program.files.get(file)
+                .ok_or_else(|| error(span, "E_PARSE", "module_path! crate source is absent"))?;
+            let path = file.path.as_str();
+            if path == "<source>" { "source".to_string() } else {
+                let base = match path.rfind('/') { Some(at) => &path[at + 1usize..], None => path };
+                let stem = match base.rfind('.') { Some(at) => &base[..at], None => base };
+                stem.replace("-", "_")
+            }
+        };
+        let relative = if root.path.is_empty() { scope.path.as_str() }
+            else if scope.path == root.path { "" }
+            else {
+                let prefix = format!("{}::", root.path);
+                if !scope.path.starts_with(&prefix) {
+                    return Err(error(span, "E_PARSE", "module_path! destination is outside its crate"));
+                }
+                &scope.path[prefix.len()..]
+            };
+        Ok(if relative.is_empty() { name } else { format!("{name}::{relative}") })
+    }
     pub(super) fn macro_provider_declaration(&mut self, attrs: &[Attribute], public: &Visibility)
         -> Result<bool, Diagnostic> {
         if !attrs.iter().any(|attribute| attribute.name == "macro_use")
@@ -256,9 +293,7 @@ impl Parser {
         self.expect("!")?;
         let name_span = self.token().span;
         let name = self.ident()?;
-        if matches!(name.as_str(), "assert" | "assert_eq" | "assert_ne" | "panic" | "vec" | "format"
-            | "write" | "writeln" | "matches" | "unreachable" | "debug_assert" | "debug_assert_eq"
-            | "debug_assert_ne" | "include_str" | "include_bytes" | "print" | "println" | "eprint" | "eprintln") {
+        if builtin_macro(&name) {
             return Err(error(name_span, "E_UNSUPPORTED_MACRO", "built-in macro names are reserved"));
         }
         for attribute in attrs {

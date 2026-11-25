@@ -182,7 +182,8 @@ fn expression_origins() -> i64 {
     let mut changed_default = program.clone();
     changed_default.structs[generated_type].generics[0usize].default = Some(program.functions[anchor].params[0usize].ty);
     count += refused(&changed_default);
-    assert!(count == 20usize);
+    count += module_path_origins();
+    assert!(count == 27usize);
     count as i64
 }
 
@@ -195,6 +196,69 @@ fn parsed_fixture(text: &str) -> (ast::Program, Vec<(String, Vec<u8>)>) {
     syntax::macros::provenance::validate_inputs(&program, &inputs).unwrap();
     (program, inputs)
 }
+fn macro_path_refused(program: &ast::Program) -> usize {
+    match syntax::macros::provenance::validate(program) {
+        Err(problem) => assert!(problem.code == "E_IDENTITY_ORIGIN"),
+        Ok(()) => panic!("forged module-path origin accepted"),
+    }
+    1usize
+}
+fn module_path_origins() -> usize {
+    let text = r#"
+macro_rules! path { () => { module_path!() }; }
+macro_rules! relay { () => { path!() }; }
+mod left { pub fn value() -> &'static str { relay!() } }
+mod right { pub fn value() -> &'static str { relay!() } }
+"#;
+    let (program, inputs) = parsed_fixture(text);
+    syntax::macros::provenance::validate_inputs(&program, &inputs).unwrap();
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    origins::collect(&program, &resolver).unwrap();
+    mounted_replay(&program, &inputs);
+    let value = program.exprs.iter().position(|node|
+        matches!(&node.kind, ast::Expr::String(value) if value == "main::left")).unwrap();
+    let alternate = program.scopes.iter().position(|scope| scope.path == "right").unwrap();
+    let invocation = program.macro_invocations.iter().position(|call| call.name == "path").unwrap();
+    let mut count = 0usize;
+    let mut literal = program.clone();
+    literal.exprs[value].kind = ast::Expr::String("main::right".to_string());
+    count += macro_path_refused(&literal);
+    let mut scope = program.clone();
+    scope.exprs[value].scope = alternate;
+    count += macro_path_refused(&scope);
+    let mut destination = program.clone();
+    destination.macro_invocations[invocation].destination = alternate;
+    count += macro_path_refused(&destination);
+    let mut parent = program.clone();
+    parent.macro_invocations[invocation].parent = None;
+    count += macro_path_refused(&parent);
+    let mut snapshot = program.clone();
+    let original_scope = snapshot.macro_input.as_ref().unwrap().scopes.iter()
+        .position(|scope: &ast::ModuleScope| scope.path == "left").unwrap();
+    snapshot.macro_input.as_mut().unwrap().scopes[original_scope].path = "right".to_string();
+    snapshot.exprs[value].kind = ast::Expr::String("main::right".to_string());
+    count += unauthenticated(&snapshot, &inputs);
+    let mut absent_file = program.clone();
+    absent_file.macro_input.as_mut().unwrap().loaded_modules[0usize].file = program.files.len();
+    count += macro_path_refused(&absent_file);
+
+    let provider_inputs = vec![("main.lkj".to_string(),
+        b"#[macro_use] extern crate provider_name as alias; fn value() -> &'static str { label!() }"[..].to_vec()),
+        ("provider.lkj".to_string(), b"#[macro_export] macro_rules! label { () => { module_path!() }; }"[..].to_vec())];
+    let providers = vec![ast::macros::MacroProviderInput { name: "provider_name".to_string(),
+        alias: "alias".to_string(), path: "provider.lkj".to_string() }];
+    let provider = source::load_report_with_providers("main.lkj", None, &providers, &mut |path: &str| {
+        Ok(provider_inputs.iter().find(|(name, _)| name == path).map(|(_, bytes)| bytes.clone()))
+    }).into_result().unwrap();
+    let mut provider = resolve::resolve(&provider).unwrap();
+    syntax::macros::provenance::validate_inputs(&provider, &provider_inputs).unwrap();
+    provider.macro_providers[0usize].input.name = "invented".to_string();
+    provider.macro_input.as_mut().unwrap().macro_providers[0usize].input.name = "invented".to_string();
+    count += unauthenticated(&provider, &provider_inputs);
+    assert!(count == 7usize);
+    count
+}
+
 fn type_origins() -> i64 {
     let (program, inputs) = parsed_fixture(r#"
 #[macro_export(local_inner_macros)]
@@ -467,5 +531,5 @@ fn source() -> i64 {
 fn main() {
     let count = expression_origins() + type_origins() + fragment_token_origins()
         + lexical_origins() + statement_origins();
-    assert!(count == 56i64);
+    assert!(count == 63i64);
 }
