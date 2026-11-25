@@ -337,6 +337,32 @@ blocked lines, including `RefCell` at 6:18 and `thread_local!` at 22:1 in the
 metrics module. The bin still refuses, with zero checked or executed metrics
 calls. The logging calls retain their baseline diagnostic rows.
 
+#### Declared Sōzu logging provider
+
+Use `--macro-provider sozu_command_lib:sozu_command_lib=command/src/lib.lkj`
+for the bin and `--macro-provider sozu_command_lib:sozu_command=command/src/lib.lkj`
+for the lib. Their unselected baseline and candidate checks have identical
+stdout, stderr and exit status on the pinned projection.
+
+An isolated site replay uses the ordinary loader and expansion walker with
+the selected provider. On the baseline, lexing the provider still stops at
+the first `@` in its logging module, so all 472 authored locations retain
+their missing binding. The candidate replay records each site's first
+matcher and nested refusal.
+
+| Root | Missing binding before | First rule matched | Nested `module_path!` refusal | `cfg(debug_assertions)` refusal | `unsafe` argument refusal |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Bin | 115 | 113 | 68 | 45 | 2 |
+| Lib | 357 | 357 | 212 | 145 | 0 |
+
+The new source forms let all three access-log sites forward their blocks and
+repeated token trees into the nested logger. They reach the same
+`module_path!` refusal as ordinary logging. All 75 existing consumer
+capability diagnostics retain their bytes. The provider exposes additional
+refusals for shared interior mutation, ambient streams and socket types.
+The isolated replay records zero complete expansions and zero checked or
+executed original calls.
+
 #### Earlier ordinary numeric traits frontier
 
 <!-- numeric-evidence-v1 sha256:53c52136581be3be25a96ff0bfa4e7077207da1e8f75548cc3aaa456e746a484 -->
