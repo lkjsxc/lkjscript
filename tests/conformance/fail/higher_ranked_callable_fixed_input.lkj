@@ -1,0 +1,12 @@
+// expect: reject E_TRAIT
+// witness: {"rustCode":"E0277"}
+fn fresh<F>(change: &mut F)
+where F: for<'input> FnMut(&'input mut i64),
+{
+    let mut local = 1i64;
+    change(&mut local);
+}
+fn fixed<'input, F: FnMut(&'input mut i64)>(mut change: F) {
+    fresh(&mut change);
+}
+pub fn probe() -> i64 { 42 }

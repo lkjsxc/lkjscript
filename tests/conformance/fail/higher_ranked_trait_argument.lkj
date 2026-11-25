@@ -1,0 +1,17 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Compare<T> {
+    fn compare(&self, input: T) -> i64;
+}
+struct Input;
+impl<'input> Compare<&'input [u8]> for Input {
+    fn compare(&self, input: &'input [u8]) -> i64 { input[0] as i64 }
+}
+fn compare<T>(value: T) -> i64
+where T: for<'input> Compare<&'input [u8]>,
+{
+    let first = [19u8];
+    let second = [23u8];
+    value.compare(&first) + value.compare(&second)
+}
+pub fn probe() -> i64 { compare(Input) }

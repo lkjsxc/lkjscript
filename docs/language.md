@@ -668,6 +668,13 @@ Reference leaves through aliases/tuples/nominal fields must outlive required reg
 using input facts and declared/implied outlives edges; local storage cannot prove a
 universal input region. Helper calls transport fixed type-family leaf requirements.
 A fixed closure input cannot satisfy a fresh higher-ranked input.
+On a function type parameter, `F: for<'a> Fn(&'a T) -> U` accepts one named
+binder used once on a direct input reference. `FnMut` and `FnOnce` follow the
+same rule. The resolved builtin uses its ordinary fresh input check, just as
+`Fn(&T)` does.
+Putting the binder in a result, sharing it across inputs, or applying a
+declared trait to the borrowed type remains a located refusal. Declared trait
+applications need witness identities that distinguish fixed and fresh regions.
 
 Named lifetime predicates such as `where 'long: 'short + 'other` on free
 functions and inherent methods use the same region edges as inline lifetime
@@ -686,8 +693,8 @@ is implemented.
 Ordinary results preserve invariance through mutable storage. An opaque result
 lifetime instead requires its hidden references to outlive that lifetime,
 without equating their stored lifetimes to it. Trait-method and implementation-header lifetime
-predicates, anonymous or static lifetime predicates and higher-ranked lifetime
-predicates remain located refusals. No IR, independent
+predicates, anonymous or static lifetime predicates and higher-ranked
+outlives predicates remain located refusals. No IR, independent
 checker or runtime rule is added. These edges also apply to const-qualified
 functions with mixed lifetime, type and builtin-usize constant parameters, and
 to borrowed `T: ?Sized` referents. They preserve distinct opaque constant

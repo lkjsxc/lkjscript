@@ -1,0 +1,63 @@
+//! An explicit lifetime used by one direct callable input has the same
+//! meaning as the existing fresh elided input region.
+use super::*;
+
+pub(crate) const CALLABLE_PREFIX: &str = "$for:";
+
+pub(crate) fn bound_reference(program: &Program, arguments: TypeId, lifetime: &str) -> Option<TypeId> {
+    let Type::Tuple(parameters) = &program.types[arguments].kind else { unreachable!() };
+    for parameter in parameters {
+        if matches!(&program.types[*parameter].kind, Type::Ref { lifetime: name, .. }
+            if name.as_str() == lifetime) {
+            return Some(*parameter);
+        }
+    }
+    None
+}
+
+impl Parser {
+    pub(super) fn higher_ranked_bound(&mut self) -> Result<TypeId, Diagnostic> {
+        let span = self.token().span;
+        self.expect("for")?;
+        self.expect("<")?;
+        if self.token().kind != TokenKind::Lifetime || self.is("'_") || self.is("'static") {
+            return Err(self.err("expected a named lifetime in higher-ranked bound"));
+        }
+        let lifetime = self.token().text.clone();
+        self.at += 1usize;
+        if self.is(":") {
+            return Err(self.unsupported("outlives bounds on higher-ranked lifetime parameters"));
+        }
+        if self.take(",") && self.token().kind == TokenKind::Lifetime {
+            return Err(self.unsupported("multiple higher-ranked lifetime parameters"));
+        }
+        self.gt()?;
+        if !matches!(self.token().text.as_str(), "Fn" | "FnMut" | "FnOnce")
+            || self.tokens[self.at + 1usize].text != "(" {
+            return Err(Diagnostic::new(span, "E_UNSUPPORTED",
+                "higher-ranked trait applications require region-aware witness identity"));
+        }
+        let first = self.program.types.len();
+        let bound = self.ty()?;
+        let Type::Path(mut path) = self.program.types[bound].kind.clone() else { unreachable!() };
+        let direct = bound_reference(&self.program, path.args[0usize], &lifetime)
+            .is_some_and(|input| !self.macro_type_materialization(input));
+        let mut uses = 0usize;
+        for node in &self.program.types[first..] {
+            if matches!(&node.kind, Type::Ref { lifetime: name, .. } if *name == lifetime)
+                || matches!(&node.kind, Type::Path(path) if path.name == lifetime) {
+                uses += 1usize;
+            }
+        }
+        if !direct || uses != 1usize {
+            return Err(Diagnostic::new(span, "E_UNSUPPORTED",
+                "higher-ranked callable lifetime must occur once on a direct input reference"));
+        }
+        // Keep the binder until ordinary lexical lookup confirms this is the
+        // builtin callable and checks for a shadowed lifetime declaration.
+        path.name = format!("{CALLABLE_PREFIX}{}:{lifetime}", path.name);
+        self.program.types[bound].kind = Type::Path(path);
+        self.program.types[bound].span = self.finish_span(span);
+        Ok(bound)
+    }
+}

@@ -1,5 +1,6 @@
 //! Module and declaration identity. Later phases consume resolved paths, never bare-name guesses.
 mod associated_constants;
+mod higher_ranked;
 mod trait_constants;
 mod import_scopes;
 mod iteration;
@@ -510,6 +511,10 @@ impl<'a> Resolver<'a> {
                     .cloned()
             })
     }
+    fn lookup_prelude(&self, name: &str, namespace: Namespace) -> Option<Binding> {
+        let scope = self.modules.get(&"$std::prelude".to_string())?;
+        self.lookup(*scope, name, namespace)
+    }
     fn path(
         &self,
         scope: ModuleId,
@@ -651,9 +656,7 @@ impl<'a> Resolver<'a> {
                     return Ok(Some(owner));
                 }
             }
-            if let Some(std_scope) = self.modules.get(&"$std::prelude".to_string()) {
-                binding = self.lookup(*std_scope, parts[at].as_str(), first_namespace);
-            }
+            binding = self.lookup_prelude(parts[at].as_str(), first_namespace);
             if binding.is_none() && parts[0].as_str() == "String" {
                 if let Some(std_scope) = self.modules.get(&"$std::string".to_string()) {
                     binding = self.lookup(*std_scope, "String", Namespace::Type);
@@ -1157,6 +1160,7 @@ fn resolve_nodes(result: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
         if result.impl_traits.get(&id).is_some_and(|form| form.result.is_some()) {
             continue;
         }
+        if resolver.lower_higher_ranked_callable(result, id)? { continue; }
         let node = &mut result.types[id];
         let scope = node.scope;
         let span = node.span;

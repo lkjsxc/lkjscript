@@ -19,7 +19,7 @@ Optimization is untrusted IR-to-IR work: recheck it, discard rejected output,
 compare optimized native behavior with interpretation of the original IR.
 There is no unsafe surface, FFI, ambient authority or unwinding. Views may occupy locals, parameters, results and view aggregates, not heap containers.
 Apply the two-way rule: use existing IR/library contracts for everyday forms and rewrite rare consumers that would enlarge trusted semantics.
-Advertised opaque callable origins come from signature positions. Verify concrete containment before admitting the source program.
+Advertised opaque callable origins come from signature positions. Verify concrete containment before admitting the source program. An explicit callable binder used once on a direct input uses the existing fresh-input check. Quantified trait applications require distinct source witness identities.
 Resolve inherent constants and literal module constants used as array lengths in the source producer. Lower through ordinary IR. General compile-time evaluation needs its own design decision. Opaque macro fragments resolve ordinary names at their destination; structural ownership governs block imports and constant initializers. Statement output splices into that block through ordered expansion and exact replay. Captured-local rename requires unchanged rules, roles and reference targets, including the preserving subset of mixed transactions.
 Apply the declaration cfg predicates to match arms in the parser. Parse disabled arms for syntax and discard their speculative syntax and macro state before coverage or name resolution.
 

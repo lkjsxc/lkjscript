@@ -4,6 +4,7 @@ mod debug;
 pub(crate) mod integer_literals;
 pub(crate) mod macros;
 mod impl_trait;
+pub(crate) mod higher_ranked;
 pub(crate) mod formatting;
 use crate::ast::*;
 use crate::diagnostics::BlockedRegion;
@@ -1521,6 +1522,8 @@ impl Parser {
                     qualification: None, bindings: Vec::new(), declaration: None,
                     name, args: Vec::new(),
                 }), span)
+            } else if self.is("for") {
+                self.higher_ranked_bound()?
             } else { self.ty()? };
             if self.macro_type_materialization(bound) {
                 return Err(Diagnostic::new(span, "E_MACRO_EXPANSION", "type captures cannot be used as trait bounds"));

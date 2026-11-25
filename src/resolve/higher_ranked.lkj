@@ -1,0 +1,67 @@
+//! Resolve the callable before lowering its explicit binder to ordinary elision.
+use super::*;
+use crate::syntax::higher_ranked::{CALLABLE_PREFIX, bound_reference};
+
+fn declares_parameter(parameters: &[GenericParam], name: &str) -> bool {
+    parameters.iter().any(|parameter: &GenericParam| !parameter.constant && parameter.name.as_str() == name)
+}
+
+fn owning_function(program: &Program, bound: TypeId) -> Option<FunctionId> {
+    for (index, function) in program.functions.iter().enumerate() {
+        for parameter in &function.generics {
+            if !parameter.lifetime && !parameter.constant && parameter.bounds.contains(&bound) {
+                return Some(FunctionId { index });
+            }
+        }
+    }
+    None
+}
+
+impl Resolver<'_> {
+    pub(super) fn lower_higher_ranked_callable(&self, program: &mut Program, id: TypeId) -> Result<bool> {
+        let (resolved, lifetime) = {
+            let Type::Path(path) = &program.types[id].kind else { return Ok(false); };
+            let Some(marked) = path.name.as_str().strip_prefix(CALLABLE_PREFIX) else { return Ok(false); };
+            let (name, lifetime) = marked.split_once(':').unwrap();
+            let mut resolved = path.clone();
+            resolved.name = name.to_string();
+            (resolved, lifetime.to_string())
+        };
+        let span = program.types[id].span;
+        // Expanded siblings can share an invocation span. The bound's arena
+        // ID identifies its actual function and enclosing declaration.
+        let Some(function) = owning_function(program, id) else {
+            return Err(Diagnostic::new(span, "E_UNSUPPORTED", "higher-ranked callable bounds require a function type parameter"));
+        };
+        let empty: [GenericParam; 0] = [];
+        let enclosing: &[GenericParam] = match self.function_owner(function) {
+            FunctionOwner::Free => &empty,
+            FunctionOwner::Implementation(owner) => &program.impls[owner.index].generics,
+            FunctionOwner::Trait(owner) => &program.traits[owner.index].generics,
+        };
+        let parameters = &program.functions[function.index].generics;
+        if declares_parameter(parameters, &lifetime) || declares_parameter(enclosing, &lifetime) {
+            return Err(Diagnostic::new(span, "E_TRAIT", "higher-ranked lifetime shadows an outer lifetime declaration"));
+        }
+        {
+            let scope = program.types[id].scope;
+            let name = resolved.name.as_str();
+            if declares_parameter(parameters, name) || declares_parameter(enclosing, name) {
+                return Err(Diagnostic::new(span, "E_TRAIT", "higher-ranked callable name resolves to a type parameter"));
+            }
+            let mut binding = self.lookup_lexical(scope, name, Namespace::Type, span);
+            if binding.is_none() { binding = self.lookup_prelude(name, Namespace::Type); }
+            if let Some(binding) = binding {
+                self.access(&binding, scope, span)?;
+                return Err(Diagnostic::new(span, "E_UNSUPPORTED", "higher-ranked trait applications require region-aware witness identity"));
+            }
+        }
+        let input = bound_reference(program, resolved.args[0usize], &lifetime).unwrap();
+        {
+            let Type::Ref { lifetime, .. } = &mut program.types[input].kind else { unreachable!() };
+            *lifetime = String::new();
+        }
+        program.types[id].kind = Type::Path(resolved);
+        Ok(true)
+    }
+}

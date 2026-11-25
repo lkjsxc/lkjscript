@@ -1,0 +1,20 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+macro_rules! with_bounds {
+    ([$($bound:tt)*]) => {
+        trait Selector { type Name: $($bound)*; }
+    }
+}
+with_bounds! { [for<'input> From<&'input str>] }
+struct Name { length: usize }
+impl From<&str> for Name {
+    fn from(input: &str) -> Self { Name { length: input.len() } }
+}
+struct Implementation;
+impl Selector for Implementation { type Name = Name; }
+fn parse<I: Selector>(input: &str) -> I::Name {
+    I::Name::from(input)
+}
+pub fn probe() -> usize {
+    parse::<Implementation>("first").length + parse::<Implementation>("second").length
+}

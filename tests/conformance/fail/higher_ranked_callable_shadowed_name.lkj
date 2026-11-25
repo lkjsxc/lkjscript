@@ -1,0 +1,4 @@
+// expect: reject E_TRAIT
+// witness: {"rustCode":"E0404"}
+fn unused<Fn, F: for<'input> Fn(&'input i64)>(_anchor: Fn, _read: F) {}
+pub fn probe() -> i64 { 42 }
