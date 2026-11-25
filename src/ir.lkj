@@ -36,6 +36,9 @@ pub enum TypeKind {
     Box {
         inner: usize,
     },
+    /// Unsized pure borrowed callable. Shared references carry an environment
+    /// address and a checked code address; no owned or mutable value exists.
+    Function { params: Vec<usize>, result: usize },
     /// Unsized immutable UTF-8 text; stored values use a shared Ref.
     Str,
     World,
@@ -394,6 +397,14 @@ pub enum IntrinsicOp {
     ForeignFinish,
 }
 impl IntrinsicOp {
+    /// Capability-free operations. Unknown additions remain effectful.
+    pub fn pure(self) -> bool {
+        matches!(self, Self::CharFromU32 | Self::F64FromBits | Self::F64ToBits
+            | Self::ArrayRepeat | Self::StrLen | Self::StrAsBytes | Self::StrFromUtf8
+            | Self::Assert | Self::VecNew | Self::VecLen | Self::VecPush | Self::VecPop
+            | Self::Replace | Self::BoxNew | Self::Cast | Self::Clone)
+    }
+
     pub fn parse(text: &str) -> Option<IntrinsicOp> {
         match text {
             "char_from_u32" => Some(IntrinsicOp::CharFromU32),
@@ -718,6 +729,10 @@ pub enum Op {
         function: usize,
         args: Vec<usize>,
     },
+    /// Bind a pure function to one thin shared environment reference.
+    Bind { dst: usize, function: usize, environment: usize },
+    /// Invoke a shared Function reference; the result cannot contain views.
+    Invoke { dst: usize, callee: usize, args: Vec<usize> },
     Struct {
         dst: usize,
         fields: Vec<usize>,

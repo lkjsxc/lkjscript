@@ -193,13 +193,13 @@ impl Layouts {
             TypeKind::Ref { inner, .. } => {
                 if matches!(
                     program.types[inner].kind,
-                    TypeKind::Slice { .. } | TypeKind::Str
+                    TypeKind::Slice { .. } | TypeKind::Str | TypeKind::Function { .. }
                 ) {
                     value.bytes = 16;
                     value.scalar = false;
                 }
             }
-            TypeKind::Slice { .. } | TypeKind::Str => {
+            TypeKind::Slice { .. } | TypeKind::Str | TypeKind::Function { .. } => {
                 value.bytes = 16;
                 value.scalar = false;
             }

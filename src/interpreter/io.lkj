@@ -61,6 +61,7 @@ impl<H: Host> Interpreter<'_, H> {
         }
         for element in self.sequence(&access)? {
             let child = Access {
+                callable: None,
                 extent: None,
                 cell: *element,
                 ty: ir::U8,

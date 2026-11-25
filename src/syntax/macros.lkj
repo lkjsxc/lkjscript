@@ -2,7 +2,7 @@
 mod matcher;
 mod expand;
 pub(crate) mod provenance;
-use super::{Parser, Token, TokenKind};
+use super::{FormatOrigin, Parser, Token, TokenKind};
 use crate::ast::*;
 use crate::diagnostics::BlockedRegion;
 use std::collections::BTreeSet;
@@ -65,7 +65,7 @@ fn error(span: Span, code: &str, message: &str) -> Diagnostic {
 fn opening(text: &str) -> bool { text == "(" || text == "[" || text == "{" }
 fn closing(text: &str) -> bool { text == ")" || text == "]" || text == "}" }
 pub(crate) fn builtin_macro(name: &str) -> bool {
-    matches!(name, "assert" | "assert_eq" | "assert_ne" | "panic" | "vec" | "format"
+    matches!(name, "assert" | "assert_eq" | "assert_ne" | "panic" | "vec" | "format" | "format_args" | "concat"
         | "write" | "writeln" | "matches" | "unreachable" | "debug_assert" | "debug_assert_eq"
         | "debug_assert_ne" | "include_str" | "include_bytes" | "module_path" | "print" | "println" | "eprint" | "eprintln")
 }
@@ -412,6 +412,23 @@ impl Parser {
             capture.materializations.push(node);
         }
         Ok(node)
+    }
+    // Recover the literal token's context through opaque expression captures.
+    // Macro-produced strings have no implicit captures, matching Rust's format contract.
+    pub(super) fn literal_origin(&self, character: bool) -> FormatOrigin {
+        let token = self.token();
+        if matches!(token.kind, TokenKind::String) || character && matches!(token.kind, TokenKind::Char) { return FormatOrigin::Literal(token.context); }
+        if matches!(token.kind, TokenKind::Ident) && (token.text == "concat" || token.text == "module_path") { return FormatOrigin::Expansion; }
+        let mut id = match &token.kind { TokenKind::Expression(id) => *id, _ => return FormatOrigin::Other };
+        for _ in 0usize..self.program.macro_captures.len() {
+            let Some(capture) = self.program.macro_captures.get(id) else { return FormatOrigin::Other; };
+            let Some(token) = capture.tokens.first() else { return FormatOrigin::Other; };
+            if token.kind == 2u8 || character && token.kind == 3u8 { return FormatOrigin::Literal(token.context); }
+            if token.kind == 0u8 && (token.text == "concat" || token.text == "module_path") { return FormatOrigin::Expansion; }
+            if token.kind != 8u8 { return FormatOrigin::Other; }
+            let Some(next) = token.capture else { return FormatOrigin::Other; }; id = next;
+        }
+        FormatOrigin::Other
     }
     pub(super) fn macro_capture_expression(&mut self, id: usize) -> Result<ExprId, Diagnostic> {
         self.macro_capture(id, ParsedFragment::Expression)

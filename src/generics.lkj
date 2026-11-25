@@ -2023,7 +2023,7 @@ fn trait_requirements(
     if bound == "Sized" {
         let mut children = Vec::new();
         match &ty.kind {
-            TypeKind::Str | TypeKind::Slice { .. } => return None,
+            TypeKind::Str | TypeKind::Slice { .. } | TypeKind::Function { .. } => return None,
             TypeKind::Array { inner, .. } => children.push(Goal { ty: *inner, bound: goal.bound.clone() }),
             TypeKind::Struct { fields, .. } => {
                 for field in fields { children.push(Goal { ty: field.ty, bound: goal.bound.clone() }); }
@@ -2047,7 +2047,8 @@ fn trait_requirements(
     if bound == "Data" {
         let mut children = Vec::new();
         match &ty.kind {
-            TypeKind::World
+            TypeKind::Function { .. }
+            | TypeKind::World
             | TypeKind::Arguments
             | TypeKind::Environment
             | TypeKind::ExitStatus
@@ -2116,6 +2117,7 @@ fn trait_requirements(
         let mut structural = true;
         match &ty.kind {
             TypeKind::Unit | TypeKind::Bool | TypeKind::Char | TypeKind::Int { .. } => {}
+            TypeKind::Function { .. } => return None,
             TypeKind::Str => {
                 if !automatic && !comparison {
                     return None;

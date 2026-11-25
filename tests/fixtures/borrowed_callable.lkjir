@@ -1,0 +1,146 @@
+lkjscript-ir 1
+# expect: value 42
+type "()" unit
+type "bool" bool
+type "i32" int 32 signed
+type "i64" int 64 signed
+type "usize" int 64 unsigned
+type "u8" int 8 unsigned
+type "f64" f64
+type "Environment" struct move "base" 3 "guard" 3
+type "EnvironmentRef" ref shared 7
+type "Pair" struct copy "left" 3 "right" 3
+type "Callable" function 9 3 3 3 3 3 3 3
+type "CallableRef" ref shared 10
+type "Holder" struct copy "callback" 11 "sentinel" 3
+type "Choice" enum copy
+variant "Some" "callback" 11
+variant "None"
+endtype
+type "OuterRef" ref shared 11
+fn "private::callback" 8 9
+local "env" 8 let
+local "arg0" 3 let
+local "arg1" 3 let
+local "arg2" 3 let
+local "arg3" 3 let
+local "arg4" 3 let
+local "arg5" 3 let
+local "arg6" 3 let
+local "base" 3 let
+local "guard" 3 let
+local "sum0" 3 let
+local "sum1" 3 let
+local "sum2" 3 let
+local "sum3" 3 let
+local "sum4" 3 let
+local "sum5" 3 let
+local "sum6" 3 let
+local "pair" 9 let
+@1 read 8 copy 0 deref field 0
+@2 read 9 copy 0 deref field 1
+@3 drop 0
+@4 binary 10 "+" 8 1
+@5 binary 11 "+" 10 2
+@6 binary 12 "+" 11 3
+@7 binary 13 "+" 12 4
+@8 binary 14 "+" 13 5
+@9 binary 15 "+" 14 6
+@10 binary 16 "+" 15 7
+@11 struct 17 16 9
+@12 return 17
+endfn
+fn "probe" 0 3
+local "base" 3 let
+local "guard" 3 let
+local "environment" 7 mut
+local "env_ref" 8 let
+local "callback" 11 let
+local "sentinel_left" 3 let
+local "sentinel_right" 3 let
+local "sentinels" 9 let
+local "callback_copy" 11 let
+local "holder" 12 let
+local "holder_copy" 12 let
+local "choice" 13 let
+local "extracted" 11 let
+local "outer" 14 let
+local "reborrow" 11 let
+local "value0" 3 let
+local "value1" 3 let
+local "value2" 3 let
+local "value3" 3 let
+local "value4" 3 let
+local "value5" 3 let
+local "value6" 3 let
+local "result" 9 let
+local "answer" 3 let
+local "returned_guard" 3 let
+local "saved_left" 3 let
+local "saved_right" 3 let
+local "expected_left" 3 let
+local "expected_right" 3 let
+local "left_difference" 3 let
+local "right_difference" 3 let
+local "expected_guard" 3 let
+local "guard_difference" 3 let
+local "sentinel_difference" 3 let
+local "difference" 3 let
+local "final_answer" 3 let
+local "holder_sentinel" 3 let
+local "enum_callback" 11 let
+local "is_some" 1 let
+@1 int 0 14
+@2 int 1 100
+@3 struct 2 0 1
+@4 borrow 3 shared 2
+@5 bind 4 0 3
+@6 int 5 1111
+@7 int 6 2222
+@8 struct 7 5 6
+@9 read 8 copy 4
+@10 read 36 copy 7 field 0
+@11 struct 9 8 36
+@12 read 10 copy 9
+@13 drop 9
+@14 read 37 copy 10 field 0
+@15 variant 11 0 37
+@16 drop 10
+@17 tag-test 38 11 0
+@18 if 38
+@19 read 12 copy 11 variant 0 0
+@20 borrow 13 shared 12
+@21 borrow 14 shared 13 deref deref
+@22 drop 4
+@23 int 15 1
+@24 int 16 2
+@25 int 17 3
+@26 int 18 4
+@27 int 19 5
+@28 int 20 6
+@29 int 21 7
+@30 invoke 22 14 15 16 17 18 19 20 21
+@31 drop 13
+@32 drop 12
+@33 drop 11
+@34 drop 2
+@35 read 23 copy 22 field 0
+@36 read 24 copy 22 field 1
+@37 drop 22
+@38 read 25 copy 7 field 0
+@39 read 26 copy 7 field 1
+@40 drop 7
+@41 int 27 1111
+@42 int 28 2222
+@43 binary 29 "-" 25 27
+@44 binary 30 "-" 26 28
+@45 int 31 100
+@46 binary 32 "-" 24 31
+@47 binary 33 "+" 29 30
+@48 binary 34 "+" 33 32
+@49 binary 35 "+" 23 34
+@50 return 35
+@51 else
+@52 trap "lost callable variant"
+@53 end
+endfn

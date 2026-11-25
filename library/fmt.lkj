@@ -3,6 +3,41 @@
 use crate::{Option, String};
 pub struct Error;
 pub type Result = crate::Result<(), Error>;
+// The compiler gives this exact private implementation type an unsized pure
+// callable representation. It has no source constructor or owned values.
+struct __FormatThunk;
+// Like the source mem wrappers, this declaration is lowered by the producer.
+pub fn __lkjscript_invoke(value: &__FormatThunk, formatter: &mut Formatter) -> Result {
+    std::fmt::__lkjscript_invoke(value, formatter)
+}
+#[derive(Copy, Clone)]
+enum ArgumentKind<'a> {
+    Literal(&'a str),
+    Formatted(&'a __FormatThunk),
+}
+#[derive(Copy, Clone)]
+pub struct Arguments<'a> { inner: ArgumentKind<'a> }
+impl<'a> Arguments<'a> {
+    pub fn as_str(&self) -> Option<&'a str> {
+        match &self.inner { ArgumentKind::Literal(value) => Option::Some(*value), ArgumentKind::Formatted(_) => Option::None }
+    }
+}
+impl Display for Arguments<'_> {
+    fn fmt(&self, formatter: &mut Formatter) -> Result {
+        match &self.inner {
+            ArgumentKind::Literal(value) => formatter.write_str(*value),
+            ArgumentKind::Formatted(value) => std::fmt::__lkjscript_invoke(*value, formatter),
+        }
+    }
+}
+impl Debug for Arguments<'_> {
+    fn fmt(&self, formatter: &mut Formatter) -> Result { <Arguments as Display>::fmt(self, formatter) }
+}
+pub fn format(arguments: Arguments) -> String { format!("{}", arguments) }
+pub fn write(output: &mut String, arguments: Arguments) -> Result { write!(output, "{}", arguments) }
+impl String {
+    pub fn write_fmt(&mut self, arguments: Arguments) -> Result { write!(self, "{}", arguments) }
+}
 pub struct Formatter<'a> {
     output: &'a mut String,
     width: usize,
@@ -37,6 +72,7 @@ impl Write for String {
     }
 }
 impl Formatter<'_> {
+    pub fn write_fmt(&mut self, arguments: Arguments) -> Result { <Arguments as Display>::fmt(&arguments, self) }
     pub fn write_str(&mut self, value: &str) -> Result {
         self.output.push_str(value);
         crate::Result::Ok(())

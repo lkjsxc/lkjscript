@@ -1,0 +1,8 @@
+// expect: reject E_TRAIT
+// Data is an LKJ capability property, not a Rust trait.
+fn require<T: Data>(_: T) {}
+pub fn probe() -> i64 {
+    let value = 42i64;
+    require(format_args!("{value}"));
+    42
+}

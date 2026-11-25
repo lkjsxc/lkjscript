@@ -47,7 +47,7 @@ fn cleanup(
         }
     }
 }
-pub(super) fn derive(
+pub(crate) fn derive(
     program: &Program, imported: &[bool], known: Vec<Vec<String>>,
 ) -> Vec<Vec<String>> {
     let mut operations = Vec::new();
@@ -65,7 +65,7 @@ pub(super) fn derive(
             let mut calls = BTreeSet::new();
             for instruction in &function.body {
                 match &instruction.op {
-                    Op::Call { function, .. } => { calls.insert(*function); }
+                    Op::Call { function, .. } | Op::Bind { function, .. } => { calls.insert(*function); }
                     Op::Intrinsic { name, .. } => {
                         operations[index].insert(name.as_str().to_string());
                     }

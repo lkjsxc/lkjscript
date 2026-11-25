@@ -1,0 +1,28 @@
+// expect: value 42
+// witness: {}
+macro_rules! forwarded {
+    ($format:expr, $value:expr) => { std::fmt::format(format_args!($format, $value)) };
+}
+macro_rules! nested {
+    ($format:expr, $value:expr) => { forwarded!($format, $value) };
+}
+macro_rules! provider {
+    ($format:expr, $value:expr) => { nested!(concat!("prefix ", $format, '\n'), $value) };
+}
+fn static_label() -> &'static str { concat!("label", '=', '💙', '\n',) }
+pub fn probe() -> i64 {
+    assert_eq!(concat!(), "");
+    assert_eq!(static_label(), "label=💙\n");
+    assert_eq!(concat!("a", concat!("b", 'c'),), "abc");
+    let value = 42i64;
+    assert_eq!(provider!("value={:04}", value), "prefix value=0042\n");
+    let arguments = format_args!(concat!("value=", "{name}"), name = value);
+    assert_eq!(std::fmt::format(arguments), "value=42");
+    let literal = format_args!(concat!('{', '{', '}', '}'));
+    assert_eq!(literal.as_str(), Some("{}"));
+    let mut output = String::new();
+    use std::fmt::Write;
+    write!(output, concat!("v", "={}"), value).unwrap();
+    assert_eq!(output, "v=42");
+    42
+}

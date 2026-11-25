@@ -1,0 +1,8 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+pub fn probe() -> i64 {
+    let mut number = 1i64;
+    let arguments = format_args!("{}", number);
+    number = 2;
+    std::fmt::format(arguments).len() as i64
+}

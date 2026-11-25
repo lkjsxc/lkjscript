@@ -663,6 +663,11 @@ impl Compiler<'_> {
             work.values.push(*id);
             return Ok(());
         }
+        if path.name == "$std::fmt::__FormatThunk" {
+            if !args.is_empty() { return Err(err(span, "E_TYPE", "format thunk takes no type arguments")); }
+            work.values.push(self.format_thunk_type(declaration, span)?);
+            return Ok(());
+        }
         let mut type_parameters: Vec<String> = Vec::new();
         for parameter in &parameters {
             if !parameter.lifetime {

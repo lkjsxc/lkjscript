@@ -2,6 +2,7 @@
 //! stack. This model neither invokes the checker nor uses native lowering.
 mod io;
 mod diagnostics;
+mod callable;
 mod scalar;
 use crate::ir::{self, Op, Place, Program, Projection, TypeKind};
 use std::collections::{BTreeMap, BTreeSet};
@@ -382,6 +383,7 @@ struct SequenceExtent {
 }
 #[derive(Clone)]
 struct Reference {
+    callable: Option<usize>,
     extent: Option<SequenceExtent>,
     target: Location,
     identity: u64,
@@ -455,6 +457,7 @@ struct Loan {
 }
 #[derive(Clone)]
 struct Access {
+    callable: Option<usize>,
     extent: Option<SequenceExtent>,
     cell: Location,
     ty: usize,
@@ -513,6 +516,7 @@ struct Interpreter<'a, H: Host> {
     peak_frames: usize,
     flow: Vec<Option<Flow>>,
     texts: BTreeMap<(usize, Vec<u8>), Location>,
+    pure_targets: BTreeSet<usize>,
     site: Site,
     result: Option<Scalar>,
 }
@@ -749,7 +753,11 @@ impl<H: Host> Interpreter<'_, H> {
         if unsized_view != reference.extent.is_some() {
             return Err(self.invalid("reference extent differs from its referent"));
         }
+        let is_callable = matches!(self.kind(reference.referent)?, TypeKind::Function { .. });
+        if is_callable != reference.callable.is_some() { return Err(self.invalid("callable metadata differs from its referent")); }
+        if is_callable { self.callable_target(reference)?; }
         let access = Access {
+            callable: reference.callable,
             extent: reference.extent,
             cell: reference.target,
             ty: reference.referent,
@@ -767,6 +775,9 @@ impl<H: Host> Interpreter<'_, H> {
         referent: usize,
         mutable: bool,
     ) -> Result<Value, RunError> {
+        if access.callable.is_some() && (mutable || referent != access.ty) {
+            return Err(self.invalid("callable reborrow must preserve its shared signature"));
+        }
         if mutable && !access.writable {
             return Err(self.error(
                 InterpreterError::ConflictingAccess,
@@ -810,6 +821,7 @@ impl<H: Host> Interpreter<'_, H> {
             },
         );
         Ok(Value::Reference(Reference {
+            callable: access.callable,
             extent,
             target: access.cell,
             identity,
@@ -893,6 +905,7 @@ impl<H: Host> Interpreter<'_, H> {
             .ok_or_else(|| self.invalid("local index is not declared"))?;
         let declaration = &self.program.functions[frame.function].locals[local];
         Ok(Access {
+            callable: None,
             extent: None,
             cell,
             ty: declaration.ty,
@@ -924,6 +937,7 @@ impl<H: Host> Interpreter<'_, H> {
                         access.permissions.extend_from_slice(&next.permissions);
                         access.cell = next.cell;
                         access.extent = next.extent;
+                        access.callable = next.callable;
                         access.ty = *inner;
                     }
                     (TypeKind::Box { inner }, Value::Box(child)) => {
@@ -1573,6 +1587,7 @@ impl<H: Host> Interpreter<'_, H> {
             let ty = self.cell(child)?.ty;
             self.push_work(Work::Drop(DropWork {
                 access: Access {
+                    callable: None,
                     extent: None,
                     cell: child,
                     ty,
@@ -1630,6 +1645,7 @@ impl<H: Host> Interpreter<'_, H> {
         let mut bytes = Vec::new();
         for element in elements {
             let element_access = Access {
+                callable: None,
                 extent: None,
                 cell: *element,
                 ty: ir::U8,
@@ -2145,6 +2161,7 @@ impl<H: Host> Interpreter<'_, H> {
                     }
                 };
                 let access = Access {
+                    callable: None,
                     extent: None,
                     cell,
                     ty: inner,
@@ -2337,6 +2354,46 @@ impl<H: Host> Interpreter<'_, H> {
                 };
                 let value = self.number(scalar::binary(self.kind(left_ty)?, op, left, right))?;
                 self.put_local(&frame, dst, Value::Bits(value))?;
+            }
+            Op::Bind { dst, function, environment } => {
+                let (signature, mutable) = self.reference_type(self.local(&frame, dst)?.ty)?;
+                if mutable || !matches!(self.kind(signature)?, TypeKind::Function { .. }) {
+                    return Err(self.invalid("binding destination is not a shared callable"));
+                }
+                let (environment_ty, environment_mutable) = self.reference_type(self.local(&frame, environment)?.ty)?;
+                if environment_mutable || matches!(self.kind(environment_ty)?, TypeKind::Function { .. } | TypeKind::Str | TypeKind::Slice { .. }) {
+                    return Err(self.invalid("binding requires a thin shared environment"));
+                }
+                let Value::Reference(mut reference) = self.take_local(&frame, environment)?.1 else {
+                    return Err(self.invalid("binding environment is not a reference"));
+                };
+                self.reference_access(&reference)?;
+                reference.referent = signature;
+                reference.callable = Some(function);
+                self.callable_target(&reference)?;
+                self.pure_target(function)?;
+                self.put_local(&frame, dst, Value::Reference(reference))?;
+            }
+            Op::Invoke { dst, callee, args } => {
+                let Value::Reference(mut reference) = self.take_local(&frame, callee)?.1 else {
+                    return Err(self.invalid("invocation target is not a reference"));
+                };
+                self.reference_access(&reference)?;
+                let function = self.callable_target(&reference)?;
+                let declaration = &self.program.functions[function];
+                if declaration.result != self.local(&frame, dst)?.ty || declaration.params != args.len() + 1usize {
+                    return Err(self.invalid("invocation signature differs"));
+                }
+                let environment_ty = declaration.locals[0].ty;
+                let inner = match self.kind(environment_ty)? { TypeKind::Ref { inner, .. } => *inner, _ => unreachable!() };
+                reference.referent = inner;
+                reference.callable = None;
+                let mut values = vec![(environment_ty, Value::Reference(reference))];
+                for arg in args { values.push(self.take_local(&frame, arg)?); }
+                let destination = self.local(&frame, dst)?.cell;
+                self.push_work(Work::Frame(frame))?;
+                self.push_frame(function, values, ReturnTo::Cell(destination))?;
+                return Ok(());
             }
             Op::Call {
                 dst,
@@ -2552,6 +2609,7 @@ fn run_inner<'a, H: Host>(
         peak_frames: 0,
         flow,
         texts: BTreeMap::new(),
+        pure_targets: BTreeSet::new(),
         site,
         result: None,
     };
@@ -2839,6 +2897,7 @@ pub(crate) fn assert_reference_reuse() {
         peak_frames: 0,
         flow: Vec::new(),
         texts: BTreeMap::new(),
+        pure_targets: BTreeSet::new(),
         site: Site {
             function: 0,
             file: 0,
@@ -2848,6 +2907,7 @@ pub(crate) fn assert_reference_reuse() {
     };
     let old = reference_probe_checked(interpreter.allocate(ir::I64, Some(Value::Bits(1)), false));
     let old_access = Access {
+        callable: None,
         extent: None,
         cell: old,
         ty: ir::I64,
@@ -2873,6 +2933,7 @@ pub(crate) fn assert_reference_reuse() {
     assert!(error.kind == ErrorKind::Interpreter(InterpreterError::DanglingReference));
     reference_probe_checked(interpreter.release_reference(&stale));
     let access = Access {
+        callable: None,
         extent: None,
         cell: replacement,
         ty: ir::I64,
@@ -2894,6 +2955,7 @@ pub(crate) fn assert_reference_reuse() {
     reference_probe_checked(interpreter.release_reference(&current));
     let other = reference_probe_checked(interpreter.allocate(ir::I64, Some(Value::Bits(3)), false));
     let other_access = Access {
+        callable: None,
         extent: None,
         cell: other,
         ty: ir::I64,

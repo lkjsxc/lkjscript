@@ -92,6 +92,10 @@ pub(crate) mod verified {
     fn remap(ty: &mut ir::Type, mapping: &BTreeMap<usize, usize>, labels: bool) {
         if !labels { ty.name = String::new(); }
         match &mut ty.kind {
+            ir::TypeKind::Function { params, result } => {
+                for index in 0usize..params.len() { params[index] = *mapping.get(&params[index]).unwrap(); }
+                *result = *mapping.get(result).unwrap();
+            }
             ir::TypeKind::Struct { fields, .. } => {
                 for at in 0usize..fields.len() {
                     if !labels { fields[at].name = String::new(); }
@@ -232,7 +236,7 @@ pub(crate) mod verified {
         for local in &original.locals { type_names.insert(shapes[local.ty].clone()); }
         let mut callees: BTreeSet<String> = BTreeSet::new();
         for instruction in &original.body {
-            if let ir::Op::Call { function, .. } = instruction.op {
+            if let ir::Op::Call { function, .. } | ir::Op::Bind { function, .. } = instruction.op {
                 callees.insert(catalog.instance_ids[function].clone());
             }
         }
@@ -253,7 +257,7 @@ pub(crate) mod verified {
         for at in 0usize..value.body.len() {
             let instruction = &mut value.body[at];
             instruction.file = None; instruction.line = 0usize; instruction.column = 0usize;
-            if let ir::Op::Call { function, .. } = &mut instruction.op {
+            if let ir::Op::Call { function, .. } | ir::Op::Bind { function, .. } = &mut instruction.op {
                 *function = *call_ids.get(&catalog.instance_ids[*function]).unwrap();
             }
         }
@@ -526,6 +530,7 @@ fn include(map: &mut Vec<Option<usize>>, order: &mut Vec<usize>, index: usize) {
 fn children(kind: &ir::TypeKind) -> Vec<usize> {
     let mut out = Vec::new();
     match kind {
+        ir::TypeKind::Function { params, result } => { out.extend_from_slice(params); out.push(*result); }
         ir::TypeKind::Struct { fields, .. } => {
             for field in fields { out.push(field.ty); }
         }
@@ -542,6 +547,10 @@ fn children(kind: &ir::TypeKind) -> Vec<usize> {
 fn remap_type(value: &mut ir::Type, types: &[Option<usize>], diagnostic_metadata: bool) {
     if !diagnostic_metadata { value.name = String::new(); }
     match &mut value.kind {
+        ir::TypeKind::Function { params, result } => {
+            for index in 0usize..params.len() { params[index] = types[params[index]].unwrap(); }
+            *result = types[*result].unwrap();
+        }
         ir::TypeKind::Struct { fields, .. } => {
             for index in 0usize..fields.len() {
                 if !diagnostic_metadata { fields[index].name = String::new(); }
@@ -587,7 +596,7 @@ pub fn closure_identity(checked: &ir::CheckedProgram, entry: usize, diagnostic_m
             include(&mut types, &mut type_order, function.result);
             for local in &function.locals { include(&mut types, &mut type_order, local.ty); }
             for instruction in &function.body {
-                if let ir::Op::Call { function, .. } = instruction.op {
+                if let ir::Op::Call { function, .. } | ir::Op::Bind { function, .. } = instruction.op {
                     include(&mut functions, &mut function_order, function);
                 }
             }
@@ -629,7 +638,7 @@ pub fn closure_identity(checked: &ir::CheckedProgram, entry: usize, diagnostic_m
         }
         for at in 0usize..function.body.len() {
             let instruction = &mut function.body[at];
-            if let ir::Op::Call { function, .. } = &mut instruction.op {
+            if let ir::Op::Call { function, .. } | ir::Op::Bind { function, .. } = &mut instruction.op {
                 *function = functions[*function].unwrap();
             }
             if diagnostic_metadata {

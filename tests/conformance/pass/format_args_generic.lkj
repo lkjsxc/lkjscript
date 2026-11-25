@@ -1,0 +1,20 @@
+// expect: value 42
+// witness: {}
+use std::fmt;
+
+// Definition checking must validate this contract even without an instantiation.
+fn unused<T: fmt::Display>(value: &T) -> String {
+    std::fmt::format(format_args!("unused={}", value))
+}
+fn render<T: fmt::Display>(value: &T) -> String {
+    let arguments = format_args!("generic={}", value);
+    std::fmt::format(arguments)
+}
+fn consumer<T: fmt::Display>(value: &T) -> String { render(value) }
+pub fn probe() -> i64 {
+    let number = 42i64;
+    let text = String::from("borrowed");
+    assert_eq!(consumer(&number), "generic=42");
+    assert_eq!(consumer(&text), "generic=borrowed");
+    42
+}

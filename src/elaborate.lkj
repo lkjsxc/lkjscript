@@ -13,6 +13,7 @@ mod derive_methods;
 mod diagnostic_inference;
 mod diagnostic_edits;
 mod floats;
+mod format_args;
 mod generic_check;
 mod qualified_paths;
 mod associated_types;
@@ -138,6 +139,7 @@ struct Compiler<'a> {
     capture_references: bool,
     semantic_evidence: Option<semantic::Evidence>,
     closures: closures::Catalog,
+    formats: format_args::Catalog,
     opaque: opaque::Catalog,
     scoped_bodies: BTreeMap<usize, scoped_locals::Body>,
     trait_proofs: Option<trait_proofs::Session>,
@@ -167,7 +169,7 @@ fn unsized_local_problem(
         let Some(ty) = types.get(local.ty) else {
             continue;
         };
-        if !matches!(ty.kind, ir::TypeKind::Slice { .. } | ir::TypeKind::Str) {
+        if !matches!(ty.kind, ir::TypeKind::Slice { .. } | ir::TypeKind::Str | ir::TypeKind::Function { .. }) {
             continue;
         }
         let mut problem = err(
@@ -192,6 +194,8 @@ fn unsized_local_problem(
                 | ir::Op::Unary { dst, .. }
                 | ir::Op::Binary { dst, .. }
                 | ir::Op::Call { dst, .. }
+                | ir::Op::Bind { dst, .. }
+                | ir::Op::Invoke { dst, .. }
                 | ir::Op::Struct { dst, .. }
                 | ir::Op::Variant { dst, .. }
                 | ir::Op::Discriminant { dst, .. }
@@ -727,6 +731,7 @@ impl<'a> Compiler<'a> {
             capture_references: true,
             semantic_evidence: None,
             closures: closures::Catalog::default(),
+            formats: format_args::Catalog::default(),
             opaque: opaque::Catalog::default(),
             scoped_bodies: BTreeMap::new(),
             trait_proofs: None,
@@ -1815,6 +1820,11 @@ impl Builder<'_, '_> {
         }
         self.record_carriers(&op);
         match &op {
+            ir::Op::Bind { dst, environment, .. } => { self.set_live(*environment, false); self.set_live(*dst, true); }
+            ir::Op::Invoke { dst, callee, args } => {
+                self.set_live(*callee, false); for arg in args { self.set_live(*arg, false); }
+                self.set_live(*dst, true);
+            }
             ir::Op::Int { dst, .. }
             | ir::Op::Text { dst, .. }
             | ir::Op::Float { dst, .. }
@@ -2371,6 +2381,7 @@ impl Builder<'_, '_> {
         while let Some(id) = todo.pop() {
             match &self.compiler.source.exprs[id].kind {
                 a::Expr::Borrow { .. } => return true,
+                a::Expr::Macro { name, .. } if name == "format_args" => return true,
                 a::Expr::Match { arms, .. }
                     if arms.iter().any(|arm| {
                         matches!(
@@ -3871,6 +3882,9 @@ impl Builder<'_, '_> {
             );
             return Ok((dst, inner));
         }
+        if path.declaration.is_none() && path.name == "std::fmt::__lkjscript_invoke" {
+            return self.invoke_format_arguments(args, span);
+        }
         if path.declaration.is_none() && (path.name == "drop" || path.name == "std::mem::drop") {
             if args.len() != 1 {
                 return Err(err(span, "E_TYPE", "drop requires one argument"));
@@ -4831,7 +4845,7 @@ impl Builder<'_, '_> {
             fields: declared, ..
         } = self.compiler.types[ty].kind.clone()
         else {
-            unreachable!()
+            return Err(err(span, "E_TYPE", "opaque unsized types have no owned constructor"));
         };
         if let Some(base) = base_place {
             for (index, field) in declared.iter().enumerate() {
@@ -4875,6 +4889,7 @@ impl Builder<'_, '_> {
         span: a::Span,
     ) -> Result<(usize, usize)> {
         match name {
+            "format_args" => self.format_arguments(args, span),
             "format" | "write" | "writeln" => self.format_macro(name, args, span),
             "assert" => {
                 if args.is_empty() {

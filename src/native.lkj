@@ -600,7 +600,7 @@ impl<'a> Body<'a> {
                     };
                     if matches!(
                         self.program.types[inner].kind,
-                        TypeKind::Slice { .. } | TypeKind::Str
+                        TypeKind::Slice { .. } | TypeKind::Str | TypeKind::Function { .. }
                     ) {
                         self.a.load(R11, R10, 8);
                     }
@@ -650,7 +650,7 @@ impl<'a> Body<'a> {
         }
         if matches!(
             self.program.types[ty].kind,
-            TypeKind::Slice { .. } | TypeKind::Str
+            TypeKind::Slice { .. } | TypeKind::Str | TypeKind::Function { .. }
         ) {
             self.a.store(BP, self.scratch[7], R11);
         }
@@ -661,6 +661,11 @@ impl<'a> Body<'a> {
     }
     fn consume_inputs(&mut self, op: &Op) {
         match op {
+            Op::Bind { environment, .. } => self.ownership.change(self.a, &Place::local(*environment), false),
+            Op::Invoke { callee, args, .. } => {
+                self.ownership.change(self.a, &Place::local(*callee), false);
+                for arg in args { self.ownership.change(self.a, &Place::local(*arg), false); }
+            }
             Op::Read {
                 place,
                 moving: true,
@@ -695,6 +700,50 @@ impl<'a> Body<'a> {
             }
             _ => {}
         }
+    }
+    fn invoke(&mut self, dst: usize, callee: usize, args: &[usize]) -> Result<(), Diagnostic> {
+        let aggregate_result = !self.layout.storage(self.ty(dst)).scalar;
+        let hidden = if aggregate_result { 1usize } else { 0usize };
+        let words = args.len() + hidden + 1usize;
+        let stacked = if words > 6usize { words - 6usize } else { 0usize };
+        let padded = (stacked + 1usize) & !1usize;
+        let stack_bytes = padded as u64 * 8u64;
+        if stack_bytes != 0u64 { stack_available(self.a, self.platform, stack_bytes + 8u64, self.site); }
+        if padded != stacked {
+            self.a.immediate(A, 8u64);
+            self.a.rr(0x29, SP, A, true);
+        }
+        let mut word = words;
+        while word > 6usize {
+            word -= 1usize;
+            let arg = args[word - hidden - 1usize];
+            let ty = self.ty(arg);
+            let scalar = self.layout.storage(ty).scalar;
+            if scalar { self.read(arg, A); }
+            else { self.local_address(arg, A); }
+            self.a.push(A);
+        }
+        if aggregate_result { self.local_address(dst, DI); }
+        self.read_word(callee, 0, parameter_register(hidden));
+        for index in 0usize..args.len() {
+            let abi = index + hidden + 1usize;
+            if abi < 6usize {
+                let register = parameter_register(abi);
+                let local = args[index];
+                let ty = self.ty(local);
+                let scalar = self.layout.storage(ty).scalar;
+                if scalar { self.read(local, register); }
+                else { self.local_address(local, register); }
+            }
+        }
+        self.read_word(callee, 1, R11);
+        self.a.call_register(R11);
+        if stack_bytes != 0u64 {
+            self.a.immediate(R11, stack_bytes);
+            self.a.rr(0x01, SP, R11, true);
+        }
+        if aggregate_result { self.mark(dst); } else { self.write(dst, A); }
+        Ok(())
     }
     fn call(&mut self, dst: usize, called: usize, args: &[usize]) -> Result<(), Diagnostic> {
         let aggregate_result = !self.layout.storage(self.ty(dst)).scalar;
@@ -933,7 +982,7 @@ impl<'a> Body<'a> {
         self.a
             .location(self.site.file, self.site.line, self.site.column);
         let call_kind = match instruction.op {
-            Op::Call { .. } => Some(self.a.scope_kind(KIND_ARGUMENT)),
+            Op::Call { .. } | Op::Invoke { .. } => Some(self.a.scope_kind(KIND_ARGUMENT)),
             Op::Return { .. } => Some(self.a.scope_kind(KIND_RETURN)),
             _ => None,
         };
@@ -996,7 +1045,7 @@ impl<'a> Body<'a> {
                 let ty = self.place_address(place, A)?;
                 if matches!(
                     self.program.types[ty].kind,
-                    TypeKind::Slice { .. } | TypeKind::Str
+                    TypeKind::Slice { .. } | TypeKind::Str | TypeKind::Function { .. }
                 ) {
                     self.write_word(*dst, 0, A);
                     self.a.load(A, BP, self.scratch[7]);
@@ -1051,6 +1100,15 @@ impl<'a> Body<'a> {
                 left,
                 right,
             } => self.scalar_binary(*dst, *op, *left, *right)?,
+            Op::Bind { dst, function, environment } => {
+                self.read(*environment, A);
+                self.write_word(*dst, 0, A);
+                self.a.address(C, self.functions[*function]);
+                self.write_word(*dst, 1, C);
+                self.needed[*function] = true;
+                self.mark(*dst);
+            }
+            Op::Invoke { dst, callee, args } => self.invoke(*dst, *callee, args)?,
             Op::Call {
                 dst,
                 function,

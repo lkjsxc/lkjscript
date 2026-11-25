@@ -1,0 +1,91 @@
+// expect: value 42
+// witness: {}
+macro_rules! template_capture {
+    () => {{ let word = 7i64; std::fmt::format(format_args!("{word}")) }};
+}
+macro_rules! template_named {
+    ($value:expr) => {{
+        let word = 8i64;
+        std::fmt::format(format_args!("{word}", word = $value))
+    }};
+}
+macro_rules! caller_literal {
+    ($format:tt) => { std::fmt::format(format_args!($format)) };
+}
+macro_rules! save_arguments {
+    ($name:ident, $value:expr) => { let $name = format_args!("<{}>", $value); };
+}
+
+// The builtin must recover a literal from an opaque expression fragment while
+// preserving that literal's context through every intervening wrapper.
+macro_rules! expression_literal {
+    ($format:expr $(, $value:expr)* $(,)?) => {{
+        let word = 30i64;
+        std::fmt::format(format_args!($format $(, $value)*))
+    }};
+}
+macro_rules! expression_nested {
+    ($format:expr $(, $value:expr)* $(,)?) => {{
+        let word = 31i64;
+        expression_literal!($format $(, $value)*)
+    }};
+}
+macro_rules! expression_named {
+    ($format:expr, $name:ident = $value:expr) => {{
+        let word = 32i64;
+        std::fmt::format(format_args!($format, $name = $value))
+    }};
+}
+macro_rules! expression_nested_named {
+    ($format:expr, $name:ident = $value:expr) => {{
+        let word = 33i64;
+        expression_named!($format, $name = $value)
+    }};
+}
+macro_rules! expression_mixed {
+    ($format:expr, $positional:expr, $name:ident = $value:expr) => {{
+        let word = 34i64;
+        std::fmt::format(format_args!($format, $positional, $name = $value))
+    }};
+}
+macro_rules! template_expression {
+    () => {{ let word = 11i64; expression_nested!("{word}") }};
+}
+macro_rules! template_expression_named {
+    ($input:expr) => {{
+        let word = 12i64;
+        expression_nested_named!("{word}", word = $input)
+    }};
+}
+macro_rules! save_expression_arguments {
+    ($name:ident, $format:expr $(, $value:expr)*) => {
+        let $name = format_args!($format $(, $value)*);
+    };
+}
+
+pub fn probe() -> i64 {
+    let word = 9i64;
+    assert_eq!(template_capture!(), "7");
+    assert_eq!(template_named!(word), "9");
+    assert_eq!(caller_literal!("{word}"), "9");
+    let arguments = format_args!("{word}:{other}", other = 4i64);
+    assert_eq!(std::fmt::format(arguments), "9:4");
+    save_arguments!(saved, word);
+    assert_eq!(std::fmt::format(saved), "<9>");
+
+    assert_eq!(expression_literal!("literal{{}}"), "literal{}");
+    assert_eq!(expression_literal!("{word}"), "9");
+    assert_eq!(expression_literal!("{1}:{0}:{1}", 2i64, 3i64), "3:2:3");
+    assert_eq!(expression_nested!("nested literal"), "nested literal");
+    assert_eq!(expression_nested!("{word}:{}", 4i64), "9:4");
+    assert_eq!(expression_nested!("{1}:{0}:{1}", 5i64, 6i64,), "6:5:6");
+    assert_eq!(expression_named!("{other}:{word}", other = 7i64), "7:9");
+    assert_eq!(expression_nested_named!("{other}:{word}", other = 8i64), "8:9");
+    assert_eq!(expression_nested_named!("{word}", word = 10i64), "10");
+    assert_eq!(expression_mixed!("{0}:{other}:{word}", 2i64, other = 4i64), "2:4:9");
+    assert_eq!(template_expression!(), "11");
+    assert_eq!(template_expression_named!(word), "9");
+    save_expression_arguments!(opaque_saved, "{word}:{}", word + 1i64);
+    assert_eq!(std::fmt::format(opaque_saved), "9:10");
+    42
+}

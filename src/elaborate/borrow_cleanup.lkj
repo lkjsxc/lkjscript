@@ -114,6 +114,15 @@ impl Builder<'_, '_> {
 
     pub(super) fn record_carriers(&mut self, operation: &ir::Op) {
         match operation {
+            ir::Op::Bind { dst, environment, .. } => {
+                let dependencies = self.remove_dependencies(*environment).unwrap_or(BTreeSet::new());
+                self.set_dependencies(*dst, dependencies);
+            }
+            ir::Op::Invoke { dst, callee, args } => {
+                self.remove_dependencies(*callee);
+                for arg in args { self.remove_dependencies(*arg); }
+                self.remove_dependencies(*dst);
+            }
             ir::Op::Borrow { dst, place, .. }
             | ir::Op::SliceBorrow { dst, place, .. }
             | ir::Op::ViewRange { dst, place, .. } => {

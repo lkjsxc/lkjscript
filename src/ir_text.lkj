@@ -402,6 +402,11 @@ fn instruction(words: &[String], line: usize) -> Result<Instruction> {
                 right: number(words, 5, line)?,
             }
         }
+        "bind" => {
+            exact(words, 5, line)?;
+            Op::Bind { dst: number(words, 2, line)?, function: number(words, 3, line)?, environment: number(words, 4, line)? }
+        }
+        "invoke" => Op::Invoke { dst: number(words, 2, line)?, callee: number(words, 3, line)?, args: indices(words, 4, line)? },
         "call" => Op::Call {
             dst: number(words, 2, line)?,
             function: number(words, 3, line)?,
@@ -623,6 +628,7 @@ pub fn read(text: &str) -> Result<Program> {
                         exact(&words, 3, line)?;
                         TypeKind::F64
                     }
+                    "function" => TypeKind::Function { result: number(&words, 3, line)?, params: indices(&words, 4, line)? },
                     "str" => {
                         exact(&words, 3, line)?;
                         TypeKind::Str
@@ -936,6 +942,11 @@ fn write_instruction(text: &mut String, instruction: &Instruction) {
             text.push_str(&format!("call {dst} {function}"));
             write_indices(text, args);
         }
+        Op::Bind { dst, function, environment } => text.push_str(&format!("bind {dst} {function} {environment}")),
+        Op::Invoke { dst, callee, args } => {
+            text.push_str(&format!("invoke {dst} {callee}"));
+            write_indices(text, args);
+        }
         Op::Struct { dst, fields } => {
             text.push_str(&format!("struct {dst}"));
             write_indices(text, fields);
@@ -1016,6 +1027,10 @@ pub fn write(program: &Program) -> String {
             TypeKind::Bool => text.push_str("bool"),
             TypeKind::Char => text.push_str("char"),
             TypeKind::F64 => text.push_str("f64"),
+            TypeKind::Function { params, result } => {
+                text.push_str(&format!("function {result}"));
+                write_indices(&mut text, params);
+            }
             TypeKind::Str => text.push_str("str"),
             TypeKind::World => text.push_str("world"),
             TypeKind::Arguments => text.push_str("arguments"),

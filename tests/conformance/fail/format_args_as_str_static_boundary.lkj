@@ -1,0 +1,11 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":true}
+// The current source library conservatively returns a view tied to Arguments.
+// Rust advertises a static string here; this records the remaining boundary.
+fn literal_view<'a>(arguments: std::fmt::Arguments<'a>) -> Option<&'static str> {
+    arguments.as_str()
+}
+pub fn probe() -> i64 {
+    assert_eq!(literal_view(format_args!("literal")), Some("literal"));
+    42
+}

@@ -1,0 +1,10 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+// Even an external referent cannot make the local formatting environment escape.
+fn escaped<'a>(value: &'a i64) -> std::fmt::Arguments<'a> {
+    format_args!("{}", value)
+}
+pub fn probe() -> i64 {
+    let value = 42i64;
+    std::fmt::format(escaped(&value)).len() as i64
+}

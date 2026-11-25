@@ -1,0 +1,15 @@
+// expect: value 42
+// witness: {}
+use std::fmt;
+pub fn probe() -> i64 {
+    let number = 42u8;
+    let word = "水";
+    let truth = true;
+    let arguments = format_args!("{0:04x}|{0:#x}|{0:b}|{1:>3}|{2:?}|{{}}", number, word, truth);
+    assert_eq!(fmt::format(arguments), "002a|0x2a|101010|  水|true|{}");
+    let character = 'λ';
+    assert_eq!(fmt::format(format_args!("{:?}", character)), "'λ'");
+    let values = vec![1i64, 2i64];
+    assert_eq!(fmt::format(format_args!("{:?}", values)), "[1, 2]");
+    42
+}

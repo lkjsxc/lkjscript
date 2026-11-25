@@ -1,0 +1,6 @@
+// expect: reject E_FORMAT
+// witness: {"rustAccept":false}
+pub fn probe() -> i64 {
+    let specification = "{}";
+    std::fmt::format(format_args!(specification, 42i64)).len() as i64
+}

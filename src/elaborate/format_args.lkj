@@ -1,0 +1,170 @@
+//! Borrowed formatting is a stack environment plus a pure checked callable.
+//! Generated helpers use the same ordinary source formatting contracts as format!.
+use super::{Builder, Compiler, Result, TypeKey, a, err, ir};
+use crate::syntax::formatting::{self, Part};
+use std::collections::{BTreeMap, BTreeSet};
+#[derive(Default)]
+pub(super) struct Catalog {
+    pub(super) helpers: BTreeMap<(usize, usize, String, Vec<usize>), usize>,
+    pub(super) checked: BTreeSet<usize>,
+}
+impl Compiler<'_> {
+    pub(super) fn format_thunk_type(&mut self, declaration: usize, span: a::Span) -> Result<usize> {
+        let key = TypeKey::Nominal(declaration, Vec::new());
+        if let Some(id) = self.type_keys.get(&key) { return Ok(*id); }
+        let path = self.names.library_type("fmt", "__FormatThunk", span)?;
+        if path.declaration != Some(declaration) { return Err(err(span, "E_TYPE", "format thunk requires its exact library declaration")); }
+        let a::Item::Struct(source) = self.source.declarations[declaration].item else {
+            return Err(err(span, "E_TYPE", "invalid format thunk declaration"));
+        };
+        if !self.source.structs[source].fields.is_empty() || !self.source.structs[source].generics.is_empty() {
+            return Err(err(span, "E_TYPE", "format thunk declaration must be opaque"));
+        }
+        let formatter = self.names.library_type("fmt", "Formatter", span)?;
+        let formatter = self.named_type(&formatter, &BTreeMap::new(), span)?;
+        let parameter = self.reference(formatter, true);
+        let result = self.names.library_type("fmt", "Result", span)?;
+        let result = self.named_type(&result, &BTreeMap::new(), span)?;
+        let id = self.types.len();
+        self.types.push(ir::Type { name: self.source.declarations[declaration].name.clone(), kind: ir::TypeKind::Function { params: vec![parameter], result } });
+        self.type_keys.insert(key, id);
+        self.applications.insert(id, (self.source.declarations[declaration].name.clone(), Vec::new()));
+        Ok(id)
+    }
+    fn format_helper(&mut self, site: usize, text: &str, argument_types: Vec<usize>, environment: usize, signature: usize, span: a::Span) -> Result<usize> {
+        let key = (span.file, site, text.to_string(), argument_types.clone());
+        if let Some(function) = self.formats.helpers.get(&key) { return Ok(*function); }
+        let ir::TypeKind::Function { params, result } = self.types[signature].kind.clone() else { unreachable!() };
+        let environment = self.reference(environment, false);
+        let function = ir::Function {
+            file: span.file, name: format!("$format:{}:{}:{}", span.file, site, self.formats.helpers.len()),
+            params: 2, result, return_source: None, test: false,
+            locals: vec![ir::Local { name: "$environment".to_string(), ty: environment, mutable: false },
+                ir::Local { name: "$formatter".to_string(), ty: params[0], mutable: false }],
+            body: Vec::new(),
+        };
+        let index = self.functions.len();
+        self.functions.push(function.clone());
+        self.formats.helpers.insert(key, index);
+        let function = {
+            let mut builder = Generated { compiler: self, function, span };
+            builder.render(text, &argument_types)?;
+            builder.function
+        };
+        self.functions[index] = function;
+        self.formats.checked.insert(index);
+        Ok(index)
+    }
+}
+struct Generated<'a, 'b> { compiler: &'a mut Compiler<'b>, function: ir::Function, span: a::Span }
+impl Generated<'_, '_> {
+    fn emit(&mut self, op: ir::Op) { self.function.body.push(ir::Instruction { file: None, column: self.span.column, line: self.span.line, op }); }
+    fn local(&mut self, ty: usize) -> usize {
+        let id = self.function.locals.len();
+        self.function.locals.push(ir::Local { name: format!("$format{id}"), ty, mutable: true }); id
+    }
+    fn call(&mut self, name: &str, substitutions: BTreeMap<String, usize>, args: Vec<usize>) -> Result<usize> {
+        let source = self.compiler.names.library_function("fmt", name, self.span)?;
+        let function = self.compiler.instantiate(source, substitutions)?;
+        let target = &self.compiler.functions[function];
+        if target.params != args.len() || target.locals.iter().zip(&args).any(|(parameter, value)| parameter.ty != self.function.locals[*value].ty) {
+            return Err(err(self.span, "E_TYPE", "deferred formatting helper signature differs"));
+        }
+        let result = target.result;
+        let dst = self.local(result); self.emit(ir::Op::Call { dst, function, args }); Ok(dst)
+    }
+    fn integer(&mut self, ty: usize, value: i64) -> usize { let dst = self.local(ty); self.emit(ir::Op::Int { dst, value }); dst }
+    fn borrow(&mut self, formatter: usize) -> usize {
+        let ty = self.compiler.reference(self.function.locals[formatter].ty, true);
+        let dst = self.local(ty); self.emit(ir::Op::Borrow { dst, place: ir::Place::local(formatter), mutable: true }); dst
+    }
+    fn render(&mut self, text: &str, argument_types: &[usize]) -> Result<()> {
+        let formatter = self.call("__lkjscript_nested", BTreeMap::new(), vec![1])?;
+        let result = self.call("__lkjscript_success", BTreeMap::new(), Vec::new())?;
+        for part in formatting::parse(text, self.span)? {
+            let condition = self.local(ir::BOOL);
+            self.emit(ir::Op::TagTest { dst: condition, place: ir::Place::local(result), variant: 0 });
+            self.emit(ir::Op::If { condition });
+            let produced = match part {
+                Part::Text(text) => {
+                    let receiver = self.borrow(formatter);
+                    let inner = self.compiler.intern(String::new(), ir::TypeKind::Str);
+                    let ty = self.compiler.reference(inner, false);
+                    let value = self.local(ty); self.emit(ir::Op::Text { dst: value, bytes: text.into_bytes() });
+                    self.call("__lkjscript_literal", BTreeMap::new(), vec![receiver, value])?
+                }
+                Part::Value { argument, specification, .. } => {
+                    let index = argument.as_str().parse::<usize>().map_err(|_| err(self.span, "E_FORMAT", "format argument was not normalized"))?;
+                    let ty = *argument_types.get(index).ok_or_else(|| err(self.span, "E_FORMAT", "format argument is out of bounds"))?;
+                    let receiver = self.borrow(formatter);
+                    let width = self.integer(ir::U64, specification.width as i64);
+                    let flags = self.integer(ir::U8, specification.flags as i64);
+                    let character = *self.compiler.type_names.get(&"char".to_string()).unwrap();
+                    let fill = self.integer(character, specification.fill as i64);
+                    let unit = self.call("__lkjscript_settings", BTreeMap::new(), vec![receiver, width, flags, fill])?;
+                    self.emit(ir::Op::Drop { place: ir::Place::local(unit) });
+                    let receiver = self.borrow(formatter);
+                    let reference = self.compiler.reference(ty, false);
+                    let value = self.local(reference);
+                    self.emit(ir::Op::Read { dst: value, place: ir::Place { local: 0, projections: vec![ir::Projection::Deref, ir::Projection::Field(index)] }, moving: false });
+                    let helper = if matches!(self.compiler.types[ty].kind, ir::TypeKind::Str) && specification.method == "display" { "__lkjscript_display_str".to_string() } else { format!("__lkjscript_{}", specification.method) };
+                    let mut substitutions = BTreeMap::new(); substitutions.insert("T".to_string(), ty);
+                    self.call(&helper, substitutions, vec![receiver, value])?
+                }
+            };
+            self.emit(ir::Op::Drop { place: ir::Place::local(result) });
+            self.emit(ir::Op::Assign { place: ir::Place::local(result), src: produced });
+            self.emit(ir::Op::Else); self.emit(ir::Op::End);
+        }
+        self.emit(ir::Op::Drop { place: ir::Place::local(formatter) });
+        self.emit(ir::Op::Drop { place: ir::Place::local(0) });
+        self.emit(ir::Op::Return { src: result });
+        Ok(())
+    }
+}
+impl Builder<'_, '_> {
+    pub(super) fn format_arguments(&mut self, args: &[usize], span: a::Span) -> Result<(usize, usize)> {
+        let Some(literal) = args.first() else { return Err(err(span, "E_FORMAT", "format_args! requires a literal")); };
+        let a::Expr::String(text) = self.compiler.source.exprs[*literal].kind.clone() else { return Err(err(span, "E_FORMAT", "format argument must be a literal")); };
+        let path = self.compiler.names.library_type("fmt", "Arguments", span)?;
+        let arguments = self.compiler.named_type(&path, &BTreeMap::new(), span)?;
+        let mut fields = Vec::new(); let mut values = Vec::new(); let mut types = Vec::new();
+        for argument in &args[1..] {
+            let (reference, ty) = self.format_argument(*argument, span)?;
+            fields.push(ir::Field { name: format!("{}", fields.len()), ty: self.ty(reference) });
+            values.push(reference); types.push(ty);
+        }
+        let (variant, value) = if values.is_empty() {
+            let mut literal = String::new();
+            for part in formatting::parse(&text, span)? { match part { Part::Text(text) => literal.push_str(&text), _ => return Err(err(span, "E_FORMAT", "format_args! has an absent argument")) } }
+            (0usize, self.format_text(literal, span.line))
+        } else {
+            let environment = self.compiler.intern(String::new(), ir::TypeKind::Struct { fields, copy: true });
+            let local = self.temp(environment); self.emit(ir::Op::Struct { dst: local, fields: values }, span.line);
+            let path = self.compiler.names.library_type("fmt", "__FormatThunk", span)?;
+            let signature = self.compiler.named_type(&path, &BTreeMap::new(), span)?;
+            let site = self.active_expression.unwrap_or(*literal);
+            let function = self.compiler.format_helper(site, &text, types, environment, signature, span)?;
+            let environment = self.borrow(ir::Place::local(local), false, span.line)?.0;
+            let ty = self.compiler.reference(signature, false); let dst = self.temp(ty);
+            self.emit(ir::Op::Bind { dst, function, environment }, span.line); (1usize, dst)
+        };
+        let path = self.compiler.names.library_type("fmt", "ArgumentKind", span)?;
+        let kind = self.compiler.named_type(&path, &BTreeMap::new(), span)?;
+        let inner = self.temp(kind); self.emit(ir::Op::Variant { dst: inner, variant, fields: vec![value] }, span.line);
+        let dst = self.temp(arguments); self.emit(ir::Op::Struct { dst, fields: vec![inner] }, span.line);
+        Ok((dst, arguments))
+    }
+    pub(super) fn invoke_format_arguments(&mut self, args: &[usize], span: a::Span) -> Result<(usize, usize)> {
+        if args.len() != 2usize { return Err(err(span, "E_TYPE", "format invocation needs a callable and formatter")); }
+        let path = self.compiler.names.library_type("fmt", "__FormatThunk", span)?;
+        let signature = self.compiler.named_type(&path, &BTreeMap::new(), span)?;
+        let ir::TypeKind::Function { params, result } = self.compiler.types[signature].kind.clone() else { unreachable!() };
+        let ty = self.compiler.reference(signature, false);
+        let callee = self.expr(args[0], Some(ty))?;
+        let formatter = self.expr(args[1], Some(params[0]))?;
+        if callee.1 != ty || formatter.1 != params[0] { return Err(err(span, "E_TYPE", "format invocation signature differs")); }
+        let dst = self.temp(result); self.emit(ir::Op::Invoke { dst, callee: callee.0, args: vec![formatter.0] }, span.line);
+        Ok((dst, result))
+    }
+}

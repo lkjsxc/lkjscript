@@ -1,0 +1,8 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false}
+fn require<T: Send>(_: T) {}
+pub fn probe() -> i64 {
+    let value = 42i64;
+    require(format_args!("{value}"));
+    42
+}

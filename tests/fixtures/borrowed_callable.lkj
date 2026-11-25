@@ -1,0 +1,308 @@
+//! Borrowed-callable controls use the production checker and independent raw interpreter.
+mod diagnostic; mod facts; mod ir; mod ir_text; mod ir_binary; mod reuse;
+mod check; mod interpreter; mod runtime_memory;
+pub use std::sha256;
+use ir::{Op, Place, Projection, TypeKind};
+
+fn input() -> ir::Program { ir_text::read(include_str!("borrowed_callable.lkjir")).unwrap() }
+fn local(name: &str, ty: usize) -> ir::Local {
+    ir::Local { name: name.to_string(), ty, mutable: false }
+}
+fn instruction(op: Op) -> ir::Instruction { ir::Instruction { file: None, line: 1, column: 1, op } }
+fn function(name: &str, params: usize, result: usize, locals: Vec<ir::Local>, ops: Vec<Op>) -> ir::Function {
+    let mut body = Vec::new();
+    for op in ops { body.push(instruction(op)); }
+    ir::Function { file: 0, name: name.to_string(), params, result, return_source: None,
+        locals, body, test: false }
+}
+fn at_bind(program: &ir::Program) -> usize {
+    program.functions[1].body.iter().position(|value| matches!(value.op, Op::Bind { .. })).unwrap()
+}
+fn at_invoke(program: &ir::Program) -> usize {
+    program.functions[1].body.iter().position(|value| matches!(value.op, Op::Invoke { .. })).unwrap()
+}
+fn run(program: &ir::Program) -> Result<interpreter::RunResult, interpreter::RunError> {
+    let mut host: Vec<u8> = Vec::new();
+    let arguments: Vec<u64> = Vec::new();
+    interpreter::run(program, 1usize, &arguments, &mut host)
+}
+fn refused(program: ir::Program, code: &str, model: bool, out: &mut Stdout) -> usize {
+    match check::check(program.clone()) {
+        Ok(_) => panic!("forged callable acquired checked authority"),
+        Err(problem) => {
+            if problem.code != code {
+                out.write(format!("unexpected checker refusal: expected {}, got {} at {}:{}: {}\n",
+                    code, problem.code, problem.line, problem.column, problem.message).as_bytes());
+                panic!("callable refusal code differs");
+            }
+        }
+    }
+    if model { assert!(run(&program).is_err()); }
+    1usize
+}
+fn checked(program: &ir::Program, out: &mut Stdout) {
+    match check::check(program.clone()) {
+        Ok(_) => {},
+        Err(problem) => {
+            out.write(format!("positive callable checker refusal: {} at {}:{}: {}\n",
+                problem.code, problem.line, problem.column, problem.message).as_bytes());
+            panic!("positive callable was rejected");
+        }
+    }
+}
+fn valid(out: &mut Stdout) -> usize {
+    let program = input();
+    checked(&program, out);
+    assert!(check::is_copy(&program.types, 11usize));
+    assert!(!check::is_data(&program.types, 11usize));
+    let result = match run(&program) {
+        Ok(result) => result,
+        Err(problem) => {
+            out.write(format!("positive callable interpreter refusal: {} at function {} line {}: {}\n",
+                problem.code(), problem.function, problem.line, problem.message).as_bytes());
+            panic!("positive callable interpreter failed");
+        }
+    };
+    match result.value {
+        interpreter::Scalar::Int { value, .. } => assert_eq!(value, 42u64),
+        _ => panic!("callable result changed scalar shape"),
+    }
+    let text = ir_text::write(&program);
+    let text_roundtrip = ir_text::read(&text).unwrap();
+    assert!(text_roundtrip == program);
+    let binary_roundtrip = ir_binary::read(&ir_binary::write(&program)).unwrap();
+    assert!(binary_roundtrip == program);
+    checked(&binary_roundtrip, out);
+    assert!(run(&binary_roundtrip).is_ok());
+    3usize
+}
+fn malformed(out: &mut Stdout) -> usize {
+    let mut count = 0usize;
+    let mut changed = input();
+    let index = at_bind(&changed);
+    changed.functions[1].body[index].op = Op::Bind { dst: 4, function: 999, environment: 3 };
+    count += refused(changed, "E_IR", true, out);
+    let mut changed = input();
+    changed.functions[0].locals[1].ty = ir::U64;
+    count += refused(changed, "E_TYPE", true, out);
+    let mut changed = input();
+    changed.types[10].kind = TypeKind::Function { params: vec![ir::I64; 6], result: 9 };
+    count += refused(changed, "E_TYPE", true, out);
+    let mut changed = input();
+    changed.types[11].kind = TypeKind::Ref { inner: 10, mutable: true };
+    count += refused(changed, "E_UNSUPPORTED", true, out);
+    let mut changed = input();
+    changed.types[10].kind = TypeKind::Function { params: vec![ir::I64; 7], result: 8 };
+    count += refused(changed, "E_TYPE", true, out);
+    let mut changed = input();
+    changed.types[10].kind = TypeKind::Function { params: vec![10usize], result: 9 };
+    count += refused(changed, "E_TYPE", true, out);
+    let mut changed = input();
+    changed.functions[1].locals.push(local("owned_callable", 10));
+    count += refused(changed, "E_UNSUPPORTED", false, out);
+    let mut changed = input();
+    changed.types.push(ir::Type { name: "heap_callable".to_string(), kind: TypeKind::Box { inner: 10 } });
+    count += refused(changed, "E_TYPE", false, out);
+    let mut changed = input();
+    let index = at_invoke(&changed);
+    changed.functions[1].body[index].op = Op::Invoke { dst: 22, callee: 14, args: vec![15usize, 16, 17, 18, 19, 20] };
+    count += refused(changed, "E_TYPE", true, out);
+    let mut changed = input();
+    let index = at_invoke(&changed);
+    changed.functions[1].body[index].op = Op::Invoke { dst: 23, callee: 14, args: vec![15usize, 16, 17, 18, 19, 20, 21] };
+    count += refused(changed, "E_TYPE", true, out);
+    let mut changed = input();
+    let text = changed.types.len();
+    changed.types.push(ir::Type { name: "str".to_string(), kind: TypeKind::Str });
+    let reference = changed.types.len();
+    changed.types.push(ir::Type { name: "strref".to_string(), kind: TypeKind::Ref { inner: text, mutable: false } });
+    changed.functions[1] = function("probe", 0, ir::UNIT,
+        vec![local("text", reference), local("callback", 11), local("unit", ir::UNIT)], vec![
+            Op::Text { dst: 0, bytes: b"environment"[..].to_vec() },
+            Op::Bind { dst: 1, function: 0, environment: 0 },
+            Op::Drop { place: Place::local(1) }, Op::Unit { dst: 2 }, Op::Return { src: 2 },
+        ]);
+    count += refused(changed, "E_TYPE", true, out);
+    count
+}
+fn insert_instruction(body: &mut Vec<ir::Instruction>, at: usize, added: ir::Instruction) {
+    assert!(at <= body.len());
+    let mut replacement: Vec<ir::Instruction> = Vec::new();
+    for index in 0usize..body.len() {
+        if index == at { replacement.push(added.clone()); }
+        replacement.push(body[index].clone());
+    }
+    if at == body.len() { replacement.push(added); }
+    *body = replacement;
+}
+fn lifetimes(out: &mut Stdout) -> usize {
+    let mut changed = input();
+    let index = at_invoke(&changed);
+    insert_instruction(&mut changed.functions[1].body, index, instruction(Op::Drop { place: Place::local(2) }));
+    let mut count = refused(changed, "E_BORROW", true, out);
+    let mut changed = input();
+    let replacement = changed.functions[1].locals.len();
+    changed.functions[1].locals.push(local("replacement", ir::I64));
+    let index = at_invoke(&changed);
+    insert_instruction(&mut changed.functions[1].body, index, instruction(Op::Int { dst: replacement, value: 99 }));
+    insert_instruction(&mut changed.functions[1].body, index + 1usize, instruction(Op::Assign {
+        place: Place { local: 2, projections: vec![Projection::Field(0)] }, src: replacement,
+    }));
+    count += refused(changed, "E_BORROW", true, out);
+    // Erasure cannot promise a static result or conceal the local environment.
+    let mut changed = input();
+    changed.functions[1] = function("probe", 0, 11,
+        vec![local("left", ir::I64), local("right", ir::I64), local("environment", 7),
+            local("env_ref", 8), local("callback", 11)], vec![
+            Op::Int { dst: 0, value: 14 }, Op::Int { dst: 1, value: 100 },
+            Op::Struct { dst: 2, fields: vec![0usize, 1] },
+            Op::Borrow { dst: 3, place: Place::local(2), mutable: false },
+            Op::Bind { dst: 4, function: 0, environment: 3 }, Op::Return { src: 4 },
+        ]);
+    count += refused(changed, "E_BORROW", true, out);
+    count
+}
+fn effect_program(transitive: bool) -> ir::Program {
+    let mut program = input();
+    let file = program.types.len();
+    program.types.push(ir::Type { name: "File".to_string(), kind: TypeKind::File });
+    program.types[10].kind = TypeKind::Function { params: vec![file], result: ir::UNIT };
+    let operations = if transitive {
+        vec![Op::Drop { place: Place::local(0) }, Op::Call { dst: 2, function: 2, args: vec![1usize] }, Op::Return { src: 2 }]
+    } else {
+        vec![Op::Drop { place: Place::local(0) }, Op::Drop { place: Place::local(1) }, Op::Unit { dst: 2 }, Op::Return { src: 2 }]
+    };
+    program.functions[0] = function("provider::close", 2, ir::UNIT,
+        vec![local("env", 8), local("file", file), local("unit", ir::UNIT)], operations);
+    program.functions[1] = function("probe", 0, ir::UNIT,
+        vec![local("left", ir::I64), local("right", ir::I64), local("environment", 7),
+            local("env_ref", 8), local("callback", 11), local("unit", ir::UNIT)], vec![
+            Op::Int { dst: 0, value: 14 }, Op::Int { dst: 1, value: 100 },
+            Op::Struct { dst: 2, fields: vec![0usize, 1] },
+            Op::Borrow { dst: 3, place: Place::local(2), mutable: false },
+            Op::Bind { dst: 4, function: 0, environment: 3 },
+            Op::Drop { place: Place::local(4) }, Op::Drop { place: Place::local(2) },
+            Op::Unit { dst: 5 }, Op::Return { src: 5 },
+        ]);
+    if transitive {
+        program.functions.push(function("private::close", 1, ir::UNIT,
+            vec![local("file", file), local("unit", ir::UNIT)], vec![
+                Op::Drop { place: Place::local(0) }, Op::Unit { dst: 1 }, Op::Return { src: 1 },
+            ]));
+    }
+    program
+}
+// Clock cleanup itself has no operation; only the registered custom Drop
+// reaches clock_unix_nanoseconds. A disconnected helper cannot taint a binding.
+fn custom_destructor_effect(transitive: bool, out: &mut Stdout) -> usize {
+    let mut program = effect_program(false);
+    let clock = program.types.len() - 1usize;
+    program.types[clock] = ir::Type { name: "Clock".to_string(), kind: TypeKind::Clock };
+    let owner = program.types.len();
+    program.types.push(ir::Type { name: "DropClock".to_string(), kind: TypeKind::Struct {
+        fields: vec![ir::Field { name: "clock".to_string(), ty: clock }], copy: false,
+    } });
+    let owner_ref = program.types.len();
+    program.types.push(ir::Type { name: "DropClockMut".to_string(), kind: TypeKind::Ref { inner: owner, mutable: true } });
+    let clock_ref = program.types.len();
+    program.types.push(ir::Type { name: "ClockMut".to_string(), kind: TypeKind::Ref { inner: clock, mutable: true } });
+    let clock_result = program.types.len();
+    program.types.push(ir::Type { name: "ClockResult".to_string(), kind: TypeKind::Enum {
+        variants: vec![
+            ir::Variant { name: "Ok".to_string(), fields: vec![ir::Field { name: "value".to_string(), ty: ir::U64 }] },
+            ir::Variant { name: "Err".to_string(), fields: vec![ir::Field { name: "error".to_string(), ty: ir::I64 }] },
+        ], copy: true,
+    } });
+    program.types[10].kind = TypeKind::Function { params: vec![owner], result: ir::UNIT };
+    program.functions[0].locals[1] = local("marker", owner);
+    let field = Place { local: 0, projections: vec![Projection::Deref, Projection::Field(0)] };
+    if transitive {
+        program.functions.push(function("private::drop_clock", 1, ir::UNIT,
+            vec![local("self", owner_ref), local("clock", clock_ref), local("unit", ir::UNIT)], vec![
+                Op::Borrow { dst: 1, place: field, mutable: true },
+                Op::Call { dst: 2, function: 3, args: vec![1usize] },
+                Op::Drop { place: Place::local(0) }, Op::Return { src: 2 },
+            ]));
+        program.functions.push(function("private::observe_clock", 1, ir::UNIT,
+            vec![local("clock", clock_ref), local("ticks", clock_result), local("unit", ir::UNIT)], vec![
+                Op::Intrinsic { dst: 1, name: ir::IntrinsicOp::ClockUnixNanoseconds, args: vec![0usize] },
+                Op::Drop { place: Place::local(1) }, Op::Unit { dst: 2 }, Op::Return { src: 2 },
+            ]));
+    } else {
+        program.functions.push(function("private::drop_clock", 1, ir::UNIT,
+            vec![local("self", owner_ref), local("clock", clock_ref), local("ticks", clock_result), local("unit", ir::UNIT)], vec![
+                Op::Borrow { dst: 1, place: field, mutable: true },
+                Op::Intrinsic { dst: 2, name: ir::IntrinsicOp::ClockUnixNanoseconds, args: vec![1usize] },
+                Op::Drop { place: Place::local(2) }, Op::Drop { place: Place::local(0) },
+                Op::Unit { dst: 3 }, Op::Return { src: 3 },
+            ]));
+    }
+    program.destructors.push((owner, 2usize));
+    let mut disconnected = program.clone();
+    disconnected.destructors.clear();
+    checked(&disconnected, out);
+    assert!(run(&disconnected).is_ok());
+    refused(program, "E_CAPABILITY", true, out)
+}
+fn import_mapped(interface: &check::units::Interface, candidate: &ir::Program) -> check::units::Import {
+    let mut types = Vec::new(); let mut functions = Vec::new();
+    for (index, ty) in interface.program().types.iter().enumerate() {
+        types.push((index, candidate.types.iter().position(|local| local.name == ty.name).unwrap()));
+    }
+    for (index, function) in interface.program().functions.iter().enumerate() {
+        functions.push((index, candidate.functions.iter().position(|local| local.name == function.name).unwrap()));
+    }
+    check::units::Import { interface: interface.clone(), types, functions }
+}
+fn authenticated(interface: &check::units::Interface) -> check::units::Interface {
+    let producer = [0x38u8; 32]; let secret = [0x91u8; 32];
+    let envelope = interface.seal(&producer, &secret);
+    check::units::Interface::authenticate(&producer, &secret, interface.name(), interface.input_identity(),
+        interface.dependencies(), &envelope).unwrap()
+}
+fn effects_and_units(out: &mut Stdout) -> usize {
+    let mut count = refused(effect_program(false), "E_CAPABILITY", true, out);
+    count += refused(effect_program(true), "E_CAPABILITY", true, out);
+    count += custom_destructor_effect(false, out);
+    count += custom_destructor_effect(true, out);
+    // An authenticated empty import body cannot erase its owning cleanup effect.
+    let mut source = effect_program(false);
+    let consumer = source.functions.pop().unwrap();
+    let no_imports: Vec<check::units::Import> = Vec::new();
+    let origin = check::units::check_unit("provider", "provider-source", source.clone(), &no_imports).unwrap();
+    let interface = authenticated(origin.interface());
+    assert!(interface.effects(0).contains(&"file_close".to_string()));
+    assert!(interface.program().functions[0].body.is_empty());
+    let mut candidate = source;
+    candidate.functions[0].body.clear();
+    candidate.functions[0].locals.truncate(2usize);
+    candidate.functions.push(consumer);
+    let imported = import_mapped(&interface, &candidate);
+    let imports = vec![imported];
+    match check::units::check_unit("consumer", "consumer-source", candidate, &imports) {
+        Err(problems) => assert!(problems.iter().any(|problem| problem.code == "E_CAPABILITY")),
+        Ok(_) => panic!("imported callable cleanup was accepted as pure"),
+    }
+    count += 1usize;
+    // Signature types survive export; private environment types and helpers do not.
+    let functions = vec![1usize];
+    let types = vec![11usize];
+    let origin = check::units::check_unit_with_exports("callable", "callable-source", input(), &no_imports,
+        &functions, &types).unwrap();
+    assert_eq!(origin.layouts()[11].bytes, 16u64);
+    assert!(!origin.layouts()[11].scalar);
+    let interface = authenticated(origin.interface());
+    assert_eq!(interface.program().functions.len(), 1usize);
+    assert_eq!(interface.program().functions[0].name, "probe");
+    assert!(!interface.program().types.iter().any(|ty| ty.name == "Environment"));
+    assert!(interface.program().types.iter().any(|ty| matches!(&ty.kind, TypeKind::Function { params, .. } if params.len() == 7usize)));
+    count + 1usize
+}
+pub fn main(mut out: Stdout) {
+    let mut count = valid(&mut out);
+    count += malformed(&mut out);
+    count += lifetimes(&mut out);
+    count += effects_and_units(&mut out);
+    assert_eq!(count, 23usize);
+    out.write(format!("ok borrowed callable {count} controls\n").as_bytes());
+}

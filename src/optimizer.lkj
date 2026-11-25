@@ -63,6 +63,11 @@ impl Uses {
     }
     fn instruction(&mut self, op: &Op, at: usize) {
         match op {
+            Op::Bind { dst, environment, .. } => { self.local(*dst, at); self.local(*environment, at); }
+            Op::Invoke { dst, callee, args } => {
+                self.local(*dst, at); self.local(*callee, at);
+                for arg in args { self.local(*arg, at); }
+            }
             Op::Text { dst, .. } | Op::Int { dst, .. } | Op::Float { dst, .. }
                 | Op::Unit { dst } => self.local(*dst, at),
             Op::Read { dst, place, .. } => { self.local(*dst, at); self.place(place, at); }
@@ -102,6 +107,7 @@ impl Uses {
 }
 fn destination(op: &Op) -> Option<usize> {
     match op {
+        Op::Bind { dst, .. } | Op::Invoke { dst, .. } => Some(*dst),
         Op::Text { dst, .. } | Op::Int { dst, .. } | Op::Float { dst, .. }
             | Op::Unit { dst } | Op::Read { dst, .. } | Op::Borrow { dst, .. }
             | Op::SliceBorrow { dst, .. } | Op::ViewRange { dst, .. }
@@ -126,6 +132,8 @@ fn place_reads(place: &Place, local: usize) -> bool {
 }
 fn reads(op: &Op, local: usize) -> bool {
     match op {
+        Op::Bind { environment, .. } => *environment == local,
+        Op::Invoke { callee, args, .. } => *callee == local || args.contains(&local),
         Op::Text { .. } | Op::Int { .. } | Op::Float { .. } | Op::Unit { .. } => false,
         Op::Read { place, .. } | Op::Borrow { place, .. } | Op::SliceBorrow { place, .. }
             | Op::Drop { place } | Op::DropIf { place } | Op::TagTest { place, .. } => place_reads(place, local),
@@ -256,6 +264,8 @@ fn remap(op: &Op, mapping: &[usize]) -> Op {
         Op::Binary { dst, op, left, right } => Op::Binary {
             dst: mapping[*dst], op: *op, left: mapping[*left], right: mapping[*right],
         },
+        Op::Bind { dst, function, environment } => Op::Bind { dst: mapping[*dst], function: *function, environment: mapping[*environment] },
+        Op::Invoke { dst, callee, args } => Op::Invoke { dst: mapping[*dst], callee: mapping[*callee], args: locals(args, mapping) },
         Op::Call { dst, function, args } => Op::Call {
             dst: mapping[*dst], function: *function, args: locals(args, mapping),
         },

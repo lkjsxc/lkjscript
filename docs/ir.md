@@ -66,11 +66,12 @@ The first seven types must match this primitive prefix exactly, including names.
 | `int BITS signed\|unsigned` | BITS is 8, 16, 32 or 64. |
 | `struct copy\|move NAME TYPE ...` | Ordered named fields. A copy declaration requires every field to be Copy. |
 | `enum copy\|move` ... `endtype` | Ordered alternatives written `variant NAME FIELD TYPE ...`; Copy requires Copy payloads. Non-Copy affine enums use move; affine is rejected with a token edit to move. |
-| `ref shared\|mut TYPE` | Shared or exclusive reference to a sized value, slice or text. |
+| `ref shared\|mut TYPE` | Shared or exclusive reference to a sized value, slice or text; a function referent permits only shared references. |
 | `slice shared\|mut TYPE` | Unsized sequence shape; values require a reference type. |
 | `array TYPE LENGTH` | Fixed-length owned elements. |
 | `vec TYPE`, `box TYPE` | Owned growable sequence or owned indirection. |
 | `str` | Unsized immutable UTF-8 text; values require a shared reference. |
+| `function RESULT PARAM ...` | Unsized borrowed-call signature. Parameters must be sized values and the result must be owned, sized and contain no views. Only shared references may carry this type. |
 | `world`, `arguments`, `environment`, `exit_status`, `stdout`, `stdin`, `stderr`, `directory`, `read_directory`, `file`, `read_file`, `foreign_command`, `foreign_session`, `image`, `channel`, `worker`, `read_region`, `null_device`, `process`, `clock`, `child`, `listener`, `connector`, `tcp_port`, `temporary_files`, `readiness`, `entropy`, `stop` | Affine authority-bearing values. |
 
 All type indices must exist. Recursive by-value layouts reject; introduce Box or
@@ -95,7 +96,7 @@ endfn
 ```
 
 A `test` function takes no parameters and returns unit. Control cannot fall
-through endfn. Slice and str cannot be direct local/result types.
+through endfn. Slice, str and function cannot be direct local/result types.
 There are no source overloads, trait lookup, inference or indirect source calls.
 
 A place is `LOCAL` followed by zero or more projections:
@@ -137,6 +138,8 @@ use `read ... copy` to retain a value. Destinations must be uninitialized.
 | `unary DST OP SRC` | Typed scalar negation or complement. |
 | `binary DST OP LEFT RIGHT` | Typed scalar arithmetic, bit operations, comparison or wrapping arithmetic. |
 | `call DST FUNCTION ARG ...` | Direct call with exact parameter/result types. |
+| `bind DST FUNCTION ENV` | Consume a thin shared environment reference into a shared function reference. The checked target takes that exact environment type followed by the function signature parameters. |
+| `invoke DST CALLEE ARG ...` | Consume a shared function descriptor and exact explicit arguments; invoke its checked target with the borrowed environment as its first argument. |
 | `tag DST SRC` | Read an enum discriminant without consuming the enum. |
 | `tag-test DST SRC TAG` | Produce a boolean tag witness for a local enum. |
 | `tag-test-place DST TAG PLACE` | Produce a witness for a projected enum place. |
@@ -371,6 +374,31 @@ Enum payload access requires a tag witness that still identifies the same
 storage. Replacing an enum or its witness invalidates that fact. Moves or writes
 to an index used by a witness also invalidate it. Joins retain only common facts.
 Instruction shapes and type indices are validated even on unreachable paths.
+
+## Borrowed calls
+
+A shared function reference is a two-word descriptor: the environment address
+and the target address. It owns neither the environment nor an allocation. Bind
+preserves the actual environment loan, nested reference dependencies and parent
+loans; erasure does not assert equality of the concrete and function referents.
+Copy, aggregate storage, reborrowing and ordinary returned-view contracts retain
+those dependencies. The environment must remain live through every invocation.
+Function referents are unsized and non-Data, and have no mutable reference,
+by-value constructor or container representation. Source formatting keeps its
+implementation marker and descriptor fields private.
+
+Binding requires a non-destructor target with the exact signature and a checked
+transitive effect summary containing only pure operations. This includes direct
+calls, other bound targets, structural cleanup and custom destructors; imported
+summaries must be authenticated. Invoking a descriptor checks its borrow together
+with all explicit arguments. The independent interpreter validates descriptor
+metadata, actual environment cells, target signatures and target effects before
+execution. The native emitter and unit linker preserve the target relocation.
+
+Pure calls may allocate while rendering, trap or fail to terminate. They receive
+no ambient capability, and their results cannot return views. An Invoke retains
+a borrowed-call residual; the effect restriction is not a termination proof.
+There is no general source syntax for constructing these callables in this slice.
 
 ## Returned views
 

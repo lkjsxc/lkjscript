@@ -149,6 +149,15 @@ impl Registers {
                     spans.access(*right, read, &loops, &ends);
                     spans.access(*dst, write, &loops, &ends);
                 }
+                Op::Bind { dst, environment, .. } => {
+                    spans.access(*environment, read, &loops, &ends);
+                    spans.access(*dst, write, &loops, &ends);
+                }
+                Op::Invoke { dst, callee, args } => {
+                    spans.access(*callee, read, &loops, &ends);
+                    for arg in args { spans.access(*arg, read, &loops, &ends); }
+                    spans.access(*dst, write, &loops, &ends);
+                }
                 Op::Call { dst, args, .. }
                 | Op::Intrinsic { dst, args, .. }
                 | Op::Array {

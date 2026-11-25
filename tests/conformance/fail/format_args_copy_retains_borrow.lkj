@@ -1,0 +1,10 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+pub fn probe() -> i64 {
+    let mut text = String::from("borrowed");
+    let arguments = format_args!("{}", text);
+    let copied = arguments;
+    drop(arguments);
+    text.push('!');
+    std::fmt::format(copied).len() as i64
+}

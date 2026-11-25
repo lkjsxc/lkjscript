@@ -1,0 +1,3 @@
+// expect: reject E_FORMAT
+// witness: {"rustAccept":false}
+pub fn probe() -> i64 { std::fmt::format(format_args!("{}"; 42i64)).len() as i64 }

@@ -1,0 +1,7 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+fn forward<'a>(arguments: std::fmt::Arguments<'a>) -> std::fmt::Arguments<'a> { arguments }
+pub fn probe() -> i64 {
+    let arguments = forward(format_args!("{}", String::from("temporary")));
+    std::fmt::format(arguments).len() as i64
+}

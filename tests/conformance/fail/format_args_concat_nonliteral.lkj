@@ -1,0 +1,8 @@
+// expect: reject E_MACRO_EXPANSION
+// witness: {"rustAccept":false}
+pub fn probe() -> i64 {
+    let value = "{}";
+    let arguments = format_args!(concat!(value), 42i64);
+    std::fmt::format(arguments);
+    42
+}

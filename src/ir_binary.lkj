@@ -56,6 +56,7 @@ fn ty(out: &mut Vec<u8>, value: &ir::Type) {
         ir::TypeKind::Array { inner, len } => { out.push(9); word(out, *inner); word(out, *len); }
         ir::TypeKind::Vec { inner } => { out.push(10); word(out, *inner); }
         ir::TypeKind::Box { inner } => { out.push(11); word(out, *inner); }
+        ir::TypeKind::Function { params, result } => { out.push(41); indices(out, params); word(out, *result); }
         ir::TypeKind::Str => out.push(12),
         ir::TypeKind::World => out.push(13),
         ir::TypeKind::Stdout => out.push(14),
@@ -131,6 +132,8 @@ fn op(out: &mut Vec<u8>, value: &ir::Op) {
             out.push(13); word(out, *dst); text(out, op.as_str()); word(out, *left); word(out, *right);
         }
         ir::Op::Call { dst, function, args } => { out.push(14); word(out, *dst); word(out, *function); indices(out, args); }
+        ir::Op::Bind { dst, function, environment } => { out.push(31); word(out, *dst); word(out, *function); word(out, *environment); }
+        ir::Op::Invoke { dst, callee, args } => { out.push(32); word(out, *dst); word(out, *callee); indices(out, args); }
         ir::Op::Struct { dst, fields } => { out.push(15); word(out, *dst); indices(out, fields); }
         ir::Op::Variant { dst, variant, fields } => { out.push(16); word(out, *dst); word(out, *variant); indices(out, fields); }
         ir::Op::Discriminant { dst, src } => { out.push(17); word(out, *dst); word(out, *src); }
@@ -265,6 +268,7 @@ impl<'a> Reader<'a> {
             9 => ir::TypeKind::Array { inner: self.word()?, len: self.word()? },
             10 => ir::TypeKind::Vec { inner: self.word()? },
             11 => ir::TypeKind::Box { inner: self.word()? },
+            41 => ir::TypeKind::Function { params: self.indices()?, result: self.word()? },
             12 => ir::TypeKind::Str,
             13 => ir::TypeKind::World,
             14 => ir::TypeKind::Stdout,
@@ -345,6 +349,8 @@ impl<'a> Reader<'a> {
                 dst: self.word()?, op: ir::BinaryOp::parse(&self.text()?)?, left: self.word()?, right: self.word()?,
             },
             14 => ir::Op::Call { dst: self.word()?, function: self.word()?, args: self.indices()? },
+            31 => ir::Op::Bind { dst: self.word()?, function: self.word()?, environment: self.word()? },
+            32 => ir::Op::Invoke { dst: self.word()?, callee: self.word()?, args: self.indices()? },
             15 => ir::Op::Struct { dst: self.word()?, fields: self.indices()? },
             16 => ir::Op::Variant { dst: self.word()?, variant: self.word()?, fields: self.indices()? },
             17 => ir::Op::Discriminant { dst: self.word()?, src: self.word()? },

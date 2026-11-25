@@ -191,7 +191,7 @@ impl Builder<'_, '_> {
         self.emit(ir::Op::Int { dst, value }, line);
         dst
     }
-    fn format_text(&mut self, text: String, line: usize) -> usize {
+    pub(super) fn format_text(&mut self, text: String, line: usize) -> usize {
         let inner = self.compiler.intern(String::new(), ir::TypeKind::Str);
         let ty = self.compiler.reference(inner, false);
         let dst = self.temp(ty);
@@ -208,7 +208,7 @@ impl Builder<'_, '_> {
         let path = self.compiler.names.library_type("fmt", "Formatter", span)?;
         self.compiler.named_type(&path, &BTreeMap::new(), span)
     }
-    fn format_argument(&mut self, expression: a::ExprId, span: a::Span) -> Result<(usize, usize)> {
+    pub(super) fn format_argument(&mut self, expression: a::ExprId, span: a::Span) -> Result<(usize, usize)> {
         let mut place = self.addressable(expression)?;
         let mut ty = place_type(&self.compiler.types, self.function, &place)
             .ok_or_else(|| err(span, "E_TYPE", "format argument is not addressable"))?;

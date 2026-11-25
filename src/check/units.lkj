@@ -1,7 +1,7 @@
 //! Independently admitted IR units. Imported signatures are authenticated facts;
 //! their empty bodies never acquire CheckedProgram authority.
 mod encoding;
-mod effects;
+pub(super) mod effects;
 mod layout;
 mod projection;
 use crate::{ir, ir_binary, reuse, sha256};
@@ -136,6 +136,10 @@ fn mapping(
 fn mapped_type(value: &ir::Type, types: &[Option<usize>]) -> Result<ir::Type, Diagnostic> {
     let mut result = value.clone();
     match &mut result.kind {
+        ir::TypeKind::Function { params, result } => {
+            for index in 0usize..params.len() { params[index] = mapped(types, params[index])?; }
+            *result = mapped(types, *result)?;
+        }
         ir::TypeKind::Struct { fields, .. } => {
             for index in 0usize..fields.len() { fields[index].ty = mapped(types, fields[index].ty)?; }
         }
@@ -313,6 +317,7 @@ fn check_unit_inner(
         }
     }
     let operations = effects::derive(&program, &imported, known_effects);
+    super::check_bind_effects(&program, &operations)?;
     let mut dependency_list = Vec::new();
     for (name, identity) in dependencies { dependency_list.push(Dependency { name, identity }); }
     let mut defined = Vec::new();

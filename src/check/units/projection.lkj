@@ -13,6 +13,7 @@ fn select(index: usize, selected: &mut [bool], pending: &mut Vec<usize>) -> Resu
 fn children(kind: &ir::TypeKind) -> Vec<usize> {
     let mut values = super::super::direct_children(kind);
     match kind {
+        ir::TypeKind::Function { params, result } => { values.extend_from_slice(params); values.push(*result); }
         ir::TypeKind::Ref { inner, .. } | ir::TypeKind::Slice { inner, .. }
         | ir::TypeKind::Vec { inner } | ir::TypeKind::Box { inner } => values.push(*inner),
         _ => {}

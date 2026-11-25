@@ -1,0 +1,20 @@
+// expect: value 42
+// witness: {}
+use std::fmt;
+use std::fmt::Write;
+
+fn literal() -> fmt::Arguments<'static> { format_args!("literal{{}}:水") }
+fn forward<'a>(value: fmt::Arguments<'a>) -> fmt::Arguments<'a> { value }
+
+pub fn probe() -> i64 {
+    let arguments = forward(literal());
+    assert_eq!(arguments.as_str(), Some("literal{}:水"));
+    assert_eq!(fmt::format(arguments), "literal{}:水");
+    assert_eq!(format!("{:?}", arguments), "literal{}:水");
+    let mut output = String::new();
+    fmt::write(&mut output, arguments).unwrap();
+    output.write_fmt(format_args!("!")).unwrap();
+    assert_eq!(output, "literal{}:水!");
+    assert_eq!(format_args!("").as_str(), Some(""));
+    42
+}

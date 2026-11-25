@@ -376,8 +376,40 @@ The candidate isolated replay takes 45.78 s for bin and 221.11 s for lib while
 reaching the later syntax above. The supplementary ordinary unselected lib
 check was stopped during diagnostic recovery after more than 267 s; it gives
 no terminal verdict or fresh whole-root comparison. The exact-site audit and
-capability-row comparison are complete. Borrowed `format_args!`, call-site
-`file!` and explicit debug-configuration inputs remain distinct next slices.
+capability-row comparison are complete. At that checkpoint, borrowed
+`format_args!`, call-site `file!` and explicit debug-configuration inputs remained
+distinct next slices.
+
+#### Borrowed formatting in the pinned logging provider
+
+A fresh replay from `c9608959b6cf2e2a60da0032dca539ffed8322a6` keeps the same
+472 authored path/line/column/macro identities and unchanged provider selection.
+Borrowed `format_args!` now uses checked stack environments and source formatting
+traits. The provider additionally forwards `concat!` expressions through opaque
+expression captures. An initial replay exposed that dependency as 272 literal
+validation refusals; the completed slice folds the string/character literal
+concatenations into ordinary static text before formatting normalization.
+
+| Root | Sites | format_args before → after | file before → after | cfg(debug_assertions) | Unsafe argument | Complete syntax before → after |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Bin | 115 | 68 → 0 | 0 → 0 | 45 → 45 | 2 → 2 | 0 → 68 |
+| Lib | 357 | 204 → 0 | 5 → 5 | 145 → 145 | 0 → 0 | 3 → 207 |
+| Total | 472 | 272 → 0 | 5 → 5 | 190 → 190 | 2 → 2 | 3 → 275 |
+
+Every former format_args first refusal now completes isolated recursive syntax
+expansion. There are no new other first-refusal categories and no changed
+non-target outcomes. All 75 original primary consumer capability rows (20 bin,
+55 lib) remain byte-identical to the frozen ordinary baseline. Both runs verify
+the same Sōzu pin, 196 tracked files and 92 suffix aliases. This is syntax evidence:
+zero original logging calls are semantically checked or executed by this replay.
+
+The before runs take 51.00 s for bin and 225.83 s for lib; the after runs take
+66.64 s and 327.21 s while traversing farther syntax. These are host observations,
+not a performance bound. The reproducible scripts, exact site transitions and
+comparison are retained in the assigned format-args handoff report. The remaining
+frontiers are explicit debug configuration at 190 sites, file! at five, and two
+unsafe argument forms; ordinary checking of the 275 syntax-complete calls remains
+separate from this expansion count.
 
 #### Earlier ordinary numeric traits frontier
 
@@ -658,7 +690,7 @@ preserves the original inventory; its Debug row is historical, not a current ref
 The original 24 Debug-format sites were direct producer refusals. Ordinary `?`,
 `#?`, derive(Debug) and source builders now work; map/set builders and ordered
 collection Debug also have focused Rust witnesses. This does not establish DOM
-root admission or a new whole-root refusal count. Borrowed `format_args!` remains
+root admission or a new whole-root refusal count. At that earlier checkpoint, borrowed `format_args!` remained
 a separate representation boundary. RefCell supports upstream's shared mutable
 tree, and `Vec<NodeRef>` forms support heap-held views. The latter have
 20 lexical occurrences on 19 lines, but no additional heap-view semantic-refusal

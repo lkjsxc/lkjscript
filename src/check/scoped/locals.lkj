@@ -299,6 +299,10 @@ impl Observation {
             }
         }
         let dst = match &instruction.op {
+            Op::Bind { dst, environment, .. } => {
+                self.transfer(state, types, function, &Place::local(*environment), &Place::local(*dst), line)?;
+                Some(*dst)
+            }
             Op::Read { dst, place, .. } => {
                 self.transfer(state, types, function, place, &Place::local(*dst), line)?;
                 Some(*dst)
@@ -826,6 +830,8 @@ impl LocalPass<'_> {
                     | Op::Struct { dst, .. }
                     | Op::Variant { dst, .. }
                     | Op::Call { dst, .. }
+                    | Op::Bind { dst, .. }
+                    | Op::Invoke { dst, .. }
                     | Op::Text { dst, .. } => Some(*dst),
                     Op::Intrinsic { dst, name, args } => {
                         if *name == IntrinsicOp::Replace && state.views.at(function.locals[*dst].ty) {

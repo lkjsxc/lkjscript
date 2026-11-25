@@ -1,0 +1,20 @@
+// expect: value 42
+// witness: {}
+use std::fmt;
+fn value(trace: &mut i64, number: i64) -> i64 {
+    *trace = *trace * 10 + number;
+    number
+}
+pub fn probe() -> i64 {
+    let mut trace = 0i64;
+    let arguments = format_args!("{1}:{0}:{1}", value(&mut trace, 1), value(&mut trace, 2));
+    assert_eq!(trace, 12);
+    assert_eq!(fmt::format(arguments), "2:1:2");
+    assert_eq!(fmt::format(arguments), "2:1:2");
+    assert_eq!(trace, 12);
+    let named = format_args!("{second}:{first}:{second}", first = value(&mut trace, 3), second = value(&mut trace, 4));
+    assert_eq!(trace, 1234);
+    assert_eq!(fmt::format(named), "4:3:4");
+    assert_eq!(trace, 1234);
+    42
+}

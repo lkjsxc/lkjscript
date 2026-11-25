@@ -1,0 +1,23 @@
+// expect: value 42
+// witness: {}
+use std::fmt;
+use std::fmt::Write;
+struct Outer<'a> { arguments: fmt::Arguments<'a> }
+impl fmt::Display for Outer<'_> {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_fmt(self.arguments)
+    }
+}
+pub fn probe() -> i64 {
+    let number = 7i64;
+    let inner = format_args!("x={}", number);
+    let nested = format_args!("[{}|{:?}]", inner, inner);
+    assert_eq!(fmt::format(nested), "[x=7|x=7]");
+    let outer = Outer { arguments: inner };
+    assert_eq!(fmt::format(format_args!("outer {}", outer)), "outer x=7");
+    let mut output = String::new();
+    output.write_fmt(inner).unwrap();
+    output.write_fmt(format_args!(";{}", nested)).unwrap();
+    assert_eq!(output, "x=7;[x=7|x=7]");
+    42
+}

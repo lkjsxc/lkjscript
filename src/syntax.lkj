@@ -816,6 +816,8 @@ struct Parser {
     fragment: bool,
 }
 
+enum FormatOrigin { Literal(usize), Expansion, Other }
+
 enum BlockPart {
     Skipped,
     Statement(Stmt),
@@ -3677,7 +3679,13 @@ impl Parser {
             }
             let mut args = Vec::new();
             let mut separator = ",".to_string();
+            let format_index = if path.name == "write" || path.name == "writeln" { 1usize } else { 0usize };
+            let mut format_origin = FormatOrigin::Literal(0usize);
             while !self.is(end) {
+                if args.len() == format_index { format_origin = self.literal_origin(false); }
+                if path.name == "concat" && matches!(self.literal_origin(true), FormatOrigin::Other) {
+                    return Err(Diagnostic::new(span, "E_MACRO_EXPANSION", "concat! supports unparenthesized string and character literals"));
+                }
                 args.push(self.expr(true)?);
                 if self.take(";") {
                     separator = ";".to_string();
@@ -3686,8 +3694,21 @@ impl Parser {
                 }
             }
             self.expect(end)?;
-            if matches!(path.name.as_str(), "format" | "write" | "writeln") {
-                self.normalize_format(&path.name, &mut args, span)?;
+            if path.name == "concat" {
+                if separator != "," { return Err(Diagnostic::new(span, "E_MACRO_EXPANSION", "concat! requires comma separators")); }
+                let mut text = String::new();
+                for argument in args {
+                    match &self.program.exprs[argument].kind {
+                        Expr::String(value) => text.push_str(value),
+                        Expr::Char(value) => text.push(*value),
+                        _ => return Err(Diagnostic::new(span, "E_MACRO_EXPANSION", "concat! supports string and character literals")),
+                    }
+                }
+                return Ok(self.add_finished_expr(Expr::String(text), span));
+            }
+            if matches!(path.name.as_str(), "format" | "format_args" | "write" | "writeln") {
+                if separator != "," { return Err(Diagnostic::new(span, "E_FORMAT", "format arguments require comma separators")); }
+                self.normalize_format(&path.name, &mut args, span, format_origin)?;
             }
             return Ok(self.add_finished_expr(
                 Expr::Macro {
@@ -3750,6 +3771,7 @@ impl Parser {
         name: &str,
         args: &mut Vec<ExprId>,
         span: Span,
+        format_origin: FormatOrigin,
     ) -> Result<(), Diagnostic> {
         let format_index = if name == "write" || name == "writeln" {
             1
@@ -3774,6 +3796,9 @@ impl Parser {
                 "format argument must be a string literal",
             ));
         };
+        if matches!(format_origin, FormatOrigin::Other) {
+            return Err(Diagnostic::new(span, "E_FORMAT", "format argument must be an unparenthesized string literal"));
+        }
         let parts = formatting::parse(&text, span)?;
         let offset = format_index + 1;
         let count = args.len() - offset;
@@ -3787,7 +3812,7 @@ impl Parser {
                 if op == "=" {
                     if let Expr::Path(path) = self.program.exprs[place].kind.clone() {
                         if path.declaration.is_none() && !path.name.contains("::") {
-                            if named.insert(path.name.clone(), index).is_some() {
+                            if named.insert(crate::ast::macros::source_name(&path.name).to_string(), index).is_some() {
                                 return Err(Diagnostic::new(
                                     span,
                                     "E_FORMAT",
@@ -3857,12 +3882,15 @@ impl Parser {
                         if let Some(index) = existing {
                             index
                         } else {
+                            let FormatOrigin::Literal(format_context) = &format_origin else {
+                                return Err(Diagnostic::new(span, "E_FORMAT", "macro-produced format strings require explicit named arguments"));
+                            };
                             let index = args.len() - offset;
                             let value = self.add_expr(
                                 Expr::Path(Path {
                                     qualification: None, bindings: Vec::new(),
                                     declaration: None,
-                                    name: argument.clone(),
+                                    name: crate::ast::macros::local_name(argument, *format_context),
                                     args: Vec::new(),
                                 }),
                                 span,

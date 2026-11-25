@@ -130,6 +130,7 @@ fn local_sites(program: &Program, function: &Function) -> Vec<Site> {
         if live[position] {
             match &instruction.op {
                 Op::Trap { .. } => add(&mut sites, position, "explicit-trap", covered(program, function, &facts)),
+                Op::Invoke { .. } => add(&mut sites, position, "borrowed-call", false),
                 Op::Unary { op: UnaryOp::Neg, src, .. } if matches!(program.types[function.locals[*src].ty].kind, TypeKind::Int { .. }) =>
                     add(&mut sites, position, "checked-arithmetic", false),
                 Op::Binary { op, left, .. } if matches!(program.types[function.locals[*left].ty].kind, TypeKind::Int { .. }) => {

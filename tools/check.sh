@@ -176,6 +176,8 @@ parallel_step 1 const-generics timeout --kill-after=10s 600s bash tools/const-ge
 parallel_step 1 maybe-sized timeout --kill-after=10s 600s bash tools/maybe-sized-test.sh "$check_binary"
 parallel_step 1 outlives-where timeout --kill-after=10s 600s bash tools/outlives-where-test.sh "$check_binary"
 parallel_step 1 debug-format timeout --kill-after=10s 600s bash tools/debug-format-test.sh "$check_binary"
+parallel_step 1 format-args timeout --kill-after=10s 600s bash tools/format-args-test.sh "$check_binary"
+parallel_step 1 borrowed-callable timeout --kill-after=10s 600s bash tools/borrowed-callable-test.sh "$check_binary"
 parallel_step 1 declarative-macros timeout --kill-after=10s 600s bash tools/declarative-macro-test.sh "$check_binary"
 parallel_step 1 macro-providers timeout --kill-after=10s 600s bash tools/macro-provider-test.sh "$check_binary"
 parallel_step 1 module-path timeout --kill-after=10s 600s bash tools/module-path-test.sh "$check_binary"
@@ -276,16 +278,16 @@ if ! awk '
         total += substr($3, length("cases=") + 1)
     }
     END {
-        if (records != 5 || total != 63) exit 1
+        if (records != 5 || total != 71) exit 1
         if (scopes["scope=expression_origins"] != 1 || scopes["scope=statement_origins"] != 1 ||
             scopes["scope=type_origins"] != 1 || scopes["scope=fragment_token_origins"] != 1 ||
             scopes["scope=lexical_origins"] != 1) exit 1
     }
 ' "${check_logs[@]}"; then
-    echo 'FAIL macro-origins (expected five interpreter scopes and 63 controls)' >&2
+    echo 'FAIL macro-origins (expected five interpreter scopes and 71 controls)' >&2
     exit 1
 fi
-printf 'ok macro-origins (63 malformed origins; statement positions/splices/roles/rules; both engines)\n'
+printf 'ok macro-origins (71 malformed origins; statement positions/splices/roles/rules; both engines)\n'
 step ir-mutation timeout --kill-after=10s 600s "$check_binary" mutate 1701 128 --jobs "$check_jobs" "${check_reuse[@]}"
 check_elapsed_ns=$(($(date +%s%N)-check_started_ns))
 read -r check_load_end _ < /proc/loadavg

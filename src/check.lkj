@@ -96,7 +96,8 @@ pub fn is_data(types: &[Type], ty: usize) -> bool {
             continue;
         }
         match &types[current].kind {
-            TypeKind::World
+            TypeKind::Function { .. }
+            | TypeKind::World
             | TypeKind::Arguments
             | TypeKind::Environment
             | TypeKind::ExitStatus
@@ -2243,6 +2244,48 @@ fn check_shape(
                 ));
             }
         }
+        Op::Bind { dst, function: called, environment } => {
+            let TypeKind::Ref { inner: signature, mutable: false } = types[ty(*dst)?].kind else {
+                return Err(error(line, "E_TYPE", "binding requires a shared callable reference"));
+            };
+            let TypeKind::Function { params, result } = &types[signature].kind else {
+                return Err(error(line, "E_TYPE", "binding destination is not a callable"));
+            };
+            let environment_ty = ty(*environment)?;
+            let TypeKind::Ref { inner, mutable: false } = types[environment_ty].kind else {
+                return Err(error(line, "E_TYPE", "binding requires a shared environment reference"));
+            };
+            if matches!(types[inner].kind, TypeKind::Str | TypeKind::Slice { .. } | TypeKind::Function { .. }) {
+                return Err(error(line, "E_TYPE", "binding environment must have a thin reference"));
+            }
+            let target = program.functions.get(*called).ok_or_else(|| error(line, "E_IR", "binding target is not declared"))?;
+            if program.destructors.iter().any(|entry| entry.1 == *called) {
+                return Err(error(line, "E_TYPE", "destructor cannot be bound"));
+            }
+            if target.params != params.len() + 1usize || target.result != *result
+                || target.locals[0].ty != environment_ty {
+                return Err(error(line, "E_TYPE", "bound function signature differs"));
+            }
+            for (index, parameter) in params.iter().enumerate() {
+                if target.locals[index + 1usize].ty != *parameter {
+                    return Err(error(line, "E_TYPE", "bound function parameter differs"));
+                }
+            }
+        }
+        Op::Invoke { dst, callee, args } => {
+            let TypeKind::Ref { inner, mutable: false } = types[ty(*callee)?].kind else {
+                return Err(error(line, "E_TYPE", "invocation requires a shared callable reference"));
+            };
+            let TypeKind::Function { params, result } = &types[inner].kind else {
+                return Err(error(line, "E_TYPE", "invocation target is not a callable"));
+            };
+            if ty(*dst)? != *result || args.len() != params.len() {
+                return Err(error(line, "E_TYPE", "invocation signature differs"));
+            }
+            for (index, parameter) in params.iter().enumerate() {
+                if ty(args[index])? != *parameter { return Err(error(line, "E_TYPE", "invocation parameter differs")); }
+            }
+        }
         Op::Call {
             dst,
             function: called,
@@ -2959,6 +3002,33 @@ fn check_function_body(
                 consume(&mut state, types, function, *right, line)?;
                 put(&mut state, *dst, line)?;
             }
+            Op::Bind { dst, environment, .. } => {
+                let from = Place::local(*environment);
+                let to = Place::local(*dst);
+                let mut carried = carried_provenance(&state, types, function, &from, &to, line)?;
+                // Erasure retains the full loan but cannot claim that Function
+                // and the concrete environment have identical pointee types.
+                for loan in 0usize..carried.loans.len() {
+                    for source in 0usize..carried.loans[loan].sources.len() { carried.loans[loan].sources[source].exact = false; }
+                }
+                remap_parents(&mut state, &from, &to);
+                remap_carried(&mut carried.loans, &from, &to);
+                consume(&mut state, types, function, *environment, line)?;
+                put(&mut state, *dst, line)?;
+                install_provenance(&mut state, carried);
+            }
+            Op::Invoke { dst, callee, args } => {
+                let mut inputs = vec![*callee];
+                inputs.extend_from_slice(args);
+                let retained = {
+                    let call = scoped::CallContext { state: &state, function, types, instruction: instruction_index, args: &inputs };
+                    input_regions.before_call(scope, &call)?
+                };
+                call_borrows(&mut state, types, function, &inputs, line)?;
+                for arg in &inputs { consume(&mut state, types, function, *arg, line)?; }
+                put(&mut state, *dst, line)?;
+                retained.install(&mut state);
+            }
             Op::Call {
                 dst,
                 function: called,
@@ -3552,6 +3622,7 @@ fn check_types(types: &[Type]) -> Result<(), Diagnostic> {
     for ty in types {
         let mut children = direct_children(&ty.kind);
         match &ty.kind {
+            TypeKind::Function { params, result } => { children.extend_from_slice(params); children.push(*result); }
             TypeKind::Int { bits, .. } => {
                 if !matches!(*bits, 8 | 16 | 32 | 64) {
                     return Err(error(1, "E_IR", "unsupported integer representation"));
@@ -3574,15 +3645,15 @@ fn check_types(types: &[Type]) -> Result<(), Diagnostic> {
             TypeKind::Ref {
                 inner,
                 mutable: true,
-            } if matches!(types[*inner].kind, TypeKind::Str) => {
+            } if matches!(types[*inner].kind, TypeKind::Str | TypeKind::Function { .. }) => {
                 return Err(error(
                     1,
                     "E_UNSUPPORTED",
-                    "mutable text views are not implemented",
+                    "mutable text and callable references are not implemented",
                 ));
             }
             TypeKind::Box { inner } | TypeKind::Vec { inner } | TypeKind::Slice { inner, .. }
-                if matches!(types[*inner].kind, TypeKind::Str) =>
+                if matches!(types[*inner].kind, TypeKind::Str | TypeKind::Function { .. }) =>
             {
                 return Err(error(
                     1,
@@ -3596,8 +3667,8 @@ fn check_types(types: &[Type]) -> Result<(), Diagnostic> {
             _ => {}
         }
         for child in direct_children(&ty.kind) {
-            if matches!(types[child].kind, TypeKind::Str) {
-                return Err(error(1, "E_TYPE", "unsized text cannot be stored by value"));
+            if matches!(types[child].kind, TypeKind::Str | TypeKind::Function { .. }) {
+                return Err(error(1, "E_TYPE", "unsized text or callables cannot be stored by value"));
             }
         }
     }
@@ -3631,6 +3702,12 @@ fn check_types(types: &[Type]) -> Result<(), Diagnostic> {
     }
     let contains_reference = reference_containment(types);
     for i in 0..types.len() {
+        if let TypeKind::Function { params, result } = &types[i].kind {
+            if contains_reference.at(*result) || matches!(types[*result].kind, TypeKind::Function { .. } | TypeKind::Str | TypeKind::Slice { .. })
+                || params.iter().any(|ty| matches!(types[*ty].kind, TypeKind::Function { .. } | TypeKind::Str | TypeKind::Slice { .. })) {
+                return Err(error(1, "E_TYPE", "borrowed callable requires sized parameters and an owned result"));
+            }
+        }
         if matches!(
             types[i].kind,
             TypeKind::Box { .. } | TypeKind::Vec { .. } | TypeKind::Array { .. }
@@ -3675,7 +3752,7 @@ fn check_structure(program: &Program) -> Result<(), Diagnostic> {
             }
             if matches!(
                 program.types[local.ty].kind,
-                TypeKind::Slice { .. } | TypeKind::Str
+                TypeKind::Slice { .. } | TypeKind::Str | TypeKind::Function { .. }
             ) {
                 return Err(error(
                     1,
@@ -3693,7 +3770,7 @@ fn check_structure(program: &Program) -> Result<(), Diagnostic> {
         }
         if matches!(
             program.types[function.result].kind,
-            TypeKind::Slice { .. } | TypeKind::Str
+            TypeKind::Slice { .. } | TypeKind::Str | TypeKind::Function { .. }
         ) {
             return Err(error(
                 1,
@@ -3960,6 +4037,26 @@ pub(crate) fn refine_return_contracts(
     problems
 }
 
+fn check_bind_effects(program: &Program, operations: &[Vec<String>]) -> Result<(), Diagnostic> {
+    for function in &program.functions {
+        for instruction in &function.body {
+            if let Op::Bind { function: target, .. } = instruction.op {
+                for operation in &operations[target] {
+                    if !IntrinsicOp::parse(operation).is_some_and(|op| op.pure()) {
+                        return Err(error(instruction.line, "E_CAPABILITY", "borrowed callable target has capability effects"));
+                    }
+                }
+            }
+        }
+    }
+    Ok(())
+}
+fn check_pure_bindings(program: &Program) -> Result<(), Diagnostic> {
+    if !program.functions.iter().any(|function| function.body.iter().any(|instruction| matches!(instruction.op, Op::Bind { .. }))) { return Ok(()); }
+    let operations = units::effects::derive(program, &vec![false; program.functions.len()], vec![Vec::new(); program.functions.len()]);
+    check_bind_effects(program, &operations)
+}
+
 /// The shared type/signature graph must be valid before independent body checks.
 /// An error list never contains CheckedProgram authority and cannot reach emit.
 pub fn check_all(program: Program) -> Result<CheckedProgram, Vec<Diagnostic>> {
@@ -3972,6 +4069,7 @@ pub fn check_all(program: Program) -> Result<CheckedProgram, Vec<Diagnostic>> {
         }
     }
     if problems.is_empty() {
+        check_pure_bindings(&program).map_err(|problem| vec![problem])?;
         Ok(CheckedProgram { program })
     } else {
         Err(problems)
@@ -4055,6 +4153,7 @@ fn check_reusing_proof(
         }
     }
     if problems.is_empty() {
+        check_pure_bindings(&program).map_err(|problem| vec![problem])?;
         Ok((CheckedProgram { program }, reused))
     } else {
         Err(problems)

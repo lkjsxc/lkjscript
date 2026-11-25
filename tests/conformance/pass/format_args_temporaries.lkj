@@ -1,0 +1,17 @@
+// expect: value 42
+// witness: {}
+use std::fmt;
+struct Holder<'a> { arguments: fmt::Arguments<'a> }
+fn temporary() -> String { String::from("temporary") }
+pub fn probe() -> i64 {
+    let direct = format_args!("{}:{}", temporary(), 7i64);
+    assert_eq!(fmt::format(direct), "temporary:7");
+    assert_eq!(fmt::format(direct), "temporary:7");
+    let tuple = (format_args!("[{}]", temporary()),);
+    assert_eq!(fmt::format(tuple.0), "[temporary]");
+    let holder = Holder { arguments: format_args!("<{}>", temporary()) };
+    assert_eq!(fmt::format(holder.arguments), "<temporary>");
+    let vector = format_args!("{:?}", vec![2i64, 3i64]);
+    assert_eq!(fmt::format(vector), "[2, 3]");
+    42
+}

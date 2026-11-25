@@ -1,0 +1,8 @@
+// expect: reject E_FORMAT
+// witness: {"rustAccept":false}
+pub fn probe() -> i64 {
+    let value = 42i64;
+    let arguments = format_args!(concat!("{value}"));
+    std::fmt::format(arguments);
+    42
+}

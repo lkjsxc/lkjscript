@@ -266,6 +266,10 @@ fn validate_selected(
         checked_roots.insert(*function);
     }
     for function in &compiler.opaque.checked_functions { checked_roots.insert(*function); }
+    for function in &compiler.formats.checked { checked_roots.insert(*function); }
+    // A failed generated body keeps its original trait diagnostic; only completed
+    // helpers are checked roots, while provisional signatures receive trap stubs.
+    for function in compiler.formats.helpers.values() { declared.insert(*function); }
     let callable_functions = compiler.assumed_callable_functions();
     let builtin_methods = compiler.validate_builtin_methods()?;
     let contracts = compiler.contracts.as_ref().unwrap();
@@ -387,6 +391,7 @@ impl Compiler<'_> {
         self.definition_types = BTreeMap::new();
         self.closures = super::closures::Catalog::default();
         self.opaque = super::opaque::Catalog::default();
+        self.formats = super::format_args::Catalog::default();
         self.scoped_bodies = BTreeMap::new();
         self.trait_proofs = None;
         self.return_inference = BTreeSet::new();

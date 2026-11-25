@@ -1,0 +1,32 @@
+// expect: value 42
+// witness: {}
+use std::fmt;
+use std::fmt::Write;
+struct Bad;
+impl fmt::Display for Bad {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        formatter.write_str("!")?;
+        Err(fmt::Error)
+    }
+}
+struct Never;
+impl fmt::Display for Never {
+    fn fmt(&self, _formatter: &mut fmt::Formatter) -> fmt::Result {
+        panic!("rendering continued after an error");
+    }
+}
+fn bad(trace: &mut i64) -> Bad { *trace = *trace * 10 + 1; Bad }
+fn never(trace: &mut i64) -> Never { *trace = *trace * 10 + 2; Never }
+pub fn probe() -> i64 {
+    let mut trace = 0i64;
+    let arguments = format_args!("before{}after{}", bad(&mut trace), never(&mut trace));
+    assert_eq!(trace, 12);
+    let mut first = String::new();
+    assert!(fmt::write(&mut first, arguments).is_err());
+    assert_eq!(first, "before!");
+    let mut second = String::new();
+    assert!(second.write_fmt(arguments).is_err());
+    assert_eq!(second, "before!");
+    assert_eq!(trace, 12);
+    42
+}

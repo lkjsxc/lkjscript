@@ -356,7 +356,7 @@ pub fn relations(checked: &CheckedProgram) -> Vec<Relations> {
         for (position, instruction) in function.body.iter().enumerate() {
             if !live[position] { continue; }
             match &instruction.op {
-                Op::Call { function, .. } => enqueue(*function, false, &mut seen, &mut calls),
+                Op::Call { function, .. } | Op::Bind { function, .. } => enqueue(*function, false, &mut seen, &mut calls),
                 Op::Intrinsic { name, .. } if effect(*name) =>
                     operation(&mut operations, name.as_str(), instruction.line, instruction.column, false),
                 Op::Drop { place } | Op::DropIf { place } => cleanup(
@@ -392,7 +392,7 @@ pub fn analyze(checked: &CheckedProgram, entry: usize) -> Result<Report, String>
                 continue;
             }
             match &instruction.op {
-                Op::Call { function, .. } => enqueue(*function, false, &mut seen, &mut pending),
+                Op::Call { function, .. } | Op::Bind { function, .. } => enqueue(*function, false, &mut seen, &mut pending),
                 Op::Intrinsic { name, .. } if effect(*name) => operation(
                     &mut operations,
                     name.as_str(),

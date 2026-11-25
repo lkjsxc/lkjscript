@@ -1,0 +1,10 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false}
+fn escaped<'a>(_anchor: &'a i64) -> std::fmt::Arguments<'a> {
+    let text = String::from("local");
+    format_args!("{}", text)
+}
+pub fn probe() -> i64 {
+    let anchor = 0i64;
+    std::fmt::format(escaped(&anchor)).len() as i64
+}

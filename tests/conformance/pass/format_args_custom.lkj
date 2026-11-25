@@ -1,0 +1,26 @@
+// expect: value 42
+// witness: {}
+use std::fmt;
+
+struct Item { number: i64 }
+impl fmt::Display for Item {
+    fn fmt(&self, formatter: &mut fmt::Formatter) -> fmt::Result {
+        write!(formatter, "item({})", self.number)
+    }
+}
+struct NeverRendered;
+impl fmt::Display for NeverRendered {
+    fn fmt(&self, _formatter: &mut fmt::Formatter) -> fmt::Result {
+        panic!("format_args construction must not call Display");
+    }
+}
+pub fn probe() -> i64 {
+    let never = NeverRendered;
+    let deferred = format_args!("deferred {}", never);
+    drop(deferred);
+    let item = Item { number: 42 };
+    let arguments = format_args!("value={}", item);
+    assert_eq!(fmt::format(arguments), "value=item(42)");
+    assert_eq!(fmt::format(arguments), "value=item(42)");
+    42
+}

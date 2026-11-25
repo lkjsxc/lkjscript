@@ -16,7 +16,7 @@ impl Compiler<'_> {
                 }
             }
             match &self.types[ty].kind {
-                ir::TypeKind::Str | ir::TypeKind::Slice { .. } => return false,
+                ir::TypeKind::Str | ir::TypeKind::Slice { .. } | ir::TypeKind::Function { .. } => return false,
                 ir::TypeKind::Array { inner, .. } => pending.push(*inner),
                 ir::TypeKind::Struct { fields, .. } => { for field in fields { pending.push(field.ty); } }
                 ir::TypeKind::Enum { variants, .. } => {

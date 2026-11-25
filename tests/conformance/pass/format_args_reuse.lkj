@@ -1,0 +1,36 @@
+// expect: value 42
+// witness: {}
+use std::fmt;
+type Message<'a> = fmt::Arguments<'a>;
+#[derive(Copy, Clone)]
+struct Record<'a> { arguments: Message<'a> }
+enum Choice<'a> { Value(Message<'a>), Empty }
+fn forward<'a>(arguments: Message<'a>) -> Message<'a> { arguments }
+fn from_shared<'a>(arguments: &Message<'a>) -> Message<'a> { *arguments }
+fn consume(arguments: Message<'_>) -> String { fmt::format(arguments) }
+fn number_message(value: &i64) -> String { consume(format_args!("number={}", value)) }
+fn text_message(value: &str) -> String { consume(format_args!("text={}", value)) }
+pub fn probe() -> i64 {
+    let number = 42i64;
+    let text = String::from("water");
+    let first = format_args!("{}", number);
+    let second = format_args!("{}!", text);
+    let record = Record { arguments: first };
+    let copied = record;
+    assert_eq!(consume(forward(record.arguments)), "42");
+    assert_eq!(consume(from_shared(&copied.arguments)), "42");
+    assert_eq!(consume(copied.arguments.clone()), "42");
+    let pair = (first, second);
+    assert_eq!(consume(pair.0), "42");
+    assert_eq!(consume(pair.1), "water!");
+    let choice = if number == 42 { Choice::Value(second) } else { Choice::Empty };
+    match choice {
+        Choice::Value(arguments) => assert_eq!(consume(arguments), "water!"),
+        Choice::Empty => panic!("wrong argument branch"),
+    }
+    let selected = if number == 42 { first } else { second };
+    assert_eq!(consume(selected), "42");
+    assert_eq!(number_message(&number), "number=42");
+    assert_eq!(text_message(text.as_str()), "text=water");
+    42
+}

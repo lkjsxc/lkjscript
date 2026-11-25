@@ -204,6 +204,7 @@ fn final_inputs_match(
 }
 fn type_children(value: &ir::Type, pending: &mut Vec<usize>) {
     match &value.kind {
+        ir::TypeKind::Function { params, result } => { pending.extend_from_slice(params); pending.push(*result); }
         ir::TypeKind::Struct { fields, .. } => { for field in fields { pending.push(field.ty); } }
         ir::TypeKind::Enum { variants, .. } => { for variant in variants { for field in &variant.fields { pending.push(field.ty); } } }
         ir::TypeKind::Ref { inner, .. } | ir::TypeKind::Slice { inner, .. }

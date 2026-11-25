@@ -553,6 +553,7 @@ impl<'a> Resolver<'a> {
         if matches!(
             path,
             "std::mem::replace"
+                | "std::fmt::__lkjscript_invoke"
                 | "std::mem::drop"
                 | "mem::replace"
                 | "std::thread::scope"
@@ -620,6 +621,7 @@ impl<'a> Resolver<'a> {
             let intrinsic = match remaining.as_str() {
                 "vec::Vec" if !core => Some("Vec"),
                 "boxed::Box" if !core => Some("Box"),
+                "fmt::__lkjscript_invoke" if !core => Some("std::fmt::__lkjscript_invoke"),
                 "mem::replace" if !core => Some("std::mem::replace"),
                 "mem::drop" if !core => Some("std::mem::drop"),
                 "str::from_utf8" if !core => Some("std::str::from_utf8"),

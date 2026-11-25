@@ -183,7 +183,8 @@ fn expression_origins() -> i64 {
     changed_default.structs[generated_type].generics[0usize].default = Some(program.functions[anchor].params[0usize].ty);
     count += refused(&changed_default);
     count += module_path_origins();
-    assert!(count == 27usize);
+    count += format_args_origins();
+    assert!(count == 35usize);
     count as i64
 }
 
@@ -202,6 +203,52 @@ fn macro_path_refused(program: &ast::Program) -> usize {
         Ok(()) => panic!("forged module-path origin accepted"),
     }
     1usize
+}
+fn format_args_origins() -> usize {
+    let text = r#"
+macro_rules! deferred { ($value:expr) => { format_args!("value={}", $value) }; }
+macro_rules! capture { () => {{ let captured = 9i64; format_args!("{captured}") }}; }
+macro_rules! composed { () => { format_args!(concat!("joined", '=', "{}"), 7i64) }; }
+fn value() { let item = 7i64; let first = deferred!(item); let second = capture!(); let third = composed!(); }
+"#;
+    let (program, inputs) = parsed_fixture(text);
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    origins::collect(&program, &resolver).unwrap();
+    mounted_replay(&program, &inputs);
+    let macro_id = program.exprs.iter().position(|node|
+        matches!(&node.kind, ast::Expr::Macro { name, args, .. } if name == "format_args" && args.len() == 2usize)).unwrap();
+    let ast::Expr::Macro { args, .. } = program.exprs[macro_id].kind.clone() else { unreachable!() };
+    let capture = program.exprs.iter().position(|node|
+        matches!(&node.kind, ast::Expr::Path(path) if ast::macros::source_name(&path.name) == "captured" && path.name != "captured")).unwrap();
+    let mut count = 0usize;
+    let mut literal = program.clone();
+    literal.exprs[args[0usize]].kind = ast::Expr::String("forged={0:?}".to_string());
+    count += macro_path_refused(&literal);
+    let mut invocation = program.clone();
+    if let ast::Expr::Macro { name, .. } = &mut invocation.exprs[macro_id].kind { *name = "format".to_string(); }
+    count += macro_path_refused(&invocation);
+    let mut arguments = program.clone();
+    if let ast::Expr::Macro { args, .. } = &mut arguments.exprs[macro_id].kind { let first = args[0usize]; args[0usize] = args[1usize]; args[1usize] = first; }
+    count += macro_path_refused(&arguments);
+    let mut separator = program.clone();
+    if let ast::Expr::Macro { separator, .. } = &mut separator.exprs[macro_id].kind { *separator = ";".to_string(); }
+    count += macro_path_refused(&separator);
+    let mut hygiene = program.clone();
+    if let ast::Expr::Path(path) = &mut hygiene.exprs[capture].kind { path.name = "captured".to_string(); }
+    count += macro_path_refused(&hygiene);
+    let mut changed_inputs = inputs.clone();
+    changed_inputs[0usize].1 = text.replace("9i64", "8i64").as_bytes().to_vec();
+    count += unauthenticated(&program, &changed_inputs);
+    let joined = program.exprs.iter().position(|node| matches!(&node.kind, ast::Expr::String(text) if text == "joined={}")).unwrap();
+    let normalized = program.exprs.iter().position(|node| matches!(&node.kind, ast::Expr::String(text) if text == "joined={0}")).unwrap();
+    let mut forged_join = program.clone();
+    forged_join.exprs[joined].kind = ast::Expr::String("other={}".to_string());
+    count += macro_path_refused(&forged_join);
+    let mut forged_normalization = program.clone();
+    forged_normalization.exprs[normalized].kind = ast::Expr::String("other={0}".to_string());
+    count += macro_path_refused(&forged_normalization);
+    assert!(count == 8usize);
+    count
 }
 fn module_path_origins() -> usize {
     let text = r#"
@@ -531,5 +578,5 @@ fn source() -> i64 {
 fn main() {
     let count = expression_origins() + type_origins() + fragment_token_origins()
         + lexical_origins() + statement_origins();
-    assert!(count == 63i64);
+    assert!(count == 71i64);
 }

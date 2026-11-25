@@ -1,0 +1,92 @@
+//! Independent validation of shared callable descriptors and their pure targets.
+use super::*;
+impl<H: Host> Interpreter<'_, H> {
+    pub(super) fn callable_target(&self, reference: &Reference) -> Result<usize, RunError> {
+        let index = reference.callable.ok_or_else(|| self.invalid("callable has no target"))?;
+        let TypeKind::Function { params, result } = self.kind(reference.referent)? else {
+            return Err(self.invalid("callable reference has another referent"));
+        };
+        if reference.mutable || reference.extent.is_some() {
+            return Err(self.invalid("callable reference must be shared and not a sequence"));
+        }
+        let target = self.program.functions.get(index).ok_or_else(|| self.invalid("unknown callable target"))?;
+        if target.params != params.len() + 1usize || target.locals.len() < target.params || target.result != *result {
+            return Err(self.invalid("callable signature differs"));
+        }
+        let TypeKind::Ref { inner, mutable: false } = self.kind(target.locals[0].ty)? else {
+            return Err(self.invalid("callable environment is not shared"));
+        };
+        if *inner != self.cell(reference.target)?.ty || matches!(self.kind(*inner)?, TypeKind::Function { .. } | TypeKind::Str | TypeKind::Slice { .. }) {
+            return Err(self.invalid("callable environment type differs or is not thin"));
+        }
+        for (at, ty) in params.iter().enumerate() {
+            if *ty != target.locals[at + 1usize].ty || matches!(self.kind(*ty)?, TypeKind::Function { .. } | TypeKind::Str | TypeKind::Slice { .. }) {
+                return Err(self.invalid("callable parameter type differs or is unsized"));
+            }
+        }
+        let mut pending = vec![*result];
+        let mut seen = BTreeSet::new();
+        while let Some(ty) = pending.pop() {
+            if !seen.insert(ty) { continue; }
+            match self.kind(ty)? {
+                TypeKind::Ref { .. } | TypeKind::Slice { .. } | TypeKind::Function { .. } | TypeKind::Str => return Err(self.invalid("callable result must be owned and sized")),
+                TypeKind::Struct { fields, .. } => { for field in fields { pending.push(field.ty); } }
+                TypeKind::Enum { variants, .. } => { for variant in variants { for field in &variant.fields { pending.push(field.ty); } } }
+                TypeKind::Vec { inner } | TypeKind::Box { inner } | TypeKind::Array { inner, .. } => pending.push(*inner),
+                _ => {}
+            }
+        }
+        if self.program.destructors.iter().any(|entry| entry.1 == index) { return Err(self.invalid("destructor cannot be bound")); }
+        Ok(index)
+    }
+    pub(super) fn pure_target(&mut self, first: usize) -> Result<(), RunError> {
+        if self.pure_targets.contains(&first) { return Ok(()); }
+        let mut pending = vec![first];
+        let mut seen = BTreeSet::new();
+        let mut cleanup = Vec::new();
+        let mut cleaned = BTreeSet::new();
+        while !pending.is_empty() || !cleanup.is_empty() {
+            while let Some(ty) = cleanup.pop() {
+                if !cleaned.insert(ty) { continue; }
+                for (owner, function) in &self.program.destructors { if *owner == ty { pending.push(*function); } }
+                match self.kind(ty)? {
+                    TypeKind::File | TypeKind::ReadFile | TypeKind::Directory | TypeKind::ReadDirectory
+                    | TypeKind::Image | TypeKind::Channel | TypeKind::Worker | TypeKind::ReadRegion
+                    | TypeKind::ForeignCommand | TypeKind::ForeignSession | TypeKind::NullDevice
+                    | TypeKind::Listener | TypeKind::Readiness | TypeKind::Stop | TypeKind::Child => return Err(self.invalid("callable cleanup has capability effects")),
+                    TypeKind::Struct { fields, .. } => { for field in fields { cleanup.push(field.ty); } }
+                    TypeKind::Enum { variants, .. } => { for variant in variants { for field in &variant.fields { cleanup.push(field.ty); } } }
+                    TypeKind::Array { inner, len } => { if *len != 0usize { cleanup.push(*inner); } }
+                    TypeKind::Vec { inner } | TypeKind::Box { inner } => cleanup.push(*inner),
+                    _ => {}
+                }
+            }
+            if let Some(index) = pending.pop() {
+                if !seen.insert(index) { continue; }
+                let function = self.program.functions.get(index).ok_or_else(|| self.invalid("unknown callable dependency"))?;
+                for instruction in &function.body {
+                    match &instruction.op {
+                        Op::Call { function, .. } | Op::Bind { function, .. } => pending.push(*function),
+                        Op::Intrinsic { name, .. } if !name.pure() => return Err(self.invalid("callable target has capability effects")),
+                        Op::Drop { place } | Op::DropIf { place } => {
+                            let mut ty = function.locals.get(place.local).ok_or_else(|| self.invalid("unknown callable drop local"))?.ty;
+                            for projection in &place.projections {
+                                ty = match (projection, self.kind(ty)?) {
+                                    (Projection::Deref, TypeKind::Ref { inner, .. } | TypeKind::Box { inner }) => *inner,
+                                    (Projection::Field(at), TypeKind::Struct { fields, .. }) => fields.get(*at).ok_or_else(|| self.invalid("unknown callable drop field"))?.ty,
+                                    (Projection::VariantField(tag, at), TypeKind::Enum { variants, .. }) => variants.get(*tag).and_then(|variant| variant.fields.get(*at)).ok_or_else(|| self.invalid("unknown callable drop variant"))?.ty,
+                                    (Projection::Index(_), TypeKind::Array { inner, .. } | TypeKind::Slice { inner, .. } | TypeKind::Vec { inner }) => *inner,
+                                    _ => return Err(self.invalid("invalid callable drop projection")),
+                                };
+                            }
+                            cleanup.push(ty);
+                        }
+                        _ => {}
+                    }
+                }
+            }
+        }
+        for index in seen { self.pure_targets.insert(index); }
+        Ok(())
+    }
+}

@@ -818,7 +818,7 @@ Only borrowed_closure_escape remains pending; concurrency uses isolated processe
 | Text methods | Prefix/suffix, contains/find/rfind, ASCII case/comparison, repeat/replace, bytes/chars, LF/CRLF lines, strip_prefix, split_once and split (including empty patterns). Pattern shares text/char needles; integer decimal parse covers ten types with validity/range checks. | General Unicode case conversion and str.trim are unsupported; std::str::trim_ascii(value) strips only bytes 9..13 and 32, preserving Unicode spaces. Only proved ASCII literals receive an automatic trim edit. Borrowed iterators retain owners. |
 | Character helpers | UTF-8/UTF-16 lengths, ASCII predicates/case, Unicode whitespace/control, to_digit and to_string. | Operate on Unicode scalars, never arbitrary code points. |
 | Formatting | Arguments evaluate once in order; macros call source String/Formatter traits. Display, Debug ?/#?, x/X/b/o, positional/named/captured arguments, escaped braces, fixed width, Unicode fill, alignment, sign/prefix/zero padding. Explicit zero width remains distinguishable. | write!/writeln! target String (Write in scope) or Formatter; arbitrary Write sinks, float formatting, x?/X? debug modes and dynamic width/precision remain unsupported. Errors stop later formatting; format! traps on failure. |
-| Debug | The declared std::fmt::Debug trait formats integers, bool, char, str/String, references, Box, slices/arrays/Vec, BTreeMap/BTreeSet, Option/Result, unit and tuples of one through twelve fields. Source DebugStruct/DebugTuple/DebugList/DebugMap/DebugSet builders preserve field order, child options, lazy alternate indentation and partial output on errors; all support finish_non_exhaustive. Map key/value sequencing is checked, and an error suppresses later child formatting. Collection Debug requires Debug bounds without Ord. derive(Debug) generates ordinary checked struct/enum implementations, including generic field obligations before use. | Unicode escaping follows the library's Unicode 17.0.0 table. Builders retain the formatter's exclusive loan, not their entry arguments. No byte inspection, reflection intrinsic or opaque formatting authority is added. Iterator-based entries, borrowed format_args! and float Debug remain absent. |
+| Debug | The declared std::fmt::Debug trait formats integers, bool, char, str/String, references, Box, slices/arrays/Vec, BTreeMap/BTreeSet, Option/Result, unit and tuples of one through twelve fields. Source DebugStruct/DebugTuple/DebugList/DebugMap/DebugSet builders preserve field order, child options, lazy alternate indentation and partial output on errors; all support finish_non_exhaustive. Map key/value sequencing is checked, and an error suppresses later child formatting. Collection Debug requires Debug bounds without Ord. derive(Debug) generates ordinary checked struct/enum implementations, including generic field obligations before use. | Unicode escaping follows the library's Unicode 17.0.0 table. Builders retain the formatter's exclusive loan, not their entry arguments. No byte inspection, reflection intrinsic or opaque formatting authority is added. Iterator-based entries and float Debug remain absent. |
 | Option/Result | Canonical source declarations and re-exports; conditional derives, views, owned and/or/transpose and selected map/default combinators. Eager arguments evaluate before call, lazy callbacks only on selected variants; unused captures/payloads still clean up normally. | Some nested receiver expressions need annotations. Option::expect evaluates its message but retains fixed trap text. Result::unwrap omits its dynamic error payload and reports the callee site; all sites retain their source path and line. To retain errno and the operation site, use an already granted output writer: `match operation() { Ok(value) => value, Err(errno) => { output.write(format!("operation: errno {errno}\n").as_bytes()); panic!("operation failed") } }`. |
 | Option extras | xor, zip/unzip, flatten, replace/insert/get_or_insert, is_some_and/is_none_or, ok_or/ok_or_else. None predicates yield false/true respectively. filter borrows the payload then keeps/drops the owner. | Returned views preserve selected input/factory origins. |
 | Option<&T>/Option<&mut T> | copied uses Copy without Clone; cloned invokes Clone once for Some, never None. | Owned clones may be independent, but nested views retain external origins. |
@@ -827,6 +827,49 @@ Only borrowed_closure_escape remains pending; concurrency uses isolated processe
 | Slice/Vec helpers | starts_with borrows; copy_from_slice needs Copy and equal lengths, with array receivers written as array[..].copy_from_slice(source); predicate split retains empty groups at delimiters. clear/truncate destroy removed elements forward; stable sort/retain are source operations. | Further primitive conversions, Sum/FromIterator and exclusive iter_mut need their own contracts. |
 | Ordered maps/sets | BTreeMap uses an indexed AVL arena/free slots with logarithmic lookup/insertion/removal; BTreeSet reuses it. Sorted shared/owned iteration, map keys/values/first_key_value/pop_first/retain and set first/pop_first. Clear/drop and partially consumed iterators destroy in key order; Clone/Default/equality ignore arena shape. | Entirely source algorithms over existing storage, not new trusted primitives. |
 | Generational arenas | std::arena::Arena<T,Kind> owns graph nodes; Handle<Kind> stores owner namespace/index/generation. get/get_mut lend temporary checked views; remove moves the value and invalidates prior handles. Exhausted generations retire. | Caller assigns distinct same-Kind owner IDs while any handle survives. Handles are values, not authority; no heap views or new IR. [Million-node specimen](../examples/object_graph/README.md). |
+
+### Borrowed formatting arguments
+
+`format_args!` evaluates each argument once in written order and produces
+`std::fmt::Arguments<'a>`. Construction does not render values or allocate:
+nonliteral arguments live in a stack environment of shared references, paired
+with a checked deferred formatter. Literal-only arguments retain static text.
+Arguments are Copy and Clone; copying or forwarding them preserves the original
+loans. Moving, mutating or destroying a borrowed owner while the Arguments value
+remains live is refused. Direct let initializers extend formatting temporaries
+through the binding scope; ordinary function calls do not confer this extension.
+A formatted value cannot return a descriptor borrowing its local environment.
+
+Display and Debug render the same deferred text through ordinary source traits.
+`std::fmt::format`, `std::fmt::write` for String, and String/Formatter
+`write_fmt` accept Arguments. The supported format specifications are the same
+as format!/write!: fixed width and the existing display/debug/radix options.
+Errors stop later formatting, while format! traps on a formatting error. Rendering
+may allocate through the existing String implementation. Formatting encoding
+remains in source, with no byte inspection, output capability or ambient effect.
+
+The source builtin concat! folds string and character literals, including nested
+concatenations, empty input and trailing commas, into static text. Numeric, boolean
+and byte literals are outside this bounded concatenation contract. Macro-produced
+format strings require explicit named arguments; implicit capture remains limited
+to literal tokens. Parenthesized format strings refuse as in Rust.
+
+Macro captures follow the format literal's syntax context, including forwarded
+literals. Exact origin replay binds the builtin kind, normalized arguments,
+literal and capture context to input bytes. Deferred helper identities use source
+expression identities, not byte offsets; checked edits recompute their bodies.
+The existing reference-completeness rule conservatively refuses renames around
+implicit captures; explicit argument references and body replacement stay checked.
+The current incremental frontend checkpoint conservatively declines inputs with
+format_args because it does not serialize generated helper state.
+
+`as_str()` returns Some for literal-only construction and None for deferred
+arguments. Its declared result conservatively carries the Arguments input
+lifetime, rather than Rust's static result lifetime: static nominal reference
+fields are outside the current source contract. An attempted static extraction
+therefore remains a located refusal. Arguments are not Send, Sync or Data;
+arbitrary Write sinks, floating-point formatting and dynamic width/precision
+retain their existing boundaries.
 
 Option/Result also provide map, map_or/map_or_else, and_then/or_else/unwrap_or_else;
 Option has filter and Result map_err. A map_err closure needs known input/result types: annotate the missing type. For a literal.to_string() result use |_| -> std::String { literal.to_string() }; this supplies the result type while preserving receiver evaluation and the closure's capture/return/? scope. String ordering/from conversion, scalar

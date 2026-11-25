@@ -105,11 +105,11 @@ pub(super) fn derive(program: &Program) -> Result<Vec<Layout>, Diagnostic> {
                 | TypeKind::Child | TypeKind::Listener | TypeKind::Readiness => { value.cleanup = true; }
                 TypeKind::Stop => { value.bytes = 16; value.scalar = false; value.cleanup = true; }
                 TypeKind::Ref { inner, .. } => {
-                    if matches!(program.types[*inner].kind, TypeKind::Slice { .. } | TypeKind::Str) {
+                    if matches!(program.types[*inner].kind, TypeKind::Slice { .. } | TypeKind::Str | TypeKind::Function { .. }) {
                         value.bytes = 16; value.scalar = false;
                     }
                 }
-                TypeKind::Slice { .. } | TypeKind::Str => { value.bytes = 16; value.scalar = false; }
+                TypeKind::Slice { .. } | TypeKind::Str | TypeKind::Function { .. } => { value.bytes = 16; value.scalar = false; }
                 _ => {}
             }
             value.cleanup |= custom[index];
