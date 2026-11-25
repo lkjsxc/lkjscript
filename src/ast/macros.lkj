@@ -2,6 +2,20 @@
 use super::{BlockId, ExprId, FileId, Item, ModuleId, Span, TypeId};
 
 #[derive(Clone, PartialEq, Eq)]
+pub struct MacroProviderInput {
+    pub name: String,
+    pub alias: String,
+    pub path: String,
+}
+
+#[derive(Clone, PartialEq, Eq)]
+pub struct MacroProvider {
+    pub input: MacroProviderInput,
+    pub declaration: Option<Span>,
+    pub root: Option<ModuleId>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
 pub struct MacroToken {
     pub kind: u8,
     pub text: String,

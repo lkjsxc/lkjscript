@@ -29,6 +29,26 @@ fn visible(program: &Program, scope: usize, cutoff: Span, name: &str) -> Option<
     }
     selected.map(|(id, _)| id)
 }
+fn exported(program: &Program, root: ModuleId, name: &str) -> Option<usize> {
+    program.macro_definitions.iter().position(|definition| definition.exported
+        && definition.name == name && program.scopes[definition.scope].crate_root == root)
+}
+fn alias_shadowed(program: &Program, invocation: &MacroInvocation, alias: &str) -> bool {
+    let mut scope = invocation.scope;
+    loop {
+        let module = &program.scopes[scope];
+        if program.modules.iter().any(|child| child.name == alias && program.scopes[child.scope].parent == Some(scope))
+            || program.structs.iter().any(|item| item.module == module.path && item.name == alias)
+            || program.enums.iter().any(|item| item.module == module.path && item.name == alias)
+            || program.traits.iter().any(|item| item.module == module.path && item.name == alias)
+            || program.aliases.iter().any(|item| item.module == module.path && item.name == alias)
+            || program.uses.iter().any(|import| import.module == module.path && (import.glob || import.alias == alias)) {
+            return true;
+        }
+        let Some(parent) = module.parent else { return false; };
+        scope = parent;
+    }
+}
 fn resolve(program: &Program, invocation: &MacroInvocation) -> Result<usize, Diagnostic> {
     let crate_root = program.scopes[invocation.scope].crate_root;
     let mut root = crate_root;
@@ -38,8 +58,22 @@ fn resolve(program: &Program, invocation: &MacroInvocation) -> Result<usize, Dia
         let split = name.rfind("::").unwrap();
         let prefix = &name[..split]; name = &name[split + 2usize..];
         if prefix != "crate" && prefix != program.scopes[crate_root].path {
-            root = program.scopes.iter().position(|scope| scope.parent.is_none() && scope.path == prefix)
-                .ok_or_else(|| error(invocation.span, "E_UNSUPPORTED_MACRO", "macro path must name an exported macro in a source crate"))?;
+            let absolute = prefix.starts_with("::");
+            let alias = if absolute { &prefix[2usize..] } else { prefix };
+            let provider = if crate_root == 0 {
+                program.macro_providers.iter().find(|provider| provider.input.alias == alias)
+                    .and_then(|provider| provider.root)
+            } else { None };
+            if let Some(provider) = provider {
+                if !absolute && alias_shadowed(program, invocation, alias) {
+                    return Err(error(invocation.span, "E_MACRO_PROVIDER",
+                        "relative macro provider alias may be shadowed; use the absolute alias"));
+                }
+                root = provider;
+            } else {
+                root = program.scopes.iter().position(|scope| scope.parent.is_none() && scope.path == prefix)
+                    .ok_or_else(|| error(invocation.span, "E_UNSUPPORTED_MACRO", "macro path must name an exported macro in a source crate"))?;
+            }
         }
     } else {
         let mut scope = invocation.scope;
@@ -55,8 +89,19 @@ fn resolve(program: &Program, invocation: &MacroInvocation) -> Result<usize, Dia
             }
         }
     }
-    for (id, definition) in program.macro_definitions.iter().enumerate() {
-        if definition.exported && definition.name.as_str() == name && program.scopes[definition.scope].crate_root == root { return Ok(id); }
+    if let Some(id) = exported(program, root, name) { return Ok(id); }
+    if !qualified && crate_root == 0 {
+        let mut selected: Option<(usize, usize)> = None;
+        for provider in &program.macro_providers {
+            if let (Some(root), Some(span)) = (provider.root, provider.declaration) {
+                if let Some(id) = exported(program, root, name) {
+                    if selected.is_none_or(|(_, start)| start < span.start) {
+                        selected = Some((id, span.start));
+                    }
+                }
+            }
+        }
+        if let Some((id, _)) = selected { return Ok(id); }
     }
     Err(error(invocation.span, "E_UNSUPPORTED_MACRO", &format!("unsupported macro: {}!; no visible declarative definition", invocation.name)))
 }
@@ -158,7 +203,8 @@ impl Expander {
     }
 }
 pub(super) fn run(program: &mut Program) -> Result<(), Diagnostic> {
-    if !program.macros_expanded && (!program.macro_definitions.is_empty() || !program.macro_invocations.is_empty())
+    if !program.macros_expanded && (!program.macro_definitions.is_empty() || !program.macro_invocations.is_empty()
+        || !program.macro_providers.is_empty())
         && program.macro_input.is_none() {
         let mut input = program.clone(); input.macro_input = None;
         program.macro_input = Some(Box::new(input));

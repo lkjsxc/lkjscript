@@ -338,9 +338,24 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String
     standard: Option<&str>,
     read: &mut F,
 ) -> SourceReport {
+    let providers: Vec<crate::ast::macros::MacroProviderInput> = Vec::new();
+    load_report_with_providers(root, standard, &providers, read)
+}
+
+pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String>>(
+    root: &str,
+    standard: Option<&str>,
+    providers: &[crate::ast::macros::MacroProviderInput],
+    read: &mut F,
+) -> SourceReport {
     let mut diagnostics = Vec::new();
     let mut blocked = Vec::new();
     let mut program = Program::default();
+    for input in providers {
+        program.macro_providers.push(crate::ast::macros::MacroProvider {
+            input: input.clone(), declaration: None, root: None,
+        });
+    }
     program.scopes.push(ModuleScope {
         path: String::new(),
         parent: None,
@@ -431,6 +446,30 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String
             blocked.push(region);
         }
         let mut items = parsed.items;
+        if scope == 0 && !providers.is_empty() {
+            let mut index = program.macro_providers.len();
+            while index > 0usize {
+                index -= 1usize;
+                if program.macro_providers[index].declaration.is_some() {
+                    let scope = program.scopes.len();
+                    program.scopes.push(ModuleScope {
+                        path: format!("$macro_provider{index}"), parent: None, crate_root: scope,
+                    });
+                    let provider = &mut program.macro_providers[index];
+                    provider.root = Some(scope);
+                    pending.push((provider.input.path.clone(), scope, None, String::new()));
+                } else {
+                    let provider = &program.macro_providers[index];
+                    let span = Span { file, ..Span::default() };
+                    let mut problem = Diagnostic::new(span, "E_MACRO_PROVIDER", &format!(
+                        "no matching crate-root #[macro_use] extern crate {} as {} declaration",
+                        provider.input.name, provider.input.alias,
+                    ));
+                    problem.path = path.clone();
+                    diagnostics.push(problem);
+                }
+            }
+        }
         // New capability helpers are ordinary, checked library source. Mounting
         // this optional module here keeps the library root readable by the
         // stored seed, whose resolver predates Arguments and Environment.
@@ -602,6 +641,17 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String
                 }
             };
             pending.push((selected, module.scope, Some(index), alternate));
+        }
+    }
+    if !providers.is_empty() {
+        for definition in &program.macro_definitions {
+            let crate_root = program.scopes[definition.scope].crate_root;
+            if definition.exported && syntax::macros::builtin_macro(&definition.name)
+                && program.macro_providers.iter().any(|provider: &crate::ast::macros::MacroProvider|
+                    -> bool { provider.root == Some(crate_root) }) {
+                diagnostics.push(load_error(&program, definition.name_span, "E_MACRO_PROVIDER",
+                    "macro provider export conflicts with a built-in macro"));
+            }
         }
     }
     let (expansion_errors, expansion_blocked) = syntax::macros::expand_report(&mut program);

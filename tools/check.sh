@@ -177,6 +177,7 @@ parallel_step 1 maybe-sized timeout --kill-after=10s 600s bash tools/maybe-sized
 parallel_step 1 outlives-where timeout --kill-after=10s 600s bash tools/outlives-where-test.sh "$check_binary"
 parallel_step 1 debug-format timeout --kill-after=10s 600s bash tools/debug-format-test.sh "$check_binary"
 parallel_step 1 declarative-macros timeout --kill-after=10s 600s bash tools/declarative-macro-test.sh "$check_binary"
+parallel_step 1 macro-providers timeout --kill-after=10s 600s bash tools/macro-provider-test.sh "$check_binary"
 parallel_step 1 macro-statements timeout --kill-after=10s 600s bash tools/macro-statement-test.sh "$check_binary"
 parallel_step 1 type-outlives timeout --kill-after=10s 600s bash tools/type-outlives-test.sh "$check_binary"
 parallel_step 1 core-facade timeout --kill-after=10s 600s bash tools/core-facade-test.sh "$check_binary"

@@ -343,6 +343,14 @@ impl<'a> Resolver<'a> {
             )?;
         }
         let problems = result.imports();
+        for provider in &program.macro_providers {
+            if let Some(span) = provider.declaration {
+                if result.lookup(0usize, &provider.input.alias, Namespace::Type).is_some() {
+                    return Err(Diagnostic::new(span, "E_MACRO_PROVIDER",
+                        "macro provider alias conflicts with a crate-root type or module name"));
+                }
+            }
+        }
         if problems.is_empty() { result.index_associated_constants()?; }
         Ok((result, problems))
     }
@@ -574,6 +582,13 @@ impl<'a> Resolver<'a> {
                 at += 1;
             }
             rooted = true;
+        }
+        if !rooted && parts[0].starts_with("$macro_provider") {
+            if let Some(root) = self.module_anchor(scope, &parts[0], span)? {
+                current = root;
+                at = 1;
+                rooted = true;
+            }
         }
         if at == parts.len() {
             return Ok(None);
@@ -926,6 +941,11 @@ impl<'a> Resolver<'a> {
         }
         if path == "self" {
             return Ok(Some(module));
+        }
+        if path.starts_with("$macro_provider") {
+            // Only a transcribed $crate token can spell a mounted root.
+            return Ok(self.modules.get(&path.to_string()).copied().filter(|id|
+                self.program.macro_providers.iter().any(|provider| provider.root == Some(*id))));
         }
         if matches!(path, "std" | "core")
             && self.lookup_lexical(scope, path, Namespace::Type, span).is_none()

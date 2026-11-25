@@ -566,6 +566,7 @@ pub struct Program {
     pub macro_definitions: Vec<MacroDefinition>,
     pub macro_invocations: Vec<MacroInvocation>,
     pub macro_expansions: Vec<MacroExpansion>,
+    pub macro_providers: Vec<macros::MacroProvider>,
     pub macro_use_modules: std::collections::BTreeSet<ModuleId>,
     pub macros_expanded: bool,
     pub macro_pattern_bindings: std::collections::BTreeMap<PatternId, (usize, bool, bool)>,

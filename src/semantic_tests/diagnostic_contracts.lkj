@@ -518,7 +518,41 @@ pub fn run() -> usize {
     malformed_ir_structure_blocks_all_body_checks();
     unsupported_diagnostics_preserve_specific_existing_errors();
     unsized_source_locals_keep_their_module_and_construction_location();
-    13usize
+    macro_provider_replays_exact_source_and_capture();
+    14usize
+}
+
+fn macro_provider_replays_exact_source_and_capture() {
+    let inputs = vec![
+        ("case/main.lkj".to_string(), b"#[macro_use] extern crate counters as chosen; fn probe() -> i32 { incr!(40) }"[..].to_vec()),
+        ("case/provider.lkj".to_string(), b"
+            pub fn sum(value: i32) -> i32 { value + 2 }
+            #[macro_export] macro_rules! count { ($value:expr) => { $crate::sum($value) }; }
+            #[macro_export] macro_rules! incr { ($value:expr) => { count!($value) }; }
+        "[..].to_vec()),
+    ];
+    let providers = vec![crate::ast::macros::MacroProviderInput {
+        name: "counters".to_string(), alias: "chosen".to_string(), path: "case/provider.lkj".to_string(),
+    }];
+    let program = source::load_report_with_providers("case/main.lkj", None, &providers, &mut |path: &str|
+        -> Result<Option<Vec<u8>>, String> {
+        Ok(inputs.iter().find(|entry| entry.0 == path).map(|entry| entry.1.clone()))
+    }).into_result().unwrap();
+    assert_eq!(program.macro_expansions.len(), 2usize);
+    for expansion in &program.macro_expansions {
+        let definition = &program.macro_definitions[expansion.definition];
+        assert_eq!(program.files[definition.name_span.file].path, "case/provider.lkj");
+    }
+    let capture = &program.macro_captures[0usize];
+    assert_eq!(capture.tokens[0usize].text, "40");
+    assert_eq!(capture.tokens[0usize].origin.file, 0usize);
+    assert_eq!(capture.tokens[0usize].context, 0usize);
+    let resolved = crate::resolve::resolve(&program).unwrap();
+    syntax::macros::provenance::validate(&resolved).unwrap();
+    syntax::macros::provenance::validate_inputs(&resolved, &inputs).unwrap();
+    let mut changed = inputs.clone();
+    changed[1usize].1 = b"#[macro_export] macro_rules! incr { ($value:expr) => { 42 }; }"[..].to_vec();
+    assert!(syntax::macros::provenance::validate_inputs(&resolved, &changed).is_err());
 }
 
 fn macro_recovery_rolls_back_failed_statements() {

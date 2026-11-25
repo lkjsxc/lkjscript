@@ -1149,6 +1149,24 @@ ownership, generic, capability and effect obligations use the normal frontend
 and independent IR checker. Expansion adds no runtime operation or checker
 privilege.
 
+A compiler invocation can select a declarative provider with
+`--source-dir DIR --macro-provider CRATE:ALIAS=PATH`. Use a separate relative
+`.lkj` root under DIR and an exact consumer-root
+`#[macro_use] extern crate CRATE as ALIAS;` declaration. When the names match,
+`as ALIAS` is optional. Repeat the flag for each declared provider. The loader
+reads the selected root and its declared modules through the ordinary source
+directory capability. It does not consult Cargo or discover ambient crates.
+Each provider has a separate crate identity. Its `#[macro_export]` definitions
+enter unqualified lookup after the consumer's ordinary macro bindings. When
+two imports export the same spelling, the later source declaration wins.
+`::ALIAS::NAME!` selects the exact export; `ALIAS::NAME!` also works when the
+alias is free of possible lexical shadowing. Built-in macro names remain
+reserved. `$crate` still names the defining root and observes ordinary privacy.
+Provider source and expanded calls undergo ordinary diagnostics and checking.
+This selector works with source check, build, run, ir, authority and residual.
+Structural snapshots and ordinary authored external item paths are outside
+this macro input route.
+
 Statement invocations splice their output directly into the destination block;
 they create no implicit scope. Empty output is valid there. A trailing invocation
 semicolon discards the final value; without one, a final expression becomes the

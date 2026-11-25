@@ -64,6 +64,11 @@ fn error(span: Span, code: &str, message: &str) -> Diagnostic {
 }
 fn opening(text: &str) -> bool { text == "(" || text == "[" || text == "{" }
 fn closing(text: &str) -> bool { text == ")" || text == "]" || text == "}" }
+pub(crate) fn builtin_macro(name: &str) -> bool {
+    matches!(name, "assert" | "assert_eq" | "assert_ne" | "panic" | "vec" | "format"
+        | "write" | "writeln" | "matches" | "unreachable" | "debug_assert" | "debug_assert_eq"
+        | "debug_assert_ne" | "include_str" | "include_bytes" | "print" | "println" | "eprint" | "eprintln")
+}
 fn partner(text: &str) -> String {
     match text { "(" => ")".to_string(), "[" => "]".to_string(), "{" => "}".to_string(), _ => String::new() }
 }
@@ -114,6 +119,39 @@ fn group_end(tokens: &[MacroToken], start: usize) -> Result<usize, Diagnostic> {
     Err(error(tokens[start].span, "E_MACRO_RULE", "unclosed token-tree delimiter"))
 }
 impl Parser {
+    pub(super) fn macro_provider_declaration(&mut self, attrs: &[Attribute], public: &Visibility)
+        -> Result<bool, Diagnostic> {
+        if !attrs.iter().any(|attribute| attribute.name == "macro_use")
+            || !self.tokens.get(self.at + 1usize).is_some_and(|token| token.text == "crate") {
+            return Ok(false);
+        }
+        let index = match self.tokens.get(self.at + 2usize) {
+            Some(name) => self.program.macro_providers.iter().position(|provider| provider.input.name == name.text),
+            None => None,
+        };
+        let Some(index) = index else { return Ok(false); };
+        let span = self.token().span;
+        if self.fragment || !matches!(public, Visibility::Private)
+            || attrs.iter().any(|attribute| attribute.name == "macro_use" && !attribute.args.is_empty()) {
+            return Err(error(span, "E_MACRO_PROVIDER", "expected an authored #[macro_use] extern crate declaration"));
+        }
+        self.expect("extern")?;
+        self.expect("crate")?;
+        let name = self.ident()?;
+        let alias = if self.take("as") { self.ident()? } else { name };
+        // Leave the recovery boundary at the semicolon for a bad binding.
+        let provider = &self.program.macro_providers[index];
+        if provider.input.alias != alias {
+            return Err(error(span, "E_MACRO_PROVIDER", "extern crate alias differs from the selected macro provider alias"));
+        }
+        if provider.declaration.is_some() {
+            return Err(error(span, "E_MACRO_PROVIDER", "duplicate macro provider declaration"));
+        }
+        self.expect(";")?;
+        self.program.macro_providers[index].declaration = Some(self.finish_span(span));
+        Ok(true)
+    }
+
     pub(super) fn macro_statement_ahead(&self) -> Result<Option<(bool, bool)>, Diagnostic> {
         if !self.macro_item_ahead() { return Ok(None); }
         let mut at = self.at;
@@ -121,9 +159,7 @@ impl Parser {
         while at < self.tokens.len() && self.tokens[at].text != "!" {
             name.push_str(&self.tokens[at].text); at += 1usize;
         }
-        if matches!(name.as_str(), "macro_rules" | "assert" | "assert_eq" | "assert_ne" | "panic" | "vec" | "format"
-            | "write" | "writeln" | "matches" | "unreachable" | "debug_assert" | "debug_assert_eq"
-            | "debug_assert_ne" | "include_str" | "include_bytes" | "print" | "println" | "eprint" | "eprintln") {
+        if name == "macro_rules" || builtin_macro(&name) {
             return Ok(None);
         }
         at += 1usize;

@@ -24,6 +24,17 @@ fn source_input(program: &Program) -> Result<(), Diagnostic> {
     {
         return Err(failure(Span::default(), "macro replay input is not an unexpanded source program"));
     }
+    for provider in &program.macro_providers {
+        let Some(span) = provider.declaration else {
+            return Err(failure(Span::default(), "macro provider has no authored declaration"));
+        };
+        let Some(root) = provider.root else { return Err(failure(span, "macro provider has no crate root")); };
+        if !program.files.get(span.file).is_some_and(|file| file.crate_root == 0)
+            || !program.scopes.get(root).is_some_and(|scope| scope.parent.is_none() && scope.crate_root == root)
+            || root_path(program, root)? != provider.input.path {
+            return Err(failure(span, "macro provider declaration or source root differs from its input"));
+        }
+    }
     for definition in &program.macro_definitions {
         if definition.scope >= program.scopes.len() || definition.span.file >= program.files.len()
             || definition.name_span.file != definition.span.file
@@ -58,6 +69,7 @@ pub(crate) fn validate(program: &Program) -> Result<(), Diagnostic> {
     let Some(input) = &program.macro_input else {
         if !program.macro_definitions.is_empty() || !program.macro_invocations.is_empty()
             || !program.macro_expansions.is_empty() || !program.macro_aliases.is_empty()
+            || !program.macro_providers.is_empty()
             || !program.macro_inputs.is_empty() || !program.macro_captures.is_empty()
             || !program.macro_identifier_uses.is_empty()
         {
@@ -117,11 +129,13 @@ fn authenticated_input(input: &Program, inputs: &[(String, Vec<u8>)]) -> Result<
         None => None,
     };
     let library = if standard.is_some() { Some("$std/lib.lkj") } else { None };
-    let mut rebuilt = crate::source::load(&root, library, &mut |path: &str| {
+    let providers: Vec<crate::ast::macros::MacroProviderInput> = input.macro_providers.iter()
+        .map(|provider| provider.input.clone()).collect();
+    let mut rebuilt = crate::source::load_report_with_providers(&root, library, &providers, &mut |path: &str| {
         let path = source_path(path, &standard);
         Ok(inputs.iter().find(|(candidate, _)| candidate == &path)
             .map(|(_, bytes)| bytes.clone()))
-    }).map_err(|problem| replay_failure(problem, "macro authenticated source replay refused"))?;
+    }).into_result().map_err(|problem| replay_failure(problem, "macro authenticated source replay refused"))?;
     let Some(rebuilt) = rebuilt.macro_input.as_mut() else {
         return Err(failure(Span::default(), "authenticated source has no declarative macro snapshot"));
     };

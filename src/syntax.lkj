@@ -39,6 +39,11 @@ fn ident_start(b: u8) -> bool {
 fn ident_continue(b: u8) -> bool {
     ident_start(b) || b.is_ascii_digit()
 }
+pub(crate) fn macro_provider_name(name: &str) -> bool {
+    !name.is_empty() && !matches!(name, "_" | "crate" | "self" | "super" | "Self")
+        && !keyword_cannot_begin_expression(name) && ident_start(name.as_bytes()[0])
+        && name.as_bytes()[1usize..].iter().all(|byte| ident_continue(*byte))
+}
 fn keyword_cannot_begin_expression(name: &str) -> bool {
     matches!(name,
         "as" | "else" | "extern" | "fn" | "in" | "let" | "mod" | "mut" | "pub" | "ref"
@@ -1272,6 +1277,11 @@ impl Parser {
             return Ok(None);
         }
         let public = self.visibility()?;
+        if self.scope == 0 && !self.program.macro_providers.is_empty() && self.is("extern")
+            && self.macro_provider_declaration(&attrs, &public)? {
+            *disabled = true;
+            return Ok(None);
+        }
         if self.token().kind == TokenKind::Ident && self.is("macro_rules") {
             self.macro_definition(&attrs, &public)?;
             *disabled = true;
@@ -3596,22 +3606,7 @@ impl Parser {
                     ),
                 ));
             }
-            let known = path.name == "assert"
-                || path.name == "assert_eq"
-                || path.name == "assert_ne"
-                || path.name == "panic"
-                || path.name == "vec"
-                || path.name == "format"
-                || path.name == "write"
-                || path.name == "writeln"
-                || path.name == "matches"
-                || path.name == "unreachable"
-                || path.name == "debug_assert"
-                || path.name == "debug_assert_eq"
-                || path.name == "debug_assert_ne"
-                || path.name == "include_str"
-                || path.name == "include_bytes";
-            if !known {
+            if !macros::builtin_macro(&path.name) {
                 let name_span = self.tokens[self.at - 2usize].span;
                 let invocation = self.macro_invocation(path.name, span, name_span, MacroPosition::Expression)?;
                 return Ok(self.add_finished_expr(Expr::MacroInvocation(invocation), span));
