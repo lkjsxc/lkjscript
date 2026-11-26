@@ -220,7 +220,7 @@ fn projections(before: &semantic::Catalog, before_inputs: &[(String, Vec<u8>)],
         if item.file != new_parent.file {
             return Err(failure(&source.identity, "MODULE_PARENT", "declaration does not belong to its loaded parent file"));
         }
-        let name = structure_edit::external_module_name(&item.identity, &item.text)?;
+        let name = structure_edit::external_module_name(&item.identity, &item.text, after.configuration)?;
         let path = if item.parent == "crate" { semantic::declaration_path(&name) } else { format!("{}::{name}", semantic::source_path(&item.parent)) };
         let identity = semantic::source_identity(crate::resolve::Namespace::Type, &path);
         if identity != source.identity {

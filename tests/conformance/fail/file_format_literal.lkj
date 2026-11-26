@@ -1,0 +1,2 @@
+// expect: reject E_FORMAT
+pub fn probe() -> i64 { let _value = format!(file!()); 42i64 }

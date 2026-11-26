@@ -143,7 +143,7 @@ pub(super) fn expanded(source: &a::Program) -> Option<Order> {
                         if let Some(end) = end { pending.push(Visit::Expression(*end)); }
                         if let Some(start) = start { pending.push(Visit::Expression(*start)); }
                     }
-                    a::Expr::Int(_) | a::Expr::Float(_) | a::Expr::Bool(_) | a::Expr::String(_)
+                    a::Expr::Int(_) | a::Expr::Float(_) | a::Expr::Bool(_) | a::Expr::String(_) | a::Expr::FilePath
                     | a::Expr::Char(_) | a::Expr::Bytes(_) | a::Expr::Continue | a::Expr::MacroInvocation(_) => {}
                 }
             }

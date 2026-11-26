@@ -1,0 +1,39 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! tail { ($value:expr) => { $value }; }
+fn blocks() -> i64 { #[cfg(debug_assertions)] { 42i64 } #[cfg(not(debug_assertions))] { 17i64 } }
+fn branches() -> i64 {
+    #[cfg(debug_assertions)] if true { 42i64 } else { 9i64 }
+    #[cfg(not(debug_assertions))] if true { 17i64 } else { 9i64 }
+}
+fn macro_tail() -> i64 { #[cfg(debug_assertions)] tail!{42i64} #[cfg(not(debug_assertions))] tail!{17i64} }
+macro_rules! gone { () => { #[cfg(any())] { 0i64 } }; }
+macro_rules! chosen { () => {{
+    #[cfg(debug_assertions)] if true { 42i64 } else { 9i64 }
+    #[cfg(not(debug_assertions))] if true { 17i64 } else { 9i64 }
+}}; }
+fn emptied() -> i64 {
+    #[cfg(debug_assertions)] if true { 42i64 } else { 9i64 }
+    #[cfg(not(debug_assertions))] if true { 17i64 } else { 9i64 }
+    gone!{}
+}
+fn nested_emptied() -> i64 { chosen!{} gone!{} }
+macro_rules! wrapped { () => { if true { 42i64 } else { 9i64 } gone!{} }; }
+fn discarded_wrapper() -> i64 { wrapped!(); 42i64 }
+fn string_tail() -> &'static str { #[cfg(all())] { "mod" } }
+fn statement_result() -> i64 {
+    #[cfg(debug_assertions)] if true { 8i64 } else { 9i64 };
+    #[cfg(not(debug_assertions))] { 7i64 };
+    42i64
+}
+pub fn probe() -> i64 {
+    let expected = if cfg!(debug_assertions) { 42i64 } else { 17i64 };
+    assert_eq!(blocks(), expected);
+    assert_eq!(branches(), expected);
+    assert_eq!(macro_tail(), expected);
+    assert_eq!(emptied(), expected);
+    assert_eq!(nested_emptied(), expected);
+    assert_eq!(discarded_wrapper(), 42i64);
+    assert_eq!(string_tail(), "mod");
+    statement_result()
+}

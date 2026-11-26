@@ -1,0 +1,120 @@
+// Build configuration is an explicit input to exact source and macro replay.
+mod ast; mod diagnostic; mod names; mod syntax; mod resolve; mod source;
+mod diagnostics {
+    #[derive(Clone)]
+    pub struct BlockedRegion { pub path: String, pub span: crate::ast::Span, pub kind: String, pub reason: String }
+}
+fn inputs() -> Vec<(String, Vec<u8>)> {
+    let text = r#"
+macro_rules! flag { () => { cfg!(debug_assertions) }; }
+#[cfg(debug_assertions)]
+fn selected_on() -> i64 { 11i64 }
+#[cfg(not(debug_assertions))]
+fn selected_off() -> i64 { 17i64 }
+fn direct() -> bool { cfg!(debug_assertions) }
+fn expanded() -> bool { flag!() }
+"#;
+    vec![("main.lkj".to_string(), text.as_bytes().to_vec())]
+}
+fn parsed(inputs: &[(String, Vec<u8>)], enabled: bool) -> ast::Program {
+    let providers: Vec<ast::macros::MacroProviderInput> = Vec::new();
+    let configuration = ast::BuildConfiguration { debug_assertions: enabled };
+    let program = source::load_report_with_providers("main.lkj", None, &providers, configuration, &mut |path: &str| {
+        Ok(inputs.iter().find(|(name, _)| name == path).map(|(_, bytes)| bytes.clone()))
+    }).into_result().unwrap();
+    resolve::resolve(&program).unwrap()
+}
+fn refused(program: &ast::Program) -> usize {
+    match syntax::macros::provenance::validate(program) {
+        Err(problem) => assert!(problem.code == "E_IDENTITY_ORIGIN"),
+        Ok(()) => panic!("forged configuration or expanded boolean accepted"),
+    }
+    1usize
+}
+fn unauthenticated(program: &ast::Program, inputs: &[(String, Vec<u8>)]) -> usize {
+    match syntax::macros::provenance::validate_inputs(program, inputs) {
+        Err(problem) => assert!(problem.code == "E_IDENTITY_ORIGIN"),
+        Ok(()) => panic!("configuration source snapshot was not bound to authenticated input"),
+    }
+    1usize
+}
+fn direct_boolean(program: &ast::Program) -> usize {
+    let function = program.functions.iter().find(|function| function.name == "direct").unwrap();
+    let expression = program.blocks[function.body.unwrap()].tail.unwrap();
+    assert!(matches!(program.exprs[expression].kind, ast::Expr::Bool(_)));
+    expression
+}
+fn flip_booleans(program: &mut ast::Program) {
+    for index in 0usize..program.exprs.len() {
+        if let ast::Expr::Bool(value) = program.exprs[index].kind {
+            program.exprs[index].kind = ast::Expr::Bool(!value);
+        }
+    }
+}
+fn configuration_origins(enabled: bool) -> usize {
+    let inputs = inputs();
+    let program = parsed(&inputs, enabled);
+    assert!(program.configuration.debug_assertions == enabled);
+    assert!(program.macro_input.as_ref().unwrap().configuration.debug_assertions == enabled);
+    syntax::macros::provenance::validate(&program).unwrap();
+    syntax::macros::provenance::validate_inputs(&program, &inputs).unwrap();
+    let active = if enabled { "selected_on" } else { "selected_off" };
+    let inactive = if enabled { "selected_off" } else { "selected_on" };
+    assert!(program.functions.iter().any(|function| function.name == active));
+    assert!(!program.functions.iter().any(|function| function.name == inactive));
+    let direct = direct_boolean(&program);
+    assert!(program.exprs[direct].kind == ast::Expr::Bool(enabled));
+    let expanded = program.macro_aliases.iter().find(|alias|
+        matches!(program.exprs[alias.expanded].kind, ast::Expr::Bool(_))).unwrap().expanded;
+    assert!(program.exprs[expanded].kind == ast::Expr::Bool(enabled));
+
+    let mut count = 0usize;
+    let mut outer = program.clone();
+    outer.configuration.debug_assertions = !enabled;
+    count += refused(&outer);
+    let mut snapshot = program.clone();
+    snapshot.macro_input.as_mut().unwrap().configuration.debug_assertions = !enabled;
+    count += refused(&snapshot);
+    let mut output = program.clone();
+    output.exprs[expanded].kind = ast::Expr::Bool(!enabled);
+    count += refused(&output);
+    let mut original_boolean = program.clone();
+    let original_direct = direct_boolean(original_boolean.macro_input.as_ref().unwrap());
+    original_boolean.macro_input.as_mut().unwrap().exprs[original_direct].kind = ast::Expr::Bool(!enabled);
+    count += refused(&original_boolean);
+    count += unauthenticated(&snapshot, &inputs);
+
+    // A mutually consistent forged AST can replay its own expansion while still
+    // retaining the declaration selected by the opposite source configuration.
+    // Exact reparsing of the actual bytes must independently refuse that claim.
+    let mut coherent = program.clone();
+    coherent.configuration.debug_assertions = !enabled;
+    flip_booleans(&mut coherent);
+    {
+        let original = coherent.macro_input.as_mut().unwrap();
+        original.configuration.debug_assertions = !enabled;
+        flip_booleans(original);
+    }
+    syntax::macros::provenance::validate(&coherent).unwrap();
+    count += unauthenticated(&coherent, &inputs);
+
+    let mut changed = inputs.clone();
+    let original = program.macro_input.as_ref().unwrap();
+    let predicate = original.macro_definitions[0usize].body.iter()
+        .find(|token| token.text == "debug_assertions").unwrap().origin.start;
+    assert!(changed[0usize].1[predicate] == b'd');
+    changed[0usize].1[predicate] = b'x';
+    count += unauthenticated(&program, &changed);
+    let missing: Vec<(String, Vec<u8>)> = Vec::new();
+    count += unauthenticated(&program, &missing);
+    let mut conflicting = inputs.clone();
+    conflicting.push(changed[0usize].clone());
+    count += unauthenticated(&program, &conflicting);
+    assert!(count == 9usize);
+    count
+}
+fn main() -> i64 {
+    let count = configuration_origins(true) + configuration_origins(false);
+    assert!(count == 18usize);
+    count as i64
+}

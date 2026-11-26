@@ -3,6 +3,7 @@ use crate::{frontend, interpreter, ir, native, runtime, source};
 
 fn compiled(world: &mut World, text: &str) -> ir::CheckedProgram {
     let checked = frontend::check_bundle(&source::SourceBundle {
+        configuration: crate::ast::BuildConfiguration::default(),
         root: "panic.lkj".to_string(), library: None,
         files: vec![source::SourceInput { path: "panic.lkj".to_string(), text: text.to_string() }],
     });
@@ -13,6 +14,7 @@ fn compiled(world: &mut World, text: &str) -> ir::CheckedProgram {
 }
 fn prepared_runtime() -> runtime::Runtime {
     runtime::seal(frontend::check_bundle(&source::SourceBundle {
+        configuration: crate::ast::BuildConfiguration::default(),
         root: "runtime.lkj".to_string(), library: None,
         files: vec![source::SourceInput {
             path: "runtime.lkj".to_string(), text: include_str!("../../library/runtime.lkj").to_string(),

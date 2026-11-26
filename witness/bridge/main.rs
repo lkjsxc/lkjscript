@@ -2,11 +2,15 @@
 #![allow(dead_code, unused_imports)]
 pub use lkjscript::{host, proof_domain, seal_header};
 pub use lkjscript::{
-    ast, authority, child_image, entry_grants, backend, check, diagnostic, diagnostics, elaborate, frontend, generics, interpreter, ir,
+    ast, authority, child_image, entry_grants, backend, check, diagnostic, diagnostics, frontend, generics, interpreter, ir,
     ir_text, ir_binary, json, names, optimizer, resolve, reuse, runtime, runtime_memory, runtime_diagnostics, sha256, x86,
     semantic, semantic_facts, structure_write, structure_replay, structure_refactor, source_json, trim_source_ascii,
 };
 // The source compiler is one crate; preserve its crate-local helper access here.
+mod elaborate {
+    pub use lkjscript::elaborate::*;
+    pub use lkjscript::infer_resolved_report_with_source_paths;
+}
 mod native {
     pub use lkjscript::native::*;
     pub mod records { pub use lkjscript::command_records::*; }

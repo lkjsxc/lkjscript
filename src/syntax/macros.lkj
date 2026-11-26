@@ -66,8 +66,8 @@ fn opening(text: &str) -> bool { text == "(" || text == "[" || text == "{" }
 fn closing(text: &str) -> bool { text == ")" || text == "]" || text == "}" }
 pub(crate) fn builtin_macro(name: &str) -> bool {
     matches!(name, "assert" | "assert_eq" | "assert_ne" | "panic" | "vec" | "format" | "format_args" | "concat"
-        | "write" | "writeln" | "matches" | "unreachable" | "debug_assert" | "debug_assert_eq"
-        | "debug_assert_ne" | "include_str" | "include_bytes" | "module_path" | "print" | "println" | "eprint" | "eprintln")
+        | "write" | "writeln" | "matches" | "cfg" | "unreachable" | "debug_assert" | "debug_assert_eq"
+        | "debug_assert_ne" | "include_str" | "include_bytes" | "module_path" | "file" | "line" | "print" | "println" | "eprint" | "eprintln")
 }
 fn partner(text: &str) -> String {
     match text { "(" => ")".to_string(), "[" => "]".to_string(), "{" => "}".to_string(), _ => String::new() }
@@ -418,13 +418,13 @@ impl Parser {
     pub(super) fn literal_origin(&self, character: bool) -> FormatOrigin {
         let token = self.token();
         if matches!(token.kind, TokenKind::String) || character && matches!(token.kind, TokenKind::Char) { return FormatOrigin::Literal(token.context); }
-        if matches!(token.kind, TokenKind::Ident) && (token.text == "concat" || token.text == "module_path") { return FormatOrigin::Expansion; }
+        if matches!(token.kind, TokenKind::Ident) && (token.text == "concat" || token.text == "module_path" || token.text == "file") { return FormatOrigin::Expansion; }
         let mut id = match &token.kind { TokenKind::Expression(id) => *id, _ => return FormatOrigin::Other };
         for _ in 0usize..self.program.macro_captures.len() {
             let Some(capture) = self.program.macro_captures.get(id) else { return FormatOrigin::Other; };
             let Some(token) = capture.tokens.first() else { return FormatOrigin::Other; };
             if token.kind == 2u8 || character && token.kind == 3u8 { return FormatOrigin::Literal(token.context); }
-            if token.kind == 0u8 && (token.text == "concat" || token.text == "module_path") { return FormatOrigin::Expansion; }
+            if token.kind == 0u8 && (token.text == "concat" || token.text == "module_path" || token.text == "file") { return FormatOrigin::Expansion; }
             if token.kind != 8u8 { return FormatOrigin::Other; }
             let Some(next) = token.capture else { return FormatOrigin::Other; }; id = next;
         }

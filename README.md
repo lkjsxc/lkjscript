@@ -64,6 +64,11 @@ check source/IR byte identity. Select one route with `--engine native` or
 produce one line; failures identify the entry and route. See the
 [case format](tests/conformance/README.md). `--help` lists options; `--stats`
 reports phase times, counts and peak RSS on stderr.
+Source commands accept `--debug-assertions on|off` for `cfg(debug_assertions)`
+and `cfg!(debug_assertions)`. The deterministic default is on; optimization and
+host environment do not choose it. The same selection reaches providers, units,
+test workers and checked edits, and forms part of reuse/snapshot identity.
+
 Stored builds also report [accepted payload/publication bytes and disjoint store
 phase durations](bench/compiler-cache-io.protocol.md) when stats are enabled.
 

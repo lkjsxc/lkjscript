@@ -80,8 +80,11 @@ fn beneath(path: &str) -> bool {
 }
 
 pub fn parse(directory: &str, text: &str) -> Result<Plan, String> {
+    parse_configured(directory, text, ast::BuildConfiguration::default())
+}
+pub fn parse_configured(directory: &str, text: &str, configuration: ast::BuildConfiguration) -> Result<Plan, String> {
     let manifest = join(directory, "program.lkj");
-    let program = syntax::parse(text).map_err(|error: ast::Diagnostic| {
+    let program = syntax::parse_configured(text, configuration).map_err(|error: ast::Diagnostic| {
         problem(&format!("{manifest}:{}:{}", error.line, error.column), &error.message)
     })?;
     let mut source: Option<String> = None;
@@ -151,7 +154,7 @@ pub fn parse(directory: &str, text: &str) -> Result<Plan, String> {
     Ok(Plan { manifest, directory: directory.to_string(), source, entry, grants, cases })
 }
 
-pub fn load(world: &mut World, path: &str) -> Result<Option<Plan>, String> {
+pub fn load(world: &mut World, path: &str, configuration: ast::BuildConfiguration) -> Result<Option<Plan>, String> {
     let mut directory = match world.directory(path) {
         Ok(directory) => directory,
         Err(2) | Err(20) => return Ok(None),
@@ -165,7 +168,7 @@ pub fn load(world: &mut World, path: &str) -> Result<Option<Plan>, String> {
     };
     let bytes = file.read_to_end().map_err(|errno: i64| problem(&manifest, &format!("read manifest: errno {errno}")))?;
     let text = String::from_utf8(bytes).map_err(|_| problem(&manifest, "manifest is not UTF-8"))?;
-    parse(path, &text).map(|plan: Plan| Some(plan))
+    parse_configured(path, &text, configuration).map(|plan: Plan| Some(plan))
 }
 
 pub fn prepare(plan: &Plan, program: &ir::Program, entry: usize) -> Result<Vec<ir::EntryGrant>, String> {

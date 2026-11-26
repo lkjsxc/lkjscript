@@ -2,6 +2,7 @@ use crate::{frontend as compiler, interpreter, runtime, runtime_memory, source};
 
 fn bundle(text: String) -> source::SourceBundle {
     source::SourceBundle {
+        configuration: crate::ast::BuildConfiguration::default(),
         root: "runtime.lkj".to_string(),
         library: None,
         files: vec![source::SourceInput {

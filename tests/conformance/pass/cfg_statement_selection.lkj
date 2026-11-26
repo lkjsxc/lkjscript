@@ -1,0 +1,28 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! add { ($target:ident, $value:expr) => { $target += $value; }; }
+macro_rules! logging {
+    ($target:ident, $value:expr) => {{
+        #[cfg(any(debug_assertions, feature = "logs-debug", feature = "logs-trace"))]
+        add!($target, $value);
+        #[cfg(not(any(debug_assertions, feature = "logs-trace")))]
+        if false { let _ = $value; }
+    }};
+}
+fn touched(calls: &mut i64) -> i64 { *calls += 1i64; 12i64 }
+pub fn probe() -> i64 {
+    let mut value = 0i64;
+    let mut calls = 0i64;
+    #[cfg(debug_assertions)] let selected = 1i64;
+    #[cfg(not(debug_assertions))] let selected = 2i64;
+    #[cfg(debug_assertions)] if selected == 1i64 { value += 10i64; } else { value += 100i64; }
+    #[cfg(not(debug_assertions))] if selected == 2i64 { value += 20i64; } else { value += 100i64; }
+    #[cfg(debug_assertions)] add!(value, 20i64);
+    #[cfg(not(debug_assertions))] add!(value, 10i64);
+    logging!(value, touched(&mut calls));
+    #[cfg(not(debug_assertions))] { value += 12i64; }
+    #[cfg(any())] println!("disabled ambient output");
+    #[cfg(any())] unknown_name();
+    assert_eq!(calls, if cfg!(debug_assertions) { 1i64 } else { 0i64 });
+    value
+}

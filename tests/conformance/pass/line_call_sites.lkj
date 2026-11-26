@@ -1,0 +1,28 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! leaf { () => { line!() }; }
+macro_rules! nested { () => { leaf!() }; }
+macro_rules! pass { ($value:expr) => { $value }; }
+macro_rules! tokens { ($($value:tt)*) => { $($value)* }; }
+const FIRST: u32 = line!();
+const SECOND: u32 = line!();
+pub fn probe() -> i64 {
+    assert_eq!(SECOND, FIRST + 1u32);
+    let direct: u32 = line!();
+    let inner: u32 = nested!();
+    assert_eq!(inner, direct + 1u32);
+    let before: u32 = line!();
+    let captured: u32 = pass!(
+        line!()
+    );
+    assert_eq!(captured, before + 2u32);
+    let before: u32 = line!();
+    let passed: u32 = tokens!(
+        line!()
+    );
+    assert_eq!(passed, before + 2u32);
+    let a: u32 = line![];
+    let b: u32 = line!{};
+    assert_eq!(b, a + 1u32);
+    42i64
+}

@@ -111,6 +111,7 @@ fn twin(case: usize) {
 }
 fn cleanup_and_kinds() {
     let checked = crate::frontend::check_bundle(&crate::source::SourceBundle {
+        configuration: crate::ast::BuildConfiguration::default(),
         root: "residual-cleanup.lkj".to_string(), library: None,
         files: vec![crate::source::SourceInput { path: "residual-cleanup.lkj".to_string(),
             text: "struct Guard { value:i64 } impl Drop for Guard { fn drop(&mut self) { let n=self.value/0; } } pub fn probe() { let guard=Guard{value:3}; }".to_string() }],

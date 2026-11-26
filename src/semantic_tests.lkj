@@ -95,6 +95,7 @@ fn source_case_at(
     complete_library(&mut files);
     let library = library.map(|path| path.to_string());
     let result = frontend::check_bundle(&source::SourceBundle {
+        configuration: crate::ast::BuildConfiguration::default(),
         root: root.to_string(),
         library,
         files,

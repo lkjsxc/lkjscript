@@ -1,0 +1,25 @@
+// expect: value 42
+// witness: {}
+#[cfg(debug_assertions)] fn selected() -> i64 { 40i64 }
+#[cfg(not(debug_assertions))] fn selected() -> i64 { 10i64 }
+macro_rules! configured { () => { cfg!(debug_assertions) }; }
+const ENABLED: bool = cfg!(debug_assertions);
+pub fn probe() -> i64 {
+    let debug_assertions = false;
+    let cfg = 0i64;
+    assert!(!debug_assertions);
+    assert_eq!(cfg, 0i64);
+    assert!(ENABLED);
+    assert!(cfg!(debug_assertions));
+    assert!(configured!());
+    assert!(cfg!(all(debug_assertions, unix, not(windows),)));
+    assert!(!cfg!(not(debug_assertions)));
+    assert!(cfg!(all()));
+    assert!(!cfg!(any()));
+    let value = match true {
+        #[cfg(debug_assertions)] true => 2i64,
+        #[cfg(not(debug_assertions))] true => 3i64,
+        false => 0i64,
+    };
+    selected() + value
+}

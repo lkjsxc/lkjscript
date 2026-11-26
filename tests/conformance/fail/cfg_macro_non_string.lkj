@@ -1,0 +1,3 @@
+// expect: reject E_PARSE
+// witness: {}
+pub fn probe() -> bool { cfg!(target_os = linux) }

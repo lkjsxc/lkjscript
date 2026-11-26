@@ -5,6 +5,7 @@ mod wrappers;
 
 fn compiled_files(root: &str, files: Vec<source::SourceInput>) -> reuse::Checked {
     let checked = frontend::check_bundle(&source::SourceBundle {
+        configuration: crate::ast::BuildConfiguration::default(),
         root: root.to_string(), library: None, files,
     }).unwrap();
     reuse::Checked::uncached(checked)
@@ -16,6 +17,7 @@ fn compiled(text: &str) -> reuse::Checked {
 }
 fn prepared_runtime() -> runtime::Runtime {
     runtime::seal(frontend::check_bundle(&source::SourceBundle {
+        configuration: crate::ast::BuildConfiguration::default(),
         root: "runtime.lkj".to_string(), library: None,
         files: vec![source::SourceInput {
             path: "runtime.lkj".to_string(), text: include_str!("../../library/runtime.lkj").to_string(),

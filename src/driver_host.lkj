@@ -37,6 +37,7 @@ pub struct Host<'world, 'program> {
     checked: Option<&'program ir::CheckedProgram>,
     entry: usize,
     runtime_source: Option<String>,
+    configuration: crate::ast::BuildConfiguration,
     executable: Option<File>,
     executable_error: Option<String>,
     pub stdout: Vec<u8>,
@@ -120,6 +121,7 @@ impl<'world, 'program> Host<'world, 'program> {
         checked: Option<&'program ir::CheckedProgram>,
         entry: usize,
         runtime_source: Option<String>,
+        configuration: crate::ast::BuildConfiguration,
     ) -> Result<Self, String> {
         let clock = world.clock();
         let capture = if capture {
@@ -143,6 +145,7 @@ impl<'world, 'program> Host<'world, 'program> {
             checked,
             entry,
             runtime_source,
+            configuration,
             executable: None,
             executable_error: None,
             stdout: Vec::new(),
@@ -182,6 +185,7 @@ impl<'world, 'program> Host<'world, 'program> {
                 checked,
                 self.entry,
                 &self.runtime_source,
+                self.configuration,
             ) {
                 Ok(bytes) => bytes,
                 Err(problem) => {

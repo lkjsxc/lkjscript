@@ -9,6 +9,7 @@ pub fn get() -> Result<&'static Runtime, String> {
     RUNTIME
         .get_or_init(|| {
             let bundle = SourceBundle {
+                configuration: crate::ast::BuildConfiguration::default(),
                 root: "$runtime/runtime.lkj".to_string(),
                 library: None,
                 files: vec![SourceInput {

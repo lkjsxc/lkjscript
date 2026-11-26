@@ -54,7 +54,7 @@ pub(crate) fn expressions(program: &Program, root: ExprId) -> Vec<ExprId> {
                     if let Some(value) = start { pending.push(*value); }
                     if let Some(value) = end { pending.push(*value); }
                 }
-                Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_)
+                Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_) | Expr::FilePath
                 | Expr::Char(_) | Expr::Bytes(_) | Expr::Path(_) | Expr::Continue
                 | Expr::MacroInvocation(_) => {}
             }

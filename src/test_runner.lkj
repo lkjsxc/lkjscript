@@ -570,6 +570,7 @@ fn workers(
     stats: bool,
     inline_limit: Option<usize>,
     store_capacity: usize,
+    configuration: crate::ast::BuildConfiguration,
 ) -> Result<Vec<Worker>, String> {
     let executable = world.executable().map_err(|e: i64| io("compiler executable", e))?;
     let mut result = Vec::new();
@@ -601,6 +602,8 @@ fn workers(
             "batch".as_bytes().to_vec(), format!("{temporary}/{name}").into_bytes(),
             "--engines".as_bytes().to_vec(), routes.as_bytes().to_vec(),
             "--roundtrip".as_bytes().to_vec(),
+            "--debug-assertions".as_bytes().to_vec(),
+            (if configuration.debug_assertions { "on" } else { "off" }).as_bytes().to_vec(),
         ];
         if let Some(path) = library_directory {
             args.push("--library-dir".as_bytes().to_vec()); args.push(path.as_bytes().to_vec());
@@ -637,8 +640,9 @@ fn run_inner(
     stats: bool,
     inline_limit: Option<usize>,
     store_capacity: usize,
+    configuration: crate::ast::BuildConfiguration,
 ) -> Result<(usize, usize, usize), String> {
-    let active = workers(world, directory, temporary, cases, jobs, engines, library_directory, store_directory, store_key, stats, inline_limit, store_capacity)?;
+    let active = workers(world, directory, temporary, cases, jobs, engines, library_directory, store_directory, store_key, stats, inline_limit, store_capacity, configuration)?;
     let mut passed = 0usize;
     let mut pending = 0usize;
     let mut failed = 0usize;
@@ -711,6 +715,7 @@ pub fn run_stored(
     stats: bool,
     inline_limit: Option<usize>,
     store_capacity: usize,
+    configuration: crate::ast::BuildConfiguration,
 ) -> Result<u8, String> {
     if jobs == 0 || jobs > 8 {
         return Err("E_USAGE --jobs must be between one and eight".to_string());
@@ -728,7 +733,7 @@ pub fn run_stored(
     let result = match parent.open_directory(&temporary) {
         Err(errno) => Err(io("worker directory", errno)),
         Ok(mut directory) => {
-            let result = run_inner(world, &mut directory, &temporary, &cases, jobs, engines, library_directory, store_directory, store_key, stats, inline_limit, store_capacity);
+            let result = run_inner(world, &mut directory, &temporary, &cases, jobs, engines, library_directory, store_directory, store_key, stats, inline_limit, store_capacity, configuration);
             for worker in 0..jobs {
                 let _ = directory.remove(&format!("worker-{worker}"));
             }
@@ -916,13 +921,16 @@ fn witness_build(
     rustc: &str,
     temporary: &str,
     name: &str,
+    configuration: crate::ast::BuildConfiguration,
 ) -> Result<Capture, String> {
     let arguments = vec![
         "PATH=/usr/local/bin:/usr/bin:/bin".as_bytes().to_vec(), rustc.as_bytes().to_vec(),
         "--edition=2024".as_bytes().to_vec(), "--cfg".as_bytes().to_vec(),
         "lkjscript_control".as_bytes().to_vec(), "-C".as_bytes().to_vec(),
         "overflow-checks=yes".as_bytes().to_vec(), "-C".as_bytes().to_vec(),
-        "opt-level=1".as_bytes().to_vec(), "-A".as_bytes().to_vec(), "warnings".as_bytes().to_vec(),
+        "opt-level=1".as_bytes().to_vec(), "-C".as_bytes().to_vec(),
+        format!("debug-assertions={}", if configuration.debug_assertions { "yes" } else { "no" }).into_bytes(),
+        "-A".as_bytes().to_vec(), "warnings".as_bytes().to_vec(),
         format!("{temporary}/{name}.rs").into_bytes(), "-o".as_bytes().to_vec(),
         format!("{temporary}/{name}").into_bytes(),
     ];
@@ -942,6 +950,7 @@ fn witness_run_root(
     directory: &mut Directory,
     case: &Case,
     host: &str,
+    configuration: crate::ast::BuildConfiguration,
 ) -> Result<Capture, String> {
     let entry = if case.kind == "value" && case.entry.is_empty() { "probe" } else { case.entry.as_str() };
     if entry.is_empty() || entry == "main" {
@@ -956,7 +965,7 @@ fn witness_run_root(
     let mut source = witness_with_root_host(&specimen, host, bindings);
     source.push_str(&adapter);
     write(directory, "root.rs", &source)?;
-    let built = witness_build(world, shell, rustc, temporary, "root")?;
+    let built = witness_build(world, shell, rustc, temporary, "root", configuration)?;
     if built.status != 0 {
         world.stderr().write(&built.stderr);
         return Err(format!("E_TEST Rust root witness {} did not compile", case.path));
@@ -970,6 +979,7 @@ fn witness_inner(
     rustc: &str,
     temporary: &str,
     directory: &mut Directory,
+    configuration: crate::ast::BuildConfiguration,
 ) -> Result<(usize, usize), String> {
     let mut discovered = Vec::new();
     discover(world, path, &mut discovered)?;
@@ -1007,7 +1017,7 @@ fn witness_inner(
     harness.push_str("_=>std::process::exit(2)}}\n");
     if has_aggregate {
         write(directory, "positive.rs", &harness)?;
-        let built = witness_build(world, &shell, rustc, temporary, "positive")?;
+        let built = witness_build(world, &shell, rustc, temporary, "positive", configuration)?;
         if built.status != 0 {
             world.stderr().write(&built.stderr);
             return Err("E_TEST Rust witness harness did not compile".to_string());
@@ -1019,7 +1029,7 @@ fn witness_inner(
     for (index, case) in cases.iter().enumerate() {
         if case.kind != "reject" {
             let capture = if witness_is_root(case) {
-                witness_run_root(world, &shell, rustc, temporary, directory, case, &host)?
+                witness_run_root(world, &shell, rustc, temporary, directory, case, &host, configuration)?
             } else {
                 let arguments = vec![format!("LKJSCRIPT_ORACLE_CASE={index}").into_bytes(),
                     format!("{temporary}/positive").into_bytes()];
@@ -1053,6 +1063,8 @@ fn witness_inner(
             let arguments = vec!["PATH=/usr/local/bin:/usr/bin:/bin".as_bytes().to_vec(), rustc.as_bytes().to_vec(),
                 "--edition=2024".as_bytes().to_vec(),
                 "--crate-type=lib".as_bytes().to_vec(), "--emit=metadata".as_bytes().to_vec(),
+                "-C".as_bytes().to_vec(),
+                format!("debug-assertions={}", if configuration.debug_assertions { "yes" } else { "no" }).into_bytes(),
                 "-A".as_bytes().to_vec(), "warnings".as_bytes().to_vec(),
                 format!("{temporary}/rejection.rs").into_bytes(), "-o".as_bytes().to_vec(),
                 format!("{temporary}/rejection.rmeta").into_bytes()];
@@ -1070,14 +1082,14 @@ fn witness_inner(
     Ok((positive, negative))
 }
 
-pub fn witness(world: &mut World, path: &str, rustc: &str) -> Result<u8, String> {
+pub fn witness(world: &mut World, path: &str, rustc: &str, configuration: crate::ast::BuildConfiguration) -> Result<u8, String> {
     let stamp = world.clock().nanoseconds().map_err(|e: i64| io("clock", e))?;
     let temporary = format!(".lkjscript-witness-{stamp}");
     let mut parent = world.directory(".").map_err(|e: i64| io("current directory", e))?;
     parent.create_directory(&temporary).map_err(|e: i64| io("witness directory", e))?;
     let outcome = {
         let mut directory = parent.open_directory(&temporary).map_err(|e: i64| io("witness directory", e))?;
-        let outcome = witness_inner(world, path, rustc, &temporary, &mut directory);
+        let outcome = witness_inner(world, path, rustc, &temporary, &mut directory, configuration);
         for bytes in directory.list().map_err(|e: i64| io("witness cleanup", e))? {
             let name = utf8(bytes, "E_TEST witness name UTF-8")?;
             directory.remove(&name).map_err(|e: i64| io("witness cleanup", e))?;

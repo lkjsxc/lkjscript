@@ -4,6 +4,7 @@ use crate::elaborate::semantic::{Evidence, LocalTarget, MethodTarget};
 
 fn resolved(user: &str, library: &str) -> ast::Program {
     let parsed = source::parse_bundle(&source::SourceBundle {
+        configuration: crate::ast::BuildConfiguration::default(),
         root: "case/main.lkj".to_string(),
         library: Some("dependencies/library.lkj".to_string()),
         files: vec![

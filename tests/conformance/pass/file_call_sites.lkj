@@ -1,0 +1,31 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! leaf { () => { file!() }; }
+macro_rules! nested { () => { leaf!() }; }
+macro_rules! discard { ($value:expr) => { 42i64 }; }
+macro_rules! generated { ($value:expr, $body:block, $($tokens:tt)*) => {
+    mod made {
+        pub fn template() -> &'static str { file!() }
+        pub fn expression() -> &'static str { $value }
+        pub fn block() -> &'static str { $body }
+        pub fn tokens() -> &'static str { $($tokens)* }
+        pub fn nested() -> &'static str { nested!() }
+    }
+}; }
+generated!(file!(), { file!() }, file!());
+const ROOT: &str = file!();
+pub fn probe() -> i64 {
+    let file = 1i64;
+    assert_eq!(ROOT, file!());
+    assert_eq!(file![], ROOT);
+    assert_eq!(file!{}, ROOT);
+    assert_eq!(nested!(), ROOT);
+    assert_eq!(made::template(), ROOT);
+    assert_eq!(made::expression(), ROOT);
+    assert_eq!(made::block(), ROOT);
+    assert_eq!(made::tokens(), ROOT);
+    assert_eq!(made::nested(), ROOT);
+    assert_eq!(format!("{}", file!()), ROOT);
+    assert!(file == 1i64);
+    discard!(file!(not_expanded))
+}

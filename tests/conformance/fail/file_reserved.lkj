@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED_MACRO
+// witness: {"rustAccept":true}
+macro_rules! file { () => { 42i64 }; }
+pub fn probe() -> i64 { file!() }

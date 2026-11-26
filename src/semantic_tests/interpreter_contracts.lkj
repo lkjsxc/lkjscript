@@ -36,6 +36,7 @@ fn compiled(text: &str) -> ir::CheckedProgram {
     });
     super::complete_library(&mut files);
     frontend::check_bundle(&source::SourceBundle {
+        configuration: crate::ast::BuildConfiguration::default(),
         root: "interpreter.lkj".to_string(),
         library: Some("$std/lib.lkj".to_string()),
         files,

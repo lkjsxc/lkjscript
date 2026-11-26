@@ -57,9 +57,9 @@ impl Expander {
         }
         Ok(())
     }
-    fn statement(&mut self, program: &mut Program, call: usize, block: BlockId, first: usize,
-        inherited_semi: bool, terminal: bool) -> Result<(Vec<Stmt>, Option<ExprId>), Diagnostic> {
-        if self.failed.contains(&call) { return Ok((vec![Stmt::MacroInvocation(call)], None)); }
+    fn statement(&mut self, program: &mut Program, call: usize, block: BlockId, first: usize)
+        -> Result<(Vec<Stmt>, bool), Diagnostic> {
+        if self.failed.contains(&call) { return Ok((vec![Stmt::MacroInvocation(call)], false)); }
         self.active.push(call);
         let invocation = self.invocation(program, call)?;
         let MacroPosition::Statement { semicolon, .. } = invocation.position else {
@@ -72,26 +72,30 @@ impl Expander {
         let (tokens, expansion) = self.begin(program, call)?;
         let (statements, tail) = super::super::statements(program, &tokens, &invocation, expansion)?;
         program.macro_expansions[expansion].end = crate::ast::macros::inventory(program);
-        let (statements, tail) = self.sequence(program, block, first, statements, tail,
-            semicolon || inherited_semi, terminal)?;
+        // A later empty splice can expose this output as the containing block's
+        // tail. Keep it in statement form until that complete sequence is known.
+        let (statements, tail, empty) = self.sequence(program, block, first, statements, tail,
+            semicolon, false)?;
         program.macro_expansions[expansion].splice = Some(MacroSplice {
             block, first, count: statements.len(), tail,
         });
         self.active.pop();
-        Ok((statements, tail))
+        Ok((statements, empty))
     }
     fn sequence(&mut self, program: &mut Program, block: BlockId, first: usize, input: Vec<Stmt>,
-        tail: Option<ExprId>, semi: bool, terminal: bool) -> Result<(Vec<Stmt>, Option<ExprId>), Diagnostic> {
+        tail: Option<ExprId>, semi: bool, terminal: bool) -> Result<(Vec<Stmt>, Option<ExprId>, bool), Diagnostic> {
+        let expansions = program.macro_expansions.len();
         let mut output = Vec::new();
         let mut result_tail = None;
-        let count = input.len();
-        for (at, statement) in input.into_iter().enumerate() {
-            let last = at + 1usize == count && tail.is_none();
+        // An empty invocation with an authored semicolon remains a barrier even
+        // though it contributes no statement nodes. Empty brace calls do not.
+        let mut empty = false;
+        for statement in input {
             if let Stmt::MacroInvocation(call) = statement {
-                let (statements, nested_tail) = self.statement(program, call, block, first + output.len(),
-                    semi && last, terminal && last)?;
+                let (statements, nested_empty) = self.statement(program, call, block, first + output.len())?;
+                if !statements.is_empty() { empty = false; }
                 for statement in statements { output.push(statement); }
-                if nested_tail.is_some() { result_tail = nested_tail; }
+                if nested_empty { empty = true; }
             } else {
                 match &statement {
                     Stmt::Let { pattern, value, .. } => {
@@ -103,6 +107,7 @@ impl Expander {
                     Stmt::MacroInvocation(_) => {}
                 }
                 output.push(statement);
+                empty = false;
             }
         }
         if let Some(value) = tail {
@@ -110,15 +115,48 @@ impl Expander {
             if semi { output.push(Stmt::Expr { value, semicolon: true }); }
             else if terminal { result_tail = Some(value); }
             else { output.push(Stmt::Expr { value, semicolon: false }); }
+            empty = false;
         }
-        Ok((output, result_tail))
+        if result_tail.is_none() && !empty {
+            let value = match output.last() {
+                Some(Stmt::Expr { value, semicolon: false }) => Some(*value),
+                _ => None,
+            };
+            if let Some(value) = value {
+                if semi {
+                    output.pop();
+                    output.push(Stmt::Expr { value, semicolon: true });
+                } else if terminal {
+                    let position = first + output.len() - 1usize;
+                    output.pop();
+                    result_tail = Some(value);
+                    // Earlier and nested splices that produced this statement
+                    // now produce the tail. Trailing empty splices move with
+                    // the shortened statement sequence, without gaining a tail.
+                    for index in expansions..program.macro_expansions.len() {
+                        if let Some(splice) = &mut program.macro_expansions[index].splice {
+                            if splice.block != block { continue; }
+                            if splice.count != 0usize && splice.first <= position
+                                && splice.first + splice.count == position + 1usize {
+                                splice.count -= 1usize;
+                                splice.tail = Some(value);
+                            } else if splice.count == 0usize && splice.first == position + 1usize {
+                                splice.first = position;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        if semi && output.is_empty() && result_tail.is_none() { empty = true; }
+        Ok((output, result_tail, empty))
     }
     fn block_node(&mut self, program: &mut Program, id: BlockId) -> Result<(), Diagnostic> {
         if !self.visited.insert((1usize, id)) { return Ok(()); }
         if id >= program.blocks.len() { return Err(absent("block")); }
         let input = std::mem::replace(&mut program.blocks[id].statements, Vec::new());
         let tail = program.blocks[id].tail.take();
-        let (statements, tail) = self.sequence(program, id, 0usize, input, tail, false, true)?;
+        let (statements, tail, _) = self.sequence(program, id, 0usize, input, tail, false, true)?;
         program.blocks[id].statements = statements;
         program.blocks[id].tail = tail;
         Ok(())
@@ -207,7 +245,7 @@ impl Expander {
                 if let Some(value) = start { self.expression_node(program, value)?; }
                 if let Some(value) = end { self.expression_node(program, value)?; }
             }
-            Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_)
+            Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_) | Expr::FilePath
             | Expr::Char(_) | Expr::Bytes(_) | Expr::Path(_) | Expr::Continue => {}
         }
         Ok(())

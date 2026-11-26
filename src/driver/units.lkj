@@ -92,6 +92,7 @@ fn request_key(unit: &Definition, root: &str, options: &Options) -> String {
     strings(&mut result, &unit.dependencies);
     optional_key(&mut result, &options.library_directory);
     store::push_word(&mut result, options.no_library as usize);
+    store::push_word(&mut result, options.configuration.debug_assertions as usize);
     sha256::hex_digest(&result)
 }
 fn dependencies(unit: &Definition, records: &mut Records) -> Result<Vec<Dependency>, String> {
@@ -330,7 +331,7 @@ fn admit(
     };
     let standard = if options.no_library { None } else { Some("$std/lib.lkj") };
     let mut inputs = Vec::new();
-    let (source, files) = crate::units::load(unit, &projections, standard, &mut |path: &str| -> Result<Option<Vec<u8>>, String> {
+    let (source, files) = crate::units::load(unit, &projections, standard, options.configuration, &mut |path: &str| -> Result<Option<Vec<u8>>, String> {
         let value = if path.starts_with("$std/") {
             match library.as_mut() {
                 Some(directory) => {
@@ -354,8 +355,26 @@ fn admit(
         Ok(value)
     })?;
     stats.mark("unit_load")?;
-    let definitions = elaborate::infer_resolved_report_with_capture(&source, false, false)
+    // The retained manifest authenticates every virtual unit-to-source mapping.
+    // Keep the AST and generic projection identities virtual; only the explicit
+    // lowering input selects the physical paths returned by file!.
+    let mut display_sources = BTreeMap::new();
+    let mut selected_paths: Vec<String> = Vec::new();
+    for file in &source.files {
+        let selected = if file.path.starts_with("$std/") {
+            let library_root = options.library_directory.as_ref().map_or("library", |path| path.as_str());
+            format!("{library_root}/{}", &file.path[5usize..])
+        } else {
+            match display_path(plan, unit, &mut display_sources, root, &file.path, manifest)? {
+                Some(path) => path,
+                None => return Err(problem("selected unit source has no authenticated physical path")),
+            }
+        };
+        selected_paths.push(selected);
+    }
+    let definitions = elaborate::infer_resolved_report_with_source_paths(&source, false, false, &selected_paths)
         .map_err(|problems: Vec<ast::Diagnostic>| -> String { ir_failure(manifest, problems) })?;
+    drop(selected_paths);
     let mut program = elaborate::lower_definitions(definitions)
         .map_err(|problems: Vec<ast::Diagnostic>| -> String { ir_failure(manifest, problems) })?;
     let instances = crate::units::normalize(&source, &mut program)?;
@@ -387,7 +406,6 @@ fn admit(
     drop(source);
     let imported = imports(&mut program, interfaces, &projections)?;
     drop(projections);
-    let mut display_sources = BTreeMap::new();
     for index in 0usize..program.sources.len() {
         let display = display_path(plan, unit, &mut display_sources, root, &program.sources[index], manifest)?;
         if let Some(path) = display { program.sources[index] = path; }
@@ -459,7 +477,7 @@ pub(super) fn run(world: &mut World, options: &Options, stats: &mut Stats, memo:
     let mut plan = crate::units::plan_disk::Plan::open(manifest, plan_file, &manifest_path, &private_source_digest)?;
     let manifest_fingerprint = plan.fingerprint();
     let build = options.command == "build-units";
-    let runtime: Option<runtime::Runtime> = if build { Some(load_runtime(world, &options.runtime_source)?) } else { None };
+    let runtime: Option<runtime::Runtime> = if build { Some(load_runtime_configured(world, &options.runtime_source, options.configuration)?) } else { None };
     let context: Option<crate::native::units::Context<'_>> = match runtime.as_ref() {
         Some(runtime) => Some(crate::native::units::Context::new(runtime)), None => None,
     };

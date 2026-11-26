@@ -1,0 +1,4 @@
+// expect: reject E_PARSE
+// witness: {}
+#[cfg(all(debug_assertions unix))]
+pub fn probe() -> i64 { 42i64 }

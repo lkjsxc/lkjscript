@@ -499,14 +499,21 @@ impl Lexer<'_> {
 }
 
 pub fn parse(source: &str) -> Result<Program, Diagnostic> {
-    let mut program = parse_unexpanded(source)?;
+    parse_configured(source, BuildConfiguration::default())
+}
+pub fn parse_configured(source: &str, configuration: BuildConfiguration) -> Result<Program, Diagnostic> {
+    let mut program = parse_unexpanded_configured(source, configuration)?;
     macros::expand(&mut program)?;
     Ok(program)
 }
 
 /// Isolated edit fragments have no defining module; their full candidate is expanded later.
 pub(crate) fn parse_unexpanded(source: &str) -> Result<Program, Diagnostic> {
+    parse_unexpanded_configured(source, BuildConfiguration::default())
+}
+pub(crate) fn parse_unexpanded_configured(source: &str, configuration: BuildConfiguration) -> Result<Program, Diagnostic> {
     let mut program = Program::default();
+    program.configuration = configuration;
     program.scopes.push(ModuleScope {
         path: String::new(),
         parent: None,
@@ -524,9 +531,13 @@ pub(crate) fn parse_unexpanded(source: &str) -> Result<Program, Diagnostic> {
 /// Read exactly one authored value expression, without expanding its invocations.
 /// Its complete candidate supplies the real scope and all semantic checking.
 pub(crate) fn parse_expression_unexpanded(source: &str) -> Result<(Program, ExprId), Diagnostic> {
+    parse_expression_unexpanded_configured(source, BuildConfiguration::default())
+}
+pub(crate) fn parse_expression_unexpanded_configured(source: &str, configuration: BuildConfiguration) -> Result<(Program, ExprId), Diagnostic> {
     let mut lexer = Lexer { source, at: 0, line: 1, column: 1 };
     let tokens = lexer.lex()?;
     let mut program = Program::default();
+    program.configuration = configuration;
     program.scopes.push(ModuleScope {
         path: String::new(), parent: None, crate_root: 0,
     });
@@ -671,49 +682,49 @@ pub fn parse_file_report(
     }
 }
 
-fn cfg_predicate(args: &[String], at: &mut usize, span: Span) -> Result<bool, Diagnostic> {
+fn cfg_predicate(args: &[String], at: &mut usize, span: Span, configuration: BuildConfiguration) -> Result<bool, Diagnostic> {
     let Some(name) = args.get(*at) else {
         return Err(Diagnostic::new(span, "E_PARSE", "missing cfg predicate"));
     };
+    if name.is_empty() || !ident_start(name.as_bytes()[0usize])
+        || !name.as_bytes()[1usize..].iter().all(|byte| ident_continue(*byte)) {
+        return Err(Diagnostic::new(span, "E_PARSE", "expected a cfg predicate name"));
+    }
     *at += 1;
     if matches!(name.as_str(), "all" | "any" | "not") {
         if args.get(*at).map(|text| text.as_str()) != Some("(") {
-            return Err(Diagnostic::new(
-                span,
-                "E_PARSE",
-                "cfg combinator needs parentheses",
-            ));
+            return Err(Diagnostic::new(span, "E_PARSE", "cfg combinator needs parentheses"));
         }
         *at += 1;
         let mut values = Vec::new();
         while args.get(*at).is_some_and(|part| part != ")") {
-            values.push(cfg_predicate(args, at, span)?);
+            values.push(cfg_predicate(args, at, span, configuration)?);
+            if args.get(*at).map(|text| text.as_str()) == Some(",") { *at += 1; }
+            else if args.get(*at).map(|text| text.as_str()) != Some(")") {
+                return Err(Diagnostic::new(span, "E_PARSE", "cfg predicates require comma separators"));
+            }
         }
         if args.get(*at).map(|text| text.as_str()) != Some(")") {
-            return Err(Diagnostic::new(
-                span,
-                "E_PARSE",
-                "unterminated cfg predicate",
-            ));
+            return Err(Diagnostic::new(span, "E_PARSE", "unterminated cfg predicate"));
         }
         *at += 1;
         return match name.as_str() {
             "all" => Ok(values.iter().all(|value| *value)),
             "any" => Ok(values.iter().any(|value| *value)),
             "not" if values.len() == 1 => Ok(!values[0]),
-            _ => Err(Diagnostic::new(
-                span,
-                "E_PARSE",
-                "cfg not needs exactly one predicate",
-            )),
+            _ => Err(Diagnostic::new(span, "E_PARSE", "cfg not needs exactly one predicate")),
         };
     }
     if args.get(*at).map(|text| text.as_str()) == Some("=") {
         *at += 1;
-        let Some(value) = args.get(*at) else {
+        let Some(literal) = args.get(*at) else {
             return Err(Diagnostic::new(span, "E_PARSE", "missing cfg value"));
         };
         *at += 1;
+        if !literal.starts_with('"') || !literal.ends_with('"') || literal.len() < 2usize {
+            return Err(Diagnostic::new(span, "E_PARSE", "cfg values must be string literals"));
+        }
+        let value = &literal[1usize..literal.len() - 1usize];
         return match name.as_str() {
             "target_os" => Ok(value == "linux"),
             "target_arch" => Ok(value == "x86_64"),
@@ -721,26 +732,26 @@ fn cfg_predicate(args: &[String], at: &mut usize, span: Span) -> Result<bool, Di
             "target_pointer_width" => Ok(value == "64"),
             "target_endian" => Ok(value == "little"),
             "feature" => Ok(false),
-            _ => Err(Diagnostic::new(
-                span,
-                "E_UNSUPPORTED",
-                &format!(
-                    "cfg predicate {name} is not supported; help: use test, target_os, target_arch, target_family, target_pointer_width or target_endian"
-                ),
-            )),
+            _ => Err(Diagnostic::new(span, "E_UNSUPPORTED", &format!(
+                "cfg value predicate {name} is not supported; help: use target_os, target_arch, target_family, target_pointer_width or target_endian"))),
         };
     }
     match name.as_str() {
+        "debug_assertions" => Ok(configuration.debug_assertions),
         "test" | "windows" | "false" => Ok(false),
         "unix" | "true" => Ok(true),
-        _ => Err(Diagnostic::new(
-            span,
-            "E_UNSUPPORTED",
-            &format!(
-                "cfg predicate {name} is not supported; help: use #[cfg(test)] for test-only declarations"
-            ),
-        )),
+        _ => Err(Diagnostic::new(span, "E_UNSUPPORTED", &format!(
+            "cfg predicate {name} is not supported; help: use debug_assertions or test for conditional declarations"))),
     }
+}
+fn cfg_value(args: &[String], span: Span, configuration: BuildConfiguration) -> Result<bool, Diagnostic> {
+    let mut at = 0usize;
+    let value = cfg_predicate(args, &mut at, span, configuration)?;
+    if args.get(at).map(|text| text.as_str()) == Some(",") { at += 1usize; }
+    if at != args.len() {
+        return Err(Diagnostic::new(span, "E_PARSE", "cfg needs exactly one predicate"));
+    }
+    Ok(value)
 }
 
 enum TypeFrame {
@@ -1057,11 +1068,16 @@ impl Parser {
                     if self.is(")") {
                         depth -= 1;
                     }
-                    if depth != 0 && !self.is(",") {
-                        args.push(self.token().text.clone());
+                    if depth != 0 && (name == "cfg" || !self.is(",")) {
+                        let value = if name == "cfg" && self.token().kind == TokenKind::String {
+                            format!("\"{}\"", self.token().text)
+                        } else { self.token().text.clone() };
+                        args.push(value);
                     }
                     self.at += 1;
                 }
+            } else if name == "cfg" {
+                return Err(Diagnostic::new(span, "E_PARSE", "cfg attributes require parentheses"));
             } else if self.take("=") {
                 if self.token().kind == TokenKind::End {
                     return Err(self.err("expected attribute value"));
@@ -1093,15 +1109,7 @@ impl Parser {
     fn enabled(&self, attrs: &[Attribute]) -> Result<bool, Diagnostic> {
         for attr in attrs {
             if attr.name == "cfg" {
-                let mut at = 0;
-                let value = cfg_predicate(&attr.args, &mut at, attr.span)?;
-                if at != attr.args.len() {
-                    return Err(Diagnostic::new(
-                        attr.span,
-                        "E_PARSE",
-                        "cfg needs exactly one predicate",
-                    ));
-                }
+                let value = cfg_value(&attr.args, attr.span, self.program.configuration)?;
                 if !value {
                     return Ok(false);
                 }
@@ -2714,9 +2722,6 @@ impl Parser {
             if self.token().kind == TokenKind::End {
                 return Err(self.err("unterminated block"));
             }
-            if self.take(";") {
-                continue;
-            }
             let start = self.at;
             let scope = self.scope;
             let block = self.block;
@@ -2738,10 +2743,72 @@ impl Parser {
         }
         if !allow_end { self.expect("}")?; }
         else if self.token().kind != TokenKind::End { return Err(self.err("unexpected closing delimiter in macro output")); }
+        // Removing final cfg statements can expose a preceding block/if value
+        // as the actual tail. An authored semicolon still discards that value.
+        if tail.is_none() {
+            let final_value = match statements.last() {
+                Some(Stmt::Expr { value, semicolon: false }) => Some(*value),
+                _ => None,
+            };
+            if final_value.is_some() { tail = final_value; statements.pop(); }
+        }
         Ok((statements, tail))
     }
 
     fn block_part(&mut self) -> Result<BlockPart, Diagnostic> {
+        // A surviving empty statement remains a tail barrier after cfg removal.
+        if self.take(";") {
+            let span = self.tokens[self.at - 1usize].span;
+            let value = self.add_expr(Expr::Tuple(Vec::new()), span);
+            return Ok(BlockPart::Statement(Stmt::Expr { value, semicolon: true }));
+        }
+        if self.is("#") {
+            let attribute_start = self.at;
+            let inner_attributes = self.program.attrs.len();
+            let attrs = self.attrs(true)?;
+            let enabled = self.enabled(&attrs)?;
+            // Declaration attributes keep their existing item rules. Other outer
+            // cfg attributes select one ordinary statement, including macro splices.
+            let declaration = self.token().kind == TokenKind::Ident && matches!(self.token().text.as_str(),
+                "fn" | "const" | "struct" | "enum" | "use" | "type" | "mod"
+                | "trait" | "impl" | "pub" | "extern" | "static" | "union" | "macro_rules");
+            if declaration || attrs.is_empty() || self.program.attrs.len() != inner_attributes {
+                if !enabled { self.skip_disabled()?; return Ok(BlockPart::Skipped); }
+                let public = self.visibility()?;
+                let item = self.item(attrs, public)?;
+                return Ok(BlockPart::Statement(Stmt::Item(item)));
+            }
+            if enabled {
+                if let Some(attribute) = attrs.iter().find(|attribute| attribute.name != "cfg") {
+                    let macro_statement = self.macro_statement_ahead()?.is_some();
+                    let code = if macro_statement { "E_UNSUPPORTED_MACRO" } else { "E_UNSUPPORTED" };
+                    return Err(Diagnostic::new(attribute.span, code,
+                        "ordinary statements support only cfg attributes"));
+                }
+                self.macro_carriers.push((attribute_start, self.at));
+                return self.block_part();
+            }
+            let saved = macros::ParseCheckpoint::new(&self.program);
+            let probing = self.probing;
+            let scope = self.scope;
+            let block = self.block;
+            let module = self.module.clone();
+            let macro_scope = self.macro_scope;
+            let self_context = self.self_context;
+            let carriers = self.macro_carriers.len();
+            self.probing = true;
+            let result = self.block_part();
+            self.probing = probing;
+            self.scope = scope;
+            self.block = block;
+            self.module = module;
+            self.macro_scope = macro_scope;
+            self.self_context = self_context;
+            saved.rollback(&mut self.program);
+            self.macro_carriers.truncate(carriers);
+            self.macro_carriers.push((attribute_start, self.at));
+            return result.map(|_| BlockPart::Skipped);
+        }
         if let Some((semicolon, braces)) = self.macro_statement_ahead()? {
             let span = self.token().span;
             let path = self.value_path()?;
@@ -2919,19 +2986,9 @@ impl Parser {
             || self.is("enum")
             || self.is("use")
             || self.is("type")
-            || self.is("#")
         {
-            let attrs = self.attrs(true)?;
-            if !self.enabled(&attrs)? {
-                self.skip_disabled()?;
-                return Ok(BlockPart::Skipped);
-            }
-            if self.macro_statement_ahead()?.is_some() {
-                let span = attrs.first().map(|attribute| attribute.span).unwrap_or(self.token().span);
-                return Err(Diagnostic::new(span, "E_UNSUPPORTED_MACRO", "attributes on statement macro invocations are not supported"));
-            }
             let public = self.visibility()?;
-            let item = self.item(attrs, public)?;
+            let item = self.item(Vec::new(), public)?;
             return Ok(BlockPart::Statement(Stmt::Item(item)));
         }
         let (expression, standalone) = self.statement_expr()?;
@@ -3594,8 +3651,11 @@ impl Parser {
         let path_start = self.at;
         let path = self.value_path()?;
         if self.token().kind == TokenKind::Symbol && self.take("!") {
-            if path.name == "module_path" && self.at != path_start + 2usize {
-                return Err(Diagnostic::new(span, "E_PARSE", "module_path! requires an unqualified macro name"));
+            if (path.name == "module_path" || path.name == "file" || path.name == "line") && self.at != path_start + 2usize {
+                return Err(Diagnostic::new(span, "E_PARSE", &format!("{}! requires an unqualified macro name", path.name)));
+            }
+            if path.name == "cfg" && self.at != path_start + 2usize {
+                return Err(Diagnostic::new(span, "E_PARSE", "cfg! requires an unqualified macro name"));
             }
             // Fragment matching recognizes syntax without executing any nested producer.
             if self.probing {
@@ -3637,10 +3697,41 @@ impl Parser {
             } else {
                 return Err(self.err("expected macro delimiter"));
             };
+            if path.name == "line" {
+                self.expect(end)?;
+                if span.line > 4294967295usize {
+                    return Err(Diagnostic::new(span, "E_PARSE", "line! source line is not representable as u32"));
+                }
+                return Ok(self.add_finished_expr(Expr::Int(format!("{}u32", span.line)), span));
+            }
+            if path.name == "file" {
+                self.expect(end)?;
+                return Ok(self.add_finished_expr(Expr::FilePath, span));
+            }
             if path.name == "module_path" {
                 self.expect(end)?;
                 let value = self.module_path_value(span)?;
                 return Ok(self.add_finished_expr(Expr::String(value), span));
+            }
+            if path.name == "cfg" {
+                let mut predicates = Vec::new();
+                let mut depth = 0usize;
+                while !self.is(end) || depth != 0usize {
+                    if self.token().kind == TokenKind::End { return Err(self.err("unterminated cfg!")); }
+                    if self.is("(") { depth += 1usize; }
+                    if self.is(")") {
+                        if depth == 0usize { return Err(self.err("unexpected cfg! closing parenthesis")); }
+                        depth -= 1usize;
+                    }
+                    let value = if self.token().kind == TokenKind::String {
+                        format!("\"{}\"", self.token().text)
+                    } else { self.token().text.clone() };
+                    predicates.push(value);
+                    self.at += 1usize;
+                }
+                self.expect(end)?;
+                let value = cfg_value(&predicates, span, self.program.configuration)?;
+                return Ok(self.add_finished_expr(Expr::Bool(value), span));
             }
             if path.name == "matches" {
                 let value = self.expr(true)?;

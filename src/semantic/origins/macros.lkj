@@ -104,7 +104,7 @@ fn nodes(program: &a::Program) -> Result<(BTreeSet<usize>, BTreeSet<usize>, BTre
                     if let Some(value) = end { pending.push((0usize, *value)); }
                 }
                 a::Expr::MacroInvocation(_) => return Err(failure("macro", "an invocation remains in the expanded expression graph")),
-                a::Expr::Int(_) | a::Expr::Float(_) | a::Expr::Bool(_) | a::Expr::String(_)
+                a::Expr::Int(_) | a::Expr::Float(_) | a::Expr::Bool(_) | a::Expr::String(_) | a::Expr::FilePath
                 | a::Expr::Char(_) | a::Expr::Bytes(_) | a::Expr::Path(_) | a::Expr::Continue => {}
             }
         } else if kind == 1usize {

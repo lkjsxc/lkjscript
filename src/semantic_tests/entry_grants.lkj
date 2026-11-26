@@ -9,6 +9,7 @@ fn prepared() -> runtime::Runtime {
         text: include_str!("../../library/runtime.lkj").to_string(),
     };
     let bundle = source::SourceBundle {
+        configuration: crate::ast::BuildConfiguration::default(),
         root: "runtime.lkj".to_string(),
         library: None,
         files: vec![input],

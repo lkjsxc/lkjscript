@@ -36,6 +36,8 @@ struct Options {
     unchecked: bool,
     observe: bool,
     source_directory: Option<String>,
+    configuration: ast::BuildConfiguration,
+    configuration_explicit: bool,
     macro_providers: Vec<MacroProviderInput>,
     library_directory: Option<String>,
     runtime_source: Option<String>,
@@ -49,7 +51,7 @@ struct Options {
 }
 
 fn usage() -> &'static str {
-    "lkjscript check|build|check-units|build-units|build-entries|run|test|ir|authority|residual|query|edit|compare <source.lkj|program.lkjir|directory> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  build-entries  Write multiple entry images and matched authority reports\n  check-units  Independently check source units through authenticated interfaces\n  build-units  Check units and stream a static executable from admitted objects\n  build-child  Write a transfer-only ELF and authenticated .admission\n  image-authority  Authenticate exact child bytes and canonical checked slots\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n  residual  List post-acquisition instruction traps in a checked function closure\n  query  Ask a bounded question about an authenticated build snapshot\n  edit   Check and publish an identity-addressed transaction (--request JSON or --against SOURCE)\n  compare  Compare checked meaning with --against SOURCE\n  delta  Print frequent accepted forms that differ from Rust\n\n  --entry NAME                 Select an entry\n  --artifact NAME=ENTRY       Select an image for build-entries; -o names its directory\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  --profile-ir PATH           Write the exact selected native IR beside a profiled build\n  --copy-sites                Report profile sites with --profile-ir, --limit and --bytes\n  --index                     Publish a structural snapshot during a stored build\n  --kind QUESTION             Select a structural query (default outline)\n  --id ID                     Select an identity (default crate)\n  --snapshot HEX              Pin an immutable source snapshot\n  --cursor HEX                Continue the same authenticated question\n  --depth N --limit N --bytes N  Bound traversal, fact count and answer bytes\n  --inline-limit N            Recheck inlining of bodies with at most N IR operations\n  --no-opt                    Keep original checked IR for native emission\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --macro-provider CRATE:ALIAS=PATH  Select an explicit macro provider source root\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --store DIR                 Reuse authenticated work beneath this Directory\n  --store-key PATH            Grant a private 32-byte key outside source roots\n  --image-key PATH            Private child-admission key outside all source grants\n  --admission PATH            Child admission record (default IMAGE.admission)\n  --store-bytes N             Bound disposable bytes (default 268435456)\n  --no-store                  Disable stored reuse\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nUnit manifests are literal .lkj declarations beneath --source-dir:\n  const UNITS: &[&str] = &[\"math=math.lkj\", \"app=app.lkj\"];\n  const DEPENDS: &[&str] = &[\"app=math\"];\n  const ENTRY: &str = \"app::main\";\nEach source is mounted as its named module; refer to dependencies as crate::math.\nPut mutually recursive modules in one unit. Unit commands require --store and a\nprivate --store-key outside all source roots. build-units accepts -o and --grant;\nENTRY selects the function. Nongeneric bodies link through checked interfaces.\nGeneric bodies remain checked templates; changes to them invalidate consumers.\nUnit builds currently emit the original checked IR; --inline-limit is not used.\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
+    "lkjscript check|build|check-units|build-units|build-entries|run|test|ir|authority|residual|query|edit|compare <source.lkj|program.lkjir|directory> [options]\n\n  check  Check all source or input IR\n  build  Write a static Linux x86-64 executable\n  build-entries  Write multiple entry images and matched authority reports\n  check-units  Independently check source units through authenticated interfaces\n  build-units  Check units and stream a static executable from admitted objects\n  build-child  Write a transfer-only ELF and authenticated .admission\n  image-authority  Authenticate exact child bytes and canonical checked slots\n  run    Execute main (or probe); bytes after -- are program arguments\n  test   Run #[test] functions through native and interpreter routes\n  ir     Write checked lkjscript IR\n  authority  Report entry grants and reachable checked-IR effects\n  residual  List post-acquisition instruction traps in a checked function closure\n  query  Ask a bounded question about an authenticated build snapshot\n  edit   Check and publish an identity-addressed transaction (--request JSON or --against SOURCE)\n  compare  Compare checked meaning with --against SOURCE\n  delta  Print frequent accepted forms that differ from Rust\n\n  --entry NAME                 Select an entry\n  --artifact NAME=ENTRY       Select an image for build-entries; -o names its directory\n  --grant NAME[=VALUE]          Grant an owned entry capability (repeatable)\n  --engine native|interpreter  Select the execution route\n  -o PATH                     Write an artifact or IR\n  --stats                     Report phase times, counts and peak RSS\n  --profile                   Sample CPU to OUTPUT.samples.PID in built programs\n  --profile-ir PATH           Write the exact selected native IR beside a profiled build\n  --copy-sites                Report profile sites with --profile-ir, --limit and --bytes\n  --index                     Publish a structural snapshot during a stored build\n  --kind QUESTION             Select a structural query (default outline)\n  --id ID                     Select an identity (default crate)\n  --snapshot HEX              Pin an immutable source snapshot\n  --cursor HEX                Continue the same authenticated question\n  --depth N --limit N --bytes N  Bound traversal, fact count and answer bytes\n  --inline-limit N            Recheck inlining of bodies with at most N IR operations\n  --no-opt                    Keep original checked IR for native emission\n  profile SAMPLES             Report top self and inclusive functions\n  --jobs N                    Native test workers (1..8)\n  --witness RUSTC             Compare marked cases with optional rustc\n  --source-dir DIR            Grant a root for source reads\n  --debug-assertions on|off    Select source cfg(debug_assertions), default on\n  --macro-provider CRATE:ALIAS=PATH  Select an explicit macro provider source root\n  --library-dir DIR           Use explicit library sources\n  --no-library                Compile without the source library\n  --runtime-source PATH       Use an explicit source runtime\n  --store DIR                 Reuse authenticated work beneath this Directory\n  --store-key PATH            Grant a private 32-byte key outside source roots\n  --image-key PATH            Private child-admission key outside all source grants\n  --admission PATH            Child admission record (default IMAGE.admission)\n  --store-bytes N             Bound disposable bytes (default 268435456)\n  --no-store                  Disable stored reuse\n  --unchecked-ir              Interpret raw IR for checker testing\n  runtime-ir                  Write the checked source runtime as IR\n  check-library               Check every source library body\n\nUnit manifests are literal .lkj declarations beneath --source-dir:\n  const UNITS: &[&str] = &[\"math=math.lkj\", \"app=app.lkj\"];\n  const DEPENDS: &[&str] = &[\"app=math\"];\n  const ENTRY: &str = \"app::main\";\nEach source is mounted as its named module; refer to dependencies as crate::math.\nPut mutually recursive modules in one unit. Unit commands require --store and a\nprivate --store-key outside all source roots. build-units accepts -o and --grant;\nENTRY selects the function. Nongeneric bodies link through checked interfaces.\nGeneric bodies remain checked templates; changes to them invalidate consumers.\nUnit builds currently emit the original checked IR; --inline-limit is not used.\n\nScalar runs print the value; f64 prints exact bits as f64:0x0123456789abcdef.\n"
 }
 
 fn delta() -> &'static str {
@@ -107,6 +109,8 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         tool_arguments: Vec::new(),
         unchecked: false, observe: false,
         source_directory: None,
+        configuration: ast::BuildConfiguration::default(),
+        configuration_explicit: false,
         macro_providers: Vec::new(),
         library_directory: None,
         runtime_source: None,
@@ -146,7 +150,7 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
             "--no-library" => out.no_library = true,
             "--no-store" => { out.store_directory = None; out.store_key = None; },
             "--entry" | "--artifact" | "-o" | "--engine" | "--engines" | "--source-dir" | "--macro-provider" | "--library-dir"
-            | "--runtime-source" | "--jobs" | "--witness" | "--grant" | "--store" | "--store-key" | "--store-bytes" | "--inline-limit" | "--image-key" | "--admission"
+            | "--runtime-source" | "--debug-assertions" | "--jobs" | "--witness" | "--grant" | "--store" | "--store-key" | "--store-bytes" | "--inline-limit" | "--image-key" | "--admission"
             | "--kind" | "--id" | "--depth" | "--limit" | "--bytes" | "--snapshot" | "--cursor" | "--profile-ir" => {
                 at += 1;
                 if at == values.len() {
@@ -187,6 +191,15 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
                     "--inline-limit" => out.inline_limit = Some(inline_limit(&value)?),
                     "--witness" => out.witness = Some(value),
                     "--source-dir" => out.source_directory = Some(value),
+                    "--debug-assertions" => {
+                        if out.configuration_explicit { return Err("E_USAGE duplicate --debug-assertions".to_string()); }
+                        out.configuration.debug_assertions = match value.as_str() {
+                            "on" => true,
+                            "off" => false,
+                            _ => return Err("E_USAGE --debug-assertions requires on or off".to_string()),
+                        };
+                        out.configuration_explicit = true;
+                    }
                     "--macro-provider" => out.macro_providers.push(macro_provider_option(&value)?),
                     "--library-dir" => out.library_directory = Some(value),
                     "--store" => out.store_directory = Some(value),
@@ -236,6 +249,10 @@ fn options(bytes: Vec<Vec<u8>>) -> Result<Options, String> {
         }
     } else if out.image_admission.is_some() || (out.image_key.is_some() && !matches!(out.command.as_str(), "build" | "run" | "authority" | "build-entries")) {
         return Err("E_USAGE --image-key/--admission require a child image command".to_string());
+    }
+    if out.configuration_explicit && ((out.path.ends_with(".lkjir") && out.runtime_source.is_none())
+        || matches!(out.command.as_str(), "profile" | "image-authority")) {
+        return Err("E_USAGE --debug-assertions requires source input or an explicit --runtime-source; program IR already contains its selected meaning".to_string());
     }
     if !out.macro_providers.is_empty() {
         if !matches!(out.command.as_str(), "check" | "build" | "run" | "ir" | "authority" | "residual")
@@ -612,23 +629,31 @@ pub(crate) fn load_runtime(
     world: &mut World,
     runtime_source: &Option<String>,
 ) -> Result<runtime::Runtime, String> {
+    load_runtime_configured(world, runtime_source, ast::BuildConfiguration::default())
+}
+fn load_runtime_configured(
+    world: &mut World,
+    runtime_source: &Option<String>,
+    configuration: ast::BuildConfiguration,
+) -> Result<runtime::Runtime, String> {
     let code = match runtime_source {
         Some(path) => text(read_path(world, path)?, path)?,
         None => embedded::runtime()
             .ok_or("E_RUNTIME this seed needs --runtime-source library/runtime.lkj")?,
     };
     let path = runtime_source.as_ref().map_or("library/runtime.lkj", |path| path.as_str());
-    prepare_runtime(code, path)
+    prepare_runtime(code, path, configuration)
 }
-fn prepare_runtime(code: String, actual_path: &str) -> Result<runtime::Runtime, String> {
-    let mut parsed = source::load("$runtime/runtime.lkj", None, &mut |path: &str| {
+fn prepare_runtime(code: String, actual_path: &str, configuration: ast::BuildConfiguration) -> Result<runtime::Runtime, String> {
+    let providers: Vec<MacroProviderInput> = Vec::new();
+    let mut parsed = source::load_report_with_providers("$runtime/runtime.lkj", None, &providers, configuration, &mut |path: &str| {
         if path == "$runtime/runtime.lkj" {
             Ok(Some(code.as_bytes().to_vec()))
         } else {
             Ok(None)
         }
     })
-    .map_err(|problem| report("$runtime/runtime.lkj", problem))?;
+    .into_result().map_err(|problem| report("$runtime/runtime.lkj", problem))?;
     if !parsed.files.is_empty() { parsed.files[0].path = actual_path.to_string(); }
     let meaning = elaborate::elaborate(&parsed)
         .map_err(|problem| located(actual_path, &parsed, problem))?;
@@ -654,9 +679,9 @@ fn ensure_runtime(
                     let (parent, name) = location(path);
                     memo.runtime_input = Some(store::input(&parent, &name, &Some(bytes.clone())));
                 }
-                prepare_runtime(text(bytes, path)?, path)?
+                prepare_runtime(text(bytes, path)?, path, options.configuration)?
             }
-            None => load_runtime(world, &None)?,
+            None => load_runtime_configured(world, &None, options.configuration)?,
         };
         *cache = Some(runtime);
     }
@@ -668,8 +693,9 @@ pub(crate) fn interpreter_image(
     checked: &ir::CheckedProgram,
     index: usize,
     runtime_source: &Option<String>,
+    configuration: ast::BuildConfiguration,
 ) -> Result<Vec<u8>, String> {
-    let runtime = load_runtime(world, runtime_source)?;
+    let runtime = load_runtime_configured(world, runtime_source, configuration)?;
     backend::emit_for_run(checked, &runtime, &checked.program().functions[index].name)
         .map_err(|problem| report("interpreter executable", problem))
 }
@@ -804,6 +830,7 @@ fn interpret(
         executable_checked,
         index,
         options.runtime_source.clone(),
+        options.configuration,
     ) {
         Ok(host) => host,
         Err(problem) => {
@@ -1258,6 +1285,9 @@ fn batch(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Mem
         let mut request = options.clone();
         request.command = columns[0].to_string();
         request.path = columns[2].to_string();
+        // Batch suites can mix source and already-selected IR. Configuration
+        // is not an input to the latter; the source runtime keeps this build setting.
+        if request.path.ends_with(".lkjir") { request.configuration_explicit = false; }
         request.arguments.clear();
         request.entry = if columns[1].is_empty() {
             None
@@ -1728,7 +1758,7 @@ fn program_options(options: &Options, plan: crate::program_directory::Plan) -> R
 
 fn execute(world: &mut World, options: &Options, stats: &mut Stats, memo: &mut Memo) -> Result<u8, String> {
     if options.program.is_none() && matches!(options.command.as_str(), "build" | "run" | "test" | "authority") {
-        if let Some(plan) = crate::program_directory::load(world, &options.path)? {
+        if let Some(plan) = crate::program_directory::load(world, &options.path, options.configuration)? {
             let configured = program_options(options, plan.clone())?;
             if options.command != "test" {
                 return execute_source(world, &configured, stats, memo);
@@ -1775,7 +1805,7 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
         return crate::test_generators::run(world, &options.tool_arguments);
     }
     if options.command == "query" {
-        let selector = crate::semantic_store::selector(&options.path, &options.source_directory, &options.library_directory, options.no_library);
+        let selector = crate::semantic_store::selector(&options.path, &options.source_directory, &options.library_directory, options.no_library, options.configuration);
         let store = memo.store.as_mut().ok_or("E_QUERY_STORE query needs an authenticated --store and --store-key")?;
         let output = crate::semantic_query::run(store, &selector, &options.query)?;
         world.stdout().write(output.as_bytes());
@@ -1800,12 +1830,12 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
     }
     if options.command == "test" {
         if let Some(rustc) = &options.witness {
-            return crate::test_runner::witness(world, &options.path, rustc);
+            return crate::test_runner::witness(world, &options.path, rustc, options.configuration);
         }
     }
     if options.command == "test" && crate::test_runner::has_cases(world, &options.path)? {
         return crate::test_runner::run_stored(world, &options.path, options.jobs, &options.engines,
-            &options.library_directory, &options.store_directory, &options.store_key, options.stats, options.inline_limit, options.store_bytes);
+            &options.library_directory, &options.store_directory, &options.store_key, options.stats, options.inline_limit, options.store_bytes, options.configuration);
     }
     if options.command == "batch" {
         return batch(world, options, stats, memo);
@@ -1839,7 +1869,7 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
             if options.index {
                 if let Some(stored) = memo.lookup(world, options, "semantic", stats) {
                     if let Ok(identity) = String::from_utf8(stored) {
-                        let selector = crate::semantic_store::selector(&options.path, &options.source_directory, &options.library_directory, options.no_library);
+                        let selector = crate::semantic_store::selector(&options.path, &options.source_directory, &options.library_directory, options.no_library, options.configuration);
                         if let Some(store) = memo.store.as_mut() {
                             if let Ok(snapshot) = crate::semantic_store::open(&mut *store, &selector, &Some(identity)) {
                                 if store.query_locator_retained(&snapshot.identity, &selector, &snapshot.root) {
@@ -1934,7 +1964,7 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
         if options.image_key.is_none() { memo.remember(options, "image", &bytes); }
         if options.index {
             let catalog = memo.catalog.take().ok_or("E_QUERY_INDEX checked source catalog was not captured")?;
-            let selector = crate::semantic_store::selector(&options.path, &options.source_directory, &options.library_directory, options.no_library);
+            let selector = crate::semantic_store::selector(&options.path, &options.source_directory, &options.library_directory, options.no_library, options.configuration);
             let snapshot = {
                 let store = memo.store.as_mut().ok_or("E_QUERY_STORE index needs an authenticated store")?;
                 crate::semantic_store::publish_emitted(store, &selector, &catalog, checked.original().checked(), &memo.native_sizes)?
@@ -2034,7 +2064,7 @@ fn execute_source(world: &mut World, options: &Options, stats: &mut Stats, memo:
 fn query_snapshot(world: &mut World, options: &Options, stats: &mut Stats) -> Result<u8, String> {
     let identity = options.query.snapshot.as_ref().ok_or("E_QUERY_SNAPSHOT explicit snapshot is missing")?;
     let selector = crate::semantic_store::selector(&options.path, &options.source_directory,
-        &options.library_directory, options.no_library);
+        &options.library_directory, options.no_library, options.configuration);
     let mut reader = store::QueryReader::open(world, &options.store_directory, &options.store_key,
         options.store_bytes, identity, &selector)?;
     stats.mark("snapshot_auth")?;
@@ -2274,6 +2304,7 @@ fn request_key(options: &Options) -> String {
     optional_key(&mut out, &options.library_directory);
     optional_key(&mut out, &options.runtime_source);
     store::push_word(&mut out, options.no_library as usize);
+    store::push_word(&mut out, options.configuration.debug_assertions as usize);
     store::push_word(&mut out, options.profile as usize);
     store::push_word(&mut out, options.roundtrip as usize);
     match options.inline_limit {
@@ -2526,7 +2557,7 @@ fn compile_snapshot(
         Some("$std/lib.lkj")
     };
     let absolute_source = options.source_directory.is_none() && options.path.starts_with('/');
-    let mut loaded = source::load_report_with_providers(&root, standard, &options.macro_providers, &mut |path: &str| {
+    let mut loaded = source::load_report_with_providers(&root, standard, &options.macro_providers, options.configuration, &mut |path: &str| {
         let result = if options.command == "check-library" && path == "$toolchain/library-check.lkj" {
             Ok(Some("fn main() {}".as_bytes().to_vec()))
         } else if path.starts_with("$std/") {

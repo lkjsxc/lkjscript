@@ -48,6 +48,9 @@ fn parse(values: &[String]) -> Result<Request, String> {
         return Err("E_USAGE --against-source-dir requires --against SOURCE".to_string());
     }
     let mut options = super::options(arguments)?;
+    if options.configuration_explicit && against.ends_with(".lkjir") {
+        return Err("E_USAGE --debug-assertions requires source input; serialized IR already contains its selected meaning".to_string());
+    }
     options.command = "check".to_string();
     options.index = false;
     options.inline_limit = Some(0usize);

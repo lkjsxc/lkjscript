@@ -1606,7 +1606,7 @@ impl Infer<'_, '_> {
             a::Expr::Bool(_) => self.atom("bool"),
             a::Expr::Char(_) => self.atom("char"),
             a::Expr::Float(_) => self.atom("f64"),
-            a::Expr::String(_) => {
+            a::Expr::String(_) | a::Expr::FilePath => {
                 let inner = self.atom("str");
                 self.shaped(Shape::Ref(false, inner))
             }

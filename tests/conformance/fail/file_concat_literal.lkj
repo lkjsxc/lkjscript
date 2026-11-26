@@ -1,0 +1,2 @@
+// expect: reject E_MACRO_EXPANSION
+pub fn probe() -> i64 { let _value = concat!(file!()); 42i64 }

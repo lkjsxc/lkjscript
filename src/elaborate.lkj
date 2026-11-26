@@ -115,6 +115,7 @@ enum PendingFunction {
 }
 struct Compiler<'a> {
     source: &'a a::Program,
+    file_paths: Vec<String>,
     names: crate::resolve::Resolver<'a>,
     implementations: crate::generics::ImplementationIndex,
     field_positions: Vec<BTreeMap<String, usize>>,
@@ -312,6 +313,22 @@ fn infer_resolved_report_with_library(
     all_library: bool,
     capture_references: bool,
 ) -> std::result::Result<TypedDefinitions<'_>, Vec<a::Diagnostic>> {
+    let paths: Vec<String> = source.files.iter().map(|file| file.path.clone()).collect();
+    infer_resolved_report_with_source_paths(source, all_library, capture_references, &paths)
+}
+
+/// Source-unit mounts keep virtual provenance identities while the authenticated
+/// invocation supplies the physical paths observed by file!. Select these before
+/// constant verification or any concrete/generic body lowering.
+pub(crate) fn infer_resolved_report_with_source_paths<'source>(
+    source: &'source a::Program,
+    all_library: bool,
+    capture_references: bool,
+    paths: &[String],
+) -> std::result::Result<TypedDefinitions<'source>, Vec<a::Diagnostic>> {
+    if paths.len() != source.files.len() {
+        return std::result::Result::Err(vec![err(a::Span::default(), "E_SOURCE_PATH", "selected file paths must cover every source file")]);
+    }
     if let std::result::Result::Err(error) = static_lifetimes::annotations(source) {
         return std::result::Result::Err(vec![error]);
     }
@@ -325,6 +342,7 @@ fn infer_resolved_report_with_library(
         std::result::Result::Ok(compiler) => compiler,
         std::result::Result::Err(error) => return std::result::Result::Err(vec![error]),
     };
+    compiler.file_paths = paths.to_vec();
     if let std::result::Result::Err(error) = compiler.check_capability_methods() {
         return std::result::Result::Err(vec![error]);
     }
@@ -345,7 +363,7 @@ fn infer_resolved_report_with_library(
         capture_references,
     );
     let (verifier, evidence, reported) =
-        match generic_check::validate_report(source, inferred.definitions, capture_references) {
+        match generic_check::validate_report(source, inferred.definitions, capture_references, paths) {
             std::result::Result::Ok(report) => report,
             std::result::Result::Err(error) => {
                 let mut errors = inferred.problems;
@@ -707,6 +725,7 @@ impl<'a> Compiler<'a> {
         }
         let mut c = Compiler {
             source,
+            file_paths: source.files.iter().map(|file| file.path.clone()).collect(),
             names,
             implementations,
             field_positions,
@@ -2808,6 +2827,19 @@ impl Builder<'_, '_> {
                     },
                     line,
                 );
+                Ok((dst, ty))
+            }
+            a::Expr::FilePath => {
+                let text = {
+                    let Some(path) = self.compiler.file_paths.get(node.span.file) else {
+                        return Err(err(node.span, "E_SOURCE_PATH", "file! invocation source is absent"));
+                    };
+                    path.clone()
+                };
+                let inner = self.compiler.intern(String::new(), ir::TypeKind::Str);
+                let ty = self.compiler.reference(inner, false);
+                let dst = self.temp(ty);
+                self.emit(ir::Op::Text { dst, bytes: text.into_bytes() }, line);
                 Ok((dst, ty))
             }
             a::Expr::String(text) => {
@@ -5212,6 +5244,7 @@ impl Builder<'_, '_> {
 
 pub(crate) fn assert_reference_capture() {
     let parsed = crate::source::parse_bundle(&crate::source::SourceBundle {
+            configuration: crate::ast::BuildConfiguration::default(),
         root: "reference-capture/main.lkj".to_string(),
         library: None,
         files: vec![crate::source::SourceInput {

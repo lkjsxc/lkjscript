@@ -61,6 +61,7 @@ pub struct Implementation {
 }
 
 pub struct Catalog {
+    pub configuration: a::BuildConfiguration,
     pub root: String,
     pub module_sources: Vec<ModuleSource>,
     /// Whether reference discovery was requested; false is declarations-only.
@@ -731,7 +732,8 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
     let resolver = resolve::Resolver::new(program).map_err(|problem| problem.message)?;
     let origins = origins::collect(program, &resolver)?;
     let mut by_path: BTreeMap<String, usize> = BTreeMap::new();
-    let mut input_identity = b"lkjscript-source-snapshot-1"[..].to_vec();
+    let mut input_identity = b"lkjscript-source-snapshot-2"[..].to_vec();
+    word(&mut input_identity, program.configuration.debug_assertions as usize);
     for (index, (path, raw)) in inputs.iter().enumerate() { by_path.insert(path.clone(), index); }
     for (path, index) in &by_path {
         bytes(&mut input_identity, path.as_bytes());
@@ -746,6 +748,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         files.push(SourceText { path: file.path.clone(), digest: sha256::hex_digest(raw), text, tokens });
     }
     let mut result = Catalog {
+        configuration: program.configuration,
         root: program.files[0usize].path.clone(), module_sources: Vec::new(), references_recorded: include_references,
         items: Vec::new(), by_identity: BTreeMap::new(), namespace_slots: BTreeMap::new(), selector_kinds: BTreeMap::new(), references: Vec::new(), generated_references: Vec::new(), unresolved: Vec::new(),
         expression_types: BTreeMap::new(), macro_replay: macro_renames::Proof::default(),

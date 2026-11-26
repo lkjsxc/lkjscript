@@ -1,0 +1,3 @@
+// expect: reject E_PARSE
+// witness: {}
+pub fn probe() -> bool { cfg!(not(debug_assertions, unix)) }

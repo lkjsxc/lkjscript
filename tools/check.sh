@@ -181,6 +181,11 @@ parallel_step 1 borrowed-callable timeout --kill-after=10s 600s bash tools/borro
 parallel_step 1 declarative-macros timeout --kill-after=10s 600s bash tools/declarative-macro-test.sh "$check_binary"
 parallel_step 1 macro-providers timeout --kill-after=10s 600s bash tools/macro-provider-test.sh "$check_binary"
 parallel_step 1 module-path timeout --kill-after=10s 600s bash tools/module-path-test.sh "$check_binary"
+parallel_step 1 file-line timeout --kill-after=10s 600s bash tools/file-test.sh "$check_binary"
+parallel_step 1 unit-file timeout --kill-after=10s 600s bash tools/unit-file-test.sh "$check_binary"
+parallel_step 1 debug-configuration timeout --kill-after=10s 600s bash tools/debug-configuration-test.sh "$check_binary"
+parallel_step 1 configuration-origins-native timeout --kill-after=10s 600s bash tools/configuration-origin-test.sh "$check_binary" --native
+parallel_step 1 configuration-origins-interpreter timeout --kill-after=10s 600s bash tools/configuration-origin-test.sh "$check_binary" --interpreter
 parallel_step 1 macro-statements timeout --kill-after=10s 600s bash tools/macro-statement-test.sh "$check_binary"
 parallel_step 1 type-outlives timeout --kill-after=10s 600s bash tools/type-outlives-test.sh "$check_binary"
 parallel_step 1 core-facade timeout --kill-after=10s 600s bash tools/core-facade-test.sh "$check_binary"
@@ -278,16 +283,16 @@ if ! awk '
         total += substr($3, length("cases=") + 1)
     }
     END {
-        if (records != 5 || total != 71) exit 1
+        if (records != 5 || total != 87) exit 1
         if (scopes["scope=expression_origins"] != 1 || scopes["scope=statement_origins"] != 1 ||
             scopes["scope=type_origins"] != 1 || scopes["scope=fragment_token_origins"] != 1 ||
             scopes["scope=lexical_origins"] != 1) exit 1
     }
 ' "${check_logs[@]}"; then
-    echo 'FAIL macro-origins (expected five interpreter scopes and 71 controls)' >&2
+    echo 'FAIL macro-origins (expected five interpreter scopes and 87 controls)' >&2
     exit 1
 fi
-printf 'ok macro-origins (71 malformed origins; statement positions/splices/roles/rules; both engines)\n'
+printf 'ok macro-origins (87 malformed origins; statement positions/splices/roles/rules; both engines)\n'
 step ir-mutation timeout --kill-after=10s 600s "$check_binary" mutate 1701 128 --jobs "$check_jobs" "${check_reuse[@]}"
 check_elapsed_ns=$(($(date +%s%N)-check_started_ns))
 read -r check_load_end _ < /proc/loadavg

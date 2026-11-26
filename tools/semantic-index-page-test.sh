@@ -222,6 +222,7 @@ pub fn index_page_oracle(world: &mut World) -> Result<(), String> {
     text.push_str("*/) -> i64 { 42i64 }\nfn main() -> i64 { f0() + f99() + long_signature() }\n");
     let path = "oracle.lkj".to_string();
     let bundle = crate::source::SourceBundle { root: path.clone(), library: None,
+        configuration: crate::ast::BuildConfiguration::default(),
         files: vec![crate::source::SourceInput { path: path.clone(), text: text.clone() }] };
     let parsed = crate::source::parse_bundle(&bundle).map_err(|problem| problem.message)?;
     let resolved = crate::resolve::resolve(&parsed).map_err(|problem| problem.message)?;
@@ -232,7 +233,7 @@ pub fn index_page_oracle(world: &mut World) -> Result<(), String> {
     let inputs: Vec<(String, Vec<u8>)> = vec![(path.clone(), text.as_bytes().to_vec())];
     let catalog = semantic::catalog_items(&resolved, &inputs, &checked)?;
     let sizes: BTreeMap<String, usize> = BTreeMap::new();
-    let selector = selector(&path, &None, &None, true);
+    let selector = selector(&path, &None, &None, true, crate::ast::BuildConfiguration::default());
     let before = oracle_publish(&mut store, &selector, &catalog, &checked, &sizes)?;
     let kinds: Vec<String> = vec!["outline".to_string(), "signature".to_string(), "text".to_string(), "slice".to_string(),
         "callees".to_string(), "type".to_string(), "layout".to_string(), "instances".to_string(), "authority".to_string()];

@@ -146,7 +146,8 @@ pub fn root_source(unit: &Definition, dependencies: &[Projection]) -> String {
     result
 }
 pub fn load<F: FnMut(&str) -> Result<Option<Vec<u8>>, String>>(
-    unit: &Definition, dependencies: &[Projection], standard: Option<&str>, read: &mut F,
+    unit: &Definition, dependencies: &[Projection], standard: Option<&str>,
+    configuration: ast::BuildConfiguration, read: &mut F,
 ) -> Result<(ast::Program, Vec<(String, Vec<u8>)>), String> {
     let mut imported: BTreeMap<String, Vec<u8>> = BTreeMap::new();
     for dependency in dependencies {
@@ -159,7 +160,8 @@ pub fn load<F: FnMut(&str) -> Result<Option<Vec<u8>>, String>>(
     }
     let root = root_source(unit, dependencies).into_bytes();
     let mut inputs: BTreeMap<String, Option<Vec<u8>>> = BTreeMap::new();
-    let report = source::load_report("$units/root.lkj", standard, &mut |path: &str| {
+    let providers: Vec<ast::macros::MacroProviderInput> = Vec::new();
+    let report = source::load_report_with_providers("$units/root.lkj", standard, &providers, configuration, &mut |path: &str| {
         if path == "$units/root.lkj" { return Ok(Some(root.clone())); }
         if let Some(bytes) = imported.get(&path.to_string()) { return Ok(Some(bytes.clone())); }
         if path.starts_with("$units/") && physical(unit, path).is_none() { return Ok(None); }

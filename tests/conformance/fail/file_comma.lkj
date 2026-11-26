@@ -1,0 +1,3 @@
+// expect: reject E_PARSE
+// witness: {"rustAccept":false}
+pub fn probe() -> i64 { let _value = file!(,); 42i64 }

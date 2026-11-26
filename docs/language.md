@@ -216,8 +216,34 @@ scope and shadow unrelated declarations, not resolved nominal/intrinsic identiti
 
 Types/instances use structural declaration/child IDs and substitutions. Printable
 names, including compact child IDs, are labels rather than semantic identity.
-Non-test compilation evaluates cfg(test) as false, including all/any/not; excluded
-declarations never enter resolution.
+Source configuration is an explicit invocation input. `--debug-assertions on|off`
+selects `cfg(debug_assertions)`; omission means on, independently of optimization,
+compiler build flags and environment variables. The value applies to the consumer,
+source library, selected macro providers, runtime sources, source units and test
+workers. Program directories accept the same option. Checked edits and comparisons
+use the selected configuration on both sides; they establish that configuration's
+meaning, not acceptance of every other configuration.
+
+Outer `#[cfg(...)]` selects supported declarations, statements and match arms
+before resolution.
+Bare `cfg!(...)` returns an ordinary boolean; both branches of an ordinary `if`
+still undergo name, type, ownership and capability checking. Predicates compose
+through `all`, `any` and unary `not`, with comma separators and optional trailing
+commas. Existing target predicates describe Linux x86-64; cfg(test) and feature
+predicates remain false. Unknown predicates, malformed forms, duplicate option
+values and a configuration flag on program IR without `--runtime-source` refuse.
+With an explicit source runtime, the flag selects only that runtime's configuration;
+program IR retains its already-selected meaning and carries no configuration authority.
+A separately serialized program must receive the same external runtime source and
+configuration to reproduce a source invocation using a custom runtime. The source snapshot,
+frontend checkpoint, whole-program/unit cache keys, and query selectors bind the
+value; exact macro-origin replay reparses with that same explicit input.
+The recognized but unsupported debug_assert macros retain their existing boundary.
+Excluded declarations never enter resolution. Disabled statements must parse as
+statements, but contribute no bindings, macro expansions or source loads. Removing
+a final statement can expose a preceding block expression as the block's value;
+a surviving semicolon still discards that value, including across macro splices.
+Other surviving statement attributes remain unsupported.
 Match arms accept outer `#[cfg(...)]` with the same predicates. Disabled arms
 must parse as arms and contribute no names, macro expansions or pattern coverage.
 Enabled arms keep their source order and ordinary guard, ownership and exhaustiveness rules.
@@ -1213,6 +1239,23 @@ qualified builtin names are refused. Lowering is an ordinary string expression,
 with unchanged token-origin replay and independent IR checking. A checked module
 rename that changes this observable string refuses with `E_EDIT_MEANING`, also
 inside a mixed transaction. Body replacements reparse in their actual module.
+
+Bare `file!()` produces the selected source path at the invocation, and `line!()`
+produces its one-based line as `u32`. Nested provider templates use their consumer's
+invocation; forwarded expression/block/token-tree captures retain their authored
+caller span. External-module code uses that module's source, and provider-owned
+functions use the provider source. Relative and absolute spelling follow the
+selected source path; `--source-dir` joins the selected root and file. Diagnostic
+path mounting cannot turn a caller into the provider's definition location.
+Empty parentheses, brackets and braces work; arguments and qualifiers refuse.
+File paths materialize after source selection as ordinary checked-IR text; line
+numbers use ordinary integer constants. Parser-time literal consumers such as
+`format!(file!())`, `concat!(file!())` and include-file arguments remain unsupported;
+file! works as a value, constant or ordinary formatting argument. Source units supply
+physical source paths from their authenticated manifest while retaining virtual
+projection identities; imported generic bodies keep their defining source path.
+Meaning-preserving renames and moves check observable path/line values; explicit
+body replacements may change them. All candidates revalidate exact macro origins.
 
 A compiler invocation can select a declarative provider with
 `--source-dir DIR --macro-provider CRATE:ALIAS=PATH`. Use a separate relative

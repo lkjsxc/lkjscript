@@ -1,0 +1,3 @@
+// expect: reject E_PARSE
+// witness: {"root":true}
+pub fn probe() -> i64 { #[cfg(any())] if true { let = 1i64; } 42i64 }

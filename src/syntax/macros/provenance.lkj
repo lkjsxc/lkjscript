@@ -131,7 +131,7 @@ fn authenticated_input(input: &Program, inputs: &[(String, Vec<u8>)]) -> Result<
     let library = if standard.is_some() { Some("$std/lib.lkj") } else { None };
     let providers: Vec<crate::ast::macros::MacroProviderInput> = input.macro_providers.iter()
         .map(|provider| provider.input.clone()).collect();
-    let mut rebuilt = crate::source::load_report_with_providers(&root, library, &providers, &mut |path: &str| {
+    let mut rebuilt = crate::source::load_report_with_providers(&root, library, &providers, input.configuration, &mut |path: &str| {
         let path = source_path(path, &standard);
         Ok(inputs.iter().find(|(candidate, _)| candidate == &path)
             .map(|(_, bytes)| bytes.clone()))

@@ -11,6 +11,7 @@ fn bundle(files: &[(String, String)]) -> SourceBundle {
         });
     }
     SourceBundle {
+        configuration: crate::ast::BuildConfiguration::default(),
         root: "case/main.lkj".to_string(),
         library: None,
         files: inputs,
@@ -534,7 +535,7 @@ fn macro_provider_replays_exact_source_and_capture() {
     let providers = vec![crate::ast::macros::MacroProviderInput {
         name: "counters".to_string(), alias: "chosen".to_string(), path: "case/provider.lkj".to_string(),
     }];
-    let program = source::load_report_with_providers("case/main.lkj", None, &providers, &mut |path: &str|
+    let program = source::load_report_with_providers("case/main.lkj", None, &providers, crate::ast::BuildConfiguration::default(), &mut |path: &str|
         -> Result<Option<Vec<u8>>, String> {
         Ok(inputs.iter().find(|entry| entry.0 == path).map(|entry| entry.1.clone()))
     }).into_result().unwrap();

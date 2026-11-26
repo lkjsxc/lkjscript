@@ -406,10 +406,55 @@ zero original logging calls are semantically checked or executed by this replay.
 The before runs take 51.00 s for bin and 225.83 s for lib; the after runs take
 66.64 s and 327.21 s while traversing farther syntax. These are host observations,
 not a performance bound. The reproducible scripts, exact site transitions and
-comparison are retained in the assigned format-args handoff report. The remaining
-frontiers are explicit debug configuration at 190 sites, file! at five, and two
+comparison are retained in the assigned format-args handoff report. At that checkpoint the remaining
+frontiers were explicit debug configuration at 190 sites, file! at five, and two
 unsafe argument forms; ordinary checking of the 275 syntax-complete calls remains
 separate from this expansion count.
+
+#### Explicit configuration and call-site source paths
+
+A fresh baseline from `74a08b76f5fd44b59a8015f6d2cb4e398772f92c`
+and the configured candidate retain the same Sōzu 1.0.6 pin,
+`c5ff06a12bd514e06ab28965052d0ad1e19c45b3`, all 196 tracked files,
+92 byte-preserving suffix aliases and 472 authored path/line/column/macro identities.
+The candidate receives explicit `--debug-assertions off` and `on` inputs; no host
+build flag or environment variable selects the mode. Call-site `file!` preserves
+the expansion destination and captured source location. All five file sites also
+use `line!`, so that ordinary source intrinsic is included in this slice.
+
+| Root | Sites | file before / off / on | cfg before / off / on | Unsafe before / off / on | Complete syntax before / off / on |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| Bin | 115 | 0 / 0 / 0 | 45 / 0 / 0 | 2 / 2 / 2 | 68 / 113 / 113 |
+| Lib | 357 | 5 / 0 / 0 | 145 / 0 / 0 | 0 / 0 / 0 | 207 / 357 / 357 |
+| Total | 472 | 5 / 0 / 0 | 190 / 0 / 0 | 2 / 2 / 2 | 275 / 470 / 470 |
+
+All 195 targeted sites now complete isolated recursive syntax expansion in both
+modes. There are no other first-refusal categories or non-target frontier changes.
+All 75 original primary consumer capability rows (20 bin, 55 lib) remain
+byte-identical. The two unsafe argument forms remain unchanged. This is syntax
+evidence: zero original logging calls are semantically checked or executed.
+Ordinary checking of the 470 complete expansions is the next separate step.
+
+The logging provider requires cfg attributes on ordinary statements as well as
+items. Disabled statements retain syntax validation without contributing bindings,
+source loads or macro expansions. Removing them, including through empty macro
+splices, preserves Rust's block-tail and semicolon rules. Source configuration,
+file paths and line numbers lower to ordinary boolean, text and integer IR values;
+no new trusted IR operation or capability exemption is introduced.
+
+The before bin/lib runs take 67.73 / 360.56 s; off takes 62.57 / 333.15 s;
+on takes 97.19 / 588.82 s. These are host observations while traversing different
+selected bodies, not a performance bound. The exact comparison, source snapshots,
+per-site transition table and reproducible scripts are retained in the assigned
+cfg/file handoff report. Its private audit adapter follows the changed internal
+statement-expansion signature; the authored-site protocol is unchanged. The
+incomplete first candidate exposed the statement requirement and is retained as
+nonacceptance evidence alongside the completed replay.
+
+A later semantic-test fixture correction reproduced both the compiler and its
+private audit byte-for-byte. The retained execution artifacts remain bound to
+those exact binaries; the corrected source snapshot and unchanged log hashes
+are recorded explicitly in the handoff report.
 
 #### Earlier ordinary numeric traits frontier
 

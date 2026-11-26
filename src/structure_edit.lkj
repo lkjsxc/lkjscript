@@ -369,12 +369,12 @@ fn finish(inputs: &[(String, Vec<u8>)], patches: Vec<Patch>) -> Result<Draft, St
     for identity in identities { names.push(identity); }
     Ok(Draft { changes, projections: Vec::new(), identities: names, patches: all })
 }
-pub(crate) fn one_item(identity: &str, source: &str, body: bool) -> Result<(), String> {
+pub(crate) fn one_item(identity: &str, source: &str, body: bool, configuration: crate::ast::BuildConfiguration) -> Result<(), String> {
     let wrapped = if body { format!("fn __lkjscript_transaction_body() {source}") }
         else { format!("mod __lkjscript_transaction_scope {{ {source} }}") };
     // Shape validation retains invocations; the complete candidate expands them
     // in their real source scope and must pass the ordinary semantic checks.
-    let parsed = syntax::parse_unexpanded(&wrapped).map_err(|problem| error(identity, "SYNTAX", &problem.message))?;
+    let parsed = syntax::parse_unexpanded_configured(&wrapped, configuration).map_err(|problem| error(identity, "SYNTAX", &problem.message))?;
     let count = if body { parsed.items.len() } else if parsed.items.len() == 1usize {
         match parsed.items[0usize] {
             crate::ast::Item::Module(index) => parsed.modules[index].items.len(),
@@ -387,9 +387,9 @@ pub(crate) fn one_item(identity: &str, source: &str, body: bool) -> Result<(), S
     Ok(())
 }
 
-pub(crate) fn external_module_name(identity: &str, source: &str) -> Result<String, String> {
+pub(crate) fn external_module_name(identity: &str, source: &str, configuration: crate::ast::BuildConfiguration) -> Result<String, String> {
     let prefix = "mod __lkjscript_transaction_scope { ";
-    let parsed = syntax::parse(&format!("{prefix}{source} }}"))
+    let parsed = syntax::parse_configured(&format!("{prefix}{source} }}"), configuration)
         .map_err(|problem| error(identity, "SYNTAX", &problem.message))?;
     if parsed.items.len() != 1usize {
         return Err(error(identity, "PROJECTION", "projection needs exactly one external module declaration"));
@@ -463,7 +463,7 @@ fn projection(catalog: &semantic::Catalog, operation: &Operation) -> Result<Opti
             return Err(error(&operation.identity, "PROJECTION", "projection path must be relative and normalized"));
         }
     }
-    let name = external_module_name(&operation.identity, &operation.source)?;
+    let name = external_module_name(&operation.identity, &operation.source, catalog.configuration)?;
     let qualified = if operation.identity == "crate" { semantic::declaration_path(&name) }
         else { format!("{}::{name}", semantic::source_path(&operation.identity)) };
     let identity = semantic::source_identity(crate::resolve::Namespace::Type, &qualified);
@@ -478,7 +478,7 @@ fn projection(catalog: &semantic::Catalog, operation: &Operation) -> Result<Opti
     Ok(Some(Projection { identity, parent: operation.identity.clone(), path,
         source: string(projected, "source", true)?.as_bytes().to_vec() }))
 }
-fn one_expression(identity: &str, source: &str, call: bool) -> Result<String, String> {
+fn one_expression(identity: &str, source: &str, call: bool, configuration: crate::ast::BuildConfiguration) -> Result<String, String> {
     let rule = if call { "CALL_SITE" } else { "EXPRESSION" };
     let tokens = syntax::semantic_tokens(source)
         .map_err(|problem| error(identity, rule, &problem.message))?;
@@ -508,7 +508,7 @@ fn one_expression(identity: &str, source: &str, call: bool) -> Result<String, St
     let expression = format!("(\n{source}\n)");
     // Validate the raw value expression to EOF before adding projection grouping.
     // Macro invocations are shape-checked here and expanded only in real scope.
-    let (parsed, tail) = syntax::parse_expression_unexpanded(source)
+    let (parsed, tail) = syntax::parse_expression_unexpanded_configured(source, configuration)
         .map_err(|problem| error(identity, rule, &problem.message))?;
     if call && !matches!(parsed.exprs[tail].kind, crate::ast::Expr::Call { .. } | crate::ast::Expr::Method { .. }) {
         return Err(error(identity, rule, "call-site text is not one complete call expression; replace its owning body"));
@@ -530,10 +530,10 @@ fn call_replacement(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)],
     }
     // Grouped callees/receivers can have spans missing an opening parenthesis.
     // Refuse such incomplete projections instead of guessing surrounding bytes.
-    if one_expression(&target.identity, &target.text, true).is_err() {
+    if one_expression(&target.identity, &target.text, true, catalog.configuration).is_err() {
         return Err(error(&target.identity, "CALL_SITE", "the text at this call site is not one complete call expression; use replace-body on its function instead"));
     }
-    one_expression(&target.identity, source, false)
+    one_expression(&target.identity, source, false, catalog.configuration)
 }
 
 pub fn plan(catalog: &semantic::Catalog,
@@ -584,7 +584,7 @@ pub fn plan(catalog: &semantic::Catalog,
                     return Err(error(&projected.identity, "PROJECTION", "duplicate projected identity or path"));
                 }
                 projections.push(projected);
-            } else { one_item(&operation.identity, &operation.source, false)?; }
+            } else { one_item(&operation.identity, &operation.source, false, catalog.configuration)?; }
             let (file, at) = add_location(catalog, inputs, operation)?;
             patch(&mut patches, &operation.identity, &file, at, at, &format!("\n{}\n", operation.source));
             continue;
@@ -600,12 +600,12 @@ pub fn plan(catalog: &semantic::Catalog,
             "replace-body" => {
                 let (start, end) = target.body.ok_or_else(|| error(&operation.identity, "BODY", "identity has no source body"))?;
                 if operation.source.is_empty() { return Err(error(&operation.identity, "BODY", "replacement body is empty")); }
-                one_item(&operation.identity, &operation.source, true)?;
+                one_item(&operation.identity, &operation.source, true, catalog.configuration)?;
                 patch(&mut patches, &operation.identity, &target.file, start, end, &operation.source);
             }
             "replace-item" => {
                 if operation.source.is_empty() { return Err(error(&operation.identity, "ITEM", "replacement item is empty")); }
-                one_item(&operation.identity, &operation.source, false)?;
+                one_item(&operation.identity, &operation.source, false, catalog.configuration)?;
                 patch(&mut patches, &operation.identity, &target.file, target.start, target.end, &operation.source);
             }
             "remove-item" => {

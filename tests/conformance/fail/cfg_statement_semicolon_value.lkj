@@ -1,0 +1,3 @@
+// expect: reject E_TYPE
+// witness: {"root":true}
+pub fn probe() -> i64 { #[cfg(all())] if true { 42i64 } else { 17i64 }; }

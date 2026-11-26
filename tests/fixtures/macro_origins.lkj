@@ -182,9 +182,10 @@ fn expression_origins() -> i64 {
     let mut changed_default = program.clone();
     changed_default.structs[generated_type].generics[0usize].default = Some(program.functions[anchor].params[0usize].ty);
     count += refused(&changed_default);
+    count += file_path_origins();
     count += module_path_origins();
     count += format_args_origins();
-    assert!(count == 35usize);
+    assert!(count == 45usize);
     count as i64
 }
 
@@ -200,7 +201,7 @@ fn parsed_fixture(text: &str) -> (ast::Program, Vec<(String, Vec<u8>)>) {
 fn macro_path_refused(program: &ast::Program) -> usize {
     match syntax::macros::provenance::validate(program) {
         Err(problem) => assert!(problem.code == "E_IDENTITY_ORIGIN"),
-        Ok(()) => panic!("forged module-path origin accepted"),
+        Ok(()) => panic!("forged call-site origin accepted"),
     }
     1usize
 }
@@ -250,6 +251,66 @@ fn value() { let item = 7i64; let first = deferred!(item); let second = capture!
     assert!(count == 8usize);
     count
 }
+fn file_path_origins() -> usize {
+    let (program, inputs) = parsed_fixture(r#"
+macro_rules! leaf_file { () => { file!() }; }
+macro_rules! relay_file { () => { leaf_file!() }; }
+fn value() -> &'static str { relay_file!() }
+macro_rules! caller_line { () => { line!() }; }
+fn line_value() -> u32 { caller_line!() }
+"#);
+    mounted_replay(&program, &inputs);
+    let value = program.exprs.iter().position(|node| matches!(node.kind, ast::Expr::FilePath)).unwrap();
+    let invocation = program.macro_invocations.iter().position(|call| call.name == "leaf_file").unwrap();
+    let mut count = 0usize;
+    let mut literal = program.clone();
+    literal.exprs[value].kind = ast::Expr::String("invented.lkj".to_string());
+    count += macro_path_refused(&literal);
+    let mut file = program.clone();
+    file.exprs[value].span.file = 1usize;
+    count += macro_path_refused(&file);
+    let mut position = program.clone();
+    position.exprs[value].span.start += 1usize;
+    count += macro_path_refused(&position);
+    let mut caller = program.clone();
+    caller.macro_invocations[invocation].span.file = 1usize;
+    count += macro_path_refused(&caller);
+    let mut parent = program.clone();
+    parent.macro_invocations[invocation].parent = None;
+    count += macro_path_refused(&parent);
+    let mut snapshot = program.clone();
+    snapshot.macro_input.as_mut().unwrap().macro_definitions[0usize].body[0usize].origin.file = 1usize;
+    count += unauthenticated(&snapshot, &inputs);
+
+    let provider_inputs = vec![("main.lkj".to_string(),
+        b"#[macro_use] extern crate file_provider as alias; fn value() -> &'static str { outer_file!() }"[..].to_vec()),
+        ("provider.lkj".to_string(), b"#[macro_export] macro_rules! leaf_file { () => { file!() }; } #[macro_export] macro_rules! outer_file { () => { $crate::leaf_file!() }; }"[..].to_vec())];
+    let providers = vec![ast::macros::MacroProviderInput { name: "file_provider".to_string(),
+        alias: "alias".to_string(), path: "provider.lkj".to_string() }];
+    let provider = source::load_report_with_providers("main.lkj", None, &providers, ast::BuildConfiguration::default(), &mut |path: &str| {
+        Ok(provider_inputs.iter().find(|(name, _)| name == path).map(|(_, bytes)| bytes.clone()))
+    }).into_result().unwrap();
+    let provider = resolve::resolve(&provider).unwrap();
+    syntax::macros::provenance::validate_inputs(&provider, &provider_inputs).unwrap();
+    let file = provider.exprs.iter().position(|node| matches!(node.kind, ast::Expr::FilePath)).unwrap();
+    let mut definition_file = provider.clone();
+    definition_file.exprs[file].span.file = 1usize;
+    count += macro_path_refused(&definition_file);
+    let mut source_path = provider.clone();
+    source_path.files[0usize].path = "invented.lkj".to_string();
+    source_path.macro_input.as_mut().unwrap().files[0usize].path = "invented.lkj".to_string();
+    count += unauthenticated(&source_path, &provider_inputs);
+    let line = program.exprs.iter().position(|node| matches!(&node.kind, ast::Expr::Int(value) if value.ends_with("u32"))).unwrap();
+    let mut line_literal = program.clone();
+    line_literal.exprs[line].kind = ast::Expr::Int("1u32".to_string());
+    count += macro_path_refused(&line_literal);
+    let mut line_span = program.clone();
+    line_span.exprs[line].span.line += 1usize;
+    count += macro_path_refused(&line_span);
+    assert!(count == 10usize);
+    count
+}
+
 fn module_path_origins() -> usize {
     let text = r#"
 macro_rules! path { () => { module_path!() }; }
@@ -294,7 +355,7 @@ mod right { pub fn value() -> &'static str { relay!() } }
         ("provider.lkj".to_string(), b"#[macro_export] macro_rules! label { () => { module_path!() }; }"[..].to_vec())];
     let providers = vec![ast::macros::MacroProviderInput { name: "provider_name".to_string(),
         alias: "alias".to_string(), path: "provider.lkj".to_string() }];
-    let provider = source::load_report_with_providers("main.lkj", None, &providers, &mut |path: &str| {
+    let provider = source::load_report_with_providers("main.lkj", None, &providers, ast::BuildConfiguration::default(), &mut |path: &str| {
         Ok(provider_inputs.iter().find(|(name, _)| name == path).map(|(_, bytes)| bytes.clone()))
     }).into_result().unwrap();
     let mut provider = resolve::resolve(&provider).unwrap();
@@ -500,6 +561,50 @@ fn source() -> i64 { block_import!(0i64) }
     assert!(count == 3usize);
     count as i64
 }
+fn statement_tail_origins() -> usize {
+    let (program, inputs) = parsed_fixture(r#"
+macro_rules! value { () => { if true { 42i64 } else { 9i64 } }; }
+macro_rules! producer { () => { value!{} }; }
+macro_rules! gone { () => { #[cfg(any())] { 0i64 } }; }
+fn source() -> i64 { producer!{} gone!{} }
+"#);
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    origins::collect(&program, &resolver).unwrap();
+    mounted_replay(&program, &inputs);
+    let source = program.functions.iter().position(|function| function.name == "source").unwrap();
+    let body = program.functions[source].body.unwrap();
+    let tail = program.blocks[body].tail.unwrap();
+    assert!(program.blocks[body].statements.is_empty());
+    let producer = program.macro_invocations.iter().position(|call| call.name == "producer").unwrap();
+    let value = program.macro_invocations.iter().position(|call| call.name == "value").unwrap();
+    let gone = program.macro_invocations.iter().position(|call| call.name == "gone").unwrap();
+    let producer_splice = program.macro_expansions.iter().position(|item| item.invocation == producer).unwrap();
+    let value_splice = program.macro_expansions.iter().position(|item| item.invocation == value).unwrap();
+    let gone_splice = program.macro_expansions.iter().position(|item| item.invocation == gone).unwrap();
+    let mut count = 0usize;
+    for expansion in vec![producer_splice, value_splice] {
+        let splice = program.macro_expansions[expansion].splice.as_ref().unwrap();
+        assert!(splice.block == body && splice.first == 0usize && splice.count == 0usize);
+        assert!(splice.tail == Some(tail));
+        let mut missing_tail = program.clone();
+        missing_tail.macro_expansions[expansion].splice.as_mut().unwrap().tail = None;
+        count += refused(&missing_tail);
+        let mut stale_count = program.clone();
+        stale_count.macro_expansions[expansion].splice.as_mut().unwrap().count = 1usize;
+        count += refused(&stale_count);
+    }
+    let splice = program.macro_expansions[gone_splice].splice.as_ref().unwrap();
+    assert!(splice.block == body && splice.first == 0usize && splice.count == 0usize && splice.tail.is_none());
+    let mut stale_first = program.clone();
+    stale_first.macro_expansions[gone_splice].splice.as_mut().unwrap().first = 1usize;
+    count += refused(&stale_first);
+    let mut stolen_tail = program.clone();
+    stolen_tail.macro_expansions[gone_splice].splice.as_mut().unwrap().tail = Some(tail);
+    count += refused(&stolen_tail);
+    assert!(count == 6usize);
+    count
+}
+
 fn statement_origins() -> i64 {
     let (program, inputs) = parsed_fixture(r#"
 macro_rules! emit { ($name:ident, $value:expr) => { fn $name() -> i64 { $value } }; }
@@ -572,11 +677,12 @@ fn source() -> i64 {
     let mut original_block = program.clone();
     original_block.macro_input.as_mut().unwrap().macro_invocations[source_statement].block = None;
     count += unauthenticated(&original_block, &inputs);
-    assert!(count == 12usize);
+    count += statement_tail_origins();
+    assert!(count == 18usize);
     count as i64
 }
 fn main() {
     let count = expression_origins() + type_origins() + fragment_token_origins()
         + lexical_origins() + statement_origins();
-    assert!(count == 71i64);
+    assert!(count == 87i64);
 }

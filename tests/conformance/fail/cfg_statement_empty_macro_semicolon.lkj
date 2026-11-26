@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"root":true}
+macro_rules! empty { () => { #[cfg(any())] { 17i64 } }; }
+pub fn probe() -> i64 { if true { 42i64 } else { 9i64 } empty!(); }

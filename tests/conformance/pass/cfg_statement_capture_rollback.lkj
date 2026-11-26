@@ -1,0 +1,17 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! discard_expr { ($value:expr) => { #[cfg(any())] $value; }; }
+macro_rules! discard_block { ($body:block) => { #[cfg(any())] $body }; }
+macro_rules! reuse {
+    ($value:expr, $body:block, $ty:ty) => {{
+        #[cfg(any())] { let hidden: $ty = $value; $body; }
+        let active: $ty = $value;
+        active + $body
+    }};
+}
+pub fn probe() -> i64 {
+    discard_expr!(include_str!("cfg-statement-absent.txt"));
+    discard_block!({ let unused: MissingType = missing_name(); include_str!("cfg-statement-absent.txt") });
+    #[cfg(any())] let unused = missing_name();
+    reuse!(20i64, { 22i64 }, i64)
+}

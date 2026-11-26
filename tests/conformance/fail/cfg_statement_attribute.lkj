@@ -1,0 +1,2 @@
+// expect: reject E_UNSUPPORTED
+pub fn probe() -> i64 { #[allow(unused)] 1i64; 42i64 }

@@ -1363,6 +1363,7 @@ mod check_tests {
 
     fn assert_flat_match_shape(text: &str, expected: [usize; 4]) {
         let parsed = crate::source::parse_bundle(&crate::source::SourceBundle {
+            configuration: crate::ast::BuildConfiguration::default(),
             root: "flat-match.lkj".to_string(),
             library: None,
             files: vec![crate::source::SourceInput {

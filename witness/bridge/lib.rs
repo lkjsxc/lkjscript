@@ -84,9 +84,20 @@ pub fn load_report_with_providers<F: FnMut(&str) -> Result<Option<Vec<u8>>, Stri
     root: &str,
     standard: Option<&str>,
     providers: &[ast::macros::MacroProviderInput],
+    configuration: ast::BuildConfiguration,
     read: &mut F,
 ) -> source::SourceReport {
-    source::load_report_with_providers(root, standard, providers, read)
+    source::load_report_with_providers(root, standard, providers, configuration, read)
+}
+
+/// Bridge unit elaboration with the selected physical source paths.
+pub fn infer_resolved_report_with_source_paths<'source>(
+    source: &'source ast::Program,
+    all_library: bool,
+    capture_references: bool,
+    paths: &[String],
+) -> Result<elaborate::TypedDefinitions<'source>, Vec<ast::Diagnostic>> {
+    elaborate::infer_resolved_report_with_source_paths(source, all_library, capture_references, paths)
 }
 
 /// Preserve source-crate access across the optional witness crate split.

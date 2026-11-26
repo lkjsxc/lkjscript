@@ -49,6 +49,7 @@ fn parse_unit(catalog: &semantic::Catalog, target: &semantic::Item, inputs: &[(S
         parent = owner.parent.clone();
     }
     let mut tree = a::Program::default();
+    tree.configuration = catalog.configuration;
     tree.scopes.push(a::ModuleScope { path: if parent == "type@std" { "$std".to_string() } else { String::new() }, parent: None, crate_root: 0usize });
     let mut scope = 0usize;
     while let Some(path) = parents.pop() {
@@ -76,18 +77,18 @@ pub(crate) fn at_site(id: &str, rule: &str, site: &semantic::Reference, reason: 
     fail(id, rule, &format!("{reason}; decision site {} {}:{}..{} ({})",
         semantic::quote(&site.owner), semantic::quote(&site.file), site.start, site.end, site.kind))
 }
-fn expression(id: &str, value: &str) -> Result<(), String> {
+fn expression(id: &str, value: &str, configuration: a::BuildConfiguration) -> Result<(), String> {
     let wrapped = format!("fn __lkjscript_expression() {{ {value} }}");
-    let tree = syntax::parse(&wrapped).map_err(|problem| fail(id, "EXPRESSION", &problem.message))?;
+    let tree = syntax::parse_configured(&wrapped, configuration).map_err(|problem| fail(id, "EXPRESSION", &problem.message))?;
     if tree.items.len() != 1usize { return Err(fail(id, "EXPRESSION", "expected exactly one expression")); }
     let index = match tree.items[0usize] { a::Item::Function(index) => index, _ => return Err(fail(id, "EXPRESSION", "expected an expression")) };
     let body = &tree.blocks[tree.functions[index].body.unwrap()];
     if !body.statements.is_empty() || body.tail.is_none() { return Err(fail(id, "EXPRESSION", "expected one expression without an outer statement")); }
     Ok(())
 }
-fn type_source(id: &str, value: &str) -> Result<(), String> {
+fn type_source(id: &str, value: &str, configuration: a::BuildConfiguration) -> Result<(), String> {
     let wrapped = format!("fn __lkjscript_type(__value: {value}) {{}}");
-    let tree = syntax::parse(&wrapped).map_err(|problem| fail(id, "TYPE", &problem.message))?;
+    let tree = syntax::parse_configured(&wrapped, configuration).map_err(|problem| fail(id, "TYPE", &problem.message))?;
     if tree.items.len() != 1usize || tree.functions.len() != 1usize || tree.functions[0usize].params.len() != 1usize {
         return Err(fail(id, "TYPE", "expected one type"));
     }
@@ -265,8 +266,8 @@ fn signature(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], operatio
             let name = text(value, &target.identity, "name", true)?;
             if !edit::identifier(&name) || name == "self" { return Err(fail(&target.identity, "NAME", "new parameter needs an ordinary identifier")); }
             functions::annotations::parameter_name(catalog, &unit, &name)?;
-            let ty = text(value, &target.identity, "type", true)?; type_source(&target.identity, &ty)?;
-            let argument = text(value, &target.identity, "argument", true)?; expression(&target.identity, &argument)?;
+            let ty = text(value, &target.identity, "type", true)?; type_source(&target.identity, &ty, catalog.configuration)?;
+            let argument = text(value, &target.identity, "argument", true)?; expression(&target.identity, &argument, catalog.configuration)?;
             added.push_str(&argument); added.push('\n');
             Parameter { old: None, declaration: format!("{name}: {ty}"), argument, name }
         };
@@ -440,9 +441,9 @@ fn declaration_container(catalog: &semantic::Catalog, target: &semantic::Item,
         Ok((unit, variant.span, variant.fields))
     } else { Err(fail(&target.identity, "FIELD", "expected a struct or named-variant identity")) }
 }
-fn field_fragment(id: &str, source: &str) -> Result<String, String> {
+fn field_fragment(id: &str, source: &str, configuration: a::BuildConfiguration) -> Result<String, String> {
     let wrapped = format!("struct __lkjscript_field {{ {source} }}");
-    let tree = syntax::parse(&wrapped).map_err(|problem| fail(id, "FIELD", &problem.message))?;
+    let tree = syntax::parse_configured(&wrapped, configuration).map_err(|problem| fail(id, "FIELD", &problem.message))?;
     if tree.items.len() != 1usize || tree.structs.len() != 1usize || tree.structs[0usize].fields.len() != 1usize {
         return Err(fail(id, "FIELD", "source must contain exactly one named field"));
     }
@@ -454,8 +455,8 @@ fn add_field(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], operatio
     let target = edit::item(catalog, &operation.identity)?;
     partial_members(catalog, target)?;
     let source = text(request, &target.identity, "source", true)?;
-    let value = text(request, &target.identity, "value", true)?; expression(&target.identity, &value)?;
-    let name = field_fragment(&target.identity, &source)?;
+    let value = text(request, &target.identity, "value", true)?; expression(&target.identity, &value, catalog.configuration)?;
+    let name = field_fragment(&target.identity, &source, catalog.configuration)?;
     let (definition, span, existing) = declaration_container(catalog, target, inputs)?;
     for field in &existing { if field.name == name { return Err(fail(&target.identity, "FIELD", "field already exists")); } }
     let (at, addition) = new_member(&definition, span.start, span.end, &source)?;
@@ -535,7 +536,7 @@ fn remove_field(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], opera
     let (start, end) = erase_member(&definition, span, container.end);
     edit::patch(patches, &target.identity, &definition.owner.file, start, end, "");
     let replacement = text(request, &target.identity, "replacement", false)?;
-    if !replacement.is_empty() { expression(&target.identity, &replacement)?; }
+    if !replacement.is_empty() { expression(&target.identity, &replacement, catalog.configuration)?; }
     let mut targets = BTreeSet::new(); targets.insert(target.identity.clone());
     for (owner, sites) in owners_for(catalog, &targets) {
         let unit = parse_unit(catalog, edit::item(catalog, &owner)?, inputs)?;
@@ -666,17 +667,17 @@ fn catch_all(program: &a::Program, index: usize) -> bool {
         _ => false,
     }
 }
-fn variant_fragment(id: &str, source: &str) -> Result<String, String> {
+fn variant_fragment(id: &str, source: &str, configuration: a::BuildConfiguration) -> Result<String, String> {
     let wrapped = format!("enum __lkjscript_variant {{ {source} }}");
-    let tree = syntax::parse(&wrapped).map_err(|problem| fail(id, "VARIANT", &problem.message))?;
+    let tree = syntax::parse_configured(&wrapped, configuration).map_err(|problem| fail(id, "VARIANT", &problem.message))?;
     if tree.items.len() != 1usize || tree.enums.len() != 1usize || tree.enums[0usize].variants.len() != 1usize {
         return Err(fail(id, "VARIANT", "source must contain exactly one variant"));
     }
     Ok(tree.enums[0usize].variants[0usize].name.clone())
 }
-fn arm_fragment(id: &str, source: &str, name: &str) -> Result<String, String> {
+fn arm_fragment(id: &str, source: &str, name: &str, configuration: a::BuildConfiguration) -> Result<String, String> {
     let wrapped = format!("fn __lkjscript_arm() {{ match () {{ {source} }} }}");
-    let tree = syntax::parse(&wrapped).map_err(|problem| fail(id, "MATCH_ARM", &problem.message))?;
+    let tree = syntax::parse_configured(&wrapped, configuration).map_err(|problem| fail(id, "MATCH_ARM", &problem.message))?;
     if tree.items.len() != 1usize || tree.functions.len() != 1usize { return Err(fail(id, "MATCH_ARM", "expected one match arm")); }
     let body = &tree.blocks[tree.functions[0usize].body.unwrap()];
     if !body.statements.is_empty() { return Err(fail(id, "MATCH_ARM", "expected one match arm")); }
@@ -699,8 +700,8 @@ fn add_variant(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], operat
     if target.kind != "enum" { return Err(fail(&target.identity, "ENUM", "add-variant needs an enum identity")); }
     partial_members(catalog, target)?;
     let source = text(request, &target.identity, "source", true)?;
-    let name = variant_fragment(&target.identity, &source)?;
-    let arm = arm_fragment(&target.identity, &text(request, &target.identity, "arm", true)?, &name)?;
+    let name = variant_fragment(&target.identity, &source, catalog.configuration)?;
+    let arm = arm_fragment(&target.identity, &text(request, &target.identity, "arm", true)?, &name, catalog.configuration)?;
     let definition = parse_unit(catalog, target, inputs)?;
     let index = match definition.tree.items[0usize] { a::Item::Enum(index) => index,
         _ => return Err(fail(&target.identity, "ENUM", "expected an enum declaration")) };
@@ -790,7 +791,7 @@ fn remove_variant(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], ope
     let (start, end) = erase_member(&definition, span, definition.tree.enums[index].span.end);
     edit::patch(patches, &target.identity, &definition.owner.file, start, end, "");
     let replacement = text(request, &target.identity, "replacement", false)?;
-    if !replacement.is_empty() { expression(&target.identity, &replacement)?; }
+    if !replacement.is_empty() { expression(&target.identity, &replacement, catalog.configuration)?; }
     for site in &catalog.references {
         if site.target == target.identity && site.kind == "import" { return Err(at_site(&target.identity, "IMPORT", site, "remove the variant import explicitly")); }
     }
@@ -1104,7 +1105,7 @@ mod functions {
         for item in &catalog.items {
             if item.parent == owner.parent && item.name == name && catalog.names_conflict(owner, item) { return Err(fail(&item.identity, "NAME", "extracted name already exists in the module")); }
         }
-        let result = text(request, &target.identity, "result", true)?; type_source(&target.identity, &result)?;
+        let result = text(request, &target.identity, "result", true)?; type_source(&target.identity, &result, catalog.configuration)?;
         let original_type: &String = catalog.expression_types.get(&(owner.file.clone(), start, end)).and_then(|ty| ty.as_ref())
             .ok_or_else(|| fail(&target.identity, "EXPRESSION_TYPE", "selected expression has no unambiguous inferred type; use a body-level operation"))?;
         if type_key(&target.identity, &result)? != type_key(&target.identity, original_type.as_str())? {
@@ -1122,7 +1123,7 @@ mod functions {
             if !identities.insert(id.clone()) { return Err(fail(&id, "CAPTURE", "capture appears twice")); }
             let parameter = text(value, &id, "name", true)?;
             if !edit::identifier(&parameter) || !names.insert(parameter.clone()) { return Err(fail(&id, "NAME", "capture names must be distinct identifiers")); }
-            let ty = text(value, &id, "type", true)?; type_source(&id, &ty)?;
+            let ty = text(value, &id, "type", true)?; type_source(&id, &ty, catalog.configuration)?;
             let argument = text(value, &id, "argument", true)?; let borrowed = capture_argument(&id, &argument, &binding.name)?;
             if !binding.type_resolved { return Err(fail(&id, "CAPTURE_TYPE", "capture has no resolved source type")); }
             let expected_type = if borrowed {
@@ -1168,7 +1169,7 @@ mod functions {
         }
         let (generic, type_arguments, bounds) = generic_source(&unit, source)?;
         let declaration = format!("fn {name}{generic}({parameters}) -> {result} {bounds} {{ {body} }}");
-        edit::one_item(&target.identity, &declaration, false)?;
+        edit::one_item(&target.identity, &declaration, false, catalog.configuration)?;
         let parent = semantic::source_path(&owner.parent);
         let path = if parent == "crate" { format!("crate::{name}") }
             else if parent == "std" || parent.starts_with("std::") || parent.starts_with("crate::") { format!("{parent}::{name}") }
@@ -1340,7 +1341,7 @@ pub mod annotations {
     fn intrinsic(name: &str) -> bool { crate::resolve::intrinsic_type_name(name) }
     pub fn render(catalog: &semantic::Catalog, unit: &Unit, name: &str) -> Result<String, String> {
         let wrapped = format!("fn __lkjscript_annotation(value: {name}) {{}}");
-        let parsed = syntax::parse(&wrapped).map_err(|problem| fail(&unit.owner.identity, "TYPE_IDENTITY", &problem.message))?;
+        let parsed = syntax::parse_configured(&wrapped, catalog.configuration).map_err(|problem| fail(&unit.owner.identity, "TYPE_IDENTITY", &problem.message))?;
         let parameter = &parsed.functions[0usize].params[0usize]; let span = parsed.types[parameter.ty].span;
         let tokens = syntax::semantic_tokens(&wrapped).map_err(|problem| fail(&unit.owner.identity, "TYPE_IDENTITY", &problem.message))?;
         let mut patches: BTreeMap<usize, (usize, String)> = BTreeMap::new();
@@ -1998,7 +1999,7 @@ fn nominal_head(catalog: &semantic::Catalog, name: &str) -> Result<Option<String
     let mut aliases: BTreeSet<String> = BTreeSet::new();
     loop {
         let wrapped = format!("fn __lkjscript_type(value: {current}) {{}}");
-        let parsed = syntax::parse(&wrapped).map_err(|problem| fail(name, "ALIAS_HEAD", &problem.message))?;
+        let parsed = syntax::parse_configured(&wrapped, catalog.configuration).map_err(|problem| fail(name, "ALIAS_HEAD", &problem.message))?;
         let mut index = parsed.functions[0usize].params[0usize].ty;
         while let a::Type::Ref { inner, .. } = parsed.types[index].kind { index = inner; }
         let a::Type::Path(path) = &parsed.types[index].kind else { return Ok(None); };

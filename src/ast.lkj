@@ -321,6 +321,8 @@ pub enum Expr {
     Float(String),
     Bool(bool),
     String(String),
+    /// Invocation source path, materialized after loader diagnostic identities are selected.
+    FilePath,
     Char(char),
     Bytes(Vec<u8>),
     Path(Path),
@@ -556,8 +558,18 @@ pub struct Declaration {
     pub span: Span,
 }
 
+/// Explicit source compilation facts; never inferred from host flags or environment.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct BuildConfiguration {
+    pub debug_assertions: bool,
+}
+impl Default for BuildConfiguration {
+    fn default() -> Self { Self { debug_assertions: true } }
+}
+
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct Program {
+    pub configuration: BuildConfiguration,
     pub macro_input: Option<Box<Program>>,
     pub macro_aliases: Vec<MacroAlias>,
     pub macro_inputs: Vec<(String, Vec<u8>)>,

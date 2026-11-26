@@ -3,6 +3,7 @@ use crate::{ast, check, elaborate, interpreter, ir, resolve, source};
 
 fn parsed(user: &str, library: &str) -> ast::Program {
     source::parse_bundle(&source::SourceBundle {
+        configuration: crate::ast::BuildConfiguration::default(),
         root: "case/main.lkj".to_string(),
         library: Some("dependencies/library.lkj".to_string()),
         files: vec![
@@ -158,6 +159,7 @@ fn optional_command_library_is_closed_and_fully_checked() {
                 "pub fn wrong(value:&mut Environment)->usize { value.__lkjscript_arg_count() }"
             };
             let bundle = source::SourceBundle {
+                configuration: crate::ast::BuildConfiguration::default(),
                 root: "main.lkj".to_string(),
                 library: Some("$std/lib.lkj".to_string()),
                 files: vec![
