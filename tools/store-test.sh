@@ -255,13 +255,20 @@ SOURCE
 done
 
 # A previously absent alternate module is also an input dependency.
+# Compare build refusals directly; check additionally reports independent item diagnostics.
 restore
 mkdir "$source_directory/dependency"
 printf 'pub fn answer() -> i64 { 9 }\n' > "$source_directory/dependency/mod.lkj"
-if "$compiler" check main.lkj --source-dir "$source_directory" > "$test_directory/ambiguous.out" 2> "$test_directory/ambiguous.expected"; then
+cp "$test_directory/result" "$test_directory/ambiguous-before"
+if "$compiler" build main.lkj --source-dir "$source_directory" --no-store -o "$test_directory/result" \
+    > "$test_directory/ambiguous.out" 2> "$test_directory/ambiguous.expected"; then
     fail "alternate module fixture was not ambiguous"
 fi
+[[ ! -s $test_directory/ambiguous.out ]] || fail "uncached ambiguous module build wrote ordinary output"
+cmp "$test_directory/ambiguous-before" "$test_directory/result" || fail "uncached ambiguous module build replaced its destination"
 if cached_build absent-alternative; then fail "cached source plan ignored a newly present module"; fi
+[[ ! -s $test_directory/absent-alternative.out ]] || fail "cached ambiguous module build wrote ordinary output"
+cmp "$test_directory/ambiguous-before" "$test_directory/result" || fail "cached ambiguous module build replaced its destination"
 sed '/^LKJSCRIPT_STATS /d; /^LKJSCRIPT_STORE_IO /d' "$test_directory/absent-alternative.log" > "$test_directory/ambiguous.actual"
 cmp "$test_directory/ambiguous.expected" "$test_directory/ambiguous.actual"
 rm "$source_directory/dependency/mod.lkj"

@@ -1,0 +1,8 @@
+use unavailable::*;
+fn broken() -> i64 {
+    println!("source refusal keeps the root invalid");
+    7i64
+}
+fn good() -> i64 { 42i64 }
+fn dependent() -> i64 { good() }
+fn probe() -> i64 { dependent() }

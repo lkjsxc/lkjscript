@@ -1,0 +1,4 @@
+static mut selected: i64 = 9i64;
+fn selected() -> i64 { 42i64 }
+fn dependent() -> i64 { selected() }
+fn probe() -> i64 { dependent() }

@@ -1,0 +1,657 @@
+//! Non-authorizing item facts for a source closure which already refused.
+//! A recovered arena is never admitted. Independently complete scalar function
+//! closures are replayed from the exact loaded text and checked normally.
+use crate::ast as a;
+use crate::diagnostics::Recovery;
+use crate::resolve::{Namespace, Resolver};
+use crate::source::SourceReport;
+use std::collections::BTreeSet;
+
+pub struct Report {
+    pub text: String,
+    pub checked: usize,
+    pub blocked: usize,
+    pub rejected: usize,
+    pub problems: Vec<a::Diagnostic>,
+}
+#[derive(Clone)]
+struct Failure { cause: a::Diagnostic, reason: String }
+#[derive(Clone)]
+struct Lookup {
+    span: a::Span,
+    namespace: Namespace,
+    written: String,
+    target: String,
+    function: Option<usize>,
+}
+#[derive(Clone, Default)]
+struct Plan { dependencies: Vec<usize>, lookups: Vec<Lookup>, structural: bool }
+struct Record {
+    function: usize,
+    status: String,
+    failure: Option<Failure>,
+    dependencies: Vec<usize>,
+}
+fn located(program: &a::Program, mut problem: a::Diagnostic) -> a::Diagnostic {
+    if problem.path.is_empty() {
+        if let Some(file) = program.files.get(problem.file) { problem.path = file.path.clone(); }
+    }
+    problem
+}
+fn id(program: &a::Program, index: usize) -> String {
+    let f = &program.functions[index];
+    let path = &program.files[f.span.file].path;
+    let mut same = 0usize;
+    for other in &program.functions {
+        if other.span.line == f.span.line && other.span.column == f.span.column
+            && program.files[other.span.file].path == *path { same += 1usize; }
+    }
+    if same > 1usize { format!("{path}@{}:{}#item={index}", f.span.line, f.span.column) }
+    else { format!("{path}@{}:{}", f.span.line, f.span.column) }
+}
+fn name(program: &a::Program, index: usize) -> String {
+    let f = &program.functions[index];
+    crate::names::qualified(&f.module, &f.name)
+}
+fn contains(outer: a::Span, inner: a::Span) -> bool {
+    outer.file == inner.file && outer.start <= inner.start && inner.end <= outer.end
+        && outer.start < outer.end
+}
+fn intersects(left: a::Span, right: a::Span) -> bool {
+    left.file == right.file && left.start < right.end && right.start < left.end
+}
+fn module_scope(program: &a::Program, scope: usize) -> usize {
+    if scope < program.scopes.len() { scope } else { program.blocks[scope - program.scopes.len()].scope }
+}
+fn block_within(program: &a::Program, scope: usize, owner: usize) -> bool {
+    if scope < program.scopes.len() { return false; }
+    let mut current = Some(scope - program.scopes.len());
+    while let Some(block) = current {
+        if block == owner { return true; }
+        current = program.blocks[block].parent;
+    }
+    false
+}
+fn scope_within(program: &a::Program, scope: usize, owner: usize) -> bool {
+    let mut current = Some(module_scope(program, scope));
+    while let Some(scope) = current {
+        if scope == owner { return true; }
+        current = program.scopes[scope].parent;
+    }
+    false
+}
+fn global(recovery: &Recovery) -> bool {
+    matches!(recovery.kind.as_str(), "source input" | "source bundle" | "file")
+}
+fn poisoned(program: &a::Program, failures: &[Recovery], scope: usize, written: &str) -> Option<Failure> {
+    for failure in failures {
+        if !failure.namespace { continue; }
+        // Qualified paths can cross a poisoned intermediate alias. Until each
+        // segment has a dependency record, conservatively include every nonlocal
+        // poison whose spelling intersects that path.
+        let affected = if global(failure) || failure.scope >= program.scopes.len()
+            || written.contains("::") && failure.block.is_none() { true }
+            else if let Some(block) = failure.block { block_within(program, scope, block) }
+            else { scope_within(program, scope, failure.scope) };
+        if !affected { continue; }
+        let mut matches = failure.names.is_empty();
+        for part in written.split("::") {
+            if failure.names.iter().any(|name| name.as_str() == part) { matches = true; }
+        }
+        if matches {
+            return Some(Failure { cause: located(program, failure.diagnostic.clone()),
+                reason: format!("blocked name lookup {written}; refused source may change its binding") });
+        }
+    }
+    None
+}
+fn complete_context(first: &a::Diagnostic, detail: &str) -> Failure {
+    Failure { cause: first.clone(), reason: format!("complete context required: {detail}") }
+}
+fn scalar(name: &str) -> bool {
+    matches!(name, "bool" | "char" | "str" | "u8" | "u16" | "u32" | "u64" | "usize"
+        | "i8" | "i16" | "i32" | "i64" | "isize" | "f64")
+}
+struct Inspector<'a> {
+    program: &'a a::Program,
+    resolver: &'a Resolver<'a>,
+    failures: &'a [Recovery],
+    first: &'a a::Diagnostic,
+}
+impl<'a> Inspector<'a> {
+    fn boundary(&self, detail: &str) -> Failure { complete_context(self.first, detail) }
+    fn binding(&self, scope: usize, path: &a::Path, span: a::Span,
+        namespace: Namespace, plan: &mut Plan) -> Result<Option<a::Item>, Failure> {
+        if path.qualification.is_some() || !path.args.is_empty() || !path.bindings.is_empty() {
+            return Err(self.boundary("generic or qualified selection"));
+        }
+        if let Some(failure) = poisoned(self.program, self.failures, scope, &path.name) { return Err(failure); }
+        let resolved = self.resolver.diagnostic_binding(scope, &path.name, namespace, span)
+            .map_err(|cause| Failure { cause: located(self.program, cause),
+                reason: "original source lookup refused".to_string() })?;
+        let Some((target, item)) = resolved else {
+            return Err(self.boundary(&format!("unresolved input {}", path.name)));
+        };
+        let function = match item { Some(a::Item::Function(index)) => Some(index), _ => None };
+        if let Some(index) = function {
+            let scope = crate::resolve::module(self.program, &self.program.functions[index].module);
+            if let Some(failure) = poisoned(self.program, self.failures, scope, &path.name) { return Err(failure); }
+            if let Some(failure) = poisoned(self.program, self.failures, scope, &self.program.functions[index].name) {
+                return Err(failure);
+            }
+        }
+        plan.lookups.push(Lookup { span, namespace, written: path.name.clone(), target, function });
+        Ok(item)
+    }
+    fn ty(&self, id: usize, plan: &mut Plan) -> Result<(), Failure> {
+        let node = &self.program.types[id];
+        match &node.kind {
+            a::Type::Infer => { plan.structural = true; Ok(()) },
+            a::Type::Never => Ok(()),
+            a::Type::Tuple(parts) => {
+                plan.structural = true;
+                for part in parts { self.ty(*part, plan)?; } Ok(())
+            }
+            a::Type::Ref { inner, .. } | a::Type::Slice(inner) => {
+                plan.structural = true; self.ty(*inner, plan)
+            },
+            a::Type::Array { inner, len } => {
+                plan.structural = true;
+                if len.is_empty() || !len.as_bytes().iter().all(|b| *b >= b'0' && *b <= b'9' || *b == b'_') {
+                    return Err(self.boundary("array length declaration dependency"));
+                }
+                self.ty(*inner, plan)
+            }
+            a::Type::Path(path) if scalar(&path.name) => {
+                if path.name == "str" { plan.structural = true; }
+                if self.binding(node.scope, path, node.span, Namespace::Type, plan)?.is_some() {
+                    return Err(self.boundary("a scalar spelling has a source declaration"));
+                }
+                Ok(())
+            }
+            _ => Err(self.boundary("nominal, generic or callable type inputs")),
+        }
+    }
+    fn pattern(&self, id: usize, locals: &mut BTreeSet<String>, plan: &mut Plan) -> Result<(), Failure> {
+        let node = &self.program.patterns[id];
+        match &node.kind {
+            a::Pattern::Wild | a::Pattern::Rest => Ok(()),
+            a::Pattern::Bind { name, by_ref, ref_mut, .. } => {
+                if *by_ref || *ref_mut { plan.structural = true; }
+                if let Some(failure) = poisoned(self.program, self.failures, node.scope, name) { return Err(failure); }
+                if self.resolver.diagnostic_binding(node.scope, name, Namespace::Value, node.span)
+                    .map_err(|cause| Failure { cause: located(self.program, cause),
+                        reason: "pattern binding lookup refused".to_string() })?.is_some() {
+                    return Err(self.boundary("a binding pattern may select a source constant or constructor"));
+                }
+                locals.insert(name.clone()); Ok(())
+            }
+            a::Pattern::Tuple(parts) => {
+                plan.structural = true;
+                for part in parts { self.pattern(*part, locals, plan)?; } Ok(())
+            }
+            a::Pattern::Or(parts) => {
+                for part in parts { self.pattern(*part, locals, plan)?; } Ok(())
+            }
+            a::Pattern::Ref { inner, .. } => {
+                plan.structural = true; self.pattern(*inner, locals, plan)
+            },
+            a::Pattern::Literal(value) => self.expression(*value, locals, plan),
+            a::Pattern::Range { start, end, .. } => {
+                if let Some(value) = start { self.expression(*value, locals, plan)?; }
+                if let Some(value) = end { self.expression(*value, locals, plan)?; }
+                Ok(())
+            }
+            _ => Err(self.boundary("pattern declaration or variant inputs")),
+        }
+    }
+    fn block(&self, id: usize, inherited: &BTreeSet<String>, plan: &mut Plan) -> Result<(), Failure> {
+        let mut locals = inherited.clone();
+        let block = &self.program.blocks[id];
+        if block.tail.is_none() { plan.structural = true; }
+        for statement in &block.statements {
+            match statement {
+                a::Stmt::Let { pattern, ty, value, .. } => {
+                    if ty.is_none() && value.is_none() { plan.structural = true; }
+                    if let Some(ty) = ty { self.ty(*ty, plan)?; }
+                    if let Some(value) = value { self.expression(*value, &locals, plan)?; }
+                    self.pattern(*pattern, &mut locals, plan)?;
+                }
+                a::Stmt::Expr { value, .. } => self.expression(*value, &locals, plan)?,
+                _ => return Err(self.boundary("local declarations or incomplete statement expansion")),
+            }
+        }
+        if let Some(value) = block.tail { self.expression(value, &locals, plan)?; }
+        Ok(())
+    }
+    fn expression(&self, id: usize, locals: &BTreeSet<String>, plan: &mut Plan) -> Result<(), Failure> {
+        let node = &self.program.exprs[id];
+        match &node.kind {
+            a::Expr::Int(_) | a::Expr::Float(_) | a::Expr::Bool(_) | a::Expr::Char(_)
+            | a::Expr::Continue => Ok(()),
+            a::Expr::String(_) | a::Expr::Bytes(_) => { plan.structural = true; Ok(()) },
+            a::Expr::Tuple(parts) | a::Expr::Array(parts) => {
+                plan.structural = true;
+                for part in parts { self.expression(*part, locals, plan)?; } Ok(())
+            }
+            a::Expr::Path(path) if path.qualification.is_none() && path.args.is_empty()
+                && path.bindings.is_empty() && locals.contains(&path.name) => Ok(()),
+            a::Expr::Path(_) => Err(self.boundary("nonlocal value or function value")),
+            a::Expr::Unary { op, value } => {
+                if op == "*" { plan.structural = true; }
+                self.expression(*value, locals, plan)
+            }
+            a::Expr::Diverge(value) => self.expression(*value, locals, plan),
+            a::Expr::Borrow { value, .. } => { plan.structural = true; self.expression(*value, locals, plan) },
+            a::Expr::Cast { value, ty } => {
+                self.expression(*value, locals, plan)?; self.ty(*ty, plan)
+            }
+            a::Expr::Binary { left, right, .. } => {
+                self.expression(*left, locals, plan)?; self.expression(*right, locals, plan)
+            }
+            a::Expr::Assign { place, value, .. } => {
+                plan.structural = true;
+                self.expression(*place, locals, plan)?; self.expression(*value, locals, plan)
+            }
+            a::Expr::Index { value, index } => {
+                plan.structural = true;
+                self.expression(*value, locals, plan)?; self.expression(*index, locals, plan)
+            }
+            a::Expr::Field { value, name } => {
+                plan.structural = true;
+                if name.is_empty() || !name.as_bytes().iter().all(|b| *b >= b'0' && *b <= b'9') {
+                    return Err(self.boundary("nominal field selection"));
+                }
+                self.expression(*value, locals, plan)
+            }
+            a::Expr::Repeat { value, count } => {
+                plan.structural = true;
+                self.expression(*value, locals, plan)?; self.expression(*count, locals, plan)
+            }
+            a::Expr::Call { callee, args } => {
+                let target = &self.program.exprs[*callee];
+                let a::Expr::Path(path) = &target.kind else {
+                    return Err(self.boundary("indirect callable selection"));
+                };
+                if locals.contains(&path.name) { return Err(self.boundary("local callable selection")); }
+                let Some(a::Item::Function(function)) =
+                    self.binding(target.scope, path, target.span, Namespace::Value, plan)? else {
+                    return Err(self.boundary("call target is not a declared free function"));
+                };
+                if !plan.dependencies.contains(&function) { plan.dependencies.push(function); }
+                for argument in args { self.expression(*argument, locals, plan)?; }
+                Ok(())
+            }
+            a::Expr::Block(block) | a::Expr::Loop { body: block } => self.block(*block, locals, plan),
+            a::Expr::If { condition, then_block, otherwise } => {
+                if otherwise.is_none() { plan.structural = true; }
+                self.expression(*condition, locals, plan)?;
+                self.block(*then_block, locals, plan)?;
+                if let Some(value) = otherwise { self.expression(*value, locals, plan)?; }
+                Ok(())
+            }
+            a::Expr::While { condition, body } => {
+                plan.structural = true;
+                self.expression(*condition, locals, plan)?; self.block(*body, locals, plan)
+            }
+            a::Expr::IfLet { pattern, value, then_block, otherwise } => {
+                if otherwise.is_none() { plan.structural = true; }
+                self.expression(*value, locals, plan)?;
+                let mut inner = locals.clone(); self.pattern(*pattern, &mut inner, plan)?;
+                self.block(*then_block, &inner, plan)?;
+                if let Some(value) = otherwise { self.expression(*value, locals, plan)?; }
+                Ok(())
+            }
+            a::Expr::WhileLet { pattern, value, body } => {
+                plan.structural = true;
+                self.expression(*value, locals, plan)?;
+                let mut inner = locals.clone(); self.pattern(*pattern, &mut inner, plan)?;
+                self.block(*body, &inner, plan)
+            }
+            a::Expr::Match { value, arms } => {
+                self.expression(*value, locals, plan)?;
+                for arm in arms {
+                    let mut inner = locals.clone(); self.pattern(arm.pattern, &mut inner, plan)?;
+                    if let Some(guard) = arm.guard { self.expression(guard, &inner, plan)?; }
+                    self.expression(arm.value, &inner, plan)?;
+                }
+                Ok(())
+            }
+            a::Expr::Return(value) | a::Expr::Break(value) => {
+                if let Some(value) = value { self.expression(*value, locals, plan)?; }
+                else { plan.structural = true; }
+                Ok(())
+            }
+            _ => Err(self.boundary("macro, trait, iterator, closure or generated-helper inputs")),
+        }
+    }
+    fn function(&self, index: usize) -> Result<Plan, Failure> {
+        let f = &self.program.functions[index];
+        for failure in self.failures {
+            if intersects(f.span, failure.span) {
+                return Err(Failure { cause: located(self.program, failure.diagnostic.clone()),
+                    reason: "the authored item overlaps a refused source region".to_string() });
+            }
+        }
+        let scope = crate::resolve::module(self.program, &f.module);
+        if let Some(failure) = poisoned(self.program, self.failures, scope, &f.name) { return Err(failure); }
+        if !f.generics.is_empty() || !f.predicates.is_empty() || !f.outlives.is_empty() {
+            return Err(self.boundary("generic function contract"));
+        }
+        if self.program.impls.iter().any(|owner| owner.methods.contains(&index))
+            || self.program.traits.iter().any(|owner| owner.methods.contains(&index)) {
+            return Err(self.boundary("method ownership and coherence"));
+        }
+        for (other, owner) in self.program.functions.iter().enumerate() {
+            if other != index && contains(owner.span, f.span) {
+                return Err(self.boundary("nested function declaration context"));
+            }
+        }
+        if self.program.macro_expansions.iter().any(|origin| origin.functions.contains(&index))
+            || self.program.macro_invocations.iter().any(|call| contains(f.span, call.span)) {
+            return Err(self.boundary("complete macro origin and consumer edges"));
+        }
+        let mut plan = Plan::default();
+        let mut locals = BTreeSet::new();
+        for parameter in &f.params { self.ty(parameter.ty, &mut plan)?; locals.insert(parameter.name.clone()); }
+        self.ty(f.result, &mut plan)?;
+        let Some(body) = f.body else { return Err(self.boundary("function body is absent")); };
+        self.block(body, &locals, &mut plan)?;
+        Ok(plan)
+    }
+}
+fn user_function(program: &a::Program, index: usize) -> bool {
+    let f = &program.functions[index];
+    let root = program.files[f.span.file].crate_root;
+    f.body.is_some() && program.scopes.get(root).is_some_and(|scope| scope.path != "$std")
+}
+fn append_problem(problems: &mut Vec<a::Diagnostic>, problem: a::Diagnostic) {
+    if !problems.contains(&problem) { problems.push(problem); }
+}
+fn import_failures(program: &a::Program, problems: &[a::Diagnostic], failures: &mut Vec<Recovery>) {
+    for problem in problems {
+        let mut found = false;
+        for item in &program.uses {
+            if item.span.file == problem.file && item.span.line == problem.line && item.span.column == problem.column {
+                let mut names = Vec::new();
+                if !item.glob { names.push(item.alias.clone()); }
+                failures.push(Recovery { span: item.span,
+                    scope: crate::resolve::module(program, &item.module), block: item.block,
+                    kind: "import".to_string(), names, namespace: true, coherence: true,
+                    diagnostic: located(program, problem.clone()) });
+                found = true;
+            }
+        }
+        if !found {
+            failures.push(Recovery { span: a::Span::default(), scope: 0, block: None,
+                kind: "source input".to_string(), names: Vec::new(), namespace: true, coherence: true,
+                diagnostic: located(program, problem.clone()) });
+        }
+    }
+}
+// A surviving import can depend on a refused alias at any path segment.
+// Propagate that exact cause before considering a caller's final spelling.
+fn propagate_import_poison(program: &a::Program, failures: &mut Vec<Recovery>) {
+    let mut marked = BTreeSet::new();
+    loop {
+        let mut changed = false;
+        for (index, item) in program.uses.iter().enumerate() {
+            if marked.contains(&index) { continue; }
+            let scope = crate::resolve::module(program, &item.module);
+            let lookup_scope = match item.block { Some(block) => program.scopes.len() + block, None => scope };
+            if let Some(failure) = poisoned(program, failures, lookup_scope, &item.path) {
+                let names = if item.glob { Vec::new() } else { vec![item.alias.clone()] };
+                failures.push(Recovery { span: item.span, scope, block: item.block,
+                    kind: "dependent import".to_string(), names, namespace: true, coherence: true,
+                    diagnostic: failure.cause });
+                marked.insert(index); changed = true;
+            }
+        }
+        if !changed { break; }
+    }
+}
+fn closure(root: usize, plans: &[Option<Plan>], failures: &[Option<Failure>],
+    first: &a::Diagnostic) -> Result<Vec<usize>, Failure> {
+    let mut pending = vec![root];
+    let mut seen = BTreeSet::new();
+    let mut result = Vec::new();
+    while let Some(index) = pending.pop() {
+        if !seen.insert(index) { continue; }
+        if let Some(failure) = &failures[index] { return Err(failure.clone()); }
+        let Some(plan) = &plans[index] else { return Err(complete_context(first, "callee contract outside the independent population")); };
+        result.push(index);
+        for dependency in &plan.dependencies { pending.push(*dependency); }
+    }
+    result.sort(); Ok(result)
+}
+fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
+    plans: &[Option<Plan>]) -> Result<a::Program, String> {
+    let mut projected = a::Program::default();
+    projected.configuration = original.configuration;
+    projected.files = original.files.clone();
+    projected.scopes = original.scopes.clone();
+    projected.loaded_modules = original.loaded_modules.clone();
+    let mut scopes = BTreeSet::new();
+    for index in selected {
+        let mut scope = Some(crate::resolve::module(original, &original.functions[*index].module));
+        while let Some(current) = scope { scopes.insert(current); scope = original.scopes[current].parent; }
+    }
+    for module in &original.modules {
+        if scopes.contains(&module.scope) {
+            let mut module = module.clone(); module.items.clear(); module.external = false;
+            let index = projected.modules.len();
+            projected.modules.push(module); projected.items.push(a::Item::Module(index));
+        }
+    }
+    let mut source_indices = Vec::new();
+    for index in selected {
+        let f = &original.functions[*index];
+        let Some(text) = source.texts.get(f.span.file) else { return Err("source text is absent".to_string()); };
+        if f.span.end > text.len() || f.span.start >= f.span.end { return Err("source span is outside its input".to_string()); }
+        let mut bytes = text.as_bytes().to_vec();
+        for at in 0usize..bytes.len() {
+            if !(f.span.start <= at && at < f.span.end) && bytes[at] != b'\n' && bytes[at] != b'\r' { bytes[at] = b' '; }
+        }
+        let text = String::from_utf8(bytes).map_err(|_| -> String { "source projection is not UTF-8".to_string() })?;
+        let scope = crate::resolve::module(original, &f.module);
+        let before = projected.functions.len();
+        let parsed = crate::syntax::parse_file_report(&mut projected, &text, f.span.file, scope);
+        if !parsed.diagnostics.is_empty() || !parsed.recovery.is_empty() || projected.functions.len() != before + 1usize
+            || parsed.items != vec![a::Item::Function(before)] {
+            return Err("authored function replay did not yield exactly one complete item".to_string());
+        }
+        let next = &mut projected.functions[before];
+        if next.name != f.name || next.module != f.module || next.span != f.span
+            || next.const_qualified != f.const_qualified {
+            return Err("authored function identity changed during replay".to_string());
+        }
+        next.public = f.public; next.attrs = f.attrs.clone();
+        projected.items.push(a::Item::Function(before)); source_indices.push(*index);
+    }
+    crate::syntax::macros::expand(&mut projected).map_err(|_| -> String { "isolated source expansion refused".to_string() })?;
+    let resolved = crate::resolve::resolve(&projected).map_err(|_| -> String { "isolated declaration lookup refused".to_string() })?;
+    let names = Resolver::new(&resolved).map_err(|_| -> String { "isolated declaration catalog refused".to_string() })?;
+    for index in selected {
+        let plan = plans[*index].as_ref().unwrap();
+        for lookup in &plan.lookups {
+            let mut matched = false;
+            if lookup.namespace == Namespace::Type {
+                for node in &projected.types {
+                    if node.span == lookup.span {
+                        if let a::Type::Path(path) = &node.kind {
+                            if path.name == lookup.written {
+                                let actual = names.diagnostic_binding(node.scope, &path.name, Namespace::Type, node.span)
+                                    .map_err(|_| -> String { "replayed type lookup refused".to_string() })?;
+                                if actual == Some((lookup.target.clone(), None)) { matched = true; }
+                            }
+                        }
+                    }
+                }
+            } else {
+                for node in &projected.exprs {
+                    if node.span == lookup.span {
+                        if let a::Expr::Path(path) = &node.kind {
+                            if path.name == lookup.written {
+                                let actual = names.diagnostic_binding(node.scope, &path.name, Namespace::Value, node.span)
+                                    .map_err(|_| -> String { "replayed call lookup refused".to_string() })?;
+                                if let Some((target, Some(a::Item::Function(function)))) = actual {
+                                    if target == lookup.target && lookup.function == source_indices.get(function).copied() { matched = true; }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            if !matched { return Err("a recorded source binding changed during isolated replay".to_string()); }
+        }
+    }
+    drop(names);
+    Ok(resolved)
+}
+fn owns_problem(source: &SourceReport, function: &a::Function, problem: &a::Diagnostic) -> bool {
+    if function.span.file != problem.file { return false; }
+    let Some(text) = source.texts.get(function.span.file) else { return false; };
+    let mut line = 1usize; let mut column = 1usize;
+    let mut offset = 0usize;
+    while offset < text.len() && (line < problem.line || line == problem.line && column < problem.column) {
+        if text.as_bytes()[offset] == b'\n' { line += 1usize; column = 1usize; } else { column += 1usize; }
+        offset += 1usize;
+    }
+    function.span.start <= offset && offset < function.span.end
+}
+fn string(out: &mut Vec<u8>, value: &str) { crate::json::write_string(out, value); }
+fn diagnostic(out: &mut Vec<u8>, value: &a::Diagnostic) {
+    out.extend_from_slice(b"{\"path\":"); string(out, &value.path);
+    out.extend_from_slice(format!(",\"line\":{},\"column\":{},\"code\":", value.line, value.column).as_bytes());
+    string(out, &value.code); out.extend_from_slice(b",\"message\":"); string(out, &value.message); out.push(b'}');
+}
+fn finish(program: &a::Program, records: Vec<Record>, failures: &[Recovery], problems: Vec<a::Diagnostic>) -> Report {
+    let mut checked = 0usize; let mut blocked = 0usize; let mut rejected = 0usize;
+    for row in &records {
+        match row.status.as_str() { "checked" => checked += 1usize, "rejected" => rejected += 1usize, _ => blocked += 1usize }
+    }
+    let mut out = format!("LKJSCRIPT_ITEMS {{\"schema\":1,\"checked\":{checked},\"blocked\":{blocked},\"rejected\":{rejected},\"items\":[").into_bytes();
+    for (at, row) in records.iter().enumerate() {
+        if at != 0usize { out.push(b','); }
+        let f = &program.functions[row.function];
+        out.extend_from_slice(b"{\"id\":"); string(&mut out, &id(program, row.function));
+        out.extend_from_slice(b",\"path\":"); string(&mut out, &program.files[f.span.file].path);
+        out.extend_from_slice(format!(",\"line\":{},\"column\":{},\"start\":{},\"end\":{},\"name\":", f.span.line, f.span.column, f.span.start, f.span.end).as_bytes());
+        string(&mut out, &name(program, row.function));
+        out.extend_from_slice(b",\"status\":"); string(&mut out, &row.status);
+        out.extend_from_slice(b",\"cause\":");
+        if let Some(failure) = &row.failure { diagnostic(&mut out, &failure.cause); } else { out.extend_from_slice(b"null"); }
+        out.extend_from_slice(b",\"reason\":");
+        let reason = match &row.failure { Some(failure) => failure.reason.clone(),
+            None => "ordinary checked independent function closure".to_string() };
+        string(&mut out, &reason);
+        out.extend_from_slice(b",\"dependencies\":[");
+        for (at, dependency) in row.dependencies.iter().enumerate() {
+            if at != 0usize { out.push(b','); } string(&mut out, &id(program, *dependency));
+        }
+        out.extend_from_slice(b"]}");
+    }
+    out.extend_from_slice(b"],\"tombstones\":[");
+    for (at, failure) in failures.iter().enumerate() {
+        if at != 0usize { out.push(b','); }
+        out.extend_from_slice(format!("{{\"scope\":{},\"block\":", failure.scope).as_bytes());
+        if let Some(block) = failure.block { out.extend_from_slice(format!("{block}").as_bytes()); } else { out.extend_from_slice(b"null"); }
+        out.extend_from_slice(b",\"kind\":"); string(&mut out, &failure.kind);
+        out.extend_from_slice(b",\"path\":");
+        let path = if global(failure) || failure.span.file >= program.files.len() { "" }
+            else { program.files[failure.span.file].path.as_str() };
+        string(&mut out, path);
+        out.extend_from_slice(format!(",\"line\":{},\"column\":{},\"module\":", failure.span.line, failure.span.column).as_bytes());
+        let module = if failure.scope < program.scopes.len() { program.scopes[failure.scope].path.as_str() } else { "" };
+        string(&mut out, module);
+        out.extend_from_slice(format!(",\"start\":{},\"end\":{},\"namespace\":{},\"coherence\":{},\"names\":[",
+            failure.span.start, failure.span.end, failure.namespace, failure.coherence).as_bytes());
+        for (at, name) in failure.names.iter().enumerate() { if at != 0usize { out.push(b','); } string(&mut out, name); }
+        out.extend_from_slice(b"],\"cause\":"); diagnostic(&mut out, &located(program, failure.diagnostic.clone()));
+        out.push(b'}');
+    }
+    out.extend_from_slice(b"]}");
+    Report { text: String::from_utf8(out).unwrap(), checked, blocked, rejected, problems }
+}
+fn blocked_declarations(program: &a::Program, problem: a::Diagnostic, failures: &[Recovery]) -> Report {
+    let problem = located(program, problem);
+    let mut records = Vec::new();
+    for index in 0usize..program.functions.len() {
+        if user_function(program, index) {
+            records.push(Record { function: index, status: "blocked".to_string(),
+                failure: Some(Failure { cause: problem.clone(), reason: "declaration environment is incomplete".to_string() }),
+                dependencies: Vec::new() });
+        }
+    }
+    finish(program, records, failures, vec![problem])
+}
+pub fn analyze(source: &SourceReport) -> Report {
+    if source.diagnostics.is_empty() { return finish(&source.program, Vec::new(), &source.recovery, Vec::new()); }
+    let mut program = source.program.clone();
+    crate::resolve::bind_lexical_scopes(&mut program);
+    let first = located(&program, source.diagnostics[0usize].clone());
+    let mut failures = source.recovery.clone();
+    let mut problems = Vec::new();
+    let (resolver, imported) = match Resolver::new_report(&program) {
+        Ok(value) => value,
+        Err(problem) => {
+            return blocked_declarations(&program, problem, &failures);
+        }
+    };
+    for problem in imported { append_problem(&mut problems, located(&program, problem)); }
+    import_failures(&program, &problems, &mut failures);
+    propagate_import_poison(&program, &mut failures);
+    let inspector = Inspector { program: &program, resolver: &resolver, failures: &failures, first: &first };
+    let mut plans: Vec<Option<Plan>> = vec![None; program.functions.len()];
+    let mut refused: Vec<Option<Failure>> = vec![None; program.functions.len()];
+    for index in 0usize..program.functions.len() {
+        if !user_function(&program, index) { continue; }
+        match inspector.function(index) {
+            Ok(plan) => plans[index] = Some(plan),
+            Err(problem) => refused[index] = Some(problem),
+        }
+    }
+    let mut records = Vec::new();
+    for index in 0usize..program.functions.len() {
+        if !user_function(&program, index) { continue; }
+        let dependencies = match &plans[index] { Some(plan) => plan.dependencies.clone(), None => Vec::new() };
+        let mut record = Record { function: index, status: "blocked".to_string(), failure: None, dependencies };
+        match closure(index, &plans, &refused, &first) {
+            Err(failure) => record.failure = Some(failure),
+            Ok(selected) => match replay(source, &program, &selected, &plans) {
+                Err(reason) => record.failure = Some(complete_context(&first, &reason)),
+                Ok(projected) => match crate::frontend::check_source(&projected) {
+                    Ok(_) => record.status = "checked".to_string(),
+                    Err(problem) => {
+                        let problem = located(&program, problem);
+                        let scalar_inputs = selected.iter().all(|selected| {
+                            match &plans[*selected] { Some(plan) => !plan.structural, None => false }
+                        });
+                        // Structural operations can need omitted library or trait
+                        // declarations even when the isolated diagnostic is E_TYPE.
+                        // Only closed primitive inputs justify a new local refusal.
+                        if scalar_inputs && matches!(problem.code.as_str(), "E_TYPE" | "E_BORROW") {
+                            let own = owns_problem(source, &program.functions[index], &problem);
+                            record.status = if own { "rejected".to_string() } else { "blocked".to_string() };
+                            record.failure = Some(Failure { cause: problem.clone(),
+                                reason: if own { "ordinary item checking refused".to_string() }
+                                    else { "a checked dependency refused".to_string() } });
+                            append_problem(&mut problems, problem);
+                        } else {
+                            record.failure = Some(complete_context(&first,
+                                "isolated validation needs library, trait or structural inputs"));
+                        }
+                    }
+                }
+            }
+        }
+        records.push(record);
+    }
+    // Exact upstream refusals are visible once even when many items depend on them.
+    for row in &records {
+        if let Some(failure) = &row.failure {
+            if !source.diagnostics.contains(&failure.cause) { append_problem(&mut problems, failure.cause.clone()); }
+        }
+    }
+    finish(&program, records, &failures, problems)
+}

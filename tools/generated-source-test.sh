@@ -185,6 +185,17 @@ mod ast; mod diagnostic; mod names; mod syntax; mod resolve; mod source; mod ori
 mod diagnostics {
     #[derive(Clone)]
     pub struct BlockedRegion { pub path: String, pub span: crate::ast::Span, pub kind: String, pub reason: String }
+    #[derive(Clone)]
+    pub struct Recovery {
+        pub span: crate::ast::Span,
+        pub scope: usize,
+        pub block: Option<usize>,
+        pub kind: String,
+        pub names: Vec<String>,
+        pub namespace: bool,
+        pub coherence: bool,
+        pub diagnostic: crate::ast::Diagnostic,
+    }
 }
 fn parsed() -> ast::Program {
     let root = "mod external; trait Bound {} struct Field; #[derive(Default)] struct Named<T:Bound> { field:Field, value:T } #[derive(Default)] struct Tuple(Field); #[derive(Default)] struct Unit; struct Manual; impl std::default::Default for Manual { fn default()->Self { Manual } } fn free() { fn nested() {} nested(); }";

@@ -1,0 +1,8 @@
+mod a {
+    pub mod target {
+        pub fn pick() -> i64 { 42i64 }
+    }
+    use std::cell::RefCell as target;
+}
+fn probe() -> i64 { a::target::pick() }
+fn good() -> i64 { 42i64 }

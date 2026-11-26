@@ -2615,6 +2615,15 @@ fn compile_snapshot(
     }
     stats.mark("load_parse")?;
     if !loaded.diagnostics.is_empty() {
+        if options.command == "check" {
+            let partial = crate::partial_check::analyze(&loaded);
+            stats.mark("partial_check")?;
+            stats.count("items_checked", partial.checked);
+            stats.count("items_blocked", partial.blocked);
+            stats.count("items_rejected", partial.rejected);
+            let failure = analysis_failure(&options.path, &mut loaded, partial.problems, "");
+            return Err(format!("{failure}\n{}", partial.text));
+        }
         return Err(analysis_failure(&options.path, &mut loaded, Vec::new(), ""));
     }
     let resolved = match resolve::resolve(&loaded.program) {

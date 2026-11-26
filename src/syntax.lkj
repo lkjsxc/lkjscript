@@ -7,7 +7,7 @@ mod impl_trait;
 pub(crate) mod higher_ranked;
 pub(crate) mod formatting;
 use crate::ast::*;
-use crate::diagnostics::BlockedRegion;
+use crate::diagnostics::{BlockedRegion, Recovery};
 use std::collections::BTreeSet;
 
 #[derive(Clone, PartialEq, Eq)]
@@ -51,6 +51,13 @@ fn keyword_cannot_begin_expression(name: &str) -> bool {
         | "static" | "struct" | "trait" | "type" | "use" | "where" | "enum" | "impl" | "dyn"
         | "abstract" | "become" | "box" | "do" | "final" | "macro" | "override" | "priv"
         | "typeof" | "unsized" | "virtual" | "try" | "gen" | "await")
+}
+// Recovery may narrow only plain binding spellings. Expression keywords and
+// normalized import segments such as trailing self are not declaration names.
+fn recovery_binding_name(name: &str) -> bool {
+    macro_provider_name(name) && !matches!(name,
+        "const" | "unsafe" | "async" | "move" | "if" | "match" | "loop" | "while"
+        | "for" | "break" | "continue" | "return" | "true" | "false" | "yield" | "union")
 }
 fn span_at(start: usize, end: usize, line: usize, column: usize) -> Span {
     Span {
@@ -546,7 +553,7 @@ pub(crate) fn parse_expression_unexpanded_configured(source: &str, configuration
     });
     let mut parser = Parser {
         tokens, at: 0, program, module: String::new(), scope: 0,
-        diagnostics: Vec::new(), blocked: Vec::new(), diagnostic_keys: BTreeSet::new(),
+        diagnostics: Vec::new(), blocked: Vec::new(), recovery: Vec::new(), diagnostic_keys: BTreeSet::new(),
         self_context: None, expansion: None, probing: false, fragment: false,
         block: None, macro_scope: None, macro_carriers: Vec::new(),
     };
@@ -565,6 +572,7 @@ pub struct ParseReport {
     pub items: Vec<Item>,
     pub diagnostics: Vec<Diagnostic>,
     pub blocked: Vec<BlockedRegion>,
+    pub recovery: Vec<Recovery>,
 }
 
 /// Producer-only token identities and exact source byte ranges for semantic tools.
@@ -630,6 +638,11 @@ pub fn parse_file_report(
             span.end = source.len();
             return ParseReport {
                 items: Vec::new(),
+                recovery: vec![Recovery {
+                    span: Span { file, start: 0usize, end: source.len(), line: 1usize, column: 1usize },
+                    scope, block: None, kind: "file".to_string(), names: Vec::new(),
+                    namespace: true, coherence: true, diagnostic: error.clone(),
+                }],
                 diagnostics: vec![error],
                 blocked: vec![BlockedRegion {
                     path: program.files[file].path.clone(),
@@ -654,6 +667,7 @@ pub fn parse_file_report(
         program: std::mem::replace(program, Program::default()),
         diagnostics: Vec::new(),
         blocked: Vec::new(),
+        recovery: Vec::new(),
         diagnostic_keys: BTreeSet::new(),
         self_context: None,
         expansion: None,
@@ -670,6 +684,11 @@ pub fn parse_file_report(
     let items = match parser.items(false) {
         Ok(items) => items,
         Err(error) => {
+            parser.recovery.push(Recovery {
+                span: Span { file, start: 0usize, end: source.len(), line: 1usize, column: 1usize },
+                scope, block: None, kind: "file".to_string(), names: Vec::new(),
+                namespace: true, coherence: true, diagnostic: error.clone(),
+            });
             parser.record(error);
             Vec::new()
         }
@@ -679,6 +698,7 @@ pub fn parse_file_report(
         items,
         diagnostics: parser.diagnostics,
         blocked: parser.blocked,
+        recovery: parser.recovery,
     }
 }
 
@@ -820,6 +840,7 @@ struct Parser {
     macro_carriers: Vec<(usize, usize)>,
     diagnostics: Vec<Diagnostic>,
     blocked: Vec<BlockedRegion>,
+    recovery: Vec<Recovery>,
     diagnostic_keys: BTreeSet<(FileId, usize, usize, String, String)>,
     self_context: Option<usize>,
     expansion: Option<usize>,
@@ -852,9 +873,106 @@ impl Parser {
         }
     }
 
+    // Only complete, plain lexical headers identify a failed binding. Attributes,
+    // groups, globs and unknown forms deliberately keep a wildcard namespace.
+    fn recovery_shape(&self, start: usize, end: usize, kind: &str) -> (Vec<String>, bool, bool) {
+        let mut at = start;
+        if at < end && self.tokens[at].text == "pub" { at += 1usize; }
+        if at >= end { return (Vec::new(), true, true); }
+        // A recovery cut before the next declaration does not prove that an
+        // unfinished qualifier or header belongs only to the preceding name.
+        if kind == "item" && !matches!(self.tokens[end - 1usize].text.as_str(), ";" | "}") {
+            return (Vec::new(), true, true);
+        }
+        if self.tokens[at].text == "#" || self.tokens[at].text == "(" {
+            return (Vec::new(), true, true);
+        }
+        if self.tokens[at].text == "const" && at + 1usize < end
+            && self.tokens[at + 1usize].text == "fn" { at += 1usize; }
+        let head = self.tokens[at].text.as_str();
+        if matches!(head, "fn" | "struct" | "enum" | "type" | "mod" | "trait" | "const" | "static") {
+            if at + 2usize < end && self.tokens[at + 1usize].kind == TokenKind::Ident
+                && recovery_binding_name(&self.tokens[at + 1usize].text) {
+                let following = self.tokens[at + 2usize].text.as_str();
+                let plain = match head {
+                    "fn" => matches!(following, "(" | "<"),
+                    "const" | "static" => following == ":",
+                    "mod" => matches!(following, ";" | "{"),
+                    "struct" => matches!(following, ";" | "{" | "(" | "<"),
+                    "enum" => matches!(following, "{" | "<"),
+                    "type" => matches!(following, "=" | ":" | "<"),
+                    _ => matches!(following, "{" | ":" | "<"),
+                };
+                if plain { return (vec![self.tokens[at + 1usize].text.clone()], true, true); }
+            }
+            return (Vec::new(), true, true);
+        }
+        if head == "extern" {
+            if at + 2usize < end && self.tokens[at + 1usize].text == "crate"
+                && self.tokens[at + 2usize].kind == TokenKind::Ident {
+                let mut name = self.tokens[at + 2usize].text.clone();
+                at += 3usize;
+                if at < end && self.tokens[at].text == "as" {
+                    at += 1usize;
+                    if at >= end || self.tokens[at].kind != TokenKind::Ident {
+                        return (Vec::new(), true, true);
+                    }
+                    name = self.tokens[at].text.clone(); at += 1usize;
+                }
+                if at + 1usize == end && self.tokens[at].text == ";" {
+                    return (vec![name], true, true);
+                }
+            }
+            return (Vec::new(), true, true);
+        }
+        if head == "use" {
+            at += 1usize;
+            if at < end && self.tokens[at].text == "::" { at += 1usize; }
+            let mut name = String::new();
+            loop {
+                if at >= end || self.tokens[at].kind != TokenKind::Ident {
+                    return (Vec::new(), true, true);
+                }
+                name = self.tokens[at].text.clone(); at += 1usize;
+                if at < end && self.tokens[at].text == "::" { at += 1usize; }
+                else { break; }
+            }
+            if at < end && self.tokens[at].text == "as" {
+                at += 1usize;
+                if at >= end || self.tokens[at].kind != TokenKind::Ident {
+                    return (Vec::new(), true, true);
+                }
+                name = self.tokens[at].text.clone(); at += 1usize;
+            }
+            if at + 1usize == end && self.tokens[at].text == ";" && recovery_binding_name(&name) {
+                return (vec![name], true, true);
+            }
+            return (Vec::new(), true, true);
+        }
+        if kind == "item" || matches!(head, "impl" | "union" | "macro_rules") {
+            return (Vec::new(), true, true);
+        }
+        // An unknown statement macro may declare local bindings or implementations.
+        // Known ambient output forms fail before any such producer is invoked.
+        let ambient = matches!(head, "print" | "println" | "eprint" | "eprintln");
+        let mut cursor = at;
+        while cursor < end && (self.tokens[cursor].kind == TokenKind::Ident
+            || self.tokens[cursor].text == "::") { cursor += 1usize; }
+        if !ambient && cursor < end && self.tokens[cursor].text == "!" {
+            return (Vec::new(), true, true);
+        }
+        if ambient { (Vec::new(), false, false) }
+        else { (Vec::new(), true, true) }
+    }
+
     fn recover_region(&mut self, start: usize, kind: &str, error: Diagnostic) {
+        self.recover_region_context(start, kind, error, false);
+    }
+    fn recover_region_context(&mut self, start: usize, kind: &str, mut error: Diagnostic, member: bool) {
         let span = self.tokens[start].span;
         let code = error.code.clone();
+        if error.path.is_empty() { error.path = self.program.files[error.file].path.clone(); }
+        let diagnostic = error.clone();
         self.record(error);
         // Propagating an EOF error through nested regions must not rescan the
         // same suffix once per nesting level.
@@ -943,6 +1061,13 @@ impl Parser {
         let mut extent = span;
         if at > start {
             extent.end = self.tokens[at - 1].span.end;
+        }
+        if !self.probing {
+            let (names, namespace, coherence) = self.recovery_shape(start, at, kind);
+            self.recovery.push(Recovery {
+                span: extent, scope: self.scope, block: self.block, kind: kind.to_string(),
+                names, namespace, coherence: coherence || member, diagnostic,
+            });
         }
         self.blocked.push(BlockedRegion {
             path: self.program.files[span.file].path.clone(),
@@ -2515,7 +2640,7 @@ impl Parser {
             let start = self.at;
             let result = self.trait_member(&mut methods, &mut associated, &mut constants);
             if let Err(error) = result {
-                self.recover_region(start, "item", error);
+                self.recover_region_context(start, "item", error, true);
             }
         }
         self.expect("}")?;
@@ -2601,7 +2726,7 @@ impl Parser {
             let start = self.at;
             let result = self.implementation_member(&mut methods, &mut associated, &mut constants, constant_owner, trait_ty.is_some());
             if let Err(error) = result {
-                self.recover_region(start, "item", error);
+                self.recover_region_context(start, "item", error, true);
             }
         }
         self.expect("}")?;

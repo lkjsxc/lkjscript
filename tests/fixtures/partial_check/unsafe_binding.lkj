@@ -1,0 +1,8 @@
+fn unsafe_local() -> i64 {
+    let value = 42i64;
+    let value = unsafe { 9i64 };
+    value
+}
+fn dependent() -> i64 { unsafe_local() }
+fn good() -> i64 { 42i64 }
+fn probe() -> i64 { good() }

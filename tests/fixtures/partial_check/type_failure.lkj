@@ -1,0 +1,10 @@
+fn broken() -> i64 {
+    println!("source refusal keeps the root invalid");
+    7i64
+}
+fn wrong() -> i64 { true }
+fn dependent() -> i64 { wrong() }
+fn good() -> i64 { 42i64 }
+fn probe() -> i64 { good() }
+fn borrowed_pattern() -> i64 { let ref value = 42i64; true }
+fn implicit_unit() -> i64 { ({}) << ({}) }

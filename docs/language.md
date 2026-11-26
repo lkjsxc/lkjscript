@@ -1082,6 +1082,55 @@ for dependent checks, never executable authority. Shared resolution/signature er
 block dependent work; no fabricated types or ownership facts continue analysis.
 Single-error APIs select the first diagnostic from these same production paths. When a rewrite is available, stderr adds LKJSCRIPT_EDITS followed by one JSON object {version:1,path,code,edits:[{start,end,replacement}]}; edits use half-open UTF-8 byte offsets in the unchanged input named by path. Apply each nonoverlapping set atomically, then check the rewritten source again; display line/column values are not edit offsets.
 
+### Item diagnostics after a source refusal
+
+A source refusal remains authoritative: the command fails and publishes no
+checked IR, executable or execution authority. The `check` command additionally emits
+`LKJSCRIPT_ITEMS` followed by a schema-1 JSON report of independent function
+checks. This report cannot replace the ordinary successful source check. Fully
+valid inputs retain their existing checking and output behavior.
+
+The report inventories retained non-library function definitions with bodies.
+Methods, generic functions and definitions outside the supported population
+remain visible as blocked items. Refused source regions appear separately as
+tombstones carrying their exact diagnostic, source extent, scope, recognizable
+names and conservative namespace/coherence effects. A surviving declaration
+inside a refused region is still blocked; recovery never supplies a substitute
+body or proves that an erased binding was absent.
+
+The current independent population consists of nongeneric free functions with
+primitive scalars, references, tuples, arrays and slices, ordinary local control
+flow, and direct calls to other eligible free functions. Nominal types, methods,
+generic or qualified trait selection, indirect calls, closures, local declarations
+and incomplete macro contexts require complete source checking. Unknown names,
+failed imports and possible shadow declarations block affected lookups.
+Qualified paths conservatively include possible poison at intermediate aliases.
+Surviving imports propagate that cause through their aliases. Incomplete or
+qualified headers and special import segments such as terminal `self` retain
+wildcard poison until their binding can be established without guessing.
+
+Each eligible function and its transitive direct-call dependencies are reparsed
+from their original loaded source bytes, preserving source coordinates and
+configuration. Primitive type bindings and direct-call targets must agree with
+lookup in the original declaration context. The reconstructed closure then passes
+ordinary resolution, elaboration and the independent IR checker. A successful
+check of this closure establishes an item diagnostic fact only.
+
+| Item status | Meaning |
+| --- | --- |
+| `checked` | The complete eligible dependency closure passed ordinary checking with its recorded source bindings preserved. |
+| `blocked` | A source refusal, failed dependency or unproved context prevents an independent conclusion. The row records a source-linked cause and the reason; a conservative boundary does not invent a new semantic refusal. |
+| `rejected` | Ordinary checking established a local type or borrow refusal with complete primitive inputs. This does not follow merely from a diagnostic pointing into a reduced replay. |
+
+Structural forms may receive `checked` only after successful ordinary replay.
+If any function in the selected closure uses references, text, tuples, arrays
+or slices, a failed replay remains blocked: omitted library helpers or source
+operator implementations can otherwise masquerade as a local type error.
+Macro, trait and coherence dependencies outside this bounded population remain
+explicit context requirements. No partial result clears the original source
+errors, changes capability requirements, or authorizes execution. Other commands
+and checked-edit transactions retain their complete-source admission boundary.
+
 ## World and capabilities
 
 Entries take owned Arguments, Environment, ExitStatus, Stdout/Stdin/Stderr, Directory/ReadDirectory, Unix-connected File, Image, ForeignCommand, NullDevice, Listener, Connector, TcpPort, TemporaryFiles, Readiness, Process, Clock, Entropy or Stop; no parameters; or a sole World declaring implicit full authority.

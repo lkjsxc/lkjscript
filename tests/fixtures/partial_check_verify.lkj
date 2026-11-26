@@ -1,0 +1,229 @@
+// Independent consumer of item diagnostics; expected coordinates are authored below.
+use std::json::{self, Value};
+use std::collections::BTreeSet;
+
+struct Expected {
+    line: usize,
+    column: usize,
+    name: String,
+    status: String,
+    cause_line: usize,
+    cause_column: usize,
+    cause_code: String,
+    dependencies: String,
+}
+fn expected(line: usize, name: &str, status: &str, cause_line: usize,
+    cause_column: usize, cause_code: &str, dependencies: &str) -> Expected {
+    Expected { line, column: 1usize, name: name.to_string(), status: status.to_string(),
+        cause_line, cause_column, cause_code: cause_code.to_string(),
+        dependencies: dependencies.to_string() }
+}
+fn at(mut row: Expected, column: usize) -> Expected { row.column = column; row }
+fn cases(name: &str) -> Vec<Expected> {
+    match name {
+        "independent" => vec![
+            expected(1, "broken", "blocked", 2, 5, "E_CAPABILITY", ""),
+            expected(5, "good", "checked", 0, 0, "", ""),
+            expected(6, "chain", "checked", 0, 0, "", "good"),
+            expected(7, "dependent", "blocked", 2, 5, "E_CAPABILITY", "broken"),
+            expected(8, "transitive", "blocked", 2, 5, "E_CAPABILITY", "dependent"),
+            expected(9, "probe", "checked", 0, 0, "", "chain"),
+        ],
+        "unsafe_binding" => vec![
+            expected(1, "unsafe_local", "blocked", 3, 17, "E_UNSUPPORTED", ""),
+            expected(6, "dependent", "blocked", 3, 17, "E_UNSUPPORTED", "unsafe_local"),
+            expected(7, "good", "checked", 0, 0, "", ""),
+            expected(8, "probe", "checked", 0, 0, "", "good"),
+        ],
+        "local_import" => vec![
+            expected(1, "selected", "checked", 0, 0, "", ""),
+            expected(2, "shadowed", "blocked", 3, 36, "E_CAPABILITY", "*"),
+            expected(6, "dependent", "blocked", 3, 36, "E_CAPABILITY", "shadowed"),
+            expected(7, "good", "checked", 0, 0, "", ""),
+            expected(8, "probe", "checked", 0, 0, "", "good"),
+        ],
+        "global_static" => vec![
+            expected(2, "selected", "blocked", 1, 1, "E_UNSUPPORTED", "*"),
+            expected(3, "dependent", "blocked", 1, 1, "E_UNSUPPORTED", "*"),
+            expected(4, "probe", "checked", 0, 0, "", ""),
+        ],
+        "mutable_static" => vec![
+            expected(2, "selected", "blocked", 1, 1, "E_UNSUPPORTED", ""),
+            expected(3, "dependent", "blocked", 1, 1, "E_UNSUPPORTED", ""),
+            expected(4, "probe", "blocked", 1, 1, "E_UNSUPPORTED", ""),
+        ],
+        "qualified_header" => vec![
+            at(expected(1, "concealed", "blocked", 1, 14, "E_PARSE", ""), 14),
+            expected(2, "probe", "blocked", 1, 14, "E_PARSE", ""),
+        ],
+        "global_macro" => vec![
+            expected(2, "good", "blocked", 1, 1, "E_UNSUPPORTED_MACRO", "*"),
+            expected(3, "dependent", "blocked", 1, 1, "E_UNSUPPORTED_MACRO", "*"),
+            expected(4, "probe", "blocked", 1, 1, "E_UNSUPPORTED_MACRO", "*"),
+        ],
+        "glob_import" => vec![
+            expected(2, "broken", "blocked", 0, 0, "", "*"),
+            expected(6, "good", "blocked", 1, 1, "E_IMPORT", "*"),
+            expected(7, "dependent", "blocked", 1, 1, "E_IMPORT", "*"),
+            expected(8, "probe", "blocked", 1, 1, "E_IMPORT", "*"),
+        ],
+        "trait_impl" => vec![
+            // Recovery stops at fn after the refused unsafe prefix, retaining its body.
+            at(expected(4, "measure", "blocked", 4, 5, "E_UNSUPPORTED", ""), 12),
+            expected(6, "good", "blocked", 4, 5, "E_UNSUPPORTED", "*"),
+            expected(7, "dependent", "blocked", 4, 5, "E_UNSUPPORTED", "*"),
+            expected(8, "probe", "blocked", 4, 5, "E_UNSUPPORTED", "*"),
+        ],
+        "type_failure" => vec![
+            expected(1, "broken", "blocked", 2, 5, "E_CAPABILITY", ""),
+            expected(5, "wrong", "rejected", 5, 1, "E_TYPE", ""),
+            expected(6, "dependent", "blocked", 5, 1, "E_TYPE", "wrong"),
+            expected(7, "good", "checked", 0, 0, "", ""),
+            expected(8, "probe", "checked", 0, 0, "", "good"),
+            expected(9, "borrowed_pattern", "blocked", 2, 5, "E_CAPABILITY", ""),
+            expected(10, "implicit_unit", "blocked", 2, 5, "E_CAPABILITY", ""),
+        ],
+        "qualified_import" => vec![
+            // The declaration has a concrete lexical owner; only outside lookup traverses the refused alias.
+            at(expected(3, "a::target::pick", "checked", 0, 0, "", ""), 13),
+            expected(7, "probe", "blocked", 5, 37, "E_CAPABILITY", "*"),
+            expected(8, "good", "checked", 0, 0, "", ""),
+        ],
+        "normalized_self" => vec![
+            at(expected(1, "io::pick", "blocked", 2, 18, "E_CAPABILITY", ""), 14),
+            expected(3, "probe", "blocked", 2, 18, "E_CAPABILITY", ""),
+        ],
+        "import_chain" => vec![
+            expected(1, "unrelated", "blocked", 2, 5, "E_CAPABILITY", ""),
+            at(expected(5, "chosen", "checked", 0, 0, "", ""), 5),
+            at(expected(12, "consumer::read", "blocked", 8, 37, "E_CAPABILITY", ""), 9),
+            expected(14, "probe", "blocked", 8, 37, "E_CAPABILITY", "consumer::read"),
+        ],
+        "library_inputs" => vec![
+            expected(1, "broken", "blocked", 2, 5, "E_CAPABILITY", ""),
+            expected(5, "text", "blocked", 2, 5, "E_CAPABILITY", "*"),
+            expected(6, "aggregate", "checked", 0, 0, "", ""),
+            expected(7, "borrowed", "blocked", 2, 5, "E_CAPABILITY", "*"),
+            expected(8, "good", "checked", 0, 0, "", ""),
+            expected(9, "probe", "checked", 0, 0, "", "good"),
+        ],
+        _ => panic!("unknown partial-check fixture"),
+    }
+}
+fn text(value: &Value, key: &str) -> String {
+    value.get(key).unwrap().as_str().unwrap().to_string()
+}
+fn number(value: &Value, key: &str) -> usize {
+    value.get(key).unwrap().as_usize().unwrap()
+}
+fn identity(path: &str, line: usize, column: usize) -> String {
+    format!("{path}@{line}:{column}")
+}
+fn main(mut world: World) {
+    let arguments = world.args();
+    assert_eq!(arguments.len(), 2usize);
+    let path = String::from_utf8(arguments[0].clone()).unwrap();
+    let name = String::from_utf8(arguments[1].clone()).unwrap();
+    let input = world.stdin().read_to_end().unwrap();
+    let diagnostics = String::from_utf8(input).unwrap();
+    let mut records = 0usize;
+    let mut report: Option<Value> = None;
+    for line in diagnostics.as_str().lines() {
+        if line.starts_with("LKJSCRIPT_ITEMS ") {
+            records += 1usize;
+            report = Some(json::parse(line[16usize..].as_bytes()).unwrap());
+        }
+    }
+    assert_eq!(records, 1usize);
+    let report = report.unwrap();
+    assert_eq!(number(&report, "schema"), 1usize);
+    assert!(report.get("tombstones").unwrap().as_array().is_some());
+    let rows = report.get("items").unwrap().as_array().unwrap();
+    let expected = cases(&name);
+    assert_eq!(rows.len(), expected.len());
+    let mut checked = 0usize;
+    let mut blocked = 0usize;
+    let mut rejected = 0usize;
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for want in &expected {
+        let id = identity(&path, want.line, want.column);
+        let mut selected: Option<usize> = None;
+        for index in 0usize..rows.len() {
+            if text(&rows[index], "id") == id {
+                assert!(selected.is_none());
+                selected = Some(index);
+            }
+        }
+        let found = &rows[selected.unwrap()];
+        assert!(seen.insert(text(found, "id")));
+        assert_eq!(text(found, "path"), path);
+        assert_eq!(number(found, "line"), want.line);
+        assert_eq!(number(found, "column"), want.column);
+        assert_eq!(text(found, "name"), want.name);
+        assert_eq!(text(found, "status"), want.status);
+        match want.status.as_str() {
+            "checked" => {
+                checked += 1usize;
+                assert!(matches!(found.get("cause").unwrap(), Value::Null));
+            }
+            status => {
+                if status == "blocked" { blocked += 1usize; }
+                else { assert_eq!(status, "rejected"); rejected += 1usize; }
+                let reason = text(found, "reason");
+                assert!(!reason.is_empty());
+                if name == "library_inputs" && want.name != "broken"
+                    || name == "type_failure" && matches!(want.name.as_str(), "borrowed_pattern" | "implicit_unit") {
+                    assert!(reason.starts_with("complete context required:"));
+                }
+                let cause = found.get("cause").unwrap();
+                assert_eq!(text(cause, "path"), path);
+                let line = number(cause, "line");
+                let column = number(cause, "column");
+                let code = text(cause, "code");
+                let message = text(cause, "message");
+                assert!(!message.is_empty());
+                if want.cause_line != 0usize {
+                    assert_eq!(line, want.cause_line);
+                    assert_eq!(column, want.cause_column);
+                    assert_eq!(code, want.cause_code);
+                }
+                let ordinary = format!("{path}:{line}:{column}: {code} {message}");
+                let mut present = false;
+                for row in diagnostics.as_str().lines() {
+                    if row == ordinary.as_str() { present = true; }
+                }
+                assert!(present);
+            }
+        }
+        let dependencies = found.get("dependencies").unwrap().as_array().unwrap();
+        let mut distinct: BTreeSet<String> = BTreeSet::new();
+        for dependency in dependencies {
+            let dependency = dependency.as_str().unwrap().to_string();
+            assert!(distinct.insert(dependency.clone()));
+            let mut present = false;
+            for row in rows {
+                if text(row, "id") == dependency { present = true; }
+            }
+            assert!(present);
+        }
+        if want.dependencies != "*" {
+            let mut index = 0usize;
+            for name in want.dependencies.as_str().split(',') {
+                if name.is_empty() { continue; }
+                assert!(index < dependencies.len());
+                let mut selected: Option<usize> = None;
+                for at in 0usize..expected.len() {
+                    if expected[at].name.as_str() == name { selected = Some(at); }
+                }
+                let expected_id = identity(&path, expected[selected.unwrap()].line, expected[selected.unwrap()].column);
+                assert_eq!(dependencies[index].as_str().unwrap(), expected_id.as_str());
+                index += 1usize;
+            }
+            assert_eq!(dependencies.len(), index);
+        }
+    }
+    assert_eq!(number(&report, "checked"), checked);
+    assert_eq!(number(&report, "blocked"), blocked);
+    assert_eq!(number(&report, "rejected"), rejected);
+    world.stdout().write(format!("ok {name}: checked={checked} blocked={blocked} rejected={rejected}\n").as_bytes());
+}

@@ -221,7 +221,7 @@ impl<'a> Resolver<'a> {
             Ok(resolver)
         }
     }
-    fn new_report(program: &'a Program) -> Result<(Self, Vec<Diagnostic>)> {
+    pub(crate) fn new_report(program: &'a Program) -> Result<(Self, Vec<Diagnostic>)> {
         if program.resolved && program.function_owners.len() != program.functions.len() {
             return Err(Diagnostic::new(
                 Span::default(),
@@ -735,6 +735,13 @@ impl<'a> Resolver<'a> {
             }
         }
         Ok(Some(Resolved::item(binding)))
+    }
+    /// Diagnostic lookup retains ordinary namespace and visibility rules.
+    /// Refused declarations and imports remain separate poisoned inputs.
+    pub(crate) fn diagnostic_binding(&self, scope: ModuleId, name: &str,
+        namespace: Namespace, span: Span) -> Result<Option<(String, Option<Item>)>> {
+        Ok(self.path(scope, name, namespace, span, true)?.map(|resolved|
+            (resolved.name, resolved.binding.map(|binding| self.declarations[binding.declaration].item))))
     }
     fn exact_trait(&self, declaration: DeclarationId, target: &str, span: Span) -> Result<Option<usize>> {
         let entry = &self.declarations[declaration];

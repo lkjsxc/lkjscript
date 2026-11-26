@@ -1,0 +1,2 @@
+const unsafe fn concealed() -> i64 { 42i64 }
+fn probe() -> i64 { concealed() }

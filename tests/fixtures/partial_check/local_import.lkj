@@ -1,0 +1,8 @@
+fn selected() -> i64 { 42i64 }
+fn shadowed() -> i64 {
+    use std::io::stdout as selected;
+    selected()
+}
+fn dependent() -> i64 { shadowed() }
+fn good() -> i64 { 42i64 }
+fn probe() -> i64 { good() }

@@ -9,7 +9,7 @@ include!(concat!(env!("OUT_DIR"), "/language-module.rs"));
 
 pub(crate) use language::facts;
 pub use language::{
-    ast, authority, child_image, entry_grants, backend, check, diagnostic, diagnostics, elaborate, frontend, generics, ir, ir_text, ir_binary, json,
+    ast, authority, child_image, entry_grants, backend, check, diagnostic, diagnostics, elaborate, frontend, partial_check, generics, ir, ir_text, ir_binary, json,
     names, native, optimizer, resolve, reuse, runtime_memory, runtime_diagnostics, sha256, source, syntax,
     meaning, semantic, semantic_facts, structure_edit, structure_write, structure_replay, structure_refactor,
 };

@@ -16,6 +16,21 @@ pub struct BlockedRegion {
     pub reason: String,
 }
 
+/// A refused source region and its exact cause. This is diagnostic metadata, never
+/// evidence that a recovered declaration, body or namespace is complete. Empty
+/// names with namespace=true poison the whole indicated namespace conservatively.
+#[derive(Clone)]
+pub struct Recovery {
+    pub span: Span,
+    pub scope: usize,
+    pub block: Option<usize>,
+    pub kind: String,
+    pub names: Vec<String>,
+    pub namespace: bool,
+    pub coherence: bool,
+    pub diagnostic: crate::ast::Diagnostic,
+}
+
 /// Report every recognized unsupported site, including those after the first
 /// failed body. Existing diagnostics retain their more specific explanation.
 pub fn complete_unsupported(report: &mut SourceReport) {

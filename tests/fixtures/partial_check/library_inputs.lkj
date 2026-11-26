@@ -1,0 +1,9 @@
+fn broken() -> i64 {
+    println!("source refusal keeps the root invalid");
+    7i64
+}
+fn text() -> bool { "a" == "a" }
+fn aggregate() -> bool { [1i64, 2i64] == [1i64, 2i64] }
+fn borrowed(value: &str) -> bool { value == "a" }
+fn good() -> i64 { 42i64 }
+fn probe() -> i64 { good() }

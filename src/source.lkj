@@ -1,6 +1,6 @@
 //! Source loading owns module discovery; the host supplies bytes for requested paths.
 use crate::ast::*;
-use crate::diagnostics::BlockedRegion;
+use crate::diagnostics::{BlockedRegion, Recovery};
 use crate::syntax;
 use std::collections::BTreeMap;
 
@@ -21,6 +21,10 @@ pub struct SourceReport {
     pub program: Program,
     pub diagnostics: Vec<Diagnostic>,
     pub blocked: Vec<BlockedRegion>,
+    pub recovery: Vec<Recovery>,
+    /// Original loaded UTF-8 source bytes, indexed by program.files. Recovered
+    /// syntax and these texts support diagnostics only, never source admission.
+    pub texts: Vec<String>,
 }
 impl SourceReport {
     pub fn into_result(self) -> Result<Program, Diagnostic> {
@@ -65,6 +69,13 @@ pub fn parse_bundle_report(bundle: &SourceBundle) -> SourceReport {
         Ok(text)
     });
     if !duplicates.is_empty() {
+        for diagnostic in &duplicates {
+            report.recovery.push(Recovery {
+                span: Span::default(), scope: 0usize, block: None,
+                kind: "source bundle".to_string(), names: Vec::new(),
+                namespace: true, coherence: true, diagnostic: diagnostic.clone(),
+            });
+        }
         let mut diagnostics = duplicates;
         for diagnostic in report.diagnostics {
             diagnostics.push(diagnostic);
@@ -344,6 +355,70 @@ pub fn load_report<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String
     load_report_with_providers(root, standard, &providers, BuildConfiguration::default(), read)
 }
 
+// Parser failures carry their exact recovery owner. Loader and expansion failures
+// only receive a narrower owner when an authored source edge proves it; unknown
+// input or expansion failures poison the global namespace and coherence context.
+fn complete_recovery(program: &Program, texts: &[String], diagnostics: &[Diagnostic],
+    recovery: &mut Vec<Recovery>) {
+    for diagnostic in diagnostics {
+        if recovery.iter().any(|failure| failure.diagnostic == *diagnostic) { continue; }
+        let mut span = Span { file: diagnostic.file, line: diagnostic.line,
+            column: diagnostic.column, ..Span::default() };
+        let mut scope = 0usize;
+        let mut block = None;
+        let mut names = Vec::new();
+        let mut kind = "source input".to_string();
+        let mut namespace = true;
+        let mut coherence = true;
+        if let Some(file) = program.files.iter().position(|file| file.path == diagnostic.path) {
+            span.file = file;
+            span.start = 0usize;
+            span.end = texts.get(file).map(|text| text.len()).unwrap_or(0usize);
+        }
+        let mut matches = 0usize;
+        for invocation in &program.macro_invocations {
+            if invocation.parent.is_none() && invocation.span.file < program.files.len()
+                && program.files[invocation.span.file].path == diagnostic.path
+                && invocation.span.line == diagnostic.line && invocation.span.column == diagnostic.column {
+                matches += 1usize;
+                span = invocation.span; scope = invocation.destination; block = invocation.block;
+                kind = "macro invocation".to_string();
+            }
+        }
+        if matches == 0usize {
+            for module in &program.modules {
+                if module.span.file < program.files.len()
+                    && program.files[module.span.file].path == diagnostic.path
+                    && module.span.line == diagnostic.line && module.span.column == diagnostic.column {
+                    matches += 1usize; span = module.span;
+                    scope = program.scopes[module.scope].parent.unwrap_or(0usize);
+                    names = vec![module.name.clone()]; kind = "module".to_string();
+                }
+            }
+        }
+        if matches == 0usize && (diagnostic.code.starts_with("E_INCLUDE") || diagnostic.code == "E_IO") {
+            for expression in &program.exprs {
+                if expression.span.file >= program.files.len()
+                    || program.files[expression.span.file].path != diagnostic.path
+                    || expression.span.line != diagnostic.line || expression.span.column != diagnostic.column { continue; }
+                if let Expr::Macro { name, .. } = &expression.kind {
+                    if name == "include_str" || name == "include_bytes" {
+                        matches += 1usize; span = expression.span;
+                        scope = expression.scope; block = expression.block; kind = "expression".to_string();
+                        namespace = false; coherence = false;
+                    }
+                }
+            }
+        }
+        if matches > 1usize {
+            scope = 0usize; block = None; names.clear();
+            namespace = true; coherence = true; kind = "source input".to_string();
+        }
+        recovery.push(Recovery { span, scope, block, kind, names, namespace, coherence,
+            diagnostic: diagnostic.clone() });
+    }
+}
+
 pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<Option<Vec<u8>>, String>>(
     root: &str,
     standard: Option<&str>,
@@ -353,6 +428,8 @@ pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<O
 ) -> SourceReport {
     let mut diagnostics = Vec::new();
     let mut blocked = Vec::new();
+    let mut recovery = Vec::new();
+    let mut texts = Vec::new();
     let mut program = Program::default();
     program.configuration = configuration;
     for input in providers {
@@ -442,6 +519,8 @@ pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<O
         directories.insert(scope, base);
         let first_expression = program.exprs.len();
         let parsed = syntax::parse_file_report(&mut program, &text, file, scope);
+        texts.push(text);
+        for failure in parsed.recovery { recovery.push(failure); }
         expand_includes(&mut program, first_expression, read, &mut diagnostics);
         for diagnostic in parsed.diagnostics {
             diagnostics.push(diagnostic);
@@ -674,10 +753,13 @@ pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<O
                 .to_string(),
         });
     }
+    complete_recovery(&program, &texts, &diagnostics, &mut recovery);
     SourceReport {
         program,
         diagnostics,
         blocked,
+        recovery,
+        texts,
     }
 }
 

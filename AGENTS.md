@@ -10,10 +10,10 @@ The checked lkjscript IR is the single trust boundary. Producers are untrusted.
 Keep the IR checker independent of elaboration; keep the interpreter independent
 of the checker and backend. Recheck optimizer output and discard it on rejection.
 Native emission assumes only checked IR and the sealed runtime interface.
-Views live in locals, parameters, results and view aggregates, never heap containers.
-Name the ecosystem lkjscript, its representation lkjscript IR, its source files .lkj and IR files .lkjir.
+Views live in locals, parameters, results and view aggregates, never heap containers. Name the ecosystem lkjscript, its representation lkjscript IR, its source files .lkj and IR files .lkjir.
 Use ir/interpreter/backend in code, lkjscript for commands, and LKJSCRIPT_* variables.
 IR text starts with lkjscript-ir 1. No compatibility aliases or obsolete paths.
+Compiler owns recovery: retain refused owners and poison uncertain bindings/coherence. Partial item facts require exact source/dependency replay and never authorize whole-source IR, execution or checked edits.
 No resource policy exists except representation facts.
 Request memory when needed, adapt to refusal; run under limits that fit actual use.
 Report located allocation/stack traps; never size from RAM or rlimits.

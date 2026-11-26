@@ -17,6 +17,7 @@ pub mod elaborate;
 pub mod embedded;
 pub(crate) mod facts;
 pub mod frontend;
+pub mod partial_check;
 pub mod generics;
 pub mod interpreter;
 pub mod ir;

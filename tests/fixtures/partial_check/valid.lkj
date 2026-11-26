@@ -1,0 +1,22 @@
+fn add(value: i64) -> i64 { value + 1i64 }
+fn read(value: &i64) -> i64 { *value }
+fn pair(value: i64) -> (i64, i64) { (value, add(value)) }
+fn array() -> [i64; 3] { [10i64, 11i64, 12i64] }
+#[cfg(debug_assertions)]
+fn selected() -> i64 { 9i64 }
+#[cfg(not(debug_assertions))]
+fn selected() -> i64 { -16i64 }
+fn probe() -> i64 {
+    if !text_contract() || !aggregate_contract() { return 0i64; }
+    let values = array();
+    let (first, second) = pair(values[0usize]);
+    let mut total = read(&first) + second;
+    let mut index = 1usize;
+    while index < 3usize {
+        total += values[index];
+        index += 1usize;
+    }
+    total - 2i64 + selected() - 9i64
+}
+fn text_contract() -> bool { "a" == "a" }
+fn aggregate_contract() -> bool { [1i64, 2i64] == [1i64, 2i64] }

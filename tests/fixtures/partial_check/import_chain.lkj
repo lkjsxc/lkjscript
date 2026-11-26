@@ -1,0 +1,14 @@
+fn unrelated() -> i64 {
+    println!("unrelated source refusal");
+    0i64
+}
+pub fn chosen() -> i64 { 42i64 }
+mod exports {
+    pub use crate::chosen as forwarded;
+    use std::io::stdout as forwarded;
+}
+mod consumer {
+    use crate::exports::forwarded as chosen;
+    pub fn read() -> i64 { chosen() }
+}
+fn probe() -> i64 { consumer::read() }

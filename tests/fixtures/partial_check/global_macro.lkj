@@ -1,0 +1,4 @@
+unavailable_items!();
+fn good() -> i64 { 42i64 }
+fn dependent() -> i64 { good() }
+fn probe() -> i64 { dependent() }

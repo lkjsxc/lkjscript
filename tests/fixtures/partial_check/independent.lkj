@@ -1,0 +1,9 @@
+fn broken() -> i64 {
+    println!("this effect must never disappear");
+    7i64
+}
+fn good() -> i64 { 40i64 + 2i64 }
+fn chain() -> i64 { good() }
+fn dependent() -> i64 { broken() }
+fn transitive() -> i64 { dependent() }
+fn probe() -> i64 { chain() }

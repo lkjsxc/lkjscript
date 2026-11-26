@@ -456,6 +456,128 @@ private audit byte-for-byte. The retained execution artifacts remain bound to
 those exact binaries; the corrected source snapshot and unchanged log hashes
 are recorded explicitly in the handoff report.
 
+
+#### Item diagnostics in refused real-program roots
+
+Ordinary whole-root checks on the pinned Sōzu inputs stop during source loading,
+before resolving or checking the 470 syntax-complete logging expansions. The
+earlier private syntax audit does not preserve all consumer expression/statement
+edges and cannot supply a semantic-check substitute. The agreed next slice is
+therefore the first conservative stage of item diagnostics after source refusal,
+with exact recovery ownership and dependency accounting.
+
+The production `check` command now emits a non-authorizing `LKJSCRIPT_ITEMS`
+report. Refused regions retain tombstones, and uncertain names, imports, macros
+and coherence inputs poison affected lookups. Eligible nongeneric free functions
+and their complete direct-call closures are reparsed from the exact loaded source
+bytes. Their recorded bindings must agree with the original declaration context
+before ordinary resolution, elaboration and the independent IR checker run.
+Methods, nominal/generic contexts, macro-generated functions and incomplete
+declaration environments remain blocked. Structural failures cannot become local
+type/borrow diagnoses merely because the smaller replay omitted library inputs.
+The [language contract](language.md#item-diagnostics-after-a-source-refusal)
+defines the bounded population and the checked/blocked/rejected statuses.
+No partial fact publishes checked IR or an executable, changes capability
+requirements, or admits a checked-edit transaction.
+
+The ranked whole-root barriers below account for the same 470 syntax-complete
+logging sites in either debug mode. They are the populations behind the first
+source refusal in each root, **not independently established local log-call
+diagnoses**. Type, borrow, trait/method and missing-library classifications for
+these calls remain unproved.
+
+| Rank | Root-first source barrier | Complete logging sites behind it |
+| --- | --- | ---: |
+| 1 | Lib: `E_CAPABILITY`, unavailable `std::cell::RefCell`, `lib/src/lib.lkj:340:18` | 357 |
+| 2 | Bin: `E_UNSUPPORTED`, `extern`, `bin/src/main.lkj:27:1` | 113 |
+
+The completed paired census uses ordinary production CLI executables built from
+the accepted and candidate compiler sources by the Rust witness. These are the
+normal source loader and checking paths, without a private audit adapter or an
+erased refusal gate. Both debug configurations give the following result:
+
+| Root | Before checked | After checked | After blocked | After rejected |
+| --- | ---: | ---: | ---: | ---: |
+| Sōzu bin | 0 | 0 | 607 | 0 |
+| Sōzu lib | 0 | 0 | 1,234 | 0 |
+| nom 8.0.0 | 0 | 0 | 659 | 0 |
+| selectors 0.38.0 | 0 | 0 | 348 | 0 |
+
+The baseline emits no per-item report, so its blocked/rejected totals are
+unavailable; zero before checked means no function IR reached ordinary checking.
+After totals inventory retained non-library functions with bodies. Sōzu bin
+contains 176 consumer and 431 declared command-provider functions; lib contains
+803 consumer and the same 431 provider functions. These overlapping provider
+populations must not be summed as distinct functions.
+
+Every Sōzu item is blocked by an incomplete recovered declaration environment:
+the ordinary declaration catalog refuses `./command/src/proto/mod.lkj:10:5`
+with `E_UNSUPPORTED: external modules require a source bundle or the normal CLI`.
+This guard records an upstream catalog limitation, not a local logging failure.
+nom has 657 poisoned lookups and two functions overlapping owned source refusals;
+its root-first source refusal is unsupported `cfg(doctest)` at
+`src/lib.lkj:385:1`. Selectors has 177 poisoned lookups and 171 functions
+overlapping refused regions. Its source stream first refuses unsafe code at
+`tree.lkj:19:1`; item poison also retains the higher-ranked trait application
+refusal at `parser.lkj:275:6`. Every blocked row records an exact printed
+upstream cause.
+
+All 472 frozen logging identities map to retained enclosing-function records.
+All 470 previously syntax-complete contexts remain unchecked in both modes;
+there is consequently no admitted original call to execute. The two unsafe
+arguments at `bin/src/worker.lkj:194:26` and
+`bin/src/upgrade.lkj:86:26` remain separate and exact. All 75 original capability
+rows (20 bin, 55 lib) retain their bytes, with no additions, omissions or duplicate
+rows in either mode.
+
+The Sōzu pin remains `c5ff06a12bd514e06ab28965052d0ad1e19c45b3`, with
+196 original tracked files and 92 byte-preserving suffix aliases. nom is pinned
+to `2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1`. The selectors archive digest is
+`8adfa1c298912827b8a28b223b3b874357397ae706e6190acd9bf28cee99114d`;
+its projection retains 22 archive files and adds 16 suffix aliases. Input and
+producer hashes are checked before and after each completed census batch.
+
+The native Sōzu and nom baseline attempts were stopped unfinished after slow
+macro-error recovery and are retained as observations, not completed census
+results. Native selectors baseline diagnostics agree with the Rust-built route
+in both modes, and the candidate native selectors item JSON is byte-identical to
+the Rust-built route in both modes. No cross-producer timing comparison is
+claimed. Full native acceptance remains separate from this paired census.
+
+The focused suite checks 112 authored item rows across both debug modes:
+34 checked, 76 blocked and two rejected. It preserves valid IR byte identity,
+passes eight native/interpreter source-and-IR value routes and 60 execution or
+publication refusals, and runs Rust opt0/opt3 controls covering eight value
+observations and 56 context/boundary verdicts. Twelve accepted Rust context
+executions and four unsafe-shadowing value observations exercise intentional
+lkjscript boundaries; these are not claims of identical admission decisions. Regressions include mutable/qualified headers,
+intermediate and normalized-`self` imports, transitive import poison, structural
+library inputs and exact dependency causes. Standalone bootstrap passes in
+186.965 s and reproduces native SHA-256
+`1deb2da75ea8280f9f15b529a156ff4db8bfcdb874353c701c9878236c054e98`.
+Fresh focused acceptance passes in 23.755 s. Standalone origin controls pass all
+87 malformed macro origins on both engines and 18 configuration origins per
+engine. The complete fresh-store four-worker gate passes in 2,197.217 s
+(2,197.219 s shell wall time), rerunning all 7,535 case requests with none skipped.
+All 128 IR mutants produce zero findings. Bootstrap inside that gate passes in
+184.865 s and reproduces the same native image; its partial-check suite passes in
+18.178 s. Each ordinary/inline64 conformance mode passes 1,832 cases / 3,662
+route checks, with the same two pending routes for the borrowed-closure-escape
+fixture. Each generated mode passes 805 cases / 2,430 routes with no pending.
+
+Integration repairs updated four reduced diagnostic harnesses, made the store
+fixture compare exact fresh/cached build refusals while preserving destinations,
+and registered the new module in the independent runtime-admission entry point.
+That one-line entry-point repair is the only compiler-source change after the
+qualified census; rebuilding the primary compiler from the final source
+reproduces the same native bytes in 9.371 s. The two stopped full-gate attempts
+and their failures remain recorded separately; the final complete run used a
+fresh store and a new final-source input snapshot.
+
+The next precision work is refused-declaration ownership and partial declaration
+catalogs, followed by certified library/trait/macro dependency closures. Native
+macro-error replay cost is a separate measured performance frontier.
+
 #### Earlier ordinary numeric traits frontier
 
 <!-- numeric-evidence-v1 sha256:53c52136581be3be25a96ff0bfa4e7077207da1e8f75548cc3aaa456e746a484 -->

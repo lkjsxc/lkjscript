@@ -334,7 +334,7 @@ fn parser(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvoca
     restored.push(Token { kind: TokenKind::End, text: String::new(), literal_spelling: String::new(), span, origin: span, context: 0usize });
     Parser { tokens: restored, at: 0usize, module: program.scopes[invocation.destination].path.clone(),
         scope: invocation.destination, block: invocation.block, macro_scope: None, program: std::mem::replace(program, Program::default()),
-        diagnostics: Vec::new(), blocked: Vec::<BlockedRegion>::new(), diagnostic_keys: BTreeSet::new(),
+        diagnostics: Vec::new(), blocked: Vec::<BlockedRegion>::new(), recovery: Vec::new(), diagnostic_keys: BTreeSet::new(),
         self_context: invocation.self_context, expansion, probing: false, fragment: true, macro_carriers: Vec::new() }
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
