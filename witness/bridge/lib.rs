@@ -90,6 +90,11 @@ pub fn load_report_with_providers<F: FnMut(&str) -> Result<Option<Vec<u8>>, Stri
     source::load_report_with_providers(root, standard, providers, configuration, read)
 }
 
+/// Preserve source-crate access to the retained-body detector in the binary.
+pub fn retained_body_failure(source: &source::SourceReport, problems: &[ast::Diagnostic]) -> bool {
+    partial_check::retained_body_failure(source, problems)
+}
+
 /// Bridge unit elaboration with the selected physical source paths.
 pub fn infer_resolved_report_with_source_paths<'source>(
     source: &'source ast::Program,

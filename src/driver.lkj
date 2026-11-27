@@ -457,12 +457,7 @@ fn join_lines(lines: &[String]) -> String {
     text
 }
 
-fn analysis_failure(
-    path: &str,
-    source: &mut source::SourceReport,
-    problems: Vec<ast::Diagnostic>,
-    blocked: &str,
-) -> String {
+fn append_source_problems(source: &mut source::SourceReport, problems: Vec<ast::Diagnostic>) {
     for mut problem in problems {
         if problem.path.is_empty() {
             if let Some(file) = source.program.files.get(problem.file) {
@@ -471,6 +466,25 @@ fn analysis_failure(
         }
         source.diagnostics.push(problem);
     }
+}
+fn partial_failure(path: &str, source: &mut source::SourceReport,
+    problems: Vec<ast::Diagnostic>, blocked: &str, stats: &mut Stats) -> Result<String, String> {
+    append_source_problems(source, problems);
+    let partial = crate::partial_check::analyze(source);
+    stats.mark("partial_check")?;
+    stats.count("items_checked", partial.checked);
+    stats.count("items_blocked", partial.blocked);
+    stats.count("items_rejected", partial.rejected);
+    let failure = analysis_failure(path, source, partial.problems, blocked);
+    Ok(format!("{failure}\n{}", partial.text))
+}
+fn analysis_failure(
+    path: &str,
+    source: &mut source::SourceReport,
+    problems: Vec<ast::Diagnostic>,
+    blocked: &str,
+) -> String {
+    append_source_problems(source, problems);
     diagnostics::complete_unsupported(source);
     let mut messages: Vec<String> = Vec::new();
     for problem in &source.diagnostics {
@@ -2618,24 +2632,23 @@ fn compile_snapshot(
     stats.mark("load_parse")?;
     if !loaded.diagnostics.is_empty() {
         if options.command == "check" {
-            let partial = crate::partial_check::analyze(&loaded);
-            stats.mark("partial_check")?;
-            stats.count("items_checked", partial.checked);
-            stats.count("items_blocked", partial.blocked);
-            stats.count("items_rejected", partial.rejected);
-            let failure = analysis_failure(&options.path, &mut loaded, partial.problems, "");
-            return Err(format!("{failure}\n{}", partial.text));
+            return Err(partial_failure(&options.path, &mut loaded, Vec::new(), "", stats)?);
         }
         return Err(analysis_failure(&options.path, &mut loaded, Vec::new(), ""));
     }
     let resolved = match resolve::resolve(&loaded.program) {
         Ok(resolved) => resolved,
         Err(problem) => {
+            let problems = vec![problem];
+            let blocked = "declaration resolution failed; dependent definition and IR analysis was not attempted";
+            if options.command == "check" && crate::partial_check::retained_body_failure(&loaded, &problems) {
+                return Err(partial_failure(&options.path, &mut loaded, problems, blocked, stats)?);
+            }
             return Err(analysis_failure(
                 &options.path,
                 &mut loaded,
-                vec![problem],
-                "declaration resolution failed; dependent definition and IR analysis was not attempted",
+                problems,
+                blocked,
             ));
         }
     };
@@ -2690,11 +2703,15 @@ fn compile_snapshot(
     let definitions = match inferred {
         Ok(definitions) => definitions,
         Err(problems) => {
+            let blocked = "definition analysis failed; dependent IR construction and checking was not attempted";
+            if options.command == "check" && crate::partial_check::retained_body_failure(&loaded, &problems) {
+                return Err(partial_failure(&options.path, &mut loaded, problems, blocked, stats)?);
+            }
             return Err(analysis_failure(
                 &options.path,
                 &mut loaded,
                 problems,
-                "definition analysis failed; dependent IR construction and checking was not attempted",
+                blocked,
             ));
         }
     };
@@ -2704,11 +2721,15 @@ fn compile_snapshot(
     let meaning = match elaborate::lower_definitions_recorded_semantic(definitions, &mut front_catalog, &mut structural) {
         Ok(meaning) => meaning,
         Err(problems) => {
+            let blocked = "failed bodies are blocked; independent typed bodies were constructed and checked";
+            if options.command == "check" && crate::partial_check::retained_body_failure(&loaded, &problems) {
+                return Err(partial_failure(&options.path, &mut loaded, problems, blocked, stats)?);
+            }
             return Err(analysis_failure(
                 &options.path,
                 &mut loaded,
                 problems,
-                "failed bodies are blocked; independent typed bodies were constructed and checked",
+                blocked,
             ));
         }
     };

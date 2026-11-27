@@ -31,7 +31,7 @@ mkdir "$work/cases"
 cp tests/fixtures/partial_check/*.lkj "$work/cases/"
 verifier_compiler=${baseline:-$compiler}
 "$verifier_compiler" build tests/fixtures/partial_check_verify.lkj --library-dir "$library" --no-store -o "$work/verify" > "$work/verifier-output" 2> "$work/verifier-error" || fail 'verifier build'
-cases=(independent unsafe_binding local_import global_static mutable_static qualified_header global_macro glob_import trait_impl type_failure qualified_import normalized_self import_chain library_inputs grow_context grow_module receiver)
+cases=(independent unsafe_binding local_import global_static mutable_static qualified_header global_macro glob_import trait_impl type_failure qualified_import normalized_self import_chain library_inputs grow_context grow_module receiver retained_impl)
 sed '/^fn invalid</d; /^fn refusal()/d' "$work/cases/grow_context.lkj" > "$work/grow-valid.lkj"
 cat >> "$work/grow-valid.lkj" <<'EOF'
 impl Marker for i64 {}
@@ -75,6 +75,11 @@ impl HasBits<u16> for Receiver {
 EOF
 sed 's/self.end = self.capacity;/println!("unsupported destructor");/' \
     "$work/cases/receiver.lkj" > "$work/receiver-destructor.lkj"
+sed '/fn denied(/d; /fn unresolved(/d' "$work/cases/retained_impl.lkj" > "$work/retained-impl-valid.lkj"
+sed 's/fn unresolved(\&self)/fn reading(\&self)/' "$work/cases/retained_impl.lkj" > "$work/retained-impl-duplicate.lkj"
+sed 's/fn unresolved(\&self)/fn unresolved(\&self, _value: dyn Marker)/' \
+    "$work/cases/retained_impl.lkj" > "$work/retained-impl-header.lkj"
+sed 's/    fn denied(.*//' "$work/cases/retained_impl.lkj" > "$work/retained-impl-semantic.lkj"
 mkdir "$work/receiver-edit"
 cp "$work/cases/receiver.lkj" "$work/receiver-edit/main.lkj"
 head -c 32 /dev/urandom > "$work/receiver-edit-key"
@@ -98,7 +103,9 @@ for mode in on off; do
         [[ $actual == 42 ]] || fail "grown closure $mode/$engine value"
         actual=$("$compiler" run "$work/receiver-valid.lkj" --library-dir "$library" --debug-assertions "$mode" --engine "$engine" --no-store 2> "$work/error")
         [[ $actual == 42 ]] || fail "receiver closure $mode/$engine value"
-        checks=$((checks + 2))
+        actual=$("$compiler" run "$work/retained-impl-valid.lkj" --library-dir "$library" --debug-assertions "$mode" --engine "$engine" --no-store 2> "$work/error")
+        [[ $actual == 42 ]] || fail "retained implementation $mode/$engine value"
+        checks=$((checks + 3))
     done
     for variant in library macro method; do
         source="$work/cases/grow_context.lkj"
@@ -117,6 +124,14 @@ for mode in on off; do
         [[ $status == 1 && ! -s $work/output ]] || fail "receiver $variant $mode kept no source refusal"
         "$work/verify" "$source" "receiver_$variant" < "$work/error" 2> "$work/verifier-error" ||
             fail "receiver $variant $mode item check"
+    done
+    for variant in duplicate header semantic; do
+        source="$work/retained-impl-$variant.lkj"
+        status=0
+        "$compiler" check "$source" --library-dir "$library" --debug-assertions "$mode" --no-store > "$work/output" 2> "$work/error" || status=$?
+        [[ $status == 1 && ! -s $work/output ]] || fail "retained implementation $variant $mode kept no source refusal"
+        "$work/verify" "$source" "retained_impl_$variant" < "$work/error" 2> "$work/verifier-error" ||
+            fail "retained implementation $variant $mode item check"
     done
     if [[ -n $baseline ]]; then
         "$baseline" ir "$work/cases/valid.lkj" --library-dir "$library" --debug-assertions "$mode" --no-store -o "$work/baseline-$mode.lkjir" > "$work/output" 2> "$work/error"
@@ -211,7 +226,7 @@ if [[ -n $witness ]]; then
                     independent|unsafe_binding|library_inputs)
                         [[ $status == 0 && $("$work/rust") == 42 ]] || fail "Rust capability-boundary twin $name/$mode/$level"
                         ;;
-                    local_import|global_static|mutable_static|qualified_header|global_macro|glob_import|trait_impl|type_failure|qualified_import|normalized_self|import_chain|grow_context|grow_module|receiver)
+                    local_import|global_static|mutable_static|qualified_header|global_macro|glob_import|trait_impl|type_failure|qualified_import|normalized_self|import_chain|grow_context|grow_module|receiver|retained_impl)
                         [[ $status != 0 ]] || fail "Rust accepted malformed context $name/$mode/$level"
                         ;;
                     *) fail "missing Rust oracle for $name" ;;
@@ -227,6 +242,11 @@ if [[ -n $witness ]]; then
             printf '\nfn main() { println!("{}", probe()); }\n' >> "$work/rust.lkj"
             "$witness" --edition=2021 --crate-name partial_receiver -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || fail "Rust receiver closure $mode/$level"
             [[ $("$work/rust") == 42 ]] || fail "Rust receiver closure $mode/$level value"
+            rust_values=$((rust_values + 1))
+            cp "$work/retained-impl-valid.lkj" "$work/rust.lkj"
+            printf '\nfn main() { println!("{}", probe()); }\n' >> "$work/rust.lkj"
+            "$witness" --edition=2021 --crate-name partial_retained_impl -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || fail "Rust retained implementation $mode/$level"
+            [[ $("$work/rust") == 42 ]] || fail "Rust retained implementation $mode/$level value"
             rust_values=$((rust_values + 1))
             for variant in duplicate blanket qualifier; do
                 sed '/^use crate::absent::Ghost;$/d; /^fn refusal()/d' "$work/receiver-$variant.lkj" > "$work/rust.lkj"

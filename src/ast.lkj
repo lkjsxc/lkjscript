@@ -243,6 +243,13 @@ pub struct Trait {
 }
 
 #[derive(Clone, PartialEq, Eq)]
+pub struct ImplSyntax {
+    pub header: Span,
+    pub close: Span,
+    pub methods: Vec<Span>,
+}
+
+#[derive(Clone, PartialEq, Eq)]
 pub struct Impl {
     pub module: String,
     pub generics: Vec<GenericParam>,
@@ -253,6 +260,7 @@ pub struct Impl {
     pub associated: Vec<AssociatedType>,
     pub constants: Vec<usize>,
     pub span: Span,
+    pub authored: Option<ImplSyntax>,
 }
 
 #[derive(Clone, PartialEq, Eq)]

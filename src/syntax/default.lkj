@@ -131,6 +131,7 @@ impl Parser {
             associated: Vec::new(),
             constants: Vec::new(),
             span,
+            authored: None,
         });
         Ok(())
     }

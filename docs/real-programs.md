@@ -654,6 +654,22 @@ preceding producer byte for byte. Complete imports remain namespace
 dependencies. In the library root, 346 blocked method records now cite the
 refused `dyn` region that leaves coherence open.
 
+#### Retained inherent implementation headers
+
+The Sōzu readiness reduction retains the exact `Ready` declaration and
+inherent implementation, including its associated constants and the eight
+method bodies, then appends an ambient-output refusal. In both modes the
+reduction advances from zero checked items to one, `Ready::is_empty` at the
+original line 17. The other seven methods keep their unresolved body inputs.
+The full Sōzu and nom roots keep their existing checked sets while unrelated
+opaque implementation producers remain in their source closures.
+
+The independent fixture checks one borrowed scalar method across a refused
+sibling. Its valid twin agrees on 42 across both lkjscript engines and Rust.
+The semantic-only control enters the report through ordinary checking,
+retains the unresolved-name diagnostic, and still checks the sibling method.
+A repeated member name or refused member header blocks the affected owner.
+
 #### Earlier ordinary numeric traits frontier
 
 <!-- numeric-evidence-v1 sha256:53c52136581be3be25a96ff0bfa4e7077207da1e8f75548cc3aaa456e746a484 -->

@@ -2,7 +2,7 @@
 #![allow(dead_code, unused_imports)]
 pub use lkjscript::{host, proof_domain, seal_header};
 pub use lkjscript::{
-    ast, authority, child_image, entry_grants, backend, check, diagnostic, diagnostics, frontend, partial_check, generics, interpreter, ir,
+    ast, authority, child_image, entry_grants, backend, check, diagnostic, diagnostics, frontend, generics, interpreter, ir,
     ir_text, ir_binary, json, names, optimizer, resolve, reuse, runtime, runtime_memory, runtime_diagnostics, sha256, x86,
     semantic, semantic_facts, structure_write, structure_replay, structure_refactor, source_json, trim_source_ascii,
 };
@@ -27,6 +27,10 @@ mod source {
 mod syntax {
     pub use lkjscript::macro_provider_name;
     pub use lkjscript::syntax::*;
+}
+mod partial_check {
+    pub use lkjscript::partial_check::*;
+    pub use lkjscript::retained_body_failure;
 }
 include!(concat!(env!("OUT_DIR"), "/embedded-module.rs"));
 include!(concat!(env!("OUT_DIR"), "/meaning-module.rs"));

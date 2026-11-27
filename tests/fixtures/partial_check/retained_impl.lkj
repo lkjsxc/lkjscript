@@ -1,0 +1,15 @@
+struct Meter(u16);
+
+#[cfg(not(test))]
+impl Meter {
+    const MARK: u16 = 42;
+
+    #[inline]
+    pub fn reading(&self) -> u16 { self.0 }
+
+    fn denied(&self) { println!("unsupported"); }
+    fn unresolved(&self) -> u16 { missing() }
+    fn reads_mark(&self) -> u16 { Self::MARK }
+}
+
+fn probe() -> i64 { Meter(42).reading() as i64 }

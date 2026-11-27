@@ -147,6 +147,7 @@ impl Parser {
         self.program.impls.push(Impl {
             module, generics, predicates, target, trait_ty: Some(bound),
             methods: vec![method], associated: Vec::new(), constants: Vec::new(), span,
+            authored: None,
         });
         Ok(())
     }

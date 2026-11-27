@@ -646,16 +646,43 @@ impl<'a> Inspector<'a> {
         }
         Ok(())
     }
-    fn implementation(&self, owner: usize, plan: &mut Plan) -> Result<(), Failure> {
+    fn inherent_members(&self, implementation: &a::Impl, selected: usize) -> Result<(), Failure> {
+        let Some(authored) = &implementation.authored else {
+            return Err(self.boundary("inherent implementation has no authored header"));
+        };
+        if let Some(refusal) = self.overlap(authored.header) { return Err(refusal); }
+        let method = &self.program.functions[selected];
+        if implementation.methods.iter().any(|other|
+            *other != selected && self.program.functions[*other].name == method.name)
+            || implementation.constants.iter().any(|other| self.program.constants[*other].name == method.name) {
+            return Err(self.competing(implementation));
+        }
+        for failure in self.failures {
+            if !intersects(implementation.span, failure.span) { continue; }
+            // A retained sibling body cannot supply this method or its header.
+            // Unknown member text and possible declaration producers still block.
+            if !failure.coherence && implementation.methods.iter().any(|other| {
+                *other != selected && self.program.functions[*other].body.is_some_and(|body|
+                    contains(self.program.blocks[body].span, failure.span))
+            }) { continue; }
+            return Err(Failure { cause: located(self.program, failure.diagnostic.clone()),
+                reason: "the implementation has a refused header or member boundary".to_string() });
+        }
+        Ok(())
+    }
+    fn implementation(&self, owner: usize, selected: usize, plan: &mut Plan) -> Result<(), Failure> {
         let implementation = &self.program.impls[owner];
-        if let Some(refusal) = self.overlap(implementation.span) { return Err(refusal); }
+        if implementation.trait_ty.is_none() {
+            self.inherent_members(implementation, selected)?;
+        } else if let Some(refusal) = self.overlap(implementation.span) { return Err(refusal); }
         // A missing implementation can change receiver selection or destruction.
         if let Some(failure) = self.failures.iter().find(|failure| failure.coherence) {
             return Err(Failure { cause: located(self.program, failure.diagnostic.clone()),
                 reason: "implementation coherence depends on refused source".to_string() });
         }
         if !implementation.generics.is_empty() || !implementation.predicates.is_empty()
-            || !implementation.associated.is_empty() || !implementation.constants.is_empty()
+            || !implementation.associated.is_empty()
+            || implementation.trait_ty.is_some() && !implementation.constants.is_empty()
             || library_scope(self.program, implementation.span.file)
             || self.program.macro_expansions.iter().any(|origin| origin.implementations.contains(&owner)) {
             return Err(self.boundary("implementation owner is not independently complete"));
@@ -736,9 +763,12 @@ impl<'a> Inspector<'a> {
         self.parameters(f, &mut plan)?;
         self.expansions(f, &mut plan)?;
         if let Some(owner) = self.program.impls.iter().position(|owner| owner.methods.contains(&index)) {
-            self.implementation(owner, &mut plan)?;
-            for method in &self.program.impls[owner].methods {
-                if *method != index && !plan.dependencies.contains(method) { plan.dependencies.push(*method); }
+            self.implementation(owner, index, &mut plan)?;
+            let implementation = &self.program.impls[owner];
+            if implementation.trait_ty.is_some() {
+                for method in &implementation.methods {
+                    if *method != index && !plan.dependencies.contains(method) { plan.dependencies.push(*method); }
+                }
             }
         }
         let nominal = plan.receiver.is_some_and(|index| !self.program.structs[index].unit);
@@ -845,21 +875,36 @@ fn closure(root: usize, plans: &[Option<Plan>], failures: &[Option<Failure>],
     }
     result.sort(); Ok(result)
 }
-fn parse_extent(source: &SourceReport, projected: &mut a::Program, span: a::Span,
+fn parse_extents(source: &SourceReport, projected: &mut a::Program, spans: &[a::Span],
     module: &str) -> Result<Vec<a::Item>, String> {
-    let Some(text) = source.texts.get(span.file) else { return Err("source text is absent".to_string()); };
-    if span.end > text.len() || span.start >= span.end { return Err("source span is outside its input".to_string()); }
+    let Some(first) = spans.first() else { return Err("source replay has no extents".to_string()); };
+    let file = first.file;
+    let Some(text) = source.texts.get(file) else { return Err("source text is absent".to_string()); };
     let mut bytes = text.as_bytes().to_vec();
-    for at in 0usize..bytes.len() {
-        if !(span.start <= at && at < span.end) && bytes[at] != b'\n' && bytes[at] != b'\r' { bytes[at] = b' '; }
+    let mut end = 0usize;
+    for span in spans {
+        if span.file != file || span.start < end || span.end > bytes.len() || span.start >= span.end {
+            return Err("source span is outside its input or out of order".to_string());
+        }
+        for at in end..span.start {
+            if bytes[at] != b'\n' && bytes[at] != b'\r' { bytes[at] = b' '; }
+        }
+        end = span.end;
+    }
+    for at in end..bytes.len() {
+        if bytes[at] != b'\n' && bytes[at] != b'\r' { bytes[at] = b' '; }
     }
     let text = String::from_utf8(bytes).map_err(|_| -> String { "source projection is not UTF-8".to_string() })?;
     let scope = crate::resolve::module(projected, module);
-    let parsed = crate::syntax::parse_file_report(projected, &text, span.file, scope);
+    let parsed = crate::syntax::parse_file_report(projected, &text, file, scope);
     if !parsed.diagnostics.is_empty() || !parsed.recovery.is_empty() {
         return Err("authored source replay refused".to_string());
     }
     Ok(parsed.items)
+}
+fn parse_extent(source: &SourceReport, projected: &mut a::Program, span: a::Span,
+    module: &str) -> Result<Vec<a::Item>, String> {
+    parse_extents(source, projected, &[span], module)
 }
 fn replay_members(original: &a::Program, projected: &mut a::Program, before: usize,
     members: &[usize], source_indices: &mut Vec<usize>, inside_owner: bool) -> Result<(), String> {
@@ -976,6 +1021,43 @@ fn same_expansions(original: &a::Program, projected: &a::Program, expected: &[us
     }
     true
 }
+fn replay_implementation(source: &SourceReport, projected: &mut a::Program,
+    implementation: &a::Impl, selected: &[usize]) -> Result<Vec<usize>, String> {
+    let Some(authored) = &implementation.authored else {
+        return Err("implementation has no authored source extent".to_string());
+    };
+    let id = projected.impls.len();
+    let mut syntax = a::ImplSyntax { header: authored.header, close: authored.close, methods: Vec::new() };
+    let mut members = Vec::new();
+    let parsed = if implementation.trait_ty.is_some() {
+        let mut extent = authored.header;
+        extent.end = authored.close.end;
+        syntax.methods = authored.methods.clone();
+        members = implementation.methods.clone();
+        parse_extent(source, projected, extent, &implementation.module)?
+    } else {
+        if authored.methods.len() != implementation.methods.len() {
+            return Err("implementation member extents are incomplete".to_string());
+        }
+        let mut spans = vec![authored.header];
+        for (offset, method) in implementation.methods.iter().enumerate() {
+            if selected.contains(method) {
+                let span = authored.methods[offset];
+                spans.push(span);
+                syntax.methods.push(span);
+                members.push(*method);
+            }
+        }
+        spans.push(authored.close);
+        parse_extents(source, projected, &spans, &implementation.module)?
+    };
+    if parsed != vec![a::Item::Impl(id)] || projected.impls[id].authored != Some(syntax)
+        || projected.impls[id].span != implementation.span {
+        return Err("authored implementation header or member extent changed during replay".to_string());
+    }
+    projected.items.push(a::Item::Impl(id));
+    Ok(members)
+}
 fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
     plans: &[Option<Plan>]) -> Result<a::Program, String> {
     let mut projected = a::Program::default();
@@ -1023,13 +1105,7 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
         let owner = plans[*index].as_ref().unwrap().implementation;
         let members = if let Some(owner) = owner {
             if !implementations.insert(owner) { continue; }
-            let implementation = &original.impls[owner];
-            let id = projected.impls.len();
-            if parse_extent(source, &mut projected, implementation.span, &implementation.module)? != vec![a::Item::Impl(id)] {
-                return Err("authored implementation changed during replay".to_string());
-            }
-            projected.items.push(a::Item::Impl(id));
-            implementation.methods.clone()
+            replay_implementation(source, &mut projected, &original.impls[owner], selected)?
         } else {
             if parse_extent(source, &mut projected, f.span, &f.module)? != vec![a::Item::Function(before)] {
                 return Err("authored function replay did not yield one complete item".to_string());
@@ -1087,16 +1163,32 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
     drop(names);
     Ok(resolved)
 }
-fn owns_problem(source: &SourceReport, function: &a::Function, problem: &a::Diagnostic) -> bool {
-    if function.span.file != problem.file { return false; }
-    let Some(text) = source.texts.get(function.span.file) else { return false; };
+fn owns_problem(source: &SourceReport, span: a::Span, problem: &a::Diagnostic) -> bool {
+    if span.file != problem.file { return false; }
+    let Some(text) = source.texts.get(span.file) else { return false; };
     let mut line = 1usize; let mut column = 1usize;
     let mut offset = 0usize;
     while offset < text.len() && (line < problem.line || line == problem.line && column < problem.column) {
         if text.as_bytes()[offset] == b'\n' { line += 1usize; column = 1usize; } else { column += 1usize; }
         offset += 1usize;
     }
-    function.span.start <= offset && offset < function.span.end
+    span.start <= offset && offset < span.end
+}
+pub(crate) fn retained_body_failure(source: &SourceReport, problems: &[a::Diagnostic]) -> bool {
+    let program = &source.program;
+    for implementation in &program.impls {
+        if implementation.trait_ty.is_some() || implementation.authored.is_none()
+            || implementation.methods.len() < 2usize || library_scope(program, implementation.span.file) {
+            continue;
+        }
+        for method in &implementation.methods {
+            if let Some(body) = program.functions[*method].body {
+                let span = program.blocks[body].span;
+                if problems.iter().any(|problem| owns_problem(source, span, problem)) { return true; }
+            }
+        }
+    }
+    false
 }
 fn string(out: &mut Vec<u8>, value: &str) { crate::json::write_string(out, value); }
 fn diagnostic(out: &mut Vec<u8>, value: &a::Diagnostic) {
@@ -1232,7 +1324,7 @@ pub fn analyze(source: &SourceReport) -> Report {
                         // declarations even when the isolated diagnostic is E_TYPE.
                         // Only closed primitive inputs justify a new local refusal.
                         if scalar_inputs && matches!(problem.code.as_str(), "E_TYPE" | "E_BORROW") {
-                            let own = owns_problem(source, &program.functions[index], &problem);
+                            let own = owns_problem(source, program.functions[index].span, &problem);
                             record.status = if own { "rejected".to_string() } else { "blocked".to_string() };
                             record.failure = Some(Failure { cause: problem.clone(),
                                 reason: if own { "ordinary item checking refused".to_string() }

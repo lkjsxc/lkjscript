@@ -1102,8 +1102,14 @@ The independent population covers scalar constants, primitive and view types,
 tuples, arrays, ordinary local control flow and direct calls to eligible source
 or library functions. Plain generic parameters use ordinary rigid checking.
 Supported explicit generic bounds are intrinsic `Copy` and `Sized` and exact
-empty source traits. A method can replay a complete inherent or trait
-implementation over a nongeneric source struct. Borrowed receivers can use
+empty source traits. An inherent method can replay the authored implementation
+header, its complete selected member and the closing delimiter. A refused
+sibling body can stay outside the closure when the retained headers prove
+distinct member identities and its recovery cannot add implementations.
+Associated constants stay outside this closure when unused. A refused member
+header blocks the owner. A semantic refusal located in an authored inherent
+body can also trigger the item report. A trait method replays the complete implementation.
+Borrowed receivers over nongeneric source structs can use
 direct named and tuple fields of primitive type. The replay includes the
 receiver layout and its supported scalar derives, required trait signatures,
 the exact scalar trait application, and an applicable source destructor.

@@ -1523,7 +1523,7 @@ impl Parser {
             return Ok(Item::Trait(self.trait_item(public)?));
         }
         if self.is("impl") {
-            return Ok(Item::Impl(self.impl_item()?));
+            return Ok(Item::Impl(self.impl_item(&attrs)?));
         }
         if self.take("use") {
             return Ok(Item::Use(self.use_item(public)?));
@@ -2737,7 +2737,7 @@ impl Parser {
         }
         Ok(())
     }
-    fn impl_item(&mut self) -> Result<usize, Diagnostic> {
+    fn impl_item(&mut self, attrs: &[Attribute]) -> Result<usize, Diagnostic> {
         let span = self.token().span;
         self.expect("impl")?;
         let mut generics = self.generics()?;
@@ -2757,7 +2757,9 @@ impl Parser {
         }
         let predicates = self.where_clause(&mut generics)?;
         self.expect("{")?;
+        let header = self.finish_span(attrs.first().map(|attr| attr.span).unwrap_or(span));
         let mut methods = Vec::new();
+        let mut method_spans = Vec::new();
         let mut associated = Vec::new();
         let mut constants = Vec::new();
         let constant_owner = if generics.is_empty() && predicates.is_empty() {
@@ -2768,11 +2770,16 @@ impl Parser {
                 return Err(self.err("unterminated impl"));
             }
             let start = self.at;
+            let before = methods.len();
             let result = self.implementation_member(&mut methods, &mut associated, &mut constants, constant_owner, trait_ty.is_some());
-            if let Err(error) = result {
-                self.recover_region_context(start, "item", error, true);
+            match result {
+                Ok(()) if methods.len() != before =>
+                    method_spans.push(self.finish_span(self.tokens[start].span)),
+                Ok(()) => (),
+                Err(error) => self.recover_region_context(start, "item", error, true),
             }
         }
+        let close = self.token().span;
         self.expect("}")?;
         let id = self.program.impls.len();
         self.program.impls.push(Impl {
@@ -2785,6 +2792,7 @@ impl Parser {
             associated,
             constants,
             span: self.finish_span(span),
+            authored: Some(crate::ast::ImplSyntax { header, close, methods: method_spans }),
         });
         Ok(id)
     }

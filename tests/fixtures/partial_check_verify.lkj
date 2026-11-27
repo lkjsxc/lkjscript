@@ -111,9 +111,9 @@ fn cases(name: &str) -> Vec<Expected> {
             let methods = name == "grow_method_mutant";
             let mut rows = vec![
                 at(expected(4, "measured", if methods { "blocked" } else { "checked" },
-                    0, 0, "", if methods { "" } else { "generic" }), 5),
+                    0, 0, "", ""), 5),
                 at(expected(5, "generic", if methods { "blocked" } else { "checked" },
-                    0, 0, "", if methods { "" } else { "measured" }), 5),
+                    0, 0, "", ""), 5),
                 expected(8, "identity", "checked", 0, 0, "", ""),
                 expected(9, "duplicate", "checked", 0, 0, "", ""),
                 expected(10, "concrete", "checked", 0, 0, "", "duplicate"),
@@ -170,6 +170,31 @@ fn cases(name: &str) -> Vec<Expected> {
             }
             rows
         },
+        "retained_impl" | "retained_impl_duplicate" | "retained_impl_header" => {
+            let duplicate = name == "retained_impl_duplicate";
+            let header = name == "retained_impl_header";
+            let reading = if duplicate { expected(8, "reading", "blocked", 4, 1, "E_BLOCKED", "") }
+                else if header { expected(8, "reading", "blocked", 11, 34, "E_UNSUPPORTED", "") }
+                else { expected(8, "reading", "checked", 0, 0, "", "") };
+            let mut rows = vec![
+                at(reading, 9),
+                at(expected(10, "denied", "blocked", 10, 24, "E_CAPABILITY", ""), 5),
+                at(if header { expected(12, "reads_mark", "blocked", 11, 34, "E_UNSUPPORTED", "") }
+                    else { expected(12, "reads_mark", "blocked", 10, 24, "E_CAPABILITY", "") }, 5),
+                expected(15, "probe", "blocked", 10, 24, "E_CAPABILITY", ""),
+            ];
+            if !header {
+                rows.push(at(if duplicate { expected(11, "reading", "blocked", 4, 1, "E_BLOCKED", "") }
+                    else { expected(11, "unresolved", "blocked", 10, 24, "E_CAPABILITY", "") }, 5));
+            }
+            rows
+        },
+        "retained_impl_semantic" => vec![
+            at(expected(8, "reading", "checked", 0, 0, "", ""), 9),
+            at(expected(11, "unresolved", "blocked", 11, 35, "E_NAME", ""), 5),
+            at(expected(12, "reads_mark", "blocked", 11, 35, "E_NAME", ""), 5),
+            expected(15, "probe", "blocked", 11, 35, "E_NAME", ""),
+        ],
         _ => panic!("unknown partial-check fixture"),
     }
 }
