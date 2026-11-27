@@ -1,0 +1,20 @@
+//! Checked CLI for the inverse-projection verifier used by the Rust witness.
+mod levenshtein_verify;
+
+pub fn main(mut arguments: Arguments, mut source: ReadDirectory, mut output: Stdout,
+    mut errors: Stderr, mut status: ExitStatus) {
+    let args = arguments.args();
+    if args.len() != 1usize || std::bytes::starts_with(args[0usize].as_slice(), b"--")
+        || !std::bytes::valid_utf8(args[0usize].as_slice()) {
+        errors.write(b"usage: verify-levenshtein.sh SPECIMEN_DIRECTORY\n");
+        status.set_status(255u8);
+        return;
+    }
+    match levenshtein_verify::provenance(&mut source) {
+        Ok(report) => output.write(report.as_bytes()),
+        Err(reason) => {
+            errors.write(format!("provenance refusal: {reason}\n").as_bytes());
+            status.set_status(255u8);
+        },
+    }
+}

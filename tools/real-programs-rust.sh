@@ -8,7 +8,11 @@ command -v "$rustc_bin" >/dev/null || { printf 'Rust witness compiler unavailabl
 source=examples/real_programs/levenshtein
 golden=tests/fixtures/real_programs_levenshtein.output.gz
 [[ -f "$golden" ]] || { printf 'missing checked corpus: %s\n' "$golden" >&2; exit 1; }
-if [[ ! -x target/lkjscript ]]; then sh tools/bootstrap.sh; fi
+lkj_compiler=${LKJSCRIPT_COMPILER:-"$PWD/target/lkjscript"}
+case "$lkj_compiler" in /*) ;; *) lkj_compiler="$PWD/$lkj_compiler" ;; esac
+if [[ ! -x "$lkj_compiler" && -z ${LKJSCRIPT_COMPILER:-} ]]; then sh tools/bootstrap.sh; fi
+[[ -x "$lkj_compiler" ]] || { printf 'checked compiler unavailable: %s\n' "$lkj_compiler" >&2; exit 1; }
+export LKJSCRIPT_COMPILER="$lkj_compiler"
 mkdir -p target
 work=$(mktemp -d "$PWD/target/real-programs-rust.XXXXXX")
 cleanup() {
@@ -36,17 +40,17 @@ for foreign_case in macro_rules impl_trait qualified_type qualified_call nested_
         "$foreign_source" -o "$work/foreign_$foreign_case.rmeta" \
         > "$work/foreign_$foreign_case.out" 2> "$work/foreign_$foreign_case.err"
 done
-node tools/real-programs/verify-levenshtein.mjs "$source" > "$work/provenance.json"
-# Check the files rustc will read against the independent provenance report.
-node --input-type=module - "$work/provenance.json" > "$work/restored.sha256" <<'NODE'
-import {readFileSync} from 'node:fs';
-const {files} = JSON.parse(readFileSync(process.argv[2], 'utf8'));
-console.log(files['src/lib.rs'].sha256 + '  upstream.rs');
-console.log(files['tests/lib.rs'].sha256 + '  upstream_tests.rs');
-NODE
+bash tools/real-programs/verify-levenshtein.sh "$source" > "$work/provenance.json"
+# Check the files rustc will read against the checked provenance report.
+"$lkj_compiler" build tools/real-programs/levenshtein-checksums.lkj --library-dir library --no-store \
+    --grant report --grant output --grant errors --grant status -o "$work/checksums" \
+    > "$work/checksums-build.out" 2> "$work/checksums-build.err"
+"$work/checksums" < "$work/provenance.json" > "$work/original.sha256"
+sed -e 's@  src/lib\.rs$@  upstream.rs@' -e 's@  tests/lib\.rs$@  upstream_tests.rs@' \
+    "$work/original.sha256" > "$work/restored.sha256"
 restored="$work/restored"
 mkdir "$restored"
-target/lkjscript build tools/real-programs/restore-levenshtein.lkj --no-store \
+"$lkj_compiler" build tools/real-programs/restore-levenshtein.lkj --library-dir library --no-store \
     --grant arguments --grant source="$PWD/$source" --grant output="$restored" \
     --grant errors --grant status -o "$work/restore" > "$work/restore-build.out" 2> "$work/restore-build.err"
 "$work/restore" --rust
