@@ -15,7 +15,8 @@ bootstrap_store="${LKJSCRIPT_STORE:-target/store}"
 bootstrap_key="${LKJSCRIPT_STORE_KEY:-$(sh tools/store-key.sh || true)}"
 mkdir -p "$bootstrap_store"
 bootstrap_directory=$(mktemp -d target/bootstrap.XXXXXX)
-trap 'rm -rf "$bootstrap_directory"' EXIT HUP INT TERM
+trap 'rm -rf "$bootstrap_directory"' EXIT
+trap 'exit 1' HUP INT TERM
 if [ -n "$handoff" ]; then
     before=$(bash tools/bootstrap-handoff.sh inputs "$bootstrap_key" "$bootstrap_store")
 fi

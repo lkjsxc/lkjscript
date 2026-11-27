@@ -63,9 +63,10 @@ if ((status == 0)); then
     # test_runner prints worker stderr in ascending partition order, followed
     # by the parent compiler's own final stats record. Never count that record
     # as a worker or confuse wall-time phases with CPU time.
-    LC_ALL=C awk '
-        /^CPU / {
+    LC_ALL=C awk -v cpu_file="$scratch/cpu" '
+        FILENAME == cpu_file && /^CPU / && $6 > 0 {
             cpu[$2] = sprintf("cpu_user_s_lower_bound=%.3f cpu_system_s_lower_bound=%.3f samples=%d", $3/$6, $4/$6, $5)
+            next
         }
         function emit(line, slot,   pair, result) {
             result = ""

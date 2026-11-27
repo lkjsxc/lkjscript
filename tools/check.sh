@@ -70,7 +70,7 @@ step() {
 }
 step driver-roots sh tools/check-roots.sh
 if [[ ${LKJSCRIPT_BOOTSTRAP_HANDOFF+x} ]]; then
-    step bootstrap bash tools/bootstrap-handoff.sh verify "$LKJSCRIPT_BOOTSTRAP_HANDOFF" "$LKJSCRIPT_STORE_KEY" "$LKJSCRIPT_STORE"
+    step bootstrap bash tools/bootstrap-handoff.sh verify "$LKJSCRIPT_BOOTSTRAP_HANDOFF" "${LKJSCRIPT_STORE_KEY:-}" "${LKJSCRIPT_STORE:-}"
     unset LKJSCRIPT_BOOTSTRAP_HANDOFF
 else
     step bootstrap timeout --kill-after=10s 600s sh tools/bootstrap.sh

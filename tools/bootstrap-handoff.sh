@@ -6,6 +6,7 @@ refuse() { printf 'FAIL bootstrap handoff: %s\n' "$*" >&2; exit 1; }
 
 inputs() {
     local key=$1 unexpected
+    [[ -f $key && ! -L $key ]] || refuse 'invalid store key'
     # Include the actual tree (including untracked files), not just Git's index.
     # Refuse aliases/special files rather than hash a different input closure.
     local roots=(src library seed tools/bootstrap.sh tools/bootstrap-handoff.sh tools/store-key.sh)
@@ -17,7 +18,7 @@ inputs() {
         find "${roots[@]}" -print0 | LC_ALL=C sort -z &&
         find "${roots[@]}" -type f -print0 | LC_ALL=C sort -z | xargs -0 -r sha256sum -z -- &&
         printf 'store=%s\0key=%s\0' "$2" "$key" &&
-        if [[ -n $key ]]; then sha256sum -z -- "$key"; fi
+        sha256sum -z -- "$key"
     } | sha256sum | cut -d' ' -f1
 }
 
@@ -30,15 +31,17 @@ proc_fields() {
     [[ ${#fields[@]} -ge 20 ]]
 }
 owner() {
+    local boot_id
     local -a fields
     proc_fields "$1" || refuse 'bootstrap process unavailable'
-    printf '%s %s %s\n' "$1" "${fields[19]}" "$(cat /proc/sys/kernel/random/boot_id)"
+    boot_id=$(cat /proc/sys/kernel/random/boot_id) || refuse 'cannot read boot identity'
+    printf '%s %s %s\n' "$1" "${fields[19]}" "$boot_id"
 }
 live_owner() {
     local claim=$1 pid=$PPID boot_id
     local -a fields
     boot_id=$(cat /proc/sys/kernel/random/boot_id) || refuse "cannot read boot identity"
-    while ((pid > 1)); do
+    while ((pid > 0)); do
         proc_fields "$pid" || break
         if [[ $claim == "$pid ${fields[19]} $boot_id" ]]; then
             return 0
