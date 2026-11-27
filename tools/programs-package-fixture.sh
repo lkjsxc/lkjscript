@@ -12,7 +12,7 @@ shift 3
 if [[ $route == archive ]]; then checksum=$1; shift; fi
 name=$1 version=$2 output=$3 child=${4:-}
 [[ $name =~ ^[A-Za-z0-9_-]+$ && $version =~ ^[0-9.]+$ ]] || fail 'invalid fixture identity'
-scratch=$(mktemp -d "${output%/*}/inventory.XXXXXX")
+scratch=$(mktemp -d "$(dirname -- "$output")/inventory.XXXXXX")
 trap 'rm -rf -- "$scratch"' EXIT
 origin=https://example.invalid/fixture
 notice=no
@@ -33,7 +33,7 @@ record() {
     local path=$1 size hash
     [[ ! ${seen[$path]+present} ]] || fail 'duplicate source path'
     seen[$path]=1
-    size=$(wc -c < "$root/$path")
+    read -r size < <(wc -c < "$root/$path")
     hash=$(digest "$root/$path")
     files+=("[\"$path\",$size,\"$hash\"]")
     if [[ $path == LICENSE ]]; then notice=yes; fi
@@ -41,7 +41,7 @@ record() {
 if [[ $route == git ]]; then
     unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
     export GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null GIT_OPTIONAL_LOCKS=0
-    git_at() { git --no-replace-objects -c core.fsmonitor=false -c core.hooksPath=/dev/null -C "$root" "$@"; }
+    git_at() { git --no-replace-objects -c core.fsmonitor=false -c core.hooksPath=/dev/null -c core.quotePath=true -C "$root" "$@"; }
     revision=$input
     [[ $revision =~ ^[0-9a-f]{40}([0-9a-f]{24})?$ && $(git_at rev-parse --verify 'HEAD^{commit}') == "$revision" ]] || fail 'source HEAD differs'
     git_at ls-tree -r --full-tree HEAD > "$scratch/tree"
@@ -99,14 +99,22 @@ elif [[ $route == archive ]]; then
                 for (i=at+148;i<at+156;i++) sum+=32-b[i]
                 if (sum!=check) refuse("tar header checksum mismatch")
                 if (b[at+156]!=0 && b[at+156]!=48) refuse("unsupported tar node")
+                # Exact ASCII ustar NUL magic and 00 version.
+                if (b[at+257]!=117 || b[at+258]!=115 || b[at+259]!=116 ||
+                    b[at+260]!=97 || b[at+261]!=114 || b[at+262]!=0) refuse("invalid ustar magic")
+                if (b[at+263]!=48 || b[at+264]!=48) refuse("invalid ustar version")
+                for (i=at+157;i<at+257;i++) if (b[i]) refuse("non-empty tar linkname")
+                for (i=at+500;i<at+512;i++) if (b[i]) refuse("non-zero tar header padding")
                 path=field(at,100); dir=field(at+345,155)
                 if (dir!="") path=dir "/" path
                 if (index(path,prefix)!=1) refuse("wrong archive prefix")
                 path=substr(path,length(prefix)+1)
                 if (path !~ /^[A-Za-z0-9_.\/-]+$/) refuse("invalid archive path")
-                if (at+512+size>n) refuse("truncated tar payload")
+                next_at=at+512+int((size+511)/512)*512
+                if (next_at>n) refuse("truncated tar payload")
+                for (i=at+512+size;i<next_at;i++) if (b[i]) refuse("non-zero tar data padding")
                 printf "%s\t%d\t%d\n",path,at+512,size
-                at+=512+int((size+511)/512)*512
+                at=next_at
             }
             refuse("tar has no terminal framing")
         }' > "$scratch/members"
@@ -127,6 +135,7 @@ read -r tree _ < <(printf 'lkjscript-source-tree-1\0%s' "$file_json" | sha256sum
 identity="[\"$name\",\"$version\",\"$origin\",\"$revision\",\"$tree\"]"
 edges='[]'
 if [[ -n $child ]]; then
+    [[ -f $child && ! -L $child ]] || fail 'not a regular fixture dependency pin'
     pin=$(cat "$child")
     # Only the leaf child produced by this fixture is supported. Check the
     # literal byte encoding, including absence of trailing newlines.

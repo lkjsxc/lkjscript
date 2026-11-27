@@ -2,6 +2,7 @@
 # Exercise the independent fixture producer on live Git and archive mutations.
 set -euo pipefail
 export LC_ALL=C GIT_CONFIG_NOSYSTEM=1 GIT_CONFIG_GLOBAL=/dev/null
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_ALTERNATE_OBJECT_DIRECTORIES GIT_COMMON_DIR GIT_NAMESPACE GIT_CONFIG_PARAMETERS GIT_CONFIG_COUNT
 work=$(mktemp -d "$1/package-inventory.XXXXXX")
 trap 'rm -rf -- "$work"' EXIT
 source="$work/source"
@@ -19,12 +20,13 @@ git_at commit -qm fixture
 revision=$(git_at rev-parse HEAD)
 cases=0
 produce() {
-    local want=$1 route=$2 input=$3 reason=$4 checksum=${5:-} status=0
+    local want=$1 route=$2 input=$3 reason=$4 checksum=${5:-} child=${6:-} status=0
     ((cases+=1))
     local prefix="$work/package-$cases"
     local -a command=(bash tools/programs-package-fixture.sh "$route" "$source" "$input")
     if [[ $route == archive ]]; then command+=("$checksum"); fi
     command+=(fixture 1.0 "$prefix")
+    if [[ -n $child ]]; then command+=("$child"); fi
     if [[ -p $input ]]; then command=(timeout --kill-after=1s 5s "${command[@]}"); fi
     "${command[@]}" > "$work/tree" 2> "$work/stderr" || status=$?
     if [[ $status != "$want" ]]; then
@@ -40,11 +42,13 @@ produce() {
         test ! -e "$prefix.pin.json"
         test ! -e "$prefix.manifest.json"
         test ! -s "$work/tree"
-        grep -F -- "$reason" "$work/stderr" > /dev/null
+        grep -Fx -- "$reason" "$work/stderr" > /dev/null
     fi
 }
 produce 0 git "$revision" ''
 cp "$work/tree" "$work/git-tree"
+ln -s "$work/package-1.pin.json" "$work/linked-pin"
+produce 1 git "$revision" "not a regular fixture dependency pin" "" "$work/linked-pin"
 printf 'pub fn answer() -> u8 { 8 }\n' > "$source/src/lib.rs"
 produce 1 git "$revision" 'tracked source differs from Git object'
 git_at add src/lib.rs
@@ -89,6 +93,35 @@ cp "$work/original.tar" "$work/bad-header.tar"
 printf X | dd of="$work/bad-header.tar" bs=1 conv=notrunc status=none
 gzip -n -c "$work/bad-header.tar" > "$work/bad-header.crate"
 archive_case 1 "$work/bad-header.crate" 'tar header checksum mismatch'
+
+# The first member is the 11-byte LICENSE. Change only the last byte of its
+# data block, leaving the header checksum and all owned file bytes intact.
+cp "$work/original.tar" "$work/bad-data-padding.tar"
+printf X | dd of="$work/bad-data-padding.tar" bs=1 seek=1023 conv=notrunc status=none
+gzip -n -c "$work/bad-data-padding.tar" > "$work/bad-data-padding.crate"
+archive_case 1 "$work/bad-data-padding.crate" 'non-zero tar data padding'
+cmp "$work/stderr" <(printf '%s\n' 'non-zero tar data padding')
+
+# Mutate one byte of the first header, then independently recompute its
+# unsigned checksum (with the eight checksum bytes treated as spaces).
+header_refusal() {
+    local label=$1 offset=$2 reason=$3 tar checksum
+    tar="$work/$label.tar"
+    cp "$work/original.tar" "$tar"
+    printf X | dd of="$tar" bs=1 seek="$offset" conv=notrunc status=none
+    checksum=$(od -An -v -tu1 -N512 "$tar" | awk '
+        { for (i=1;i<=NF;i++) { sum+=(at>=148 && at<156 ? 32 : $i); at++ } }
+        END { print sum }')
+    printf '%06o\0 ' "$checksum" | dd of="$tar" bs=1 seek=148 conv=notrunc status=none
+    gzip -n -c "$tar" > "$work/$label.crate"
+    archive_case 1 "$work/$label.crate" "$reason"
+    cmp "$work/stderr" <(printf '%s\n' "$reason")
+}
+header_refusal bad-magic 257 'invalid ustar magic'
+header_refusal bad-magic-nul 262 'invalid ustar magic'
+header_refusal bad-version 263 'invalid ustar version'
+header_refusal bad-linkname 157 'non-empty tar linkname'
+header_refusal bad-header-padding 511 'non-zero tar header padding'
 printf 'different bytes\n' > "$source/src/lib.rs"
 archive_case 1 "$work/original.crate" 'extracted source differs from archive member'
 git_at add src/lib.rs
