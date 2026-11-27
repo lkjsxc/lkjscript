@@ -133,7 +133,7 @@ impl Expander {
         Some(ParseCheckpoint::new(program))
     }
     fn prepared<T>(&mut self, program: &mut Program, call: usize, saved: Option<ParseCheckpoint>,
-        result: Result<T, Diagnostic>) -> Result<Option<T>, Diagnostic> {
+        result: Result<T, Diagnostic>, footprint: Option<Vec<String>>) -> Result<Option<T>, Diagnostic> {
         match result {
             Ok(value) => {
                 discard_suffix(&mut program.macro_parse_writes, 0usize);
@@ -145,7 +145,7 @@ impl Expander {
                 // child. Roll back failed preparation without touching the
                 // completed prefix or renumbering surviving descendants.
                 saved.rollback(program);
-                recovery::refused_call(self.report.as_mut().unwrap(), program, call, problem)?;
+                recovery::refused_call(self.report.as_mut().unwrap(), program, call, problem, footprint)?;
                 self.failed.insert(call);
                 Ok(None)
             }
@@ -198,16 +198,24 @@ impl Expander {
         if let Some(id) = self.expressions.get(&call) { return Ok(Some(*id)); }
         let saved = self.attempt(program);
         let parsed = self.parse_expression(program, call);
-        let Some(id) = self.prepared(program, call, saved, parsed)? else { return Ok(None); };
+        let Some(id) = self.prepared(program, call, saved, parsed, None)? else { return Ok(None); };
         self.expression_node(program, id)?;
         self.expressions.insert(call, id);
         Ok(Some(id))
     }
-    fn parse_item(&self, program: &mut Program, call: usize) -> Result<Vec<Item>, Diagnostic> {
+    fn parse_item(&self, program: &mut Program, call: usize, footprint: &mut Option<Vec<String>>)
+        -> Result<Vec<Item>, Diagnostic> {
         let invocation = self.invocation(program, call)?;
         if invocation.position != MacroPosition::Item { return Err(error(invocation.span, "E_MACRO_EXPANSION", "macro invocation is not an item")); }
         let (tokens, expansion) = self.begin(program, call, &invocation)?;
-        let expanded = super::items(program, &tokens, &invocation, expansion)?;
+        let parsed = super::items(program, &tokens, &invocation, expansion);
+        if parsed.is_err() {
+            if let Some(report) = &self.report {
+                let definition = &program.macro_definitions[program.macro_expansions[expansion].definition];
+                *footprint = recovery::function_footprint(program, report, &invocation, definition, &tokens);
+            }
+        }
+        let expanded = parsed?;
         let end = crate::ast::macros::inventory(program);
         program.macro_expansions[expansion].end = end;
         for item in &expanded {
@@ -224,8 +232,9 @@ impl Expander {
             if let Item::MacroInvocation(call) = item {
                 if self.failed.contains(&call) { output.push(item); continue; }
                 let saved = self.attempt(program);
-                let parsed = self.parse_item(program, call);
-                if let Some(items) = self.prepared(program, call, saved, parsed)? {
+                let mut footprint = None;
+                let parsed = self.parse_item(program, call, &mut footprint);
+                if let Some(items) = self.prepared(program, call, saved, parsed, footprint)? {
                     for item in self.items(program, items)? { output.push(item); }
                 } else { output.push(item); }
             } else { self.item_node(program, item)?; output.push(item); }
@@ -264,12 +273,12 @@ pub(super) fn replay(program: &mut Program) -> Result<(), Diagnostic> {
 
 /// Successful source loading uses the same expansion and provenance as replay.
 /// Only a refused input pays for isolated diagnostic recovery.
-pub(super) fn report(program: &mut Program) -> ExpansionReport {
-    if program.macros_expanded { return ExpansionReport::default(); }
+pub(super) fn report(program: &mut Program, report: ExpansionReport) -> ExpansionReport {
+    if program.macros_expanded { return report; }
     remember_input(program);
     if program.macro_definitions.is_empty() && program.macro_invocations.is_empty() {
         program.macros_expanded = true;
-        return ExpansionReport::default();
+        return report;
     }
-    recovery::run(program)
+    recovery::run(program, report)
 }

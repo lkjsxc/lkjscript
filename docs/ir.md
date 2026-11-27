@@ -535,6 +535,8 @@ output discarded, then native behavior is compared with interpretation of the
 original IR.
 
 Independent item diagnostics use the same checker on replayed source closures.
+Declaration footprints from refused macro transcriptions affect source lookup
+and coherence during replay. They contribute no IR or checked declarations.
 The report gives no authority to publish the resulting IR or use it for an
 executable, interpreter run or checked edit of the refused source root.
 

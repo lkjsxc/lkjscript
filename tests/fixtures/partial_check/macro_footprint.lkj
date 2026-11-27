@@ -1,0 +1,18 @@
+trait Compare<T> {}
+mod receiver {
+    pub struct Ready(pub u8);
+    impl Ready {
+        pub fn exact(&self) -> u8 { self.0 }
+    }
+}
+
+macro_rules! produce {
+    (functions $($name:ident),+) => {
+        $(pub fn $name<T>(_: T) where T: for<'a> Compare<&'a [u8]> {})+
+    };
+    (implementation) => { impl receiver::Ready { fn exact(&self) -> u8 { 0 } } };
+}
+produce!(functions first, second);
+produce!(functions third);
+
+fn probe() -> i64 { 42 }

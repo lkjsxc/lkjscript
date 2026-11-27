@@ -1140,9 +1140,13 @@ declaration and closed scalar arguments. A balanced refused member with a
 plain prefix and no nested declaration producer carries its implementation
 header as its coherence footprint. Disjoint receivers and applications can
 still check. A possible overlap blocks the affected item with the upstream
-lookup failure or the location of the competing header. Opaque macros,
-unloaded modules, unknown attributes and incomplete declaration boundaries
-keep conservative poison.
+lookup failure or the location of the competing header. A refused item macro
+with a locally established textual definition can bound its footprint when the
+exact selected transcription is a complete sequence of plain functions. The
+invocation retains its original diagnostic and poisons each produced name.
+The proof checks tokens inside every delimiter for implementations, attributes,
+nested macro producers and opaque captures. Uncertain selection or declaration
+boundaries, opaque producers and unloaded modules keep conservative poison.
 
 Each eligible function and its transitive call and destructor dependencies are reparsed
 from their original loaded source bytes, preserving source coordinates and

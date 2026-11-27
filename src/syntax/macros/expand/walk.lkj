@@ -77,7 +77,7 @@ impl Expander {
         if self.failed.contains(&call) { return Ok((vec![Stmt::MacroInvocation(call)], false)); }
         let saved = self.attempt(program);
         let parsed = self.parse_statement(program, call, block);
-        let Some((expansion, statements, tail, semicolon)) = self.prepared(program, call, saved, parsed)? else {
+        let Some((expansion, statements, tail, semicolon)) = self.prepared(program, call, saved, parsed, None)? else {
             return Ok((vec![Stmt::MacroInvocation(call)], false));
         };
         // A later empty splice can expose this output as the containing block's

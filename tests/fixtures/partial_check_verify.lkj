@@ -27,6 +27,21 @@ fn cases(name: &str) -> Vec<Expected> {
             expected(3, "probe", "checked", 0, 0, "", "delimiter_size"),
             at(expected(7, "poisoned::blocked", "blocked", 6, 5, "E_IMPORT", ""), 5),
         ],
+        "macro_footprint" | "macro_footprint_collision" | "macro_footprint_nested"
+        | "macro_footprint_implementation" | "macro_footprint_intervening" | "macro_footprint_malformed" => {
+            let bounded = matches!(name, "macro_footprint" | "macro_footprint_collision");
+            let (line, column, code) = match name {
+                "macro_footprint_intervening" => (14usize, 3usize, "E_UNSUPPORTED_MACRO"),
+                "macro_footprint_malformed" => (15usize, 1usize, "E_PARSE"),
+                _ => (15usize, 1usize, "E_UNSUPPORTED"),
+            };
+            vec![
+                at(if bounded { expected(5, "receiver::exact", "checked", 0, 0, "", "") }
+                    else { expected(5, "receiver::exact", "blocked", line, column, code, "") }, 13),
+                if name == "macro_footprint" { expected(18, "probe", "checked", 0, 0, "", "") }
+                else { expected(18, "probe", "blocked", line, column, code, "") },
+            ]
+        },
         "independent" => vec![
             expected(1, "broken", "blocked", 2, 5, "E_CAPABILITY", ""),
             expected(5, "good", "checked", 0, 0, "", ""),
@@ -242,6 +257,41 @@ fn text(value: &Value, key: &str) -> String {
 fn number(value: &Value, key: &str) -> usize {
     value.get(key).unwrap().as_usize().unwrap()
 }
+fn verify_footprint(rows: &[Value], name: &str) {
+    let bounded = matches!(name, "macro_footprint" | "macro_footprint_collision");
+    let intervening = name == "macro_footprint_intervening";
+    let malformed = name == "macro_footprint_malformed";
+    assert_eq!(rows.len(), if intervening { 3usize } else { 2usize });
+    for (index, row) in rows.iter().enumerate() {
+        let line = if intervening { 14usize + index } else { 15usize + index };
+        let unknown = line == 14usize;
+        let column = if unknown { 3usize } else { 1usize };
+        assert_eq!(number(row, "line"), line);
+        assert_eq!(number(row, "column"), column);
+        assert_eq!(text(row, "kind"), "macro invocation");
+        assert!(matches!(row.get("namespace").unwrap(), Value::Bool(true)));
+        assert!(matches!(row.get("coherence").unwrap(), Value::Bool(value) if *value == !bounded));
+        let names = row.get("names").unwrap().as_array().unwrap();
+        if !bounded { assert!(names.is_empty()); }
+        else if line == 15usize {
+            assert_eq!(names.len(), 2usize);
+            let first = if name == "macro_footprint_collision" { "probe" } else { "first" };
+            assert_eq!(names[0].as_str().unwrap(), first);
+            assert_eq!(names[1].as_str().unwrap(), "second");
+        } else {
+            assert_eq!(names.len(), 1usize);
+            assert_eq!(names[0].as_str().unwrap(), "third");
+        }
+        let cause = row.get("cause").unwrap();
+        assert_eq!(number(cause, "line"), line);
+        assert_eq!(number(cause, "column"), column);
+        let code = if unknown { "E_UNSUPPORTED_MACRO" } else if malformed { "E_PARSE" } else { "E_UNSUPPORTED" };
+        assert_eq!(text(cause, "code"), code);
+        if !unknown && !malformed {
+            assert_eq!(text(cause, "message"), "higher-ranked trait applications require region-aware witness identity");
+        }
+    }
+}
 fn identity(path: &str, line: usize, column: usize) -> String {
     format!("{path}@{line}:{column}")
 }
@@ -263,7 +313,8 @@ fn main(mut world: World) {
     assert_eq!(records, 1usize);
     let report = report.unwrap();
     assert_eq!(number(&report, "schema"), 1usize);
-    assert!(report.get("tombstones").unwrap().as_array().is_some());
+    let tombstones = report.get("tombstones").unwrap().as_array().unwrap();
+    if name.starts_with("macro_footprint") { verify_footprint(tombstones, &name); }
     let rows = report.get("items").unwrap().as_array().unwrap();
     let expected = cases(&name);
     assert_eq!(rows.len(), expected.len());

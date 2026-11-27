@@ -2,7 +2,7 @@
 mod matcher;
 mod expand;
 pub(crate) mod provenance;
-use super::{FormatOrigin, Parser, Token, TokenKind};
+use super::{FormatOrigin, Parser, Token, TokenKind, recovery_binding_name};
 use crate::ast::*;
 use crate::diagnostics::{BlockedRegion, Recovery};
 use std::collections::BTreeSet;
@@ -504,6 +504,6 @@ pub(crate) struct ExpansionReport {
     pub recovery: Vec<Recovery>,
     pub attempts: usize,
 }
-pub(crate) fn expand_report(program: &mut Program) -> ExpansionReport {
-    expand::report(program)
+pub(crate) fn expand_report(program: &mut Program, recovery: Vec<Recovery>) -> ExpansionReport {
+    expand::report(program, ExpansionReport { recovery, ..ExpansionReport::default() })
 }

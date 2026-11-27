@@ -19,8 +19,88 @@ fn incomplete_recovery(problem: Diagnostic) -> Recovery {
     Recovery { span: Span::default(), scope: 0usize, block: None, kind: "source input".to_string(),
         names: Vec::new(), namespace: true, coherence: true, diagnostic: problem }
 }
+
+// A local textual definition can establish its own selection. Any intervening
+// item producer or refused boundary could supply a competing definition.
+fn local_selection(program: &Program, report: &ExpansionReport, invocation: &MacroInvocation,
+    definition: &MacroDefinition) -> bool {
+    if invocation.parent.is_some() || invocation.block.is_some() || invocation.name != definition.name
+        || definition.exported || definition.scope != invocation.scope || invocation.scope != invocation.destination
+        || definition.span.file != invocation.span.file || definition.span.end > invocation.span.start {
+        return false;
+    }
+    let intervenes = |span: Span| span.file == invocation.span.file
+        && definition.span.end <= span.start && span.start < invocation.span.start;
+    !program.macro_invocations.iter().enumerate().any(|(id, other)| {
+        other.parent.is_none() && other.position == MacroPosition::Item && intervenes(other.span)
+            && !program.macro_expansions.iter().any(|expansion| expansion.invocation == id)
+            && !report.recovery.iter().any(|failure| bounded_call(failure) && failure.span == other.span)
+    })
+        && !program.modules.iter().any(|module| program.macro_use_modules.contains(&module.scope)
+            && intervenes(module.span))
+        && !report.recovery.iter().any(|failure| failure.span.file == invocation.span.file
+            && failure.span.start < invocation.span.end && definition.span.start < failure.span.end
+            && !bounded_call(failure))
+}
+
+fn bounded_call(failure: &Recovery) -> bool {
+    failure.kind == "macro invocation" && !failure.coherence
+}
+
+// Only complete sequences of plain function declarations have this footprint.
+// Examine every token, including bodies and const arguments: a block-local
+// impl still contributes to coherence. Opaque captures can conceal producers.
+pub(super) fn function_footprint(program: &Program, report: &ExpansionReport, invocation: &MacroInvocation,
+    definition: &MacroDefinition, tokens: &[MacroToken]) -> Option<Vec<String>> {
+    if tokens.is_empty() || !local_selection(program, report, invocation, definition) { return None; }
+    for (index, token) in tokens.iter().enumerate() {
+        if token.capture.is_some() || token.kind == 0u8 && matches!(token.text.as_str(),
+            "impl" | "mod" | "extern" | "macro" | "macro_rules")
+            || token.kind == 6u8 && matches!(token.text.as_str(), "#" | "$")
+            || symbol(token, "!") && index > 0usize && tokens[index - 1usize].kind == 0u8 {
+            return None;
+        }
+    }
+    let mut names = Vec::new();
+    let mut at = 0usize;
+    while at < tokens.len() {
+        if keyword(tokens.get(at), "pub") { at += 1usize; }
+        if !keyword(tokens.get(at), "fn") { return None; }
+        let name = tokens.get(at + 1usize)?;
+        if name.kind != 0u8 || !recovery_binding_name(&name.text) { return None; }
+        at += 2usize;
+        let start = tokens.get(at)?;
+        if !symbol(start, "(") && !symbol(start, "<") { return None; }
+        let mut parameters = false;
+        loop {
+            let token = tokens.get(at)?;
+            if symbol(token, "{") {
+                if !parameters { return None; }
+                at = group_end(tokens, at).ok()? + 1usize;
+                break;
+            }
+            if token.kind == 6u8 && (closing(&token.text) || matches!(token.text.as_str(), ";" | "="))
+                || token.kind == 0u8 && matches!(token.text.as_str(),
+                    "fn" | "pub" | "const" | "static" | "struct" | "enum" | "union" | "trait" | "type" | "use") {
+                return None;
+            }
+            if token.kind == 6u8 && opening(&token.text) {
+                if symbol(token, "(") { parameters = true; }
+                at = group_end(tokens, at).ok()?;
+            }
+            at += 1usize;
+        }
+        if !names.contains(&name.text) { names.push(name.text.clone()); }
+    }
+    Some(names)
+}
+
+fn keyword(token: Option<&MacroToken>, text: &str) -> bool {
+    token.is_some_and(|token| token.kind == 0u8 && token.text == text)
+}
+
 pub(super) fn refused_call(report: &mut ExpansionReport, program: &Program, call: usize,
-    problem: Diagnostic) -> Result<(), Diagnostic> {
+    problem: Diagnostic, footprint: Option<Vec<String>>) -> Result<(), Diagnostic> {
     let problem = located(program, problem);
     let Some(invocation) = program.macro_invocations.get(call) else { return Err(problem); };
     record(&mut report.diagnostics, problem.clone());
@@ -31,14 +111,14 @@ pub(super) fn refused_call(report: &mut ExpansionReport, program: &Program, call
         authored = program.macro_expansions[parent].invocation;
     }
     let owner = &program.macro_invocations[authored];
+    let coherence = footprint.is_none();
     report.recovery.push(Recovery { span: owner.span, scope: owner.destination, block: owner.block,
-        kind: "macro invocation".to_string(), names: Vec::new(),
-        namespace: owner.position != MacroPosition::Expression, coherence: true,
+        kind: "macro invocation".to_string(), names: footprint.unwrap_or(Vec::new()),
+        namespace: owner.position != MacroPosition::Expression, coherence,
         diagnostic: problem });
     Ok(())
 }
-pub(super) fn run(program: &mut Program) -> ExpansionReport {
-    let mut report = ExpansionReport::default();
+pub(super) fn run(program: &mut Program, mut report: ExpansionReport) -> ExpansionReport {
     let mut rules: Vec<Vec<matcher::Rule>> = Vec::new();
     let mut invalid: BTreeMap<usize, Diagnostic> = BTreeMap::new();
     let mut exports: BTreeMap<(usize, String), usize> = BTreeMap::new();

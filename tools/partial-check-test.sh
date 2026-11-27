@@ -31,7 +31,7 @@ mkdir "$work/cases"
 cp tests/fixtures/partial_check/*.lkj "$work/cases/"
 verifier_compiler=${baseline:-$compiler}
 "$verifier_compiler" build tests/fixtures/partial_check_verify.lkj --library-dir "$library" --no-store -o "$work/verify" > "$work/verifier-output" 2> "$work/verifier-error" || fail 'verifier build'
-cases=(independent unsafe_binding local_import global_static mutable_static qualified_header global_macro glob_import trait_impl type_failure qualified_import normalized_self import_chain library_inputs grow_context grow_module receiver retained_impl qualified_chain scoped_coherence glob_anchor scalar_size)
+cases=(independent unsafe_binding local_import global_static mutable_static qualified_header global_macro glob_import trait_impl type_failure qualified_import normalized_self import_chain library_inputs grow_context grow_module receiver retained_impl qualified_chain scoped_coherence glob_anchor scalar_size macro_footprint)
 sed '/^fn invalid</d; /^fn refusal()/d' "$work/cases/grow_context.lkj" > "$work/grow-valid.lkj"
 cat >> "$work/grow-valid.lkj" <<'EOF'
 impl Marker for i64 {}
@@ -91,6 +91,15 @@ sed 's/dyn Missing) -> bool { false }/dyn Missing) -> bool { opaque!() }/' \
     "$work/cases/scoped_coherence.lkj" > "$work/scoped-coherence-opaque.lkj"
 sed 's/impl Bits<u16> for Ready/impl Drop for Ready/; s/fn test(\&self, _value: dyn Missing) -> bool { false }/fn drop(\&mut self, _value: dyn Missing) {}/' \
     "$work/cases/scoped_coherence.lkj" > "$work/scoped-coherence-drop.lkj"
+footprint="$work/cases/macro_footprint.lkj"
+sed "s/ where T: for<'a> Compare<\&'a \[u8\]>//; s/{ 42 }/{ receiver::Ready(42u8).exact() as i64 }/" \
+    "$footprint" > "$work/macro_footprint-valid.lkj"
+sed 's/functions first, second/functions probe, second/' "$footprint" > "$work/macro_footprint_collision.lkj"
+sed 's/> {})+/> { hidden!(); })+/' "$footprint" > "$work/macro_footprint_nested.lkj"
+sed 's/> {})+/> { impl receiver::Ready { fn exact(\&self) -> u8 { 0 } } })+/' \
+    "$footprint" > "$work/macro_footprint_implementation.lkj"
+sed '14s/}/} missing!();/' "$footprint" > "$work/macro_footprint_intervening.lkj"
+sed 's/pub fn \$name/pub(in ::receiver) fn $name/' "$footprint" > "$work/macro_footprint_malformed.lkj"
 mkdir "$work/receiver-edit"
 cp "$work/cases/receiver.lkj" "$work/receiver-edit/main.lkj"
 head -c 32 /dev/urandom > "$work/receiver-edit-key"
@@ -117,7 +126,7 @@ for mode in on off; do
         actual=$("$compiler" run "$work/retained-impl-valid.lkj" --library-dir "$library" --debug-assertions "$mode" --engine "$engine" --no-store 2> "$work/error")
         [[ $actual == 42 ]] || fail "retained implementation $mode/$engine value"
         checks=$((checks + 3))
-        for valid in qualified-chain scoped-coherence scalar-size; do
+        for valid in qualified-chain scoped-coherence scalar-size macro_footprint; do
             actual=$("$compiler" run "$work/$valid-valid.lkj" --library-dir "$library" --debug-assertions "$mode" --engine "$engine" --no-store 2> "$work/error")
             [[ $actual == 42 ]] || fail "$valid $mode/$engine value"
             checks=$((checks + 1))
@@ -156,6 +165,15 @@ for mode in on off; do
         [[ $status == 1 && ! -s $work/output ]] || fail "scoped coherence $variant $mode kept no source refusal"
         "$work/verify" "$source" "scoped_coherence_$variant" < "$work/error" 2> "$work/verifier-error" ||
             fail "scoped coherence $variant $mode item check"
+    done
+    for variant in collision nested implementation intervening malformed; do
+        name="macro_footprint_$variant"
+        source="$work/$name.lkj"
+        status=0
+        "$compiler" check "$source" --library-dir "$library" --debug-assertions "$mode" --no-store > "$work/output" 2> "$work/error" || status=$?
+        [[ $status == 1 && ! -s $work/output ]] || fail "$name $mode kept no source refusal"
+        "$work/verify" "$source" "$name" < "$work/error" 2> "$work/verifier-error" ||
+            fail "$name $mode item check"
     done
     if [[ -n $baseline ]]; then
         "$baseline" ir "$work/cases/valid.lkj" --library-dir "$library" --debug-assertions "$mode" --no-store -o "$work/baseline-$mode.lkjir" > "$work/output" 2> "$work/error"
@@ -198,7 +216,7 @@ for mode in on off; do
         done
     done
     # Even when probe itself checks independently, the invalid source cannot publish an image or IR.
-    for name in independent receiver qualified_chain scalar_size; do
+    for name in independent receiver qualified_chain scalar_size macro_footprint; do
         for command in build ir; do
             printf 'unreplaced destination\n' > "$work/destination"
             cp "$work/destination" "$work/destination-before"
@@ -247,7 +265,7 @@ if [[ -n $witness ]]; then
                 status=0
                 "$witness" --edition=2021 --crate-name partial_case -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || status=$?
                 case "$name" in
-                    independent|unsafe_binding|library_inputs)
+                    independent|unsafe_binding|library_inputs|macro_footprint)
                         [[ $status == 0 && $("$work/rust") == 42 ]] || fail "Rust capability-boundary twin $name/$mode/$level"
                         ;;
                     local_import|global_static|mutable_static|qualified_header|global_macro|glob_import|trait_impl|type_failure|qualified_import|normalized_self|import_chain|grow_context|grow_module|receiver|retained_impl|qualified_chain|scoped_coherence|glob_anchor|scalar_size)
@@ -272,12 +290,20 @@ if [[ -n $witness ]]; then
             "$witness" --edition=2021 --crate-name partial_retained_impl -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || fail "Rust retained implementation $mode/$level"
             [[ $("$work/rust") == 42 ]] || fail "Rust retained implementation $mode/$level value"
             rust_values=$((rust_values + 1))
-            for valid in qualified-chain scoped-coherence scalar-size; do
+            for valid in qualified-chain scoped-coherence scalar-size macro_footprint; do
                 cp "$work/$valid-valid.lkj" "$work/rust.lkj"
                 printf '\nfn main() { println!("{}", probe()); }\n' >> "$work/rust.lkj"
                 "$witness" --edition=2021 --crate-name partial_lookup -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || fail "Rust $valid $mode/$level"
                 [[ $("$work/rust") == 42 ]] || fail "Rust $valid $mode/$level value"
                 rust_values=$((rust_values + 1))
+            done
+            for variant in collision nested implementation intervening malformed; do
+                cp "$work/macro_footprint_$variant.lkj" "$work/rust.lkj"
+                printf '\nfn main() { println!("{}", probe()); }\n' >> "$work/rust.lkj"
+                if "$witness" --edition=2021 --crate-name partial_footprint -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error"; then
+                    fail "Rust accepted macro footprint $variant/$mode/$level"
+                fi
+                rust_verdicts=$((rust_verdicts + 1))
             done
             for variant in duplicate blanket qualifier; do
                 sed '/^use crate::absent::Ghost;$/d; /^fn refusal()/d' "$work/receiver-$variant.lkj" > "$work/rust.lkj"

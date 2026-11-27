@@ -743,13 +743,13 @@ pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<O
             }
         }
     }
-    let expansion = syntax::macros::expand_report(&mut program);
+    let expansion = syntax::macros::expand_report(&mut program, recovery);
     for mut diagnostic in expansion.diagnostics {
         if diagnostic.path.is_empty() { diagnostic.path = program.files[diagnostic.file].path.clone(); }
         diagnostics.push(diagnostic);
     }
     for region in expansion.blocked { blocked.push(region); }
-    for failure in expansion.recovery { recovery.push(failure); }
+    let mut recovery = expansion.recovery;
     if !program.macro_expansions.is_empty() { capture_macro_includes(&mut program, read, &mut diagnostics); }
     if !diagnostics.is_empty() {
         blocked.push(BlockedRegion {
