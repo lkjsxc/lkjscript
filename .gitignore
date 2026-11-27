@@ -7,3 +7,5 @@
 .lkjscript-edit.pending
 .lkjscript-edit.generation
 .*.lkjscript-next
+# Crew worker progress notes stay local to each worktree.
+/.crew-progress.md
