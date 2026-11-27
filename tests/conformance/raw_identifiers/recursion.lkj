@@ -1,0 +1,3 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! m {(plain)=>{m!(r#plain)}; (r#plain)=>{42i64};} fn probe()->i64 {m!(plain)}

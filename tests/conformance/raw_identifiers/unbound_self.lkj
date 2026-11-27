@@ -1,0 +1,3 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! pick {($d:tt self)=>{42i64};} macro_rules! pass {()=>{pick!($self)};} fn probe()->i64{pass!()}

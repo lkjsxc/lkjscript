@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {"root":true}
+struct r#type {r#match:i64}
+impl r#type {fn r#fn(&self)->i64 {self.r#match}}
+fn probe()->i64 {r#type{r#match:42i64}.r#fn()}

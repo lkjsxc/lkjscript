@@ -1,0 +1,3 @@
+// expect: reject E_NAME
+// witness: {"root":true}
+macro_rules! m {()=>{r#value};} fn probe()->i64 {let value=42i64;m!()}

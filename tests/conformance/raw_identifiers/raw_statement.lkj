@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! r#match {($r#name:ident)=>{let $name=42i64;};}
+fn probe()->i64 {r#match!(r#mut);r#mut}

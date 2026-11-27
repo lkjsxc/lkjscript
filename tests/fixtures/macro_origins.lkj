@@ -481,8 +481,8 @@ fn source() -> i64 { discard_type!(UnresolvedUnused) }
     let mut split_origin = program.clone();
     let last = split_origin.macro_captures[split].tokens.len() - 1usize;
     split_origin.macro_captures[split].tokens[last].origin.end += 1usize;
-    let count = refused(&split_origin) + lifetime_token_origins() + block_and_tree_origins() + dollar_token_origins();
-    assert!(count == 16usize);
+    let count = refused(&split_origin) + lifetime_token_origins() + block_and_tree_origins() + dollar_token_origins() + raw_identifier_origins();
+    assert!(count == 27usize);
     count as i64
 }
 fn lifetime_token_origins() -> usize {
@@ -652,9 +652,56 @@ macro_rules! builder {
 }
 builder!(State);
 thread_local! { static UNKNOWN: i64 = 0i64; }
-"#, "unbound keyword metavariable requires a raw identifier token");
+"#, "generated macro definitions are not supported");
     assert!(count == 8usize);
     count
+}
+fn raw_identifier_origins() -> usize {
+    let (program, inputs) = parsed_fixture(r#"
+macro_rules! choose { (plain) => { 1i64 }; (r#plain) => { 42i64 }; }
+macro_rules! relay { ($r#name:r#ident) => { choose!($name) }; }
+macro_rules! value { ($r#body:expr) => { $body }; }
+macro_rules! accept { ($d:tt mut) => { 1i64 }; ($d:tt r#mut) => { 42i64 }; }
+macro_rules! unknown { () => { accept!($mut) }; }
+fn r#fn() -> i64 { let r#type = 42i64; value!(r#type) + relay!(r#plain) + unknown!() }
+"#);
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    origins::collect(&program, &resolver).unwrap(); mounted_replay(&program, &inputs);
+    assert!(program.functions[0usize].name == "fn");
+    for definition in &program.macro_definitions { assert!(!definition.name.contains('#')); }
+    for call in &program.macro_invocations { assert!(!call.name.contains('#')); }
+    for capture in &program.macro_captures { assert!(!capture.name.contains('#')); }
+    let choose = program.macro_invocations.iter().position(|call| call.name == "choose").unwrap();
+    let chosen = program.macro_expansions.iter().position(|expansion| expansion.invocation == choose).unwrap();
+    assert!(program.macro_expansions[chosen].rule == 1usize);
+    assert!(program.macro_invocations[choose].tokens[0usize].text == "r#plain");
+    let accept = program.macro_invocations.iter().position(|call| call.name == "accept").unwrap();
+    let raw = &program.macro_invocations[accept].tokens[1usize];
+    assert!(raw.kind == 0u8 && raw.text == "r#mut" && raw.origin.end - raw.origin.start == 3usize);
+    assert!(raw.context != 0usize && raw.span != raw.origin && raw.literal_spelling.is_empty());
+    let capture = program.macro_captures.iter().position(|capture| capture.name == "body").unwrap();
+    assert!(program.macro_captures[capture].tokens[0usize].text == "r#type");
+    let lexical = syntax::semantic_tokens("r#plain plain r#mut mut r#fn").unwrap();
+    assert!(lexical.len() == 5usize && lexical[0usize].text != lexical[1usize].text);
+    assert!(lexical[0usize].span.start == 0usize && lexical[0usize].span.end == 7usize);
+    let mut changed = program.clone(); changed.macro_invocations[choose].tokens[0usize].text = "plain".to_string();
+    let mut count = refused(&changed);
+    let mut changed = program.clone(); changed.macro_invocations[accept].tokens[1usize].text = "mut".to_string(); count += refused(&changed);
+    let mut changed = program.clone(); changed.macro_invocations[accept].tokens[1usize].kind = 6u8; count += refused(&changed);
+    let mut changed = program.clone(); changed.macro_invocations[accept].tokens[1usize].context = 0usize; count += refused(&changed);
+    let mut changed = program.clone(); changed.macro_invocations[accept].tokens[1usize].origin.start += 1usize; count += refused(&changed);
+    let mut changed = program.clone(); changed.macro_invocations[accept].tokens[1usize].literal_spelling = "r#mut".to_string(); count += refused(&changed);
+    let mut changed = program.clone(); changed.macro_captures[capture].tokens[0usize].text = "type".to_string(); count += refused(&changed);
+    let mut changed = program.clone(); changed.macro_expansions[chosen].rule = 0usize; count += refused(&changed);
+    let mut changed = program.clone(); changed.functions[0usize].name = "r#fn".to_string(); count += refused(&changed);
+    let definition = program.macro_definitions.iter().position(|definition| definition.name == "choose").unwrap();
+    let token = program.macro_definitions[definition].body.iter().position(|token| token.text == "r#plain").unwrap();
+    let mut changed = program.clone(); changed.macro_input.as_mut().unwrap().macro_definitions[definition].body[token].text = "plain".to_string();
+    count += unauthenticated(&changed, &inputs);
+    let original = program.macro_input.as_ref().unwrap().macro_invocations.iter().position(|call| call.name == "relay").unwrap();
+    let mut changed = program.clone(); changed.macro_input.as_mut().unwrap().macro_invocations[original].tokens[0usize].text = "plain".to_string();
+    count += unauthenticated(&changed, &inputs);
+    assert!(count == 11usize); count
 }
 fn lexical_origins() -> i64 {
     let (program, inputs) = parsed_fixture(r#"
@@ -806,5 +853,5 @@ fn source() -> i64 {
 fn main() {
     let count = expression_origins() + type_origins() + fragment_token_origins()
         + lexical_origins() + statement_origins();
-    assert!(count == 95i64);
+    assert!(count == 106i64);
 }

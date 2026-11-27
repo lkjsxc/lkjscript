@@ -1,0 +1,3 @@
+// expect: value 42
+// witness: {"root":true}
+mod r#mod { pub struct r#struct {pub r#match:i64} pub type r#type=r#struct; pub fn r#fn(x:r#type)->i64 {x.r#match} } fn probe()->i64 {let r#mut=42i64;r#mod::r#fn(r#mod::r#struct{r#match:r#mut})}

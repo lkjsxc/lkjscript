@@ -1,0 +1,53 @@
+// expect: value 42
+// witness: {"root":true}
+fn probe()->i64 {
+let r#as=1i64;
+let r#break=1i64;
+let r#const=1i64;
+let r#continue=1i64;
+let r#else=1i64;
+let r#enum=1i64;
+let r#extern=1i64;
+let r#false=1i64;
+let r#fn=1i64;
+let r#for=1i64;
+let r#if=1i64;
+let r#impl=1i64;
+let r#in=1i64;
+let r#let=1i64;
+let r#loop=1i64;
+let r#match=1i64;
+let r#mod=1i64;
+let r#move=1i64;
+let r#mut=1i64;
+let r#pub=1i64;
+let r#ref=1i64;
+let r#return=1i64;
+let r#static=1i64;
+let r#struct=1i64;
+let r#trait=1i64;
+let r#true=1i64;
+let r#type=1i64;
+let r#unsafe=1i64;
+let r#use=1i64;
+let r#where=1i64;
+let r#while=1i64;
+let r#abstract=1i64;
+let r#become=1i64;
+let r#box=1i64;
+let r#do=1i64;
+let r#final=1i64;
+let r#macro=1i64;
+let r#override=1i64;
+let r#priv=1i64;
+let r#typeof=1i64;
+let r#unsized=1i64;
+let r#virtual=1i64;
+let r#yield=1i64;
+let r#async=1i64;
+let r#await=1i64;
+let r#dyn=1i64;
+let r#gen=1i64;
+let r#try=1i64;
+r#as+r#break+r#const+r#continue+r#else+r#enum+r#extern+r#false+r#fn+r#for+r#if+r#impl+r#in+r#let+r#loop+r#match+r#mod+r#move+r#mut+r#pub+r#ref+r#return+r#static+r#struct+r#trait+r#true+r#type+r#unsafe+r#use+r#where+r#while+r#abstract+r#become+r#box+r#do+r#final+r#macro+r#override+r#priv+r#typeof+r#unsized+r#virtual+r#yield+r#async+r#await+r#dyn+r#gen+r#try-6i64
+}

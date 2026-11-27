@@ -26,7 +26,7 @@ plan_root=$(realpath "$plan_fixture")
 "$plan_compiler" build src/main.lkj --library-dir library --entry units::plan_disk::contracts_main --no-store \
     -o "$plan_root/contracts" > "$plan_root/contracts-build.out" 2> "$plan_root/contracts-build.err"
 "$plan_root/contracts" > "$plan_root/contracts-native.out" 2> "$plan_root/contracts-native.err"
-grep -Fxq -- 'ok streaming manifest 86 controls' "$plan_root/contracts-native.out"
+grep -Fxq -- 'ok streaming manifest 98 controls' "$plan_root/contracts-native.out"
 cat "$plan_root/contracts-native.out"
 "$plan_compiler" run src/main.lkj --library-dir library --entry units::plan_disk::smoke_main \
     --engine interpreter --no-store \
@@ -36,16 +36,18 @@ cat "$plan_root/contracts-interpreter.out"
 
 cat > "$plan_root/units.lkj" <<'SOURCE'
 /* The dependency declaration is deliberately first. /* Nested comment. */ */
-pub(crate) const DEPENDS: (&'static [(&'static str)]) = (&[("app=base"),]);
-const ENTRY: &str = r#"app::main"#;
-const UNITS: &[&str] = &[r##"app=app.lkj"##, "base=\u{57fa}.lkj"];
+pub(crate) const r#DEPENDS: (&'static [(&'static r#str)]) = (&[("app=base"),]);
+const r#ENTRY: &r#str = r#"app::main"#;
+const r#UNITS: &[&r#str] = &[r##"app=app.lkj"##, "base=\u{57fa}.lkj"];
 SOURCE
 cat > "$plan_root/基.lkj" <<'SOURCE'
-pub fn answer() -> i64 { 42i64 }
+pub fn r#answer<T>() -> i64 { r#include_str!("answer.txt").len() as i64 + 40i64 }
 SOURCE
+printf ok > "$plan_root/answer.txt"
 cat > "$plan_root/app.lkj" <<'SOURCE'
+use crate::r#base::r#answer;
 pub fn main(mut out: Stdout) {
-    out.write(format!("{}\n", crate::base::answer()).as_bytes());
+    out.write(format!("{}\n", r#answer::<i64>()).as_bytes());
 }
 SOURCE
 plan_options=(units.lkj --source-dir "$plan_root" --store "$plan_root/store" --store-key "$plan_key")

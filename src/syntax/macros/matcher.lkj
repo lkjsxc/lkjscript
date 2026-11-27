@@ -14,17 +14,6 @@ fn literal_dollar(tokens: &[MacroToken], at: usize) -> bool {
     symbol(&tokens[at], "$") && (at + 1usize == tokens.len()
         || tokens[at + 1usize].kind == 6u8 && closing(&tokens[at + 1usize].text))
 }
-// Rust transcribes an unbound keyword metavariable as a raw identifier.
-// The surface has no raw-identifier token identity; copying its keyword text
-// would select a different literal arm. Bound captures retain their own tokens.
-fn unbound_raw_keyword(name: &str) -> bool {
-    matches!(name, "as" | "break" | "const" | "continue" | "else" | "enum" | "extern" | "false"
-        | "fn" | "for" | "if" | "impl" | "in" | "let" | "loop" | "match" | "mod" | "move"
-        | "mut" | "pub" | "ref" | "return" | "static" | "struct" | "trait" | "true" | "type"
-        | "unsafe" | "use" | "where" | "while" | "abstract" | "become" | "box" | "do"
-        | "final" | "macro" | "override" | "priv" | "typeof" | "unsized" | "virtual" | "yield"
-        | "async" | "await" | "dyn" | "gen" | "try")
-}
 fn repetition(tokens: &[MacroToken], at: usize) -> Result<Repetition, Diagnostic> {
     let end = group_end(tokens, at + 1usize)?;
     let mut next = end + 1usize;
@@ -87,8 +76,8 @@ fn variables(tokens: &[MacroToken], depth: usize, expr_end: bool, ty_end: bool,
                 || !symbol(&tokens[at + 2usize], ":") || tokens[at + 3usize].kind != 0u8 {
                 return Err(error(tokens[at].span, "E_MACRO_RULE", "expected $name:fragment in matcher"));
             }
-            let name = tokens[at + 1usize].text.clone();
-            let fragment = tokens[at + 3usize].text.clone();
+            let name = identifier_name(&tokens[at + 1usize].text).to_string();
+            let fragment = identifier_name(&tokens[at + 3usize].text).to_string();
             if name == "crate" { return Err(error(tokens[at + 1usize].span, "E_MACRO_RULE", "$crate is reserved for the defining crate")); }
             if !matches!(fragment.as_str(), "expr" | "ty" | "block" | "ident" | "lifetime" | "tt") {
                 return Err(error(tokens[at + 3usize].span, "E_UNSUPPORTED_MACRO", "supported declarative fragments are expr, ty, block, ident, lifetime, and tt"));
@@ -232,7 +221,7 @@ fn starts(pattern: &[MacroToken], at: usize, token: &MacroToken) -> Result<(bool
         return Ok((head || tail, fragment || tail_fragment));
     }
     if symbol(&pattern[at], "$") && !literal_dollar(pattern, at) {
-        let fragment = pattern[at + 3usize].text.as_str();
+        let fragment = identifier_name(&pattern[at + 3usize].text);
         let accepts = fragment_start(fragment, token);
         return Ok((accepts, accepts));
     }
@@ -242,7 +231,7 @@ fn contains_binding(tokens: &[MacroToken], name: &str) -> bool {
     let mut at = 0usize;
     while at + 2usize < tokens.len() {
         if symbol(&tokens[at], "$") && tokens[at + 1usize].kind == 0u8
-            && tokens[at + 1usize].text == name && symbol(&tokens[at + 2usize], ":") { return true; }
+            && identifier_name(&tokens[at + 1usize].text) == name && symbol(&tokens[at + 2usize], ":") { return true; }
         at += 1usize;
     }
     false
@@ -308,8 +297,8 @@ fn matches(program: &mut Program, invocation: &MacroInvocation, pattern: &[Macro
         }
         if *position >= end { return Ok(false); }
         if symbol(&pattern[at], "$") && !literal_dollar(pattern, at) {
-            let name = &pattern[at + 1usize].text;
-            let binding = bindings.iter().position(|binding| binding.name == *name).unwrap();
+            let name = identifier_name(&pattern[at + 1usize].text);
+            let binding = bindings.iter().position(|binding| binding.name == name).unwrap();
             let fragment = bindings[binding].fragment.clone();
             let start = *position;
             if !fragment_start(&fragment, &input.tokens[start]) { return Ok(false); }
@@ -363,7 +352,7 @@ fn matches(program: &mut Program, invocation: &MacroInvocation, pattern: &[Macro
                 let id = program.macro_captures.len();
                 let owner = program.macro_expansions.last().unwrap().invocation;
                 program.macro_captures.push(MacroCapture { materializations: Vec::new(),
-                    type_materializations: Vec::new(), ty: None, name: name.clone(),
+                    type_materializations: Vec::new(), ty: None, name: name.to_string(),
                     path: path.to_vec(), invocation: owner, tokens, scope: invocation.scope, span,
                     parent: invocation.parent, expression: None });
                 captured = vec![MacroToken { kind: token_kind,
@@ -399,8 +388,8 @@ fn repeat_count(tokens: &[MacroToken], bindings: &[Binding], path: &[usize]) -> 
     let mut at = 0usize;
     while at + 1usize < tokens.len() {
         if symbol(&tokens[at], "$") && tokens[at + 1usize].kind == 0u8 {
-            let name = &tokens[at + 1usize].text;
-            if let Some(binding) = bindings.iter().find(|binding| binding.name == *name) {
+            let name = identifier_name(&tokens[at + 1usize].text);
+            if let Some(binding) = bindings.iter().find(|binding| binding.name == name) {
                 if binding.depth > path.len() {
                     let mut repetitions = 0usize;
                     for (parent, length) in &binding.repetitions {
@@ -441,19 +430,17 @@ fn transcribe(program: &Program, definition: &MacroDefinition, invocation: &Macr
             if at + 1usize >= template.len() || template[at + 1usize].kind != 0u8 {
                 return Err(error(template[at].span, "E_MACRO_RULE", "expected a capture name after $"));
             }
-            let name = &template[at + 1usize].text;
+            let name = identifier_name(&template[at + 1usize].text);
             if name == "crate" {
                 let mut token = projected(&template[at + 1usize], invocation, 0usize); token.text = root_name(program, definition); output.push(token);
             } else {
-                let Some(binding) = bindings.iter().find(|binding| binding.name == *name) else {
-                    if unbound_raw_keyword(name) {
-                        return Err(error(template[at + 1usize].span, "E_UNSUPPORTED_MACRO",
-                            "unbound keyword metavariable requires a raw identifier token"));
-                    }
-                    // An inner macro can own this metavariable. Preserve both
-                    // projected tokens for its parser; never erase or recapture it.
+                let Some(binding) = bindings.iter().find(|binding| binding.name == name) else {
+                    // Rust reconstructs an unknown metavariable from its symbol:
+                    // raw for reserved keywords, plain otherwise (even $r#plain).
+                    // The dollar and reconstructed name keep template provenance.
                     output.push(projected(&template[at], invocation, context));
-                    output.push(projected(&template[at + 1usize], invocation, context));
+                    let mut token = projected(&template[at + 1usize], invocation, context);
+                    token.text = identifier_source(name); output.push(token);
                     at += 2usize;
                     continue;
                 };

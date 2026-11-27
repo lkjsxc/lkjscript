@@ -34,6 +34,44 @@ struct Token {
     context: usize,
 }
 
+// Tokens retain their complete spelling; only semantic names discard r#.
+// Keeping rawness here also binds literal matching, digests and source replay.
+pub(crate) fn identifier_name(spelling: &str) -> &str {
+    if spelling.starts_with("r#") { &spelling[2usize..] } else { spelling }
+}
+fn forbidden_raw_identifier(name: &str) -> bool {
+    matches!(name, "crate" | "self" | "Self" | "super" | "_")
+}
+pub(crate) fn raw_identifier_keyword(name: &str) -> bool {
+    matches!(name, "as" | "break" | "const" | "continue" | "else" | "enum" | "extern" | "false"
+        | "fn" | "for" | "if" | "impl" | "in" | "let" | "loop" | "match" | "mod" | "move"
+        | "mut" | "pub" | "ref" | "return" | "static" | "struct" | "trait" | "true" | "type"
+        | "unsafe" | "use" | "where" | "while" | "abstract" | "become" | "box" | "do"
+        | "final" | "macro" | "override" | "priv" | "typeof" | "unsized" | "virtual" | "yield"
+        | "async" | "await" | "dyn" | "gen" | "try")
+}
+pub(crate) fn identifier_spelling(spelling: &str) -> bool {
+    let name = identifier_name(spelling);
+    !name.is_empty() && ident_start(name.as_bytes()[0usize])
+        && name.as_bytes()[1usize..].iter().all(|byte| ident_continue(*byte))
+        && !forbidden_raw_identifier(name)
+        && (spelling.starts_with("r#") || !raw_identifier_keyword(name))
+}
+pub(crate) fn identifier_source(name: &str) -> String {
+    if raw_identifier_keyword(name) { format!("r#{name}") } else { name.to_string() }
+}
+pub(crate) fn identifier_matches(spelling: &str, name: &str) -> bool {
+    identifier_name(spelling) == name
+        && (spelling.starts_with("r#") || !raw_identifier_keyword(spelling))
+}
+pub(crate) fn path_source(path: &str) -> String {
+    let mut result = String::new();
+    for part in path.split("::") {
+        if !result.is_empty() { result.push_str("::"); }
+        result.push_str(&identifier_source(part));
+    }
+    result
+}
 fn ident_start(b: u8) -> bool {
     b.is_ascii_alphabetic() || b == b'_'
 }
@@ -55,6 +93,7 @@ fn keyword_cannot_begin_expression(name: &str) -> bool {
 // Recovery may narrow only plain binding spellings. Expression keywords and
 // normalized import segments such as trailing self are not declaration names.
 fn recovery_binding_name(name: &str) -> bool {
+    if name.starts_with("r#") { return identifier_spelling(name); }
     macro_provider_name(name) && !matches!(name,
         "const" | "unsafe" | "async" | "move" | "if" | "match" | "loop" | "while"
         | "for" | "break" | "continue" | "return" | "true" | "false" | "yield" | "union")
@@ -308,6 +347,14 @@ impl Lexer<'_> {
                     kind = TokenKind::Bytes;
                     text = s;
                 }
+            } else if b == b'r' && self.byte(1) == b'#' && ident_start(self.byte(2)) {
+                self.advance(); self.advance();
+                while self.at < self.source.len() && ident_continue(self.byte(0)) { self.advance(); }
+                text = self.source[span.start..self.at].to_string();
+                if forbidden_raw_identifier(identifier_name(&text)) {
+                    return Err(Diagnostic::new(span, "E_LEX", "this name cannot be a raw identifier"));
+                }
+                kind = TokenKind::Ident;
             } else if b == b'r' && (self.byte(1) == b'"' || self.byte(1) == b'#') {
                 self.advance();
                 let mut hashes = 0usize;
@@ -347,6 +394,9 @@ impl Lexer<'_> {
                 kind = TokenKind::String;
                 text = self.quoted(b'"', false)?;
             } else if b == b'\'' {
+                if self.byte(1) == b'r' && self.byte(2) == b'#' {
+                    return Err(Diagnostic::new(span, "E_UNSUPPORTED", "raw lifetime identifiers are not supported"));
+                }
                 let mut end = self.at + 1;
                 while end < self.source.len() && ident_continue(self.source.as_bytes()[end]) {
                     end += 1;
@@ -703,15 +753,16 @@ pub fn parse_file_report(
 }
 
 fn cfg_predicate(args: &[String], at: &mut usize, span: Span, configuration: BuildConfiguration) -> Result<bool, Diagnostic> {
-    let Some(name) = args.get(*at) else {
+    let Some(spelling) = args.get(*at) else {
         return Err(Diagnostic::new(span, "E_PARSE", "missing cfg predicate"));
     };
+    let name = identifier_name(spelling);
     if name.is_empty() || !ident_start(name.as_bytes()[0usize])
         || !name.as_bytes()[1usize..].iter().all(|byte| ident_continue(*byte)) {
         return Err(Diagnostic::new(span, "E_PARSE", "expected a cfg predicate name"));
     }
     *at += 1;
-    if matches!(name.as_str(), "all" | "any" | "not") {
+    if matches!(name, "all" | "any" | "not") {
         if args.get(*at).map(|text| text.as_str()) != Some("(") {
             return Err(Diagnostic::new(span, "E_PARSE", "cfg combinator needs parentheses"));
         }
@@ -728,7 +779,7 @@ fn cfg_predicate(args: &[String], at: &mut usize, span: Span, configuration: Bui
             return Err(Diagnostic::new(span, "E_PARSE", "unterminated cfg predicate"));
         }
         *at += 1;
-        return match name.as_str() {
+        return match name {
             "all" => Ok(values.iter().all(|value| *value)),
             "any" => Ok(values.iter().any(|value| *value)),
             "not" if values.len() == 1 => Ok(!values[0]),
@@ -745,7 +796,7 @@ fn cfg_predicate(args: &[String], at: &mut usize, span: Span, configuration: Bui
             return Err(Diagnostic::new(span, "E_PARSE", "cfg values must be string literals"));
         }
         let value = &literal[1usize..literal.len() - 1usize];
-        return match name.as_str() {
+        return match name {
             "target_os" => Ok(value == "linux"),
             "target_arch" => Ok(value == "x86_64"),
             "target_family" => Ok(value == "unix"),
@@ -756,12 +807,14 @@ fn cfg_predicate(args: &[String], at: &mut usize, span: Span, configuration: Bui
                 "cfg value predicate {name} is not supported; help: use target_os, target_arch, target_family, target_pointer_width or target_endian"))),
         };
     }
-    match name.as_str() {
+    match name {
         "debug_assertions" => Ok(configuration.debug_assertions),
-        "test" | "windows" | "false" => Ok(false),
-        "unix" | "true" => Ok(true),
+        "test" | "windows" => Ok(false),
+        "unix" => Ok(true),
+        "false" if !spelling.starts_with("r#") => Ok(false),
+        "true" if !spelling.starts_with("r#") => Ok(true),
         _ => Err(Diagnostic::new(span, "E_UNSUPPORTED", &format!(
-            "cfg predicate {name} is not supported; help: use debug_assertions or test for conditional declarations"))),
+            "cfg predicate {spelling} is not supported; help: use debug_assertions or test for conditional declarations"))),
     }
 }
 fn cfg_value(args: &[String], span: Span, configuration: BuildConfiguration) -> Result<bool, Diagnostic> {
@@ -881,7 +934,7 @@ impl Parser {
             && self.tokens[at].kind == TokenKind::Symbol && self.tokens[at].text == "#"
             && self.tokens[at + 1usize].kind == TokenKind::Symbol && self.tokens[at + 1usize].text == "["
             && self.tokens[at + 2usize].kind == TokenKind::Ident
-            && matches!(self.tokens[at + 2usize].text.as_str(), "cfg" | "derive" | "allow" | "doc"
+            && matches!(identifier_name(&self.tokens[at + 2usize].text), "cfg" | "derive" | "allow" | "doc"
                 | "deprecated" | "inline") {
             let mut depth = 1usize;
             let mut end = at + 3usize;
@@ -937,21 +990,21 @@ impl Parser {
                     "type" => matches!(following, "=" | ":" | "<"),
                     _ => matches!(following, "{" | ":" | "<"),
                 };
-                if plain { return (vec![self.tokens[at + 1usize].text.clone()], true, true); }
+                if plain { return (vec![identifier_name(&self.tokens[at + 1usize].text).to_string()], true, true); }
             }
             return (Vec::new(), true, true);
         }
         if head == "extern" {
             if at + 2usize < end && self.tokens[at + 1usize].text == "crate"
                 && self.tokens[at + 2usize].kind == TokenKind::Ident {
-                let mut name = self.tokens[at + 2usize].text.clone();
+                let mut name = identifier_name(&self.tokens[at + 2usize].text).to_string();
                 at += 3usize;
                 if at < end && self.tokens[at].text == "as" {
                     at += 1usize;
                     if at >= end || self.tokens[at].kind != TokenKind::Ident {
                         return (Vec::new(), true, true);
                     }
-                    name = self.tokens[at].text.clone(); at += 1usize;
+                    name = identifier_name(&self.tokens[at].text).to_string(); at += 1usize;
                 }
                 if at + 1usize == end && self.tokens[at].text == ";" {
                     return (vec![name], true, true);
@@ -1151,7 +1204,7 @@ impl Parser {
         if self.token().kind != TokenKind::Ident {
             return Err(self.err("expected an identifier"));
         }
-        let text = self.token().text.clone();
+        let text = identifier_name(&self.token().text).to_string();
         self.at += 1;
         Ok(text)
     }
@@ -1241,7 +1294,8 @@ impl Parser {
                     if depth != 0 && (name == "cfg" || !self.is(",")) {
                         let value = if name == "cfg" && self.token().kind == TokenKind::String {
                             format!("\"{}\"", self.token().text)
-                        } else { self.token().text.clone() };
+                        } else if name != "cfg" && self.token().kind == TokenKind::Ident { identifier_name(&self.token().text).to_string() }
+                        else { self.token().text.clone() };
                         args.push(value);
                     }
                     self.at += 1;
@@ -1436,8 +1490,9 @@ impl Parser {
         if at + 1usize >= self.tokens.len() || self.tokens[at].text != "fn"
             || self.tokens[at + 1usize].kind != TokenKind::Ident { return; }
         let name = &self.tokens[at + 1usize];
-        let qualified = if self.module.is_empty() { name.text.clone() }
-            else { format!("{}::{}", self.module, name.text) };
+        let symbol = identifier_name(&name.text);
+        let qualified = if self.module.is_empty() { symbol.to_string() }
+            else { format!("{}::{symbol}", self.module) };
         self.blocked.push(BlockedRegion {
             path: self.program.files[name.span.file].path.clone(), span: name.span,
             kind: "excluded cfg(test) declaration".to_string(), reason: qualified,
@@ -1533,11 +1588,12 @@ impl Parser {
         if self.take("mod") {
             let span = self.tokens[self.at - 1].span;
             let name_span = self.token().span;
+            let raw = self.token().text.starts_with("r#");
             let name = self.ident()?;
-            if keyword_cannot_begin_expression(&name) || matches!(name.as_str(),
+            if !raw && (keyword_cannot_begin_expression(&name) || matches!(name.as_str(),
                 "async" | "break" | "const" | "continue" | "crate" | "false" | "for" | "if"
                 | "loop" | "match" | "move" | "return" | "self" | "Self" | "super" | "true"
-                | "unsafe" | "while" | "yield")
+                | "unsafe" | "while" | "yield"))
             {
                 return Err(Diagnostic::new(name_span, "E_PARSE", &format!("module name `{name}` is reserved")));
             }
@@ -1748,7 +1804,10 @@ impl Parser {
             }
             let bounds = if constant {
                 self.expect(":")?;
-                if !self.take("usize") { return Err(self.unsupported("const generic parameters other than usize")); }
+                if self.token().kind != TokenKind::Ident || identifier_name(&self.token().text) != "usize" {
+                    return Err(self.unsupported("const generic parameters other than usize"));
+                }
+                self.at += 1usize;
                 Vec::new()
             } else if self.take(":") {
                 self.bounds()?
@@ -2124,7 +2183,7 @@ impl Parser {
                             return Err(self.unsupported("array lengths other than literals or names"));
                         }
                         let named = self.token().kind == TokenKind::Ident;
-                        let mut len = self.token().text.clone();
+                        let mut len = identifier_name(&self.token().text).to_string();
                         let length_span = self.token().span;
                         self.at += 1;
                         while named && self.is("::") && self.tokens[self.at + 1usize].kind == TokenKind::Ident {
@@ -3892,7 +3951,7 @@ impl Parser {
                 let invocation = self.macro_invocation(path.name, span, name_span, MacroPosition::Expression)?;
                 return Ok(self.add_finished_expr(Expr::MacroInvocation(invocation), span));
             }
-            if path.name == "macro_rules" { return Err(Diagnostic::new(span, "E_UNSUPPORTED_MACRO", "block-local macro definitions are not supported")); }
+            if path.name == "macro_rules" && self.tokens[path_start].text == "macro_rules" { return Err(Diagnostic::new(span, "E_UNSUPPORTED_MACRO", "block-local macro definitions are not supported")); }
             if path.name == "println"
                 || path.name == "print"
                 || path.name == "eprintln"

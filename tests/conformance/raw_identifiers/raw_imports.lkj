@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {"root":true}
+mod r#mod {pub fn r#fn()->i64{42i64}}
+use crate::r#mod::{r#fn as r#type};
+fn probe()->i64 {r#type()}

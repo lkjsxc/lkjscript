@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {"root":true}
+struct r#type {r#value:i64}
+macro_rules! identity {($t:ty,$v:expr)=>{{let r#match:$t=$v;r#match.r#value}};}
+fn probe()->i64 {identity!(r#type,r#type{r#value:42i64})}

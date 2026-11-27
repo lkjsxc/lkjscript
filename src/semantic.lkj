@@ -257,7 +257,8 @@ fn preceding(tokens: &[syntax::SemanticToken], start: usize) -> usize {
 fn name_span(file: &SourceText, start: usize, end: usize, name: &str) -> (usize, usize) {
     let mut at = token_at(&file.tokens, start);
     while at < file.tokens.len() && file.tokens[at].span.end <= end {
-        if file.tokens[at].text == name {
+        if (file.tokens[at].kind == 0u8 && syntax::identifier_matches(&file.tokens[at].text, name))
+            || (file.tokens[at].kind == 5u8 && file.tokens[at].text == name) {
             return (file.tokens[at].span.start, file.tokens[at].span.end);
         }
         at += 1usize;

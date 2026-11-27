@@ -117,7 +117,7 @@ pub(super) fn family_parameter_reference(result: &mut Catalog, files: &[SourceTe
     let file = &files[span.file];
     let at = path_start(file, span);
     let Some(token) = file.tokens.get(at) else { return false; };
-    if token.text.as_str() != first || token.span.end > span.end { return false; }
+    if syntax::identifier_name(&token.text) != first || token.span.end > span.end { return false; }
     record_site(result, files, owner, target, a::Span { file: span.file, ..token.span }, &kind, true);
     !path.name.contains("::")
 }
@@ -195,7 +195,7 @@ pub(super) fn path_reference(result: &mut Catalog, files: &[SourceText], owner: 
             }
         };
         let canonical: Option<String> = result.by_identity.get(&target).map(|index: &usize| -> String { result.items[*index].name.clone() });
-        let actual_kind = if alias || canonical.as_ref().is_some_and(|name| *name != token.text) {
+        let actual_kind = if alias || canonical.as_ref().is_some_and(|name| name.as_str() != syntax::identifier_name(&token.text)) {
             format!("alias-{kind}")
         } else { kind.to_string() };
         record_site(result, files, owner, target, a::Span { file: span.file, ..token.span }, &actual_kind, canonical.is_some());
@@ -211,13 +211,13 @@ pub(super) fn import_reference(result: &mut Catalog, files: &[SourceText], owner
         return;
     };
     let token = &file.tokens[index];
-    let proven = token.text == leaf_name(&imported.path);
+    let proven = syntax::identifier_name(&token.text) == leaf_name(&imported.path);
     record_site(result, files, owner, target, a::Span { file: imported.span.file, ..token.span }, if alias { "alias-import" } else { "import" }, proven);
 }
 fn field_label(file: &SourceText, outer: a::Span, value: a::Span, name: &str) -> Option<(a::Span, bool)> {
     if value.file != outer.file || value.start < outer.start || value.start >= outer.end { return None; }
     let at = token_at(&file.tokens, value.start);
-    if at >= 2usize && file.tokens[at - 1usize].text == ":" && file.tokens[at - 2usize].text == name
+    if at >= 2usize && file.tokens[at - 1usize].text == ":" && syntax::identifier_matches(&file.tokens[at - 2usize].text, name)
         && file.tokens[at - 2usize].span.start >= outer.start {
         return Some((a::Span { file: outer.file, ..file.tokens[at - 2usize].span }, false));
     }
@@ -227,7 +227,7 @@ fn field_label(file: &SourceText, outer: a::Span, value: a::Span, name: &str) ->
     if scan < file.tokens.len() && file.tokens[scan].text == "ref" { scan += 1usize; }
     if scan < file.tokens.len() && file.tokens[scan].text == "mut" { scan += 1usize; }
     let token = file.tokens.get(scan)?;
-    if token.kind != 0u8 || token.text != name || token.span.end > outer.end { return None; }
+    if token.kind != 0u8 || !syntax::identifier_matches(&token.text, name) || token.span.end > outer.end { return None; }
     if scan == at && token.span.end > value.end { return None; }
     let next = file.tokens.get(scan + 1usize)?;
     if next.span.end > outer.end || !matches!(next.text.as_str(), "," | "}") { return None; }
@@ -362,7 +362,7 @@ pub(super) fn local_reference(result: &mut Catalog, files: &[SourceText], progra
 fn written_path(file: &SourceText, span: a::Span, last: usize) -> String {
     let mut at = path_start(file, span);
     let mut result = String::new();
-    while at <= last && at < file.tokens.len() { result.push_str(&file.tokens[at].text); at += 1usize; }
+    while at <= last && at < file.tokens.len() { result.push_str(syntax::identifier_name(&file.tokens[at].text)); at += 1usize; }
     result
 }
 
@@ -416,11 +416,11 @@ pub(super) fn path_qualifications(result: &mut Catalog, files: &[SourceText], pr
         let token = &file.tokens[at];
         if token.span.end > span.end || token.kind != 0u8 { break; }
         if !prefix.is_empty() { prefix.push_str("::"); }
-        prefix.push_str(&token.text);
+        prefix.push_str(syntax::identifier_name(&token.text));
         if at + 2usize >= file.tokens.len() || file.tokens[at + 1usize].text != "::" ||
             file.tokens[at + 2usize].kind != 0u8 || file.tokens[at + 2usize].span.end > span.end { break; }
         qualification_site(result, files, program, resolver, owner, scope, &prefix,
-            a::Span { file: span.file, ..token.span }, &token.text);
+            a::Span { file: span.file, ..token.span }, syntax::identifier_name(&token.text));
         at += 2usize;
     }
 }
@@ -437,7 +437,7 @@ pub(super) fn import_qualifications(result: &mut Catalog, files: &[SourceText], 
         if !imported.glob {
             if let Some((at, inherited)) = import_token(&files[imported.span.file], imported) {
                 let token = &files[imported.span.file].tokens[at];
-                if inherited && token.text == leaf_name(&imported.path)
+                if inherited && syntax::identifier_name(&token.text) == leaf_name(&imported.path)
                     && resolve::semantic_type_path(resolver, scope, &imported.path, imported.span).is_err() {
                     let path = a::Path { qualification: None, bindings: Vec::new(), declaration: None, name: imported.path.clone(), args: Vec::new() };
                     if let Ok(resolved) = resolver.value_path(scope, &path, imported.span) {
@@ -476,12 +476,12 @@ pub(super) fn import_qualifications(result: &mut Catalog, files: &[SourceText], 
             if token.kind != 0u8 { at += 1usize; continue; }
             if !(token.text == "self" && !prefix.is_empty()) {
                 if !prefix.is_empty() { prefix.push_str("::"); }
-                prefix.push_str(&token.text);
+                prefix.push_str(syntax::identifier_name(&token.text));
             }
             if at + 1usize < file.tokens.len() && file.tokens[at + 1usize].text == "::"
                 && !self_values.contains(&(file_id, token.span.start)) {
                 qualification_site(result, files, program, resolver, &owner, scope, &prefix,
-                    a::Span { file: file_id, ..token.span }, &token.text);
+                    a::Span { file: file_id, ..token.span }, syntax::identifier_name(&token.text));
             }
             at += 1usize;
         }
@@ -502,7 +502,7 @@ pub(super) fn visibility_qualifications(result: &mut Catalog, files: &[SourceTex
                 let token = &file.tokens[at];
                 if token.kind == 0u8 && !matches!(token.text.as_str(), "crate" | "self" | "super") {
                     if let Some(owner) = &owner {
-                        record_site(result, files, owner.clone(), token.text.clone(),
+                        record_site(result, files, owner.clone(), syntax::identifier_name(&token.text).to_string(),
                             a::Span { file: file_id, ..token.span }, "visibility-qualification", false);
                     }
                 }
@@ -657,7 +657,7 @@ pub(super) fn typed_associated(result: &mut Catalog, files: &[SourceText], progr
     // The ordinary prefix references retain that owner's independent provenance.
     let token = path_token(&files[node.span.file], node.span).map(|index| &files[node.span.file].tokens[index]);
     if let Some(token) = token {
-        if token.text == program.functions[source].name && result.by_identity.contains_key(&target) {
+        if syntax::identifier_matches(&token.text, &program.functions[source].name) && result.by_identity.contains_key(&target) {
             record_site(result, files, owner.to_string(), target,
                 a::Span { file: node.span.file, ..token.span }, "associated-call", true);
             return true;

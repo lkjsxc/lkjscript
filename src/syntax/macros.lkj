@@ -2,7 +2,7 @@
 mod matcher;
 mod expand;
 pub(crate) mod provenance;
-use super::{FormatOrigin, Parser, Token, TokenKind, recovery_binding_name};
+use super::{FormatOrigin, Parser, Token, TokenKind, recovery_binding_name, identifier_name, identifier_source};
 use crate::ast::*;
 use crate::diagnostics::{BlockedRegion, Recovery};
 use std::collections::BTreeSet;
@@ -183,7 +183,7 @@ impl Parser {
             return Ok(false);
         }
         let index = match self.tokens.get(self.at + 2usize) {
-            Some(name) => self.program.macro_providers.iter().position(|provider| provider.input.name == name.text),
+            Some(name) => self.program.macro_providers.iter().position(|provider| provider.input.name == identifier_name(&name.text)),
             None => None,
         };
         let Some(index) = index else { return Ok(false); };
@@ -214,9 +214,9 @@ impl Parser {
         let mut at = self.at;
         let mut name = String::new();
         while at < self.tokens.len() && self.tokens[at].text != "!" {
-            name.push_str(&self.tokens[at].text); at += 1usize;
+            name.push_str(identifier_name(&self.tokens[at].text)); at += 1usize;
         }
-        if name == "macro_rules" || builtin_macro(&name) {
+        if self.tokens[self.at].text == "macro_rules" || builtin_macro(&name) {
             return Ok(None);
         }
         at += 1usize;
@@ -440,13 +440,13 @@ impl Parser {
     pub(super) fn literal_origin(&self, character: bool) -> FormatOrigin {
         let token = self.token();
         if matches!(token.kind, TokenKind::String) || character && matches!(token.kind, TokenKind::Char) { return FormatOrigin::Literal(token.context); }
-        if matches!(token.kind, TokenKind::Ident) && (token.text == "concat" || token.text == "module_path" || token.text == "file") { return FormatOrigin::Expansion; }
+        if matches!(token.kind, TokenKind::Ident) && matches!(identifier_name(&token.text), "concat" | "module_path" | "file") { return FormatOrigin::Expansion; }
         let mut id = match &token.kind { TokenKind::Expression(id) => *id, _ => return FormatOrigin::Other };
         for _ in 0usize..self.program.macro_captures.len() {
             let Some(capture) = self.program.macro_captures.get(id) else { return FormatOrigin::Other; };
             let Some(token) = capture.tokens.first() else { return FormatOrigin::Other; };
             if token.kind == 2u8 || character && token.kind == 3u8 { return FormatOrigin::Literal(token.context); }
-            if token.kind == 0u8 && (token.text == "concat" || token.text == "module_path" || token.text == "file") { return FormatOrigin::Expansion; }
+            if token.kind == 0u8 && matches!(identifier_name(&token.text), "concat" | "module_path" | "file") { return FormatOrigin::Expansion; }
             if token.kind != 8u8 { return FormatOrigin::Other; }
             let Some(next) = token.capture else { return FormatOrigin::Other; }; id = next;
         }

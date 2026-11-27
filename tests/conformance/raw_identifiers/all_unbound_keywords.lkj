@@ -1,0 +1,101 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! pick_as { ($d:tt as)=>{0i64}; ($d:tt r#as)=>{1i64}; }
+macro_rules! pass_as {()=>{pick_as!($as)};}
+macro_rules! pick_break { ($d:tt break)=>{0i64}; ($d:tt r#break)=>{1i64}; }
+macro_rules! pass_break {()=>{pick_break!($break)};}
+macro_rules! pick_const { ($d:tt const)=>{0i64}; ($d:tt r#const)=>{1i64}; }
+macro_rules! pass_const {()=>{pick_const!($const)};}
+macro_rules! pick_continue { ($d:tt continue)=>{0i64}; ($d:tt r#continue)=>{1i64}; }
+macro_rules! pass_continue {()=>{pick_continue!($continue)};}
+macro_rules! pick_else { ($d:tt else)=>{0i64}; ($d:tt r#else)=>{1i64}; }
+macro_rules! pass_else {()=>{pick_else!($else)};}
+macro_rules! pick_enum { ($d:tt enum)=>{0i64}; ($d:tt r#enum)=>{1i64}; }
+macro_rules! pass_enum {()=>{pick_enum!($enum)};}
+macro_rules! pick_extern { ($d:tt extern)=>{0i64}; ($d:tt r#extern)=>{1i64}; }
+macro_rules! pass_extern {()=>{pick_extern!($extern)};}
+macro_rules! pick_false { ($d:tt false)=>{0i64}; ($d:tt r#false)=>{1i64}; }
+macro_rules! pass_false {()=>{pick_false!($false)};}
+macro_rules! pick_fn { ($d:tt fn)=>{0i64}; ($d:tt r#fn)=>{1i64}; }
+macro_rules! pass_fn {()=>{pick_fn!($fn)};}
+macro_rules! pick_for { ($d:tt for)=>{0i64}; ($d:tt r#for)=>{1i64}; }
+macro_rules! pass_for {()=>{pick_for!($for)};}
+macro_rules! pick_if { ($d:tt if)=>{0i64}; ($d:tt r#if)=>{1i64}; }
+macro_rules! pass_if {()=>{pick_if!($if)};}
+macro_rules! pick_impl { ($d:tt impl)=>{0i64}; ($d:tt r#impl)=>{1i64}; }
+macro_rules! pass_impl {()=>{pick_impl!($impl)};}
+macro_rules! pick_in { ($d:tt in)=>{0i64}; ($d:tt r#in)=>{1i64}; }
+macro_rules! pass_in {()=>{pick_in!($in)};}
+macro_rules! pick_let { ($d:tt let)=>{0i64}; ($d:tt r#let)=>{1i64}; }
+macro_rules! pass_let {()=>{pick_let!($let)};}
+macro_rules! pick_loop { ($d:tt loop)=>{0i64}; ($d:tt r#loop)=>{1i64}; }
+macro_rules! pass_loop {()=>{pick_loop!($loop)};}
+macro_rules! pick_match { ($d:tt match)=>{0i64}; ($d:tt r#match)=>{1i64}; }
+macro_rules! pass_match {()=>{pick_match!($match)};}
+macro_rules! pick_mod { ($d:tt mod)=>{0i64}; ($d:tt r#mod)=>{1i64}; }
+macro_rules! pass_mod {()=>{pick_mod!($mod)};}
+macro_rules! pick_move { ($d:tt move)=>{0i64}; ($d:tt r#move)=>{1i64}; }
+macro_rules! pass_move {()=>{pick_move!($move)};}
+macro_rules! pick_mut { ($d:tt mut)=>{0i64}; ($d:tt r#mut)=>{1i64}; }
+macro_rules! pass_mut {()=>{pick_mut!($mut)};}
+macro_rules! pick_pub { ($d:tt pub)=>{0i64}; ($d:tt r#pub)=>{1i64}; }
+macro_rules! pass_pub {()=>{pick_pub!($pub)};}
+macro_rules! pick_ref { ($d:tt ref)=>{0i64}; ($d:tt r#ref)=>{1i64}; }
+macro_rules! pass_ref {()=>{pick_ref!($ref)};}
+macro_rules! pick_return { ($d:tt return)=>{0i64}; ($d:tt r#return)=>{1i64}; }
+macro_rules! pass_return {()=>{pick_return!($return)};}
+macro_rules! pick_static { ($d:tt static)=>{0i64}; ($d:tt r#static)=>{1i64}; }
+macro_rules! pass_static {()=>{pick_static!($static)};}
+macro_rules! pick_struct { ($d:tt struct)=>{0i64}; ($d:tt r#struct)=>{1i64}; }
+macro_rules! pass_struct {()=>{pick_struct!($struct)};}
+macro_rules! pick_trait { ($d:tt trait)=>{0i64}; ($d:tt r#trait)=>{1i64}; }
+macro_rules! pass_trait {()=>{pick_trait!($trait)};}
+macro_rules! pick_true { ($d:tt true)=>{0i64}; ($d:tt r#true)=>{1i64}; }
+macro_rules! pass_true {()=>{pick_true!($true)};}
+macro_rules! pick_type { ($d:tt type)=>{0i64}; ($d:tt r#type)=>{1i64}; }
+macro_rules! pass_type {()=>{pick_type!($type)};}
+macro_rules! pick_unsafe { ($d:tt unsafe)=>{0i64}; ($d:tt r#unsafe)=>{1i64}; }
+macro_rules! pass_unsafe {()=>{pick_unsafe!($unsafe)};}
+macro_rules! pick_use { ($d:tt use)=>{0i64}; ($d:tt r#use)=>{1i64}; }
+macro_rules! pass_use {()=>{pick_use!($use)};}
+macro_rules! pick_where { ($d:tt where)=>{0i64}; ($d:tt r#where)=>{1i64}; }
+macro_rules! pass_where {()=>{pick_where!($where)};}
+macro_rules! pick_while { ($d:tt while)=>{0i64}; ($d:tt r#while)=>{1i64}; }
+macro_rules! pass_while {()=>{pick_while!($while)};}
+macro_rules! pick_abstract { ($d:tt abstract)=>{0i64}; ($d:tt r#abstract)=>{1i64}; }
+macro_rules! pass_abstract {()=>{pick_abstract!($abstract)};}
+macro_rules! pick_become { ($d:tt become)=>{0i64}; ($d:tt r#become)=>{1i64}; }
+macro_rules! pass_become {()=>{pick_become!($become)};}
+macro_rules! pick_box { ($d:tt box)=>{0i64}; ($d:tt r#box)=>{1i64}; }
+macro_rules! pass_box {()=>{pick_box!($box)};}
+macro_rules! pick_do { ($d:tt do)=>{0i64}; ($d:tt r#do)=>{1i64}; }
+macro_rules! pass_do {()=>{pick_do!($do)};}
+macro_rules! pick_final { ($d:tt final)=>{0i64}; ($d:tt r#final)=>{1i64}; }
+macro_rules! pass_final {()=>{pick_final!($final)};}
+macro_rules! pick_macro { ($d:tt macro)=>{0i64}; ($d:tt r#macro)=>{1i64}; }
+macro_rules! pass_macro {()=>{pick_macro!($macro)};}
+macro_rules! pick_override { ($d:tt override)=>{0i64}; ($d:tt r#override)=>{1i64}; }
+macro_rules! pass_override {()=>{pick_override!($override)};}
+macro_rules! pick_priv { ($d:tt priv)=>{0i64}; ($d:tt r#priv)=>{1i64}; }
+macro_rules! pass_priv {()=>{pick_priv!($priv)};}
+macro_rules! pick_typeof { ($d:tt typeof)=>{0i64}; ($d:tt r#typeof)=>{1i64}; }
+macro_rules! pass_typeof {()=>{pick_typeof!($typeof)};}
+macro_rules! pick_unsized { ($d:tt unsized)=>{0i64}; ($d:tt r#unsized)=>{1i64}; }
+macro_rules! pass_unsized {()=>{pick_unsized!($unsized)};}
+macro_rules! pick_virtual { ($d:tt virtual)=>{0i64}; ($d:tt r#virtual)=>{1i64}; }
+macro_rules! pass_virtual {()=>{pick_virtual!($virtual)};}
+macro_rules! pick_yield { ($d:tt yield)=>{0i64}; ($d:tt r#yield)=>{1i64}; }
+macro_rules! pass_yield {()=>{pick_yield!($yield)};}
+macro_rules! pick_async { ($d:tt async)=>{0i64}; ($d:tt r#async)=>{1i64}; }
+macro_rules! pass_async {()=>{pick_async!($async)};}
+macro_rules! pick_await { ($d:tt await)=>{0i64}; ($d:tt r#await)=>{1i64}; }
+macro_rules! pass_await {()=>{pick_await!($await)};}
+macro_rules! pick_dyn { ($d:tt dyn)=>{0i64}; ($d:tt r#dyn)=>{1i64}; }
+macro_rules! pass_dyn {()=>{pick_dyn!($dyn)};}
+macro_rules! pick_gen { ($d:tt gen)=>{0i64}; ($d:tt r#gen)=>{1i64}; }
+macro_rules! pass_gen {()=>{pick_gen!($gen)};}
+macro_rules! pick_try { ($d:tt try)=>{0i64}; ($d:tt r#try)=>{1i64}; }
+macro_rules! pass_try {()=>{pick_try!($try)};}
+fn probe()->i64 {
+pass_as!()+pass_break!()+pass_const!()+pass_continue!()+pass_else!()+pass_enum!()+pass_extern!()+pass_false!()+pass_fn!()+pass_for!()+pass_if!()+pass_impl!()+pass_in!()+pass_let!()+pass_loop!()+pass_match!()+pass_mod!()+pass_move!()+pass_mut!()+pass_pub!()+pass_ref!()+pass_return!()+pass_static!()+pass_struct!()+pass_trait!()+pass_true!()+pass_type!()+pass_unsafe!()+pass_use!()+pass_where!()+pass_while!()+pass_abstract!()+pass_become!()+pass_box!()+pass_do!()+pass_final!()+pass_macro!()+pass_override!()+pass_priv!()+pass_typeof!()+pass_unsized!()+pass_virtual!()+pass_yield!()+pass_async!()+pass_await!()+pass_dyn!()+pass_gen!()+pass_try!()-6i64
+}

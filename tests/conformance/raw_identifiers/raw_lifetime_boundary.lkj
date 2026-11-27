@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"root":true,"rustAccept":true}
+macro_rules! choose { ('r # type) => { 1i64 }; ($l:lifetime) => {42i64}; }
+fn probe()->i64 {choose!('r#type)}

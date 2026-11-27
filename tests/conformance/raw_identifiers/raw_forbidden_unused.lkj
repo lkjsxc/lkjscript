@@ -1,0 +1,3 @@
+// expect: reject E_LEX
+// witness: {"root":true}
+#[cfg(any())] fn r#self() {} fn probe()->i64{42i64}

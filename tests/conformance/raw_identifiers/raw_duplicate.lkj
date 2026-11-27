@@ -1,0 +1,3 @@
+// expect: reject E_MACRO_RULE
+// witness: {"root":true}
+macro_rules! pass { ($x:expr, $r#x:expr) => {$x}; } fn probe()->i64 {42i64}

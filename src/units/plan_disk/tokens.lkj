@@ -74,10 +74,20 @@ fn next_lexeme(input: &mut input::Bytes, data: &mut records::Store) -> Result<Op
         } else if byte == b'b' && matches!(input.peek(data, 1usize)?, Some(b'"') | Some(b'\'')) {
             append(input, data, &mut out)?;
             let quote = input.peek(data, 0usize)?.unwrap(); quoted(input, data, &mut out, quote)?;
+        } else if byte == b'r' && input.peek(data, 1usize)? == Some(b'#')
+            && input.peek(data, 2usize)?.is_some_and(|value: u8| ident(value)) {
+            append(input, data, &mut out)?; append(input, data, &mut out)?;
+            while input.peek(data, 0usize)?.is_some_and(|value: u8| continuation(value)) {
+                append(input, data, &mut out)?;
+            }
         } else if byte == b'r' && matches!(input.peek(data, 1usize)?, Some(b'"') | Some(b'#')) {
             raw_string(input, data, &mut out)?;
         } else if byte == b'"' { quoted(input, data, &mut out, b'"')?; }
         else if byte == b'\'' {
+            if input.peek(data, 1usize)? == Some(b'r') && input.peek(data, 2usize)? == Some(b'#') {
+                append(input, data, &mut out)?; append(input, data, &mut out)?; append(input, data, &mut out)?;
+                return Ok(Some(out)); // The shared lexer refuses raw lifetimes without splitting them.
+            }
             if input.peek(data, 1usize)?.is_some_and(|value: u8| continuation(value)) {
                 append(input, data, &mut out)?;
                 while input.peek(data, 0usize)?.is_some_and(|value: u8| continuation(value)) {

@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {"root":true}
+struct Packet { r#value: i64 }
+fn r#plain(r#value:i64)->i64 {value}
+fn probe()->i64 {let value=42i64;let packet=Packet{r#value}; let Packet{value}=packet;plain(r#value)}

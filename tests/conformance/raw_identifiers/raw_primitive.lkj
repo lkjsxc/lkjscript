@@ -1,0 +1,3 @@
+// expect: value 42
+// witness: {"root":true}
+fn probe()->r#i64 {42i64}

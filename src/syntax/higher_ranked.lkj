@@ -32,7 +32,7 @@ impl Parser {
             return Err(self.unsupported("multiple higher-ranked lifetime parameters"));
         }
         self.gt()?;
-        if !matches!(self.token().text.as_str(), "Fn" | "FnMut" | "FnOnce")
+        if !matches!(identifier_name(&self.token().text), "Fn" | "FnMut" | "FnOnce")
             || self.tokens[self.at + 1usize].text != "(" {
             return Err(Diagnostic::new(span, "E_UNSUPPORTED",
                 "higher-ranked trait applications require region-aware witness identity"));

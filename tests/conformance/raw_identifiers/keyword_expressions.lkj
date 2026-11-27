@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {"root":true}
+fn r#if()->i64 {21i64}
+fn probe()->i64 {let r#true=21i64;let r#false=0i64;r#if()+r#true+r#false}

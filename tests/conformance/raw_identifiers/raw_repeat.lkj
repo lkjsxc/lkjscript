@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! sum {($($r#x:r#expr),*)=>{0i64 $(+$x)*};}
+fn probe()->i64 {sum!(20i64,22i64)}

@@ -192,8 +192,20 @@ guards and arms after a default retain the general pattern path.
 The owned loader reads inline/file modules, child.lkj or child/mod.lkj, and nested
 directories through the source Directory. Missing, ambiguous and duplicate inputs
 have distinct diagnostics. File identities survive into IR and diagnostics.
-A reserved keyword in a module declaration produces `E_PARSE` at the name token
-before the loader looks for a module file.
+An unescaped reserved keyword in a module declaration produces `E_PARSE` at the
+name token before the loader looks for a module file. ASCII raw identifiers
+`r#name` use the same semantic name as `name`, including keywords such as
+`r#type`, `r#mut` and `r#match`. Their complete spelling remains a distinct
+identifier token and never selects keyword grammar. `r#crate`, `r#self`,
+`r#Self`, `r#super` and `r#_` refuse during lexing, including unused macro
+bodies and disabled declarations. Raw lifetime names remain explicitly unsupported;
+they are never split into a different lifetime and punctuation sequence.
+Semantic queries, checked rename/body transactions and source-unit manifests
+retain complete raw-token extents. Renames compare normalized symbol names for
+collisions, escape keyword path segments and recheck macro selection and meaning.
+Raw attribute and primitive-type names normalize as ordinary names. In cfg,
+`r#true` and `r#false` are names, not boolean predicates; these unconfigured
+options retain the ordinary unsupported-cfg refusal.
 include_str!("path") produces static UTF-8 text; include_bytes!("path") produces
 a static reference to an exact-size byte array. Paths are literal, relative to the
 containing file and beneath the granted source root. Missing/escaping paths reject;
@@ -1352,9 +1364,15 @@ A bare `$` is literal only at the end of its current token tree, including a
 nested group. It can be captured as `tt`, matched exactly, and forwarded through
 self-invocations. Dollar repetition separators follow the ordinary fragment
 follower rules. Every template is syntax-checked, including unselected arms
-and empty repetitions. Unbound ordinary `$name` pairs retain projected tokens
-for a later macro. Unbound names that require raw identifier identity refuse
-with `E_UNSUPPORTED_MACRO`. Bound captures keep their exact token identity.
+and empty repetitions. Unbound `$name` pairs retain the projected dollar and
+reconstruct the identifier from its semantic name: reserved keywords become raw
+(`$mut` emits `$ r#mut`), while ordinary names become plain (`$r#name` emits
+`$ name`). Bound captures keep their exact token identity. Literal arms distinguish
+`name` from `r#name` and keywords from raw identifiers; transparent `ident`
+and `tt` captures preserve that distinction. Metavariable names and fragment
+specifier names normalize, so `$r#x:r#ident` binds the same variable as `$x`.
+Recursion fingerprints, semantic token digests, provenance replay and the unit
+token tape retain the complete token spelling.
 Generated macro definitions remain unsupported and retain wildcard recovery.
 
 A fragment that cannot begin at the next token lets matching try another arm.

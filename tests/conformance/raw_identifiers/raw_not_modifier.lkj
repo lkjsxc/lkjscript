@@ -1,0 +1,3 @@
+// expect: reject E_PARSE
+// witness: {"root":true}
+fn probe()->i64 {let r#mut value=42i64;value}

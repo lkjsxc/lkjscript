@@ -11,7 +11,7 @@ case "$mode:$#" in
         case "$entry" in
             expression_origins) cases=45 ;;
             type_origins) cases=13 ;;
-            fragment_token_origins) cases=16 ;;
+            fragment_token_origins) cases=27 ;;
             lexical_origins) cases=3 ;;
             statement_origins) cases=18 ;;
             *) usage ;;
@@ -306,6 +306,116 @@ if "$compiler" check "$fixture/forged-view.lkjir" --no-store > "$fixture/forged-
 fi
 grep -Eq 'E_BORROW|E_RETURN' "$fixture/forged-error" || fail 'independent return-origin refusal missing'
 
+# Local identities include their current token-body epoch; always obtain them
+# from the indexed source instead of constructing an identity across edits.
+raw_binding() {
+    query outline 'value@main' > "$fixture/raw-binding-outline"
+    local found
+    found=$(awk -F '\t' -v suffix="::binding:$1:0\"" '$1 ~ /^"value@main::body:/ && index($1, suffix) { print substr($1,2,length($1)-2); exit }' "$fixture/raw-binding-outline")
+    [[ -n $found ]] || fail "missing raw binding $1"
+    printf '%s' "$found"
+}
+raw_rename_binding() {
+    local identity
+    identity=$(raw_binding "$1")
+    printf '{"version":1,"operations":[{"op":"rename","id":"%s","name":"%s"}]}\n' "$identity" "$2" > "$fixture/request"
+}
+raw_body_digest() {
+    query meta 'value@main' > "$fixture/raw-body-meta"
+    sed -n 's/.* body=\([0-9a-f]*\) .*/\1/p' "$fixture/raw-body-meta"
+}
+phase raw-identifier-edits
+cat > "$fixture/project/main.lkj" <<'SOURCE'
+mod r#type { pub fn r#fn() -> i64 { 42i64 } }
+struct Packet { r#match: i64 }
+fn main() -> i64 {
+    let r#mut = r#type::r#fn();
+    let Packet { r#match } = Packet { r#match: r#mut };
+    r#match
+}
+SOURCE
+publish
+query meta 'value@type::fn' > "$fixture/raw-function-meta"
+query uses 'value@type::fn' > "$fixture/raw-function-refs"
+raw_site=$(grep -E '^"value@main"[[:space:]].*fact=uses[[:space:]].*target="value@type::fn"' "$fixture/raw-function-refs")
+raw_start=$(sed -n 's/.* start=\([0-9]*\) end=.*/\1/p' <<< "$raw_site")
+raw_end=$(sed -n 's/.* end=\([0-9]*\) kind=.*/\1/p' <<< "$raw_site")
+[[ $raw_start =~ ^[0-9]+$ && $raw_end =~ ^[0-9]+$ && $((raw_end - raw_start)) == 4 ]] || fail 'raw call query lost full token extent'
+[[ $(dd if="$fixture/project/main.lkj" bs=1 skip="$raw_start" count=4 status=none) == 'r#fn' ]] || fail 'raw call query chose the wrong source spelling'
+query signature 'value@type::fn' > "$fixture/raw-function-signature"
+grep -Fq 'r#fn' "$fixture/raw-function-signature" || fail 'raw function query lost source spelling'
+value 42
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"rename","id":"value@type::fn","name":"r#return"}]}
+REQUEST
+edit
+value 42
+publish
+grep -Fq 'fn r#return()' "$fixture/project/main.lkj" || fail 'raw name extent chose fn keyword'
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"rename","id":"type@type","name":"r#mod"}]}
+REQUEST
+edit
+value 42
+publish
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"rename","id":"Packet::field:match","name":"r#type"}]}
+REQUEST
+edit
+value 42
+publish
+grep -Fq 'r#type: r#match' "$fixture/project/main.lkj" || fail 'field shorthand lost raw binding spelling'
+raw_rename_binding match renamed
+edit
+value 42
+publish
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-body","id":"value@mod::return","source":"{ let r#match = 41i64; r#match + 1i64 }"}]}
+REQUEST
+edit
+value 42
+publish
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"replace-body","id":"value@mod::return","source":"{ let r#match = true; r#match }"}]}
+REQUEST
+refuse E_EDIT_CHECK
+for name in r#self r#Self r#super r#crate r#_ mut; do
+    printf '{"version":1,"operations":[{"op":"rename","id":"value@mod::return","name":"%s"}]}\n' "$name" > "$fixture/request"
+    refuse E_EDIT_NAME
+done
+# Same symbol with different spelling still collides, and raw literal-arm
+# selection remains covered by the ordinary capture-replay and meaning proof.
+cat > "$fixture/project/main.lkj" <<'SOURCE'
+macro_rules! read { ($value:ident) => { $value }; }
+fn plain() -> i64 { 0i64 }
+fn r#type() -> i64 { 1i64 }
+fn main() -> i64 { let r#mut = 42i64; read!(r#mut) }
+SOURCE
+publish
+cat > "$fixture/request" <<'REQUEST'
+{"version":1,"operations":[{"op":"rename","id":"value@type","name":"r#plain"}]}
+REQUEST
+refuse E_EDIT_NAME
+raw_rename_binding mut r#value
+edit
+value 42
+publish
+raw_digest=$(raw_body_digest)
+raw_rename_binding value value
+edit
+value 42
+publish
+plain_digest=$(raw_body_digest)
+[[ $raw_digest =~ ^[0-9a-f]{64}$ && $plain_digest =~ ^[0-9a-f]{64}$ && $raw_digest != "$plain_digest" ]] || fail 'raw/plain spelling collapsed token-body digest'
+cat > "$fixture/project/main.lkj" <<'SOURCE'
+macro_rules! choose { (r#value) => { 0i64 }; ($value:ident) => { $value }; }
+fn main() -> i64 { let value = 42i64; choose!(value) }
+SOURCE
+publish
+raw_rename_binding value r#value
+refuse E_EDIT_REFERENCES
+value 42
+
 phase contract-build
 prepare_contracts
 "$compiler" build "${contracts[@]}" -o "$fixture/contracts-image" > "$fixture/contracts-out" 2> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract build'; }
@@ -313,4 +423,4 @@ phase contracts-native
 "$fixture/contracts-image" >> "$fixture/contracts-out" 2>> "$fixture/contracts-error" || { cat "$fixture/contracts-error" >&2; fail 'origin contract execution'; }
 if [[ $mode == --native ]]; then exit; fi
 run_interpreter
-printf 'ok declarative macro origins: authenticated source/topology and include replay; generated item, field, import, call and strict derive queries; checked authored rename/body edits; projection/reference refusals; template/include epochs; 95 malformed origins; statement positions/splices/roles/rules; typed capture queries/edits, structural block ownership and independent return-origin refusal; both engines\n'
+printf 'ok declarative macro origins: authenticated source/topology and include replay; generated item, field, import, call and strict derive queries; checked authored rename/body edits; projection/reference refusals; template/include epochs; 106 malformed origins; statement positions/splices/roles/rules; typed capture queries/edits, structural block ownership and independent return-origin refusal; both engines\n'

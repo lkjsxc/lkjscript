@@ -1,0 +1,3 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"root":true,"rustAccept":true}
+fn probe()->bool {cfg!(r#false)}

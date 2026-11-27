@@ -46,6 +46,27 @@ fn refused(world: &mut World, text: &str) -> String {
 fn same_refusal(world: &mut World, text: &str) {
     let expected = crate::units::parse(text).err().unwrap(); assert_eq!(refused(world, text), expected);
 }
+const RAW: &str = "const r#UNITS: &[&r#str] = &[\"a=a.lkj\"]; const r#DEPENDS: &[&r#str] = &[]; const r#ENTRY: &r#str = \"a::main\";";
+fn raw_identifiers(world: &mut World) -> usize {
+    same(world, RAW);
+    let marker = RAW.find("r#UNITS").unwrap();
+    for crossing in 0usize..4usize {
+        let mut text = String::new();
+        for _ in 0usize..CHUNK - marker - crossing { text.push(' '); }
+        text.push_str(RAW); same(world, &text);
+    }
+    for name in vec!["crate".to_string(), "self".to_string(), "Self".to_string(), "super".to_string(), "_".to_string()] {
+        let text = format!("const r#{name}: &str = \"x\"; {RAW}");
+        assert!(crate::units::parse(&text).is_err());
+        assert!(refused(world, &text).contains("cannot be a raw identifier"));
+    }
+    for keyword in vec!["r#const".to_string(), "r#pub const".to_string()] {
+        let text = format!("{keyword} UNITS: &[&str] = &[]; {RAW}");
+        assert!(crate::units::parse(&text).is_err());
+        assert!(refused(world, &text).contains("manifest accepts only"));
+    }
+    12usize
+}
 fn literal_cases(world: &mut World) -> usize {
     let cases: Vec<String> = vec![
         SMALL.to_string(),
@@ -230,7 +251,7 @@ fn corruption(world: &mut World) -> usize {
 /// Broader dependency, boundary and corruption populations run in the native entry.
 pub(super) fn smoke(world: &mut World) -> usize {
     world.stderr().write(b"streaming manifest smoke: literal oracle begins\n");
-    same(world, "const UNITS: &[&str] = &[\"a=a.lkj\"]; const DEPENDS: &[&str] = &[]; const ENTRY: &str = \"a::main\";");
+    same(world, RAW);
     world.stderr().write(b"streaming manifest smoke: literal oracle passed; rank attack begins\n");
     let mut plan = opened(world, "const UNITS: &[&str] = &[\"b=b.lkj\", \"a=a.lkj\"]; const DEPENDS: &[&str] = &[]; const ENTRY: &str = \"a::main\";");
     plan.data.replace(&ordinal_key("O", 0usize), &row_bytes(2usize, 0usize, "b")).unwrap();
@@ -240,6 +261,6 @@ pub(super) fn smoke(world: &mut World) -> usize {
     2usize
 }
 pub(super) fn run(world: &mut World) -> usize {
-    literal_cases(world) + declaration_orders(world) + semantic_errors(world)
+    literal_cases(world) + raw_identifiers(world) + declaration_orders(world) + semantic_errors(world)
         + boundaries(world) + input_guards(world) + corruption(world)
 }

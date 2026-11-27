@@ -1,0 +1,3 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! pick { (mut) => {1i64}; (r#mut) => {42i64}; } fn probe()->i64 {pick!(r#mut)}

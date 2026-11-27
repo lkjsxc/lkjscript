@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! pick {(r#match)=>{42i64};(match)=>{1i64};}
+macro_rules! relay {($x:tt)=>{pick!($x)};}
+fn probe()->i64 {relay!(r#match)}

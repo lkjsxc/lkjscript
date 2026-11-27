@@ -129,8 +129,8 @@ fn fresh(unit: &Unit, operation: &edit::Operation, site: usize, extra: &str) -> 
     loop {
         let prefix = format!("__lkjscript_edit_{}_{}_", &digest[..16usize], number);
         let mut collision = false;
-        for token in &unit.tokens { if token.kind == 0u8 && token.text.starts_with(&prefix) { collision = true; } }
-        for token in &added { if token.kind == 0u8 && token.text.starts_with(&prefix) { collision = true; } }
+        for token in &unit.tokens { if token.kind == 0u8 && syntax::identifier_name(&token.text).starts_with(&prefix) { collision = true; } }
+        for token in &added { if token.kind == 0u8 && syntax::identifier_name(&token.text).starts_with(&prefix) { collision = true; } }
         if !collision { return Ok(prefix); }
         number += 1usize;
     }
@@ -200,8 +200,7 @@ fn call_for(unit: &Unit, site: &semantic::Reference) -> Option<Call> {
                 let receiver_end = unit.owner.start + unit.tree.exprs[*receiver].span.end;
                 let (_, end) = absolute(unit, node.span);
                 if receiver_end <= site.start && site.end <= end
-                    && site.end - site.start == name.len()
-                    && &unit.owner.text[site.start - unit.owner.start..site.end - unit.owner.start] == name.as_str() {
+                    && syntax::identifier_matches(&unit.owner.text[site.start - unit.owner.start..site.end - unit.owner.start], name) {
                     let (open, _) = delimited(unit, node.span.start, node.span.end, "(", ")").ok()?;
                     if site.end <= unit.owner.start + open { return Some(Call { expression: index, method: true }); }
                 }
@@ -391,13 +390,13 @@ fn partial_members(catalog: &semantic::Catalog, target: &semantic::Item) -> Resu
 fn label(unit: &Unit, outer: a::Span, value: a::Span, name: &str) -> Option<(usize, usize)> {
     let mut at = 0usize;
     while at < unit.tokens.len() && unit.tokens[at].span.start < value.start { at += 1usize; }
-    if at >= 2usize && unit.tokens[at - 1usize].text == ":" && unit.tokens[at - 2usize].text == name
+    if at >= 2usize && unit.tokens[at - 1usize].text == ":" && syntax::identifier_matches(&unit.tokens[at - 2usize].text, name)
         && unit.tokens[at - 2usize].span.start >= outer.start {
         return Some((unit.tokens[at - 2usize].span.start, value.end));
     }
     while at < unit.tokens.len() && unit.tokens[at].span.end <= value.end {
         let token = &unit.tokens[at];
-        if token.text == name { return Some((value.start, value.end)); }
+        if syntax::identifier_matches(&token.text, name) { return Some((value.start, value.end)); }
         if token.text != "ref" && token.text != "mut" { return None; }
         at += 1usize;
     }
@@ -406,14 +405,14 @@ fn label(unit: &Unit, outer: a::Span, value: a::Span, name: &str) -> Option<(usi
 fn member_site(unit: &Unit, outer: a::Span, value: a::Span, name: &str, site: &semantic::Reference) -> bool {
     let mut at = 0usize;
     while at < unit.tokens.len() && unit.tokens[at].span.start < value.start { at += 1usize; }
-    if at >= 2usize && unit.tokens[at - 1usize].text == ":" && unit.tokens[at - 2usize].text == name
+    if at >= 2usize && unit.tokens[at - 1usize].text == ":" && syntax::identifier_matches(&unit.tokens[at - 2usize].text, name)
         && unit.tokens[at - 2usize].span.start >= outer.start {
         let token = &unit.tokens[at - 2usize];
         return site.start == unit.owner.start + token.span.start && site.end == unit.owner.start + token.span.end;
     }
     while at < unit.tokens.len() && unit.tokens[at].span.end <= value.end {
         let token = &unit.tokens[at];
-        if token.text == name { return site.start == unit.owner.start + token.span.start && site.end == unit.owner.start + token.span.end; }
+        if syntax::identifier_matches(&token.text, name) { return site.start == unit.owner.start + token.span.start && site.end == unit.owner.start + token.span.end; }
         if token.text != "ref" && token.text != "mut" { return false; }
         at += 1usize;
     }
@@ -1031,9 +1030,9 @@ mod functions {
     }
     fn capture_argument(id: &str, argument: &str, name: &str) -> Result<bool, String> {
         let tokens = syntax::semantic_tokens(argument).map_err(|problem| fail(id, "CAPTURE", &problem.message))?;
-        if tokens.len() == 1usize && tokens[0usize].text == name { return Ok(false); }
-        if tokens.len() == 2usize && tokens[0usize].text == "&" && tokens[1usize].text == name { return Ok(true); }
-        if tokens.len() == 3usize && tokens[0usize].text == "&" && tokens[1usize].text == "mut" && tokens[2usize].text == name { return Ok(true); }
+        if tokens.len() == 1usize && syntax::identifier_matches(&tokens[0usize].text, name) { return Ok(false); }
+        if tokens.len() == 2usize && tokens[0usize].text == "&" && syntax::identifier_matches(&tokens[1usize].text, name) { return Ok(true); }
+        if tokens.len() == 3usize && tokens[0usize].text == "&" && tokens[1usize].text == "mut" && syntax::identifier_matches(&tokens[2usize].text, name) { return Ok(true); }
         Err(fail(id, "CAPTURE", "argument must be this binding, &binding, or &mut binding; arbitrary effects need a separate operation"))
     }
     fn scalar_capture(target: &semantic::Item) -> bool {
@@ -1488,7 +1487,7 @@ pub mod relocation {
             if !known_target {
                 for part in site.target.as_str().split("::") { if names.contains(&part.to_string()) { relevant = true; } }
                 for name in &names {
-                    if bytes[site.start..site.end] == *name.as_bytes() { relevant = true; }
+                    if edit::identifier_bytes(&bytes[site.start..site.end], name) { relevant = true; }
                 }
             }
             if relevant { return Err(at_site(&site.owner, "REFERENCES", site, "relevant unresolved references need an explicit decision")); }
@@ -1563,7 +1562,10 @@ pub mod relocation {
     fn shorthand(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)],
         site: &semantic::Reference, old: &str, name: &str, patches: &mut Vec<edit::Patch>) -> Result<(), String> {
         if site.kind == "field-shorthand" {
-            edit::patch(patches, &site.owner, &site.file, site.start, site.end, &format!("{name}: {old}")); return Ok(());
+            let bytes = edit::input(inputs, &site.file)?;
+            let original = String::from_utf8(bytes[site.start..site.end].to_vec())
+                .map_err(|_| fail(&site.owner, "SPAN", "shorthand name is not UTF-8"))?;
+            edit::patch(patches, &site.owner, &site.file, site.start, site.end, &format!("{name}: {original}")); return Ok(());
         }
         let owner = edit::item(catalog, &site.owner)?; let unit = parse_unit(catalog, owner, inputs)?;
         let mut selected: Option<a::Span> = None;
@@ -1578,7 +1580,7 @@ pub mod relocation {
             if *mutable || *ref_mut {
                 if at == unit.tokens.len() || unit.tokens[at].text != "mut" { continue; } at += 1usize;
             }
-            if at == unit.tokens.len() || unit.tokens[at].text != old { continue; }
+            if at == unit.tokens.len() || !syntax::identifier_matches(&unit.tokens[at].text, old) { continue; }
             let token = &unit.tokens[at];
             if unit.owner.start + token.span.start != site.start || unit.owner.start + token.span.end != site.end { continue; }
             let span = a::Span { end: token.span.end, ..pattern.span };
@@ -1593,6 +1595,9 @@ pub mod relocation {
     }
     fn rename(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], target: &semantic::Item,
         name: &str, patches: &mut Vec<edit::Patch>) -> Result<(), String> {
+        let spelling = name;
+        if !syntax::identifier_spelling(spelling) { return Err(fail(&target.identity, "NAME", "new member name must be one identifier")); }
+        let name = syntax::identifier_name(spelling);
         let mut scoped_type_parameter = false;
         if target.kind == "generic-parameter" {
             let declaration = syntax::semantic_tokens(&target.text)
@@ -1608,7 +1613,7 @@ pub mod relocation {
                 .map_err(|problem| fail(&target.identity, "GENERIC_REFERENCES", &problem.message))?;
             // A fresh spelling cannot capture another value/type use anywhere
             // in the declaration's complete lexical scope, including closures.
-            if name == "Self" || (name != target.name && tokens.iter().any(|token| token.text == name)) {
+            if name == "Self" || (name != target.name && tokens.iter().any(|token| token.kind == 0u8 && syntax::identifier_matches(&token.text, name))) {
                 return Err(fail(&target.identity, "CAPTURE", "generic parameter rename requires a fresh spelling in its enclosing item"));
             }
             for site in &catalog.unresolved {
@@ -1626,7 +1631,6 @@ pub mod relocation {
                 }
             }
         }
-        if !edit::identifier(name) { return Err(fail(&target.identity, "NAME", "new member name must be one identifier")); }
         if target.kind == "module" { inline_module(catalog, inputs, target)?; }
         let targets = cohort(catalog, inputs, target)?;
         for site in &catalog.references {
@@ -1647,7 +1651,7 @@ pub mod relocation {
         if global {
             let old = qualified(catalog, &target.identity)?;
             let at = old.rfind("::").ok_or_else(|| fail(&target.identity, "SCOPE", "global declaration has no canonical parent path"))?;
-            new_path = format!("{}::{name}", &old[..at]);
+            new_path = syntax::path_source(&format!("{}::{spelling}", &old[..at]));
             if new_path.starts_with("std::") {
                 for item in &catalog.items {
                     if item.kind == "module" && item.name == "std" && item.identity != "type@std" {
@@ -1664,13 +1668,13 @@ pub mod relocation {
                     return Err(fail(&other.identity, "NAME", "new spelling collides with another declaration in this scope"));
                 }
             }
-            if item.kind == "binding" { binding_declaration(catalog, inputs, item, name, patches)?; continue; }
+            if item.kind == "binding" { binding_declaration(catalog, inputs, item, spelling, patches)?; continue; }
             let bytes = edit::input(inputs, &item.file)?;
             if item.name_start >= item.name_end || item.name_end > bytes.len()
-                || bytes[item.name_start..item.name_end] != *item.name.as_bytes() {
+                || !edit::identifier_bytes(&bytes[item.name_start..item.name_end], &item.name) {
                 return Err(fail(identity, "NAME", "declaration has no exact editable name span"));
             }
-            edit::patch(patches, identity, &item.file, item.name_start, item.name_end, name);
+            edit::patch(patches, identity, &item.file, item.name_start, item.name_end, spelling);
         }
         capture(catalog, inputs, target, &targets, name, &mut cache)?;
         for site in &catalog.references {
@@ -1682,13 +1686,13 @@ pub mod relocation {
             let item = edit::item(catalog, &site.target)?;
             let bytes = edit::input(inputs, &site.file)?;
             if site.start >= site.end || site.end > bytes.len() { return Err(at_site(&target.identity, "SPAN", site, "reference is outside its source")); }
-            let spelling = &bytes[site.start..site.end];
+            let source_spelling = &bytes[site.start..site.end];
             if target.kind == "module" && site.kind == "qualification"
-                && (spelling == b"self".as_slice() || spelling == b"super".as_slice() || spelling == b"crate".as_slice()) { continue; }
-            if spelling != item.name.as_bytes() { return Err(at_site(&target.identity, "REFERENCE", site, "resolved reference spelling needs an explicit rewrite")); }
-            let replacement = if global && site.kind != "import" && bare_site(inputs, site, &mut cache)? { new_path.as_str() } else { name };
+                && (source_spelling == b"self".as_slice() || source_spelling == b"super".as_slice() || source_spelling == b"crate".as_slice()) { continue; }
+            if !edit::identifier_bytes(source_spelling, &item.name) { return Err(at_site(&target.identity, "REFERENCE", site, "resolved reference spelling needs an explicit rewrite")); }
+            let replacement = if global && site.kind != "import" && bare_site(inputs, site, &mut cache)? { new_path.as_str() } else { spelling };
             if matches!(site.kind.as_str(), "field-shorthand" | "pattern-field-shorthand") {
-                shorthand(catalog, inputs, site, &item.name, name, patches)?;
+                shorthand(catalog, inputs, site, &item.name, spelling, patches)?;
             } else if matches!(site.kind.as_str(), "value" | "local-value") {
                 let owner = edit::item(catalog, &site.owner)?; let unit = parse_unit(catalog, owner, inputs)?;
                 value_patch(catalog, &unit, site, site.start, site.end, replacement, patches)?;
@@ -1873,7 +1877,7 @@ fn binding_declaration(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)]
             while at < unit.tokens.len() && unit.tokens[at].span.start < pattern.span.start { at += 1usize; }
             if *by_ref { if at == unit.tokens.len() || unit.tokens[at].text != "ref" { continue; } at += 1usize; }
             if *mutable || *ref_mut { if at == unit.tokens.len() || unit.tokens[at].text != "mut" { continue; } at += 1usize; }
-            if at == unit.tokens.len() || unit.tokens[at].text != target.name { continue; }
+            if at == unit.tokens.len() || !syntax::identifier_matches(&unit.tokens[at].text, &target.name) { continue; }
             let token = &unit.tokens[at];
             let found = (start, unit.owner.start + token.span.start, unit.owner.start + token.span.end);
             if selected.is_some_and(|old| old != found) { return Err(fail(&target.identity, "BINDING_SITE", "binding has conflicting parsed declaration spans")); }
@@ -1888,7 +1892,7 @@ fn binding_declaration(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)]
         if shorthand {
             let bytes = edit::input(inputs, &target.file)?;
             let prefix = String::from_utf8(bytes[start..name_start].to_vec()).map_err(|_| fail(&target.identity, "SPAN", "binding prefix is not UTF-8"))?;
-            edit::patch(patches, &target.identity, &target.file, start, name_end, &format!("{}: {prefix}{name}", target.name));
+            edit::patch(patches, &target.identity, &target.file, start, name_end, &format!("{}: {prefix}{name}", syntax::identifier_source(&target.name)));
         } else { edit::patch(patches, &target.identity, &target.file, name_start, name_end, name); }
         Ok(())
     }
@@ -1908,7 +1912,7 @@ fn local_scope(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)],
                 || !matches!(site.kind.as_str(), "value" | "alias-value" | "local-value") { continue; }
             let bytes = edit::input(inputs, &site.file)?;
             if site.start > site.end || site.end > bytes.len() { return Err(fail(&site.owner, "SPAN", "reference is outside its source")); }
-            if bytes[site.start..site.end] == *name.as_bytes() {
+            if edit::identifier_bytes(&bytes[site.start..site.end], name) {
                 return Err(at_site(&target.identity, "CAPTURE", site, "new local spelling could capture an existing resolved value"));
             }
         }
@@ -1964,7 +1968,7 @@ fn capture(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)],
                     | "pattern" | "alias-pattern" | "qualification" | "alias-qualification" | "import" | "alias-import") { continue; }
             let bytes = edit::input(inputs, &site.file)?;
             if site.start > site.end || site.end > bytes.len() { return Err(fail(&site.owner, "SPAN", "reference is outside its source")); }
-            if bytes[site.start..site.end] != *name.as_bytes() { continue; }
+            if !edit::identifier_bytes(&bytes[site.start..site.end], name) { continue; }
             let existing = edit::item(catalog, &site.target)?;
             if !catalog.names_conflict(target, existing) { continue; }
             if matches!(existing.kind.as_str(), "binding" | "parameter" | "generic-parameter") { continue; }
@@ -1987,7 +1991,7 @@ fn canonical_source_site(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>
         while start >= 2usize && tokens[start - 1usize].text == "::" && tokens[start - 2usize].kind == 0u8 { start -= 2usize; }
         if tokens[start].text != "crate" { return Ok(false); }
         let mut written = String::new();
-        for index in start..low + 1usize { written.push_str(&tokens[index].text); }
+        for index in start..low + 1usize { written.push_str(syntax::identifier_name(&tokens[index].text)); }
         Ok(written == expected)
     }
 }

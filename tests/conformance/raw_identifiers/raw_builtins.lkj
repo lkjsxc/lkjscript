@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {"root":true}
+#[r#allow(dead_code)] fn unused() {}
+fn probe()->i64 { r#assert_eq!(r#concat!("raw", "_", 'x'), "raw_x"); 42i64 }

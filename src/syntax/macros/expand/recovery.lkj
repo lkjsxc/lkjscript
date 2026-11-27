@@ -90,7 +90,8 @@ pub(super) fn function_footprint(program: &Program, report: &ExpansionReport, in
             }
             at += 1usize;
         }
-        if !names.contains(&name.text) { names.push(name.text.clone()); }
+        let symbol = identifier_name(&name.text).to_string();
+        if !names.contains(&symbol) { names.push(symbol); }
     }
     Some(names)
 }

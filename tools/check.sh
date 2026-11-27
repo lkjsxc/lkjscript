@@ -294,16 +294,16 @@ if ! awk '
         total += substr($3, length("cases=") + 1)
     }
     END {
-        if (records != 5 || total != 95) exit 1
+        if (records != 5 || total != 106) exit 1
         if (scopes["scope=expression_origins"] != 1 || scopes["scope=statement_origins"] != 1 ||
             scopes["scope=type_origins"] != 1 || scopes["scope=fragment_token_origins"] != 1 ||
             scopes["scope=lexical_origins"] != 1) exit 1
     }
 ' "${check_logs[@]}"; then
-    echo 'FAIL macro-origins (expected five interpreter scopes and 95 controls)' >&2
+    echo 'FAIL macro-origins (expected five interpreter scopes and 106 controls)' >&2
     exit 1
 fi
-printf 'ok macro-origins (95 malformed origins; statement positions/splices/roles/rules; both engines)\n'
+printf 'ok macro-origins (106 malformed origins; statement positions/splices/roles/rules; both engines)\n'
 step ir-mutation timeout --kill-after=10s 600s "$check_binary" mutate 1701 128 --jobs "$check_jobs" "${check_reuse[@]}"
 check_elapsed_ns=$(($(date +%s%N)-check_started_ns))
 read -r check_load_end _ < /proc/loadavg

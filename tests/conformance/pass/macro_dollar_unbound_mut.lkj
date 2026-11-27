@@ -1,5 +1,5 @@
-// expect: reject E_UNSUPPORTED_MACRO
-// witness: {"root":true,"rustAccept":true}
+// expect: value 42
+// witness: {"root":true}
 macro_rules! receive { ($d:tt mut) => { 1i64 }; ($d:tt $name:ident) => { 42i64 }; }
 macro_rules! forward { () => { receive!($mut) }; }
 fn probe() -> i64 { forward!() }

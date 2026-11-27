@@ -1,0 +1,36 @@
+// expect: value 42
+// witness: {}
+fn shared<F>(read: F) -> i64
+where F: for<'input> r#Fn(&'input [u8]) -> i64,
+{
+    let first = [9u8];
+    let second = [5u8];
+    read(&first) + read(&second)
+}
+
+macro_rules! repeat_mutation {
+    ($input:lifetime) => {
+        fn preserve<$input, r#FnMut>(_value: r#FnMut, input: &$input i64) -> &$input i64 { input }
+        fn exclusive<F: for<$input> r#FnMut(&$input mut i64)>(mut change: F) -> i64 {
+            let mut first = 8i64;
+            let mut second = 12i64;
+            change(&mut first);
+            change(&mut second);
+            first + second
+        }
+    };
+}
+repeat_mutation!('input);
+
+fn once<F: for<'input> r#FnOnce(&'input i64) -> i64>(read: F) -> i64 {
+    let input = 5i64;
+    read(&input)
+}
+
+pub fn probe() -> i64 {
+    let owner = String::from("owned");
+    let result = shared(|input: &[u8]| input[0] as i64)
+        + exclusive(|input: &mut i64| *input += 1)
+        + once(move |input: &i64| { drop(owner); *input + 1 });
+    *preserve((), &result)
+}

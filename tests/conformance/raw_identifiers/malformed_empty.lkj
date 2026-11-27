@@ -1,0 +1,4 @@
+// expect: reject E_LEX
+// witness: {"root":true}
+macro_rules! m {($($t:tt)*)=>{42i64};}
+fn probe()->i64{m!(r# )}

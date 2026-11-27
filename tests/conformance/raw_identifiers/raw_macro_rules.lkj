@@ -1,0 +1,3 @@
+// expect: reject E_PARSE
+// witness: {"root":true}
+r#macro_rules! pass { () => {42i64}; } fn probe()->i64 {pass!()}

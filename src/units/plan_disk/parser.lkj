@@ -65,7 +65,8 @@ impl Parser {
         let outer = self.groups(data)?;
         self.require(data, 6u8, "&", message)?; self.lifetime(data)?;
         let inner = self.groups(data)?;
-        self.require(data, 0u8, "str", message)?;
+        let name = self.take(data)?.ok_or_else(|| issue(message))?;
+        if name.kind != 0u8 || syntax::identifier_name(&name.text) != "str" { return Err(issue(message)); }
         self.close_groups(data, inner, message)?; self.close_groups(data, outer, message)
     }
     fn list_type(&mut self, data: &mut records::Store) -> Result<(), String> {
@@ -131,11 +132,11 @@ pub(super) fn parse(data: &mut records::Store, tape: tokens::Tape) -> Result<Par
         parser.require(data, 0u8, "const", ITEMS)?;
         let name = parser.take(data)?.ok_or_else(|| issue(ITEMS))?;
         if name.kind != 0u8 { return Err(issue(ITEMS)); }
-        match name.text.as_str() {
+        match syntax::identifier_name(&name.text) {
             "UNITS" | "DEPENDS" => {
                 parser.require(data, 6u8, ":", LIST_TYPE)?; parser.list_type(data)?;
                 parser.require(data, 6u8, "=", LIST_VALUE)?;
-                let unit = name.text == "UNITS";
+                let unit = syntax::identifier_name(&name.text) == "UNITS";
                 let duplicate = if unit { units.is_some() } else { dependencies.is_some() };
                 let count = parser.list(data, if unit { "U" } else { "V" }, if unit { 0usize } else { 1usize }, !duplicate)?;
                 parser.require(data, 6u8, ";", ITEMS)?;

@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {"root":true}
+fn length<const N:r#usize>(a:[i64;N])->i64 {a[0usize]}
+fn probe()->i64 {length::<1usize>([42i64])}

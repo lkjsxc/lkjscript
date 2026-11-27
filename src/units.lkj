@@ -297,8 +297,8 @@ pub fn project(name: &str, program: &ast::Program, inputs: &[(String, Vec<u8>)],
         let end = expression.span.end;
         if end > text.len() || start >= end || covered(replacements.get(path).unwrap(), start, end) { continue; }
         let literal = match &expression.kind {
-            ast::Expr::String(value) if text[start..end].starts_with("include_str") => Some(source_literal(value.as_bytes(), false)),
-            ast::Expr::Bytes(value) if text[start..end].starts_with("include_bytes") => Some(source_literal(value, true)),
+            ast::Expr::String(value) if syntax::identifier_name(&text[start..end]).starts_with("include_str") => Some(source_literal(value.as_bytes(), false)),
+            ast::Expr::Bytes(value) if syntax::identifier_name(&text[start..end]).starts_with("include_bytes") => Some(source_literal(value, true)),
             _ => None,
         };
         if let Some(literal) = literal {
@@ -331,7 +331,7 @@ pub fn project(name: &str, program: &ast::Program, inputs: &[(String, Vec<u8>)],
         let mut retained_names: BTreeSet<String> = BTreeSet::new();
         for token in &tokens {
             if token.kind == 0u8 && !covered(replacements.get(path).unwrap(), token.span.start, token.span.end)
-                && !covered(&use_ranges, token.span.start, token.span.end) { retained_names.insert(token.text.clone()); }
+                && !covered(&use_ranges, token.span.start, token.span.end) { retained_names.insert(syntax::identifier_name(&token.text).to_string()); }
         }
         for (start, (end, members)) in uses {
             let mut keep = false;
@@ -364,7 +364,7 @@ pub fn project(name: &str, program: &ast::Program, inputs: &[(String, Vec<u8>)],
             let tokens = syntax::semantic_tokens(&out).map_err(|problem: ast::Diagnostic| -> String { error(&problem.message) })?;
             for index in 0usize..tokens.len() {
                 if tokens[index].kind == 0u8 && index + 1usize < tokens.len() && tokens[index + 1usize].text == "::" {
-                    require_path(&tokens[index].text, name, &mut required);
+                    require_path(syntax::identifier_name(&tokens[index].text), name, &mut required);
                 }
             }
             out.into_bytes()

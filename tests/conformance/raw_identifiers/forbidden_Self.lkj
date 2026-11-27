@@ -1,0 +1,3 @@
+// expect: reject E_LEX
+// witness: {"root":true}
+macro_rules! pass {()=>{r#Self};} fn probe()->i64 {42i64}

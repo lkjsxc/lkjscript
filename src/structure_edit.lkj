@@ -251,6 +251,10 @@ pub(crate) fn patch(patches: &mut Vec<Patch>, identity: &str, file: &str, start:
     patches.push(Patch { identity: identity.to_string(), file: file.to_string(), start, end,
         replacement: replacement.to_string() });
 }
+// Source names retain the full raw-token extent; catalog names are symbols.
+pub(crate) fn identifier_bytes(bytes: &[u8], name: &str) -> bool {
+    bytes == name.as_bytes() || (bytes.starts_with(b"r#") && &bytes[2usize..] == name.as_bytes())
+}
 pub(crate) fn identifier(name: &str) -> bool {
     if name.is_empty() { return false; }
     for (index, byte) in name.bytes().enumerate() {
@@ -436,7 +440,7 @@ pub(crate) fn external_module_name(identity: &str, source: &str, configuration: 
         }
     }
     if tokens.len() != at + 3usize || tokens[at].kind != 0u8 || tokens[at].text != "mod"
-        || tokens[at + 1usize].kind != 0u8 || tokens[at + 1usize].text != module.name
+        || tokens[at + 1usize].kind != 0u8 || !syntax::identifier_matches(&tokens[at + 1usize].text, &module.name)
         || tokens[at + 2usize].kind != 6u8 || tokens[at + 2usize].text != ";"
         || tokens[at].span.start + prefix.len() != module.span.start
         || tokens[at + 2usize].span.end + prefix.len() != module.span.end {
