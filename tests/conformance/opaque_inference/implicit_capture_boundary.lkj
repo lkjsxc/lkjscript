@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+fn hold<T>(value: T) -> impl FnOnce() -> T { move || value }
+pub fn probe() -> i64 { let value = 42i64; let callable = hold(&value); *callable() }

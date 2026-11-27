@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+fn make<T,const N:usize>()->impl Fn([T;N])->usize {|input:[T;N]|input.len()}
+pub fn probe()->i64 {make()([1i64,2i64,3i64]) as i64+39i64}

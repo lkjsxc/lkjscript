@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+fn nested() -> (impl Copy, i64) { (1i64, 41i64) }
+pub fn probe() -> i64 { let (_, value) = nested(); value }

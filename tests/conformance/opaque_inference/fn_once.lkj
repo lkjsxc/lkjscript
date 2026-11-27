@@ -1,0 +1,9 @@
+// expect: reject E_MOVE
+// witness: {"rustCode":"E0382"}
+fn make<T>(text: String) -> impl FnOnce(T) -> T {
+    move |value: T| { drop(text); value }
+}
+pub fn probe() -> i64 {
+    let callable = make("owned".to_string());
+    callable(20i64) + callable(22i64)
+}

@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+fn identity<T>() -> impl Fn(T) -> T { |value: T| value }
+fn apply<T>(value: T) -> T { let callable = identity(); callable(value) }
+pub fn probe() -> i64 { apply(42i64) }

@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {}
+fn identity<T>() -> impl FnMut(T) -> T { |value: T| value }
+pub fn probe() -> i64 {
+    let mut value = 1i64;
+    let mut callable = identity();
+    let result = callable(&mut value);
+    *result = 42i64;
+    *result
+}

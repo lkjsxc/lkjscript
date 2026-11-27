@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+fn tick(value: &mut i64) -> i64 { *value += 1i64; *value }
+fn make<T>(first: i64, second: i64) -> impl Fn(T) -> (i64, T) {
+    move |value: T| (first * 10i64 + second, value)
+}
+pub fn probe() -> i64 {
+    let mut order = 0i64;
+    let callable = make(tick(&mut order), tick(&mut order));
+    let (prefix, value) = callable(30i64);
+    assert_eq!(order, 2i64);
+    prefix + value
+}

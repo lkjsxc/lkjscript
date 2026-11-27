@@ -1,0 +1,6 @@
+// expect: reject E_BORROW
+// witness: {"rustCode":"E0596"}
+fn make<T>(mut calls: i64) -> impl FnMut(T) -> T {
+    move |value: T| { calls += 1i64; value }
+}
+pub fn probe() -> i64 { let callable = make(0i64); callable(42i64) }

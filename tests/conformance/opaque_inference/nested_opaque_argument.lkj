@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+fn make<T>() -> impl Fn(T) -> T { |input: T| input }
+fn plain<T>(value:T)->T{value}
+pub fn probe()->i64 {let a=plain(make()); a(42i64)}

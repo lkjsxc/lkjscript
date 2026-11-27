@@ -1,0 +1,9 @@
+// expect: reject E_TRAIT
+// witness: {"rustCode":"E0277"}
+struct Affine { value: i64 }
+fn make<T: Copy>() -> impl Fn(T) -> T { |value: T| value }
+pub fn probe() -> i64 {
+    let callable = make();
+    let value = callable(Affine { value: 42i64 });
+    value.value
+}

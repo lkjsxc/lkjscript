@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+fn make<T>() -> impl Fn(T) -> T { |input: T| input }
+use make as factory;
+pub fn probe()->i64 {factory()(42i64)}

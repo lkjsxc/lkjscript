@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {}
+fn make<T>()->impl Fn(i64)->i64 {|input:i64|input}
+pub fn probe()->i64 {make()(42i64)}

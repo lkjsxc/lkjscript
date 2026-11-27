@@ -153,6 +153,7 @@ pub(super) struct DefinitionTypes {
     family_members: BTreeMap<a::TypeId, Option<usize>>,
     // Values are inference variables here, and resolved types in Types below.
     method_applications: BTreeMap<a::ExprId, MethodApplication>,
+    call_applications: BTreeMap<a::ExprId, CallApplication>,
     closures: BTreeMap<a::ExprId, closures::Closure>,
     local_paths: Vec<(a::ExprId, super::semantic::LocalTarget)>,
     semantic_bindings: Vec<(a::PatternId, Variable)>,
@@ -163,11 +164,17 @@ pub(super) struct MethodApplication {
     pub(super) method: usize,
     pub(super) arguments: BTreeMap<String, usize>,
 }
+#[derive(Clone)]
+pub(super) struct CallApplication {
+    pub(super) function: usize,
+    pub(super) arguments: BTreeMap<String, usize>,
+}
 #[derive(Clone, Default)]
 pub(super) struct Types {
     pub(super) expressions: BTreeMap<a::ExprId, usize>,
     pub(super) bindings: BTreeMap<a::PatternId, usize>,
     pub(super) method_applications: BTreeMap<a::ExprId, MethodApplication>,
+    pub(super) call_applications: BTreeMap<a::ExprId, CallApplication>,
 }
 impl DefinitionTypes {
     pub(super) fn result_type(&self, compiler: &mut Compiler<'_>,
@@ -203,6 +210,18 @@ impl DefinitionTypes {
             if let Some(ty) = self.materialize(*v, compiler, substitutions, &mut known, span)? {
                 result.bindings.insert(*pattern, ty);
             }
+        }
+        for (expression, application) in &self.call_applications {
+            let span = compiler.source.exprs[*expression].span;
+            let mut arguments = BTreeMap::new();
+            for (name, variable) in &application.arguments {
+                if let Some(ty) = self.materialize(*variable, compiler, substitutions, &mut known, span)? {
+                    arguments.insert(name.clone(), ty);
+                }
+            }
+            result.call_applications.insert(*expression, CallApplication {
+                function: application.function, arguments,
+            });
         }
         for (expression, application) in &self.method_applications {
             let span = compiler.source.exprs[*expression].span;
@@ -1163,12 +1182,33 @@ impl Infer<'_, '_> {
     }
     fn call_signature(
         &mut self,
+        expression: Option<a::ExprId>,
         index: usize,
         type_args: &[a::TypeId],
         values: &[Variable],
         span: a::Span,
     ) -> Result<Variable> {
-        self.header_signature(index, type_args, values, BTreeMap::new(), 0, span)
+        let (result, environment) = self.header_signature_environment(
+            index, type_args, values, BTreeMap::new(), 0, span)?;
+        if let Some(expression) = expression {
+            let mut arguments = BTreeMap::new();
+            for parameter in &self.source.functions[index].generics {
+                if !parameter.lifetime {
+                    if let Some(value) = environment.get(&parameter.name) {
+                        arguments.insert(parameter.name.clone(), *value);
+                    }
+                }
+            }
+            // An opaque result shares these variables with its advertised
+            // bounds. Later calls and result context may solve them; retain
+            // the exact callee application until ordinary call lowering.
+            if !arguments.is_empty() {
+                self.definition.call_applications.insert(expression, CallApplication {
+                    function: index, arguments,
+                });
+            }
+        }
+        Ok(result)
     }
     fn header_signature(
         &mut self,
@@ -1864,7 +1904,7 @@ impl Infer<'_, '_> {
                     } else if let Some(a::Item::Function(index)) =
                         path.declaration.map(|id| self.source.declarations[id].item)
                     {
-                        self.call_signature(index, &path.args, &values, span)?
+                        self.call_signature(Some(id), index, &path.args, &values, span)?
                     } else if let Some(result) =
                         self.associated_header(&path, &values, callee_scope, span)?
                     {
@@ -2480,7 +2520,7 @@ impl Infer<'_, '_> {
                     )?;
                     let mut values = vec![base];
                     values.extend_from_slice(&arguments);
-                    let output = self.call_signature(function, &types, &values, span)?;
+                    let output = self.call_signature(None, function, &types, &values, span)?;
                     self.unify(result, output, span)?;
                     return Ok(true);
                 }
@@ -2709,6 +2749,7 @@ pub(super) fn infer(
             bindings: BTreeMap::new(),
             family_members: BTreeMap::new(),
             method_applications: BTreeMap::new(),
+            call_applications: BTreeMap::new(),
             closures: BTreeMap::new(), local_paths: Vec::new(), semantic_bindings: Vec::new(),
         },
         bindings: semantic::SourceBindings::default(),
@@ -2860,6 +2901,7 @@ pub(super) fn assert_reference_capture_deferred(source: &a::Program, index: usiz
                 bindings: BTreeMap::new(),
                 family_members: BTreeMap::new(),
                 method_applications: BTreeMap::new(),
+                call_applications: BTreeMap::new(),
                 closures: BTreeMap::new(),
                 local_paths: Vec::new(),
                 semantic_bindings: Vec::new(),

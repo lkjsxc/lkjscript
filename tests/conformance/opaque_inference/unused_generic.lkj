@@ -1,0 +1,6 @@
+// expect: reject E_MOVE
+// witness: {"rustCode":"E0382"}
+fn invalid<T>() -> impl Fn(T) -> T {
+    |value: T| { let first = value; drop(first); value }
+}
+pub fn probe() -> i64 { 42i64 }

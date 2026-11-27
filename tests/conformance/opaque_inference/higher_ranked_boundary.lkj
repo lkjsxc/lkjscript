@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+fn identity() -> impl for<'a> Fn(&'a i64) -> &'a i64 { |value| value }
+pub fn probe() -> i64 { *identity()(&42i64) }

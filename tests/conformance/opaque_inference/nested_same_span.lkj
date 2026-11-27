@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+macro_rules! two {()=>{{ let a=make(); let b=make(); if b(true) {a(42i64)} else {0i64} }}}
+fn make<T>() -> impl Fn(T) -> T { |input: T| input }
+pub fn probe()->i64 {two!()}

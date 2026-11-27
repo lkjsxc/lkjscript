@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+fn named<'a, F: Fn(i64) -> i64 + 'a>(f: F) -> impl Fn(i64) -> i64 + 'a {
+    move |value: i64| f(value)
+}
+fn anonymous<'a>(f: impl Fn(i64) -> i64 + 'a) -> impl Fn(i64) -> i64 + 'a {
+    move |value: i64| f(value)
+}
+pub fn probe() -> i64 {
+    let amount = 1i64;
+    let first = named(|value: i64| value + amount);
+    let second = anonymous(|value: i64| value + amount);
+    first(20i64) + second(20i64)
+}

@@ -3092,7 +3092,7 @@ impl Builder<'_, '_> {
                 );
                 Ok((dst, t))
             }
-            a::Expr::Call { callee, args } => self.call(callee, &args, context, node.span),
+            a::Expr::Call { callee, args } => self.call(id, callee, &args, context, node.span),
             a::Expr::Method {
                 receiver,
                 name,
@@ -3756,8 +3756,26 @@ impl Builder<'_, '_> {
             .ok_or_else(|| err(span, "E_TYPE", "unknown enum variant"))?;
         Ok((ty, tag))
     }
+    fn complete_call_application(&self, expression: a::ExprId, function: usize,
+        substitutions: &mut BTreeMap<String, usize>, span: a::Span) -> Result<()> {
+        if let Some(application) = self.inferred.call_applications.get(&expression) {
+            if application.function != function {
+                return Err(err(span, "E_TYPE", "inferred call target differs from the resolved function"));
+            }
+            // Source context and evaluated arguments already include their
+            // coercions. The inference graph may retain an uncoerced operand
+            // type, so it only completes bindings that lowering has not solved.
+            for (name, value) in &application.arguments {
+                if !substitutions.contains_key(name) {
+                    substitutions.insert(name.clone(), *value);
+                }
+            }
+        }
+        Ok(())
+    }
     fn call(
         &mut self,
+        expression: a::ExprId,
         callee: usize,
         args: &[usize],
         context: ExpressionContext,
@@ -4128,6 +4146,14 @@ impl Builder<'_, '_> {
         for i in 0..args.len() {
             let declared = target.params[i].ty;
             let mut parameter = self.compiler.resolve(declared, &sub).ok();
+            if parameter.is_none() && self.declared_reference_shape(declared, &sub) {
+                // A written reference already supplies a coercion site. Preview
+                // solved arguments to resolve its referent, including associated
+                // slice elements, without changing an inferred bare T's move.
+                let mut preview = sub.clone();
+                self.complete_call_application(expression, index, &mut preview, span)?;
+                parameter = self.compiler.resolve(declared, &preview).ok();
+            }
             // A known context supplies its coercion before matching the operand.
             // Only an unresolved declared reference shape needs early inference;
             // a bare T still keeps ordinary move behavior.
@@ -4162,6 +4188,9 @@ impl Builder<'_, '_> {
         if let Some(inferred) = context.inferred {
             self.infer_type_matches(target.result, inferred, &mut sub)?;
         }
+        // Complete inference only after evaluating arguments. A solved bare
+        // type parameter must not turn a moved reference into a reborrow.
+        self.complete_call_application(expression, index, &mut sub, span)?;
         let function = self
             .compiler
             .instantiate(index, sub.clone())

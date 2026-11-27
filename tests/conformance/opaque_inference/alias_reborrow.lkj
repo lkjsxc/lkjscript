@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+type View<'a, T> = &'a mut T;
+fn discard<'a, T, U>(_value: View<'a, T>) -> impl Fn(U) -> U { |value: U| value }
+pub fn probe() -> i64 {
+    let mut value = 0i64;
+    let reference = &mut value;
+    let callable = discard(reference);
+    let result = callable(42i64);
+    drop(callable);
+    *reference = result;
+    *reference
+}

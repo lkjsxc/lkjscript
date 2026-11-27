@@ -901,6 +901,63 @@ behind each refusal are unknown while earlier parsing stops admission. Selected
 source upper bounds are nom 21,397, DOM root 7,773 and Sōzu 38,575. No fabricated
 transitive blocked-line count is used.
 
+#### Inference through advertised opaque callable results
+
+The next bounded result-opaque slice preserves generic substitutions already
+solved from a producer's declared signature. The ranking below weighs observed
+use and implementation scope; it does not replace the full-root refusal census.
+
+| Rank | Observed boundary | Pinned source evidence | Scope |
+| --- | --- | --- | --- |
+| 1 | Infer producer arguments through an opaque callable | nom `bits/complete.rs:96,125`, `bits/streaming.rs:72,101`; `sequence::tuple` and its delayed-use example | Existing source equations; no new IR or lifetime identity |
+| 2 | Explicit higher-ranked binder on an opaque callable | nom `tests/reborrow_fold.rs:13` | One integration-test helper; input/output binder support remains separate |
+| 3 | Stored views without a separate result lifetime bound | Sōzu `metrics/local_drain.rs:210,267,306`; DOM `node/node_ref.rs:90,117,137` | Requires a source capture inventory and advertised method-result origins |
+| 4 | Higher-ranked nominal trait applications | Thirteen nom and one selectors source sites | Requires distinct fixed/fresh region witness identities |
+
+The four nom production callers use `take(count)(input)` or
+`take(1usize)(input)?` without explicit producer type arguments. Their opaque
+callable signatures already expose the relevant input, output and error types.
+The frontend now retains the resulting equations under the exact call-expression
+and producer identities, materializes known arguments under the caller's own
+substitutions, and rechecks bounds during ordinary instantiation. The hidden
+closure layout supplies no missing type information. Written reference shapes
+may resolve their referents before argument evaluation; bare generic parameters
+retain move semantics. The checked IR, checker, interpreter and backend are unchanged.
+
+The paired executable reduction uses nom 8.0.0 at
+`2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1`. It preserves the exact
+`Tuple` trait, empty-tuple implementation and `tuple` producer from
+`src/sequence/mod.rs:228–233,297–302,315–321`, including their attributes.
+The input file SHA-256 is
+`6e7e65213283c2fbfa2297fae0ae1d1f02a2fb6ee5e79dde761974054815814c`.
+Compatible error/trait support and the caller are explicitly handwritten
+reduction scaffolding, not original nom implementations.
+
+| Same-source reduction | Baseline | Candidate | Rust |
+| --- | --- | --- | --- |
+| `let mut parser = tuple(());` followed by a typed callable use | E_TYPE: producer `I` needs a type argument | 42 on native and interpreter | 42 |
+| Explicit `tuple::<i64, (), (), ()>(())` control | 42 on both engines | 42 on both engines | 42 |
+
+The [38 focused cases](../tests/conformance/opaque_inference/) cover immediate,
+delayed and output-driven inference, rigid and const parameters, nested calls,
+aliases, macro-expanded call identities, named/anonymous closure parameters,
+argument order, reborrow/unsizing, contextual coercion precedence, bound failures
+and opaque identity. They retain
+explicit refusals for nested and trait-method opaque results, direct higher-ranked
+opaque binders and implicit stored-view captures. The return-opaque host suite
+also checks queries, rename, body replacement and rejected-edit rollback after
+inferred producer calls.
+
+The unchanged full nom root still refuses: original-suffix and suffix-projected
+exit statuses, stdout and stderr are byte-identical before and after; projection
+verification retains 106 tracked files and 65 aliases. Separate exact `take` plus
+`bool` reductions still stop at generic conversion inference. Isolating the
+unchanged `bool` functions also exposes their partial `(_, u32)` annotation
+boundary, even with explicit producer arguments. Completing that annotation in
+a separate control makes the baseline execute. These are remaining boundaries,
+not admissions credited to this change. No whole nom root or upstream test suite
+is claimed to execute under lkjscript.
+
 #### nom: generic code
 
 [Original site table](real-programs-nom.json) and [current frontier](real-programs-current.json):

@@ -85,4 +85,36 @@ publish narrow
 meaning narrow 'Readable<Output = i64>'
 execute 42
 test ! -e "$fixture/source/.lkjscript-edit.pending"
-printf 'ok return impl Trait: opaque queries, bound rename, hidden layout edits, warm cache and both engines\n'
+# Later callable use supplies the producer's T through its advertised contract.
+# Rename and body publication must rebuild those call applications from source.
+cat > "$fixture/source/main.lkj" <<'SOURCE'
+fn make<T>(offset: i64) -> impl Fn(T) -> (T, i64) {
+    move |value: T| (value, offset)
+}
+fn main() -> i64 {
+    let callable = make(40i64);
+    let (flag, value) = callable(true);
+    if flag { value + 2i64 } else { 0i64 }
+}
+SOURCE
+publish inferred
+query type make > "$fixture/inferred-type"
+grep -Fq 'fn(i64) -> impl Fn<(T,), (T, i64)>' "$fixture/inferred-type"
+execute 42
+printf '%s\n' '{"version":1,"operations":[{"op":"rename","id":"make","name":"factory"}]}' > "$fixture/request"
+"$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/inferred-rename.log"
+execute 42
+printf '%s\n' '{"version":1,"operations":[{"op":"replace-body","id":"factory","source":"{ move |value: T| (value, offset + 1i64) }"}]}' > "$fixture/request"
+"$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/inferred-edit.log"
+publish inferred_changed
+execute 43
+cp "$fixture/source/main.lkj" "$fixture/before-refusal"
+printf '%s\n' '{"version":1,"operations":[{"op":"replace-body","id":"factory","source":"{ move |value: T| { drop(value); (true, offset) } }"}]}' > "$fixture/request"
+if "$compiler" edit "${common[@]}" --request "$fixture/request" > "$fixture/inferred-refusal.log" 2>&1; then
+    echo 'opaque caller specialization admitted an invalid generic body edit' >&2; exit 1
+fi
+grep -Fq 'E_TYPE' "$fixture/inferred-refusal.log"
+cmp "$fixture/before-refusal" "$fixture/source/main.lkj"
+execute 43
+test ! -e "$fixture/source/.lkjscript-edit.pending"
+printf 'ok return impl Trait: opaque queries, inferred calls, renames, body edits and rollback, warm cache and both engines\n'

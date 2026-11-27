@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+fn named<F: FnOnce(i64) -> i64>(f: F) -> impl FnOnce(i64) -> i64 {
+    move |value: i64| f(value)
+}
+fn anonymous(f: impl FnOnce(i64) -> i64) -> impl FnOnce(i64) -> i64 {
+    move |value: i64| f(value)
+}
+pub fn probe() -> i64 {
+    let first: String = "first".to_string();
+    let second: String = "second".to_string();
+    named(move |value: i64| -> i64 { drop(first); value })(20i64)
+        + anonymous(move |value: i64| -> i64 { drop(second); value })(22i64)
+}

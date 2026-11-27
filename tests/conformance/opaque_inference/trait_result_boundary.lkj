@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Source { fn make(&self) -> impl Copy; }
+struct Number;
+impl Source for Number { fn make(&self) -> impl Copy { 42i64 } }
+pub fn probe() -> i64 { let _value = Number.make(); 42i64 }

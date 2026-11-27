@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {}
+trait Fresh { fn fresh() -> Self; }
+impl Fresh for i64 { fn fresh() -> i64 { 42i64 } }
+fn make<T: Fresh>() -> impl Fn() -> T { || T::fresh() }
+pub fn probe() -> i64 { let callable = make(); let value: i64 = callable(); value }

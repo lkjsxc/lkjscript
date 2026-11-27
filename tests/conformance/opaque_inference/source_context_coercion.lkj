@@ -1,0 +1,15 @@
+// expect: value 42
+// witness: {}
+trait Tag { fn tag(&self) -> i64; }
+impl Tag for i64 { fn tag(&self) -> i64 { 1i64 } }
+impl Tag for Box<i64> { fn tag(&self) -> i64 { 2i64 } }
+fn borrow<'a, T: Tag>(value: &'a mut T, tag: &mut i64) -> &'a mut T {
+    *tag = value.tag();
+    value
+}
+pub fn probe() -> i64 {
+    let mut value: Box<i64> = Box::new(41i64);
+    let mut tag = 0i64;
+    let reference: &mut i64 = borrow(&mut value, &mut tag);
+    *reference + tag
+}

@@ -1,0 +1,36 @@
+// expect: value 42
+// witness: {}
+// nom 8.0.0, commit 2cec1b3e4c9ccac62c902d60c00de6d1549ccbe1 (MIT).
+// Unchanged src/sequence/mod.rs items: 228-233, 297-302, and 315-321.
+// Independent reduction support and probe surround those exact upstream bytes.
+trait ParseError<I> {}
+impl<I> ParseError<I> for () {}
+enum Err<E> { Error(E) }
+type IResult<I, O, E> = Result<(I, O), Err<E>>;
+#[deprecated(since = "8.0.0", note = "`Parser` is directly implemented for tuples")]
+#[allow(deprecated)]
+pub trait Tuple<I, O, E> {
+  /// Parses the input and returns a tuple of results of each parser.
+  fn parse_tuple(&mut self, input: I) -> IResult<I, O, E>;
+}
+
+#[allow(deprecated)]
+impl<I, E: ParseError<I>> Tuple<I, (), E> for () {
+  fn parse_tuple(&mut self, input: I) -> IResult<I, (), E> {
+    Ok((input, ()))
+  }
+}
+
+#[deprecated(since = "8.0.0", note = "`Parser` is directly implemented for tuples")]
+#[allow(deprecated)]
+pub fn tuple<I, O, E: ParseError<I>, List: Tuple<I, O, E>>(
+  mut l: List,
+) -> impl FnMut(I) -> IResult<I, O, E> {
+  move |i: I| l.parse_tuple(i)
+}
+
+pub fn probe() -> i64 {
+    let mut parser = tuple(());
+    let actual: IResult<i64, (), ()> = parser(42i64);
+    match actual { Ok((value, ())) => value, Err(_) => 0i64 }
+}

@@ -1,0 +1,15 @@
+// expect: value 42
+// witness: {}
+fn named<F: FnMut(i64) -> i64>(mut f: F) -> impl FnMut(i64) -> i64 {
+    move |value: i64| f(value)
+}
+fn anonymous(mut f: impl FnMut(i64) -> i64) -> impl FnMut(i64) -> i64 {
+    move |value: i64| f(value)
+}
+pub fn probe() -> i64 {
+    let mut first = 1i64;
+    let mut second = 2i64;
+    let mut a = named(move |value: i64| { first += 1i64; value + first });
+    let mut b = anonymous(move |value: i64| { second += 1i64; value + second });
+    a(18i64) + b(19i64)
+}

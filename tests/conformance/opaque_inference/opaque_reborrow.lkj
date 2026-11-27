@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {}
+fn make<T>(_value:T)->impl Fn(T)->T {|input:T|input}
+pub fn probe()->i64 {let mut x=42i64; let mut y=0i64; let r=&mut x; let call=make(&mut *r); drop(call(&mut y)); drop(call); *r}

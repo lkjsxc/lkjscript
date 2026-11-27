@@ -1,0 +1,12 @@
+// expect: reject E_MOVE
+// witness: {"rustCode":"E0382"}
+type Identity<T> = T;
+fn discard<T, U>(_value: Identity<T>) -> impl Fn(U) -> U { |value: U| value }
+pub fn probe() -> i64 {
+    let mut value = 0i64;
+    let reference = &mut value;
+    let callable = discard(reference);
+    let result = callable(42i64);
+    *reference = result;
+    *reference
+}

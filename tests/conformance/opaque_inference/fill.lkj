@@ -1,5 +1,5 @@
-// expect: reject E_TYPE
-// witness: {"rustAccept":true}
+// expect: value 42
+// witness: {}
 trait Parser<I> { type Output; fn parse(&mut self, input: I) -> (I, Self::Output); }
 struct Counter { amount: i64 }
 impl Parser<i64> for Counter {

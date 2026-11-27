@@ -634,6 +634,24 @@ Concrete execution uses ordinary layouts and functions through the unchanged IR
 checker. Returned `Fn`, `FnMut` and `FnOnce` closures preserve source-checked
 capture and method choices across specialization.
 
+An immediate or later use of an advertised opaque callable can determine the
+producer's type and const arguments: `identity()(42i64)` and
+`let callable = identity(); callable(42i64)` use the same declared signature.
+Result annotations, rigid generic callers, nested generic calls and imported
+aliases retain these equations. Each solved application belongs to its exact
+source call and resolved producer. Hidden fields, implementation bodies and
+concrete layout equality supply no inference evidence. Unconstrained parameters,
+conflicting uses and missing declared bounds still refuse.
+
+Written reference parameters, including transparent reference aliases, may use
+solved referent types for their ordinary reborrow and array-to-slice coercions.
+An inferred bare type parameter remains a move, including through an identity
+alias. After operand evaluation, saved inference completes only unresolved
+arguments. Explicit arguments, source-context coercions and operand-derived
+bindings retain precedence; ordinary argument/result checks and declared bounds
+still apply. Named and anonymous argument parameters follow the same rule.
+[Opaque callable inference cases](../tests/conformance/opaque_inference/).
+
 When the opaque result has no written lifetime bound and its hidden value is
 view-free, an advertised callable may return views supplied by its arguments.
 A result leaf from a type parameter selects only the corresponding leaves of
@@ -760,8 +778,9 @@ lifetime may be chosen for that call. Existing reference-origin and mutable
 storage checks continue to apply independently of the whole-type proof.
 The [capture case](../tests/conformance/pass/type_outlives_capture.lkj) and
 [parser buffer case](../tests/conformance/pass/type_outlives_parser_fill.lkj)
-exercise these contracts on both engines; the latter uses explicit input type
-arguments because inference from a later opaque-callable use remains separate.
+exercise these contracts on both engines. A later opaque-callable use can also
+supply the producer's input type argument while the written slice parameter
+retains its ordinary coercion and borrow contract.
 
 This subset does not admit type-outlives bounds on nominal, alias, trait or
 implementation headers, trait methods, associated family parameters or

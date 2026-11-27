@@ -1,0 +1,6 @@
+// expect: reject E_TYPE
+// witness: {}
+fn make<T>() -> impl Fn(T) -> T { |input: T| input }
+fn other<T>()->impl Fn(T)->T {|input:T|input}
+fn same<T>(_a:T,_b:T){}
+pub fn probe()->i64 {let f=make::<i64>(); let g=other::<i64>(); same(f,g);42i64}

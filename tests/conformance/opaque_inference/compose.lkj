@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {}
+fn make<T>() -> impl Fn(T) -> T { |input: T| input }
+fn compose<A,B,F:Fn(A)->B>(f:F)->impl Fn(A)->B {move|a:A|f(a)}
+pub fn probe()->i64 {let c=compose(make()); c(42i64)}

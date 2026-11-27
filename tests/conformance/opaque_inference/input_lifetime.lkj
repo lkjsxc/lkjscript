@@ -1,0 +1,12 @@
+// expect: reject E_BORROW
+// witness: {"rustCode":"E0597"}
+fn identity<T>() -> impl Fn(T) -> T { |value: T| value }
+pub fn probe() -> i64 {
+    let result: &i64;
+    {
+        let local = 42i64;
+        let callable = identity();
+        result = callable(&local);
+    }
+    *result
+}
