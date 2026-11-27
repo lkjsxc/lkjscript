@@ -14,6 +14,7 @@ while (($#)); do
 done
 case "$compiler" in /*) ;; *) compiler="$PWD/$compiler" ;; esac
 [[ -x "$compiler" ]] || { printf 'compiler is not executable: %s\n' "$compiler" >&2; exit 1; }
+bash tools/real-programs/rerank-test.sh "$compiler"
 source=examples/real_programs/levenshtein
 entry="$source/main.lkj"
 golden=tests/fixtures/real_programs_levenshtein.output.gz

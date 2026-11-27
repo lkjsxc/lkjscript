@@ -1,0 +1,855 @@
+//! Recount reviewed exact diagnostic sites from authenticated probe receipts.
+use std::json::{self, Value};
+use std::sha256;
+use std::collections::{BTreeMap, BTreeSet};
+
+type Map = BTreeMap<String, Value>;
+macro_rules! object {
+    ($($key:tt => $value:expr),*) => {
+        Value::Object(vec![$(($key.to_string(), $value)),*])
+    };
+}
+fn st(s: &str) -> Value { Value::String(s.to_string()) }
+fn num(n: usize) -> Value { Value::from_usize(n) }
+fn copy(v: &Value) -> Value {
+    match v {
+        Value::Null => Value::Null,
+        Value::Bool(b) => Value::Bool(*b),
+        Value::Number(s) => Value::Number(s.clone()),
+        Value::String(s) => Value::String(s.clone()),
+        Value::Array(a) => {
+            let mut out = Vec::new();
+            for item in a { out.push(copy(item)); }
+            Value::Array(out)
+        },
+        Value::Object(a) => {
+            let mut out = Vec::new();
+            for item in a { out.push((item.0.clone(), copy(&item.1))); }
+            Value::Object(out)
+        },
+    }
+}
+fn field(v: &Value, key: &str) -> Value {
+    match v.get(key) { Some(x) => copy(x), None => Value::Null }
+}
+fn s<'a>(v: &'a Value, key: &str) -> &'a str {
+    v.get(key).and_then(|x: &Value| x.as_str()).unwrap_or("")
+}
+fn n(v: &Value, key: &str) -> usize {
+    v.get(key).and_then(|x: &Value| x.as_usize()).unwrap_or(0usize)
+}
+fn array<'a>(v: &'a Value, key: &str) -> Result<&'a [Value], String> {
+    v.get(key).and_then(|x: &Value| x.as_array()).ok_or(format!("missing or invalid array: {key}"))
+}
+fn require(ok: bool, message: &str) -> Result<(), String> {
+    if ok { Ok(()) } else { Err(message.to_string()) }
+}
+fn put(v: &mut Value, key: &str, value: Value) {
+    if let Value::Object(fields) = v {
+        for i in 0usize..fields.len() {
+            if fields[i].0.as_str() == key { fields[i].1 = value; return; }
+        }
+        fields.push((key.to_string(), value));
+    }
+}
+fn append(v: &mut Value, item: Value) {
+    if let Value::Array(items) = v { items.push(item); }
+}
+fn merge(v: &mut Value, other: &Value) {
+    if let Value::Object(fields) = other {
+        for pair in fields { put(v, &pair.0, copy(&pair.1)); }
+    }
+}
+fn sorted_keys(map: &Map) -> Vec<String> {
+    let mut order: BTreeMap<String, String> = BTreeMap::new();
+    for (k, _) in map { order.insert(lex_key(k), k.clone()); }
+    let mut out = Vec::new();
+    for (_, k) in &order { out.push(k.clone()); }
+    out
+}
+fn map_value(map: &Map) -> Value {
+    let mut fields = Vec::new();
+    for (k, v) in map { fields.push((k.clone(), copy(v))); }
+    Value::Object(fields)
+}
+fn increment(map: &mut Map, key: &str) {
+    let k = key.to_string();
+    let count = map.get(&k).and_then(|v: &Value| v.as_usize()).unwrap_or(0usize);
+    map.insert(k, num(count + 1usize));
+}
+fn quoted(out: &mut String, value: &str) {
+    // JSON.stringify uses lowercase UTF-16 escapes, including surrogate pairs.
+    let encoded = json::stringify(&st(value)).unwrap();
+    for ch in encoded.as_str().chars() {
+        let code = ch as u32;
+        if code <= 127u32 { out.push(ch); }
+        else if code <= 65535u32 { hex4(out, code); }
+        else {
+            let rest = code - 65536u32;
+            hex4(out, 55296u32 + rest / 1024u32);
+            hex4(out, 56320u32 + rest % 1024u32);
+        }
+    }
+}
+fn hex4(out: &mut String, code: u32) {
+    out.push_str("\\u");
+    let digits = b"0123456789abcdef";
+    for i in 0usize..4usize { let shift = (12usize - i * 4usize) as u32;
+        out.push(digits[((code >> shift) & 15u32) as usize] as char);
+    }
+}
+fn sort_key(key: &str) -> String {
+    // JS object enumeration puts canonical uint32 array-index keys first.
+    if let Ok(index) = key.parse::<u32>() {
+        if index < 4294967295u32 && format!("{index}").as_str() == key {
+            let digits = format!("{index}");
+            return format!("0{}{digits}", "0".repeat(10usize - digits.len()));
+        }
+    }
+    format!("1{}", lex_key(key))
+}
+fn lex_key(key: &str) -> String {
+    let mut out = String::new();
+    for ch in key.chars() {
+        let code = ch as u32;
+        if code <= 65535u32 { hex4(&mut out, code); }
+        else {
+            let rest = code - 65536u32;
+            hex4(&mut out, 55296u32 + rest / 1024u32);
+            hex4(&mut out, 56320u32 + rest % 1024u32);
+        }
+    }
+    out
+}
+fn indent(out: &mut String, pretty: bool, depth: usize) {
+    if pretty { out.push('\n'); out.push_str(&" ".repeat(depth * 3usize)); }
+}
+fn encode(v: &Value, out: &mut String, pretty: bool, depth: usize) {
+    match v {
+        Value::String(s) => quoted(out, s),
+        Value::Array(items) => {
+            out.push('[');
+            let mut first = true;
+            for item in items {
+                if !first { out.push(','); }
+                first = false;
+                indent(out, pretty, depth + 1usize);
+                encode(item, out, pretty, depth + 1usize);
+            }
+            if !first { indent(out, pretty, depth); }
+            out.push(']');
+        },
+        Value::Object(fields) => {
+            let mut order: BTreeMap<String, usize> = BTreeMap::new();
+            for i in 0usize..fields.len() { order.insert(sort_key(&fields[i].0), i); }
+            out.push('{');
+            let mut first = true;
+            for (_, i) in &order {
+                if !first { out.push(','); }
+                first = false;
+                indent(out, pretty, depth + 1usize);
+                quoted(out, &fields[*i].0);
+                out.push(':');
+                if pretty { out.push(' '); }
+                encode(&fields[*i].1, out, pretty, depth + 1usize);
+            }
+            if !first { indent(out, pretty, depth); }
+            out.push('}');
+        },
+        _ => out.push_str(&json::stringify(v).unwrap()),
+    }
+}
+fn canonical(v: &Value, pretty: bool) -> String {
+    let mut out = String::new();
+    encode(v, &mut out, pretty, 0usize);
+    out
+}
+fn equal(a: &Value, b: &Value) -> bool { canonical(a, false) == canonical(b, false) }
+fn same(a: &Value, b: &Value, key: &str) -> bool { equal(&field(a, key), &field(b, key)) }
+fn text(raw: Vec<u8>, label: &str) -> Result<String, String> {
+    String::from_utf8(raw).map_err(|_| -> String { format!("invalid UTF-8 {label}") })
+}
+fn parent_name(path: &str) -> (String, String) {
+    match path.rfind("/") {
+        Some(0usize) => ("/".to_string(), path[1usize..].to_string()),
+        Some(i) => (path[..i].to_string(), path[i + 1usize..].to_string()),
+        None => (".".to_string(), path.to_string()),
+    }
+}
+fn read(world: &mut World, path: &str) -> Result<Vec<u8>, String> {
+    let (parent, name) = parent_name(path);
+    let mut dir = world.directory(&parent).map_err(|e: i64| -> String { format!("{parent}: errno {e}") })?;
+    let mut file = dir.open(&name).map_err(|e: i64| -> String { format!("{path}: errno {e}") })?;
+    file.read_to_end().map_err(|e: i64| -> String { format!("{path}: errno {e}") })
+}
+fn publish(world: &mut World, path: &str, content: &str) -> Result<(), String> {
+    let (parent, name) = parent_name(path);
+    let mut dir = world.directory(&parent).map_err(|e: i64| -> String { format!("{parent}: errno {e}") })?;
+    let mut file = dir.create_private(&name).map_err(|e: i64| -> String {
+        if e == 17i64 { "output already exists".to_string() } else { format!("{path}: errno {e}") }
+    })?;
+    if let Err(e) = file.write_all(content.as_bytes()) {
+        drop(file);
+        let _ = dir.remove(&name);
+        return Err(format!("{path}: errno {e}"));
+    }
+    Ok(())
+}
+fn load(world: &mut World, path: &str) -> Result<(Value, String), String> {
+    let raw = read(world, path)?;
+    let hash = sha256::hex_digest(&raw);
+    let decoded = text(raw, path).map_err(|e: String| -> String { format!("invalid JSON {path}: real-programs-rerank: {e}") })?;
+    let value = json::parse(decoded.as_bytes()).map_err(|e| -> String { format!("invalid JSON {path}: {e}") })?;
+    Ok((value, hash))
+}
+fn base64(s: &str) -> Result<Vec<u8>, String> {
+    let input = s.as_bytes();
+    let alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = Vec::new();
+    require(input.len() % 4usize == 0usize, "invalid base64 diagnostic stream")?;
+    let mut at = 0usize;
+    while at < input.len() {
+        let mut bits = 0u32;
+        let mut pad = 0usize;
+        for i in 0usize..4usize {
+            let b = input[at + i];
+            bits = bits << 6u32;
+            if b == b'=' {
+                require(i >= 2usize && at + 4usize == input.len(), "invalid base64 diagnostic stream")?;
+                pad += 1usize;
+            } else {
+                require(pad == 0usize, "invalid base64 diagnostic stream")?;
+                let digit = std::bytes::find_byte(alphabet, b).ok_or("invalid base64 diagnostic stream".to_string())?;
+                bits |= digit as u32;
+            }
+        }
+        require((pad != 2usize || bits & 65535u32 == 0u32) &&
+                (pad != 1usize || bits & 255u32 == 0u32), "invalid base64 diagnostic stream")?;
+        out.push((bits >> 16u32) as u8);
+        if pad < 2usize { out.push((bits >> 8u32) as u8); }
+        if pad == 0usize { out.push(bits as u8); }
+        at += 4usize;
+    }
+    Ok(out)
+}
+fn stream(v: &Value) -> Result<String, String> {
+    require(v.as_object().is_some(), "missing captured stream")?;
+    let raw = if let Some(t) = v.get("text") {
+        t.as_str().ok_or("invalid UTF-8 diagnostic stream".to_string())?.as_bytes().to_vec()
+    } else if let Some(t) = v.get("base64") {
+        base64(t.as_str().ok_or("invalid base64 diagnostic stream".to_string())?)?
+    } else { return Err("captured stream has neither text nor base64".to_string()); };
+    require(v.get("bytes").and_then(|x: &Value| x.as_usize()) == Some(raw.len()) &&
+            sha256::hex_digest(&raw).as_str() == s(v, "sha256"), "captured stream byte/hash mismatch")?;
+    text(raw, "diagnostic stream")
+}
+fn coord(v: &Value) -> String { format!("{}:{}:{}", s(v,"path"), n(v,"line"), n(v,"column")) }
+fn key(v: &Value) -> String {
+    canonical(&Value::Array(vec![field(v,"path"),field(v,"line"),field(v,"column"),field(v,"code"),field(v,"message")]), false)
+}
+fn obs_key(v: &Value) -> String {
+    canonical(&Value::Array(vec![field(v,"route"),field(v,"upstream_entry")]), false)
+}
+fn unsafe_path(path: &str) -> bool {
+    if path.contains("\0") { return true; }
+    for part in path.split("/") { if part == "." || part == ".." { return true; } }
+    false
+}
+fn prefixes(receipt: &Value) -> Result<Vec<String>, String> {
+    let mut found: BTreeSet<String> = BTreeSet::new();
+    for o in array(receipt,"observations")? {
+        if s(o,"route") != "suffix_projection" { continue; }
+        let cmd = o.get("command").and_then(|x: &Value| x.as_array()).ok_or("missing captured probe command".to_string())?;
+        let mut at = 0usize;
+        let mut roots: Vec<String> = Vec::new();
+        while at < cmd.len() {
+            if cmd[at].as_str() == Some("--source-dir") {
+                at += 1usize;
+                require(at < cmd.len(), "captured source-dir is missing its value")?;
+                roots.push(cmd[at].as_str().ok_or("invalid captured source-dir".to_string())?.to_string());
+            }
+            at += 1usize;
+        }
+        require(roots.len() <= 1usize, "ambiguous captured source-dir")?;
+        if roots.is_empty() { continue; }
+        let root = roots[0usize].as_str();
+        if !root.starts_with("/") || unsafe_path(root) || root.contains("//") { continue; }
+        let root = if root.ends_with("/") { &root[..root.len()-1usize] } else { root };
+        found.insert(format!("{root}/"));
+    }
+    // Longest first; ties cannot match the same path.
+    let mut order: BTreeMap<(usize, String), String> = BTreeMap::new();
+    for root in &found { order.insert((!0usize - root.len(), root.clone()), root.clone()); }
+    let mut out = Vec::new();
+    for (_, root) in &order { out.push(root.clone()); }
+    Ok(out)
+}
+struct SourceFile { raw: Vec<u8>, starts: Vec<usize>, physical: usize }
+struct Reader {
+    root: String,
+    roots: Vec<String>,
+    files: Map,
+    aliases: BTreeMap<String, String>,
+    cache: BTreeMap<String, SourceFile>,
+}
+impl Reader {
+    fn new(manifest: &Value, root: &str, roots: Vec<String>) -> Result<Reader, String> {
+        let mut files = Map::new();
+        let mut aliases = BTreeMap::new();
+        for f in array(manifest,"files")? { files.insert(s(f,"path").to_string(), copy(f)); }
+        for a in array(manifest,"aliases")? { aliases.insert(s(a,"to").to_string(), s(a,"from").to_string()); }
+        Ok(Reader {root:root.to_string(), roots, files, aliases, cache:BTreeMap::new()})
+    }
+    fn locate(&mut self, world: &mut World, raw_path: &str, line: usize, column: usize) -> Result<Value, String> {
+        let mut path = raw_path.to_string();
+        if raw_path.starts_with("/") {
+            for prefix in &self.roots {
+                if let Some(rest) = raw_path.strip_prefix(prefix.as_str()) { path = rest.to_string(); break; }
+            }
+        }
+        require(!path.starts_with("/") && !unsafe_path(&path), &format!("diagnostic is outside the tracked original source: {path}"))?;
+        if let Some(alias) = self.aliases.get(&path) { path = alias.clone(); }
+        require(!path.starts_with("/") && !unsafe_path(&path), &format!("diagnostic is outside the tracked original source: {path}"))?;
+        let expected = self.files.get(&path).ok_or(format!("diagnostic is outside the tracked original source: {path}"))?;
+        if !self.cache.contains_key(&path) {
+            let raw = read(world, &format!("{}/{}", self.root, path))?;
+            require(expected.get("bytes").and_then(|v: &Value| v.as_usize()) == Some(raw.len()) &&
+                    sha256::hex_digest(&raw).as_str() == s(expected,"sha256"), &format!("original source bytes changed: {path}"))?;
+            require(std::bytes::valid_utf8(&raw), &format!("invalid UTF-8 {path}"))?;
+            let mut starts = vec![0usize];
+            for i in 0usize..raw.len() { if raw[i] == b'\n' { starts.push(i + 1usize); } }
+            let physical = if raw.is_empty() { 0usize } else if raw[raw.len()-1usize] == b'\n' { starts.len()-1usize } else { starts.len() };
+            self.cache.insert(path.clone(), SourceFile { raw, starts, physical });
+        }
+        let f = self.cache.get(&path).unwrap();
+        let raw = &f.raw;
+        let starts = &f.starts;
+        let mut source = Value::Null;
+        if line != 0usize || column != 0usize {
+            let problem = format!("diagnostic is outside original source coordinates: {path}:{line}:{column}");
+            require(line > 0usize && line <= starts.len() && column > 0usize, &problem)?;
+            let start = starts[line-1usize];
+            let end = if line < starts.len() { starts[line]-1usize } else { raw.len() };
+            require(column <= end-start+1usize, &problem)?;
+            let bytes = &raw[start..end];
+            let line_text = text(bytes.to_vec(), &format!("{path}:{line}"))?;
+            source = object!("file_sha256"=>field(expected,"sha256"),"file_bytes"=>field(expected,"bytes"),
+                "file_physical_lines"=>num(f.physical),"byte_offset"=>num(start+column-1usize),
+                "line_sha256"=>st(&sha256::hex_digest(bytes)),"line_text"=>Value::String(line_text));
+        }
+        Ok(object!("path"=>Value::String(path),"line"=>num(line),"column"=>num(column),"source"=>source))
+    }
+}
+// The compiler's diagnostic grammar: greedy path, decimal byte coordinates,
+// uppercase E_ code and a message. No classification by message keywords.
+fn decimal(s: &str) -> Option<usize> {
+    if s.is_empty() { return None; }
+    for b in s.as_bytes() { if *b < b'0' || *b > b'9' { return None; } }
+    s.parse::<usize>().ok()
+}
+fn parse_diagnostic(line: &str) -> Option<(String, usize, usize, String, String)> {
+    // ECMAScript dot does not match a line terminator.
+    if line.contains("\r") || line.contains("\u{2028}") || line.contains("\u{2029}") { return None; }
+    let mut end = line.len();
+    while end > 0usize {
+        let at = line[..end].rfind(": ")?;
+        end = at;
+        let tail = &line[at+2usize..];
+        let space = match tail.find(" ") { Some(i) => i, None => continue };
+        let code = &tail[..space];
+        if !code.starts_with("E_") || code.len() <= 2usize { continue; }
+        let mut valid = true;
+        for b in code[2usize..].as_bytes() {
+            if !((*b >= b'A' && *b <= b'Z') || (*b >= b'0' && *b <= b'9') || *b == b'_') { valid = false; }
+        }
+        if !valid { continue; }
+        let head = &line[..at];
+        let c = match head.rfind(":") { Some(i) => i, None => continue };
+        let p = match head[..c].rfind(":") { Some(i) => i, None => continue };
+        if p == 0usize { continue; }
+        let column = match decimal(&head[c+1usize..]) { Some(x) => x, None => continue };
+        let number = match decimal(&head[p+1usize..c]) { Some(x) => x, None => continue };
+        return Some((head[..p].to_string(), number, column, code.to_string(), tail[space+1usize..].to_string()));
+    }
+    None
+}
+struct Observations { rows: Vec<Value>, annotations: Vec<Value>, entries: Map }
+fn false_signal(o: &Value) -> bool {
+    // Probe receipts carry integer signals. Reject malformed nonzero / noninteger values.
+    match o.get("launcher_signal") {
+        Some(v) => v.as_usize() == Some(0usize),
+        None => false,
+    }
+}
+fn valid_command(o: &Value) -> bool {
+    if let Some(a) = o.get("command").and_then(|v: &Value| v.as_array()) {
+        for v in a { if v.as_str().is_none() { return false; } }
+        return !a.is_empty();
+    }
+    false
+}
+fn observations(world: &mut World, receipt: &Value, manifest: &Value, digest: &str, reader: &mut Reader) -> Result<Observations, String> {
+    require(n(receipt,"schema") == 1usize && s(receipt,"kind") == "unmodified_real_program_root_observations", "not an unmodified root-probe receipt")?;
+    require(s(receipt,"projection_manifest_sha256") == digest &&
+        s(&field(receipt,"verification_before"),"manifest_sha256") == digest &&
+        s(&field(receipt,"verification_after"),"manifest_sha256") == digest &&
+        !s(&field(manifest,"source"),"commit").is_empty() &&
+        same(&field(receipt,"package"),&field(manifest,"source"),"commit"), "receipt/projection identity mismatch")?;
+    let mut result = Observations {rows:Vec::new(),annotations:Vec::new(),entries:Map::new()};
+    let mut routes: BTreeMap<String, BTreeSet<String>> = BTreeMap::new();
+    for o in array(receipt,"observations")? {
+        let id = obs_key(o);
+        require(!result.entries.contains_key(&id), "duplicate route/entry in receipt")?;
+        result.entries.insert(id, copy(o));
+        let entry = s(o,"upstream_entry").to_string();
+        let route = s(o,"route");
+        if !routes.contains_key(&entry) { routes.insert(entry.clone(), BTreeSet::new()); }
+        routes.get_mut(&entry).unwrap().insert(route.to_string());
+        let file = reader.files.get(&entry).ok_or("probe entry does not match a tracked original file".to_string())?;
+        require(s(file,"sha256").len() == 64usize && s(file,"sha256") == s(o,"entry_sha256") && file.get("bytes").and_then(|v: &Value| v.as_usize()).is_some() &&
+            equal(&field(file,"bytes"),&field(o,"entry_bytes")), "probe entry does not match a tracked original file")?;
+        stream(&field(o,"stdout"))?;
+        let stderr = stream(&field(o,"stderr"))?;
+        stream(&field(o,"time_report"))?;
+        let exit = o.get("exit_status").and_then(|v: &Value| v.as_usize());
+        require(false_signal(o) && (exit == Some(0usize) || exit == Some(1usize)), "root observation ended abnormally")?;
+        require(valid_command(o), "missing captured probe command")?;
+        if route == "original_suffix" { continue; }
+        require(route == "suffix_projection", "unknown probe route")?;
+        let mut index = 0usize;
+        let mut end = stderr.len();
+        while end > 0usize && stderr.as_bytes()[end-1usize] == b'\n' { end -= 1usize; }
+        if end > 0usize {
+            for line in stderr[..end].split("\n") {
+                if let Some((path, number, column, code, message)) = parse_diagnostic(line) {
+                    require((number != 0usize && column != 0usize) || (code.as_str() == "E_BLOCKED" && number == 0usize && column == 0usize), "unlocated primary diagnostic")?;
+                    let mut row = reader.locate(world, &path, number, column)?;
+                    put(&mut row,"code",Value::String(code)); put(&mut row,"message",Value::String(message));
+                    put(&mut row,"root",st(&entry)); put(&mut row,"diagnostic_index",num(index)); put(&mut row,"raw",st(line));
+                    result.rows.push(row);
+                    index += 1usize;
+                } else if line.starts_with("LKJSCRIPT_EDITS ") {
+                    let edits = json::parse(line[16usize..].as_bytes()).map_err(|_| -> String { "malformed diagnostic edit annotation".to_string() })?;
+                    require(edits.as_object().is_some(), "malformed diagnostic edit annotation")?;
+                    result.annotations.push(object!("root"=>st(&entry),"raw"=>st(line)));
+                } else { return Err(format!("unparsed diagnostic line (must be reviewed): {line}")); }
+            }
+        }
+        require(exit != Some(0usize) || stderr.is_empty(), "successful root check emitted diagnostics")?;
+        require(exit != Some(1usize) || !stderr.is_empty(), "refused root check emitted no diagnostics")?;
+    }
+    for (entry, r) in &routes {
+        require(r.len() == 2usize && r.contains(&"original_suffix".to_string()) && r.contains(&"suffix_projection".to_string()),
+            &format!("incomplete original/projection observation pair: {entry}"))?;
+    }
+    require(!routes.is_empty(), "empty observation cohort")?;
+    Ok(result)
+}
+struct Classes { classes: Map, labels: Map, primary: Map, excluded: Map }
+fn add(c: &mut Classes, row: &Value, cause: &str, id: &str, partition: &str) -> Result<(), String> {
+    let k = key(row);
+    if let Some(old) = c.classes.get(&k) {
+        require(s(old,"cause") == cause, "conflicting reviewed cause at exact diagnostic")?;
+    }
+    c.classes.insert(k.clone(), object!("cause"=>st(cause),"site_id"=>st(id),"partition"=>st(partition)));
+    let id = id.to_string();
+    if !c.primary.contains_key(&id) {
+        c.primary.insert(id.clone(), object!("keys"=>Value::Array(Vec::new())));
+    }
+    let p = c.primary.get_mut(&id).unwrap();
+    let mut keys = field(p,"keys");
+    if !has_string(&keys, &k) { append(&mut keys, Value::String(k)); }
+    put(p,"keys",keys); put(p,"cause",st(cause)); put(p,"coordinate",Value::String(coord(row)));
+    put(p,"source",field(row,"source"));
+    Ok(())
+}
+fn has_string(v: &Value, needle: &str) -> bool {
+    if let Some(a) = v.as_array() { for x in a { if x.as_str() == Some(needle) { return true; } } }
+    false
+}
+fn site_coord(site: &[Value]) -> Result<String, String> {
+    require(site.len() >= 3usize, "invalid baseline site")?;
+    let path = site[0usize].as_str().ok_or("invalid baseline path".to_string())?;
+    let line = site[1usize].as_usize().ok_or("invalid baseline line".to_string())?;
+    let column = site[2usize].as_usize().ok_or("invalid baseline column".to_string())?;
+    Ok(format!("{path}:{line}:{column}"))
+}
+fn label(cause: &Value, title: &str) -> Value {
+    object!("title"=>field(cause,title),"owner"=>field(cause,"owner"),"baseline_rank"=>field(cause,"rank"))
+}
+fn baseline(table: &Value, rows: &[Value]) -> Result<Classes, String> {
+    let mut c = Classes {classes:Map::new(),labels:Map::new(),primary:Map::new(),excluded:Map::new()};
+    if table.get("accounting").is_some() {
+        let mut roots: BTreeSet<String> = BTreeSet::new();
+        let mut indices: BTreeMap<usize, usize> = BTreeMap::new();
+        for i in 0usize..rows.len() {
+            roots.insert(s(&rows[i],"root").to_string());
+            indices.insert(n(&rows[i],"diagnostic_index"), i);
+        }
+        require(roots.len() == 1usize, "nom baseline expects exactly one projected root")?;
+        for exclusion in array(table,"recovery_exclusions")? {
+            let children = array(exclusion,"diagnostic_indices")?;
+            let parents = array(exclusion,"parent_diagnostic_indices")?;
+            require(children.len() == parents.len(), "reviewed recovery requires a parent diagnostic for each row")?;
+            for i in 0usize..children.len() {
+                let child = children[i].as_usize().ok_or("invalid recovery diagnostic index".to_string())?;
+                let parent = parents[i].as_usize().ok_or("invalid recovery parent index".to_string())?;
+                let ci = indices.get(&child).ok_or(format!("missing reviewed recovery diagnostic index {child}"))?;
+                let pi = indices.get(&parent).ok_or(format!("missing reviewed recovery parent index {parent}"))?;
+                c.excluded.insert(key(&rows[*ci]),object!("reason"=>field(exclusion,"id"),"parent_key"=>Value::String(key(&rows[*pi]))));
+            }
+        }
+        for cause in array(table,"causes")? {
+            let id = s(cause,"id");
+            c.labels.insert(id.to_string(),label(cause,"title"));
+            for site in array(cause,"sites")? {
+                let site = site.as_array().ok_or("invalid baseline site".to_string())?;
+                let coordinate = site_coord(site)?;
+                require(site.len() >= 5usize, "invalid nom baseline site")?;
+                let partition = if site[4usize].as_bool() == Some(true) { "inactive_in_upstream_default" } else { "default_candidate" };
+                let mut matched = false;
+                for row in rows {
+                    if coord(row) == coordinate && s(row,"code") != "E_BLOCKED" && !c.excluded.contains_key(&key(row)) {
+                        matched = true;
+                        add(&mut c,row,id,&format!("{id}:{coordinate}"),partition)?;
+                    }
+                }
+                require(matched,&format!("reviewed nom primary coordinate has no exact diagnostic: {coordinate}"))?;
+            }
+        }
+        require(c.primary.len() == n(&field(table,"accounting"),"unique_primary_sites"),"nom baseline primary count mismatch")?;
+    } else if table.get("primary_sites").is_some() {
+        for cause in array(table,"causes")? { c.labels.insert(s(cause,"id").to_string(),label(cause,"cause")); }
+        for d in array(table,"recovery_duplicate_messages")? {
+            let coordinate = s(d,"coordinate");
+            let mut parent = None;
+            for row in rows {
+                if coord(row).as_str() == coordinate && s(row,"code") == s(d,"primary_code") && s(row,"message") == s(d,"primary_message") {
+                    parent = Some(key(row)); break;
+                }
+            }
+            let parent = parent.ok_or("reviewed duplicate has no primary diagnostic".to_string())?;
+            for row in rows {
+                if coord(row).as_str() == coordinate && s(row,"code") == s(d,"secondary_code") && s(row,"message") == s(d,"secondary_message") {
+                    c.excluded.insert(key(row),object!("reason"=>st("same_coordinate_recovery_duplicate"),"parent_key"=>st(&parent)));
+                }
+            }
+        }
+        for site in array(table,"primary_sites")? {
+            let a = site.as_array().ok_or("invalid DOM baseline site".to_string())?;
+            require(a.len() == 4usize,"invalid DOM baseline site")?;
+            let coordinate = a[0usize].as_str().ok_or("invalid DOM coordinate".to_string())?;
+            let cause = a[1usize].as_str().ok_or("invalid DOM cause".to_string())?;
+            let code = a[2usize].as_str().ok_or("invalid DOM code".to_string())?;
+            let partition = a[3usize].as_str().ok_or("invalid DOM partition".to_string())?;
+            let mut matched = false;
+            for row in rows {
+                if coord(row).as_str() == coordinate && s(row,"code") == code && !c.excluded.contains_key(&key(row)) {
+                    matched = true;
+                    add(&mut c,row,cause,&format!("{cause}:{coordinate}"),partition)?;
+                }
+            }
+            require(matched,&format!("reviewed DOM primary coordinate has no exact diagnostic: {coordinate}"))?;
+        }
+        require(c.primary.len() == n(&field(table,"counts"),"unique_primary_sites"),"DOM baseline primary count mismatch")?;
+    } else if let Some(groups) = table.get("groups") {
+        let groups = groups.as_object().ok_or("invalid Sozu groups".to_string())?;
+        let mut total = 0usize;
+        for (cause,g) in groups {
+            c.labels.insert(cause.clone(),object!("title"=>st(cause),"owner"=>field(g,"owner"),"baseline_rank"=>field(g,"rank")));
+            total += n(g,"diagnosed_sites");
+            let kinds = array(g,"diagnostic_kinds")?;
+            for site in array(g,"sites")? {
+                let site = site.as_array().ok_or("invalid Sozu site".to_string())?;
+                let coordinate = site_coord(site)?;
+                require(site.len() >= 4usize,"invalid Sozu site")?;
+                let index = site[3usize].as_usize().ok_or("invalid Sozu kind".to_string())?;
+                require(index < kinds.len(),"invalid Sozu kind")?;
+                let kind = kinds[index].as_str().ok_or("invalid Sozu kind".to_string())?;
+                let partition = if n(g,"independent_gap_sites") != 0usize { "observed_cause" } else { "unclassified_recovery" };
+                let mut matched = false;
+                for row in rows {
+                    if coord(row) == coordinate && format!("{}: {}",s(row,"code"),s(row,"message")).as_str() == kind {
+                        matched = true;
+                        add(&mut c,row,cause,&format!("{cause}:{coordinate}:{kind}"),partition)?;
+                    }
+                }
+                require(matched,&format!("reviewed Sozu site has no exact diagnostic: {coordinate} {kind}"))?;
+            }
+        }
+        require(c.primary.len() == total,"Sozu baseline primary count mismatch")?;
+    } else { return Err("unsupported baseline classification schema".to_string()); }
+    for row in rows {
+        if s(row,"code") == "E_BLOCKED" { continue; }
+        let k = key(row);
+        let primary = c.classes.contains_key(&k);
+        let excluded = c.excluded.contains_key(&k);
+        require(primary || excluded, &format!("unaccounted baseline diagnostic: {}",s(row,"raw")))?;
+        require(!(primary && excluded),"baseline primary is also excluded")?;
+    }
+    Ok(c)
+}
+fn surviving_exclusion(c: &Classes, by_key: &Map, k: &String) -> bool {
+    match c.excluded.get(k) {
+        Some(e) => by_key.contains_key(&s(e,"parent_key").to_string()),
+        None => false,
+    }
+}
+fn apply_review(review: &Value, c: &mut Classes, by_key: &Map, rows: &[Value]) -> Result<(), String> {
+    require(n(review,"schema") == 1usize && review.get("sites").and_then(|v: &Value| v.as_array()).is_some(), "unsupported explicit-review schema")?;
+    for entry in array(review,"sites")? {
+        let k = key(entry);
+        let observed = by_key.get(&k).ok_or("review does not match an observed diagnostic".to_string())?;
+        require(s(entry,"file_sha256") == s(&field(observed,"source"),"file_sha256"),"review source hash mismatch")?;
+        for name in "cause title owner reason".split(" ") {
+            require(!s(entry,name).is_empty(),"review needs cause/title/owner/reason")?;
+        }
+        require(!c.classes.contains_key(&k) && !surviving_exclusion(c,by_key,&k),"explicit review cannot overwrite surviving baseline classification")?;
+        let disposition = entry.get("disposition").and_then(|v: &Value| v.as_str()).unwrap_or("primary");
+        if disposition == "recovery" {
+            let p = entry.get("parent").ok_or("reviewed recovery requires a parent diagnostic".to_string())?;
+            require(p.as_object().is_some(),"reviewed recovery requires a parent diagnostic")?;
+            let parent = key(p);
+            require(parent != k && by_key.contains_key(&parent),"reviewed recovery parent does not match another observed diagnostic")?;
+            for row in rows {
+                if key(row) != k { continue; }
+                let mut earlier = false;
+                for candidate in rows {
+                    if key(candidate) == parent && s(candidate,"root") == s(row,"root") && n(candidate,"diagnostic_index") < n(row,"diagnostic_index") { earlier = true; break; }
+                }
+                require(earlier,"reviewed recovery parent is not earlier in the same root")?;
+            }
+            c.excluded.insert(k,object!("reason"=>field(entry,"cause"),"parent_key"=>Value::String(parent),"review_reason"=>field(entry,"reason")));
+            continue;
+        }
+        require(disposition == "primary","unknown reviewed disposition")?;
+        c.excluded.remove(&k);
+        let id = format!("review:{k}");
+        c.classes.insert(k,object!("cause"=>field(entry,"cause"),"site_id"=>Value::String(id),"partition"=>st("explicitly_reviewed"),"review_reason"=>field(entry,"reason")));
+        let cause = s(entry,"cause").to_string();
+        if !c.labels.contains_key(&cause) {
+            c.labels.insert(cause,object!("title"=>field(entry,"title"),"owner"=>field(entry,"owner")));
+        }
+    }
+    Ok(())
+}
+fn input(path: &str, sha: &str) -> Value { object!("path"=>st(path),"sha256"=>st(sha)) }
+fn count(map: &Map, k: &str) -> usize { map.get(&k.to_string()).and_then(|v: &Value| v.as_usize()).unwrap_or(0usize) }
+fn values_at(map: &Map, k: &str) -> Value {
+    match map.get(&k.to_string()) { Some(v) => copy(v), None => Value::Array(Vec::new()) }
+}
+fn unique_push(v: &mut Value, item: &str) {
+    if !has_string(v,item) { append(v,st(item)); }
+}
+fn compare_commands(old: &Observations, current: &Observations) -> Result<bool, String> {
+    require(old.entries.len() == current.entries.len(),"probe root/route scope changed")?;
+    for (k,_) in &old.entries { require(current.entries.contains_key(k),"probe root/route scope changed")?; }
+    let mut original_equal = true;
+    for (k,a) in &old.entries {
+        let b = current.entries.get(k).unwrap();
+        require(same(a,b,"entry_sha256") && same(a,b,"entry_bytes"),"probe source-entry identity changed")?;
+        let ac = array(a,"command")?;
+        let bc = array(b,"command")?;
+        require(ac.len() == bc.len(),"probe command changed beyond compiler path")?;
+        for i in 1usize..ac.len() { require(equal(&ac[i],&bc[i]),"probe command changed beyond compiler path")?; }
+        if s(a,"route") == "original_suffix" {
+            for name in "exit_status launcher_signal stdout stderr".split(" ") { if !same(a,b,name) { original_equal = false; } }
+        }
+    }
+    Ok(original_equal)
+}
+struct Group { sites: Vec<Value>, files: Map }
+fn recount(c: &Classes, current: &Observations, by_key: &Map, at: &Map, inputs: Value, original_equal: bool) -> Value {
+    let mut comparison = Vec::new();
+    let mut before_counts = Map::new();
+    let mut survival: BTreeMap<String, Map> = BTreeMap::new();
+    for id in &sorted_keys(&c.primary) {
+        let site = c.primary.get(id).unwrap();
+        let mut surviving = Vec::new();
+        for k in site.get("keys").unwrap().as_array().unwrap() {
+            if by_key.contains_key(&k.as_str().unwrap().to_string()) { surviving.push(copy(k)); }
+        }
+        let keys_at = values_at(at,s(site,"coordinate"));
+        let state = if !surviving.is_empty() { "exact_diagnostic_survives" }
+            else if !keys_at.as_array().unwrap().is_empty() { "different_diagnostic_at_same_coordinate" } else { "not_observed" };
+        let cause = s(site,"cause");
+        increment(&mut before_counts,cause);
+        let cause = cause.to_string();
+        if !survival.contains_key(&cause) { survival.insert(cause.clone(),Map::new()); }
+        increment(survival.get_mut(&cause).unwrap(),state);
+        let mut row = copy(site);
+        put(&mut row,"site_id",st(id)); put(&mut row,"state",st(state));
+        put(&mut row,"surviving_diagnostic_keys",Value::Array(surviving)); put(&mut row,"current_diagnostic_keys_at_coordinate",keys_at);
+        comparison.push(row);
+    }
+    let mut groups: BTreeMap<String, Group> = BTreeMap::new();
+    let mut raw_by_code = Map::new();
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    let mut unknown = Vec::new();
+    let mut recovery = Vec::new();
+    let mut classified = 0usize;
+    let mut prior_unknown = 0usize;
+    for row in &current.rows { increment(&mut raw_by_code,s(row,"code")); }
+    for (k,row) in by_key {
+        if surviving_exclusion(c,by_key,k) {
+            let mut row = copy(row);
+            put(&mut row,"exclusion",copy(c.excluded.get(k).unwrap()));
+            recovery.push(row);
+            continue;
+        }
+        let class = match c.classes.get(k) { Some(x) => x, None => { unknown.push(copy(row)); continue; } };
+        if !seen.insert(s(class,"site_id").to_string()) { continue; }
+        if s(class,"partition") == "unclassified_recovery" { prior_unknown += 1usize; } else { classified += 1usize; }
+        let cause = s(class,"cause").to_string();
+        if !groups.contains_key(&cause) { groups.insert(cause.clone(),Group{sites:Vec::new(),files:Map::new()}); }
+        let g = groups.get_mut(&cause).unwrap();
+        let mut site = copy(row);
+        merge(&mut site,class);
+        g.sites.push(site);
+        g.files.insert(s(row,"path").to_string(),field(&field(row,"source"),"file_physical_lines"));
+    }
+    let mut rank_order: BTreeMap<(usize,String), String> = BTreeMap::new();
+    for (cause,g) in &groups { rank_order.insert((!0usize-g.sites.len(),lex_key(cause)),cause.clone()); }
+    let mut ranked = Vec::new();
+    for (_,cause) in &rank_order {
+        let g = groups.get(cause).unwrap();
+        let mut total = 0usize;
+        let mut files = Vec::new();
+        for path in &sorted_keys(&g.files) { files.push(st(path)); total += g.files.get(path).unwrap().as_usize().unwrap(); }
+        let mut sites = Vec::new();
+        for site in &g.sites { sites.push(copy(site)); }
+        let old_survival = match survival.get(cause) { Some(m) => map_value(m), None => Value::Object(Vec::new()) };
+        let mut row = object!("id"=>st(cause),"sites"=>Value::Array(sites),"observed_sites"=>num(g.sites.len()),
+            "affected_files"=>Value::Array(files),"overlapping_file_physical_lines"=>num(total),"baseline_sites"=>num(count(&before_counts,cause)),
+            "old_site_survival"=>old_survival,"count_rank"=>num(ranked.len()+1usize));
+        if let Some(label) = c.labels.get(cause) { merge(&mut row,label); }
+        ranked.push(row);
+    }
+    let mut counts = Vec::new();
+    for id in &sorted_keys(&before_counts) {
+        let number = before_counts.get(id).unwrap();
+        let states = survival.get(id).unwrap();
+        let mut row = object!("id"=>st(id),"baseline_sites"=>copy(number),
+            "exact_surviving_sites"=>num(count(states,"exact_diagnostic_survives")),
+            "changed_diagnostic_sites"=>num(count(states,"different_diagnostic_at_same_coordinate")),
+            "not_observed_sites"=>num(count(states,"not_observed")));
+        if let Some(label) = c.labels.get(id) { merge(&mut row,label); }
+        counts.push(row);
+    }
+    let mut annotations = Vec::new();
+    for a in &current.annotations { annotations.push(copy(a)); }
+    object!("schema"=>num(1usize),"kind"=>st("exact_foreign_refusal_comparison"),"inputs"=>inputs,
+        "observation_count"=>num(current.entries.len()),"original_suffix_observations_unchanged"=>Value::Bool(original_equal),
+        "raw_projected_diagnostic_count"=>num(current.rows.len()),"raw_by_code"=>map_value(&raw_by_code),
+        "observed_classified_sites"=>num(classified),"observed_prior_unclassified_sites"=>num(prior_unknown),
+        "inherited_recovery_unique_diagnostics"=>num(recovery.len()),"unclassified_unique_diagnostics"=>num(unknown.len()),
+        "baseline_site_counts"=>Value::Array(counts),"baseline_site_comparison"=>Value::Array(comparison),
+        "ranked_observed_causes"=>Value::Array(ranked),"unclassified_diagnostics"=>Value::Array(unknown),
+        "inherited_recovery_diagnostics"=>Value::Array(recovery),"diagnostic_edit_annotations"=>Value::Array(annotations),
+        "interpretation"=>Value::Array(vec![
+            st("Causes are inherited only from an explicitly classified, identical diagnostic at the same unchanged source coordinate; reviewed new sites name the complete code/message and file hash."),
+            st("Missing old diagnostics are not observed at this frontier. This is not proof of admission, successful execution, or equivalent Cargo feature/test configuration."),
+            st("New or changed diagnostics stay unclassified until explicitly reviewed. Known recovery exclusions remain exclusions only while both their complete diagnostic identity and their reviewed parent diagnostic survive."),
+            st("Source columns are one-based UTF-8 byte columns, matching the compiler lexer, not the Unicode-scalar columns of census.mjs."),
+            st("Count ranking is descriptive. Ownership and implementation priority remain explicit decisions. File coverage overlaps and is not a causal blocked-line estimate.")]))
+}
+fn run(world: &mut World) -> Result<(), String> {
+    let raw = world.args();
+    let mut args = Map::new();
+    let mut i = 0usize;
+    let mut help = false;
+    while i < raw.len() {
+        let arg = text(raw[i].clone(),"argument")?;
+        let rest = arg.as_str().strip_prefix("--").or_else(|| arg.as_str().strip_prefix("-")).ok_or("use --help".to_string())?;
+        let name = match rest.find("=") { Some(at) => &rest[..at], None => rest };
+        if name == "help" { help = true; i += 1usize; continue; }
+        require(name == "baseline" || name == "before" || name == "after" || name == "projection" ||
+            name == "source" || name == "output" || name == "review","use --help")?;
+        let value = match rest.find("=") {
+            Some(at) => rest[at+1usize..].to_string(),
+            None => {
+                i += 1usize;
+                require(i < raw.len(),"use --help")?;
+                text(raw[i].clone(),"argument")?
+            },
+        };
+        args.insert(name.to_string(),Value::String(value));
+        i += 1usize;
+    }
+    if help {
+        world.stdout().write(b"Usage: tools/real-programs/rerank.sh --baseline TABLE.json --before OLD_PROBE.json --after NEW_PROBE.json\n       --projection PROJECTION/projection.json [--source ORIGINAL_SOURCE]\n       [--review REVIEWED_NEW_SITES.json] --output NEW_REPORT.json\nClassifications require exact diagnostics and verified original source bytes.\nMissing diagnostics mean not observed, never admitted. The output must be new.\n");
+        return Ok(());
+    }
+    let args = map_value(&args);
+    for name in "baseline before after projection output".split(" ") {
+        require(!s(&args,name).is_empty(),"missing required arguments; use --help")?;
+    }
+    let output = s(&args,"output");
+    let (parent,name) = parent_name(output);
+    let mut directory = world.directory(&parent).map_err(|e: i64| -> String { format!("{parent}: errno {e}") })?;
+    // Listing refuses existing entries without following links or opening a FIFO.
+    // Exclusive private creation below closes the publication race.
+    let names = directory.list().map_err(|e: i64| -> String { format!("{parent}: errno {e}") })?;
+    for entry in &names {
+        require(entry.as_slice() != name.as_bytes(), "output already exists")?;
+    }
+    drop(directory);
+    let (table,table_sha) = load(world,s(&args,"baseline"))?;
+    let (before,before_sha) = load(world,s(&args,"before"))?;
+    let (after,after_sha) = load(world,s(&args,"after"))?;
+    let (manifest,manifest_sha) = load(world,s(&args,"projection"))?;
+    require(n(&manifest,"schema") == 1usize && s(&manifest,"kind") == "git_tracked_suffix_projection","not a tracked suffix-projection manifest")?;
+    require(s(&field(&table,"current_verification"),"receipt_sha256") == before_sha.as_str(),"before receipt is not the baseline table current verification")?;
+    let source = field(&manifest,"source");
+    let root = args.get("source").and_then(|v: &Value| v.as_str()).unwrap_or(s(&source,"root"));
+    let mut reader = Reader::new(&manifest,root,prefixes(&before)?)?;
+    let old = observations(world,&before,&manifest,&manifest_sha,&mut reader)?;
+    let current = observations(world,&after,&manifest,&manifest_sha,&mut reader)?;
+    let original_equal = compare_commands(&old,&current)?;
+    let mut classes = baseline(&table,&old.rows)?;
+    let mut by_key = Map::new();
+    let mut at = Map::new();
+    for row in &current.rows {
+        if s(row,"code") == "E_BLOCKED" { continue; }
+        let k = key(row);
+        if !by_key.contains_key(&k) {
+            let mut first = copy(row);
+            put(&mut first,"observed_roots",Value::Array(Vec::new()));
+            by_key.insert(k.clone(),first);
+        }
+        let first = by_key.get_mut(&k).unwrap();
+        let mut roots = field(first,"observed_roots");
+        unique_push(&mut roots,s(row,"root"));
+        put(first,"observed_roots",roots);
+        let coordinate = coord(row);
+        let mut keys = values_at(&at,&coordinate);
+        unique_push(&mut keys,&k);
+        at.insert(coordinate,keys);
+    }
+    let mut before_input = input(s(&args,"before"),&before_sha);
+    put(&mut before_input,"compiler",field(&before,"compiler"));
+    let mut after_input = input(s(&args,"after"),&after_sha);
+    put(&mut after_input,"compiler",field(&after,"compiler"));
+    let mut projection = input(s(&args,"projection"),&manifest_sha);
+    put(&mut projection,"source",source);
+    let mut inputs = object!("baseline"=>input(s(&args,"baseline"),&table_sha),"before"=>before_input,"after"=>after_input,"projection"=>projection);
+    if !s(&args,"review").is_empty() {
+        let (review,sha) = load(world,s(&args,"review"))?;
+        apply_review(&review,&mut classes,&by_key,&current.rows)?;
+        put(&mut inputs,"review",input(s(&args,"review"),&sha));
+    }
+    let report = recount(&classes,&current,&by_key,&at,inputs,original_equal);
+    let encoded = format!("{}\n",canonical(&report,true));
+    publish(world,output,&encoded)?;
+    let summary = object!("report"=>st(output),"observations"=>field(&report,"observation_count"),
+        "old_sites"=>num(classes.primary.len()),"unclassified_diagnostics"=>field(&report,"unclassified_unique_diagnostics"),
+        "ranked_causes"=>num(report.get("ranked_observed_causes").unwrap().as_array().unwrap().len()));
+    world.stdout().write(format!("{}\n",canonical(&summary,false)).as_bytes());
+    Ok(())
+}
+pub fn main(mut world: World) {
+    if let Err(e) = run(&mut world) {
+        world.stderr().write(format!("real-programs-rerank: {e}\n").as_bytes());
+        world.set_exit_status(255);
+    }
+}

@@ -210,12 +210,14 @@ quiescent during projection; this is not a hostile concurrent-namespace snapshot
 
 ### Ranked observed barriers
 
-`tools/real-programs/rerank.mjs` repeats the accounting from the complete probe
+`tools/real-programs/rerank.lkj` repeats the accounting from the complete probe
 receipts and the reviewed site tables below. Run it once with identical `--before`
-and `--after` inputs to reproduce the baseline, then against each new producer:
+and `--after` inputs to reproduce the baseline, then against each new producer.
+The wrapper builds the ordinary checked tool with `target/lkjscript` (override
+with `LKJSCRIPT_COMPILER`); input paths remain relative to the caller:
 
 ```sh
-node tools/real-programs/rerank.mjs --baseline docs/real-programs-nom.json \
+bash tools/real-programs/rerank.sh --baseline docs/real-programs-nom.json \
   --before OLD_PROBE.json --after NEW_PROBE.json \
   --projection PROJECTION/projection.json --source ORIGINAL_SOURCE \
   --output NEW_COMPARISON.json
@@ -223,9 +225,10 @@ node tools/real-programs/rerank.mjs --baseline docs/real-programs-nom.json \
 
 Use the corresponding DOM and Sōzu tables and receipts for those packages. The
 baseline table's `current_verification.receipt_sha256` pins the before receipt.
-The tool verifies captured stream hashes, unchanged probe scope and commands,
-projection identity, and complete original-file hashes for every diagnostic
-anchor. Its columns follow the compiler's UTF-8 byte convention, distinct from
+The tool verifies captured stream lengths and hashes, canonical base64, unchanged
+probe scope and commands, projection identity, and complete original-file hashes
+for every diagnostic anchor. JSON, captured streams and read source files must be
+valid UTF-8; a BOM is not removed. Reports are published only to a new private file. Its columns follow the compiler's UTF-8 byte convention, distinct from
 the census tool's Unicode-scalar columns.
 
 Old causes carry forward only at the same unchanged source coordinate with the
@@ -238,7 +241,7 @@ schema. The comparison separates an exact surviving
 diagnostic, a different diagnostic at the old coordinate, and an old site no longer
 observed. The last is not proof that the surrounding program admits or runs.
 Counts re-rank the observed frontier; implementation priority is a separate
-decision. The required offline gate runs 38 controls for this accounting,
+decision. The required offline gate runs exact-byte and refusal controls for this accounting,
 including all three table schemas, repeated-root de-duplication, changed recovery
 parents, source substitution and receipt corruption.
 
@@ -837,7 +840,7 @@ original-source hashes. Reproduce the results with the
 [nom review](https://github.com/lkjsxc/lkjscript/blob/evidence-archive-20261120/docs/real-programs-lifetime-where-nom-review.json),
 [DOM review](https://github.com/lkjsxc/lkjscript/blob/evidence-archive-20261120/docs/real-programs-lifetime-where-dom-review.json), and
 [Sōzu review](https://github.com/lkjsxc/lkjscript/blob/evidence-archive-20261120/docs/real-programs-lifetime-where-sozu-review.json) passed to
-`node tools/real-programs/rerank.mjs --review`. Ten complete exit/status/stdout/stderr identities are
+`bash tools/real-programs/rerank.sh --review`. Ten complete exit/status/stdout/stderr identities are
 byte-identical to published Sized; only the nom and DOM projections change.
 Original-suffix observations, source/projection hashes and the literal library
 inventory remain unchanged. There are no new unclassified diagnostics or

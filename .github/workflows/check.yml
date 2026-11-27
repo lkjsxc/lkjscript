@@ -48,8 +48,6 @@ jobs:
         run: node tools/real-programs/project.mjs --self-test
       - name: Compiler observation
         run: node tools/real-programs/probe-test.mjs
-      - name: Observation reranking
-        run: node tools/real-programs/rerank-test.mjs
   witness:
     runs-on: ubuntu-latest
     continue-on-error: true
