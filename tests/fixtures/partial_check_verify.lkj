@@ -135,6 +135,41 @@ fn cases(name: &str) -> Vec<Expected> {
             expected(12, "independent", "checked", 0, 0, "", ""),
             at(expected(17, "outer::same::ambiguous", "blocked", 15, 5, "E_UNSUPPORTED_MACRO", ""), 13),
         ],
+        "receiver" | "receiver_duplicate" | "receiver_blanket" | "receiver_qualifier"
+        | "receiver_alias" | "receiver_destructor" => {
+            let qualifier = name == "receiver_qualifier";
+            let destructor = name == "receiver_destructor";
+            let application = match name {
+                "receiver_duplicate" | "receiver_blanket" | "receiver_qualifier" =>
+                    expected(13, "has_bits", "blocked", 47, 1, "E_BLOCKED", ""),
+                "receiver_alias" => expected(13, "has_bits", "blocked", 47, 1, "E_IMPORT", ""),
+                _ => expected(13, "has_bits", "checked", 0, 0, "", ""),
+            };
+            let mut rows = vec![
+                at(if qualifier { expected(6, "is_empty", "blocked", 47, 1, "E_BLOCKED", "") }
+                    else { expected(6, "is_empty", "checked", 0, 0, "", "") }, 9),
+                at(application, 5),
+                at(if qualifier { expected(16, "has_bits", "blocked", 47, 1, "E_BLOCKED", "") }
+                    else { expected(16, "has_bits", "checked", 0, 0, "", "") }, 5),
+                at(if destructor { expected(21, "available_space", "blocked", 23, 45, "E_CAPABILITY", "drop") }
+                    else { expected(21, "available_space", "checked", 0, 0, "", "drop") }, 5),
+                at(if destructor { expected(23, "drop", "blocked", 23, 45, "E_CAPABILITY", "") }
+                    else { expected(23, "drop", "checked", 0, 0, "", "") }, 24),
+                if destructor { expected(25, "probe", "blocked", 23, 45, "E_CAPABILITY", "") }
+                    else { expected(25, "probe", "blocked", 36, 16, "E_CAPABILITY", "") },
+                expected(36, "refusal", "blocked", 36, 16, "E_CAPABILITY", ""),
+                at(if qualifier { expected(42, "has_bits", "blocked", 47, 1, "E_BLOCKED", "") }
+                    else { expected(42, "has_bits", "checked", 0, 0, "", "") }, 5),
+                expected(45, "HasBits", "checked", 0, 0, "", ""),
+            ];
+            match name {
+                "receiver_duplicate" => rows.push(at(expected(48, "has_bits", "blocked", 12, 1, "E_BLOCKED", ""), 5)),
+                "receiver_blanket" => rows.push(at(expected(48, "has_bits", "blocked", 36, 16, "E_CAPABILITY", ""), 5)),
+                "receiver_alias" => rows.push(at(expected(49, "has_bits", "blocked", 47, 1, "E_IMPORT", ""), 5)),
+                _ => {}
+            }
+            rows
+        },
         _ => panic!("unknown partial-check fixture"),
     }
 }

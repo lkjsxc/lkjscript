@@ -631,6 +631,29 @@ The native bin-off baseline was still running when the measurement stopped
 after 2,435 s. The completed paired timings in the table use the Rust-built
 producers.
 
+#### Borrowed receiver and trait evidence
+
+The receiver fixture retains Sōzu's `Ready` tuple declaration and
+`is_empty` method, a named-field buffer capacity reduction, two applications
+of a source trait, a second trait with the same short name, and the buffer
+destructor. Checked item records advance from one to seven in each debug mode.
+The corresponding valid source evaluates to 42 on both lkjscript engines and at Rust opt0 and
+opt3. An unresolved import and an ambient-output refusal keep the reduced root
+in item-reporting mode.
+
+A duplicate or blanket receiver for the `u16` application blocks that
+application. The `u8` application and the separately declared trait can still
+check. A malformed trait qualifier leaves the trait identity unproved for
+that receiver. A competing receiver through a refused alias keeps the exact
+import cause. A refused destructor blocks the buffer method through its
+recorded dependency. Whole-source execution and publication still refuse.
+
+The pinned bin and lib roots retain eight and nine checked items respectively in
+both modes. Their original diagnostic text and checked item records match the
+preceding producer byte for byte. Complete imports remain namespace
+dependencies. In the library root, 346 blocked method records now cite the
+refused `dyn` region that leaves coherence open.
+
 #### Earlier ordinary numeric traits frontier
 
 <!-- numeric-evidence-v1 sha256:53c52136581be3be25a96ff0bfa4e7077207da1e8f75548cc3aaa456e746a484 -->

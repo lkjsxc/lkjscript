@@ -1,0 +1,45 @@
+#[derive(Copy, PartialEq, Eq, Clone, PartialOrd, Ord)]
+pub struct Ready(pub u16);
+
+impl Ready {
+    #[inline]
+    pub fn is_empty(&self) -> bool {
+        self.0 == 0
+    }
+}
+
+trait HasBits<Bit> { fn has_bits(&self, bits: Bit) -> bool; }
+impl HasBits<u16> for Ready {
+    fn has_bits(&self, bits: u16) -> bool { self.0 & bits != 0 }
+}
+impl HasBits<u8> for Ready {
+    fn has_bits(&self, bits: u8) -> bool { self.0 & (bits as u16) != 0 }
+}
+
+struct Buffer { capacity: usize, end: usize }
+impl Buffer {
+    fn available_space(&self) -> usize { self.capacity - self.end }
+}
+impl Drop for Buffer { fn drop(&mut self) { self.end = self.capacity; } }
+
+fn probe() -> i64 {
+    let ready = Ready(12u16);
+    let buffer = Buffer { capacity: 50usize, end: 8usize };
+    if !ready.is_empty() && Ready(0u16).is_empty()
+        && <Ready as HasBits<u16>>::has_bits(&ready, 4u16)
+        && <Ready as HasBits<u8>>::has_bits(&ready, 8u8) && HasBits() == 7
+        && <Ready as peer::HasBits<u16>>::has_bits(&ready, 16u16)
+        && buffer.available_space() == 42usize { 42 } else { 0 }
+}
+
+use crate::absent::Ghost;
+fn refusal() { println!("unsupported"); }
+
+mod peer {
+    pub trait HasBits<Bit> { fn has_bits(&self, bits: Bit) -> bool; }
+}
+impl peer::HasBits<u16> for Ready {
+    fn has_bits(&self, bits: u16) -> bool { self.0 & bits == 0 }
+}
+#[allow(non_snake_case)]
+fn HasBits() -> i64 { 7 }

@@ -3,6 +3,7 @@
 //! are replayed from the exact loaded text and checked normally.
 use crate::ast as a;
 use crate::diagnostics::Recovery;
+use crate::generics::TraitIdentity;
 use crate::resolve::{Namespace, Resolver};
 use crate::source::SourceReport;
 use std::collections::BTreeSet;
@@ -32,6 +33,7 @@ struct Plan {
     parameters: Vec<String>,
     expansions: Vec<usize>,
     implementation: Option<usize>,
+    receiver: Option<usize>,
     structural: bool,
 }
 struct Record {
@@ -126,6 +128,16 @@ fn scalar(name: &str) -> bool {
     matches!(name, "bool" | "char" | "str" | "u8" | "u16" | "u32" | "u64" | "usize"
         | "i8" | "i16" | "i32" | "i64" | "isize" | "f64")
 }
+fn attributed_span(span: a::Span, attrs: &[a::Attribute]) -> a::Span {
+    if let Some(first) = attrs.first() {
+        let mut extent = first.span;
+        extent.end = span.end;
+        extent
+    } else { span }
+}
+fn plain_path(path: &a::Path) -> bool {
+    path.qualification.is_none() && path.bindings.is_empty()
+}
 struct Inspector<'a> {
     program: &'a a::Program,
     resolver: &'a Resolver<'a>,
@@ -154,9 +166,9 @@ impl<'a> Inspector<'a> {
         }
         Ok(scope)
     }
-    fn binding(&self, scope: usize, path: &a::Path, span: a::Span,
-        namespace: Namespace, plan: &mut Plan) -> Result<Option<a::Item>, Failure> {
-        if path.qualification.is_some() || !path.bindings.is_empty() {
+    fn lookup(&self, scope: usize, path: &a::Path, span: a::Span,
+        namespace: Namespace) -> Result<(String, Option<a::Item>), Failure> {
+        if !plain_path(path) {
             return Err(self.boundary("generic or qualified selection"));
         }
         if let Some(failure) = poisoned(self.program, self.failures, scope, &path.name) { return Err(failure); }
@@ -166,6 +178,11 @@ impl<'a> Inspector<'a> {
         let Some((target, item)) = resolved else {
             return Err(self.boundary(&format!("unresolved input {}", path.name)));
         };
+        Ok((target, item))
+    }
+    fn binding(&self, scope: usize, path: &a::Path, span: a::Span,
+        namespace: Namespace, plan: &mut Plan) -> Result<Option<a::Item>, Failure> {
+        let (target, item) = self.lookup(scope, path, span, namespace)?;
         let function = match item { Some(a::Item::Function(index)) => Some(index), _ => None };
         if let Some(index) = function {
             let scope = crate::resolve::module(self.program, &self.program.functions[index].module);
@@ -271,7 +288,12 @@ impl<'a> Inspector<'a> {
                 for part in parts { self.expression(*part, locals, plan)?; } Ok(())
             }
             a::Expr::Path(path) if path.qualification.is_none() && path.args.is_empty()
-                && path.bindings.is_empty() && locals.contains(&path.name) => Ok(()),
+                && path.bindings.is_empty() && locals.contains(&path.name) => {
+                if path.name == "self" && plan.receiver.is_some_and(|index| !self.program.structs[index].unit) {
+                    return Err(self.boundary("receiver use outside a direct field"));
+                }
+                Ok(())
+            }
             a::Expr::Path(path) => {
                 if !path.args.is_empty() { return Err(self.boundary("applied nonlocal value")); }
                 let Some(a::Item::Constant(index)) = self.binding(node.scope, path, node.span, Namespace::Value, plan)? else {
@@ -307,6 +329,15 @@ impl<'a> Inspector<'a> {
             }
             a::Expr::Field { value, name } => {
                 plan.structural = true;
+                if let Some(receiver) = plan.receiver {
+                    if matches!(&self.program.exprs[*value].kind, a::Expr::Path(path)
+                        if plain_path(path) && path.args.is_empty() && path.name == "self") {
+                        if self.program.structs[receiver].fields.iter().any(|field| &field.name == name) {
+                            return Ok(());
+                        }
+                        return Err(self.boundary("field is outside the certified receiver"));
+                    }
+                }
                 if name.is_empty() || !name.as_bytes().iter().all(|b| *b >= b'0' && *b <= b'9') {
                     return Err(self.boundary("nominal field selection"));
                 }
@@ -423,20 +454,211 @@ impl<'a> Inspector<'a> {
             .map(|failure| Failure { cause: located(self.program, failure.diagnostic.clone()),
                 reason: "the authored item overlaps a refused source region".to_string() })
     }
+    fn nominal_field_type(&self, id: usize, plan: &mut Plan) -> Result<(), Failure> {
+        let node = &self.program.types[id];
+        if !matches!(&node.kind, a::Type::Path(path)
+            if plain_path(path) && path.args.is_empty() && scalar(&path.name) && path.name != "str"
+                && !self.resolver.generic(node.span, &path.name)) {
+            return Err(self.boundary("receiver field needs an additional type or destructor"));
+        }
+        self.ty(id, plan)
+    }
+    fn receiver(&self, index: usize, root: usize, plan: &mut Plan) -> Result<Vec<String>, Failure> {
+        let declaration = &self.program.structs[index];
+        let item = a::Item::Struct(index);
+        if !declaration.generics.is_empty() || !declaration.predicates.is_empty()
+            || self.program.macro_expansions.iter().any(|origin| origin.items.contains(&item))
+            || self.program.files[declaration.span.file].crate_root != root {
+            return Err(self.boundary("receiver needs a complete nominal declaration"));
+        }
+        let mut derives = Vec::new();
+        for attr in &declaration.attrs {
+            if attr.name == "derive" && attr.args.iter().all(|name| matches!(name.as_str(),
+                "Copy" | "Clone" | "PartialEq" | "Eq" | "PartialOrd" | "Ord")) {
+                derives.extend_from_slice(&attr.args);
+            } else if !matches!(attr.name.as_str(), "cfg" | "allow" | "doc" | "deprecated") {
+                return Err(self.boundary("receiver attribute needs additional declaration evidence"));
+            }
+        }
+        let extent = attributed_span(declaration.span, &declaration.attrs);
+        self.declaration(item, &declaration.module, &declaration.name, extent, plan)?;
+        for field in &declaration.fields { self.nominal_field_type(field.ty, plan)?; }
+        Ok(derives)
+    }
+    fn trait_head(&self, id: usize) -> Option<TraitIdentity> {
+        let node = &self.program.types[id];
+        let a::Type::Path(path) = &node.kind else { return None; };
+        if self.resolver.generic(node.span, &path.name) { return None; }
+        let (target, item) = self.lookup(node.scope, path, node.span, Namespace::Type).ok()?;
+        match item {
+            Some(a::Item::Trait(index)) => {
+                let declaration = &self.program.traits[index];
+                if target == crate::names::qualified(&declaration.module, &declaration.name) {
+                    return Some(TraitIdentity::Declared(index));
+                }
+                None
+            }
+            None if crate::generics::builtin_trait(&target) => Some(TraitIdentity::Builtin(target)),
+            _ => None,
+        }
+    }
+    fn trait_arguments(&self, id: usize) -> Option<Vec<String>> {
+        let a::Type::Path(path) = &self.program.types[id].kind else { return None; };
+        let mut arguments = Vec::new();
+        for argument in &path.args {
+            let node = &self.program.types[*argument];
+            let a::Type::Path(path) = &node.kind else { return None; };
+            if !path.args.is_empty() || self.resolver.generic(node.span, &path.name) { return None; }
+            let (target, item) = self.lookup(node.scope, path, node.span, Namespace::Type).ok()?;
+            if item.is_some() || !scalar(&target) || target == "str" { return None; }
+            arguments.push(target);
+        }
+        Some(arguments)
+    }
+    fn trait_input(&self, id: usize, plan: &mut Plan) -> Result<(TraitIdentity, Vec<String>), Failure> {
+        let node = &self.program.types[id];
+        let a::Type::Path(path) = &node.kind else { return Err(self.boundary("non-path trait implementation")); };
+        self.binding(node.scope, path, node.span, Namespace::Type, plan)?;
+        let Some(identity) = self.trait_head(id) else {
+            return Err(self.boundary("implementation needs an exact trait declaration"));
+        };
+        let Some(arguments) = self.trait_arguments(id) else {
+            return Err(self.boundary("trait application needs closed scalar arguments"));
+        };
+        for argument in &path.args { self.ty(*argument, plan)?; }
+        match &identity {
+            TraitIdentity::Builtin(name) if name == "Drop" && arguments.is_empty() => {}
+            TraitIdentity::Declared(index) => {
+                let declaration = &self.program.traits[*index];
+                let item = a::Item::Trait(*index);
+                if !declaration.predicates.is_empty() || !declaration.bounds.is_empty()
+                    || !declaration.associated.is_empty() || !declaration.constants.is_empty()
+                    || self.program.macro_expansions.iter().any(|origin| origin.items.contains(&item))
+                    || declaration.generics.len() != arguments.len() || declaration.generics.iter().any(|parameter|
+                        parameter.lifetime || parameter.constant || parameter.implicit
+                            || parameter.default.is_some() || !parameter.bounds.is_empty()) {
+                    return Err(self.boundary("trait declaration needs additional contracts"));
+                }
+                self.declaration(item, &declaration.module, &declaration.name, declaration.span, plan)?;
+                let previous = plan.parameters.len();
+                plan.parameters.push("Self".to_string());
+                for parameter in &declaration.generics { plan.parameters.push(parameter.name.clone()); }
+                for method in &declaration.methods {
+                    let method = &self.program.functions[*method];
+                    if method.body.is_some() || !method.generics.is_empty() || !method.predicates.is_empty()
+                        || !method.outlives.is_empty() || !method.attrs.is_empty() {
+                        return Err(self.boundary("trait method needs additional declaration evidence"));
+                    }
+                    for parameter in &method.params { self.ty(parameter.ty, plan)?; }
+                    self.ty(method.result, plan)?;
+                }
+                while plan.parameters.len() > previous { plan.parameters.pop(); }
+            }
+            _ => return Err(self.boundary("intrinsic trait implementation needs additional contracts")),
+        }
+        Ok((identity, arguments))
+    }
+    fn disjoint_receiver(&self, id: usize, receiver: usize) -> bool {
+        let node = &self.program.types[id];
+        match &node.kind {
+            a::Type::Tuple(_) | a::Type::Ref { .. } | a::Type::Slice(_) | a::Type::Array { .. }
+            | a::Type::Never | a::Type::Function { .. } => true,
+            a::Type::Path(path) if !self.resolver.generic(node.span, &path.name) => {
+                let Ok((target, item)) = self.lookup(node.scope, path, node.span, Namespace::Type) else {
+                    return false;
+                };
+                match item {
+                    Some(a::Item::Struct(index)) if index != receiver => {
+                        let declaration = &self.program.structs[index];
+                        target == crate::names::qualified(&declaration.module, &declaration.name)
+                    }
+                    Some(a::Item::Enum(index)) => {
+                        let declaration = &self.program.enums[index];
+                        target == crate::names::qualified(&declaration.module, &declaration.name)
+                    }
+                    None => crate::resolve::intrinsic_type_name(&target),
+                    _ => false,
+                }
+            }
+            _ => false,
+        }
+    }
+    fn competing(&self, implementation: &a::Impl) -> Failure {
+        let mut inputs = vec![implementation.target];
+        if let Some(trait_ty) = implementation.trait_ty {
+            inputs.push(trait_ty);
+            if let a::Type::Path(path) = &self.program.types[trait_ty].kind {
+                inputs.extend_from_slice(&path.args);
+            }
+        }
+        for input in inputs {
+            let node = &self.program.types[input];
+            if let a::Type::Path(path) = &node.kind {
+                if let Some(refusal) = poisoned(self.program, self.failures, node.scope, &path.name) {
+                    return refusal;
+                }
+            }
+        }
+        let cause = a::Diagnostic::new(implementation.span, "E_BLOCKED",
+            "implementation header may overlap the independent item closure");
+        Failure { cause: located(self.program, cause),
+            reason: "receiver selection or destruction needs a competing implementation".to_string() }
+    }
+    fn coherence(&self, owner: usize, receiver: usize, application: Option<&(TraitIdentity, Vec<String>)>,
+        derives: &[String], plan: &mut Plan) -> Result<(), Failure> {
+        let mut destructor = None;
+        for (other, implementation) in self.program.impls.iter().enumerate() {
+            if other == owner || self.disjoint_receiver(implementation.target, receiver) { continue; }
+            let Some(trait_ty) = implementation.trait_ty else {
+                if application.is_none() { return Err(self.competing(implementation)); }
+                continue;
+            };
+            let Some(identity) = self.trait_head(trait_ty) else { return Err(self.competing(implementation)); };
+            if let Some((selected, arguments)) = application {
+                if &identity == selected {
+                    if self.trait_arguments(trait_ty).is_none_or(|other|
+                        other.len() != arguments.len() || &other == arguments) {
+                        return Err(self.competing(implementation));
+                    }
+                }
+            }
+            if let TraitIdentity::Builtin(name) = &identity {
+                if derives.contains(name) { return Err(self.competing(implementation)); }
+                if name == "Drop" {
+                    if destructor.is_some() || implementation.methods.is_empty() {
+                        return Err(self.competing(implementation));
+                    }
+                    destructor = Some(other);
+                }
+            }
+        }
+        if let Some(destructor) = destructor {
+            let implementation = &self.program.impls[destructor];
+            // The dependency must recheck the destructor as an ordinary impl.
+            // An unknown receiver could instead hide an overlap.
+            let node = &self.program.types[implementation.target];
+            if !matches!(&node.kind, a::Type::Path(path) if path.args.is_empty()
+                && matches!(self.lookup(node.scope, path, node.span, Namespace::Type),
+                    Ok((_, Some(a::Item::Struct(index)))) if index == receiver)) {
+                return Err(self.competing(implementation));
+            }
+            for method in &implementation.methods { plan.dependencies.push(*method); }
+        }
+        Ok(())
+    }
     fn implementation(&self, owner: usize, plan: &mut Plan) -> Result<(), Failure> {
         let implementation = &self.program.impls[owner];
         if let Some(refusal) = self.overlap(implementation.span) { return Err(refusal); }
         // A missing implementation can change receiver selection or destruction.
-        // This projection keeps one complete inherent owner with no open
-        // coherence input. Trait implementations need their full witness set.
         if let Some(failure) = self.failures.iter().find(|failure| failure.coherence) {
             return Err(Failure { cause: located(self.program, failure.diagnostic.clone()),
                 reason: "implementation coherence depends on refused source".to_string() });
         }
         if !implementation.generics.is_empty() || !implementation.predicates.is_empty()
-            || implementation.trait_ty.is_some() || !implementation.associated.is_empty()
-            || !implementation.constants.is_empty() {
-            return Err(self.boundary("inherent owner is not independently complete"));
+            || !implementation.associated.is_empty() || !implementation.constants.is_empty()
+            || library_scope(self.program, implementation.span.file)
+            || self.program.macro_expansions.iter().any(|origin| origin.implementations.contains(&owner)) {
+            return Err(self.boundary("implementation owner is not independently complete"));
         }
         let node = &self.program.types[implementation.target];
         let a::Type::Path(path) = &node.kind else { return Err(self.boundary("non-nominal receiver")); };
@@ -445,18 +667,18 @@ impl<'a> Inspector<'a> {
             return Err(self.boundary("implementation receiver is not a source struct"));
         };
         let declaration = &self.program.structs[index];
-        let root = self.program.files[implementation.span.file].crate_root;
-        if !declaration.unit || !declaration.generics.is_empty() || !declaration.predicates.is_empty()
-            || !declaration.attrs.is_empty() || self.program.files[declaration.span.file].crate_root != root
-            || library_scope(self.program, implementation.span.file)
-            || self.program.impls.iter().enumerate().any(|(i, item)|
-                i != owner && !library_scope(self.program, item.span.file)) {
-            return Err(self.boundary("receiver needs a complete nominal or competing implementation context"));
+        if plan.lookups.last().unwrap().target != crate::names::qualified(&declaration.module, &declaration.name) {
+            return Err(self.boundary("receiver path has an unexpected suffix"));
         }
-        self.declaration(a::Item::Struct(index), &declaration.module, &declaration.name,
-            declaration.span, plan)?;
+        let root = self.program.files[implementation.span.file].crate_root;
+        let derives = self.receiver(index, root, plan)?;
+        let application = if let Some(trait_ty) = implementation.trait_ty {
+            Some(self.trait_input(trait_ty, plan)?)
+        } else { None };
+        self.coherence(owner, index, application.as_ref(), &derives, plan)?;
         plan.parameters.push("Self".to_string());
         plan.implementation = Some(owner);
+        plan.receiver = Some(index);
         plan.structural = true;
         Ok(())
     }
@@ -516,11 +738,26 @@ impl<'a> Inspector<'a> {
         if let Some(owner) = self.program.impls.iter().position(|owner| owner.methods.contains(&index)) {
             self.implementation(owner, &mut plan)?;
             for method in &self.program.impls[owner].methods {
-                if *method != index { plan.dependencies.push(*method); }
+                if *method != index && !plan.dependencies.contains(method) { plan.dependencies.push(*method); }
             }
         }
+        let nominal = plan.receiver.is_some_and(|index| !self.program.structs[index].unit);
+        if nominal {
+            let Some(param) = f.params.first() else { return Err(self.boundary("nominal method needs a borrowed receiver")); };
+            if !(param.name == "self"
+                && matches!(&self.program.types[param.ty].kind, a::Type::Ref { inner, .. }
+                    if matches!(&self.program.types[*inner].kind, a::Type::Path(path)
+                        if plain_path(path) && path.args.is_empty() && path.name == "Self"))) {
+                return Err(self.boundary("nominal method needs a borrowed receiver"));
+            }
+            self.ty(param.ty, &mut plan)?;
+            plan.parameters.pop();
+        }
         let mut locals = BTreeSet::new();
-        for parameter in &f.params { self.ty(parameter.ty, &mut plan)?; locals.insert(parameter.name.clone()); }
+        for (offset, parameter) in f.params.iter().enumerate() {
+            if !nominal || offset != 0usize { self.ty(parameter.ty, &mut plan)?; }
+            locals.insert(parameter.name.clone());
+        }
         self.ty(f.result, &mut plan)?;
         let Some(body) = f.body else { return Err(self.boundary("function body is absent")); };
         self.block(body, &locals, &mut plan)?;
@@ -550,7 +787,7 @@ fn import_failures(program: &a::Program, problems: &[a::Diagnostic], inherited: 
                 if !item.glob { names.push(item.alias.clone()); }
                 failures.push(Recovery { span: item.span,
                     scope: crate::resolve::module(program, &item.module), block: item.block,
-                    kind: "import".to_string(), names, namespace: true, coherence: true,
+                    kind: "import".to_string(), names, namespace: true, coherence: false,
                     diagnostic: located(program, problem.clone()) });
             }
         }
@@ -586,7 +823,7 @@ fn propagate_import_poison(program: &a::Program, resolver: &Resolver<'_>,
             if let Some(diagnostic) = cause {
                 let names = if item.glob { Vec::new() } else { vec![item.alias.clone()] };
                 failures.push(Recovery { span: item.span, scope, block: item.block,
-                    kind: "dependent import".to_string(), names, namespace: true, coherence: true,
+                    kind: "dependent import".to_string(), names, namespace: true, coherence: false,
                     diagnostic });
                 marked.insert(index); changed = true;
             }
@@ -624,12 +861,31 @@ fn parse_extent(source: &SourceReport, projected: &mut a::Program, span: a::Span
     }
     Ok(parsed.items)
 }
+fn replay_members(original: &a::Program, projected: &mut a::Program, before: usize,
+    members: &[usize], source_indices: &mut Vec<usize>, inside_owner: bool) -> Result<(), String> {
+    if projected.functions.len() != before + members.len() {
+        return Err("authored function population changed during replay".to_string());
+    }
+    for (offset, member) in members.iter().enumerate() {
+        let f = &original.functions[*member];
+        let next = &mut projected.functions[before + offset];
+        if next.name != f.name || next.module != f.module || next.span != f.span
+            || next.const_qualified != f.const_qualified || next.body.is_some() != f.body.is_some()
+            || inside_owner && (next.public != f.public || next.attrs != f.attrs) {
+            return Err("authored function identity changed during replay".to_string());
+        }
+        if !inside_owner { next.public = f.public; next.attrs = f.attrs.clone(); }
+        source_indices.push(*member);
+    }
+    Ok(())
+}
 fn replay_item(source: &SourceReport, original: &a::Program, projected: &mut a::Program,
-    item: a::Item) -> Result<(), String> {
+    item: a::Item, source_indices: &mut Vec<usize>) -> Result<(), String> {
+    let before = projected.functions.len();
     let (span, module, expected) = match item {
         a::Item::Struct(index) => {
             let value = &original.structs[index];
-            (value.span, value.module.as_str(), a::Item::Struct(projected.structs.len()))
+            (attributed_span(value.span, &value.attrs), value.module.as_str(), a::Item::Struct(projected.structs.len()))
         }
         a::Item::Trait(index) => {
             let value = &original.traits[index];
@@ -645,10 +901,21 @@ fn replay_item(source: &SourceReport, original: &a::Program, projected: &mut a::
         return Err("authored declaration changed during replay".to_string());
     }
     match (item, expected) {
-        (a::Item::Struct(original_id), a::Item::Struct(id)) =>
-            projected.structs[id].public = original.structs[original_id].public,
-        (a::Item::Trait(original_id), a::Item::Trait(id)) =>
-            projected.traits[id].public = original.traits[original_id].public,
+        (a::Item::Struct(original_id), a::Item::Struct(id)) => {
+            let value = &original.structs[original_id];
+            if projected.structs[id].span != value.span || projected.structs[id].attrs != value.attrs {
+                return Err("receiver declaration changed during replay".to_string());
+            }
+            projected.structs[id].public = value.public;
+        }
+        (a::Item::Trait(original_id), a::Item::Trait(id)) => {
+            let value = &original.traits[original_id];
+            if projected.traits[id].span != value.span || projected.traits[id].methods.len() != value.methods.len() {
+                return Err("trait declaration changed during replay".to_string());
+            }
+            projected.traits[id].public = value.public;
+            replay_members(original, projected, before, &value.methods, source_indices, true)?;
+        }
         (a::Item::Constant(original_id), a::Item::Constant(id)) =>
             projected.constants[id].public = original.constants[original_id].public,
         _ => return Err("authored declaration kind changed during replay".to_string()),
@@ -746,19 +1013,20 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
             projected.modules.push(module); projected.items.push(a::Item::Module(index));
         }
     }
-    for item in declarations { replay_item(source, original, &mut projected, item)?; }
-    replay_expansion_inputs(source, original, &mut projected, &expansions)?;
     let mut source_indices = Vec::new();
+    for item in declarations { replay_item(source, original, &mut projected, item, &mut source_indices)?; }
+    replay_expansion_inputs(source, original, &mut projected, &expansions)?;
     let mut implementations = BTreeSet::new();
     for index in selected {
         let f = &original.functions[*index];
         let before = projected.functions.len();
-        let members = if let Some(owner) = plans[*index].as_ref().unwrap().implementation {
+        let owner = plans[*index].as_ref().unwrap().implementation;
+        let members = if let Some(owner) = owner {
             if !implementations.insert(owner) { continue; }
             let implementation = &original.impls[owner];
             let id = projected.impls.len();
             if parse_extent(source, &mut projected, implementation.span, &implementation.module)? != vec![a::Item::Impl(id)] {
-                return Err("inherent implementation changed during replay".to_string());
+                return Err("authored implementation changed during replay".to_string());
             }
             projected.items.push(a::Item::Impl(id));
             implementation.methods.clone()
@@ -769,19 +1037,7 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
             projected.items.push(a::Item::Function(before));
             vec![*index]
         };
-        if projected.functions.len() != before + members.len() {
-            return Err("authored function population changed during replay".to_string());
-        }
-        for (offset, member) in members.iter().enumerate() {
-            let f = &original.functions[*member];
-            let next = &mut projected.functions[before + offset];
-            if next.name != f.name || next.module != f.module || next.span != f.span
-                || next.const_qualified != f.const_qualified {
-                return Err("authored function identity changed during replay".to_string());
-            }
-            next.public = f.public; next.attrs = f.attrs.clone();
-            source_indices.push(*member);
-        }
+        replay_members(original, &mut projected, before, &members, &mut source_indices, owner.is_some())?;
     }
     crate::syntax::macros::expand(&mut projected).map_err(|_| -> String { "isolated source expansion refused".to_string() })?;
     if !same_expansions(original, &projected, &expansions) {

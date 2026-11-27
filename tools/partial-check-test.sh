@@ -31,7 +31,7 @@ mkdir "$work/cases"
 cp tests/fixtures/partial_check/*.lkj "$work/cases/"
 verifier_compiler=${baseline:-$compiler}
 "$verifier_compiler" build tests/fixtures/partial_check_verify.lkj --library-dir "$library" --no-store -o "$work/verify" > "$work/verifier-output" 2> "$work/verifier-error" || fail 'verifier build'
-cases=(independent unsafe_binding local_import global_static mutable_static qualified_header global_macro glob_import trait_impl type_failure qualified_import normalized_self import_chain library_inputs grow_context grow_module)
+cases=(independent unsafe_binding local_import global_static mutable_static qualified_header global_macro glob_import trait_impl type_failure qualified_import normalized_self import_chain library_inputs grow_context grow_module receiver)
 sed '/^fn invalid</d; /^fn refusal()/d' "$work/cases/grow_context.lkj" > "$work/grow-valid.lkj"
 cat >> "$work/grow-valid.lkj" <<'EOF'
 impl Marker for i64 {}
@@ -49,6 +49,37 @@ printf 'pub fn __lkjscript_is_ascii_digit(_value: char) -> bool { 1i64 }\n' > "$
 sed 's/1i64 };/false };/' "$work/cases/grow_context.lkj" > "$work/macro-mutant.lkj"
 cp "$work/cases/grow_context.lkj" "$work/method-mutant.lkj"
 printf 'impl Counter { fn measured(&self) -> i64 { 0 } }\n' >> "$work/method-mutant.lkj"
+sed '/^use crate::absent::Ghost;$/d; /^fn refusal()/d' "$work/cases/receiver.lkj" > "$work/receiver-valid.lkj"
+for variant in duplicate blanket qualifier alias; do
+    cp "$work/cases/receiver.lkj" "$work/receiver-$variant.lkj"
+done
+cat >> "$work/receiver-duplicate.lkj" <<'EOF'
+
+impl HasBits<u16> for Ready {
+    fn has_bits(&self, bits: u16) -> bool { bits != 0 }
+}
+EOF
+cat >> "$work/receiver-blanket.lkj" <<'EOF'
+
+impl<T> HasBits<u16> for T {
+    fn has_bits(&self, bits: u16) -> bool { bits != 0 }
+}
+EOF
+printf '\nimpl HasBits::Missing for Ready {}\n' >> "$work/receiver-qualifier.lkj"
+cat >> "$work/receiver-alias.lkj" <<'EOF'
+
+use crate::absent::Ghost as Receiver;
+impl HasBits<u16> for Receiver {
+    fn has_bits(&self, bits: u16) -> bool { bits != 0 }
+}
+EOF
+sed 's/self.end = self.capacity;/println!("unsupported destructor");/' \
+    "$work/cases/receiver.lkj" > "$work/receiver-destructor.lkj"
+mkdir "$work/receiver-edit"
+cp "$work/cases/receiver.lkj" "$work/receiver-edit/main.lkj"
+head -c 32 /dev/urandom > "$work/receiver-edit-key"
+printf '%s\n' '{"version":1,"operations":[{"op":"replace-body","id":"probe","source":"{ 0i64 }"}]}' \
+    > "$work/receiver-edit-request"
 checks=0
 refusals=0
 for mode in on off; do
@@ -65,7 +96,9 @@ for mode in on off; do
         checks=$((checks + 2))
         actual=$("$compiler" run "$work/grow-valid.lkj" --library-dir "$library" --debug-assertions "$mode" --engine "$engine" --no-store 2> "$work/error")
         [[ $actual == 42 ]] || fail "grown closure $mode/$engine value"
-        checks=$((checks + 1))
+        actual=$("$compiler" run "$work/receiver-valid.lkj" --library-dir "$library" --debug-assertions "$mode" --engine "$engine" --no-store 2> "$work/error")
+        [[ $actual == 42 ]] || fail "receiver closure $mode/$engine value"
+        checks=$((checks + 2))
     done
     for variant in library macro method; do
         source="$work/cases/grow_context.lkj"
@@ -76,6 +109,14 @@ for mode in on off; do
         "$compiler" check "$source" --library-dir "$selected_library" --debug-assertions "$mode" --no-store > "$work/output" 2> "$work/error" || status=$?
         [[ $status == 1 && ! -s $work/output ]] || fail "$variant mutant $mode kept no source refusal"
         "$work/verify" "$source" "grow_${variant}_mutant" < "$work/error" || fail "$variant mutant $mode item check"
+    done
+    for variant in duplicate blanket qualifier alias destructor; do
+        source="$work/receiver-$variant.lkj"
+        status=0
+        "$compiler" check "$source" --library-dir "$library" --debug-assertions "$mode" --no-store > "$work/output" 2> "$work/error" || status=$?
+        [[ $status == 1 && ! -s $work/output ]] || fail "receiver $variant $mode kept no source refusal"
+        "$work/verify" "$source" "receiver_$variant" < "$work/error" 2> "$work/verifier-error" ||
+            fail "receiver $variant $mode item check"
     done
     if [[ -n $baseline ]]; then
         "$baseline" ir "$work/cases/valid.lkj" --library-dir "$library" --debug-assertions "$mode" --no-store -o "$work/baseline-$mode.lkjir" > "$work/output" 2> "$work/error"
@@ -118,18 +159,34 @@ for mode in on off; do
         done
     done
     # Even when probe itself checks independently, the invalid source cannot publish an image or IR.
-    for command in build ir; do
-        printf 'unreplaced destination\n' > "$work/destination"
-        cp "$work/destination" "$work/destination-before"
+    for name in independent receiver; do
+        for command in build ir; do
+            printf 'unreplaced destination\n' > "$work/destination"
+            cp "$work/destination" "$work/destination-before"
+            status=0
+            "$compiler" "$command" "$work/cases/$name.lkj" --entry probe --library-dir "$library" --debug-assertions "$mode" --no-store -o "$work/destination" > "$work/output" 2> "$work/refused-error" || status=$?
+            [[ $status == 1 && ! -s $work/output ]] || fail "$command published an invalid source root"
+            cmp "$work/destination-before" "$work/destination" || fail "$command changed the destination after refusal"
+            if grep -q '^LKJSCRIPT_ITEMS ' "$work/refused-error"; then fail 'item reporting leaked into artifact admission'; fi
+            refusals=$((refusals + 1))
+        done
+    done
+    for edit_mode in dry-run apply; do
+        edit_flags=()
+        if [[ $edit_mode == dry-run ]]; then edit_flags=(--dry-run); fi
         status=0
-        "$compiler" "$command" "$work/cases/independent.lkj" --entry probe --library-dir "$library" --debug-assertions "$mode" --no-store -o "$work/destination" > "$work/output" 2> "$work/refused-error" || status=$?
-        [[ $status == 1 && ! -s $work/output ]] || fail "$command published an invalid source root"
-        cmp "$work/destination-before" "$work/destination" || fail "$command changed the destination after refusal"
-        if grep -q '^LKJSCRIPT_ITEMS ' "$work/refused-error"; then fail 'item reporting leaked into artifact admission'; fi
+        "$compiler" edit main.lkj --source-dir "$work/receiver-edit" --library-dir "$library" \
+            --debug-assertions "$mode" --no-store --store-key "$work/receiver-edit-key" \
+            --request "$work/receiver-edit-request" "${edit_flags[@]}" \
+            > "$work/output" 2> "$work/refused-error" || status=$?
+        [[ $status == 1 && ! -s $work/output ]] || fail "receiver edit $edit_mode $mode admitted a refused root"
+        grep -q 'E_CAPABILITY' "$work/refused-error" || fail 'receiver edit lost the original refusal'
+        cmp "$work/cases/receiver.lkj" "$work/receiver-edit/main.lkj"
+        [[ ! -e $work/receiver-edit/.lkjscript-edit.pending ]] || fail 'receiver edit left a pending transaction'
         refusals=$((refusals + 1))
     done
 done
-printf 'ok partial-check: both configurations, authored item IDs/counts/dependencies/causes, %s source/IR value routes and %s retained execution/publication refusals\n' "$checks" "$refusals"
+printf 'ok partial-check: both configurations, authored item IDs/counts/dependencies/causes, %s source/IR value routes and %s retained execution, publication and checked-edit refusals\n' "$checks" "$refusals"
 if [[ -n $baseline ]]; then
     printf 'ok partial-check baseline: valid IR byte identity, both-engine values, and every original primary refusal retained\n'
 fi
@@ -154,7 +211,7 @@ if [[ -n $witness ]]; then
                     independent|unsafe_binding|library_inputs)
                         [[ $status == 0 && $("$work/rust") == 42 ]] || fail "Rust capability-boundary twin $name/$mode/$level"
                         ;;
-                    local_import|global_static|mutable_static|qualified_header|global_macro|glob_import|trait_impl|type_failure|qualified_import|normalized_self|import_chain|grow_context|grow_module)
+                    local_import|global_static|mutable_static|qualified_header|global_macro|glob_import|trait_impl|type_failure|qualified_import|normalized_self|import_chain|grow_context|grow_module|receiver)
                         [[ $status != 0 ]] || fail "Rust accepted malformed context $name/$mode/$level"
                         ;;
                     *) fail "missing Rust oracle for $name" ;;
@@ -166,6 +223,19 @@ if [[ -n $witness ]]; then
             "$witness" --edition=2021 --crate-name partial_grow -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || fail "Rust grown closure $mode/$level"
             [[ $("$work/rust") == 42 ]] || fail "Rust grown closure $mode/$level value"
             rust_values=$((rust_values + 1))
+            cp "$work/receiver-valid.lkj" "$work/rust.lkj"
+            printf '\nfn main() { println!("{}", probe()); }\n' >> "$work/rust.lkj"
+            "$witness" --edition=2021 --crate-name partial_receiver -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || fail "Rust receiver closure $mode/$level"
+            [[ $("$work/rust") == 42 ]] || fail "Rust receiver closure $mode/$level value"
+            rust_values=$((rust_values + 1))
+            for variant in duplicate blanket qualifier; do
+                sed '/^use crate::absent::Ghost;$/d; /^fn refusal()/d' "$work/receiver-$variant.lkj" > "$work/rust.lkj"
+                printf '\nfn main() { println!("{}", probe()); }\n' >> "$work/rust.lkj"
+                if "$witness" --edition=2021 --crate-name partial_receiver -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error"; then
+                    fail "Rust accepted receiver $variant $mode/$level"
+                fi
+                rust_verdicts=$((rust_verdicts + 1))
+            done
             cp "$work/cases/unsafe_binding.lkj" "$work/rust.lkj"
             printf '\nfn main() { println!("{}", unsafe_local()); }\n' >> "$work/rust.lkj"
             "$witness" --edition=2021 --crate-name partial_shadow -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error"

@@ -1101,23 +1101,31 @@ body or proves that an erased binding was absent.
 The independent population covers scalar constants, primitive and view types,
 tuples, arrays, ordinary local control flow and direct calls to eligible source
 or library functions. Plain generic parameters use ordinary rigid checking.
-Supported explicit bounds are intrinsic `Copy` and `Sized` and exact empty
-source traits. The method case replays a complete inherent implementation for
-a nongeneric unit struct when the catalog has no competing implementation or
-refused coherence input. Applied traits, method calls and nominal values with
-additional dependencies still require complete source checking.
+Supported explicit generic bounds are intrinsic `Copy` and `Sized` and exact
+empty source traits. A method can replay a complete inherent or trait
+implementation over a nongeneric source struct. Borrowed receivers can use
+direct named and tuple fields of primitive type. The replay includes the
+receiver layout and its supported scalar derives, required trait signatures,
+the exact scalar trait application, and an applicable source destructor.
+Other nominal operations and method calls still require complete source
+checking.
 
 Unloaded modules occupy their written names and poison dependent imports with
 their loader causes. A failed import with a complete tree contributes its
-ordinary aliases, including grouped and terminal `self` imports. Unresolved
-globs and unknown declaration shapes retain wildcard poison. A balanced outer
+ordinary aliases, including grouped and terminal `self` imports. A complete
+import can poison the type and trait names used by an implementation header.
+Coherence compares retained headers by exact receiver declaration, trait
+declaration and closed scalar arguments. A possible overlap blocks the
+affected item with the upstream lookup failure or a location on the competing
+header. Unknown source ownership and declaration shapes keep coherence open.
+Unresolved globs and unknown declaration shapes retain wildcard poison. A balanced outer
 attribute whose source semantics cannot add ordinary bindings preserves the
 written declaration owner. Unknown attributes and incomplete headers keep
 conservative poison. Qualified paths still conservatively include possible
 poison at intermediate aliases. A replay needs one source owner for each
 selected module path and its ancestors.
 
-Each eligible function and its transitive direct-call dependencies are reparsed
+Each eligible function and its transitive call and destructor dependencies are reparsed
 from their original loaded source bytes, preserving source coordinates and
 configuration. Type, constant, trait and direct-call bindings must agree with
 lookup in the original declaration context. Selected library bodies participate

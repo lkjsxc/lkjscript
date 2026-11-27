@@ -1589,6 +1589,11 @@ pub(crate) fn builtin_parents(name: &str) -> Vec<String> {
     }
 }
 
+pub(crate) fn builtin_trait(name: &str) -> bool {
+    matches!(name, "Copy" | "Clone" | "Data" | "Send" | "Sync" | "Ord" | "Eq"
+        | "PartialEq" | "PartialOrd" | "Drop" | "Sized")
+}
+
 pub(crate) fn bound_identity(source: &Program, path: &Path) -> TraitIdentity {
     if path.qualification.is_some() {
         return TraitIdentity::Unknown(format!("qualified associated type {}", path.name));
@@ -1608,20 +1613,7 @@ pub(crate) fn bound_identity(source: &Program, path: &Path) -> TraitIdentity {
             return TraitIdentity::Declared(index);
         }
     }
-    if matches!(
-        path.name.as_str(),
-        "Copy"
-            | "Clone"
-            | "Data"
-            | "Send"
-            | "Sync"
-            | "Ord"
-            | "Eq"
-            | "PartialEq"
-            | "PartialOrd"
-            | "Drop"
-            | "Sized"
-    ) {
+    if builtin_trait(&path.name) {
         TraitIdentity::Builtin(path.name.clone())
     } else {
         TraitIdentity::Unknown(path.name.clone())

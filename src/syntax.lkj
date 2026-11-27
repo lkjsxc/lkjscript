@@ -974,7 +974,7 @@ impl Parser {
                 for item in &self.program.uses[before..] { names.push(item.alias.clone()); }
             }
             self.program.uses.truncate(before);
-            return (names, true, true);
+            return (names, true, !complete);
         }
         if kind == "item" || matches!(head, "impl" | "union" | "macro_rules") {
             return (Vec::new(), true, true);
