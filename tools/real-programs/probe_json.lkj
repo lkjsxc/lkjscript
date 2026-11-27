@@ -1,0 +1,110 @@
+//! Canonical JSON spelling used in probe receipts and their independent fixture checks.
+use std::json::{self, Value};
+use std::collections::BTreeMap;
+pub fn st(s: &str) -> Value { Value::String(s.to_string()) }
+pub fn num(n: usize) -> Value { Value::from_usize(n) }
+pub fn copy(v: &Value) -> Value {
+    match v {
+        Value::Null => Value::Null,
+        Value::Bool(b) => Value::Bool(*b),
+        Value::Number(s) => Value::Number(s.clone()),
+        Value::String(s) => Value::String(s.clone()),
+        Value::Array(a) => {
+            let mut out = Vec::new();
+            for item in a { out.push(copy(item)); }
+            Value::Array(out)
+        },
+        Value::Object(a) => {
+            let mut out = Vec::new();
+            for item in a { out.push((item.0.clone(), copy(&item.1))); }
+            Value::Object(out)
+        },
+    }
+}
+fn quoted(out: &mut String, value: &str) {
+    // JSON.stringify uses lowercase UTF-16 escapes, including surrogate pairs.
+    let encoded = json::stringify(&st(value)).unwrap();
+    for ch in encoded.as_str().chars() {
+        let code = ch as u32;
+        if code <= 127u32 { out.push(ch); }
+        else if code <= 65535u32 { hex4(out, code); }
+        else {
+            let rest = code - 65536u32;
+            hex4(out, 55296u32 + rest / 1024u32);
+            hex4(out, 56320u32 + rest % 1024u32);
+        }
+    }
+}
+fn hex4(out: &mut String, code: u32) {
+    out.push_str("\\u");
+    let digits = b"0123456789abcdef";
+    for i in 0usize..4usize { let shift = (12usize - i * 4usize) as u32;
+        out.push(digits[((code >> shift) & 15u32) as usize] as char);
+    }
+}
+fn sort_key(key: &str) -> String {
+    // JS object enumeration puts canonical uint32 array-index keys first.
+    if let Ok(index) = key.parse::<u32>() {
+        if index < 4294967295u32 && format!("{index}").as_str() == key {
+            let digits = format!("{index}");
+            return format!("0{}{digits}", "0".repeat(10usize - digits.len()));
+        }
+    }
+    format!("1{}", lex_key(key))
+}
+fn lex_key(key: &str) -> String {
+    let mut out = String::new();
+    for ch in key.chars() {
+        let code = ch as u32;
+        if code <= 65535u32 { hex4(&mut out, code); }
+        else {
+            let rest = code - 65536u32;
+            hex4(&mut out, 55296u32 + rest / 1024u32);
+            hex4(&mut out, 56320u32 + rest % 1024u32);
+        }
+    }
+    out
+}
+fn indent(out: &mut String, pretty: bool, depth: usize) {
+    if pretty { out.push('\n'); out.push_str(&" ".repeat(depth * 3usize)); }
+}
+fn encode(v: &Value, out: &mut String, pretty: bool, depth: usize) {
+    match v {
+        Value::String(s) => quoted(out, s),
+        Value::Array(items) => {
+            out.push('[');
+            let mut first = true;
+            for item in items {
+                if !first { out.push(','); }
+                first = false;
+                indent(out, pretty, depth + 1usize);
+                encode(item, out, pretty, depth + 1usize);
+            }
+            if !first { indent(out, pretty, depth); }
+            out.push(']');
+        },
+        Value::Object(fields) => {
+            let mut order: BTreeMap<String, usize> = BTreeMap::new();
+            for i in 0usize..fields.len() { order.insert(sort_key(&fields[i].0), i); }
+            out.push('{');
+            let mut first = true;
+            for (_, i) in &order {
+                if !first { out.push(','); }
+                first = false;
+                indent(out, pretty, depth + 1usize);
+                quoted(out, &fields[*i].0);
+                out.push(':');
+                if pretty { out.push(' '); }
+                encode(&fields[*i].1, out, pretty, depth + 1usize);
+            }
+            if !first { indent(out, pretty, depth); }
+            out.push('}');
+        },
+        _ => out.push_str(&json::stringify(v).unwrap()),
+    }
+}
+pub fn canonical(v: &Value, pretty: bool) -> String {
+    let mut out = String::new();
+    encode(v, &mut out, pretty, 0usize);
+    out
+}

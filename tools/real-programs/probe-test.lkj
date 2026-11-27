@@ -1,0 +1,197 @@
+//! Independently validate the receipts from the offline probe fixtures.
+mod probe_json;
+use probe_json::{canonical, copy, st, num};
+use std::json::{self, Value};
+use std::sha256;
+
+macro_rules! object {
+    ($($key:tt => $value:expr),*) => {
+        Value::Object(vec![$(($key.to_string(), $value)),*])
+    };
+}
+fn check(ok: bool, reason: &str) -> Result<(),String> {
+    if ok { Ok(()) } else { Err(format!("review check failed: {reason}")) }
+}
+fn read(root: &mut ReadDirectory, path: &str) -> Result<Vec<u8>,String> {
+    let mut file = root.open(path).map_err(|e:i64| -> String { format!("open {path}: errno {e}") })?;
+    file.read_to_end().map_err(|e:i64| -> String { format!("read {path}: errno {e}") })
+}
+fn parse(raw: &[u8]) -> Result<Value,String> {
+    json::parse(raw).map_err(|e:json::Error| -> String { format!("{e}") })
+}
+fn field<'a>(v: &'a Value, k: &str) -> &'a Value { v.get(k).unwrap() }
+fn s<'a>(v: &'a Value, k: &str) -> &'a str { field(v,k).as_str().unwrap_or("") }
+fn n(v: &Value, k: &str) -> usize { field(v,k).as_usize().unwrap_or(!0usize) }
+fn put(v: &mut Value, key: &str, value: Value) {
+    if let Value::Object(fields) = v {
+        for i in 0usize..fields.len() {
+            if fields[i].0.as_str()==key { fields[i].1=value; return; }
+        }
+        fields.push((key.to_string(),value));
+    }
+}
+fn remove(v: &mut Value, key: &str) {
+    if let Value::Object(fields) = v {
+        let mut kept=Vec::new();
+        for i in 0usize..fields.len() { if fields[i].0.as_str()!=key { kept.push((fields[i].0.clone(),copy(&fields[i].1))); } }
+        *fields=kept;
+    }
+}
+fn sha(raw: &[u8]) -> String { sha256::hex_digest(raw) }
+fn digit(c: u8) -> Result<u32,String> {
+    if c>=b'A' && c<=b'Z' { return Ok((c-b'A') as u32); }
+    if c>=b'a' && c<=b'z' { return Ok((c-b'a') as u32+26u32); }
+    if c>=b'0' && c<=b'9' { return Ok((c-b'0') as u32+52u32); }
+    if c==b'+' { return Ok(62u32); }
+    if c==b'/' { return Ok(63u32); }
+    Err("invalid base64 digit".to_string())
+}
+fn decode(encoded: &str) -> Result<Vec<u8>,String> {
+    let raw=encoded.as_bytes();
+    check(raw.len()%4usize==0usize,"base64 length")?;
+    let mut out=Vec::new();
+    let mut i=0usize;
+    while i<raw.len() {
+        let a=digit(raw[i])?;
+        let b=digit(raw[i+1usize])?;
+        let c=raw[i+2usize];
+        let d=raw[i+3usize];
+        out.push(((a<<2u32)|(b>>4u32)) as u8);
+        if c==b'=' { check(d==b'=' && i+4usize==raw.len() && b%16u32==0u32,"base64 final padding")?; }
+        else {
+            let v=digit(c)?;
+            out.push(((b<<4u32)|(v>>2u32)) as u8);
+            if d==b'=' { check(i+4usize==raw.len() && v%4u32==0u32,"base64 final padding")?; }
+            else { out.push(((v<<6u32)|digit(d)?) as u8); }
+        }
+        i+=4usize;
+    }
+    Ok(out)
+}
+fn replace_root(s: &str, root: &str) -> String {
+    if s.starts_with(root) { format!("/fixture{}",&s[root.len()..]) } else { s.to_string() }
+}
+fn normalize_path(v: &mut Value, key: &str, root: &str) {
+    let normalized=replace_root(s(v,key),root);
+    put(v,key,Value::String(normalized));
+}
+// This is the predecessor's stable ASCII fingerprint, not one sampled from
+// the port. Only changing environmental fields are normalized.
+fn fingerprint(receipt: &Value, root: &str) -> String {
+    let mut r=copy(receipt);
+    remove(&mut r,"timestamp_utc");
+    let mut package=copy(field(&r,"package"));
+    put(&mut package,"commit",st("FIXTURE_COMMIT"));
+    normalize_path(&mut package,"root",root);
+    put(&mut r,"package",package);
+    let mut compiler=copy(field(&r,"compiler"));
+    put(&mut compiler,"sha256",st("FIXTURE_COMPILER_SHA256"));
+    normalize_path(&mut compiler,"path",root);
+    put(&mut r,"compiler",compiler);
+    let mut time=copy(field(&r,"time_launcher"));
+    put(&mut time,"sha256",st("FIXTURE_TIME_SHA256"));
+    normalize_path(&mut time,"path",root);
+    put(&mut r,"time_launcher",time);
+    let mut library=copy(field(&r,"library"));
+    normalize_path(&mut library,"root",root);
+    put(&mut r,"library",library);
+    put(&mut r,"projection_manifest_sha256",st("FIXTURE_PROJECTION_SHA256"));
+    for key in vec!["verification_before".to_string(),"verification_after".to_string()] {
+        let mut v=copy(field(&r,key.as_str()));
+        put(&mut v,"commit",st("FIXTURE_COMMIT"));
+        put(&mut v,"manifest_sha256",st("FIXTURE_PROJECTION_SHA256"));
+        normalize_path(&mut v,"manifest",root);
+        put(&mut r,key.as_str(),v);
+    }
+    let mut normalized=Vec::new();
+    let observations=field(&r,"observations").as_array().unwrap();
+    for i in 0usize..observations.len() {
+        let mut o=copy(&observations[i]);
+        remove(&mut o,"wall_seconds"); remove(&mut o,"load_before"); remove(&mut o,"load_after");
+        let mut command=Vec::new();
+        for arg in field(&o,"command").as_array().unwrap() {
+            command.push(Value::String(replace_root(arg.as_str().unwrap(),root)));
+        }
+        put(&mut o,"command",Value::Array(command));
+        // Independently constructed with printf/base64/sha256sum from the
+        // original fixture's normalized diagnostic bytes.
+        let raw=if i==0usize {
+            object!("base64"=>st("ZW50cnkAc3JjL2xpYi5ycwByb290AC9maXh0dXJlL2FzY2lpL3NvdXJjZQBwYXlsb2FkAGZuIG9yaWdpbmFsKCkge30NCi8vIGNhZsOpDQr/"),"bytes"=>num(81usize),"sha256"=>st("12389d70570ea6eb09975d02ced4f75b9295850705ce207b92d0b708564e0a1c"))
+        } else {
+            object!("base64"=>st("ZW50cnkAc3JjL2xpYi5sa2oAcm9vdAAvZml4dHVyZS9hc2NpaS9wcm9qZWN0aW9uAHBheWxvYWQAZm4gb3JpZ2luYWwoKSB7fQ0KLy8gY2Fmw6kNCv8="),"bytes"=>num(86usize),"sha256"=>st("c4ef04134678125fca6f817913fb2dc926f750147ce3cbcade58f5aa258c91e8"))
+        };
+        put(&mut o,"stdout",raw);
+        normalized.push(o);
+    }
+    put(&mut r,"observations",Value::Array(normalized));
+    sha(canonical(&r,false).as_bytes())
+}
+fn validate(root: &mut ReadDirectory, args: &[Vec<u8>]) -> Result<(),String> {
+    check(args.len()==6usize,"validator argument count")?;
+    let mut strings=Vec::new();
+    for arg in args { strings.push(String::from_utf8(arg.clone()).map_err(|_| -> String { "invalid validator argument".to_string() })?); }
+    let tmp=strings[0].as_str(); let label=strings[1].as_str(); let entry=strings[2].as_str();
+    let suffix=if strings[3].as_str()=="yes" { "-源" } else { "" };
+    let receipt_path=format!("{label}/{}",strings[4]);
+    let commit=strings[5].as_str();
+    let source=format!("{label}/source{suffix}");
+    let projection=format!("{label}/projection{suffix}");
+    let library=format!("{label}/library{suffix}");
+    let compiler=format!("compiler{suffix}");
+    let time=format!("time{suffix}");
+    let rel=if label=="ascii" { "std/plain.lkj" } else { "std/café.lkj" };
+    let receipt_raw=read(root,receipt_path.as_str())?;
+    let r=parse(&receipt_raw)?;
+    check(receipt_raw.as_slice()==format!("{}\n",canonical(&r,true)).as_bytes(),"receipt canonical bytes")?;
+    let digest=sha(&read(root,&format!("{projection}/projection.json"))?);
+    let observations=field(&r,"observations").as_array().unwrap();
+    let before=field(&r,"verification_before"); let after=field(&r,"verification_after");
+    check(observations.len()==2usize && s(&r,"projection_manifest_sha256")==digest.as_str() && s(before,"manifest_sha256")==digest.as_str() && s(after,"manifest_sha256")==digest.as_str(),"both routes bind verified manifest")?;
+    let package=field(&r,"package");
+    check(s(package,"root")==format!("{tmp}/{source}").as_str() && s(package,"commit")==commit && s(before,"commit")==commit && s(after,"commit")==commit,"source root and Git commit binding")?;
+    let lib_raw=read(root,&format!("{library}/{rel}"))?;
+    let expected=Value::Array(vec![object!("path"=>st(rel),"bytes"=>num(lib_raw.len()),"sha256"=>Value::String(sha(&lib_raw)))]);
+    let lib=field(&r,"library");
+    check(s(lib,"root")==format!("{tmp}/{library}").as_str() && s(lib,"manifest_sha256")==sha(canonical(&expected,false).as_bytes()).as_str(),"library root and input manifest")?;
+    check(canonical(field(lib,"files"),false)==canonical(&expected,false),"library inventory and Unicode path")?;
+    let producer=field(&r,"compiler"); let launcher=field(&r,"time_launcher");
+    let producer_hash=sha(&read(root,compiler.as_str())?);
+    check(s(producer,"path")==format!("{tmp}/{compiler}").as_str() && s(producer,"sha256")==producer_hash.as_str(),"compiler path and byte identity")?;
+    check(s(launcher,"path")==format!("{tmp}/{time}").as_str() && s(launcher,"sha256")==sha(&read(root,time.as_str())?).as_str(),"time launcher path and byte identity")?;
+    let summary=object!("receipt"=>st(format!("{tmp}/{receipt_path}").as_str()),"observations"=>num(2usize),"compiler_sha256"=>Value::String(producer_hash),"source_unchanged"=>Value::Bool(true));
+    check(read(root,"stdout")?.as_slice()==format!("{}\n",canonical(&summary,false)).as_bytes(),"exact summary and Unicode receipt path")?;
+    let body=read(root,&format!("{source}/{entry}"))?;
+    let body_sha=sha(&body);
+    for i in 0usize..2usize {
+        let o=&observations[i];
+        let selected=if i==0usize { entry.to_string() } else { format!("{}.lkj",&entry[..entry.len()-3usize]) };
+        let route_root=if i==0usize { format!("{tmp}/{source}") } else { format!("{tmp}/{projection}") };
+        let route=if i==0usize { "original_suffix" } else { "suffix_projection" };
+        check(n(o,"exit_status")==0usize && n(o,"launcher_signal")==0usize,"route opens exact OS byte path")?;
+        let command=field(o,"command").as_array().unwrap();
+        check(command.len()==7usize && command[0].as_str()==Some(format!("{tmp}/{compiler}").as_str()) && command[1].as_str()==Some("check") &&
+            command[2].as_str()==Some(selected.as_str()) && command[3].as_str()==Some("--source-dir") &&
+            command[4].as_str()==Some(route_root.as_str()) && command[5].as_str()==Some("--library-dir") &&
+            command[6].as_str()==Some(format!("{tmp}/{library}").as_str()),"exact route command text")?;
+        check(s(o,"upstream_entry")==entry && s(o,"route")==route,"route entry text")?;
+        check(s(o,"entry_sha256")==body_sha.as_str() && n(o,"entry_bytes")==body.len(),"route payload identity")?;
+        let mut expected=format!("entry\0{selected}\0root\0{route_root}\0payload\0").into_bytes();
+        expected.extend_from_slice(&body); expected.push(255u8);
+        let stdout=field(o,"stdout"); let stderr=field(o,"stderr"); let time_report=field(o,"time_report");
+        check(decode(s(stdout,"base64"))?==expected && s(stdout,"sha256")==sha(&expected).as_str() && n(stdout,"bytes")==expected.len(),"raw diagnostic bytes preserved")?;
+        check(s(stderr,"text")=="diagnostic ☃\n" && n(stderr,"bytes")==15usize && s(stderr,"sha256")==sha("diagnostic ☃\n".as_bytes()).as_str(),"UTF-8 diagnostics")?;
+        check(n(o,"peak_rss_kib")==4321usize && s(time_report,"text")=="4321\n" && n(time_report,"bytes")==5usize &&
+            s(time_report,"sha256")==sha(b"4321\n").as_str(),"complete GNU-time report")?;
+    }
+    if label=="ascii" {
+        let actual=fingerprint(&r,tmp);
+        check(actual.as_str()=="0b4f12062b98aace48425ebbbaa2cd67e6b7526feeaf594efd7ac042195cbc22",&format!("ASCII receipt schema and stable semantics unchanged (got {actual})"))?;
+    }
+    Ok(())
+}
+fn main(mut arguments: Arguments, mut fixture: ReadDirectory, mut output: Stdout, mut errors: Stderr, mut status: ExitStatus) {
+    match validate(&mut fixture,&arguments.args()) {
+        Ok(()) => output.write(b"ok receipt fixture\n"),
+        Err(reason) => { errors.write(format!("{reason}\n").as_bytes()); status.set_status(1u8); },
+    }
+}

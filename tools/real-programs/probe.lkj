@@ -1,0 +1,387 @@
+//! Observe unchanged upstream roots; a receipt is not an admission certificate.
+//! The host adapter owns the remaining external verifier, GNU-time launch and
+//! no-replace publication. Checked code owns argument admission, identities,
+//! route selection, observation validation and receipt rendering.
+mod probe_json;
+use probe_json::{canonical, copy, num, st};
+use std::json::{self, Value};
+use std::collections::{BTreeMap, BTreeSet};
+use std::sha256;
+
+macro_rules! object {
+    ($($key:tt => $value:expr),*) => {
+        Value::Object(vec![$(($key.to_string(), $value)),*])
+    };
+}
+fn fail(message: &str) -> Result<(), String> { Err(message.to_string()) }
+fn text(raw: &[u8], description: &str) -> Result<String, String> {
+    String::from_utf8(raw.to_vec()).map_err(|_| -> String { format!("non-UTF-8 {description}") })
+}
+fn io<T>(result: Result<T,i64>, operation: &str) -> Result<T,String> {
+    result.map_err(|errno: i64| -> String { format!("{operation}: {}", std::io::errno_name(errno)) })
+}
+fn sha(raw: &[u8]) -> String { sha256::hex_digest(raw) }
+fn get_string<'a>(v: &'a Value, key: &str) -> Result<&'a str,String> {
+    v.get(key).and_then(|x: &Value| x.as_str()).ok_or(format!("missing or invalid {key}"))
+}
+fn get_array<'a>(v: &'a Value, key: &str) -> Result<&'a [Value],String> {
+    v.get(key).and_then(|x: &Value| x.as_array()).ok_or(format!("missing or invalid {key}"))
+}
+fn parse_json(raw: &[u8], description: &str) -> Result<Value,String> {
+    let value = text(raw, description)?;
+    json::parse(value.as_bytes()).map_err(|e: std::json::Error| -> String { format!("{e}") })
+}
+fn line(v: &Value) -> String { format!("{}\n",canonical(v,false)) }
+const HELP: &str = "Usage: probe.sh --compiler COMPILER --library LIBRARY --source SOURCE\n       --projection PROJECTION --package NAME --version EXACT --entry src/lib.rs\n       [--entry another/root.rs ...] --output NEW_RECEIPT.json [--time GNU_TIME]\nSOURCE and PROJECTION must already pass project.mjs --verify. Every diagnostic byte,\nexact command, input identity, load, elapsed wall time and peak process RSS is retained.\nThese source-root observations do not establish Cargo-equivalent admission.\n";
+
+struct Options {
+    paths: Vec<Vec<u8>>,
+    entries: Vec<String>,
+    package: String,
+    version: String,
+    output: String,
+    help: bool,
+}
+fn options(args: &[Vec<u8>]) -> Result<Options,String> {
+    let mut fields: BTreeMap<String,Vec<u8>> = BTreeMap::new();
+    fields.insert("time".to_string(), b"/usr/bin/time"[..].to_vec());
+    let mut entries = Vec::new();
+    let mut help = false;
+    let mut i = 0usize;
+    while i < args.len() {
+        let word = &args[i];
+        let mut split = 0usize;
+        while split < word.len() && word[split] != b'=' { split += 1usize; }
+        // Node Buffer's ASCII decoder masks the high bit.
+        let mut flag = String::new();
+        for byte in &word[..split] { flag.push((*byte & 127u8) as char); }
+        let f = flag.as_str();
+        if !f.starts_with("-") { return Err("use --help".to_string()); }
+        let name = if f.starts_with("--") { &f[2..] } else { &f[1..] };
+        if name == "help" && split == word.len() { help = true; i += 1usize; continue; }
+        if name != "compiler" && name != "library" && name != "source" && name != "projection"
+            && name != "output" && name != "package" && name != "version" && name != "entry" && name != "time" {
+            return Err("use --help".to_string());
+        }
+        let value = if split < word.len() { word[split+1usize..].to_vec() }
+            else { i += 1usize; if i == args.len() { return Err("use --help".to_string()); } args[i].clone() };
+        if name == "entry" { entries.push(value); } else { fields.insert(name.to_string(), value); }
+        i += 1usize;
+    }
+    let mut result = Options { paths: Vec::new(), entries: Vec::new(), package: String::new(), version: String::new(), output: String::new(), help };
+    if help { return Ok(result); }
+    for key in vec!["compiler".to_string(),"library".to_string(),"source".to_string(),"projection".to_string(),"output".to_string(),"package".to_string(),"version".to_string()] {
+        if fields.get(&key).map(|v: &Vec<u8>| v.is_empty()).unwrap_or(true) {
+            return Err("all named arguments and at least one --entry are required".to_string());
+        }
+    }
+    if entries.is_empty() { return Err("all named arguments and at least one --entry are required".to_string()); }
+    for entry in &entries { result.entries.push(text(entry,"entry path")?); }
+    result.package = text(fields.get(&"package".to_string()).unwrap(),"package name")?;
+    result.version = text(fields.get(&"version".to_string()).unwrap(),"package version")?;
+    result.output = text(fields.get(&"output".to_string()).unwrap(),"output path")?;
+    for key in vec!["compiler".to_string(),"library".to_string(),"source".to_string(),"projection".to_string(),"time".to_string()] { result.paths.push(fields.get(&key).unwrap().clone()); }
+    Ok(result)
+}
+fn refusal(errors: &mut Stderr, status: &mut ExitStatus, reason: &str) {
+    errors.write(format!("real-programs-probe: {reason}\n").as_bytes());
+    status.set_status(255u8);
+}
+fn send_field(output: &mut Stdout, value: &[u8]) {
+    output.write(value);
+    output.write(b"\0");
+}
+// Grant selector: no filesystem or process authority. The launcher receives
+// exactly the options this same parser will admit on the observation route.
+fn select(mut arguments: Arguments, mut output: Stdout, mut errors: Stderr, mut status: ExitStatus) {
+    match options(&arguments.args()) {
+        Err(reason) => refusal(&mut errors,&mut status,reason.as_str()),
+        Ok(o) => {
+            if o.help { send_field(&mut output,b"help"); output.write(HELP.as_bytes()); }
+            else {
+                send_field(&mut output,b"observe");
+                for path in &o.paths { send_field(&mut output,path); }
+                send_field(&mut output,o.output.as_bytes());
+            }
+        }
+    }
+}
+struct Host {
+    input: Stdin,
+    output: Stdout,
+    scratch: Directory,
+}
+impl Host {
+    fn request(&mut self, verb: &str, fields: &[String]) -> Result<String,String> {
+        send_field(&mut self.output,verb.as_bytes());
+        for value in fields { send_field(&mut self.output,value.as_bytes()); }
+        let mut raw = Vec::new();
+        let mut byte = [0u8;1];
+        loop {
+            if io(self.input.read(&mut byte),"host reply")? == 0usize { return Err("host adapter closed".to_string()); }
+            if byte[0] == 0u8 { break; }
+            raw.push(byte[0]);
+        }
+        let reply = text(&raw,"host reply")?;
+        if reply.as_str().starts_with("error:") { return Err(reply.as_str()[6..].to_string()); }
+        Ok(reply)
+    }
+    fn read(&mut self, name: &str) -> Result<Vec<u8>,String> {
+        let mut file = io(self.scratch.open(name),name)?;
+        io(file.read_to_end(),name)
+    }
+    fn receipt(&mut self, raw: &[u8]) -> Result<(),String> {
+        let mut file = io(self.scratch.create_private("receipt"),"receipt")?;
+        io(file.write_all(raw),"receipt")
+    }
+}
+fn read(root: &mut ReadDirectory, name: &str) -> Result<Vec<u8>,String> {
+    let mut file = io(root.open(name),name)?;
+    io(file.read_to_end(),name)
+}
+fn basename(path: &str) -> &str {
+    let mut last = 0usize;
+    for i in 0usize..path.len() { if path.as_bytes()[i] == b'/' { last = i+1usize; } }
+    &path[last..]
+}
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct Entry { name: Vec<u8>, kind: u8 }
+fn entries(dir: &mut ReadDirectory) -> Result<Vec<Entry>,String> {
+    // Preserve getdents d_type: a beneath-root open alone can follow links.
+    let mut scan = io(dir.open_directory("."),"open library directory")?;
+    let mut result = Vec::new();
+    let mut buffer = [0u8;8192];
+    loop {
+        let n = scan.__lkjscript_read(&mut buffer);
+        if n < 0i64 { return Err(format!("read directory: {}",std::io::errno_name(-n))); }
+        if n == 0i64 { break; }
+        let count = n as usize;
+        let mut at = 0usize;
+        while at < count {
+            if count-at < 20usize { return Err("invalid directory record".to_string()); }
+            let size = buffer[at+16usize] as usize | ((buffer[at+17usize] as usize)<<8u64);
+            if size < 20usize || size > count-at { return Err("invalid directory record length".to_string()); }
+            let mut end = at+19usize;
+            while end < at+size && buffer[end] != 0u8 { end += 1usize; }
+            if end == at+size { return Err("unterminated directory record".to_string()); }
+            let name = &buffer[at+19usize..end];
+            if name != b"." && name != b".." {
+                result.push(Entry { name: name.to_vec(), kind: buffer[at+18usize] });
+            }
+            at += size;
+        }
+    }
+    result.sort();
+    Ok(result)
+}
+fn library_file(dir: &mut ReadDirectory, name: &str, relative: &str, files: &mut Vec<Value>) -> Result<(),String> {
+    let raw = read(dir,name)?;
+    files.push(object!("path"=>st(relative),"bytes"=>num(raw.len()),"sha256"=>st(sha(&raw).as_str())));
+    Ok(())
+}
+fn visit(dir: &mut ReadDirectory, root: &str, relative: &str, files: &mut Vec<Value>) -> Result<(),String> {
+    for entry in entries(dir)? {
+        let name = text(&entry.name,"library path")?;
+        let child = if relative.is_empty() { name.clone() } else { format!("{relative}/{name}") };
+        let full = format!("{root}/{child}");
+        match entry.kind {
+            10u8 => return Err(format!("symlink in library input: {full}")),
+            4u8 => {
+                let mut sub = io(dir.open_directory(name.as_str()),"open library directory")?;
+                visit(&mut sub,root,child.as_str(),files)?;
+            },
+            8u8 => library_file(dir,name.as_str(),child.as_str(),files)?,
+            _ => return Err(format!("nonregular library input: {full}")),
+        }
+    }
+    Ok(())
+}
+fn library_identity(dir: &mut ReadDirectory, root: &str, leaf: &str) -> Result<Value,String> {
+    let mut files = Vec::new();
+    if leaf.is_empty() { visit(dir,root,"",&mut files)?; }
+    else {
+        let mut kind = 0u8;
+        for entry in entries(dir)? { if entry.name.as_slice() == leaf.as_bytes() { kind = entry.kind; break; } }
+        if kind == 10u8 { return Err(format!("symlink in library input: {root}")); }
+        if kind != 8u8 { return Err(format!("nonregular library input: {root}")); }
+        library_file(dir,leaf,"",&mut files)?;
+    }
+    let value = Value::Array(files);
+    let digest = sha(canonical(&value,false).as_bytes());
+    Ok(object!("files"=>value,"manifest_sha256"=>st(digest.as_str())))
+}
+fn base64(raw: &[u8]) -> String {
+    let alphabet = b"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+    let mut out = String::new();
+    let mut i = 0usize;
+    while i < raw.len() {
+        let a = raw[i] as usize;
+        let b = if i+1usize < raw.len() { raw[i+1usize] as usize } else { 0usize };
+        let c = if i+2usize < raw.len() { raw[i+2usize] as usize } else { 0usize };
+        out.push(alphabet[a>>2u64] as char);
+        out.push(alphabet[((a&3usize)<<4u64)|(b>>4u64)] as char);
+        if i+1usize < raw.len() { out.push(alphabet[((b&15usize)<<2u64)|(c>>6u64)] as char); } else { out.push('='); }
+        if i+2usize < raw.len() { out.push(alphabet[c&63usize] as char); } else { out.push('='); }
+        i += 3usize;
+    }
+    out
+}
+fn stream(raw: &[u8]) -> Value {
+    let digest = sha(raw);
+    match String::from_utf8(raw.to_vec()) {
+        Ok(value) => object!("bytes"=>num(raw.len()),"sha256"=>st(digest.as_str()),"text"=>Value::String(value)),
+        Err(_) => object!("bytes"=>num(raw.len()),"sha256"=>st(digest.as_str()),"base64"=>Value::String(base64(raw))),
+    }
+}
+fn load(host: &mut Host) -> Result<String,String> {
+    let empty: Vec<String> = Vec::new(); host.request("load",empty.as_slice())?; let raw = host.read("loadavg")?;
+    let mut i = 0usize;
+    while i < raw.len() && ((raw[i]>=b'0' && raw[i]<=b'9') || raw[i]==b'.') { i += 1usize; }
+    if i == 0usize || i == raw.len() || raw[i] != b' ' { return Err("unexpected /proc/loadavg".to_string()); }
+    text(&raw[..i],"load average")
+}
+fn rss(raw: &[u8]) -> Result<usize,String> {
+    if raw.is_empty() || raw[raw.len()-1usize] != b'\n' { return Err("missing GNU-time peak RSS".to_string()); }
+    let end = raw.len()-1usize;
+    let mut start = end;
+    while start>0usize && raw[start-1usize]>=b'0' && raw[start-1usize]<=b'9' { start -= 1usize; }
+    if start==end || (start>0usize && raw[start-1usize]!=b'\n') { return Err("missing GNU-time peak RSS".to_string()); }
+    text(&raw[start..end],"time report")?.as_str().parse::<usize>().map_err(|_| -> String { "missing GNU-time peak RSS".to_string() })
+}
+fn wall(ns: usize) -> Value {
+    let micros = (ns+500usize)/1000usize;
+    let whole = micros/1000000usize;
+    let part = micros%1000000usize;
+    if part==0usize { return num(whole); }
+    let fraction = format!("{part:06}");
+    let mut end = fraction.len(); while fraction.as_bytes()[end-1usize] == b'0' { end -= 1usize; } let trimmed = &fraction.as_str()[..end];
+    Value::Number(format!("{whole}.{trimmed}"))
+}
+fn timestamp(clock: &mut Clock) -> Result<String,String> {
+    let date = std::time::http_date(io(clock.unix_seconds(),"realtime")?)?;
+    let m = match &date.as_str()[8..11] { "Jan"=>"01","Feb"=>"02","Mar"=>"03","Apr"=>"04","May"=>"05","Jun"=>"06","Jul"=>"07","Aug"=>"08","Sep"=>"09","Oct"=>"10","Nov"=>"11",_=>"12" };
+    Ok(format!("{}-{m}-{}T{}Z",&date.as_str()[12..16],&date.as_str()[5..7],&date.as_str()[17..25]))
+}
+fn verify(host: &mut Host, errors: &mut Stderr) -> Result<Value,String> {
+    let empty: Vec<String> = Vec::new(); let status = host.request("verify",empty.as_slice())?;
+    let stderr = host.read("stderr")?;
+    if !stderr.is_empty() { errors.write(&stderr); }
+    if status.as_str() != "0" { return Err(format!("projection verification failed: {status}")); }
+    parse_json(&host.read("stdout")?,"verifier JSON")
+}
+fn observed(host: &mut Host, clock: &mut Clock, command: Vec<Value>,
+    index: usize, route: &str, selected: &str) -> Result<Value,String> {
+    let before = load(host)?;
+    let start = io(clock.nanoseconds(),"monotonic clock")?;
+    let result = host.request("observe",&[format!("{index}"),route.to_string(),selected.to_string()])?;
+    let elapsed = io(clock.nanoseconds(),"monotonic clock")?-start;
+    let after = load(host)?;
+    let mut fields = result.as_str().split(' ');
+    let exit = fields.next().unwrap_or("").parse::<usize>().map_err(|_| -> String { "invalid launcher status".to_string() })?;
+    let signal = fields.next().unwrap_or("").parse::<usize>().map_err(|_| -> String { "invalid launcher signal".to_string() })?;
+    host.request("collect",&[format!("{index}")])?; let report = host.read("rss")?;
+    let peak = rss(&report)?;
+    Ok(object!("command"=>Value::Array(command),"exit_status"=>num(exit),"launcher_signal"=>num(signal),
+        "wall_seconds"=>wall(elapsed),"peak_rss_kib"=>num(peak),"load_before"=>Value::String(before),"load_after"=>Value::String(after),
+        "stdout"=>stream(&host.read("stdout")?),"stderr"=>stream(&host.read("stderr")?),"time_report"=>stream(&report)))
+}
+fn extend(target: &mut Value, value: Value) -> Result<(),String> {
+    if let Value::Object(fields) = target {
+        if let Value::Object(add) = value {
+            for pair in add {
+                let mut replaced = false;
+                for i in 0usize..fields.len() {
+                    if fields[i].0 == pair.0 { fields[i].1 = copy(&pair.1); replaced = true; break; }
+                }
+                if !replaced { fields.push(pair); }
+            }
+            return Ok(());
+        }
+    }
+    fail("expected object")
+}
+fn run(args: &[Vec<u8>], host: &mut Host, clock: &mut Clock, compiler_dir: &mut ReadDirectory,
+    library_dir: &mut ReadDirectory, projection_dir: &mut ReadDirectory, time_dir: &mut ReadDirectory, errors: &mut Stderr) -> Result<(),String> {
+    // Internal prefix is supplied only by the grant selector's launcher.
+    if args.len()<10usize { return fail("invalid host invocation"); }
+    let o = options(&args[10..])?;
+    if o.help { return fail("invalid host invocation"); }
+    let mut paths = Vec::new();
+    for i in 0usize..5usize {
+        text(&o.paths[i],"input path")?;
+        if args[i].is_empty() { return fail("input path does not exist"); }
+        paths.push(text(&args[i],"resolved input path").map_err(|_| -> String { "input path does not exist".to_string() })?);
+    }
+    let compiler = paths[0].as_str();
+    let library = paths[1].as_str();
+    let source = paths[2].as_str();
+    let projection = paths[3].as_str();
+    let time = paths[4].as_str();
+    if args[5].as_slice()!=b"yes" { return fail("compiler is not executable"); }
+    if args[6].as_slice()!=b"yes" { return fail("GNU-time-compatible launcher is not executable"); }
+    if args[7].as_slice()==b"yes" { return fail("output already exists"); }
+    if args[8].as_slice()!=b"yes" { return fail("project.mjs must be adjacent to probe.sh"); }
+    let leaf = text(&args[9],"resolved input path")?;
+    let before = verify(host,errors)?;
+    let manifest_raw = read(projection_dir,"projection.json")?;
+    let manifest_digest = sha(&manifest_raw);
+    if manifest_digest.as_str()!=get_string(&before,"manifest_sha256")? { return fail("projection manifest differs from the verified bytes"); }
+    let manifest = parse_json(&manifest_raw,"projection manifest")?;
+    let mut files: BTreeMap<String,Value> = BTreeMap::new();
+    let mut aliases: BTreeMap<String,Value> = BTreeMap::new();
+    for f in get_array(&manifest,"files")? { files.insert(get_string(f,"path")?.to_string(),copy(f)); }
+    for a in get_array(&manifest,"aliases")? { aliases.insert(get_string(a,"from")?.to_string(),copy(a.get("to").ok_or("missing alias destination".to_string())?)); }
+    let mut seen: BTreeSet<String> = BTreeSet::new();
+    for entry in &o.entries {
+        if !files.contains_key(entry) || !aliases.contains_key(entry) || seen.contains(entry) { return Err(format!("entry must be a unique tracked Rust path: {entry}")); }
+        seen.insert(entry.clone());
+    }
+    let producer = sha(&read(compiler_dir,basename(compiler))?);
+    let library_before = library_identity(library_dir,library,leaf.as_str())?;
+    let empty: Vec<String> = Vec::new(); host.request("begin",empty.as_slice())?;
+    let mut observations = Vec::new();
+    for entry in &o.entries {
+        let file = files.get(entry).unwrap();
+        for route_id in 0usize..2usize { let route = if route_id==0usize { "original_suffix" } else { "suffix_projection" };
+            let root = if route=="original_suffix" { source } else { projection };
+            let selected = if route=="original_suffix" { entry.as_str() } else {
+                aliases.get(entry).unwrap().as_str().ok_or("invalid Unicode manifest alias path".to_string())?
+            };
+            let command = vec![st(compiler),st("check"),st(selected),st("--source-dir"),st(root),st("--library-dir"),st(library)];
+            let mut record = object!("route"=>st(route),"upstream_entry"=>st(entry.as_str()),
+                "entry_sha256"=>copy(file.get("sha256").ok_or("missing entry hash".to_string())?),
+                "entry_bytes"=>copy(file.get("bytes").ok_or("missing entry bytes".to_string())?));
+            let observation = observed(host,clock,command,observations.len(),route,selected)?;
+            extend(&mut record,observation)?;
+            observations.push(record);
+        }
+    }
+    let after = verify(host,errors)?;
+    if get_string(&before,"manifest_sha256")?!=get_string(&after,"manifest_sha256")? { return fail("projection manifest changed during observations"); }
+    if sha(&read(compiler_dir,basename(compiler))?)!=producer { return fail("compiler bytes changed during observations"); }
+    if get_string(&library_before,"manifest_sha256")?!=get_string(&library_identity(library_dir,library,leaf.as_str())?,"manifest_sha256")? { return fail("library bytes changed during observations"); }
+    let mut package = object!("name"=>st(o.package.as_str()),"version"=>st(o.version.as_str()));
+    extend(&mut package,copy(manifest.get("source").ok_or("missing manifest source".to_string())?))?;
+    let mut library_value = object!("root"=>st(library));
+    extend(&mut library_value,library_before)?;
+    let count = observations.len();
+    let receipt = object!("schema"=>num(1usize),"kind"=>st("unmodified_real_program_root_observations"),"timestamp_utc"=>Value::String(timestamp(clock)?),
+        "package"=>package,"compiler"=>object!("path"=>st(compiler),"sha256"=>st(producer.as_str())),
+        "time_launcher"=>object!("path"=>st(time),"sha256"=>Value::String(sha(&read(time_dir,basename(time))?))),
+        "library"=>library_value,"projection_manifest_sha256"=>Value::String(manifest_digest),"verification_before"=>before,"verification_after"=>after,
+        "interpretation"=>st("Every source byte is unchanged. Suffix projection preserves tracked module/asset context. The compiler has no Cargo package/feature/test configuration here. A refusal is a root observation, not an exhaustive blocker count; acceptance would not establish Cargo-equivalent configuration or executed upstream tests. Exit status and launcher_signal belong to the time launcher; the complete separate time_report retains its abnormal-exit/signal diagnostic as well as peak RSS."),
+        "observations"=>Value::Array(observations));
+    host.receipt(format!("{}\n",canonical(&receipt,true)).as_bytes())?;
+    host.request("publish",empty.as_slice())?;
+    let summary = line(&object!("receipt"=>st(o.output.as_str()),"observations"=>num(count),"compiler_sha256"=>Value::String(producer),"source_unchanged"=>Value::Bool(true)));
+    host.request("result",&[summary])?;
+    Ok(())
+}
+fn main(mut arguments: Arguments, input: Stdin, output: Stdout, mut errors: Stderr, mut status: ExitStatus,
+    scratch: Directory, mut clock: Clock, mut compiler_dir: ReadDirectory,
+    mut library_dir: ReadDirectory, mut projection_dir: ReadDirectory, mut time_dir: ReadDirectory) {
+    let mut host = Host { input, output, scratch };
+    if let Err(reason) = run(&arguments.args(),&mut host,&mut clock,&mut compiler_dir,&mut library_dir,&mut projection_dir,&mut time_dir,&mut errors) {
+        refusal(&mut errors,&mut status,reason.as_str());
+    }
+}

@@ -265,7 +265,7 @@ explicit review inputs with the code; retain upstream originals and notices once
 The larger comparison JSON can then be regenerated from these inputs. A receipt
 still under `target/` is a temporary candidate observation, not a durable evidence
 link. Fresh observations additionally require the original/projected trees to pass
-`node tools/real-programs/project.mjs --verify`; use `node tools/real-programs/probe.mjs --help` for its exact entry and package options.
+`node tools/real-programs/project.mjs --verify`; use `tools/real-programs/probe.sh --help` for its exact entry and package options.
 
 #### Match-arm configuration
 

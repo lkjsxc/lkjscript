@@ -161,9 +161,11 @@ includes a generated-traffic harness with memory measurement and CPU profiling.
 - [Direction](docs/direction.md): the ordered development course.
 
 The native gate bootstraps from the stored seed and runs without Rust or Node.
-Perl serves package checks and other fixtures. The separate required
-real-program host-tool job uses Node to test census, projection, probe and
-reranking. A release requires both jobs to pass on the same check attempt.
+Perl serves other gate fixtures.
+The separate required real-program host-tool job uses Node to test Git projection.
+Census, reranking and probe fixture observations run in the native gate. The
+production probe still invokes the hosted projection verifier. A release requires
+both jobs to pass on the same check attempt.
 The gate exercises HTTP with an explicit lkjscript client.
 
 ```sh
