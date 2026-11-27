@@ -1,0 +1,8 @@
+mod one { pub const x: i64 = 1; }
+mod two { pub const x: i64 = 2; }
+fn selected() -> i64 {
+    let x = 7i64;
+    { use crate::one::*; use crate::two::*; 42 }
+}
+fn probe() -> i64 { selected() }
+fn refusal() { println!("source refusal remains"); }

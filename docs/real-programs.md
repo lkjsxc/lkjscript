@@ -708,6 +708,8 @@ including the exact antecedent of a reexport. Block-local import trees retain
 their lexical owner after function replay renumbers the block arena. Unused
 grouped leaves are verified against the authored tree before projection; every
 selected leaf, dependency and positive or negative lookup is checked again.
+Synthetic inherited-local guards inspect exactly one block slot, retain authentic
+poison and replay that slot's absence without inventing source diagnostics.
 The original full catalog decides explicit precedence and used-slot ambiguity.
 Unknown and poisoned targets retain their original upstream causes. Source
 refusal still prevents execution, IR/image publication and checked edits.
@@ -733,12 +735,16 @@ leaves (including macro-produced leaves) inherit `thread_local!` at
 `std::cell::Ref` input. Selectors' local enum globs retain the `bitflags!` cause.
 
 Focused controls cover distinct slots from one glob, reexport chains, module
-anchors, whole-block import scope, grouped leaves, same-spelled type/value slots,
-precedence, sibling isolation,
+anchors, whole-block import scope, multiple selected grouped leaves, same-spelled
+type/value slots, precedence, sibling isolation, inner and enclosing ambiguity,
 ambiguous globs, poisoned targets and publication/edit rollback. Pattern controls
 retain an imported function hiding an outer constant and refuse a projection
-that would expose a formerly hidden constant. Macro-generated inherited-local
-controls expose a pre-existing ordinary lowering mismatch: native/interpreter
+that would expose a formerly hidden constant. An absent block-slot control also
+refuses a projection that would change an inherited local into an imported value.
+Bare binding patterns under ambiguous outer globs remain refused, matching Rust's
+classification boundary; a mutable parameter supplies the accepted isolation twin.
+Macro-generated inherited-local controls expose a pre-existing ordinary lowering
+mismatch: native/interpreter
 select the outer value 3 where Rust selects the inner imported value 10. Partial
 replay explicitly refuses that intersection. Empty local import trees and enum
 glob targets remain separate bounded contexts.

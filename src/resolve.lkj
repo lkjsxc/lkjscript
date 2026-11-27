@@ -799,6 +799,14 @@ impl<'a> Resolver<'a> {
         }
         Ok(Some(Resolved::item(binding)))
     }
+    /// A synthetic scope probe records only this owner. It does not perform
+    /// access checks or walk into enclosing scopes and cannot invent a use-site diagnostic.
+    pub(crate) fn diagnostic_scope_read(&self, scope: ModuleId, name: &str, namespace: Namespace) -> LookupRead {
+        let mut reads = Some(Vec::new());
+        self.path_read(scope, name, namespace, &mut reads);
+        let mut reads = reads.unwrap();
+        reads.pop().unwrap()
+    }
     /// Diagnostic lookup retains ordinary namespace and visibility rules.
     /// Refused declarations and imports remain separate poisoned inputs.
     pub(crate) fn diagnostic_binding(&self, scope: ModuleId, name: &str,

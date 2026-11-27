@@ -26,6 +26,7 @@ struct Lookup {
     reads: Vec<LookupRead>,
     import_site: Option<usize>,
     pattern_site: bool,
+    block_site: Option<usize>,
 }
 enum Receiver {
     Struct(usize),
@@ -200,6 +201,9 @@ impl<'a> Inspector<'a> {
         let trace = self.resolver.diagnostic_trace(scope, written, namespace, span, prelude)
             .map_err(|cause| Failure { cause: located(self.program, cause),
                 reason: "original source lookup refused".to_string() })?;
+        self.observed(scope, written, trace)
+    }
+    fn observed(&self, scope: usize, written: &str, trace: LookupTrace) -> Result<LookupTrace, Failure> {
         if let Some(failure) = traced_poison(self.program, self.failures, scope, written, &trace.reads) {
             return Err(failure);
         }
@@ -255,7 +259,7 @@ impl<'a> Inspector<'a> {
             self.record_imports(&trace.reads, plan)?;
             plan.lookups.push(Lookup { span: value.span, namespace: read.namespace,
                 written, result: Some((target, item)), reads: trace.reads,
-                import_site: Some(index), pattern_site: false });
+                import_site: Some(index), pattern_site: false, block_site: None });
         }
         Ok(())
     }
@@ -274,7 +278,7 @@ impl<'a> Inspector<'a> {
         }
         self.record_imports(&trace.reads, plan)?;
         plan.lookups.push(Lookup { span, namespace, written: path.name.clone(), result: Some((target, item)),
-            reads: trace.reads, import_site: None, pattern_site: false });
+            reads: trace.reads, import_site: None, pattern_site: false, block_site: None });
         Ok(item)
     }
     fn ty(&self, id: usize, plan: &mut Plan) -> Result<(), Failure> {
@@ -315,7 +319,9 @@ impl<'a> Inspector<'a> {
                 if *by_ref || *ref_mut { plan.structural = true; }
                 let written = a::macros::source_name(name);
                 if let Some(failure) = poisoned(self.program, self.failures, node.scope, written) { return Err(failure); }
-                let trace = self.observe(node.scope, written, node.span, Namespace::Value, true)?;
+                let trace = self.resolver.diagnostic_trace(node.scope, written, Namespace::Value, node.span, true)
+                    .map_err(|_| self.boundary("pattern binding lookup needs complete source context"))?;
+                let trace = self.observed(node.scope, written, trace)?;
                 match &trace.result {
                     Some((_, Some(a::Item::Function(index)))) => {
                         if !plan.dependencies.contains(index) { plan.dependencies.push(*index); }
@@ -328,7 +334,7 @@ impl<'a> Inspector<'a> {
                 // absence of a pattern binding is a dependency too.
                 plan.lookups.push(Lookup { span: node.span, namespace: Namespace::Value,
                     written: written.to_string(), result: trace.result, reads: trace.reads,
-                    import_site: None, pattern_site: true });
+                    import_site: None, pattern_site: true, block_site: None });
                 locals.insert(name.clone()); Ok(())
             }
             a::Pattern::Tuple(parts) => {
@@ -360,10 +366,21 @@ impl<'a> Inspector<'a> {
             let scope = self.program.scopes.len() + id;
             for name in inherited {
                 let written = a::macros::source_name(name);
-                let trace = self.observe(scope, written, block.span, Namespace::Value, true)?;
-                if trace.reads.iter().any(|read| read.owner == scope && read.binding.is_some()) {
+                // This is a synthetic guard, not a source name use. Inspect
+                // only this block and retain genuine poison without inventing
+                // an ambiguity diagnostic or consulting an enclosing import.
+                let read = self.resolver.diagnostic_scope_read(scope, written, Namespace::Value);
+                if let Some(failure) = traced_poison(self.program, self.failures, scope, written, &[read.clone()]) {
+                    return Err(failure);
+                }
+                if read.import.is_some() {
                     return Err(self.boundary("block import shadows an inherited local"));
                 }
+                // A retained glob can expose a formerly hidden member when
+                // its source module is reduced. Preserve this absent slot too.
+                plan.lookups.push(Lookup { span: block.span, namespace: Namespace::Value,
+                    written: written.to_string(), result: None, reads: vec![read],
+                    import_site: None, pattern_site: false, block_site: Some(id) });
             }
         }
         if block.tail.is_none() { plan.structural = true; }
@@ -1449,6 +1466,23 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
     for index in selected {
         let plan = plans[*index].as_ref().unwrap();
         for lookup in &plan.lookups {
+            if let Some(block) = lookup.block_site {
+                let mut owner = None;
+                for id in 0usize..resolved.blocks.len() {
+                    let scope = resolved.scopes.len() + id;
+                    if same_lexical_scope(original, original.scopes.len() + block, &resolved, scope) {
+                        if owner.is_some() { return Err("block replay has ambiguous lexical ownership".to_string()); }
+                        owner = Some(scope);
+                    }
+                }
+                let Some(scope) = owner else { return Err("block replay lost its lexical owner".to_string()); };
+                let read = names.diagnostic_scope_read(scope, &lookup.written, lookup.namespace);
+                let actual = LookupTrace { result: None, reads: vec![read] };
+                if !same_binding(lookup, actual, original, &resolved, &source_indices) {
+                    return Err("a recorded block import slot changed during replay".to_string());
+                }
+                continue;
+            }
             if let Some(import) = lookup.import_site {
                 let value = &original.uses[import];
                 let mut owner = None;

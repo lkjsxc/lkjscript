@@ -1,0 +1,17 @@
+mod one {
+    pub fn x() -> i64 { 1 }
+}
+mod two {
+    pub fn x() -> i64 { 2 }
+}
+mod helper {
+    pub fn ok() -> i64 { 35 }
+}
+use crate::one::*;
+use crate::two::*;
+fn selected() -> i64 {
+    let x = 7i64;
+    { use crate::helper::ok; ok() + x }
+}
+fn probe() -> i64 { selected() }
+fn refusal() { println!("source refusal remains"); }

@@ -1200,8 +1200,13 @@ Block-local use trees are reparsed with the complete owning function. Every
 leaf must match its original statement and lexical owner before unused leaves
 are removed from the diagnostic projection. Grouped statements retain their
 first selected leaf. All recorded positive and negative lookups, including binding
-patterns, are checked again against the projected catalog. A local may shadow
-an imported function; its source antecedent remains in the recorded closure.
+patterns, are checked again against the projected catalog. Synthetic inherited-local
+probes inspect only the owning block's import slot and preserve genuine poison;
+they never invent a use-site diagnostic or inherit an enclosing import conflict.
+Absent block slots are checked again, because a reduced glob can expose a hidden
+member. Unclassifiable binding patterns retain a complete-context boundary rooted
+in an actual source refusal. A local may shadow an imported function; its source
+antecedent remains in the recorded closure.
 Replay requires unique module owners and structural block ancestry, independent
 of arena numbering. Empty local use trees, enum glob targets and an inner
 import hiding an inherited local remain explicit replay boundaries. The last

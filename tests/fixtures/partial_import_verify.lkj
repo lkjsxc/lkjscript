@@ -108,6 +108,41 @@ fn cases(name: &str) -> Vec<Expected> {
             row(12, 1, "probe", true, 0, 0, "", ""),
             row(13, 1, "refusal", false, 13, 16, "E_CAPABILITY", ""),
         ],
+        "import_ambiguous_inner" => vec![
+            row(3, 1, "selected", false, 8, 16, "E_CAPABILITY", ""),
+            row(7, 1, "probe", false, 8, 16, "E_CAPABILITY", "selected"),
+            row(8, 1, "refusal", false, 8, 16, "E_CAPABILITY", ""),
+        ],
+        "import_ambiguous_outer" => vec![
+            row(2, 9, "one::x", true, 0, 0, "", ""),
+            row(5, 9, "two::x", true, 0, 0, "", ""),
+            row(8, 9, "helper::ok", true, 0, 0, "", ""),
+            row(12, 1, "selected", true, 0, 0, "", "helper::ok"),
+            row(15, 1, "probe", true, 0, 0, "", "selected"),
+            row(16, 1, "refusal", false, 16, 16, "E_CAPABILITY", ""),
+        ],
+        "import_ambiguous_pattern" => vec![
+            row(2, 9, "one::x", true, 0, 0, "", ""),
+            row(5, 9, "two::x", true, 0, 0, "", ""),
+            row(8, 9, "helper::ok", true, 0, 0, "", ""),
+            row(12, 1, "selected", false, 17, 16, "E_CAPABILITY", ""),
+            row(16, 1, "probe", false, 17, 16, "E_CAPABILITY", "selected"),
+            row(17, 1, "refusal", false, 17, 16, "E_CAPABILITY", ""),
+        ],
+        "import_grouped" => vec![
+            row(2, 9, "first::spare", true, 0, 0, "", ""),
+            row(3, 9, "first::a", true, 0, 0, "", ""),
+            row(4, 9, "first::b", true, 0, 0, "", ""),
+            row(6, 1, "selected", true, 0, 0, "", "first::a,first::b"),
+            row(10, 1, "probe", true, 0, 0, "", "selected"),
+            row(11, 1, "refusal", false, 11, 16, "E_CAPABILITY", ""),
+        ],
+        "import_block_hidden" => vec![
+            row(3, 9, "upstream::y", true, 0, 0, "", ""),
+            row(7, 5, "provider::x", true, 0, 0, "", ""),
+            row(9, 1, "probe", false, 13, 16, "E_CAPABILITY", "upstream::y"),
+            row(13, 1, "refusal", false, 13, 16, "E_CAPABILITY", ""),
+        ],
         _ => panic!("unknown import replay fixture"),
     }
 }
@@ -206,7 +241,7 @@ fn main(mut world: World) {
             if name == "import_nonleak" && want.name != "refusal" {
                 assert_eq!(reason, "complete context required: unresolved input target");
             }
-            if matches!(name.as_str(), "import_outer_local" | "import_macro_local") && want.name != "refusal" {
+            if matches!(name.as_str(), "import_outer_local" | "import_macro_local" | "import_ambiguous_inner") && want.name != "refusal" {
                 assert!(reason.starts_with("complete context required:"));
                 assert!(reason.contains("inherited local"));
             }
@@ -215,6 +250,12 @@ fn main(mut world: World) {
             }
             if name == "import_pattern_hidden" && want.name == "probe" {
                 assert_eq!(reason, "complete context required: a recorded pattern binding changed during replay");
+            }
+            if name == "import_ambiguous_pattern" && want.name != "refusal" {
+                assert_eq!(reason, "complete context required: pattern binding lookup needs complete source context");
+            }
+            if name == "import_block_hidden" && want.name == "probe" {
+                assert_eq!(reason, "complete context required: a recorded block import slot changed during replay");
             }
             let cause = actual.get("cause").unwrap();
             assert_eq!(text(cause, "path"), path);

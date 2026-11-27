@@ -1,0 +1,11 @@
+mod first {
+    pub fn spare() -> i64 { 999 }
+    pub fn a() -> i64 { 20 }
+    pub fn b() -> i64 { 22 }
+}
+fn selected() -> i64 {
+    use crate::first::{spare, a, b};
+    a() + b()
+}
+fn probe() -> i64 { selected() }
+fn refusal() { println!("source refusal remains"); }
