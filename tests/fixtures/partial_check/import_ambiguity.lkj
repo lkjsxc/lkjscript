@@ -1,0 +1,24 @@
+mod one {
+    pub fn pick() -> i64 { 1 }
+}
+mod two {
+    pub fn pick() -> i64 { 2 }
+}
+mod conflict {
+    use crate::one::*;
+    use crate::two::*;
+    pub fn blocked() -> i64 { pick() }
+}
+fn local_conflict() -> i64 {
+    use crate::one::*;
+    use crate::two::*;
+    pick()
+}
+fn explicit() -> i64 {
+    use crate::one::*;
+    use crate::two::*;
+    use crate::one::pick;
+    pick()
+}
+fn probe() -> i64 { explicit() + 41 }
+fn refusal() { println!("source refusal remains"); }

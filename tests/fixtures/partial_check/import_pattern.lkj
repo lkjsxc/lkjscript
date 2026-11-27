@@ -1,0 +1,11 @@
+mod functions {
+    pub fn selected() -> i64 { 1 }
+}
+const selected: i64 = 5;
+fn local_pattern() -> i64 {
+    use crate::functions::selected;
+    let selected = 37i64;
+    selected
+}
+fn probe() -> i64 { local_pattern() + crate::selected }
+fn refusal() { println!("source refusal remains"); }

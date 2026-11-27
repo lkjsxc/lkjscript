@@ -22,10 +22,10 @@ struct Lookup {
     span: a::Span,
     namespace: Namespace,
     written: String,
-    target: String,
-    item: Option<a::Item>,
+    result: Option<(String, Option<a::Item>)>,
     reads: Vec<LookupRead>,
     import_site: Option<usize>,
+    pattern_site: bool,
 }
 enum Receiver {
     Struct(usize),
@@ -36,7 +36,7 @@ struct Plan {
     dependencies: Vec<usize>,
     declarations: Vec<a::Item>,
     lookups: Vec<Lookup>,
-    imports: BTreeSet<(usize, Namespace)>,
+    imports: BTreeSet<(usize, Namespace, String)>,
     parameters: Vec<String>,
     expansions: Vec<usize>,
     implementation: Option<usize>,
@@ -228,19 +228,34 @@ impl<'a> Inspector<'a> {
     fn record_imports(&self, reads: &[LookupRead], plan: &mut Plan) -> Result<(), Failure> {
         for read in reads {
             let Some(index) = read.import else { continue; };
-            if !plan.imports.insert((index, read.namespace)) { continue; }
+            // A glob leaf can supply several independent slots in one namespace.
+            if !plan.imports.insert((index, read.namespace, read.spelling.clone())) { continue; }
             let value = &self.program.uses[index];
-            if value.block.is_some() || value.glob || value.statement.is_none() {
-                return Err(self.boundary("import dependency needs a complete lexical or glob replay"));
+            if value.statement.is_none() {
+                return Err(self.boundary("import statement has no authored extent"));
             }
-            let scope = self.declaration_scope(&value.module)?;
-            let trace = self.observe(scope, &value.path, value.span, read.namespace, false)?;
+            let module = self.declaration_scope(&value.module)?;
+            let scope = value.block.map(|block| self.program.scopes.len() + block).unwrap_or(module);
+            let written = if value.glob {
+                let target = self.resolver.diagnostic_glob_scope(scope, &value.path, value.span)
+                    .map_err(|cause| Failure { cause: located(self.program, cause),
+                        reason: "original glob target refused".to_string() })?;
+                if target.is_none() { return Err(self.boundary("glob target needs an exact module")); }
+                // Trace the exported slot, including any reexport, rather than
+                // looking up a module in the member's value namespace.
+                format!("{}::{}", value.path, read.spelling)
+            } else { value.path.clone() };
+            let trace = self.observe(scope, &written, value.span, read.namespace, false)?;
             let Some((target, item)) = trace.result else {
                 return Err(self.boundary("import antecedent is unresolved"));
             };
+            if !matches!(&read.binding, Some((name, expected)) if name == &target && Some(*expected) == item) {
+                return Err(self.boundary("import antecedent differs from its selected slot"));
+            }
             self.record_imports(&trace.reads, plan)?;
             plan.lookups.push(Lookup { span: value.span, namespace: read.namespace,
-                written: value.path.clone(), target, item, reads: trace.reads, import_site: Some(index) });
+                written, result: Some((target, item)), reads: trace.reads,
+                import_site: Some(index), pattern_site: false });
         }
         Ok(())
     }
@@ -258,8 +273,8 @@ impl<'a> Inspector<'a> {
             }
         }
         self.record_imports(&trace.reads, plan)?;
-        plan.lookups.push(Lookup { span, namespace, written: path.name.clone(), target, item,
-            reads: trace.reads, import_site: None });
+        plan.lookups.push(Lookup { span, namespace, written: path.name.clone(), result: Some((target, item)),
+            reads: trace.reads, import_site: None, pattern_site: false });
         Ok(item)
     }
     fn ty(&self, id: usize, plan: &mut Plan) -> Result<(), Failure> {
@@ -298,12 +313,22 @@ impl<'a> Inspector<'a> {
             a::Pattern::Wild | a::Pattern::Rest => Ok(()),
             a::Pattern::Bind { name, by_ref, ref_mut, .. } => {
                 if *by_ref || *ref_mut { plan.structural = true; }
-                if let Some(failure) = poisoned(self.program, self.failures, node.scope, name) { return Err(failure); }
-                if self.resolver.diagnostic_binding(node.scope, name, Namespace::Value, node.span)
-                    .map_err(|cause| Failure { cause: located(self.program, cause),
-                        reason: "pattern binding lookup refused".to_string() })?.is_some() {
-                    return Err(self.boundary("a binding pattern may select a source constant or constructor"));
+                let written = a::macros::source_name(name);
+                if let Some(failure) = poisoned(self.program, self.failures, node.scope, written) { return Err(failure); }
+                let trace = self.observe(node.scope, written, node.span, Namespace::Value, true)?;
+                match &trace.result {
+                    Some((_, Some(a::Item::Function(index)))) => {
+                        if !plan.dependencies.contains(index) { plan.dependencies.push(*index); }
+                    }
+                    Some(_) => return Err(self.boundary("a binding pattern may select a source constant or constructor")),
+                    None => (),
                 }
+                self.record_imports(&trace.reads, plan)?;
+                // A reduced glob can expose a previously hidden constant. The
+                // absence of a pattern binding is a dependency too.
+                plan.lookups.push(Lookup { span: node.span, namespace: Namespace::Value,
+                    written: written.to_string(), result: trace.result, reads: trace.reads,
+                    import_site: None, pattern_site: true });
                 locals.insert(name.clone()); Ok(())
             }
             a::Pattern::Tuple(parts) => {
@@ -328,7 +353,21 @@ impl<'a> Inspector<'a> {
     fn block(&self, id: usize, inherited: &BTreeSet<String>, plan: &mut Plan) -> Result<(), Failure> {
         let mut locals = inherited.clone();
         let block = &self.program.blocks[id];
+        if self.program.uses.iter().any(|input| input.block == Some(id)) {
+            // Ordinary lowering currently searches inherited locals before all
+            // imports. An inner import can hide that local in Rust; do not
+            // certify the wrong meaning until shared local lookup models it.
+            let scope = self.program.scopes.len() + id;
+            for name in inherited {
+                let written = a::macros::source_name(name);
+                let trace = self.observe(scope, written, block.span, Namespace::Value, true)?;
+                if trace.reads.iter().any(|read| read.owner == scope && read.binding.is_some()) {
+                    return Err(self.boundary("block import shadows an inherited local"));
+                }
+            }
+        }
         if block.tail.is_none() { plan.structural = true; }
+        let mut import_statements = BTreeSet::new();
         for statement in &block.statements {
             match statement {
                 a::Stmt::Let { pattern, ty, value, .. } => {
@@ -338,6 +377,14 @@ impl<'a> Inspector<'a> {
                     self.pattern(*pattern, &mut locals, plan)?;
                 }
                 a::Stmt::Expr { value, .. } => self.expression(*value, &locals, plan)?,
+                // Exact function replay reparses these statements. Only leaves
+                // observed by a lookup survive the isolated import projection.
+                a::Stmt::Item(a::Item::Use(index)) => {
+                    if !import_statements.insert(*index) || !self.program.uses.get(*index)
+                        .is_some_and(|input| input.block == Some(id) && input.statement.is_some()) {
+                        return Err(self.boundary("local import statement needs a distinct authored leaf"));
+                    }
+                }
                 _ => return Err(self.boundary("local declarations or incomplete statement expansion")),
             }
         }
@@ -426,7 +473,8 @@ impl<'a> Inspector<'a> {
                     Some(a::Item::Function(function)) => {
                         if !plan.dependencies.contains(&function) { plan.dependencies.push(function); }
                     }
-                    None if plan.lookups.last().unwrap().target == crate::resolve::SCALAR_SIZE_OF => {
+                    None if matches!(&plan.lookups.last().unwrap().result,
+                        Some((target, _)) if target == crate::resolve::SCALAR_SIZE_OF) => {
                         plan.structural = true;
                     }
                     _ => return Err(self.boundary("call target is not a declared free function")),
@@ -791,7 +839,7 @@ impl<'a> Inspector<'a> {
         let a::Type::Path(path) = &node.kind else { return Err(self.boundary("non-nominal receiver")); };
         if !path.args.is_empty() { return Err(self.boundary("applied receiver type")); }
         let binding = self.binding(node.scope, path, node.span, Namespace::Type, plan)?;
-        let target = plan.lookups.last().unwrap().target.clone();
+        let target = plan.lookups.last().unwrap().result.as_ref().unwrap().0.clone();
         let (receiver, derives) = match binding {
             Some(a::Item::Struct(index)) => {
                 let declaration = &self.program.structs[index];
@@ -1098,24 +1146,55 @@ fn same_item(expected: Option<a::Item>, actual: Option<a::Item>,
         _ => false,
     }
 }
-fn lexical_location(program: &a::Program, owner: usize) -> (usize, Option<a::Span>) {
-    if owner < program.scopes.len() { (owner, None) }
-    else {
-        let block = &program.blocks[owner - program.scopes.len()];
-        (block.scope, Some(block.span))
+fn same_lexical_scope(original: &a::Program, mut left: usize,
+    replayed: &a::Program, mut right: usize) -> bool {
+    loop {
+        let left_module = left < original.scopes.len();
+        let right_module = right < replayed.scopes.len();
+        if left_module || right_module {
+            return left_module && right_module && left == right
+                && original.scopes[left].path == replayed.scopes[right].path;
+        }
+        let expected = &original.blocks[left - original.scopes.len()];
+        let actual = &replayed.blocks[right - replayed.scopes.len()];
+        if expected.scope != actual.scope || expected.span != actual.span { return false; }
+        left = expected.parent.map(|block| original.scopes.len() + block).unwrap_or(expected.scope);
+        right = actual.parent.map(|block| replayed.scopes.len() + block).unwrap_or(actual.scope);
+    }
+}
+fn same_use(left: &a::Use, right: &a::Use, original: &a::Program, replayed: &a::Program) -> bool {
+    let mut expected = left.clone();
+    expected.block = right.block;
+    expected == *right && match (left.block, right.block) {
+        (None, None) => true,
+        (Some(left), Some(right)) => same_lexical_scope(original, original.scopes.len() + left,
+            replayed, replayed.scopes.len() + right),
+        _ => false,
+    }
+}
+fn same_import(left: Option<usize>, right: Option<usize>, original: &a::Program,
+    replayed: &a::Program) -> bool {
+    match (left, right) {
+        (None, None) => true,
+        (Some(left), Some(right)) => same_use(&original.uses[left], &replayed.uses[right], original, replayed),
+        _ => false,
     }
 }
 fn same_binding(lookup: &Lookup, actual: LookupTrace,
     original: &a::Program, replayed: &a::Program, source_indices: &[usize]) -> bool {
-    let Some((target, item)) = actual.result else { return false; };
-    if target != lookup.target || !same_item(lookup.item, item, original, replayed, source_indices)
-        || actual.reads.len() != lookup.reads.len() { return false; }
+    match (&lookup.result, &actual.result) {
+        (None, None) => (),
+        (Some((target, item)), Some((actual, replayed_item))) if target == actual
+            && same_item(*item, *replayed_item, original, replayed, source_indices) => (),
+        _ => return false,
+    }
+    if actual.reads.len() != lookup.reads.len() { return false; }
     for (position, left) in lookup.reads.iter().enumerate() {
         let right = &actual.reads[position];
         if left.spelling != right.spelling || left.namespace != right.namespace
             || left.visibility != right.visibility
-            || lexical_location(original, left.owner) != lexical_location(replayed, right.owner)
-            || left.import.map(|index| &original.uses[index]) != right.import.map(|index| &replayed.uses[index]) {
+            || !same_lexical_scope(original, left.owner, replayed, right.owner)
+            || !same_import(left.import, right.import, original, replayed) {
             return false;
         }
         match (&left.binding, &right.binding) {
@@ -1132,6 +1211,7 @@ fn replay_imports(source: &SourceReport, original: &a::Program, projected: &mut 
     let mut statements = BTreeSet::new();
     for index in selected {
         let input = &original.uses[*index];
+        if input.block.is_some() { continue; }
         let Some(statement) = input.statement else { return Err("import statement is unavailable".to_string()); };
         if !statements.insert((statement.file, statement.start, statement.end)) { continue; }
         let before = projected.uses.len();
@@ -1150,6 +1230,66 @@ fn replay_imports(source: &SourceReport, original: &a::Program, projected: &mut 
         }
         if offset != leaves.len() { return Err("unexpected leaf in replayed import".to_string()); }
         projected.items.push(a::Item::Use(before));
+    }
+    Ok(())
+}
+// Whole-function parsing retains every local use-tree leaf. Authenticate those
+// leaves before selecting the dependency slice, including unused grouped siblings.
+// No runtime statement is removed, and every surviving lookup is compared below.
+fn select_local_imports(original: &a::Program, projected: &mut a::Program,
+    selected: &BTreeSet<usize>) -> Result<(), String> {
+    let mut replacements: Vec<Option<usize>> = vec![None; projected.uses.len()];
+    let mut retained = Vec::new();
+    let mut seen = BTreeSet::new();
+    let mut start = 0usize;
+    while start < projected.uses.len() {
+        let first = &projected.uses[start];
+        let mut end = start + 1usize;
+        while end < projected.uses.len() && projected.uses[end].statement == first.statement
+            && projected.uses[end].module == first.module && projected.uses[end].block == first.block {
+            end += 1usize;
+        }
+        let before = retained.len();
+        for index in start..end {
+            let input = &projected.uses[index];
+            let mut source = None;
+            for (id, expected) in original.uses.iter().enumerate() {
+                if same_use(expected, input, original, projected) {
+                    if source.is_some() { return Err("replayed import has ambiguous source ownership".to_string()); }
+                    source = Some(id);
+                }
+            }
+            let Some(source) = source else { return Err("local import leaf changed during replay".to_string()); };
+            if !seen.insert(source) { return Err("authored import leaf replayed more than once".to_string()); }
+            if selected.contains(&source) { retained.push(input.clone()); }
+        }
+        if retained.len() != before {
+            for index in start..end { replacements[index] = Some(before); }
+        }
+        start = end;
+    }
+    if selected.iter().any(|index| !seen.contains(index)) {
+        return Err("selected import is absent from its authored owner".to_string());
+    }
+    projected.uses = retained;
+    let items = projected.items.clone();
+    projected.items.clear();
+    for item in items {
+        if let a::Item::Use(index) = item {
+            if index >= replacements.len() { return Err("import item has no replayed leaf".to_string()); }
+            if let Some(next) = replacements[index] { projected.items.push(a::Item::Use(next)); }
+        } else { projected.items.push(item); }
+    }
+    for id in 0usize..projected.blocks.len() {
+        let block = &mut projected.blocks[id];
+        let statements = block.statements.clone();
+        block.statements.clear();
+        for statement in statements {
+            if let a::Stmt::Item(a::Item::Use(index)) = statement {
+                if index >= replacements.len() { return Err("local import statement has no replayed leaf".to_string()); }
+                if let Some(next) = replacements[index] { block.statements.push(a::Stmt::Item(a::Item::Use(next))); }
+            } else { block.statements.push(statement); }
+        }
     }
     Ok(())
 }
@@ -1245,7 +1385,7 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
             if !declarations.contains(declaration) { declarations.push(*declaration); }
         }
         for expansion in &plan.expansions { expansions.push(*expansion); }
-        for (input, _) in &plan.imports { imports.insert(*input); }
+        for (input, _, _) in &plan.imports { imports.insert(*input); }
         for lookup in &plan.lookups {
             for read in &lookup.reads {
                 modules.push(original.scopes[module_scope(original, read.owner)].path.clone());
@@ -1299,6 +1439,10 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
     if !same_expansions(original, &projected, &expansions) {
         return Err("macro invocation, token provenance or selected rule changed during replay".to_string());
     }
+    if projected.scopes.len() != original.scopes.len() {
+        return Err("source replay changed the module scope population".to_string());
+    }
+    select_local_imports(original, &mut projected, &imports)?;
     crate::resolve::bind_lexical_scopes(&mut projected);
     let resolved = crate::resolve::resolve(&projected).map_err(|_| -> String { "isolated declaration lookup refused".to_string() })?;
     let names = Resolver::new(&resolved).map_err(|_| -> String { "isolated declaration catalog refused".to_string() })?;
@@ -1307,7 +1451,15 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
         for lookup in &plan.lookups {
             if let Some(import) = lookup.import_site {
                 let value = &original.uses[import];
-                let scope = crate::resolve::module(&projected, &value.module);
+                let mut owner = None;
+                for input in &resolved.uses {
+                    if same_use(value, input, original, &resolved) {
+                        if owner.is_some() { return Err("import replay has ambiguous lexical ownership".to_string()); }
+                        let module = crate::resolve::module(&resolved, &input.module);
+                        owner = Some(input.block.map(|block| resolved.scopes.len() + block).unwrap_or(module));
+                    }
+                }
+                let Some(scope) = owner else { return Err("import replay lost its lexical owner".to_string()); };
                 let actual = names.diagnostic_trace(scope, &lookup.written, lookup.namespace, lookup.span, false)
                     .map_err(|_| -> String { "replayed import antecedent refused".to_string() })?;
                 if !same_binding(lookup, actual, original, &resolved, &source_indices) {
@@ -1316,7 +1468,22 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
                 continue;
             }
             let mut matched = false;
-            if lookup.namespace == Namespace::Type {
+            if lookup.pattern_site {
+                for node in &projected.patterns {
+                    if node.span == lookup.span {
+                        if let a::Pattern::Bind { name, .. } = &node.kind {
+                            if a::macros::source_name(name) == lookup.written.as_str() {
+                                let actual = names.diagnostic_trace(node.scope, &lookup.written, Namespace::Value, node.span, true)
+                                    .map_err(|_| -> String { "replayed pattern lookup refused".to_string() })?;
+                                if !same_binding(lookup, actual, original, &resolved, &source_indices) {
+                                    return Err("a recorded pattern binding changed during replay".to_string());
+                                }
+                                matched = true;
+                            }
+                        }
+                    }
+                }
+            } else if lookup.namespace == Namespace::Type {
                 for node in &projected.types {
                     if node.span == lookup.span {
                         if let a::Type::Path(path) = &node.kind {

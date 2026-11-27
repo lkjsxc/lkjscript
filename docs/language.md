@@ -1191,10 +1191,22 @@ ordinary aliases, including grouped and terminal `self` imports. A complete
 import can poison the type and trait names used by an implementation header.
 The ordinary resolver records each observed qualified slot, its namespace,
 visibility and any selected import leaf. Exact leaf failures stay attached to
-their own aliases. Selected module-level imports replay their authored statements
-and recurse through the selected antecedents. Replay checks every recorded
-lookup and requires unique owners for the modules it traverses. A selected
-glob or block-local import still needs its complete source context.
+their own aliases. Selected module imports replay their authored statements;
+module globs trace each selected spelling and namespace through the exact
+exported slot and its reexports. The full original catalog establishes explicit
+over glob precedence and refuses a used ambiguous slot before projection.
+Unknown or poisoned glob targets keep their original refusal ownership.
+Block-local use trees are reparsed with the complete owning function. Every
+leaf must match its original statement and lexical owner before unused leaves
+are removed from the diagnostic projection. Grouped statements retain their
+first selected leaf. All recorded positive and negative lookups, including binding
+patterns, are checked again against the projected catalog. A local may shadow
+an imported function; its source antecedent remains in the recorded closure.
+Replay requires unique module owners and structural block ancestry, independent
+of arena numbering. Empty local use trees, enum glob targets and an inner
+import hiding an inherited local remain explicit replay boundaries. The last
+boundary includes macro-generated locals: ordinary lowering currently gives
+the outer local priority, whereas Rust selects the inner import.
 
 Coherence compares retained headers by exact receiver identity, trait
 declaration and closed scalar arguments. A balanced refused member with a

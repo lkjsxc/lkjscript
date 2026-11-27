@@ -701,6 +701,48 @@ on both lkjscript engines and in Rust at opt0 and opt3. The full pinned Sōzu an
 nom roots at that revision still have opaque declaration producers and keep
 eight, nine and eight checked items respectively.
 
+#### Selected glob and block-local import replay
+
+Selected module globs now preserve each exported spelling and namespace,
+including the exact antecedent of a reexport. Block-local import trees retain
+their lexical owner after function replay renumbers the block arena. Unused
+grouped leaves are verified against the authored tree before projection; every
+selected leaf, dependency and positive or negative lookup is checked again.
+The original full catalog decides explicit precedence and used-slot ambiguity.
+Unknown and poisoned targets retain their original upstream causes. Source
+refusal still prevents execution, IR/image publication and checked edits.
+
+The complete pinned census against exact baseline `dec3f7ba7` gives the same
+results in both `off` and `on` modes:
+
+| Root | Before checked/blocked/rejected | After checked/blocked/rejected |
+| --- | ---: | ---: |
+| Sōzu bin | 9 / 598 / 0 | 9 / 598 / 0 |
+| Sōzu lib | 10 / 1,224 / 0 | 10 / 1,224 / 0 |
+| nom | 8 / 651 / 0 | 8 / 651 / 0 |
+| DOM | 0 / 423 / 0 | 0 / 423 / 0 |
+| selectors | 0 / 348 / 0 | 0 / 348 / 0 |
+
+All ten ordinary diagnostic streams, complete item rows and tombstones are
+byte-identical. Changed blocker rows: zero. No original upstream item is newly
+admitted by this slice, so no new import-driven reduction value is claimed.
+Earlier poison precedes this replay limit: Sōzu lib's 47 poisoned block-local
+leaves (including macro-produced leaves) inherit `thread_local!` at
+`lib/src/metrics/mod.lkj:22:1`; all six nom glob leaves inherit the retained
+`cfg(doctest)` refusal. DOM's three local `super::*` globs inherit its unavailable
+`std::cell::Ref` input. Selectors' local enum globs retain the `bitflags!` cause.
+
+Focused controls cover distinct slots from one glob, reexport chains, module
+anchors, whole-block import scope, grouped leaves, same-spelled type/value slots,
+precedence, sibling isolation,
+ambiguous globs, poisoned targets and publication/edit rollback. Pattern controls
+retain an imported function hiding an outer constant and refuse a projection
+that would expose a formerly hidden constant. Macro-generated inherited-local
+controls expose a pre-existing ordinary lowering mismatch: native/interpreter
+select the outer value 3 where Rust selects the inner imported value 10. Partial
+replay explicitly refuses that intersection. Empty local import trees and enum
+glob targets remain separate bounded contexts.
+
 #### Scalar layout queries in refused Sōzu roots
 
 The pinned command provider's `channel::delimiter_size` at

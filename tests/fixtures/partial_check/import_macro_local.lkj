@@ -1,0 +1,7 @@
+mod chosen { pub const selected: i64 = 10; }
+macro_rules! choose_explicit { () => {{ let selected = 3i64; { use crate::chosen::selected; selected } }}; }
+macro_rules! choose_glob { () => {{ let selected = 3i64; { use crate::chosen::*; selected } }}; }
+fn macro_explicit() -> i64 { choose_explicit!() }
+fn macro_glob() -> i64 { choose_glob!() }
+fn probe() -> i64 { 42 }
+fn refusal() { println!("source refusal remains"); }

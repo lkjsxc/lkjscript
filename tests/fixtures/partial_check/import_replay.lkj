@@ -1,0 +1,72 @@
+mod first {
+    pub fn pick() -> i64 { 1 }
+    pub fn a() -> i64 { 10 }
+    pub fn b() -> i64 { 20 }
+    pub fn spare() -> i64 { 999 }
+}
+mod second {
+    pub fn pick() -> i64 { 2 }
+}
+mod third {
+    pub fn pick() -> i64 { 3 }
+}
+mod chain {
+    pub use crate::first::*;
+}
+use crate::first::*;
+use crate::second::pick;
+fn module_choice() -> i64 { pick() }
+fn pairs() -> i64 { a() + b() }
+fn linked() -> i64 {
+    use crate::chain::*;
+    a() + b()
+}
+fn qualified() -> i64 {
+    use crate::first::{spare, pick as chosen};
+    chosen()
+}
+fn late() -> i64 {
+    let value = chosen();
+    use crate::third::pick as chosen;
+    value
+}
+fn block_choices() -> i64 {
+    let outer = pick();
+    let inner = { use crate::third::*; pick() };
+    let explicit = { use crate::first::*; use crate::second::pick; pick() };
+    outer * 100 + inner * 10 + explicit
+}
+fn locals() -> i64 {
+    use crate::first::pick;
+    let pick = 9i64;
+    ({ let pick = 7i64; pick }) + pick
+}
+fn sibling() -> i64 {
+    let inner = { use crate::third::pick; pick() };
+    inner * 10 + pick()
+}
+fn anchors() -> i64 {
+    use crate::*;
+    pairs()
+}
+mod nested {
+    use super::first::*;
+    pub fn parent() -> i64 { a() + b() }
+    mod level {
+        use super::*;
+        pub fn from_parent() -> i64 { parent() }
+    }
+    pub fn self_anchor() -> i64 {
+        use self::*;
+        parent()
+    }
+    pub fn through_child() -> i64 { level::from_parent() }
+}
+fn probe() -> i64 {
+    if module_choice() == 2 && pairs() == 30 && linked() == 30
+        && qualified() == 1 && late() == 3 && block_choices() == 232
+        && locals() == 16 && sibling() == 32 && anchors() == 30
+        && nested::parent() == 30 && nested::self_anchor() == 30
+        && nested::through_child() == 30 { 42 } else { 0 }
+}
+fn refusal() { println!("source refusal remains"); }

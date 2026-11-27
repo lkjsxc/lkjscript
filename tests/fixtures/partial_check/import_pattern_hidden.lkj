@@ -1,0 +1,15 @@
+mod upstream {
+    pub const x: i64 = 0;
+    pub fn y() -> i64 { 0 }
+}
+mod provider {
+    pub use crate::upstream::*;
+    fn x() -> i64 { 8 }
+}
+use provider::*;
+macro_rules! choose {
+    () => { match 1i64 { x => 42i64, _ => 0i64 } };
+}
+pub fn probe() -> i64 { y() + crate::upstream::x + choose!() }
+
+fn refusal() { println!("source refusal remains"); }

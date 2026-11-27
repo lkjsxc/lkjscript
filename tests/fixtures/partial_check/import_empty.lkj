@@ -1,0 +1,11 @@
+mod chosen {
+    pub fn target() -> i64 { 42 }
+}
+fn empty() -> i64 { use crate::chosen::{}; 42 }
+fn empty_then_used() -> i64 {
+    use crate::chosen::{};
+    use crate::chosen::target;
+    target()
+}
+fn probe() -> i64 { 42 }
+fn refusal() { println!("source refusal remains"); }

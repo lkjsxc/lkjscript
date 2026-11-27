@@ -1,0 +1,16 @@
+mod chosen {
+    pub fn target() -> i64 { 42 }
+}
+fn first() -> i64 { use crate::chosen::target; target() }
+fn after() -> i64 {
+    { use crate::chosen::target; target() };
+    target()
+}
+fn sibling() -> i64 {
+    let left = { use crate::chosen::target; target() };
+    let right = { target() };
+    left + right
+}
+fn other() -> i64 { target() }
+fn probe() -> i64 { first() }
+fn refusal() { println!("source refusal remains"); }

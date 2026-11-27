@@ -1,0 +1,13 @@
+mod chosen {
+    pub fn item() -> i64 { 42 }
+}
+fn inner_import() -> i64 {
+    let item = 7i64;
+    { use crate::chosen::item; item() }
+}
+fn inner_glob() -> i64 {
+    let item = 7i64;
+    { use crate::chosen::*; item() }
+}
+fn probe() -> i64 { 42 }
+fn refusal() { println!("source refusal remains"); }

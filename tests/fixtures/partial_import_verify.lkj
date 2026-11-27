@@ -1,0 +1,250 @@
+// Independent expectations for diagnostic-only import replay.
+use std::json::{self, Value};
+use std::collections::BTreeSet;
+struct Expected {
+    line: usize,
+    column: usize,
+    name: String,
+    checked: bool,
+    cause_line: usize,
+    cause_column: usize,
+    cause_code: String,
+    dependencies: String,
+}
+fn row(line: usize, column: usize, name: &str, checked: bool,
+    cause_line: usize, cause_column: usize, cause_code: &str, dependencies: &str) -> Expected {
+    Expected { line, column, name: name.to_string(), checked, cause_line, cause_column,
+        cause_code: cause_code.to_string(), dependencies: dependencies.to_string() }
+}
+fn cases(name: &str) -> Vec<Expected> {
+    match name {
+        "import_replay" => vec![
+            row(2, 9, "first::pick", true, 0, 0, "", ""),
+            row(3, 9, "first::a", true, 0, 0, "", ""),
+            row(4, 9, "first::b", true, 0, 0, "", ""),
+            row(5, 9, "first::spare", true, 0, 0, "", ""),
+            row(8, 9, "second::pick", true, 0, 0, "", ""),
+            row(11, 9, "third::pick", true, 0, 0, "", ""),
+            row(18, 1, "module_choice", true, 0, 0, "", "second::pick"),
+            row(19, 1, "pairs", true, 0, 0, "", "first::a,first::b"),
+            row(20, 1, "linked", true, 0, 0, "", "first::a,first::b"),
+            row(24, 1, "qualified", true, 0, 0, "", "first::pick"),
+            row(28, 1, "late", true, 0, 0, "", "third::pick"),
+            row(33, 1, "block_choices", true, 0, 0, "", "second::pick,third::pick"),
+            row(39, 1, "locals", true, 0, 0, "", "first::pick"),
+            row(44, 1, "sibling", true, 0, 0, "", "third::pick,second::pick"),
+            row(48, 1, "anchors", true, 0, 0, "", "pairs"),
+            row(54, 9, "nested::parent", true, 0, 0, "", "first::a,first::b"),
+            row(57, 13, "nested::level::from_parent", true, 0, 0, "", "nested::parent"),
+            row(59, 9, "nested::self_anchor", true, 0, 0, "", "nested::parent"),
+            row(63, 9, "nested::through_child", true, 0, 0, "", "nested::level::from_parent"),
+            row(65, 1, "probe", true, 0, 0, "", "module_choice,pairs,linked,qualified,late,block_choices,locals,sibling,anchors,nested::parent,nested::self_anchor,nested::through_child"),
+            row(72, 1, "refusal", false, 72, 16, "E_CAPABILITY", ""),
+        ],
+        "import_ambiguity" => vec![
+            row(2, 9, "one::pick", true, 0, 0, "", ""),
+            row(5, 9, "two::pick", true, 0, 0, "", ""),
+            row(10, 9, "conflict::blocked", false, 10, 31, "E_NAME", ""),
+            row(12, 1, "local_conflict", false, 15, 5, "E_NAME", ""),
+            row(17, 1, "explicit", true, 0, 0, "", "one::pick"),
+            row(23, 1, "probe", true, 0, 0, "", "explicit"),
+            row(24, 1, "refusal", false, 24, 16, "E_CAPABILITY", ""),
+        ],
+        "import_poison" => vec![
+            row(3, 9, "refused::good", true, 0, 0, "", ""),
+            row(7, 9, "contaminated::blocked", false, 2, 24, "E_UNSUPPORTED", ""),
+            row(9, 1, "local_bad", false, 2, 24, "E_UNSUPPORTED", ""),
+            row(13, 1, "local_glob", false, 2, 24, "E_UNSUPPORTED", ""),
+            row(17, 1, "missing_glob", false, 18, 5, "E_IMPORT", ""),
+            row(21, 1, "missing_explicit", false, 22, 5, "E_IMPORT", ""),
+            row(25, 1, "unrelated", true, 0, 0, "", ""),
+            row(26, 1, "probe", true, 0, 0, "", "unrelated"),
+        ],
+        "import_nonleak" => vec![
+            row(2, 9, "chosen::target", true, 0, 0, "", ""),
+            row(4, 1, "first", true, 0, 0, "", "chosen::target"),
+            row(5, 1, "after", false, 16, 16, "E_CAPABILITY", ""),
+            row(9, 1, "sibling", false, 16, 16, "E_CAPABILITY", ""),
+            row(14, 1, "other", false, 16, 16, "E_CAPABILITY", ""),
+            row(15, 1, "probe", true, 0, 0, "", "first"),
+            row(16, 1, "refusal", false, 16, 16, "E_CAPABILITY", ""),
+        ],
+        "import_namespaces" => vec![
+            row(3, 9, "source::item", true, 0, 0, "", ""),
+            row(9, 1, "module_override", true, 0, 0, "", "source::item"),
+            row(10, 1, "from_alias", true, 0, 0, "", "source::item"),
+            row(14, 1, "probe", true, 0, 0, "", "module_override,from_alias"),
+            row(15, 1, "refusal", false, 15, 16, "E_CAPABILITY", ""),
+        ],
+        "import_pattern" => vec![
+            row(2, 9, "functions::selected", true, 0, 0, "", ""),
+            row(5, 1, "local_pattern", true, 0, 0, "", "functions::selected"),
+            row(10, 1, "probe", true, 0, 0, "", "local_pattern"),
+            row(11, 1, "refusal", false, 11, 16, "E_CAPABILITY", ""),
+        ],
+        "import_pattern_hidden" => vec![
+            row(3, 9, "upstream::y", true, 0, 0, "", ""),
+            row(7, 5, "provider::x", true, 0, 0, "", ""),
+            row(13, 5, "probe", false, 15, 16, "E_CAPABILITY", "upstream::y"),
+            row(15, 1, "refusal", false, 15, 16, "E_CAPABILITY", ""),
+        ],
+        "import_macro_local" => vec![
+            row(4, 1, "macro_explicit", false, 7, 16, "E_CAPABILITY", ""),
+            row(5, 1, "macro_glob", false, 7, 16, "E_CAPABILITY", ""),
+            row(6, 1, "probe", true, 0, 0, "", ""),
+            row(7, 1, "refusal", false, 7, 16, "E_CAPABILITY", ""),
+        ],
+        "import_empty" => vec![
+            row(2, 9, "chosen::target", true, 0, 0, "", ""),
+            row(4, 1, "empty", false, 11, 16, "E_CAPABILITY", ""),
+            row(5, 1, "empty_then_used", false, 11, 16, "E_CAPABILITY", ""),
+            row(10, 1, "probe", true, 0, 0, "", ""),
+            row(11, 1, "refusal", false, 11, 16, "E_CAPABILITY", ""),
+        ],
+        "import_outer_local" => vec![
+            row(2, 9, "chosen::item", true, 0, 0, "", ""),
+            row(4, 1, "inner_import", false, 13, 16, "E_CAPABILITY", ""),
+            row(8, 1, "inner_glob", false, 13, 16, "E_CAPABILITY", ""),
+            row(12, 1, "probe", true, 0, 0, "", ""),
+            row(13, 1, "refusal", false, 13, 16, "E_CAPABILITY", ""),
+        ],
+        _ => panic!("unknown import replay fixture"),
+    }
+}
+fn text(value: &Value, key: &str) -> String {
+    value.get(key).unwrap().as_str().unwrap().to_string()
+}
+fn number(value: &Value, key: &str) -> usize {
+    value.get(key).unwrap().as_usize().unwrap()
+}
+fn identity(path: &str, row: &Expected) -> String {
+    format!("{path}@{}:{}", row.line, row.column)
+}
+fn verify_poison(tombstones: &[Value], path: &str) {
+    let mut count = 0usize;
+    for tombstone in tombstones {
+        let line = number(tombstone, "line");
+        if !matches!(line, 6 | 10 | 14) { continue; }
+        count += 1usize;
+        assert_eq!(text(tombstone, "path"), path);
+        assert_eq!(number(tombstone, "column"), 5usize);
+        assert_eq!(text(tombstone, "kind"), "dependent import");
+        assert!(matches!(tombstone.get("namespace").unwrap(), Value::Bool(true)));
+        assert!(matches!(tombstone.get("coherence").unwrap(), Value::Bool(false)));
+        let names = tombstone.get("names").unwrap().as_array().unwrap();
+        if line == 10usize {
+            assert_eq!(names.len(), 1usize);
+            assert_eq!(names[0].as_str().unwrap(), "Mystery");
+        } else { assert!(names.is_empty()); }
+        if line == 6usize {
+            assert!(matches!(tombstone.get("block").unwrap(), Value::Null));
+            assert_eq!(text(tombstone, "module"), "contaminated");
+        } else {
+            let expected = if line == 10usize { 2usize } else { 3usize };
+            assert_eq!(number(tombstone, "block"), expected);
+            assert_eq!(text(tombstone, "module"), "");
+        }
+        let cause = tombstone.get("cause").unwrap();
+        assert_eq!(text(cause, "path"), path);
+        assert_eq!(number(cause, "line"), 2usize);
+        assert_eq!(number(cause, "column"), 24usize);
+        assert_eq!(text(cause, "code"), "E_UNSUPPORTED");
+        assert_eq!(text(cause, "message"), "unsupported construct: dyn");
+    }
+    assert_eq!(count, 3usize);
+}
+fn main(mut world: World) {
+    let arguments = world.args();
+    assert_eq!(arguments.len(), 2usize);
+    let path = String::from_utf8(arguments[0].clone()).unwrap();
+    let name = String::from_utf8(arguments[1].clone()).unwrap();
+    let input = world.stdin().read_to_end().unwrap();
+    let diagnostics = String::from_utf8(input).unwrap();
+    let mut reports = 0usize;
+    let mut report: Option<Value> = None;
+    for line in diagnostics.as_str().lines() {
+        if line.starts_with("LKJSCRIPT_ITEMS ") {
+            reports += 1usize;
+            report = Some(json::parse(line[16usize..].as_bytes()).unwrap());
+        }
+    }
+    assert_eq!(reports, 1usize);
+    let report = report.unwrap();
+    assert_eq!(number(&report, "schema"), 1usize);
+    if name == "import_poison" {
+        verify_poison(report.get("tombstones").unwrap().as_array().unwrap(), &path);
+    }
+    let found = report.get("items").unwrap().as_array().unwrap();
+    let expected = cases(&name);
+    assert_eq!(found.len(), expected.len());
+    let mut checked = 0usize;
+    let mut blocked = 0usize;
+    let mut seen = BTreeSet::new();
+    for want in &expected {
+        let id = identity(&path, want);
+        let mut selected: Option<usize> = None;
+        for index in 0usize..found.len() {
+            if text(&found[index], "id") == id { assert!(selected.is_none()); selected = Some(index); }
+        }
+        let actual = &found[selected.unwrap()];
+        assert!(seen.insert(id));
+        assert_eq!(text(actual, "path"), path);
+        assert_eq!(number(actual, "line"), want.line);
+        assert_eq!(number(actual, "column"), want.column);
+        assert_eq!(text(actual, "name"), want.name);
+        assert_eq!(text(actual, "status"), if want.checked { "checked" } else { "blocked" });
+        if want.checked {
+            checked += 1usize;
+            assert!(matches!(actual.get("cause").unwrap(), Value::Null));
+        } else {
+            blocked += 1usize;
+            let reason = text(actual, "reason");
+            assert!(!reason.is_empty());
+            if name == "import_ambiguity" && want.name != "refusal" {
+                assert_eq!(reason, "original source lookup refused");
+            }
+            if name == "import_nonleak" && want.name != "refusal" {
+                assert_eq!(reason, "complete context required: unresolved input target");
+            }
+            if matches!(name.as_str(), "import_outer_local" | "import_macro_local") && want.name != "refusal" {
+                assert!(reason.starts_with("complete context required:"));
+                assert!(reason.contains("inherited local"));
+            }
+            if name == "import_empty" && want.name != "refusal" {
+                assert_eq!(reason, "complete context required: local import statement needs a distinct authored leaf");
+            }
+            if name == "import_pattern_hidden" && want.name == "probe" {
+                assert_eq!(reason, "complete context required: a recorded pattern binding changed during replay");
+            }
+            let cause = actual.get("cause").unwrap();
+            assert_eq!(text(cause, "path"), path);
+            assert_eq!(number(cause, "line"), want.cause_line);
+            assert_eq!(number(cause, "column"), want.cause_column);
+            assert_eq!(text(cause, "code"), want.cause_code);
+            let ordinary = format!("{path}:{}:{}: {} {}", want.cause_line,
+                want.cause_column, want.cause_code, text(cause, "message"));
+            let mut present = false;
+            for line in diagnostics.as_str().lines() {
+                if line == ordinary.as_str() { present = true; }
+            }
+            assert!(present);
+        }
+        let dependencies = actual.get("dependencies").unwrap().as_array().unwrap();
+        let mut at = 0usize;
+        for name in want.dependencies.as_str().split(',') {
+            if name.is_empty() { continue; }
+            let mut selected: Option<usize> = None;
+            for index in 0usize..expected.len() {
+                if expected[index].name.as_str() == name { selected = Some(index); }
+            }
+            let dependency = &expected[selected.unwrap()];
+            assert_eq!(dependencies[at].as_str().unwrap(), identity(&path, dependency).as_str());
+            at += 1usize;
+        }
+        assert_eq!(dependencies.len(), at);
+    }
+    assert_eq!(number(&report, "checked"), checked);
+    assert_eq!(number(&report, "blocked"), blocked);
+    assert_eq!(number(&report, "rejected"), 0usize);
+    world.stdout().write(format!("ok {name}: checked={checked} blocked={blocked} rejected=0\n").as_bytes());
+}

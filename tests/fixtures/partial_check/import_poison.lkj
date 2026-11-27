@@ -1,0 +1,26 @@
+mod refused {
+    pub type Mystery = dyn Missing;
+    pub fn good() -> i64 { 4 }
+}
+mod contaminated {
+    use crate::refused::*;
+    pub fn blocked() -> i64 { good() }
+}
+fn local_bad() -> i64 {
+    use crate::refused::Mystery;
+    42
+}
+fn local_glob() -> i64 {
+    use crate::refused::*;
+    good()
+}
+fn missing_glob() -> i64 {
+    use absent::*;
+    42
+}
+fn missing_explicit() -> i64 {
+    use absent::thing;
+    42
+}
+fn unrelated() -> i64 { 42 }
+fn probe() -> i64 { unrelated() }

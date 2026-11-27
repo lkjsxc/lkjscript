@@ -1,0 +1,15 @@
+mod source {
+    pub mod item { pub const VALUE: i64 = 40; }
+    pub fn item() -> i64 { 2 }
+}
+mod relay { pub use crate::source::*; }
+mod replacement { pub mod item { pub const VALUE: i64 = 7; } }
+use crate::relay::*;
+use crate::replacement::item;
+fn module_override() -> i64 { item() + item::VALUE }
+fn from_alias() -> i64 {
+    use crate::relay as route;
+    { use route::*; item() + item::VALUE }
+}
+fn probe() -> i64 { if module_override() == 9 && from_alias() == 42 { 42 } else { 0 } }
+fn refusal() { println!("source refusal remains"); }

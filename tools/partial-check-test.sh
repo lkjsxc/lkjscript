@@ -322,3 +322,5 @@ if [[ -n $witness ]]; then
     done
     printf 'ok partial-check Rust: %s values and %s context/boundary verdicts; opt0/opt3 and both configurations\n' "$rust_values" "$rust_verdicts"
 fi
+
+bash tools/partial-import-test.sh "$compiler" "$witness" "$baseline"
