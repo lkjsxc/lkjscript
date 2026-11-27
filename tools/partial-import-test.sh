@@ -27,8 +27,8 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' HUP TERM
 fail() { printf 'partial-import: %s\n' "$*" >&2; exit 1; }
-cases=(import_replay import_ambiguity import_poison import_nonleak import_outer_local import_macro_local import_empty import_pattern import_pattern_hidden import_namespaces import_ambiguous_inner import_ambiguous_outer import_ambiguous_pattern import_grouped import_block_hidden)
-valids=(replay ambiguity poison nonleak pattern pattern-hidden namespaces ambiguous-inner ambiguous-outer grouped block-hidden)
+cases=(import_replay import_ambiguity import_poison import_nonleak import_outer_local import_macro_local import_empty import_pattern import_pattern_hidden import_namespaces import_ambiguous_inner import_ambiguous_outer import_ambiguous_pattern import_explicit_patterns import_grouped import_block_hidden)
+valids=(replay ambiguity poison nonleak pattern pattern-hidden namespaces ambiguous-inner ambiguous-outer explicit-patterns grouped block-hidden)
 mkdir "$work/cases"
 for name in "${cases[@]}"; do cp "tests/fixtures/partial_check/$name.lkj" "$work/cases/"; done
 verifier_compiler=${baseline:-$compiler}
@@ -56,7 +56,7 @@ for name in ambiguity poison nonleak; do
 done
 cp "$work/poison-invalid.lkj" "$work/poison-type-invalid.lkj"
 printf '\nmod absent { pub const thing: i64 = 0; }\n' >> "$work/poison-type-invalid.lkj"
-for name in ambiguous_inner ambiguous_outer ambiguous_pattern grouped block_hidden; do
+for name in ambiguous_inner ambiguous_outer ambiguous_pattern explicit_patterns grouped block_hidden; do
     sed '/^fn refusal()/d' "$work/cases/import_$name.lkj" > "$work/${name//_/-}-valid.lkj"
 done
 sed '/^    fn x()/d' "$work/block-hidden-valid.lkj" > "$work/block-projected-valid.lkj"
@@ -67,8 +67,10 @@ checks=0
 boundary_values=0
 refusals=0
 for mode in off on; do
-    # Bare ambiguous patterns and changed block projections preserve ordinary
-    # lkjscript values but differ from Rust; count those routes separately.
+    # Explicit binding modes in ambiguous globs are shared positive controls.
+    # The bare twin must remain blocked in the diagnostic report. Ordinary
+    # lkjscript still admits that isolated root, unlike Rust; count those
+    # routes and changed block projections as frontend boundaries.
     for name in "${valids[@]}" ambiguous-pattern block-projected; do
         source="$work/$name-valid.lkj"
         expected=42
@@ -96,7 +98,7 @@ for mode in off on; do
         "$work/verify" "$source" "$name" < "$work/error" > "$work/verified" 2> "$work/verifier-error" || fail "$name $mode exact item report"
         cat "$work/verified"
         case "$name" in
-            import_ambiguous_inner|import_ambiguous_outer|import_ambiguous_pattern|import_block_hidden)
+            import_ambiguous_inner|import_ambiguous_outer|import_ambiguous_pattern|import_explicit_patterns|import_block_hidden)
                 ! grep -q ': E_NAME ' "$work/error" || fail "$name $mode invented a lookup diagnostic"
                 ;;
         esac
@@ -197,7 +199,7 @@ if [[ -n $witness ]]; then
                 status=0
                 "$witness" --edition=2021 --crate-name partial_imports -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || status=$?
                 case "$name" in
-                    import_replay|import_outer_local|import_macro_local|import_empty|import_pattern|import_pattern_hidden|import_namespaces|import_ambiguous_inner|import_ambiguous_outer|import_grouped|import_block_hidden)
+                    import_replay|import_outer_local|import_macro_local|import_empty|import_pattern|import_pattern_hidden|import_namespaces|import_ambiguous_inner|import_ambiguous_outer|import_explicit_patterns|import_grouped|import_block_hidden)
                         [[ $status == 0 && $("$work/rust") == 42 ]] || fail "Rust capability-boundary $name $mode/$level"
                         ;;
                     import_ambiguity|import_nonleak|import_poison|import_ambiguous_pattern)
@@ -217,6 +219,13 @@ if [[ -n $witness ]]; then
                 [[ $("$work/rust") == 10 ]] || fail "Rust macro shadow boundary $entry $mode/$level value"
                 rust_shadow_values=$((rust_shadow_values + 1))
             done
+            cp "$work/ambiguous-pattern-valid.lkj" "$work/rust.lkj"
+            printf '\nfn main() { println!("{}", probe()); }\n' >> "$work/rust.lkj"
+            if "$witness" --edition=2021 --crate-name partial_imports -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error"; then
+                fail "Rust accepted isolated bare ambiguous pattern $mode/$level"
+            fi
+            grep -Fq 'error[E0659]' "$work/rust-error" || fail "Rust isolated bare ambiguous pattern $mode/$level wrong refusal"
+            rust_verdicts=$((rust_verdicts + 1))
             cp "$work/pattern-projected-invalid.lkj" "$work/rust.lkj"
             printf '\nfn main() { println!("{}", probe()); }\n' >> "$work/rust.lkj"
             "$witness" --edition=2021 --crate-name partial_imports -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || fail "Rust changed pattern projection $mode/$level"

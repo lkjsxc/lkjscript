@@ -608,18 +608,23 @@ fn entry_kind(dir: &mut ReadDirectory, name: &str) -> Result<u8,String> {
     }
     Err(format!("no such root component: {name}"))
 }
+// Linux getdents64 special entries are neither regular files nor directories.
+fn special_entry(kind: u8) -> bool {
+    matches!(kind, 1u8 | 2u8 | 6u8 | 12u8 | 14u8)
+}
 fn visit(dir: &mut ReadDirectory, package: &str, relative: &str,
     external: bool, files: &mut BTreeMap<String,bool>) -> Result<(),String> {
     for entry in entries(dir)? {
         let name = String::from_utf8(entry.name).map_err(|_| -> String { "non-UTF-8 file name under selected roots".to_string() })?;
         let child = child_path(relative,name.as_str());
         if entry.kind == 10u8 { return Err(symlink_reason(package,child.as_str(),false)); }
-        if entry.kind == 0u8 { return Err(format!("unknown directory entry type: {child}")); }
         if entry.kind == 4u8 {
             let mut sub = dir.open_directory(name.as_str()).map_err(|errno: i64| -> String { format!("open {child}: errno {errno}") })?;
             visit(&mut sub,package,child.as_str(),external,files)?;
         } else if entry.kind == 8u8 && child.as_str().ends_with(".rs") {
             files.insert(child,external);
+        } else if entry.kind != 8u8 && !special_entry(entry.kind) {
+            return Err(format!("unknown directory entry type: {child}"));
         }
     }
     Ok(())
@@ -633,7 +638,9 @@ fn select_root(root: &mut ReadDirectory, package: &str, relative: &str,
     loop {
         let kind = entry_kind(&mut dir,part)?;
         if kind == 10u8 { return Err(symlink_reason(package,relative,true)); }
-        if kind == 0u8 { return Err(format!("unknown root component type: {relative}")); }
+        if kind != 4u8 && kind != 8u8 && !special_entry(kind) {
+            return Err(format!("unknown root component type: {relative}"));
+        }
         let next = parts.next();
         if kind != 4u8 {
             if next.is_some() { return Err(format!("not a directory root component: {part}")); }

@@ -805,7 +805,9 @@ impl<'a> Resolver<'a> {
         let mut reads = Some(Vec::new());
         self.path_read(scope, name, namespace, &mut reads);
         let mut reads = reads.unwrap();
-        reads.pop().unwrap()
+        let read = reads.pop().unwrap();
+        assert!(reads.is_empty());
+        read
     }
     /// Diagnostic lookup retains ordinary namespace and visibility rules.
     /// Refused declarations and imports remain separate poisoned inputs.

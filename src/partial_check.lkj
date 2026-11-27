@@ -315,26 +315,30 @@ impl<'a> Inspector<'a> {
         let node = &self.program.patterns[id];
         match &node.kind {
             a::Pattern::Wild | a::Pattern::Rest => Ok(()),
-            a::Pattern::Bind { name, by_ref, ref_mut, .. } => {
+            a::Pattern::Bind { name, mutable, by_ref, ref_mut } => {
                 if *by_ref || *ref_mut { plan.structural = true; }
                 let written = a::macros::source_name(name);
                 if let Some(failure) = poisoned(self.program, self.failures, node.scope, written) { return Err(failure); }
-                let trace = self.resolver.diagnostic_trace(node.scope, written, Namespace::Value, node.span, true)
-                    .map_err(|_| self.boundary("pattern binding lookup needs complete source context"))?;
-                let trace = self.observed(node.scope, written, trace)?;
-                match &trace.result {
-                    Some((_, Some(a::Item::Function(index)))) => {
-                        if !plan.dependencies.contains(index) { plan.dependencies.push(*index); }
+                // Explicit binding modes cannot select a constant or constructor.
+                // Only a bare binding needs the conservative source lookup.
+                if !*mutable && !*by_ref && !*ref_mut {
+                    let trace = self.resolver.diagnostic_trace(node.scope, written, Namespace::Value, node.span, true)
+                        .map_err(|_| self.boundary("pattern binding lookup needs complete source context"))?;
+                    let trace = self.observed(node.scope, written, trace)?;
+                    match &trace.result {
+                        Some((_, Some(a::Item::Function(index)))) => {
+                            if !plan.dependencies.contains(index) { plan.dependencies.push(*index); }
+                        }
+                        Some(_) => return Err(self.boundary("a binding pattern may select a source constant or constructor")),
+                        None => (),
                     }
-                    Some(_) => return Err(self.boundary("a binding pattern may select a source constant or constructor")),
-                    None => (),
+                    self.record_imports(&trace.reads, plan)?;
+                    // A reduced glob can expose a previously hidden constant. The
+                    // absence of a pattern binding is a dependency too.
+                    plan.lookups.push(Lookup { span: node.span, namespace: Namespace::Value,
+                        written: written.to_string(), result: trace.result, reads: trace.reads,
+                        import_site: None, pattern_site: true, block_site: None });
                 }
-                self.record_imports(&trace.reads, plan)?;
-                // A reduced glob can expose a previously hidden constant. The
-                // absence of a pattern binding is a dependency too.
-                plan.lookups.push(Lookup { span: node.span, namespace: Namespace::Value,
-                    written: written.to_string(), result: trace.result, reads: trace.reads,
-                    import_site: None, pattern_site: true, block_site: None });
                 locals.insert(name.clone()); Ok(())
             }
             a::Pattern::Tuple(parts) => {
@@ -1505,7 +1509,7 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
             if lookup.pattern_site {
                 for node in &projected.patterns {
                     if node.span == lookup.span {
-                        if let a::Pattern::Bind { name, .. } = &node.kind {
+                        if let a::Pattern::Bind { name, mutable: false, by_ref: false, ref_mut: false } = &node.kind {
                             if a::macros::source_name(name) == lookup.written.as_str() {
                                 let actual = names.diagnostic_trace(node.scope, &lookup.written, Namespace::Value, node.span, true)
                                     .map_err(|_| -> String { "replayed pattern lookup refused".to_string() })?;

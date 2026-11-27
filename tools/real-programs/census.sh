@@ -27,8 +27,8 @@ done
 # Explicit selected roots and every visited descendant are never followed.
 if [[ $valid == yes && $help == no && $root_value == no && $positionals == 1 ]]; then
     # Node interprets the empty positional as the current directory.
-    if ! IFS= read -r -d '' package < <(realpath -ez -- "$root_arg" 2>/dev/null) ; then
-        if [[ -z $root_arg ]]; then package=$PWD; else refuse "cannot resolve package root: $root_arg"; fi
+    if ! IFS= read -r -d '' package < <(realpath -ez -- "${root_arg:-.}" 2>/dev/null); then
+        refuse "cannot resolve package root: $root_arg"
     fi
     [[ -d $package ]] || refuse "not a directory: $root_arg"
 else

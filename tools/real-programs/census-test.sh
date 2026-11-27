@@ -108,7 +108,18 @@ main() {
     runner="$PWD/tools/real-programs/census.sh"
     make_fixtures "$work"
     success self b52d7670c99756ab5d32c9a591f1490119b4856fd3a5c2b66b15b0f8863bc1c1 --self-test
+    # Independently exercise the standalone wrapper build and grant manifest.
+    (
+        unset LKJSCRIPT_CENSUS_BINARY
+        export LKJSCRIPT_COMPILER="$compiler"
+        success uncached-self b52d7670c99756ab5d32c9a591f1490119b4856fd3a5c2b66b15b0f8863bc1c1 --self-test
+    )
     success defaults 9ccd14b2245d0514bcbec8c65dc9dcabb704a9e63b1fcb6bc0cc2f6d7fb328e1 "$work/package"
+    # An empty positional uses the physical cwd, not the logical symlink path.
+    ln -s package "$work/package-alias"
+    (cd -L "$work/package-alias"; success empty-positional 9ccd14b2245d0514bcbec8c65dc9dcabb704a9e63b1fcb6bc0cc2f6d7fb328e1 "")
+    ln -s entry-link "$work/entry-link-alias"
+    (cd -L "$work/entry-link-alias"; refusal physical-cwd "symlink under selected root: $(realpath -e .)/src/not-rust.txt" "")
     success overlap f5fa9799cf1dd9e60912abf5657913f65836bda0a17bdf43f04c09c58acc3195 --source-root=./src// --source-root . --source-root src --test-root tests --test-root=src/nested "$work/package"
     success explicit b3a383a1b250002eda15e9de52ecf016a16f00b5e6b496129a671f40991d9e72 --source-root extra/one.rs --test-root=src/edges.rs --self-test "$work/package"
     success fallback 8cd7741859582a94fcf3d02b5eb29353604c62322c98506af49c4c45878d84c7 "$work/fallback"
@@ -138,7 +149,7 @@ main() {
     refusal missing-root 'no such root component: missing' --source-root=missing "$work/package"
     refusal missing-package "cannot resolve package root: $work/missing" "$work/missing"
     refusal invalid-arg 'non-UTF-8 argument' --source-root=$'\xff' "$work/package"
-    printf 'ok source census: 19 self-tests, 6 exact package reports, help and 21 refusals\n'
+    printf 'ok source census: 19 self-tests (cached and uncached), 7 exact package reports, help and 22 refusals (including symlink cwd)\n'
 }
 # Source only to reconstruct the same disposable fixtures for an external
 # differential comparison; the normal gate invokes main.

@@ -129,6 +129,16 @@ fn cases(name: &str) -> Vec<Expected> {
             row(16, 1, "probe", false, 17, 16, "E_CAPABILITY", "selected"),
             row(17, 1, "refusal", false, 17, 16, "E_CAPABILITY", ""),
         ],
+        "import_explicit_patterns" => vec![
+            row(2, 9, "one::x", true, 0, 0, "", ""),
+            row(5, 9, "two::x", true, 0, 0, "", ""),
+            row(8, 9, "helper::ok", true, 0, 0, "", ""),
+            row(12, 1, "selected_mut", true, 0, 0, "", "helper::ok"),
+            row(16, 1, "selected_ref", true, 0, 0, "", "helper::ok"),
+            row(20, 1, "selected_ref_mut", true, 0, 0, "", "helper::ok"),
+            row(25, 1, "probe", true, 0, 0, "", "selected_mut,selected_ref,selected_ref_mut"),
+            row(28, 1, "refusal", false, 28, 16, "E_CAPABILITY", ""),
+        ],
         "import_grouped" => vec![
             row(2, 9, "first::spare", true, 0, 0, "", ""),
             row(3, 9, "first::a", true, 0, 0, "", ""),
