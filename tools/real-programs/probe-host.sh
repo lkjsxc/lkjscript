@@ -43,7 +43,7 @@ run_probe() (
     local i path
     for i in 1 2 3 4 5; do
         path=''
-        IFS= read -r -d '' path < <(realpath -ez -- "${fields[i]:-.}" 2>/dev/null) || path=''
+        IFS= read -r -d '' path < <(realpath -ez -- "${fields[i]}" 2>/dev/null) || path=''
         paths+=("$path")
     done
     local compiler=${paths[0]} library=${paths[1]} source=${paths[2]} projection=${paths[3]} time=${paths[4]} output=${fields[6]}

@@ -100,7 +100,7 @@ test_probe() (
     source "$repo/tools/real-programs/probe-host.sh"
     sanitize_git
     local tmp work
-    tmp=$(mktemp -d /tmp/lkj-probe-unicode.XXXXXX)
+    tmp=$(mktemp -d "${TMPDIR:-/tmp}/lkj-probe-unicode.XXXXXX")
     work=$tmp/build; mkdir "$work"
     trap 'rm -rf -- "$tmp"' EXIT
     trap 'exit 130' INT
@@ -159,6 +159,8 @@ test_probe() (
     refuse unknown 'use --help' "${good[@]}" --wrong value
     refuse missing-value 'use --help' "${good[@]}" --compiler
     refuse missing-input 'input path does not exist' "${good[@]}" --compiler "$tmp/missing"
+    refuse empty-time 'input path does not exist' "${good[@]}" --time ""
+    refuse empty-time-equals 'input path does not exist' "${good[@]}" --time=
     refuse bad-compiler 'compiler is not executable' "${good[@]}" --compiler "$tmp/ascii/library/std/plain.lkj"
     refuse bad-time 'GNU-time-compatible launcher is not executable' "${good[@]}" --time "$tmp/ascii/library/std/plain.lkj"
     refuse duplicate-entry 'entry must be a unique tracked Rust path: src/lib.rs' "${good[@]}" --entry src/lib.rs
