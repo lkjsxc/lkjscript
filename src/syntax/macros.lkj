@@ -216,7 +216,7 @@ impl Parser {
         while at < self.tokens.len() && self.tokens[at].text != "!" {
             name.push_str(identifier_name(&self.tokens[at].text)); at += 1usize;
         }
-        if self.tokens[self.at].text == "macro_rules" || builtin_macro(&name) {
+        if (name == "macro_rules" && self.tokens[self.at].text == "macro_rules") || builtin_macro(&name) {
             return Ok(None);
         }
         at += 1usize;

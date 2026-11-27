@@ -28,6 +28,8 @@ macro_rules! access { () => { $crate::secret() }; }
 #[macro_export]
 macro_rules! view { ($value:expr) => { &$value }; }
 #[macro_export]
+macro_rules! foo { ($name:ident) => { let $name = 21i32; }; }
+#[macro_export]
 macro_rules! ambient { () => {{ println!("ambient output"); 42 }}; }
 LKJ
 cat > "$work/other.lkj" <<'LKJ'
@@ -65,6 +67,14 @@ LKJ
 specimen collision <<'LKJ'
 #[macro_use] extern crate other_provider;
 fn probe() -> i32 { count!(0) + ::metrics::count!(0) }
+LKJ
+cat > "$work/qualified_keyword.lkj" <<'LKJ'
+#[macro_use] extern crate fixture_provider as macro_rules;
+fn probe() -> i32 {
+    macro_rules::foo!(left);
+    macro_rules::foo! { right }
+    left + right
+}
 LKJ
 specimen hidden <<'LKJ'
 fn probe() -> i32 { metrics::hidden!() }
@@ -114,6 +124,9 @@ for engine in native interpreter; do
         result=$("$compiler" run "$name.lkj" "${args[@]}" "${provider[@]}" --engine "$engine")
         [[ $result == 42 ]]
     done
+    result=$("$compiler" run qualified_keyword.lkj "${args[@]}" \
+        --macro-provider fixture_provider:macro_rules=provider.lkj --engine "$engine")
+    [[ $result == 42 ]]
     # Select inputs in reverse order to prove precedence comes from source.
     result=$("$compiler" run collision.lkj "${args[@]}" --macro-provider other_provider:other_provider=other.lkj \
         "${provider[@]}" --engine "$engine")
@@ -132,7 +145,7 @@ for engine in native interpreter; do
             exit 1
         fi
     done
-    printf 'ok macro provider %s: three values and eight located refusals\n' "$engine"
+    printf 'ok macro provider %s: four values and eight located refusals\n' "$engine"
 done
 
 if "$compiler" check exact.lkj "${args[@]}" --macro-provider fixture_provider:wrong=missing.lkj > "$work/out" 2> "$work/err"; then
@@ -155,7 +168,7 @@ if [[ -n $witness ]]; then
         "$work/provider.lkj" -o "$work/libfixture_provider.rlib"
     "$witness" --edition=2024 -Awarnings --crate-name other_provider --crate-type rlib \
         "$work/other.lkj" -o "$work/libother_provider.rlib"
-    for name in exact precedence collision hidden malformed shadowed shadowed_type duplicate private lifetime ambient; do
+    for name in exact precedence collision qualified_keyword hidden malformed shadowed shadowed_type duplicate private lifetime ambient; do
         {
             cat "$work/$name.lkj"
             printf 'fn main() { println!("{}", probe()); }\n'
@@ -163,7 +176,7 @@ if [[ -n $witness ]]; then
         rust=(--edition=2024 -Awarnings --extern "fixture_provider=$work/libfixture_provider.rlib"
             --extern "other_provider=$work/libother_provider.rlib" "$work/main.rs" -o "$work/rust")
         case $name in
-            exact|precedence|collision|ambient)
+            exact|precedence|collision|qualified_keyword|ambient)
                 "$witness" "${rust[@]}"
                 result=$("$work/rust")
                 if [[ $name == ambient ]]; then [[ $result == $'ambient output\n42' ]]
@@ -178,5 +191,5 @@ if [[ -n $witness ]]; then
                 ;;
         esac
     done
-    printf 'ok macro provider Rust: three matching values, seven matching refusals and the ambient-output boundary\n'
+    printf 'ok macro provider Rust: four matching values, seven matching refusals and the ambient-output boundary\n'
 fi

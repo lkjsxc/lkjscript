@@ -1,5 +1,11 @@
 // expect: value 42
 // witness: {"root":true}
-mod r#mod {pub const r#type:usize=2usize;}
-const r#const:usize=2usize;
-fn probe()->i64 {let a:[i64;r#const]=[20i64,21i64];let b:[i64;r#mod::r#type]=[0i64,1i64];a[0usize]+a[1usize]+b[1usize]}
+mod r#mod { pub const r#type: usize = 2usize; }
+mod m { pub const r#const: usize = 1usize; }
+const r#const: usize = 2usize;
+fn probe() -> i64 {
+    let a: [i64; r#const] = [20i64, 21i64];
+    let b: [i64; r#mod::r#type] = [0i64, 1i64];
+    let c: [i64; m::r#const] = [0i64];
+    a[0usize] + a[1usize] + b[1usize] + c[0usize]
+}

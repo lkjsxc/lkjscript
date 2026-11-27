@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {"root":true}
+fn probe() -> i64 {
+    #[cfg(false)]
+    {
+        macro_rules::foo!();
+        macro_rules::foo! {}
+        0i64
+    }
+    42i64
+}
