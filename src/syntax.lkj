@@ -965,7 +965,8 @@ impl Parser {
             let probing = self.probing;
             self.probing = true;
             self.at = at + 1usize;
-            let complete = self.use_item(Visibility::Private).is_ok() && self.at == end;
+            let extent = self.tokens[start].span;
+            let complete = self.use_item(Visibility::Private, extent).is_ok() && self.at == end;
             self.at = resume;
             self.probing = probing;
             let mut names = Vec::new();
@@ -1444,6 +1445,7 @@ impl Parser {
     }
 
     fn next_item(&mut self, disabled: &mut bool) -> Result<Option<Item>, Diagnostic> {
+        let start = self.token().span;
         let attrs = self.attrs(true)?;
         if attrs.iter().any(|attribute| attribute.name.starts_with("proc_macro")) {
             return Err(Diagnostic::new(self.token().span, "E_UNSUPPORTED_MACRO", "procedural macros require an explicit untrusted source producer"));
@@ -1468,7 +1470,7 @@ impl Parser {
             *disabled = true;
             return Ok(None);
         }
-        let item = self.item(attrs, public)?;
+        let item = self.item(attrs, public, start)?;
         Ok(Some(item))
     }
     fn items(&mut self, nested: bool) -> Result<Vec<Item>, Diagnostic> {
@@ -1495,7 +1497,7 @@ impl Parser {
         }
         Ok(items)
     }
-    fn item(&mut self, attrs: Vec<Attribute>, public: Visibility) -> Result<Item, Diagnostic> {
+    fn item(&mut self, attrs: Vec<Attribute>, public: Visibility, start: Span) -> Result<Item, Diagnostic> {
         if self.macro_item_ahead() {
             let span = self.token().span;
             if !matches!(public, Visibility::Private) { return Err(Diagnostic::new(span, "E_MACRO_RULE", "macro item visibility belongs to the expanded declarations")); }
@@ -1526,7 +1528,7 @@ impl Parser {
             return Ok(Item::Impl(self.impl_item(&attrs)?));
         }
         if self.take("use") {
-            return Ok(Item::Use(self.use_item(public)?));
+            return Ok(Item::Use(self.use_item(public, start)?));
         }
         if self.take("mod") {
             let span = self.tokens[self.at - 1].span;
@@ -2737,6 +2739,38 @@ impl Parser {
         }
         Ok(())
     }
+    fn closed_impl_member(&self, start: usize, end: usize) -> bool {
+        // Only plain member prefixes have an independently known footprint.
+        let first = if self.tokens[start].kind == TokenKind::Ident && self.tokens[start].text == "pub" {
+            start + 1usize
+        } else { start };
+        if self.fragment || first >= end || self.tokens[first].kind != TokenKind::Ident
+            || !matches!(self.tokens[first].text.as_str(), "fn" | "const" | "type")
+            || self.tokens[end - 1usize].kind != TokenKind::Symbol
+            || !matches!(self.tokens[end - 1usize].text.as_str(), ";" | "}") {
+            return false;
+        }
+        let mut delimiters = Vec::new();
+        for token in &self.tokens[first + 1usize..end] {
+            if token.kind == TokenKind::Ident && matches!(token.text.as_str(),
+                "fn" | "struct" | "enum" | "trait" | "impl" | "type" | "const" | "static"
+                    | "mod" | "extern" | "use" | "union" | "macro" | "macro_rules") {
+                return false;
+            }
+            if token.kind != TokenKind::Symbol { continue; }
+            match token.text.as_str() {
+                "!" | "#" => return false,
+                "(" => delimiters.push(b')'),
+                "[" => delimiters.push(b']'),
+                "{" => delimiters.push(b'}'),
+                ")" | "]" | "}" => {
+                    if delimiters.pop() != Some(token.text.as_bytes()[0usize]) { return false; }
+                }
+                _ => (),
+            }
+        }
+        delimiters.is_empty()
+    }
     fn impl_item(&mut self, attrs: &[Attribute]) -> Result<usize, Diagnostic> {
         let span = self.token().span;
         self.expect("impl")?;
@@ -2760,6 +2794,7 @@ impl Parser {
         let header = self.finish_span(attrs.first().map(|attr| attr.span).unwrap_or(span));
         let mut methods = Vec::new();
         let mut method_spans = Vec::new();
+        let mut refused = Vec::new();
         let mut associated = Vec::new();
         let mut constants = Vec::new();
         let constant_owner = if generics.is_empty() && predicates.is_empty() {
@@ -2776,11 +2811,22 @@ impl Parser {
                 Ok(()) if methods.len() != before =>
                     method_spans.push(self.finish_span(self.tokens[start].span)),
                 Ok(()) => (),
-                Err(error) => self.recover_region_context(start, "item", error, true),
+                Err(error) => {
+                    let before = self.recovery.len();
+                    self.recover_region_context(start, "item", error, true);
+                    if self.recovery.len() == before + 1usize && self.closed_impl_member(start, self.at) {
+                        refused.push(before);
+                    }
+                }
             }
         }
         let close = self.token().span;
         self.expect("}")?;
+        let mut refused_members = Vec::new();
+        for index in refused {
+            self.recovery[index].namespace = false;
+            refused_members.push(self.recovery[index].span);
+        }
         let id = self.program.impls.len();
         self.program.impls.push(Impl {
             module: self.module.clone(),
@@ -2792,15 +2838,17 @@ impl Parser {
             associated,
             constants,
             span: self.finish_span(span),
-            authored: Some(crate::ast::ImplSyntax { header, close, methods: method_spans }),
+            authored: Some(crate::ast::ImplSyntax { header, close, methods: method_spans, refused_members }),
         });
         Ok(id)
     }
-    fn use_item(&mut self, public: Visibility) -> Result<usize, Diagnostic> {
+    fn use_item(&mut self, public: Visibility, start: Span) -> Result<usize, Diagnostic> {
         let first = self.program.uses.len();
         let span = self.tokens[self.at - 1].span;
         self.use_tree(String::new(), public, span)?;
         self.expect(";")?;
+        let extent = self.finish_span(start);
+        for index in first..self.program.uses.len() { self.program.uses[index].statement = Some(extent); }
         Ok(first)
     }
     fn use_tree(
@@ -2831,6 +2879,7 @@ impl Parser {
                 glob: true,
                 public,
                 span: self.finish_span(span),
+                statement: None,
             });
             return Ok(());
         }
@@ -2865,6 +2914,7 @@ impl Parser {
             glob: false,
             public,
             span: self.finish_span(span),
+            statement: None,
         });
         Ok(())
     }
@@ -2952,7 +3002,8 @@ impl Parser {
             if declaration || attrs.is_empty() || self.program.attrs.len() != inner_attributes {
                 if !enabled { self.skip_disabled()?; return Ok(BlockPart::Skipped); }
                 let public = self.visibility()?;
-                let item = self.item(attrs, public)?;
+                let start = self.tokens[attribute_start].span;
+                let item = self.item(attrs, public, start)?;
                 return Ok(BlockPart::Statement(Stmt::Item(item)));
             }
             if enabled {
@@ -3164,8 +3215,9 @@ impl Parser {
             || self.is("use")
             || self.is("type")
         {
+            let start = self.token().span;
             let public = self.visibility()?;
-            let item = self.item(Vec::new(), public)?;
+            let item = self.item(Vec::new(), public, start)?;
             return Ok(BlockPart::Statement(Stmt::Item(item)));
         }
         let (expression, standalone) = self.statement_expr()?;

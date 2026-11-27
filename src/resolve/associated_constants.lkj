@@ -25,7 +25,7 @@ impl Resolver<'_> {
         let binding = if let Some(declaration) = path.declaration {
             let entry = &self.declarations[declaration];
             Some(Binding { declaration, target: path.name.clone(), scope: entry.scope,
-                public: entry.public, glob: false, ambiguous: false, semantic_alias: false })
+                public: entry.public, glob: false, ambiguous: false, import: None, semantic_alias: false })
         } else {
             let scope = node.block.map(|id| self.program.scopes.len() + id).unwrap_or(node.scope);
             self.path(scope, &path.name, Namespace::Type, node.span, true)?
@@ -67,7 +67,7 @@ impl Resolver<'_> {
             let name = qualified(&owner_entry.name, &constant.name);
             let declaration = self.declarations.len();
             let binding = Binding { declaration, target: name.clone(), scope, public: constant.public,
-                glob: false, ambiguous: false, semantic_alias: false };
+                glob: false, ambiguous: false, import: None, semantic_alias: false };
             if self.associated_constants.members.insert((owner.declaration, constant.name.clone()), binding).is_some() {
                 return Err(Diagnostic::new(constant.span, "E_NAME", &format!("duplicate declaration: {name}")));
             }

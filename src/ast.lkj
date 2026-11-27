@@ -247,6 +247,7 @@ pub struct ImplSyntax {
     pub header: Span,
     pub close: Span,
     pub methods: Vec<Span>,
+    pub refused_members: Vec<Span>,
 }
 
 #[derive(Clone, PartialEq, Eq)]
@@ -274,6 +275,7 @@ pub struct Use {
     pub glob: bool,
     pub public: Visibility,
     pub span: Span,
+    pub statement: Option<Span>,
 }
 
 #[derive(Clone, PartialEq, Eq)]

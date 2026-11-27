@@ -1108,7 +1108,8 @@ sibling body can stay outside the closure when the retained headers prove
 distinct member identities and its recovery cannot add implementations.
 Associated constants stay outside this closure when unused. A refused member
 header blocks the owner. A semantic refusal located in an authored inherent
-body can also trigger the item report. A trait method replays the complete implementation.
+body can also trigger the item report. A trait method replays the complete
+implementation. A declared trait can use an exact primitive scalar receiver.
 Borrowed receivers over nongeneric source structs can use
 direct named and tuple fields of primitive type. The replay includes the
 receiver layout and its supported scalar derives, required trait signatures,
@@ -1120,16 +1121,21 @@ Unloaded modules occupy their written names and poison dependent imports with
 their loader causes. A failed import with a complete tree contributes its
 ordinary aliases, including grouped and terminal `self` imports. A complete
 import can poison the type and trait names used by an implementation header.
-Coherence compares retained headers by exact receiver declaration, trait
-declaration and closed scalar arguments. A possible overlap blocks the
-affected item with the upstream lookup failure or a location on the competing
-header. Unknown source ownership and declaration shapes keep coherence open.
-Unresolved globs and unknown declaration shapes retain wildcard poison. A balanced outer
-attribute whose source semantics cannot add ordinary bindings preserves the
-written declaration owner. Unknown attributes and incomplete headers keep
-conservative poison. Qualified paths still conservatively include possible
-poison at intermediate aliases. A replay needs one source owner for each
-selected module path and its ancestors.
+The ordinary resolver records each observed qualified slot, its namespace,
+visibility and any selected import leaf. Exact leaf failures stay attached to
+their own aliases. Selected module-level imports replay their authored statements
+and recurse through the selected antecedents. Replay checks every recorded
+lookup and requires unique owners for the modules it traverses. A selected
+glob or block-local import still needs its complete source context.
+
+Coherence compares retained headers by exact receiver identity, trait
+declaration and closed scalar arguments. A balanced refused member with a
+plain prefix and no nested declaration producer carries its implementation
+header as its coherence footprint. Disjoint receivers and applications can
+still check. A possible overlap blocks the affected item with the upstream
+lookup failure or the location of the competing header. Opaque macros,
+unloaded modules, unknown attributes and incomplete declaration boundaries
+keep conservative poison.
 
 Each eligible function and its transitive call and destructor dependencies are reparsed
 from their original loaded source bytes, preserving source coordinates and

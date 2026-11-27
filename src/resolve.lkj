@@ -27,6 +27,7 @@ struct Binding {
     public: Visibility,
     glob: bool,
     ambiguous: bool,
+    import: Option<usize>,
     // Whether this final spelling is fixed by an explicit import alias.
     semantic_alias: bool,
 }
@@ -52,6 +53,20 @@ impl Resolved {
 pub(crate) enum Namespace {
     Type,
     Value,
+}
+#[derive(Clone)]
+pub(crate) struct LookupRead {
+    pub owner: usize,
+    pub spelling: String,
+    pub namespace: Namespace,
+    pub binding: Option<(String, Item)>,
+    pub import: Option<usize>,
+    pub visibility: Option<(ModuleId, Visibility)>,
+}
+#[derive(Clone)]
+pub(crate) struct LookupTrace {
+    pub result: Option<(String, Option<Item>)>,
+    pub reads: Vec<LookupRead>,
 }
 /// The declaration slots used by both resolution and semantic source identity.
 pub(crate) fn declaration_namespaces(program: &Program, item: Item) -> (bool, bool) {
@@ -215,7 +230,7 @@ fn index_function_owners(program: &Program) -> Result<Vec<FunctionOwner>> {
 impl<'a> Resolver<'a> {
     pub fn new(program: &'a Program) -> Result<Self> {
         let (resolver, problems) = Self::catalog(program, false)?;
-        if let Some(failure) = problems.into_iter().next() {
+        if let Some((_, failure)) = problems.into_iter().next() {
             Err(failure)
         } else {
             Ok(resolver)
@@ -223,10 +238,10 @@ impl<'a> Resolver<'a> {
     }
     /// Unloaded module declarations still occupy their original names. The
     /// diagnostic consumer must reject lookups affected by their loader errors.
-    pub(crate) fn partial_catalog(program: &'a Program) -> Result<(Self, Vec<Diagnostic>)> {
+    pub(crate) fn partial_catalog(program: &'a Program) -> Result<(Self, Vec<(usize, Diagnostic)>)> {
         Self::catalog(program, true)
     }
-    fn catalog(program: &'a Program, partial: bool) -> Result<(Self, Vec<Diagnostic>)> {
+    fn catalog(program: &'a Program, partial: bool) -> Result<(Self, Vec<(usize, Diagnostic)>)> {
         if program.resolved && program.function_owners.len() != program.functions.len() {
             return Err(Diagnostic::new(
                 Span::default(),
@@ -455,6 +470,7 @@ impl<'a> Resolver<'a> {
                             public,
                             glob: false,
                             ambiguous: false,
+                            import: None,
                             semantic_alias: false,
                         },
                     )
@@ -528,6 +544,27 @@ impl<'a> Resolver<'a> {
         let scope = self.modules.get(&"$std::prelude".to_string())?;
         self.lookup(*scope, name, namespace)
     }
+    fn path_read(&self, owner: usize, name: &str, namespace: Namespace,
+        reads: &mut Option<Vec<LookupRead>>) -> Option<Binding> {
+        let result = self.lookup(owner, name, namespace);
+        if let Some(reads) = reads {
+            reads.push(LookupRead { owner, spelling: name.to_string(), namespace,
+                binding: result.as_ref().map(|binding|
+                    (binding.target.clone(), self.declarations[binding.declaration].item)),
+                import: result.as_ref().and_then(|binding| binding.import),
+                visibility: result.as_ref().map(|binding| (binding.scope, binding.public)) });
+        }
+        result
+    }
+    fn lexical_path_reads(&self, scope: usize, name: &str, namespace: Namespace, span: Span,
+        reads: &mut Option<Vec<LookupRead>>) -> Option<Binding> {
+        if reads.is_none() { return self.lookup_lexical(scope, name, namespace, span); }
+        let mut owner = scope;
+        loop {
+            if let Some(binding) = self.path_read(owner, name, namespace, reads) { return Some(binding); }
+            owner = self.import_scopes.parent(owner)?;
+        }
+    }
     fn path(
         &self,
         scope: ModuleId,
@@ -535,6 +572,12 @@ impl<'a> Resolver<'a> {
         namespace: Namespace,
         span: Span,
         prelude: bool,
+    ) -> Result<Option<Resolved>> {
+        self.path_traced(scope, path, namespace, span, prelude, &mut None)
+    }
+    fn path_traced(
+        &self, scope: ModuleId, path: &str, namespace: Namespace, span: Span, prelude: bool,
+        reads: &mut Option<Vec<LookupRead>>,
     ) -> Result<Option<Resolved>> {
         let parts = path_parts(path);
         if parts.is_empty() {
@@ -550,6 +593,7 @@ impl<'a> Resolver<'a> {
             .is_some_and(|owner| owner >= self.program.scopes.len());
         if !local_type && self.generic(span, parts[0].as_str())
             && (namespace == Namespace::Type || parts[0] == "Self" || parts.len() > 1usize || self.generic_value(span, parts[0].as_str())) {
+            if reads.is_some() { self.lexical_path_reads(scope, parts[0].as_str(), Namespace::Type, span, reads); }
             return Ok(Some(Resolved::intrinsic(path.to_string())));
         }
         if let Some(limit) = self.primitive_limit(scope, path, &parts, namespace, span)? {
@@ -565,7 +609,7 @@ impl<'a> Resolver<'a> {
                 | "std::str::from_utf8"
                 | "std::char::from_u32"
         ) && self
-            .lookup_lexical(scope, parts[0].as_str(), Namespace::Type, span)
+            .lexical_path_reads(scope, parts[0].as_str(), Namespace::Type, span, reads)
             .is_none()
         {
             return Ok(Some(Resolved::intrinsic(path.to_string())));
@@ -605,9 +649,9 @@ impl<'a> Resolver<'a> {
             namespace
         };
         let mut binding = if rooted {
-            self.lookup(current, parts[at].as_str(), first_namespace)
+            self.path_read(current, parts[at].as_str(), first_namespace, reads)
         } else {
-            self.lookup_lexical(scope, parts[at].as_str(), first_namespace, span)
+            self.lexical_path_reads(scope, parts[at].as_str(), first_namespace, span, reads)
         };
         let standard_root = if parts[at].as_str() == "core" { "$std::core" } else { "$std" };
         if binding.is_none()
@@ -650,14 +694,14 @@ impl<'a> Resolver<'a> {
             if !core && remaining.starts_with("boxed::Box::") {
                 return Ok(Some(Resolved::intrinsic(remaining[7..].to_string())));
             }
-            binding = self.lookup(
+            binding = self.path_read(
                 current,
                 parts[at].as_str(),
                 if parts.len() - at > 1 {
                     Namespace::Type
                 } else {
                     namespace
-                },
+                }, reads,
             );
         }
         if binding.is_none() && !rooted && prelude {
@@ -670,7 +714,7 @@ impl<'a> Resolver<'a> {
                 } else {
                     "Result"
                 };
-                if let Some(mut owner) = self.path(scope, owner, Namespace::Type, span, true)? {
+                if let Some(mut owner) = self.path_traced(scope, owner, Namespace::Type, span, true, reads)? {
                     owner.name = format!("{}::{}", owner.name, parts[0].as_str());
                     if let Some(binding) = &mut owner.binding {
                         binding.target = owner.name.clone();
@@ -678,10 +722,12 @@ impl<'a> Resolver<'a> {
                     return Ok(Some(owner));
                 }
             }
-            binding = self.lookup_prelude(parts[at].as_str(), first_namespace);
+            binding = if let Some(scope) = self.modules.get(&"$std::prelude".to_string()) {
+                self.path_read(*scope, parts[at].as_str(), first_namespace, reads)
+            } else { None };
             if binding.is_none() && parts[0].as_str() == "String" {
                 if let Some(std_scope) = self.modules.get(&"$std::string".to_string()) {
-                    binding = self.lookup(*std_scope, "String", Namespace::Type);
+                    binding = self.path_read(*std_scope, "String", Namespace::Type, reads);
                 }
             }
             if binding.is_none()
@@ -717,7 +763,7 @@ impl<'a> Resolver<'a> {
                     } else {
                         namespace
                     };
-                    binding = match self.lookup(current, parts[at].as_str(), ns) {
+                    binding = match self.path_read(current, parts[at].as_str(), ns, reads) {
                         Some(b) => b,
                         None => return Ok(None),
                     };
@@ -747,6 +793,22 @@ impl<'a> Resolver<'a> {
         namespace: Namespace, span: Span) -> Result<Option<(String, Option<Item>)>> {
         Ok(self.path(scope, name, namespace, span, true)?.map(|resolved|
             (resolved.name, resolved.binding.map(|binding| self.declarations[binding.declaration].item))))
+    }
+    pub(crate) fn diagnostic_trace(&self, scope: ModuleId, name: &str, namespace: Namespace,
+        span: Span, prelude: bool) -> Result<LookupTrace> {
+        let mut reads = Some(Vec::new());
+        let result = self.path_traced(scope, name, namespace, span, prelude, &mut reads)?.map(|resolved|
+            (resolved.name, resolved.binding.map(|binding| self.declarations[binding.declaration].item)));
+        Ok(LookupTrace { result, reads: reads.unwrap() })
+    }
+    pub(crate) fn diagnostic_glob_scope(&self, scope: ModuleId, name: &str, span: Span) -> Result<Option<ModuleId>> {
+        if let Some(module) = self.module_anchor(scope, name, span)? { return Ok(Some(module)); }
+        let Some(binding) = self.path(scope, name, Namespace::Type, span, false)?
+            .and_then(|resolved| resolved.binding) else { return Ok(None); };
+        match self.declarations[binding.declaration].item {
+            Item::Module(index) => Ok(Some(self.program.modules[index].scope)),
+            _ => Ok(None),
+        }
     }
     fn exact_trait(&self, declaration: DeclarationId, target: &str, span: Span) -> Result<Option<usize>> {
         let entry = &self.declarations[declaration];
@@ -800,6 +862,7 @@ impl<'a> Resolver<'a> {
     }
     fn import_binding(
         &mut self,
+        index: usize,
         use_item: &Use,
         scope: ModuleId,
         name: &str,
@@ -853,6 +916,7 @@ impl<'a> Resolver<'a> {
             },
             glob: use_item.glob,
             ambiguous: false,
+            import: Some(index),
             semantic_alias: source.semantic_alias || use_item.explicit_alias,
         };
         let previous: Option<Binding> = match self.names.get(&key) {
@@ -1036,23 +1100,19 @@ impl<'a> Resolver<'a> {
                 return Ok((false, false));
             };
             for (name, namespace, binding) in entries {
-                changed |= self.import_binding(&import, module, &name, namespace, &binding)?;
+                changed |= self.import_binding(index, &import, module, &name, namespace, &binding)?;
             }
             Ok((changed, true))
         } else {
             let mut found = false;
-            for index in 0..2 {
-                let ns = if index == 0 {
-                    Namespace::Type
-                } else {
-                    Namespace::Value
-                };
+            for slot in 0usize..2usize {
+                let ns = if slot == 0usize { Namespace::Type } else { Namespace::Value };
                 if let Some(binding) = self
                     .path(scope, &import.path, ns, import.span, false)?
                     .and_then(|resolved| resolved.binding)
                 {
                     found = true;
-                    changed |= self.import_binding(&import, module, &import.alias, ns, &binding)?;
+                    changed |= self.import_binding(index, &import, module, &import.alias, ns, &binding)?;
                 }
             }
             if !found
@@ -1069,7 +1129,7 @@ impl<'a> Resolver<'a> {
             Ok((changed, found))
         }
     }
-    fn imports(&mut self) -> Vec<Diagnostic> {
+    fn imports(&mut self) -> Vec<(usize, Diagnostic)> {
         loop {
             let mut problems = BTreeMap::new();
             let mut unresolved = Vec::new();
@@ -1100,8 +1160,8 @@ impl<'a> Resolver<'a> {
                     );
                 }
                 let mut failures = Vec::new();
-                for (_, problem) in problems {
-                    failures.push(problem);
+                for entry in problems {
+                    failures.push(entry);
                 }
                 return failures;
             }

@@ -1,0 +1,19 @@
+pub mod data {
+    pub const BASE: i64 = 21;
+}
+mod hub {
+    pub use crate::{data as source, absent::Missing};
+    pub fn source() -> i64 { 21 }
+}
+mod relay {
+    pub use crate::hub::source as alias;
+}
+mod unrelated {
+    pub use crate::absent::Ghost as source;
+}
+fn by_type() -> i64 { crate::relay::alias::BASE }
+fn by_value() -> i64 { crate::hub::source() }
+fn probe() -> i64 { by_type() + by_value() }
+fn poisoned() -> i64 { crate::unrelated::source::BASE }
+fn malformed() -> i64 { crate::hub::source::BASE::tail }
+fn refusal() { println!("unsupported"); }

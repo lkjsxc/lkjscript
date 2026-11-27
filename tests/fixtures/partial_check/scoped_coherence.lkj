@@ -1,0 +1,27 @@
+struct Ready(u16);
+trait Bits<T> {
+    fn test(&self, value: T) -> bool;
+}
+impl Bits<u16> for Ready {
+    fn test(&self, _value: dyn Missing) -> bool { false }
+}
+impl Bits<u8> for Ready {
+    fn test(&self, value: u8) -> bool { self.0 == value as u16 }
+}
+impl Ready {
+    fn exact(&self) -> u16 { self.0 }
+}
+struct Other(u16);
+impl Other {
+    fn independent(&self) -> u16 { self.0 }
+}
+fn probe() -> i64 {
+    let ready = Ready(21u16);
+    if <Ready as Bits<u8>>::test(&ready, 21u8) && <u8 as Count>::count(&21u8) == 21 {
+        (ready.exact() + Other(21u16).independent()) as i64
+    } else { 0 }
+}
+
+pub trait ToCount { fn count(&self) -> usize; }
+pub use crate::ToCount as Count;
+impl Count for u8 { fn count(&self) -> usize { *self as usize } }

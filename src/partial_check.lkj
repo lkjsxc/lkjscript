@@ -4,9 +4,9 @@
 use crate::ast as a;
 use crate::diagnostics::Recovery;
 use crate::generics::TraitIdentity;
-use crate::resolve::{Namespace, Resolver};
+use crate::resolve::{LookupRead, LookupTrace, Namespace, Resolver};
 use crate::source::SourceReport;
-use std::collections::BTreeSet;
+use std::collections::{BTreeMap, BTreeSet};
 
 pub struct Report {
     pub text: String,
@@ -24,12 +24,19 @@ struct Lookup {
     written: String,
     target: String,
     item: Option<a::Item>,
+    reads: Vec<LookupRead>,
+    import_site: Option<usize>,
+}
+enum Receiver {
+    Struct(usize),
+    Scalar(String),
 }
 #[derive(Clone, Default)]
 struct Plan {
     dependencies: Vec<usize>,
     declarations: Vec<a::Item>,
     lookups: Vec<Lookup>,
+    imports: BTreeSet<(usize, Namespace)>,
     parameters: Vec<String>,
     expansions: Vec<usize>,
     implementation: Option<usize>,
@@ -121,6 +128,27 @@ fn poisoned(program: &a::Program, failures: &[Recovery], scope: usize, written: 
     Some(Failure { cause: located(program, failures[selected].diagnostic.clone()),
         reason: format!("blocked name lookup {written}; refused source may change its binding") })
 }
+fn traced_poison(program: &a::Program, failures: &[Recovery], scope: usize, written: &str,
+    reads: &[LookupRead]) -> Option<Failure> {
+    if reads.is_empty() { return poisoned(program, failures, scope, written); }
+    let mut wildcard = None;
+    for read in reads {
+        for (index, failure) in failures.iter().enumerate() {
+            if !failure.namespace { continue; }
+            let owner = failure.block.map(|id| program.scopes.len() + id).unwrap_or(failure.scope);
+            if owner != read.owner && !global(failure) && failure.scope < program.scopes.len()
+                && failure.block.is_none_or(|block| block < program.blocks.len()) { continue; }
+            if failure.names.iter().any(|name| name == &read.spelling) {
+                return Some(Failure { cause: located(program, failure.diagnostic.clone()),
+                    reason: format!("blocked name lookup {written}; refused source may change its binding") });
+            }
+            if failure.names.is_empty() && wildcard.is_none() { wildcard = Some(index); }
+        }
+    }
+    let failure = &failures[wildcard?];
+    Some(Failure { cause: located(program, failure.diagnostic.clone()),
+        reason: format!("blocked name lookup {written}; refused source may change its binding") })
+}
 fn complete_context(first: &a::Diagnostic, detail: &str) -> Failure {
     Failure { cause: first.clone(), reason: format!("complete context required: {detail}") }
 }
@@ -144,6 +172,7 @@ struct Inspector<'a> {
     failures: &'a [Recovery],
     first: &'a a::Diagnostic,
     ambiguous_modules: &'a BTreeSet<String>,
+    recovery_owners: &'a BTreeMap<(usize, usize, usize), Option<usize>>,
 }
 impl<'a> Inspector<'a> {
     fn boundary(&self, detail: &str) -> Failure { complete_context(self.first, detail) }
@@ -166,32 +195,71 @@ impl<'a> Inspector<'a> {
         }
         Ok(scope)
     }
-    fn lookup(&self, scope: usize, path: &a::Path, span: a::Span,
-        namespace: Namespace) -> Result<(String, Option<a::Item>), Failure> {
+    fn observe(&self, scope: usize, written: &str, span: a::Span, namespace: Namespace,
+        prelude: bool) -> Result<LookupTrace, Failure> {
+        let trace = self.resolver.diagnostic_trace(scope, written, namespace, span, prelude)
+            .map_err(|cause| Failure { cause: located(self.program, cause),
+                reason: "original source lookup refused".to_string() })?;
+        if let Some(failure) = traced_poison(self.program, self.failures, scope, written, &trace.reads) {
+            return Err(failure);
+        }
+        for read in &trace.reads {
+            let owner = module_scope(self.program, read.owner);
+            self.declaration_scope(&self.program.scopes[owner].path)?;
+            if let Some((_, a::Item::Module(index))) = &read.binding {
+                let destination = self.program.modules[*index].scope;
+                self.declaration_scope(&self.program.scopes[destination].path)?;
+            }
+        }
+        Ok(trace)
+    }
+    fn path_trace(&self, scope: usize, path: &a::Path, span: a::Span,
+        namespace: Namespace) -> Result<LookupTrace, Failure> {
         if !plain_path(path) {
             return Err(self.boundary("generic or qualified selection"));
         }
-        if let Some(failure) = poisoned(self.program, self.failures, scope, &path.name) { return Err(failure); }
-        let resolved = self.resolver.diagnostic_binding(scope, &path.name, namespace, span)
-            .map_err(|cause| Failure { cause: located(self.program, cause),
-                reason: "original source lookup refused".to_string() })?;
-        let Some((target, item)) = resolved else {
-            return Err(self.boundary(&format!("unresolved input {}", path.name)));
-        };
-        Ok((target, item))
+        self.observe(scope, &path.name, span, namespace, true)
+    }
+    fn lookup(&self, scope: usize, path: &a::Path, span: a::Span,
+        namespace: Namespace) -> Result<(String, Option<a::Item>), Failure> {
+        self.path_trace(scope, path, span, namespace)?.result
+            .ok_or_else(|| self.boundary(&format!("unresolved input {}", path.name)))
+    }
+    fn record_imports(&self, reads: &[LookupRead], plan: &mut Plan) -> Result<(), Failure> {
+        for read in reads {
+            let Some(index) = read.import else { continue; };
+            if !plan.imports.insert((index, read.namespace)) { continue; }
+            let value = &self.program.uses[index];
+            if value.block.is_some() || value.glob || value.statement.is_none() {
+                return Err(self.boundary("import dependency needs a complete lexical or glob replay"));
+            }
+            let scope = self.declaration_scope(&value.module)?;
+            let trace = self.observe(scope, &value.path, value.span, read.namespace, false)?;
+            let Some((target, item)) = trace.result else {
+                return Err(self.boundary("import antecedent is unresolved"));
+            };
+            self.record_imports(&trace.reads, plan)?;
+            plan.lookups.push(Lookup { span: value.span, namespace: read.namespace,
+                written: value.path.clone(), target, item, reads: trace.reads, import_site: Some(index) });
+        }
+        Ok(())
     }
     fn binding(&self, scope: usize, path: &a::Path, span: a::Span,
         namespace: Namespace, plan: &mut Plan) -> Result<Option<a::Item>, Failure> {
-        let (target, item) = self.lookup(scope, path, span, namespace)?;
+        let trace = self.path_trace(scope, path, span, namespace)?;
+        let Some((target, item)) = trace.result else {
+            return Err(self.boundary(&format!("unresolved input {}", path.name)));
+        };
         let function = match item { Some(a::Item::Function(index)) => Some(index), _ => None };
         if let Some(index) = function {
             let scope = crate::resolve::module(self.program, &self.program.functions[index].module);
-            if let Some(failure) = poisoned(self.program, self.failures, scope, &path.name) { return Err(failure); }
             if let Some(failure) = poisoned(self.program, self.failures, scope, &self.program.functions[index].name) {
                 return Err(failure);
             }
         }
-        plan.lookups.push(Lookup { span, namespace, written: path.name.clone(), target, item });
+        self.record_imports(&trace.reads, plan)?;
+        plan.lookups.push(Lookup { span, namespace, written: path.name.clone(), target, item,
+            reads: trace.reads, import_site: None });
         Ok(item)
     }
     fn ty(&self, id: usize, plan: &mut Plan) -> Result<(), Failure> {
@@ -558,7 +626,7 @@ impl<'a> Inspector<'a> {
         }
         Ok((identity, arguments))
     }
-    fn disjoint_receiver(&self, id: usize, receiver: usize) -> bool {
+    fn disjoint_receiver(&self, id: usize, receiver: &Receiver) -> bool {
         let node = &self.program.types[id];
         match &node.kind {
             a::Type::Tuple(_) | a::Type::Ref { .. } | a::Type::Slice(_) | a::Type::Array { .. }
@@ -568,7 +636,7 @@ impl<'a> Inspector<'a> {
                     return false;
                 };
                 match item {
-                    Some(a::Item::Struct(index)) if index != receiver => {
+                    Some(a::Item::Struct(index)) if !matches!(receiver, Receiver::Struct(selected) if *selected == index) => {
                         let declaration = &self.program.structs[index];
                         target == crate::names::qualified(&declaration.module, &declaration.name)
                     }
@@ -576,7 +644,8 @@ impl<'a> Inspector<'a> {
                         let declaration = &self.program.enums[index];
                         target == crate::names::qualified(&declaration.module, &declaration.name)
                     }
-                    None => crate::resolve::intrinsic_type_name(&target),
+                    None => crate::resolve::intrinsic_type_name(&target)
+                        && !matches!(receiver, Receiver::Scalar(name) if name == &target),
                     _ => false,
                 }
             }
@@ -594,8 +663,10 @@ impl<'a> Inspector<'a> {
         for input in inputs {
             let node = &self.program.types[input];
             if let a::Type::Path(path) = &node.kind {
-                if let Some(refusal) = poisoned(self.program, self.failures, node.scope, &path.name) {
-                    return refusal;
+                if let Ok(trace) = self.resolver.diagnostic_trace(node.scope, &path.name, Namespace::Type, node.span, true) {
+                    if let Some(refusal) = traced_poison(self.program, self.failures, node.scope, &path.name, &trace.reads) {
+                        return refusal;
+                    }
                 }
             }
         }
@@ -604,7 +675,31 @@ impl<'a> Inspector<'a> {
         Failure { cause: located(self.program, cause),
             reason: "receiver selection or destruction needs a competing implementation".to_string() }
     }
-    fn coherence(&self, owner: usize, receiver: usize, application: Option<&(TraitIdentity, Vec<String>)>,
+    fn recovery_owner(&self, failure: &Recovery) -> Option<&a::Impl> {
+        if failure.kind != "item" || failure.namespace { return None; }
+        let span = failure.span;
+        let index = self.recovery_owners.get(&(span.file, span.start, span.end)).copied().flatten()?;
+        self.program.impls.get(index)
+    }
+    fn possibly_applicable(&self, implementation: &a::Impl, receiver: &Receiver,
+        application: Option<&(TraitIdentity, Vec<String>)>, derives: &[String]) -> bool {
+        if self.disjoint_receiver(implementation.target, receiver) { return false; }
+        let Some(ty) = implementation.trait_ty else { return application.is_none(); };
+        let Some(identity) = self.trait_head(ty) else { return true; };
+        if let TraitIdentity::Builtin(name) = &identity {
+            if name == "Drop" || derives.contains(name) { return true; }
+        }
+        if let Some((selected, arguments)) = application {
+            return &identity == selected && self.trait_arguments(ty).is_none_or(|other|
+                other.len() != arguments.len() || &other == arguments);
+        }
+        false
+    }
+    fn refused_coherence(&self, failure: &Recovery) -> Failure {
+        Failure { cause: located(self.program, failure.diagnostic.clone()),
+            reason: "implementation coherence depends on refused source".to_string() }
+    }
+    fn coherence(&self, owner: usize, receiver: &Receiver, application: Option<&(TraitIdentity, Vec<String>)>,
         derives: &[String], plan: &mut Plan) -> Result<(), Failure> {
         let mut destructor = None;
         for (other, implementation) in self.program.impls.iter().enumerate() {
@@ -639,7 +734,7 @@ impl<'a> Inspector<'a> {
             let node = &self.program.types[implementation.target];
             if !matches!(&node.kind, a::Type::Path(path) if path.args.is_empty()
                 && matches!(self.lookup(node.scope, path, node.span, Namespace::Type),
-                    Ok((_, Some(a::Item::Struct(index)))) if index == receiver)) {
+                    Ok((_, Some(a::Item::Struct(index)))) if matches!(receiver, Receiver::Struct(selected) if *selected == index))) {
                 return Err(self.competing(implementation));
             }
             for method in &implementation.methods { plan.dependencies.push(*method); }
@@ -676,9 +771,10 @@ impl<'a> Inspector<'a> {
             self.inherent_members(implementation, selected)?;
         } else if let Some(refusal) = self.overlap(implementation.span) { return Err(refusal); }
         // A missing implementation can change receiver selection or destruction.
-        if let Some(failure) = self.failures.iter().find(|failure| failure.coherence) {
-            return Err(Failure { cause: located(self.program, failure.diagnostic.clone()),
-                reason: "implementation coherence depends on refused source".to_string() });
+        for failure in self.failures {
+            if failure.coherence && self.recovery_owner(failure).is_none() {
+                return Err(self.refused_coherence(failure));
+            }
         }
         if !implementation.generics.is_empty() || !implementation.predicates.is_empty()
             || !implementation.associated.is_empty()
@@ -690,22 +786,39 @@ impl<'a> Inspector<'a> {
         let node = &self.program.types[implementation.target];
         let a::Type::Path(path) = &node.kind else { return Err(self.boundary("non-nominal receiver")); };
         if !path.args.is_empty() { return Err(self.boundary("applied receiver type")); }
-        let Some(a::Item::Struct(index)) = self.binding(node.scope, path, node.span, Namespace::Type, plan)? else {
-            return Err(self.boundary("implementation receiver is not a source struct"));
+        let binding = self.binding(node.scope, path, node.span, Namespace::Type, plan)?;
+        let target = plan.lookups.last().unwrap().target.clone();
+        let (receiver, derives) = match binding {
+            Some(a::Item::Struct(index)) => {
+                let declaration = &self.program.structs[index];
+                if target != crate::names::qualified(&declaration.module, &declaration.name) {
+                    return Err(self.boundary("receiver path has an unexpected suffix"));
+                }
+                let root = self.program.files[implementation.span.file].crate_root;
+                (Receiver::Struct(index), self.receiver(index, root, plan)?)
+            }
+            None if scalar(&target) && target != "str" && implementation.trait_ty.is_some()
+                && !self.resolver.generic(node.span, &path.name) =>
+                (Receiver::Scalar(target), Vec::new()),
+            _ => return Err(self.boundary("implementation receiver needs a source struct or scalar trait application")),
         };
-        let declaration = &self.program.structs[index];
-        if plan.lookups.last().unwrap().target != crate::names::qualified(&declaration.module, &declaration.name) {
-            return Err(self.boundary("receiver path has an unexpected suffix"));
-        }
-        let root = self.program.files[implementation.span.file].crate_root;
-        let derives = self.receiver(index, root, plan)?;
         let application = if let Some(trait_ty) = implementation.trait_ty {
             Some(self.trait_input(trait_ty, plan)?)
         } else { None };
-        self.coherence(owner, index, application.as_ref(), &derives, plan)?;
+        if matches!(receiver, Receiver::Scalar(_))
+            && !matches!(&application, Some((TraitIdentity::Declared(_), _))) {
+            return Err(self.boundary("scalar receiver needs a declared trait"));
+        }
+        for failure in self.failures {
+            if failure.coherence && self.recovery_owner(failure).is_some_and(|owner|
+                self.possibly_applicable(owner, &receiver, application.as_ref(), &derives)) {
+                return Err(self.refused_coherence(failure));
+            }
+        }
+        self.coherence(owner, &receiver, application.as_ref(), &derives, plan)?;
         plan.parameters.push("Self".to_string());
         plan.implementation = Some(owner);
-        plan.receiver = Some(index);
+        if let Receiver::Struct(index) = receiver { plan.receiver = Some(index); }
         plan.structural = true;
         Ok(())
     }
@@ -805,27 +918,16 @@ fn user_function(program: &a::Program, index: usize) -> bool {
 fn append_problem(problems: &mut Vec<a::Diagnostic>, problem: a::Diagnostic) {
     if !problems.contains(&problem) { problems.push(problem); }
 }
-fn import_failures(program: &a::Program, problems: &[a::Diagnostic], inherited: &BTreeSet<usize>,
+fn import_failures(program: &a::Program, problems: &[(usize, a::Diagnostic)], inherited: &BTreeSet<usize>,
     failures: &mut Vec<Recovery>) {
-    for problem in problems {
-        let mut found = false;
-        for (index, item) in program.uses.iter().enumerate() {
-            if item.span.file == problem.file && item.span.line == problem.line && item.span.column == problem.column {
-                found = true;
-                if inherited.contains(&index) { continue; }
-                let mut names = Vec::new();
-                if !item.glob { names.push(item.alias.clone()); }
-                failures.push(Recovery { span: item.span,
-                    scope: crate::resolve::module(program, &item.module), block: item.block,
-                    kind: "import".to_string(), names, namespace: true, coherence: false,
-                    diagnostic: located(program, problem.clone()) });
-            }
-        }
-        if !found {
-            failures.push(Recovery { span: a::Span::default(), scope: 0, block: None,
-                kind: "source input".to_string(), names: Vec::new(), namespace: true, coherence: true,
-                diagnostic: located(program, problem.clone()) });
-        }
+    for (index, problem) in problems {
+        if inherited.contains(index) { continue; }
+        let item = &program.uses[*index];
+        let names = if item.glob { Vec::new() } else { vec![item.alias.clone()] };
+        failures.push(Recovery { span: item.span,
+            scope: crate::resolve::module(program, &item.module), block: item.block,
+            kind: "import".to_string(), names, namespace: true, coherence: false,
+            diagnostic: located(program, problem.clone()) });
     }
 }
 // A surviving import can depend on a refused alias at any path segment.
@@ -838,13 +940,19 @@ fn propagate_import_poison(program: &a::Program, resolver: &Resolver<'_>,
             if marked.contains(&index) { continue; }
             let scope = crate::resolve::module(program, &item.module);
             let lookup_scope = match item.block { Some(block) => program.scopes.len() + block, None => scope };
-            let mut cause = poisoned(program, failures, lookup_scope, &item.path).map(|failure| failure.cause);
+            let mut cause = None;
+            for slot in 0usize..2usize {
+                let namespace = if slot == 0usize { Namespace::Type } else { Namespace::Value };
+                if let Ok(trace) = resolver.diagnostic_trace(lookup_scope, &item.path, namespace, item.span, false) {
+                    cause = traced_poison(program, failures, lookup_scope, &item.path, &trace.reads)
+                        .map(|failure| failure.cause);
+                    if cause.is_some() { break; }
+                }
+            }
             if cause.is_none() && item.glob {
                 // A glob can depend on refused members even when the module
                 // binding itself is intact. Propagate before checking a use.
-                if let Ok(Some((_, Some(a::Item::Module(id))))) =
-                    resolver.diagnostic_binding(lookup_scope, &item.path, Namespace::Type, item.span) {
-                    let target = program.modules[id].scope;
+                if let Ok(Some(target)) = resolver.diagnostic_glob_scope(lookup_scope, &item.path, item.span) {
                     cause = failures.iter().find(|failure| failure.namespace
                         && failure.scope == target && failure.block.is_none())
                         .map(|failure| failure.diagnostic.clone());
@@ -968,11 +1076,9 @@ fn replay_item(source: &SourceReport, original: &a::Program, projected: &mut a::
     projected.items.push(expected);
     Ok(())
 }
-fn same_binding(lookup: &Lookup, actual: Option<(String, Option<a::Item>)>,
+fn same_item(expected: Option<a::Item>, actual: Option<a::Item>,
     original: &a::Program, replayed: &a::Program, source_indices: &[usize]) -> bool {
-    let Some((target, item)) = actual else { return false; };
-    if target != lookup.target { return false; }
-    match (lookup.item, item) {
+    match (expected, actual) {
         (None, None) => true,
         (Some(a::Item::Function(a)), Some(a::Item::Function(b))) =>
             Some(a) == source_indices.get(b).copied(),
@@ -982,8 +1088,66 @@ fn same_binding(lookup: &Lookup, actual: Option<(String, Option<a::Item>)>,
             original.traits[a].span == replayed.traits[b].span,
         (Some(a::Item::Constant(a)), Some(a::Item::Constant(b))) =>
             original.constants[a].span == replayed.constants[b].span,
+        (Some(a::Item::Module(a)), Some(a::Item::Module(b))) =>
+            original.modules[a].scope == replayed.modules[b].scope
+                && original.modules[a].span == replayed.modules[b].span,
         _ => false,
     }
+}
+fn lexical_location(program: &a::Program, owner: usize) -> (usize, Option<a::Span>) {
+    if owner < program.scopes.len() { (owner, None) }
+    else {
+        let block = &program.blocks[owner - program.scopes.len()];
+        (block.scope, Some(block.span))
+    }
+}
+fn same_binding(lookup: &Lookup, actual: LookupTrace,
+    original: &a::Program, replayed: &a::Program, source_indices: &[usize]) -> bool {
+    let Some((target, item)) = actual.result else { return false; };
+    if target != lookup.target || !same_item(lookup.item, item, original, replayed, source_indices)
+        || actual.reads.len() != lookup.reads.len() { return false; }
+    for (position, left) in lookup.reads.iter().enumerate() {
+        let right = &actual.reads[position];
+        if left.spelling != right.spelling || left.namespace != right.namespace
+            || left.visibility != right.visibility
+            || lexical_location(original, left.owner) != lexical_location(replayed, right.owner)
+            || left.import.map(|index| &original.uses[index]) != right.import.map(|index| &replayed.uses[index]) {
+            return false;
+        }
+        match (&left.binding, &right.binding) {
+            (None, None) => (),
+            (Some((name, item)), Some((actual, replayed_item))) if name == actual
+                && same_item(Some(*item), Some(*replayed_item), original, replayed, source_indices) => (),
+            _ => return false,
+        }
+    }
+    true
+}
+fn replay_imports(source: &SourceReport, original: &a::Program, projected: &mut a::Program,
+    selected: &BTreeSet<usize>) -> Result<(), String> {
+    let mut statements = BTreeSet::new();
+    for index in selected {
+        let input = &original.uses[*index];
+        let Some(statement) = input.statement else { return Err("import statement is unavailable".to_string()); };
+        if !statements.insert((statement.file, statement.start, statement.end)) { continue; }
+        let before = projected.uses.len();
+        if parse_extent(source, projected, statement, &input.module)? != vec![a::Item::Use(before)] {
+            return Err("authored import did not replay as one statement".to_string());
+        }
+        let leaves = projected.uses[before..].to_vec();
+        let mut offset = 0usize;
+        while projected.uses.len() > before { projected.uses.pop(); }
+        for (item, original) in original.uses.iter().enumerate() {
+            if original.statement != Some(statement) || original.module != input.module { continue; }
+            let Some(leaf) = leaves.get(offset) else { return Err("import leaf is absent in replay".to_string()); };
+            if leaf != original { return Err("authored import leaf changed during replay".to_string()); }
+            if selected.contains(&item) { projected.uses.push(leaf.clone()); }
+            offset += 1usize;
+        }
+        if offset != leaves.len() { return Err("unexpected leaf in replayed import".to_string()); }
+        projected.items.push(a::Item::Use(before));
+    }
+    Ok(())
 }
 fn replay_expansion_inputs(source: &SourceReport, original: &a::Program, projected: &mut a::Program,
     expansions: &[usize]) -> Result<(), String> {
@@ -1027,7 +1191,8 @@ fn replay_implementation(source: &SourceReport, projected: &mut a::Program,
         return Err("implementation has no authored source extent".to_string());
     };
     let id = projected.impls.len();
-    let mut syntax = a::ImplSyntax { header: authored.header, close: authored.close, methods: Vec::new() };
+    let mut syntax = a::ImplSyntax { header: authored.header, close: authored.close,
+        methods: Vec::new(), refused_members: Vec::new() };
     let mut members = Vec::new();
     let parsed = if implementation.trait_ty.is_some() {
         let mut extent = authored.header;
@@ -1068,14 +1233,24 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
     let mut scopes = BTreeSet::new();
     let mut declarations = Vec::new();
     let mut expansions = Vec::new();
+    let mut imports = BTreeSet::new();
+    let mut modules: Vec<String> = selected.iter().map(|index| original.functions[*index].module.clone()).collect();
     for index in selected {
         let plan = plans[*index].as_ref().unwrap();
         for declaration in &plan.declarations {
             if !declarations.contains(declaration) { declarations.push(*declaration); }
         }
         for expansion in &plan.expansions { expansions.push(*expansion); }
+        for (input, _) in &plan.imports { imports.insert(*input); }
+        for lookup in &plan.lookups {
+            for read in &lookup.reads {
+                modules.push(original.scopes[module_scope(original, read.owner)].path.clone());
+                if let Some((_, a::Item::Module(index))) = &read.binding {
+                    modules.push(original.scopes[original.modules[*index].scope].path.clone());
+                }
+            }
+        }
     }
-    let mut modules: Vec<String> = selected.iter().map(|index| original.functions[*index].module.clone()).collect();
     for item in &declarations {
         match item {
             a::Item::Struct(index) => modules.push(original.structs[*index].module.clone()),
@@ -1097,6 +1272,7 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
     }
     let mut source_indices = Vec::new();
     for item in declarations { replay_item(source, original, &mut projected, item, &mut source_indices)?; }
+    replay_imports(source, original, &mut projected, &imports)?;
     replay_expansion_inputs(source, original, &mut projected, &expansions)?;
     let mut implementations = BTreeSet::new();
     for index in selected {
@@ -1125,15 +1301,25 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
     for index in selected {
         let plan = plans[*index].as_ref().unwrap();
         for lookup in &plan.lookups {
+            if let Some(import) = lookup.import_site {
+                let value = &original.uses[import];
+                let scope = crate::resolve::module(&projected, &value.module);
+                let actual = names.diagnostic_trace(scope, &lookup.written, lookup.namespace, lookup.span, false)
+                    .map_err(|_| -> String { "replayed import antecedent refused".to_string() })?;
+                if !same_binding(lookup, actual, original, &resolved, &source_indices) {
+                    return Err("import antecedent changed during replay".to_string());
+                }
+                continue;
+            }
             let mut matched = false;
             if lookup.namespace == Namespace::Type {
                 for node in &projected.types {
                     if node.span == lookup.span {
                         if let a::Type::Path(path) = &node.kind {
                             if path.name == lookup.written {
-                                let actual = names.diagnostic_binding(node.scope, &path.name, Namespace::Type, node.span)
+                                let actual = names.diagnostic_trace(node.scope, &path.name, Namespace::Type, node.span, true)
                                     .map_err(|_| -> String { "replayed type lookup refused".to_string() })?;
-                                if !same_binding(lookup, actual, original, &projected, &source_indices) {
+                                if !same_binding(lookup, actual, original, &resolved, &source_indices) {
                                     return Err("a recorded source type binding changed during replay".to_string());
                                 }
                                 matched = true;
@@ -1146,9 +1332,9 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
                     if node.span == lookup.span {
                         if let a::Expr::Path(path) = &node.kind {
                             if path.name == lookup.written {
-                                let actual = names.diagnostic_binding(node.scope, &path.name, Namespace::Value, node.span)
+                                let actual = names.diagnostic_trace(node.scope, &path.name, Namespace::Value, node.span, true)
                                     .map_err(|_| -> String { "replayed call lookup refused".to_string() })?;
-                                if !same_binding(lookup, actual, original, &projected, &source_indices) {
+                                if !same_binding(lookup, actual, original, &resolved, &source_indices) {
                                     return Err("a recorded source value binding changed during replay".to_string());
                                 }
                                 matched = true;
@@ -1269,19 +1455,28 @@ pub fn analyze(source: &SourceReport) -> Report {
             return blocked_declarations(&program, problem, &failures);
         }
     };
-    for problem in imported { append_problem(&mut problems, located(&program, problem)); }
+    for (_, problem) in &imported { append_problem(&mut problems, located(&program, problem.clone())); }
     // Prefer an authored upstream refusal to the consequent unresolved import.
     let mut inherited = BTreeSet::new();
     propagate_import_poison(&program, &resolver, &mut failures, &mut inherited);
-    import_failures(&program, &problems, &inherited, &mut failures);
+    import_failures(&program, &imported, &inherited, &mut failures);
     propagate_import_poison(&program, &resolver, &mut failures, &mut inherited);
     let mut module_paths: BTreeSet<String> = BTreeSet::new();
     let mut ambiguous_modules: BTreeSet<String> = BTreeSet::new();
     for scope in &program.scopes {
         if !module_paths.insert(scope.path.clone()) { ambiguous_modules.insert(scope.path.clone()); }
     }
+    let mut recovery_owners = BTreeMap::new();
+    for (index, implementation) in program.impls.iter().enumerate() {
+        let Some(authored) = &implementation.authored else { continue; };
+        for span in &authored.refused_members {
+            let key = (span.file, span.start, span.end);
+            let owner = if recovery_owners.contains_key(&key) { None } else { Some(index) };
+            recovery_owners.insert(key, owner);
+        }
+    }
     let inspector = Inspector { program: &program, resolver: &resolver, failures: &failures,
-        first: &first, ambiguous_modules: &ambiguous_modules };
+        first: &first, ambiguous_modules: &ambiguous_modules, recovery_owners: &recovery_owners };
     let mut plans: Vec<Option<Plan>> = vec![None; program.functions.len()];
     let mut refused: Vec<Option<Failure>> = vec![None; program.functions.len()];
     let mut pending = Vec::new();

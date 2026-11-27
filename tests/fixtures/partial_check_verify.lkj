@@ -195,6 +195,38 @@ fn cases(name: &str) -> Vec<Expected> {
             at(expected(12, "reads_mark", "blocked", 11, 35, "E_NAME", ""), 5),
             expected(15, "probe", "blocked", 11, 35, "E_NAME", ""),
         ],
+        "qualified_chain" => vec![
+            at(expected(6, "hub::source", "checked", 0, 0, "", ""), 9),
+            expected(14, "by_type", "checked", 0, 0, "", ""),
+            expected(15, "by_value", "checked", 0, 0, "", "hub::source"),
+            expected(16, "probe", "checked", 0, 0, "", "by_type,by_value"),
+            expected(17, "poisoned", "blocked", 12, 9, "E_IMPORT", ""),
+            expected(18, "malformed", "blocked", 19, 16, "E_CAPABILITY", ""),
+            expected(19, "refusal", "blocked", 19, 16, "E_CAPABILITY", ""),
+        ],
+        "glob_anchor" => vec![
+            at(expected(1, "available::value", "checked", 0, 0, "", ""), 21),
+            at(expected(5, "reader::may_change", "blocked", 2, 1, "E_IMPORT", ""), 9),
+            expected(7, "refusal", "blocked", 7, 16, "E_CAPABILITY", ""),
+            expected(8, "probe", "checked", 0, 0, "", "available::value"),
+        ],
+        "scoped_coherence" | "scoped_coherence_same" | "scoped_coherence_opaque" | "scoped_coherence_drop" => {
+            let opaque = name == "scoped_coherence_opaque";
+            let drop = name == "scoped_coherence_drop";
+            let same = name == "scoped_coherence_same";
+            let column = if drop { 32usize } else { 28usize };
+            vec![
+                at(if same || opaque || drop { expected(9, "test", "blocked", 6, column, "E_UNSUPPORTED", "") }
+                    else { expected(9, "test", "checked", 0, 0, "", "") }, 5),
+                at(if opaque || drop { expected(12, "exact", "blocked", 6, column, "E_UNSUPPORTED", "") }
+                    else { expected(12, "exact", "checked", 0, 0, "", "") }, 5),
+                at(if opaque { expected(16, "independent", "blocked", 6, column, "E_UNSUPPORTED", "") }
+                    else { expected(16, "independent", "checked", 0, 0, "", "") }, 5),
+                expected(18, "probe", "blocked", 6, column, "E_UNSUPPORTED", ""),
+                at(if opaque { expected(27, "count", "blocked", 6, column, "E_UNSUPPORTED", "") }
+                    else { expected(27, "count", "checked", 0, 0, "", "") }, 21),
+            ]
+        },
         _ => panic!("unknown partial-check fixture"),
     }
 }

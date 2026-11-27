@@ -70,7 +70,7 @@ impl Resolver<'_> {
                 let scope = self.scope(&value.module);
                 let id = self.declarations.len();
                 let binding = Binding { declaration: id, target: name.clone(), scope, public: Visibility::Public,
-                    glob: false, ambiguous: false, semantic_alias: false };
+                    glob: false, ambiguous: false, import: None, semantic_alias: false };
                 if self.associated_constants.trait_members.insert((receiver.clone(), trait_index, value.name.clone()), binding).is_some() {
                     return Err(Diagnostic::new(value.span, "E_NAME", "duplicate trait implementation constant"));
                 }

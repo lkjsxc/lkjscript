@@ -1,0 +1,8 @@
+mod available { pub fn value() -> i64 { 42 } }
+use crate::missing::Mystery;
+mod reader {
+    use crate::*;
+    pub fn may_change() -> i64 { 1 }
+}
+fn refusal() { println!("unsupported"); }
+fn probe() -> i64 { crate::available::value() }

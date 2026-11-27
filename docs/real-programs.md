@@ -670,6 +670,29 @@ The semantic-only control enters the report through ordinary checking,
 retains the unresolved-name diagnostic, and still checks the sibling method.
 A repeated member name or refused member header blocks the affected owner.
 
+#### Qualified imports and scoped implementation refusals
+
+Qualified replay follows the resolver's actual namespace slots. The fixture
+selects a module alias through two type-namespace re-exports and a value with
+the same spelling. It checks both routes while keeping the failed grouped leaf and
+unrelated refused alias at their original source locations. An unresolved
+qualified suffix blocks its caller. A glob anchored at `crate` carries the
+upstream poison into the importing scope.
+
+A refused trait member contributes its retained receiver and applied trait
+header when its balanced source extent excludes nested declarations and macro
+producers. The independent trait application and disjoint receiver check. The
+same application and applicable destructor controls preserve their exact
+causes. The opaque macro control leaves coherence open.
+
+The nom 8.0.0 reduction retains the authored `ToUsize` declaration and the
+`u8`, `u16` and `usize` implementations, with a re-export alias and a
+refused `u32` member. In both modes, it advances from zero checked methods to
+three at the original lines 1240, 1247 and 1254. The valid twin evaluates to 42
+on both lkjscript engines and in Rust at opt0 and opt3. The full pinned Sōzu and
+nom roots still have opaque declaration producers and keep eight, nine and
+eight checked items respectively.
+
 #### Earlier ordinary numeric traits frontier
 
 <!-- numeric-evidence-v1 sha256:53c52136581be3be25a96ff0bfa4e7077207da1e8f75548cc3aaa456e746a484 -->
