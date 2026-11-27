@@ -30,7 +30,7 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' HUP TERM
 if [[ "$io_only" == no ]]; then
-    perl tools/programs-package-manifest-test.pl tools/programs-package-manifest.pl "$work"
+    bash tools/programs-package-manifest-test.sh "$work"
     printf 'ok 6 tests\n' > "$work/expected-tests.out"
     for engine in native interpreter; do
         "$compiler" test src/programs_package_tool.lkj --source-dir . --library-dir library --no-store --jobs 1 --engine "$engine" > "$work/$engine-tests.out" 2> "$work/$engine-tests.err"
@@ -59,9 +59,8 @@ export LKJSCRIPT_PACKAGE_POLICY="$work/catalog"
 export LKJSCRIPT_PACKAGE_STORE="$work/store"
 export LKJSCRIPT_PACKAGE_ISSUER="$work/issuer"
 export LKJSCRIPT_PACKAGE_SINK="$work/store"
-producer=(perl tools/programs-package-manifest.pl --git --source "$work/source" --revision "$revision" \
-    --origin https://example.invalid/fixture --notice LICENSE)
-"${producer[@]}" --name fixture --version 1.0 --output "$work/catalog/fixture" > "$work/inventory.json"
+producer=(bash tools/programs-package-fixture.sh git "$work/source" "$revision")
+"${producer[@]}" fixture 1.0 "$work/catalog/fixture" > "$work/inventory.tree"
 "$work/package" issue fixture > "$work/issue.out" 2> "$work/issue.err"
 printf 'issued fixture\n' > "$work/expected-issue.out"
 cmp "$work/expected-issue.out" "$work/issue.out"
@@ -141,15 +140,15 @@ cmp "$work/original.rs" "$work/snapshot.out"
 test ! -s "$work/snapshot.err"
 ((package_controls+=1))
 cp "$work/original.rs" "$work/source/src/lib.rs"
-"${producer[@]}" --name child --version 1.0 --output "$work/catalog/child" > "$work/child-inventory.json"
+"${producer[@]}" child 1.0 "$work/catalog/child" > "$work/child-inventory.tree"
 "$work/package" issue child > "$work/child-issue.out" 2> "$work/child-issue.err"
-"${producer[@]}" --name parent --version 1.0 --dependency-pin "$work/catalog/child.pin.json" --output "$work/catalog/parent" > "$work/parent-inventory.json"
+"${producer[@]}" parent 1.0 "$work/catalog/parent" "$work/catalog/child.pin.json" > "$work/parent-inventory.tree"
 "$work/package" issue parent > "$work/parent-issue.out" 2> "$work/parent-issue.err"
 "$work/package" read-edge parent child src/lib.rs > "$work/edge.out" 2> "$work/edge.err"
 cmp "$work/original.rs" "$work/edge.out"
 test ! -s "$work/edge.err"
 ((package_controls+=1))
-"${producer[@]}" --name child --version 2.0 --output "$work/catalog/child-v2" > "$work/child-v2-inventory.json"
+"${producer[@]}" child 2.0 "$work/catalog/child-v2" > "$work/child-v2-inventory.tree"
 "$work/package" issue child-v2 > "$work/child-v2-issue.out" 2> "$work/child-v2-issue.err"
 expect_reject dependencies "$work/package" read-edge parent child-v2 src/lib.rs
 sha256sum "$work/catalog/child.pin.json" > "$work/catalog-before.sha256"
