@@ -42,8 +42,6 @@ jobs:
       - name: Host-tool dependencies
         run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates nodejs
       - uses: actions/checkout@v4
-      - name: Source census
-        run: node tools/real-programs/census.mjs --self-test
       - name: Git projection
         run: node tools/real-programs/project.mjs --self-test
       - name: Compiler observation

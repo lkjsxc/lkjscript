@@ -151,4 +151,5 @@ if [[ "$full_interpreter" == yes ]]; then
     test ! -s "$work/interpreter.err"
     printf 'ok real programs: full interpreted 7,239-row corpus\n'
 fi
+bash tools/real-programs/census-test.sh "$compiler"
 printf 'ok real programs: original library syntax, independently checked native provenance, 18 provenance and 4 manifest-shape controls, native restorer with foreign hash check and refusal, native/interpreter importer, 8 tests on each engine, pure algorithm authority and 7,239 native corpus rows\n'

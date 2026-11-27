@@ -1,0 +1,790 @@
+//! Lexical Rust source inventory; no Rust parser or compiler semantics.
+use std::json::Value;
+use std::collections::{BTreeMap, BTreeSet};
+use std::sha256;
+mod census_data;
+use census_data::{XID_START, XID_CONTINUE, STANDARD, SELF_SOURCE, LIMITATIONS};
+
+const FEATURES: &str = "macro_rules_definitions macro_invocations nonbuiltin_macro_invocations derive_attributes derived_traits test_attributes async await dyn unsafe extern";
+const HELP: &str = "Usage: census.sh [--source-root REL] [--test-root REL] [--self-test] PACKAGE_ROOT\nOnly .rs files are inventoried. Test roots override source roots. Symlinks fail.\nCounts are lexical inventories, not compiler refusals or macro expansions.\n";
+
+fn hex_digit(b: u8) -> u32 {
+    if b <= b'9' { (b - b'0') as u32 } else { (b - b'a' + 10u8) as u32 }
+}
+fn endpoint(table: &[u8], at: usize) -> u32 {
+    let mut value = 0u32;
+    for b in &table[at..at+6usize] { value = value * 16u32 + hex_digit(*b); }
+    value
+}
+fn in_ranges(c: char, table: &str) -> bool {
+    let bytes = table.as_bytes();
+    let code = c as u32;
+    let mut lo = 0usize;
+    let mut hi = bytes.len()/12usize;
+    while lo < hi {
+        let mid = lo+(hi-lo)/2usize;
+        let at = mid*12usize;
+        if code < endpoint(bytes,at) { hi = mid; }
+        else if code > endpoint(bytes,at+6usize) { lo = mid+1usize; }
+        else { return true; }
+    }
+    false
+}
+fn ident_start(c: char) -> bool { c == '_' || in_ranges(c,XID_START) }
+fn ident_continue(c: char) -> bool { in_ranges(c,XID_CONTINUE) }
+fn at(s: &[char], i: usize) -> char {
+    if i < s.len() { s[i] } else { '\0' }
+}
+fn starts(s: &[char], i: usize, pattern: &str) -> bool {
+    let mut j = i;
+    for c in pattern.chars() {
+        if j >= s.len() || s[j] != c { return false; }
+        j += 1usize;
+    }
+    true
+}
+fn spelling(s: &[char], a: usize, b: usize) -> String {
+    let mut result = String::new();
+    for c in &s[a..b] { result.push(*c); }
+    result
+}
+fn ident_end(s: &[char], i: usize) -> usize {
+    if !ident_start(at(s,i)) { return i; }
+    let mut j = i+1usize;
+    while ident_continue(at(s,j)) { j += 1usize; }
+    j
+}
+fn digit(c: char) -> bool { c >= '0' && c <= '9' }
+fn hex(c: char) -> bool { c.is_ascii_hexdigit() }
+fn number_end(s: &[char], i: usize) -> usize {
+    let mut j = i;
+    if starts(s,i,"0x") {
+        j += 2usize;
+        while hex(at(s,j)) || at(s,j) == '_' { j += 1usize; }
+    } else if starts(s,i,"0o") {
+        j += 2usize;
+        while (at(s,j) >= '0' && at(s,j) <= '7') || at(s,j) == '_' { j += 1usize; }
+    } else if starts(s,i,"0b") {
+        j += 2usize;
+        while at(s,j) == '0' || at(s,j) == '1' || at(s,j) == '_' { j += 1usize; }
+    } else {
+        while digit(at(s,j)) || at(s,j) == '_' { j += 1usize; }
+        if at(s,j) == '.' && at(s,j+1usize) != '.' && !ident_start(at(s,j+1usize)) {
+            j += 1usize;
+            while digit(at(s,j)) || at(s,j) == '_' { j += 1usize; }
+        }
+        if at(s,j) == 'e' || at(s,j) == 'E' {
+            let mut k = j+1usize;
+            if at(s,k) == '+' || at(s,k) == '-' { k += 1usize; }
+            let begin = k;
+            while digit(at(s,k)) || at(s,k) == '_' { k += 1usize; }
+            if k > begin { j = k; }
+        }
+    }
+    ident_end(s,j)
+}
+// Character-literal regex alternatives, including the single escaped scalar fallback.
+fn char_end(s: &[char], i: usize) -> usize {
+    let mut j = i;
+    if at(s,j) == 'b' { j += 1usize; }
+    if at(s,j) != '\'' { return i; }
+    j += 1usize;
+    if j >= s.len() || at(s,j) == '\r' || at(s,j) == '\n' || at(s,j) == '\'' { return i; }
+    if at(s,j) == '\\' {
+        j += 1usize;
+        if j >= s.len() || at(s,j) == '\r' || at(s,j) == '\n' { return i; }
+        if at(s,j) == 'x' && hex(at(s,j+1usize)) && hex(at(s,j+2usize)) && at(s,j+3usize) == '\'' {
+            return j+4usize;
+        }
+        if starts(s,j,"u{") {
+            let mut k = j+2usize;
+            while hex(at(s,k)) || at(s,k) == '_' { k += 1usize; }
+            if k > j+2usize && at(s,k) == '}' && at(s,k+1usize) == '\'' { return k+2usize; }
+        }
+    }
+    if at(s,j+1usize) == '\'' { j+2usize } else { i }
+}
+struct Token {
+    text: String,
+    value: String,
+    // kind: 0 punctuation, 1 identifier, 2 lifetime.
+    kind: u8,
+    raw: bool,
+    at: usize,
+}
+struct Lexed {
+    tokens: Vec<Token>,
+    masked: String,
+    starts: Vec<usize>,
+}
+fn mask(out: &mut String, s: &[char], a: usize, b: usize) {
+    for c in &s[a..b] {
+        if *c == '\r' || *c == '\n' { out.push(*c); } else { out.push(' '); }
+    }
+}
+fn unterminated(kind: &str, i: usize) -> String { format!("unterminated {kind} at character {i}") }
+fn lex(source: &str) -> Result<Lexed,String> {
+    let mut s = Vec::new();
+    let mut lines = vec![0usize];
+    for c in source.chars() {
+        s.push(c);
+        if c == '\n' { lines.push(s.len()); }
+    }
+    let s = s.as_slice();
+    let mut i = 0usize;
+    let mut tokens = Vec::new();
+    let mut masked = String::new();
+    while i < s.len() {
+        let c = s[i];
+        if c.is_whitespace() { masked.push(c); i += 1usize; continue; }
+        if starts(s,i,"//") {
+            let mut j = i+2usize;
+            while j < s.len() && s[j] != '\n' { j += 1usize; }
+            mask(&mut masked,s,i,j); i = j; continue;
+        }
+        if starts(s,i,"/*") {
+            let mut j = i+2usize;
+            let mut depth = 1usize;
+            while j < s.len() && depth > 0usize {
+                if starts(s,j,"/*") { depth += 1usize; j += 2usize; }
+                else if starts(s,j,"*/") { depth -= 1usize; j += 2usize; }
+                else { j += 1usize; }
+            }
+            if depth != 0usize { return Err(unterminated("block comment",i)); }
+            mask(&mut masked,s,i,j); i = j; continue;
+        }
+        let mut raw_open = i;
+        if starts(s,i,"br") || starts(s,i,"cr") { raw_open += 2usize; }
+        else if c == 'r' { raw_open += 1usize; }
+        if raw_open > i {
+            let mut j = raw_open;
+            while at(s,j) == '#' { j += 1usize; }
+            if at(s,j) == '"' {
+                let hashes = j-raw_open;
+                j += 1usize;
+                let mut closed = false;
+                while j < s.len() {
+                    if s[j] == '"' {
+                        let mut k = j+1usize;
+                        while k < j+1usize+hashes && at(s,k) == '#' { k += 1usize; }
+                        if k == j+1usize+hashes { j = k; closed = true; break; }
+                    }
+                    j += 1usize;
+                }
+                if !closed { return Err(unterminated("raw string",i)); }
+                mask(&mut masked,s,i,j); i = j; continue;
+            }
+        }
+        if c == '"' || ((c == 'b' || c == 'c') && at(s,i+1usize) == '"') {
+            let mut j = if c == '"' { i+1usize } else { i+2usize };
+            let mut closed = false;
+            while j < s.len() {
+                let next = s[j]; j += 1usize;
+                if next == '"' { closed = true; break; }
+                if next == '\\' && j < s.len() { j += 1usize; }
+            }
+            if !closed { return Err(unterminated("string",i)); }
+            mask(&mut masked,s,i,j); i = j; continue;
+        }
+        let end = char_end(s,i);
+        if end > i { mask(&mut masked,s,i,end); i = end; continue; }
+        if c == '\'' {
+            let mut j = i+1usize;
+            if starts(s,j,"r#") && ident_start(at(s,j+2usize)) { j += 2usize; }
+            let end = ident_end(s,j);
+            if end > j {
+                let text = spelling(s,i,end);
+                masked.push_str(&text);
+                tokens.push(Token { text, value: String::new(), kind: 2u8, raw: false, at: i });
+                i = end; continue;
+            }
+        }
+        if digit(c) {
+            let end = number_end(s,i);
+            masked.push_str(&spelling(s,i,end));
+            i = end; continue;
+        }
+        let raw = starts(s,i,"r#") && ident_start(at(s,i+2usize));
+        let begin = if raw { i+2usize } else { i };
+        let end = ident_end(s,begin);
+        if end > begin {
+            let text = spelling(s,i,end);
+            masked.push_str(&text);
+            tokens.push(Token { text, value: spelling(s,begin,end), kind: 1u8, raw, at: i });
+            i = end; continue;
+        }
+        let end = if starts(s,i,"::") { i+2usize } else { i+1usize };
+        let text = spelling(s,i,end);
+        masked.push_str(&text);
+        tokens.push(Token { text, value: String::new(), kind: 0u8, raw: false, at: i });
+        i = end;
+    }
+    Ok(Lexed { tokens, masked, starts: lines })
+}
+fn is(t: &[Token], i: usize, text: &str) -> bool {
+    i < t.len() && t[i].text.as_str() == text
+}
+fn ident(t: &[Token], i: usize) -> bool { i < t.len() && t[i].kind == 1u8 }
+struct Path {
+    text: String,
+    normal: String,
+    next: usize,
+}
+fn path_at(t: &[Token], start: usize, end: usize) -> Option<Path> {
+    let mut i = start;
+    let mut text = String::new();
+    let mut normal = String::new();
+    if is(t,i,"::") { i += 1usize; text.push_str("::"); normal.push_str("::"); }
+    if i >= end || !ident(t,i) { return None; }
+    loop {
+        text.push_str(&t[i].text);
+        normal.push_str(&t[i].value);
+        i += 1usize;
+        if i+1usize >= end || !is(t,i,"::") || !ident(t,i+1usize) { break; }
+        text.push_str("::"); normal.push_str("::"); i += 1usize;
+    }
+    Some(Path { text, normal, next: i })
+}
+fn closing(s: &str) -> &str {
+    match s { "(" => ")", "[" => "]", "{" => "}", _ => "" }
+}
+fn opener(s: &str) -> bool { s == "(" || s == "[" || s == "{" }
+// The predecessor delimiter map was an ordinary JS object: these exact
+// token spellings made its group scan fail. Retain that report behavior;
+// raw spellings such as r#constructor are not affected.
+fn legacy_delimiter_name(s: &str) -> bool {
+    match s {
+        "constructor" | "__defineGetter__" | "__defineSetter__" | "hasOwnProperty" |
+        "__lookupGetter__" | "__lookupSetter__" | "isPrototypeOf" | "propertyIsEnumerable" |
+        "toLocaleString" | "toString" | "valueOf" | "__proto__" => true,
+        _ => false,
+    }
+}
+fn close_at(t: &[Token], start: usize, end: usize) -> Option<usize> {
+    if start >= end || !opener(t[start].text.as_str()) { return None; }
+    let mut stack: Vec<String> = Vec::new();
+    let mut i = start;
+    while i < end {
+        let s = t[i].text.as_str();
+        if legacy_delimiter_name(s) { return None; }
+        if opener(s) { stack.push(closing(s).to_string()); }
+        else if s == ")" || s == "]" || s == "}" {
+            let expected = stack.pop()?;
+            if expected.as_str() != s { return None; }
+            if stack.is_empty() { return Some(i); }
+        }
+        i += 1usize;
+    }
+    None
+}
+fn comma_parts(t: &[Token], start: usize, end: usize) -> Vec<(usize,usize)> {
+    let mut parts = Vec::new();
+    let mut part = start;
+    let mut i = start;
+    while i < end {
+        if opener(t[i].text.as_str()) {
+            match close_at(t,i,end) { Some(close) => i = close, None => return Vec::new() }
+        } else if is(t,i,",") {
+            if part < i { parts.push((part,i)); }
+            part = i+1usize;
+        }
+        i += 1usize;
+    }
+    if part < end { parts.push((part,end)); }
+    parts
+}
+fn field(key: &str, value: Value) -> (String, Value) { (key.to_string(), value) }
+fn string(s: &str) -> Value { Value::String(s.to_string()) }
+fn num(n: usize) -> Value { Value::from_usize(n) }
+fn boolean(b: bool) -> Value { Value::Bool(b) }
+fn object(fields: Vec<(String,Value)>) -> Value { Value::Object(fields) }
+fn strings(s: &str, separator: char) -> Value {
+    let mut values = Vec::new();
+    for p in s.split(separator) { values.push(string(p)); }
+    Value::Array(values)
+}
+fn feature_index(name: &str) -> usize {
+    let mut i = 0usize;
+    for f in FEATURES.split(' ') { if f == name { return i; } i += 1usize; }
+    panic!("unknown feature");
+}
+fn add(sites: &mut Vec<Vec<Value>>, lines: &[usize], kind: &str, offset: usize, mut extra: Vec<(String,Value)>) {
+    let mut lo = 0usize;
+    let mut hi = lines.len();
+    while lo+1usize < hi {
+        let mid = lo+(hi-lo)/2usize;
+        if lines[mid] <= offset { lo = mid; } else { hi = mid; }
+    }
+    extra.push(field("line",num(lo+1usize)));
+    extra.push(field("column",num(offset-lines[lo]+1usize)));
+    sites[feature_index(kind)].push(object(extra));
+}
+fn attribute(t: &[Token], lines: &[usize], sites: &mut Vec<Vec<Value>>, start: usize, end: usize,
+    conditional: bool, inner: bool, anchor: usize) {
+    let parsed = match path_at(t,start,end) { Some(p) => p, None => return };
+    let normal = parsed.normal.as_str();
+    let path = parsed.text.as_str();
+    if normal == "test" || normal.ends_with("::test") {
+        add(sites,lines,"test_attributes",anchor,vec![field("path",string(path)),field("conditional",boolean(conditional)),
+            field("inner",boolean(inner)),field("qualified",boolean(normal != "test"))]);
+    }
+    if parsed.next >= end || !is(t,parsed.next,"(") { return; }
+    let close = match close_at(t,parsed.next,end) { Some(c) => c, None => return };
+    let parts = comma_parts(t,parsed.next+1usize,close);
+    if normal == "derive" {
+        add(sites,lines,"derive_attributes",anchor,vec![field("path",string(path)),
+            field("conditional",boolean(conditional)),field("inner",boolean(inner))]);
+        for part in &parts {
+            if let Some(trait_path) = path_at(t,part.0,part.1) {
+                if trait_path.next == part.1 {
+                    add(sites,lines,"derived_traits",t[part.0].at,vec![field("path",string(&trait_path.text)),
+                        field("conditional",boolean(conditional))]);
+                }
+            }
+        }
+    } else if normal == "cfg_attr" {
+        for part in parts.iter().skip(1usize) {
+            attribute(t,lines,sites,part.0,part.1,true,inner,t[part.0].at);
+        }
+    }
+}
+fn inventory(source: &str) -> Result<Vec<Vec<Value>>,String> {
+    let lexed = lex(source)?;
+    let t = lexed.tokens.as_slice();
+    let lines = lexed.starts.as_slice();
+    let mut sites = Vec::new();
+    for _ in FEATURES.split(' ') { sites.push(Vec::new()); }
+    let mut i = 0usize;
+    while i < t.len() {
+        let token = &t[i];
+        if token.kind == 1u8 && !token.raw {
+            let value = token.value.as_str();
+            if value == "async" || value == "await" || value == "dyn" || value == "unsafe" || value == "extern" {
+                add(&mut sites,lines,value,token.at,Vec::new());
+            }
+            if value == "macro_rules" && is(t,i+1usize,"!") {
+                let mut extra = Vec::new();
+                if ident(t,i+2usize) { extra.push(field("name",string(&t[i+2usize].text))); }
+                else if is(t,i+2usize,"$") && ident(t,i+3usize) {
+                    extra.push(field("name",string(&format!("{}{}", "$", t[i+3usize].text))));
+                    extra.push(field("name_is_metavariable",boolean(true)));
+                }
+                add(&mut sites,lines,"macro_rules_definitions",token.at,extra);
+            }
+        }
+        if is(t,i,"#") && i+1usize < t.len() {
+            let inner = is(t,i+1usize,"!");
+            let open = if inner { i+2usize } else { i+1usize };
+            if is(t,open,"[") {
+                if let Some(close) = close_at(t,open,t.len()) {
+                    attribute(t,lines,&mut sites,open+1usize,close,false,inner,token.at);
+                }
+            }
+        }
+        if is(t,i,"!") && i > 0usize && i+1usize < t.len() && opener(t[i+1usize].text.as_str()) && ident(t,i-1usize) {
+            let last = &t[i-1usize];
+            if last.raw || last.value.as_str() != "macro_rules" {
+                let mut start = i-1usize;
+                while start >= 2usize && is(t,start-1usize,"::") && ident(t,start-2usize) { start -= 2usize; }
+                if start > 0usize && (is(t,start-1usize,"$") || is(t,start-1usize,"::")) { start -= 1usize; }
+                let mut path = String::new();
+                let mut normal = String::new();
+                let mut j = start;
+                while j < i {
+                    path.push_str(&t[j].text);
+                    // JS strips r# only at the start or after ::, not after $.
+                    if t[j].raw && (j == start || is(t,j-1usize,"::")) { normal.push_str(&t[j].value); }
+                    else { normal.push_str(&t[j].text); }
+                    j += 1usize;
+                }
+                let base = last.value.as_str();
+                let n = normal.as_str();
+                let prefix = n.strip_prefix("::").unwrap_or(n);
+                let standard = STANDARD.split(' ').any(|name: &str| name == base)
+                    && (n == base || prefix.starts_with("std::") || prefix.starts_with("core::") || prefix.starts_with("alloc::"));
+                add(&mut sites,lines,"macro_invocations",t[start].at,vec![field("path",string(&path)),field("standard_name_match",boolean(standard))]);
+                if !standard { add(&mut sites,lines,"nonbuiltin_macro_invocations",t[start].at,vec![field("path",string(&path))]); }
+            }
+        }
+        i += 1usize;
+    }
+    Ok(sites)
+}
+
+fn physical_lines(bytes: &[u8]) -> usize {
+    let mut n = 0usize;
+    for b in bytes { if *b == b'\n' { n += 1usize; } }
+    if !bytes.is_empty() && bytes[bytes.len()-1usize] != b'\n' { n += 1usize; }
+    n
+}
+fn check(ok: bool, reason: &str, checks: &mut usize) -> Result<(),String> {
+    *checks += 1usize;
+    if ok { Ok(()) } else { Err(format!("self-test: {reason}")) }
+}
+fn newline_offsets(text: &str) -> Vec<usize> {
+    let mut result = Vec::new();
+    let mut i = 0usize;
+    for c in text.chars() { if c == '\n' { result.push(i); } i += 1usize; }
+    result
+}
+fn self_test() -> Result<Value,String> {
+    let mut checks = 0usize;
+    let lexed = lex(SELF_SOURCE)?;
+    check(lexed.masked.as_str().chars().count() == SELF_SOURCE.chars().count(), "mask preserves character offsets", &mut checks)?;
+    check(newline_offsets(&lexed.masked) == newline_offsets(SELF_SOURCE), "mask preserves every newline", &mut checks)?;
+    let features = inventory(SELF_SOURCE)?;
+    let expected = [3usize,6usize,4usize,2usize,3usize,4usize,1usize,1usize,1usize,1usize,1usize];
+    let mut i = 0usize;
+    for f in FEATURES.split(' ') {
+        check(features[i].len() == expected[i], &format!("{f} count"), &mut checks)?;
+        i += 1usize;
+    }
+    let unsafe_site = &features[feature_index("unsafe")][0usize];
+    let before = SELF_SOURCE.split("unsafe extern").next().unwrap();
+    check(unsafe_site.get("line").unwrap().as_usize() == Some(newline_offsets(before).len()+1usize)
+        && unsafe_site.get("column").unwrap().as_usize() == Some(1usize), "location after multiline literals", &mut checks)?;
+    let mut conditional = 0usize;
+    for site in &features[feature_index("test_attributes")] {
+        if site.get("conditional").unwrap().as_bool() == Some(true) { conditional += 1usize; }
+    }
+    check(conditional == 2usize, "nested cfg_attr test inventory", &mut checks)?;
+    check(physical_lines(b"") == 0usize && physical_lines(b"a\r\nb\n") == 2usize && physical_lines(b"a") == 1usize,
+        "physical line convention", &mut checks)?;
+    check(lex("/* nested /* */").is_err(), "unterminated lexical region rejected", &mut checks)?;
+    check(lex("r##\"missing\"#").is_err(), "unterminated lexical region rejected", &mut checks)?;
+    check(lex("b\"missing").is_err(), "unterminated lexical region rejected", &mut checks)?;
+    Ok(object(vec![field("passed",boolean(true)),field("checks",num(checks))]))
+}
+
+// JSON.stringify's ASCII spelling, followed by escaping every non-ASCII
+// UTF-16 code unit (including DEL and surrogate pairs), exactly as the census.
+fn quote(out: &mut String, s: &str) {
+    out.push('"');
+    for c in s.chars() {
+        let code = c as u32;
+        match c {
+            '"' => out.push_str("\\\""),
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            '\u{8}' => out.push_str("\\b"),
+            '\u{c}' => out.push_str("\\f"),
+            _ => {
+                if code >= 0x10000u32 {
+                    let scalar = code-0x10000u32;
+                    let high = 0xd800u32+(scalar>>10u32);
+                    let low = 0xdc00u32+(scalar&0x3ffu32);
+                    out.push_str(&format!("\\u{high:04x}\\u{low:04x}"));
+                } else if code < 32u32 || code >= 127u32 {
+                    out.push_str(&format!("\\u{code:04x}"));
+                } else { out.push(c); }
+            }
+        }
+    }
+    out.push('"');
+}
+fn pad(out: &mut String, level: usize) {
+    out.push('\n');
+    let mut i = 0usize;
+    while i < level { out.push_str("   "); i += 1usize; }
+}
+fn render(out: &mut String, value: &Value, level: usize) {
+    match value {
+        Value::Null => out.push_str("null"),
+        Value::Bool(b) => out.push_str(if *b { "true" } else { "false" }),
+        Value::String(s) => quote(out,s.as_str()),
+        Value::Number(s) => out.push_str(s.as_str()),
+        Value::Array(values) => {
+            out.push('[');
+            let mut i = 0usize;
+            while i < values.len() {
+                if i != 0usize { out.push(','); }
+                pad(out,level+1usize);
+                render(out,&values[i],level+1usize);
+                i += 1usize;
+            }
+            if !values.is_empty() { pad(out,level); }
+            out.push(']');
+        },
+        Value::Object(fields) => {
+            // UTF-8 byte ordering of valid strings is Unicode-scalar ordering.
+            let mut keys: Vec<String> = Vec::new();
+            for f in fields { keys.push(f.0.clone()); }
+            keys.sort();
+            out.push('{');
+            let mut i = 0usize;
+            while i < keys.len() {
+                if i != 0usize { out.push(','); }
+                pad(out,level+1usize);
+                quote(out,keys[i].as_str());
+                out.push_str(" : ");
+                render(out,value.get(keys[i].as_str()).unwrap(),level+1usize);
+                i += 1usize;
+            }
+            if !keys.is_empty() { pad(out,level); }
+            out.push('}');
+        },
+    }
+}
+fn json_line(value: &Value) -> String {
+    let mut out = String::new();
+    render(&mut out,value,0usize);
+    out.push('\n');
+    out
+}
+fn relative_root(value: &str) -> Result<String,String> {
+    if value.starts_with("/") { return Err(format!("root must be package-relative: {value}")); }
+    let mut result = String::new();
+    for p in value.split('/') {
+        if p == ".." { return Err(format!("parent traversal in root: {value}")); }
+        if p != "." && !p.is_empty() {
+            if !result.is_empty() { result.push('/'); }
+            result.push_str(p);
+        }
+    }
+    if result.is_empty() { result.push('.'); }
+    Ok(result)
+}
+fn roots(raw: &[String]) -> Result<Vec<String>,String> {
+    let mut set = BTreeSet::new();
+    for value in raw { set.insert(relative_root(value.as_str())?); }
+    let mut result = Vec::new();
+    for value in set.iter() { result.push(value.clone()); }
+    Ok(result)
+}
+fn string_array(values: &[String]) -> Value {
+    let mut items = Vec::new();
+    for value in values { items.push(string(value.as_str())); }
+    Value::Array(items)
+}
+fn child_path(parent: &str, name: &str) -> String {
+    if parent == "." { name.to_string() } else { format!("{parent}/{name}") }
+}
+fn symlink_reason(package: &str, relative: &str, selected: bool) -> String {
+    if selected { format!("symlink root component: {relative}") }
+    else { format!("symlink under selected root: {package}/{relative}") }
+}
+// The current ReadDirectory open operations confine access beneath the grant
+// but can follow internal symlinks. Inspect Linux getdents64 record types
+// before opening any descendant. The layout matches library/read_io.lkj;
+// unlike list(), retain d_type. An unknown type is not proof of a regular
+// file or directory: refuse instead of silently following a possible link.
+#[derive(PartialEq, Eq, PartialOrd, Ord)]
+struct Entry {
+    name: Vec<u8>,
+    kind: u8,
+}
+fn entries(dir: &mut ReadDirectory) -> Result<Vec<Entry>,String> {
+    let mut scan = dir.open_directory(".").map_err(|errno: i64| -> String { format!("open directory: errno {errno}") })?;
+    let mut result = Vec::new();
+    let mut buffer = [0u8;8192];
+    loop {
+        let n = scan.__lkjscript_read(&mut buffer);
+        if n < 0i64 { return Err(format!("read directory: errno {}",-n)); }
+        if n == 0i64 { break; }
+        let count = n as usize;
+        let mut at = 0usize;
+        while at < count {
+            if count-at < 20usize { return Err("invalid directory record".to_string()); }
+            let size = buffer[at+16usize] as usize | ((buffer[at+17usize] as usize)<<8u64);
+            if size < 20usize || size > count-at { return Err("invalid directory record length".to_string()); }
+            let mut end = at+19usize;
+            while end < at+size && buffer[end] != 0u8 { end += 1usize; }
+            if end == at+size { return Err("unterminated directory record".to_string()); }
+            let name = &buffer[at+19usize..end];
+            if name != b"." && name != b".." {
+                result.push(Entry { name: name.to_vec(), kind: buffer[at+18usize] });
+            }
+            at += size;
+        }
+    }
+    result.sort();
+    Ok(result)
+}
+fn entry_kind(dir: &mut ReadDirectory, name: &str) -> Result<u8,String> {
+    for entry in entries(dir)? {
+        if entry.name.as_slice() == name.as_bytes() { return Ok(entry.kind); }
+    }
+    Err(format!("no such root component: {name}"))
+}
+fn visit(dir: &mut ReadDirectory, package: &str, relative: &str,
+    external: bool, files: &mut BTreeMap<String,bool>) -> Result<(),String> {
+    for entry in entries(dir)? {
+        let name = String::from_utf8(entry.name).map_err(|_| -> String { "non-UTF-8 file name under selected roots".to_string() })?;
+        let child = child_path(relative,name.as_str());
+        if entry.kind == 10u8 { return Err(symlink_reason(package,child.as_str(),false)); }
+        if entry.kind == 0u8 { return Err(format!("unknown directory entry type: {child}")); }
+        if entry.kind == 4u8 {
+            let mut sub = dir.open_directory(name.as_str()).map_err(|errno: i64| -> String { format!("open {child}: errno {errno}") })?;
+            visit(&mut sub,package,child.as_str(),external,files)?;
+        } else if entry.kind == 8u8 && child.as_str().ends_with(".rs") {
+            files.insert(child,external);
+        }
+    }
+    Ok(())
+}
+fn select_root(root: &mut ReadDirectory, package: &str, relative: &str,
+    external: bool, files: &mut BTreeMap<String,bool>) -> Result<(),String> {
+    if relative == "." { return visit(root,&format!("{package}/."),relative,external,files); }
+    let mut dir = root.open_directory(".").map_err(|errno: i64| -> String { format!("open package: errno {errno}") })?;
+    let mut parts = relative.split('/');
+    let mut part = parts.next().unwrap();
+    loop {
+        let kind = entry_kind(&mut dir,part)?;
+        if kind == 10u8 { return Err(symlink_reason(package,relative,true)); }
+        if kind == 0u8 { return Err(format!("unknown root component type: {relative}")); }
+        let next = parts.next();
+        if kind != 4u8 {
+            if next.is_some() { return Err(format!("not a directory root component: {part}")); }
+            if kind == 8u8 && relative.ends_with(".rs") { files.insert(relative.to_string(),external); }
+            return Ok(());
+        }
+        dir = dir.open_directory(part).map_err(|errno: i64| -> String { format!("open {relative}: errno {errno}") })?;
+        match next {
+            Some(name) => part = name,
+            None => return visit(&mut dir,package,relative,external,files),
+        }
+    }
+}
+struct Group {
+    files: usize,
+    bytes: usize,
+    lines: usize,
+    counts: Vec<usize>,
+    direct: usize,
+    conditional: usize,
+    qualified: usize,
+}
+impl Group {
+    fn new() -> Group {
+        Group { files: 0usize, bytes: 0usize, lines: 0usize, counts: vec![0usize;11usize],
+            direct: 0usize, conditional: 0usize, qualified: 0usize }
+    }
+    fn record(&mut self, bytes: usize, lines: usize, sites: &[Vec<Value>]) {
+        self.files += 1usize; self.bytes += bytes; self.lines += lines;
+        let mut i = 0usize;
+        while i < sites.len() { self.counts[i] += sites[i].len(); i += 1usize; }
+        for site in &sites[feature_index("test_attributes")] {
+            if site.get("qualified").unwrap().as_bool() == Some(true) { self.qualified += 1usize; }
+            else if site.get("conditional").unwrap().as_bool() == Some(true) { self.conditional += 1usize; }
+            else { self.direct += 1usize; }
+        }
+    }
+    fn fields(&self) -> Vec<(String,Value)> {
+        let mut counts = Vec::new();
+        let mut i = 0usize;
+        for f in FEATURES.split(' ') { counts.push(field(f,num(self.counts[i]))); i += 1usize; }
+        vec![field("files",num(self.files)),field("bytes",num(self.bytes)),field("physical_lines",num(self.lines)),
+            field("feature_counts",object(counts)),field("test_attribute_counts",object(vec![
+                field("direct_unqualified",num(self.direct)),field("conditional_unqualified",num(self.conditional)),
+                field("qualified",num(self.qualified))]))]
+    }
+}
+fn feature_fields(sites: Vec<Vec<Value>>) -> Value {
+    let mut result = Vec::new();
+    let mut names = FEATURES.split(' ');
+    for values in sites {
+        let f = names.next().unwrap();
+        let count = values.len();
+        result.push(field(f,object(vec![field("count",num(count)),field("sites",Value::Array(values))])));
+    }
+    object(result)
+}
+fn conventions() -> Value {
+    object(vec![
+        field("physical_lines",string("LF terminators plus one unterminated final line; empty file is zero")),
+        field("locations",string("one-based lines and Unicode-scalar columns in original UTF-8 source")),
+        field("inline_tests",string("remain in source files; external_test is determined only by selected roots")),
+        field("macro_classification",string("nonbuiltin means no lexical match to the explicit standard macro-name list; all invocations are also retained")),
+        field("standard_macro_names",strings(STANDARD,' ')),
+        field("limitations",strings(LIMITATIONS,'\n')),
+    ])
+}
+fn census(root: &mut ReadDirectory, package: &str, sources: &[String], tests: &[String], controls: Option<Value>) -> Result<Value,String> {
+    let mut files: BTreeMap<String,bool> = BTreeMap::new();
+    for rel in sources { select_root(root,package,rel.as_str(),false,&mut files)?; }
+    for rel in tests { select_root(root,package,rel.as_str(),true,&mut files)?; }
+    if files.is_empty() { return Err("no .rs files under selected roots".to_string()); }
+    let mut records = Vec::new();
+    let mut total = Group::new();
+    let mut source = Group::new();
+    let mut test = Group::new();
+    for (relative,external) in files.iter() {
+        let mut file = root.open(relative.as_str()).map_err(|errno: i64| -> String { format!("open {relative}: errno {errno}") })?;
+        let bytes = file.read_to_end().map_err(|errno: i64| -> String { format!("read {relative}: errno {errno}") })?;
+        let digest = sha256::hex_digest(&bytes);
+        let length = bytes.len();
+        let lines = physical_lines(&bytes);
+        let text = String::from_utf8(bytes).map_err(|_| -> String { format!("{relative} is not UTF-8") })?;
+        let sites = inventory(text.as_str())?;
+        total.record(length,lines,&sites);
+        if *external { test.record(length,lines,&sites); } else { source.record(length,lines,&sites); }
+        records.push(object(vec![field("path",string(relative.as_str())),
+            field("kind",string(if *external { "external_test" } else { "source" })),
+            field("sha256",Value::String(digest)),field("bytes",num(length)),field("physical_lines",num(lines)),
+            field("features",feature_fields(sites))]));
+    }
+    let mut summary = total.fields();
+    summary.push(field("source",object(source.fields())));
+    summary.push(field("external_test",object(test.fields())));
+    let mut result = vec![field("schema",num(1usize)),field("inventory_kind",string("lexical_rust_source")),
+        field("scope",object(vec![field("source_roots",string_array(sources)),field("external_test_roots",string_array(tests)),
+            field("suffix",string(".rs")),field("overlap_precedence",string("external_test"))])),
+        field("conventions",conventions()),field("summary",object(summary)),field("files",Value::Array(records))];
+    if let Some(value) = controls { result.push(field("self_test",value)); }
+    Ok(object(result))
+}
+fn env_text(env: &mut Environment) -> Result<String,String> {
+    String::from_utf8(env.get().unwrap_or(Vec::new())).map_err(|_| -> String { "non-UTF-8 package path".to_string() })
+}
+fn run(args: &mut Arguments, root: &mut ReadDirectory, package: &mut Environment, defaults: &mut Environment) -> Result<String,String> {
+    let mut words = Vec::new();
+    for raw in args.args() {
+        words.push(String::from_utf8(raw).map_err(|_| -> String { "non-UTF-8 argument".to_string() })?);
+    }
+    let mut source_roots = Vec::new();
+    let mut test_roots = Vec::new();
+    let mut rest = 0usize;
+    let mut help = false;
+    let mut self_test_requested = false;
+    let mut i = 0usize;
+    while i < words.len() {
+        let a = words[i].as_str();
+        if a == "--self-test" { self_test_requested = true; }
+        else if a == "--help" { help = true; }
+        else if a == "--source-root" || a == "--test-root" {
+            i += 1usize;
+            if i >= words.len() { return Err("missing root argument".to_string()); }
+            if a == "--source-root" { source_roots.push(words[i].clone()); }
+            else { test_roots.push(words[i].clone()); }
+        } else if let Some(value) = a.strip_prefix("--source-root=") { source_roots.push(value.to_string()); }
+        else if let Some(value) = a.strip_prefix("--test-root=") { test_roots.push(value.to_string()); }
+        else if a.starts_with("-") { return Err("use --help for usage".to_string()); }
+        else { rest += 1usize; }
+        i += 1usize;
+    }
+    if help { return Ok(HELP.to_string()); }
+    let controls = if self_test_requested { Some(self_test()?) } else { None };
+    if rest == 0usize && self_test_requested {
+        return Ok(json_line(&object(vec![field("self_test",controls.unwrap())])));
+    }
+    if rest != 1usize { return Err("exactly one package root is required; use --help".to_string()); }
+    let package_name = env_text(package)?;
+    let hints = env_text(defaults)?;
+    if source_roots.is_empty() { source_roots.push(if hints.starts_with("s") { "src".to_string() } else { ".".to_string() }); }
+    if test_roots.is_empty() && hints.ends_with("t") { test_roots.push("tests".to_string()); }
+    let sources = roots(&source_roots)?;
+    let tests = roots(&test_roots)?;
+    Ok(json_line(&census(root,package_name.as_str(),&sources,&tests,controls)?))
+}
+pub fn main(mut arguments: Arguments, mut root: ReadDirectory, mut package: Environment, mut defaults: Environment,
+    mut output: Stdout, mut errors: Stderr, mut status: ExitStatus) {
+    match run(&mut arguments,&mut root,&mut package,&mut defaults) {
+        Ok(report) => output.write(report.as_bytes()),
+        Err(reason) => {
+            errors.write(format!("real-programs-census: {reason}\n").as_bytes());
+            status.set_status(255u8);
+        },
+    }
+}

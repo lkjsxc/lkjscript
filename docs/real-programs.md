@@ -204,9 +204,14 @@ dom-query-bench/test-pages -> ../test-pages was a tooling gap. The projector
 now preserves safe internal relative tracked symlinks and refuses escaping,
 dangling, cyclic, untracked or alias-only targets and gitlinks. Review also
 corrected Git owner-execute interpretation and UTF-8 entry/path handling.
-The required real-program gate runs 19 census, 81 projection and 68 probe
+The native real-program gate runs the checked source census (19 self-tests,
+6 exact package-report controls and 21 refusals). Run it with
+`tools/real-programs/census.sh [--source-root REL] [--test-root REL] PACKAGE_ROOT`.
+The separate host-tool checks run 81 projection and 68 probe
 controls, including exact diagnostic bytes and non-ASCII roots. Sources must be
-quiescent during projection; this is not a hostile concurrent-namespace snapshot.
+quiescent during projection and census; neither is a hostile concurrent-namespace
+snapshot. The checked census refuses unknown directory-entry types rather than
+following an unclassified descendant.
 
 ### Ranked observed barriers
 

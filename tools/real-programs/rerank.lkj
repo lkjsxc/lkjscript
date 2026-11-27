@@ -750,7 +750,7 @@ fn recount(c: &Classes, current: &Observations, by_key: &Map, at: &Map, inputs: 
             st("Causes are inherited only from an explicitly classified, identical diagnostic at the same unchanged source coordinate; reviewed new sites name the complete code/message and file hash."),
             st("Missing old diagnostics are not observed at this frontier. This is not proof of admission, successful execution, or equivalent Cargo feature/test configuration."),
             st("New or changed diagnostics stay unclassified until explicitly reviewed. Known recovery exclusions remain exclusions only while both their complete diagnostic identity and their reviewed parent diagnostic survive."),
-            st("Source columns are one-based UTF-8 byte columns, matching the compiler lexer, not the Unicode-scalar columns of census.mjs."),
+            st("Source columns are one-based UTF-8 byte columns, matching the compiler lexer, not the Unicode-scalar columns of the source census."),
             st("Count ranking is descriptive. Ownership and implementation priority remain explicit decisions. File coverage overlaps and is not a causal blocked-line estimate.")]))
 }
 fn run(world: &mut World) -> Result<(), String> {
