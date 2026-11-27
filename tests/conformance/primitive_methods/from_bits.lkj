@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {}
+pub fn probe() -> i64 {
+    if f64::from_bits(0u64) == 0.0f64 {
+        42
+    } else {
+        1
+    }
+}

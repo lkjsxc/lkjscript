@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+trait Shadow: Sized {
+    fn checked_add(self, n: Self) -> bool;
+}
+impl Shadow for i32 {
+    fn checked_add(self, _: i32) -> bool {
+        false
+    }
+}
+pub fn probe() -> i64 {
+    let n = 40i32.checked_add(2);
+    n.unwrap() as i64
+}

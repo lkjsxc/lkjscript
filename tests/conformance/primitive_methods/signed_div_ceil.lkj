@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+trait Shadow {
+    fn div_ceil(self, n: i32) -> i64;
+}
+impl Shadow for i32 {
+    fn div_ceil(self, _: i32) -> i64 {
+        42
+    }
+}
+pub fn probe() -> i64 {
+    1i32.div_ceil(1)
+}

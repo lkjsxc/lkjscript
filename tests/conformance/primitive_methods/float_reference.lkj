@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+trait Shadow {
+    fn to_bits(&self) -> i64;
+}
+impl Shadow for f64 {
+    fn to_bits(&self) -> i64 {
+        42
+    }
+}
+pub fn probe() -> i64 {
+    (&0.0f64).to_bits()
+}

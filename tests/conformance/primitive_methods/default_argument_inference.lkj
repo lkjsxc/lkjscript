@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {}
+trait Shadow<T> {
+    fn to_digit(&self, _radix: T) -> Option<u32> {
+        Some(42)
+    }
+}
+impl<T> Shadow<T> for char {}
+pub fn probe() -> i64 {
+    (&'1').to_digit(10u32).unwrap() as i64
+}

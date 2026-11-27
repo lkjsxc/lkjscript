@@ -97,6 +97,7 @@ pub(super) enum MethodTarget {
 #[derive(Clone)]
 pub(super) struct MethodSelection {
     pub(super) dereferences: usize,
+    pub(super) autoref: Option<bool>,
     pub(super) target: MethodTarget,
 }
 
@@ -1354,6 +1355,7 @@ impl Compiler<'_> {
                 self.method_selections.insert(
                     expression,
                     MethodSelection {
+                        autoref: None,
                         dereferences: 0,
                         target,
                     },

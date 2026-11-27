@@ -263,6 +263,7 @@ impl Compiler<'_> {
         }
         let target = self.bound_method_target(identity, caller, span)?;
         self.method_selections.insert(expression, MethodSelection {
+            autoref: None,
             dereferences: 0,
             target,
         });
@@ -296,6 +297,7 @@ impl super::Builder<'_, '_> {
         if let Some(candidate) = candidates.pop() {
             let target = self.compiler.bound_method_target(&candidate.identity, &self.sub, span)?;
             self.compiler.method_selections.insert(expression, MethodSelection {
+                autoref: None,
                 dereferences: 0,
                 target,
             });
@@ -324,19 +326,33 @@ impl super::Builder<'_, '_> {
                 _ => None,
             }
         } else { None };
+        let provider_name = match self.compiler.primitive_name(receiver) {
+            Some(primitive) => super::primitive_methods::provider(primitive, name), None => None,
+        };
+        let provider = match provider_name {
+            Some(provider) => match self.compiler.names.library_type("integer", provider, span) {
+                Ok(path) => path.declaration, Err(_) => None,
+            },
+            None => None,
+        };
         let implementations = self.compiler.implementations.associated_method_candidates(
             self.compiler.source, &self.compiler.types, &self.compiler.applications, receiver, name);
         let mut candidates: Vec<(usize, usize, BTreeMap<String, usize>)> = Vec::new();
         let mut inherent: Vec<(usize, usize, BTreeMap<String, usize>)> = Vec::new();
+        let mut provided: Vec<(usize, usize, BTreeMap<String, usize>)> = Vec::new();
         let mut prerequisite_problem = None;
         for index in implementations {
             let implementation = self.compiler.source.impls[index].clone();
+            let declaration = implementation.trait_ty.and_then(|ty| match &self.compiler.source.types[ty].kind {
+                a::Type::Path(path) => path.declaration, _ => None,
+            });
+            let canonical = provider.is_some() && declaration == provider;
             let mut methods = Vec::new();
             if let Some(candidate) = crate::generics::implementation_method(self.compiler.source, index, name) {
                 let function = &self.compiler.source.functions[candidate];
                 let selected = match fixed { Some(source) => source == candidate, None => true };
                 if function.name == name
-                    && function.params.first().is_none_or(|parameter| parameter.name != "self")
+                    && (canonical || function.params.first().is_none_or(|parameter| parameter.name != "self"))
                     && selected
                 {
                     methods.push(candidate);
@@ -347,7 +363,7 @@ impl super::Builder<'_, '_> {
             if !self.infer_type_matches(implementation.target, receiver, &mut substitutions)? { continue; }
             substitutions.insert("Self".to_string(), receiver);
             if self.compiler.resolve(implementation.target, &substitutions).ok() != Some(receiver)
-                || !self.trait_available(&implementation, receiver, span) {
+                || (!canonical && !self.trait_available(&implementation, receiver, span)) {
                 continue;
             }
             if let Err(problem) = self.compiler.implementation_bounds(&implementation, &substitutions) {
@@ -356,10 +372,20 @@ impl super::Builder<'_, '_> {
             }
             for candidate in methods {
                 if implementation.trait_ty.is_none() { inherent.push((index, candidate, substitutions.clone())); }
+                else if canonical { provided.push((index, candidate, substitutions.clone())); }
                 else { candidates.push((index, candidate, substitutions.clone())); }
             }
         }
         if !inherent.is_empty() { candidates = inherent; }
+        else if !provided.is_empty() { candidates = provided; }
+        else if fixed.is_none() {
+            if let Some(primitive) = self.compiler.primitive_name(receiver) {
+                if super::primitive_methods::member(primitive, name).is_some() {
+                    return Err(super::primitive_methods::unsupported(primitive, name, span));
+                }
+            }
+        }
+
         if candidates.len() > 1 { return Err(err(span, "E_TRAIT", "ambiguous associated function")); }
         if let Some((implementation, source, substitutions)) = candidates.pop() {
             if matches!(self.compiler.source.function_owner(a::FunctionId { index: source }), a::FunctionOwner::Trait(_)) {
@@ -371,6 +397,7 @@ impl super::Builder<'_, '_> {
             }
             if explicit_receiver && self.compiler.contracts.is_some() {
                 self.compiler.method_selections.insert(expression, MethodSelection {
+                    autoref: None,
                     dereferences: 0, target: MethodTarget::Source(source),
                 });
             }

@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {}
+trait Shadow {
+    fn rotate_left(&mut self, count: u32) -> i64;
+}
+impl Shadow for u32 {
+    fn rotate_left(&mut self, _count: u32) -> i64 {
+        42
+    }
+}
+pub fn probe() -> i64 {
+    let mut value = 21u32;
+    (&mut value).rotate_left(1)
+}

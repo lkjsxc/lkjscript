@@ -1,0 +1,13 @@
+// expect: reject E_PARSE
+// witness: {"rustAccept":true}
+trait Shadow {
+    fn rotate_left(value: u32, count: u32) -> i64;
+}
+impl Shadow for u32 {
+    fn rotate_left(_value: u32, _count: u32) -> i64 {
+        1
+    }
+}
+pub fn probe() -> i64 {
+    <u32>::rotate_left(21, 1) as i64
+}

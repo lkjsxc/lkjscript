@@ -1,0 +1,17 @@
+// expect: value 42
+// witness: {}
+trait Shadow {
+    fn is_ascii(&self) -> bool;
+}
+impl Shadow for char {
+    fn is_ascii(&self) -> bool {
+        false
+    }
+}
+pub fn probe() -> i64 {
+    if (&'A').is_ascii() {
+        42
+    } else {
+        1
+    }
+}

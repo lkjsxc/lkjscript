@@ -1,0 +1,15 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Shadow {
+    fn make_ascii_uppercase(&mut self);
+}
+impl Shadow for u8 {
+    fn make_ascii_uppercase(&mut self) {
+        *self = b'B';
+    }
+}
+pub fn probe() -> i64 {
+    let mut value = b'a';
+    value.make_ascii_uppercase();
+    value as i64
+}

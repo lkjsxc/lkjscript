@@ -1,0 +1,17 @@
+// expect: value 42
+// witness: {}
+trait Shadow {
+    fn is_ascii_digit(&self) -> i64;
+}
+impl Shadow for u8 {
+    fn is_ascii_digit(&self) -> i64 {
+        1
+    }
+}
+pub fn probe() -> i64 {
+    if b'2'.is_ascii_digit() {
+        42
+    } else {
+        1
+    }
+}

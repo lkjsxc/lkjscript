@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {}
+struct u32 {
+    value: i64,
+}
+trait Shadow {
+    fn rotate_left(self, count: usize) -> i64;
+}
+impl Shadow for u32 {
+    fn rotate_left(self, _count: usize) -> i64 {
+        self.value
+    }
+}
+pub fn probe() -> i64 {
+    u32 { value: 42 }.rotate_left(1)
+}

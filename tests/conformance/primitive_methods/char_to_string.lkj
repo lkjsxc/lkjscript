@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {}
+pub fn probe() -> i64 {
+    if 'A'.to_string() == "A" {
+        42
+    } else {
+        1
+    }
+}

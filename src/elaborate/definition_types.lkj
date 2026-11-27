@@ -7,6 +7,7 @@ use std::collections::{BTreeMap, BTreeSet};
 mod capabilities;
 mod closures;
 mod method_headers;
+mod primitive_methods;
 mod numeric_operators;
 mod pattern_equations;
 mod projection_equations;
@@ -2450,6 +2451,8 @@ impl Infer<'_, '_> {
                 result,
                 span,
             } => {
+                if let Some(complete) = self.primitive_method_header(receiver, &name, &types,
+                    &arguments, result, (id, expression, scope, span))? { return Ok(complete); }
                 let Some((base, shape)) = self.strip_references(receiver, id) else {
                     return Ok(false);
                 };

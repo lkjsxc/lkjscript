@@ -1,0 +1,19 @@
+// expect: value 42
+// witness: {}
+trait Shadow: Sized {
+    fn make_ascii_uppercase(self) -> Self;
+}
+impl Shadow for &u8 {
+    fn make_ascii_uppercase(self) -> Self {
+        self
+    }
+}
+pub fn probe() -> i64 {
+    let mut value = b'*';
+    let answer = {
+        let held = value.make_ascii_uppercase();
+        *held as i64
+    };
+    value = b'b';
+    answer
+}

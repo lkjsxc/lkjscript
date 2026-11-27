@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+trait Shadow<T> {
+    fn rotate_left(&self, count: T) -> u32;
+}
+impl<T: Copy> Shadow<T> for u32 {
+    fn rotate_left(&self, _count: T) -> u32 {
+        42
+    }
+}
+pub fn probe() -> i64 {
+    (&21u32).rotate_left(1u8) as i64
+}

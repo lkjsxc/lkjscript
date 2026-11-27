@@ -1,0 +1,13 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Shadow {
+    fn then_some(self, value: i64) -> Option<i64>;
+}
+impl Shadow for bool {
+    fn then_some(self, _value: i64) -> Option<i64> {
+        Some(1)
+    }
+}
+pub fn probe() -> i64 {
+    true.then_some(42i64).unwrap()
+}

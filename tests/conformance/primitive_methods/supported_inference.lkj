@@ -1,0 +1,46 @@
+// expect: value 42
+// witness: {}
+trait Shadow {
+    fn wrapping_add(self, rhs: bool) -> bool;
+    fn to_bits(self) -> bool;
+    fn len_utf8(self) -> bool;
+}
+impl Shadow for i32 {
+    fn wrapping_add(self, _rhs: bool) -> bool {
+        false
+    }
+    fn to_bits(self) -> bool {
+        false
+    }
+    fn len_utf8(self) -> bool {
+        false
+    }
+}
+impl Shadow for f64 {
+    fn wrapping_add(self, _rhs: bool) -> bool {
+        false
+    }
+    fn to_bits(self) -> bool {
+        false
+    }
+    fn len_utf8(self) -> bool {
+        false
+    }
+}
+impl Shadow for char {
+    fn wrapping_add(self, _rhs: bool) -> bool {
+        false
+    }
+    fn to_bits(self) -> bool {
+        false
+    }
+    fn len_utf8(self) -> bool {
+        false
+    }
+}
+pub fn probe() -> i64 {
+    let value = 40i32.wrapping_add(1i32);
+    let bits: u64 = 0.0f64.to_bits();
+    let length: usize = 'A'.len_utf8();
+    value as i64 + bits as i64 + length as i64
+}

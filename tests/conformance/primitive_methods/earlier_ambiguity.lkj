@@ -1,0 +1,21 @@
+// expect: reject E_TRAIT
+// witness: {"rustAccept":false,"rustCode":"E0034"}
+trait First {
+    fn is_ascii(self) -> i64;
+}
+trait Second {
+    fn is_ascii(self) -> i64;
+}
+impl First for char {
+    fn is_ascii(self) -> i64 {
+        41
+    }
+}
+impl Second for char {
+    fn is_ascii(self) -> i64 {
+        42
+    }
+}
+pub fn probe() -> i64 {
+    'A'.is_ascii()
+}

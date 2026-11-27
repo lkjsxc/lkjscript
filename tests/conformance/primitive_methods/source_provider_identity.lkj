@@ -1,0 +1,35 @@
+// expect: value 42
+// witness: {}
+trait CheckedArithmetic {
+    fn checked_add(self, other: bool) -> bool;
+}
+impl CheckedArithmetic for i32 {
+    fn checked_add(self, _other: bool) -> bool {
+        false
+    }
+}
+trait SaturatingArithmetic {
+    fn saturating_add(self, other: bool) -> bool;
+}
+impl SaturatingArithmetic for i32 {
+    fn saturating_add(self, _other: bool) -> bool {
+        false
+    }
+}
+trait ByteAscii {
+    fn is_ascii_digit(&self) -> i64;
+}
+impl ByteAscii for u8 {
+    fn is_ascii_digit(&self) -> i64 {
+        1
+    }
+}
+pub fn probe() -> i64 {
+    let sum = 20i32.checked_add(21i32).unwrap();
+    let saturated = sum.saturating_add(1i32);
+    if b'2'.is_ascii_digit() {
+        saturated as i64
+    } else {
+        1
+    }
+}

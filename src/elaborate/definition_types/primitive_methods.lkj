@@ -1,0 +1,190 @@
+//! Primitive lookup contributes only the winning receiver tier's equations.
+//! Conditional implementation bounds remain the ordinary selector's obligation.
+use super::*;
+use super::super::primitive_methods as primitive;
+
+impl Infer<'_, '_> {
+    pub(super) fn primitive_method_header(
+        &mut self, receiver: Variable, name: &str, types: &[a::TypeId],
+        arguments: &[Variable], result: Variable,
+        location: (usize, a::ExprId, a::ModuleId, a::Span),
+    ) -> Result<Option<bool>> {
+        let (id, expression, scope, span) = location;
+        let mut scalar = receiver;
+        while let Some(Shape::Ref(_, inner)) = self.shape(scalar) { scalar = inner; }
+        let Some(Shape::Atom(primitive_name)) = self.shape(scalar) else { return Ok(None); };
+        let Some(inherent_receiver) = primitive::method(&primitive_name, name) else { return Ok(None); };
+        let mut owners = vec![receiver];
+        let mut references = Vec::new();
+        let mut current = receiver;
+        while let Some(Shape::Ref(mutable, inner)) = self.shape(current) {
+            references.push(mutable); owners.push(inner); current = inner;
+        }
+        let inherent_rank = primitive::rank(&references, references.len(), inherent_receiver);
+        let provider = match primitive::provider(&primitive_name, name) {
+            Some(provider) => match self.names.library_type("integer", provider, span) {
+                Ok(path) => path.declaration, Err(_) => None,
+            },
+            None => None,
+        };
+        let mut selected: Option<(usize, usize, usize, BTreeMap<String, Variable>)> = None;
+        let mut source_inherent: Option<(usize, usize, BTreeMap<String, Variable>)> = None;
+        let mut uncertain_rank: Option<usize> = None;
+        let mut ambiguous = false;
+        let mut variants = Vec::new();
+        for depth in 0..owners.len() {
+            variants.push((owners[depth], depth, None));
+            for kind in 0..2 {
+                let mutable = kind == 1;
+                let borrowed = self.shaped(Shape::Ref(mutable, owners[depth]));
+                let mut existing = false;
+                for owner in &owners { existing |= self.same_projection_receiver(borrowed, *owner); }
+                if !existing { variants.push((borrowed, depth, Some(mutable))); }
+            }
+        }
+        for (owner, depth, autoref) in variants {
+            let head = self.shape_head(owner);
+            let candidates = primitive::candidates(self.source, self.implementations,
+                head.as_ref().map(|head| head.as_str()), name);
+            for candidate in candidates {
+                let implementation = self.source.impls[candidate].clone();
+                let declaration = implementation.trait_ty.and_then(|ty| match &self.source.types[ty].kind {
+                    a::Type::Path(path) => path.declaration,
+                    _ => None,
+                });
+                let canonical = depth == references.len() && autoref.is_none() && provider.is_some() && declaration == provider;
+                if !canonical && declaration.is_some_and(|declaration|
+                    !self.names.trait_in_scope(scope, declaration, span)) { continue; }
+                let mut environment = match self.implementation_environment(candidate, owner)? {
+                    projection_equations::Match::No => continue,
+                    projection_equations::Match::Deferred => { uncertain_rank = Some(0); continue; }
+                    projection_equations::Match::Yes(environment) => environment,
+                };
+                environment.insert("Self".to_string(), owner);
+                if depth == references.len() && autoref.is_none() && implementation.trait_ty.is_none() { return Ok(None); }
+                let Some(found) = crate::generics::implementation_method(self.source, candidate, name) else { continue; };
+                {
+                    let method = found;
+                    let function = self.source.functions[method].clone();
+                    if function.name != name || (function.params.is_empty() || function.params[0].name != "self") { continue; }
+                    let first = match self.source_type(function.params[0].ty, &environment) {
+                        Ok(first) => first, Err(_) => { uncertain_rank = Some(0); continue; }
+                    };
+                    let receiver = if self.same_projection_receiver(first, owner) { primitive::Receiver::Value }
+                        else { match self.shape(first) {
+                            Some(Shape::Ref(mutable, inner)) if self.same_projection_receiver(inner, owner) =>
+                                if mutable { primitive::Receiver::Mutable } else { primitive::Receiver::Shared },
+                            _ => continue,
+                        }};
+                    let Some(candidate_rank) = primitive::adapted_rank(&references, depth, autoref, receiver) else { continue; };
+                    if !canonical && candidate_rank >= inherent_rank { continue; }
+                    let mut conditional = !implementation.predicates.is_empty();
+                    for parameter in &implementation.generics { conditional |= !parameter.bounds.is_empty(); }
+                    let mut needs_arguments = false;
+                    for parameter in &implementation.generics {
+                        if !parameter.lifetime {
+                            if let Some(variable) = environment.get(&parameter.name) {
+                                needs_arguments |= self.shape(*variable).is_none();
+                            }
+                        }
+                    }
+                    if conditional && !needs_arguments {
+                        // Known receiver substitutions can be proved at selection.
+                        // Do not impose a potentially ineligible method signature.
+                        uncertain_rank = Some(match uncertain_rank { Some(previous) => previous.min(candidate_rank), None => candidate_rank });
+                        continue;
+                    }
+                    if canonical {
+                        if source_inherent.is_some() {
+                            uncertain_rank = Some(match uncertain_rank { Some(previous) => previous.min(inherent_rank), None => inherent_rank });
+                        }
+                        source_inherent = Some((candidate, method, environment.clone()));
+                        continue;
+                    }
+                    let previous_rank = match &selected { Some((previous, _, _, _)) => Some(*previous), None => None };
+                    match previous_rank {
+                        Some(previous) if previous < candidate_rank => {}
+                        Some(previous) if previous == candidate_rank => ambiguous = true,
+                        _ => { selected = Some((candidate_rank, candidate, method, environment.clone())); ambiguous = false; }
+                    }
+                }
+            }
+        }
+        let winning_rank = match &selected { Some((rank, _, _, _)) => *rank, None => inherent_rank };
+        let uncertain = match uncertain_rank { Some(rank) => rank <= winning_rank, None => false };
+        if uncertain || ambiguous {
+            self.watch_shape(receiver, id);
+            return Ok(Some(false));
+        }
+        let selected = match selected {
+            Some((_, candidate, method, environment)) => Some((candidate, method, environment)),
+            None => {
+                if super::super::methods::direct(Shape::Atom(primitive_name.clone()).primitive(), name).is_some() { return Ok(None); }
+                source_inherent
+            },
+        };
+        if let Some((candidate, method, mut environment)) = selected {
+            let implementation = self.source.impls[candidate].clone();
+            self.parameter_equations(&implementation.generics, &mut environment, false)?;
+            self.predicate_equations(&implementation.predicates, &mut environment, false)?;
+            if let Some(bound) = implementation.trait_ty {
+                let owner = *environment.get(&"Self".to_string()).unwrap();
+                self.trait_equations(owner, "Self", bound, &mut environment, false)?;
+            }
+            if matches!(self.source.function_owner(a::FunctionId { index: method }), a::FunctionOwner::Trait(_)) {
+                return Ok(Some(self.primitive_default_header((candidate, method, expression),
+                    types, arguments, result, environment, span)?));
+            }
+            self.method_application_header((candidate, method, expression),
+                types, arguments, result, environment, span)?;
+            return Ok(Some(true));
+        }
+        if super::super::methods::direct(Shape::Atom(primitive_name).primitive(), name).is_some() {
+            return Ok(None);
+        }
+        // Final selection emits the located unsupported-inherent diagnostic.
+        // In particular, a shadow trait must not determine argument/result types.
+        Ok(Some(false))
+    }
+}
+
+impl Infer<'_, '_> {
+    fn primitive_default_header(
+        &mut self, selection: (usize, usize, a::ExprId), types: &[a::TypeId],
+        arguments: &[Variable], result: Variable,
+        environment: BTreeMap<String, Variable>, span: a::Span,
+    ) -> Result<bool> {
+        let (candidate, method, expression) = selection;
+        let implementation = self.source.impls[candidate].clone();
+        let Some(bound) = implementation.trait_ty else { return Ok(false); };
+        let a::Type::Path(path) = self.source.types[bound].kind.clone() else { return Ok(false); };
+        let receiver = *environment.get(&"Self".to_string()).unwrap();
+        self.binding_equations(receiver, bound, &environment, false)?;
+        let Some((declaration, trait_arguments, mut signature)) =
+            self.trait_application(receiver, &path, &environment)? else { return Ok(false); };
+        let a::Item::Trait(owner) = self.source.declarations[declaration].item else { return Ok(false); };
+        let associated = self.source.traits[owner].associated.clone();
+        for item in &associated {
+            if !item.generics.is_empty() { continue; }
+            let value = self.qualified_projection(receiver, declaration, &trait_arguments, &item.name, span);
+            signature.insert(format!("Self::{}", item.name), value);
+        }
+        let output = self.header_signature(method, types, arguments, signature, 1, span)?;
+        self.unify(result, output, span)?;
+        // Impl and default-method parameters have separate scopes, even when
+        // their spellings coincide. Only impl arguments authorize selection;
+        // the trait-scoped call infers its method arguments independently.
+        let mut application = BTreeMap::new();
+        for parameter in &implementation.generics {
+            if !parameter.lifetime {
+                if let Some(value) = environment.get(&parameter.name) {
+                    application.insert(parameter.name.clone(), *value);
+                }
+            }
+        }
+        self.definition.method_applications.insert(expression, super::MethodApplication {
+            implementation: candidate, method, arguments: application,
+        });
+        Ok(true)
+    }
+}

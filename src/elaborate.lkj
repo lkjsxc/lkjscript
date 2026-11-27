@@ -22,6 +22,7 @@ mod inference;
 pub mod incremental;
 mod integers;
 mod methods;
+mod primitive_methods;
 pub(crate) mod numeric_operators;
 mod operators;
 mod opaque;
@@ -4389,11 +4390,22 @@ impl Builder<'_, '_> {
         let mut base = place_type(&self.compiler.types, self.function, &place)
             .ok_or_else(|| err(span, "E_TYPE", "invalid method receiver"))?;
         let mut target = place.clone();
-        let selection = if self.compiler.contracts.is_none() {
+        let mut selection = if self.compiler.contracts.is_none() {
             self.compiler.method_selections.get(&expression).cloned()
         } else {
             None
         };
+        if selection.is_none() {
+            selection = self.primitive_method_selection(base, name, expression, span)?;
+            if let Some(selected) = &selection {
+                if let generic_check::MethodTarget::Source(index) = selected.target {
+                    if let Some(evidence) = self.compiler.semantic_evidence.as_mut() { evidence.method(expression, index); }
+                }
+                if self.compiler.contracts.is_some() {
+                    self.compiler.method_selections.insert(expression, selected.clone());
+                }
+            }
+        }
         let mut dereferences = 0;
         while let ir::TypeKind::Ref { inner, .. } = self.compiler.types[base].kind {
             if selection
@@ -4413,6 +4425,11 @@ impl Builder<'_, '_> {
                     "E_GENERIC",
                     "specialized receiver differs from checked dereference path",
                 ));
+            }
+            if let Some(mutable) = selected.autoref {
+                let borrowed = self.borrow(target, mutable, span.line)?;
+                target = ir::Place::local(borrowed.0);
+                base = borrowed.1;
             }
             match &selected.target {
                 generic_check::MethodTarget::Trait(identity) => {
@@ -4434,6 +4451,7 @@ impl Builder<'_, '_> {
             self.compiler.method_selections.insert(
                 expression,
                 generic_check::MethodSelection {
+                    autoref: None,
                     dereferences,
                     target: generic_check::MethodTarget::Builtin,
                 },
@@ -4520,6 +4538,7 @@ impl Builder<'_, '_> {
                     self.compiler.method_selections.insert(
                         expression,
                         generic_check::MethodSelection {
+                            autoref: None,
                             dereferences,
                             target: generic_check::MethodTarget::Trait(
                                 crate::generics::TraitIdentity::Builtin(

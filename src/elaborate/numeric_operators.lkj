@@ -84,7 +84,7 @@ impl Builder<'_, '_> {
                     || right_type.is_some_and(|ty| self.numeric_scalar(self.primitive_value_type(ty)))) };
         if saved.is_none() && primitive {
             self.compiler.method_selections.insert(expression,
-                MethodSelection { dereferences: 0, target: MethodTarget::Builtin });
+                MethodSelection { autoref: None, dereferences: 0, target: MethodTarget::Builtin });
             return Ok(None);
         }
         let (_, owner) = match declaration(self.compiler.source, &self.compiler.names, operation, span) {

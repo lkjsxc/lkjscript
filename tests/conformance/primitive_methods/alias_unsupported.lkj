@@ -1,0 +1,15 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+type Word = u32;
+trait Shadow {
+    fn rotate_left(self, count: u32) -> Word;
+}
+impl Shadow for Word {
+    fn rotate_left(self, _count: u32) -> Word {
+        1
+    }
+}
+pub fn probe() -> i64 {
+    let value: Word = 21;
+    value.rotate_left(1) as i64
+}

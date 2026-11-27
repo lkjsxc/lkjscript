@@ -1,0 +1,13 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Shadow: Sized {
+    fn rotate_left(self, count: u32) -> Self;
+}
+impl Shadow for i64 {
+    fn rotate_left(self, _count: u32) -> i64 {
+        1
+    }
+}
+pub fn probe() -> i64 {
+    21i64.rotate_left(1u32) as i64
+}

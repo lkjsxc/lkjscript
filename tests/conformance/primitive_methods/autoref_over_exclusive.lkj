@@ -1,0 +1,19 @@
+// expect: value 42
+// witness: {}
+trait Shadow {
+    fn is_ascii(self) -> bool;
+}
+impl Shadow for &&mut u8 {
+    fn is_ascii(self) -> bool {
+        false
+    }
+}
+pub fn probe() -> i64 {
+    let mut byte = b'a';
+    let reference = &mut byte;
+    if reference.is_ascii() {
+        1
+    } else {
+        42
+    }
+}

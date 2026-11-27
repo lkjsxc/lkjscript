@@ -1,0 +1,13 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Shadow {
+    fn total_cmp(&self, other: &f64) -> i64;
+}
+impl Shadow for f64 {
+    fn total_cmp(&self, _other: &f64) -> i64 {
+        42
+    }
+}
+pub fn probe() -> i64 {
+    0.0f64.total_cmp(&1.0f64) as i64
+}

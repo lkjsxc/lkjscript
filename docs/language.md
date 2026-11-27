@@ -955,6 +955,36 @@ An absent integer library refuses the spelling rather than supplying a hidden
 value. The source `SaturatingArithmetic::saturating_add` implementations use
 checked addition and the corresponding typed limit on overflow.
 
+### Primitive method selection
+
+For the ten integer types, f64, bool and char, stable inherent members follow the
+[Rust receiver search order](https://doc.rust-lang.org/reference/expressions/method-call-expr.html):
+try the receiver, its shared borrow and its exclusive borrow at each dereference
+level. An inherent member wins over a trait only at the same receiver position.
+Thus a trait `rotate_left(&self, ...)` on an explicitly shared integer can win
+before the integer's by-value inherent method. Higher-priority trait defaults and
+reference implementations use the existing trait selection and loan checks.
+
+The grouped name/signature inventory is the stable Rust 1.97 primitive API;
+nightly and later additions are not reserved. Integer signedness and the u8
+ASCII members remain distinct. i128, u128 and f32 still have no admitted scalar
+type. Existing direct operations and the exact source CheckedArithmetic,
+SaturatingArithmetic and ByteAscii declarations provide implemented behavior;
+a same-spelled user trait cannot become one of those providers. No arithmetic
+body or checked-IR operation is added by lookup. These source providers also
+admit type-qualified calls such as `i32::checked_add(40, 2)` and
+`u8::is_ascii_digit(&byte)`, with the same declaration identity and signature.
+
+A missing inherent member gives a located `E_UNSUPPORTED` naming `Type::member`
+instead of selecting a lower-priority user trait. Incompatible arguments do not
+restart lookup. The same boundary applies to type-only associated calls; an
+associated function without self does not reserve a dot-call name. Explicit
+`<Type as Trait>::member(...)` remains intentional trait selection, and a generic
+call retains its definition-time trait choice after specialization. Primitive
+aliases keep primitive identity; nominal lookalikes keep their own identity.
+Authored primitive inherent implementations remain a lkjscript-only source
+extension with their existing lookup; Rust rejects those definitions.
+
 `Bound`, `Range`, `RangeFrom`, `RangeTo`, `RangeToInclusive`,
 `RangeFull` and `RangeInclusive` are ordinary source values. All six range
 forms implement `RangeBounds<T>`. This initial `contains` contract compares

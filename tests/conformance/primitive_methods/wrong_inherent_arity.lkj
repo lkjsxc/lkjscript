@@ -1,0 +1,13 @@
+// expect: reject E_TYPE
+// witness: {"rustAccept":false,"rustCode":"E0061"}
+trait Shadow {
+    fn wrapping_add(self) -> i64;
+}
+impl Shadow for i32 {
+    fn wrapping_add(self) -> i64 {
+        42
+    }
+}
+pub fn probe() -> i64 {
+    1i32.wrapping_add()
+}

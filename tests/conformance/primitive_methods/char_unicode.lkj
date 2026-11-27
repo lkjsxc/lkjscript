@@ -1,0 +1,17 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Shadow {
+    fn is_alphabetic(self) -> bool;
+}
+impl Shadow for char {
+    fn is_alphabetic(self) -> bool {
+        false
+    }
+}
+pub fn probe() -> i64 {
+    if 'A'.is_alphabetic() {
+        42
+    } else {
+        1
+    }
+}

@@ -1,0 +1,13 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Shadow {
+    fn sqrt(self) -> f64;
+}
+impl Shadow for f64 {
+    fn sqrt(self) -> f64 {
+        1.0
+    }
+}
+pub fn probe() -> i64 {
+    1764.0f64.sqrt() as i64
+}

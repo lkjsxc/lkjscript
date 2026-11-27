@@ -1,0 +1,15 @@
+// expect: reject E_BORROW
+// witness: {"rustAccept":false,"rustCode":"E0596"}
+trait Shadow {
+    fn rotate_left(self, count: u32) -> i64;
+}
+impl Shadow for &mut &u32 {
+    fn rotate_left(self, _count: u32) -> i64 {
+        42
+    }
+}
+pub fn probe() -> i64 {
+    let value = 21u32;
+    let reference = &value;
+    reference.rotate_left(1)
+}

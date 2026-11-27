@@ -1,0 +1,13 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+trait Shadow {
+    fn from_be(x: u32) -> u32;
+}
+impl Shadow for u32 {
+    fn from_be(_: u32) -> u32 {
+        1
+    }
+}
+pub fn probe() -> i64 {
+    u32::from_be(704643072) as i64
+}

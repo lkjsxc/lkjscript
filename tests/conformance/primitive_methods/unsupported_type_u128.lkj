@@ -1,0 +1,6 @@
+// expect: reject E_NAME
+// witness: {"rustAccept":true}
+pub fn probe() -> i64 {
+    let value: u128 = 42;
+    value as i64
+}

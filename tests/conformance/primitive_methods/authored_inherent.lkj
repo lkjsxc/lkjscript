@@ -1,0 +1,10 @@
+// expect: value 42
+// Authored primitive inherent implementations are lkjscript-only.
+impl u32 {
+    fn rotate_left(self, _count: u32) -> i64 {
+        42
+    }
+}
+pub fn probe() -> i64 {
+    21u32.rotate_left(1)
+}

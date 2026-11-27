@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {}
+trait Shadow {
+    fn make_ascii_uppercase(&self) -> i64;
+}
+impl Shadow for char {
+    fn make_ascii_uppercase(&self) -> i64 {
+        42
+    }
+}
+pub fn probe() -> i64 {
+    'a'.make_ascii_uppercase()
+}

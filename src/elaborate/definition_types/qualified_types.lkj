@@ -156,18 +156,29 @@ impl Infer<'_, '_> {
             self.unify(result, output, span)?;
             return Ok(true);
         }
+        let provider_name = match &shape {
+            Shape::Atom(primitive) => super::super::primitive_methods::provider(primitive, name), _ => None,
+        };
+        let provider = match provider_name {
+            Some(provider) => match self.names.library_type("integer", provider, span) {
+                Ok(path) => path.declaration, Err(_) => None,
+            },
+            None => None,
+        };
         let head = self.shape_head(receiver);
         let head_view = match &head { Some(head) => Some(head.as_str()), None => None };
         let implementations = self.implementations.associated_method_candidates_by_head(self.source, head_view, name);
         let mut candidates: Vec<(usize, usize, BTreeMap<String, Variable>)> = Vec::new();
         let mut inherent: Vec<(usize, usize, BTreeMap<String, Variable>)> = Vec::new();
+        let mut provided: Vec<(usize, usize, BTreeMap<String, Variable>)> = Vec::new();
         for candidate in implementations {
             let implementation = self.source.impls[candidate].clone();
             let trait_declaration = implementation.trait_ty.and_then(|ty| match &self.source.types[ty].kind {
                 a::Type::Path(path) => path.declaration,
                 _ => None,
             });
-            if trait_declaration.is_some_and(|declaration| !self.names.trait_in_scope(scope, declaration, span)) {
+            let canonical = provider.is_some() && trait_declaration == provider;
+            if !canonical && trait_declaration.is_some_and(|declaration| !self.names.trait_in_scope(scope, declaration, span)) {
                 continue;
             }
             let environment = match self.implementation_environment(candidate, receiver)? {
@@ -178,17 +189,25 @@ impl Infer<'_, '_> {
             if let Some(method) = crate::generics::implementation_method(self.source, candidate, name) {
                 let function = &self.source.functions[method];
                 if function.name != name || function.params.len() != arguments.len()
-                    || function.params.first().is_some_and(|parameter| parameter.name == "self") {
+                    || (!canonical && function.params.first().is_some_and(|parameter| parameter.name == "self")) {
                     continue;
                 }
                 if implementation.trait_ty.is_none() {
                     if crate::resolve::visible(self.source, self.names.scope(&function.module), function.public, scope) {
                         inherent.push((candidate, method, environment.clone()));
                     }
-                } else { candidates.push((candidate, method, environment.clone())); }
+                } else if canonical { provided.push((candidate, method, environment.clone())); }
+                else { candidates.push((candidate, method, environment.clone())); }
             }
         }
         if !inherent.is_empty() { candidates = inherent; }
+        else if !provided.is_empty() { candidates = provided; }
+        else if let Shape::Atom(primitive) = &shape {
+            if super::super::primitive_methods::member(primitive, name).is_some() {
+                return Ok(false);
+            }
+        }
+
         if candidates.len() != 1 { return Ok(false); }
         let (candidate, method, mut environment) = candidates.pop().unwrap();
         let implementation = self.source.impls[candidate].clone();

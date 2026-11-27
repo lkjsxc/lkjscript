@@ -1,0 +1,296 @@
+//! Primitive inherent names are a source-language lookup boundary, not IR operations.
+//! Stable Rust 1.97 receiver signatures are surveyed in docs/language.md. Nightly
+//! names and trait-provided methods are deliberately absent. Associated functions
+//! participate in type-qualified lookup, never in dot-call lookup.
+use super::{Builder, Result, a, err, ir, methods};
+use super::generic_check::{MethodSelection, MethodTarget};
+use std::collections::{BTreeMap, BTreeSet};
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub(super) enum Receiver { Value, Shared, Mutable, Associated }
+
+pub(super) fn integer(name: &str) -> bool {
+    matches!(name, "i8" | "i16" | "i32" | "i64" | "isize"
+        | "u8" | "u16" | "u32" | "u64" | "usize")
+}
+
+pub(super) fn member(primitive: &str, name: &str) -> Option<Receiver> {
+    if (primitive == "u8" || primitive == "char") && matches!(name,
+        "is_ascii" | "to_ascii_uppercase" | "to_ascii_lowercase" | "eq_ignore_ascii_case"
+        | "is_ascii_alphabetic" | "is_ascii_uppercase" | "is_ascii_lowercase"
+        | "is_ascii_alphanumeric" | "is_ascii_digit" | "is_ascii_hexdigit"
+        | "is_ascii_punctuation" | "is_ascii_graphic" | "is_ascii_whitespace" | "is_ascii_control")
+    { return Some(Receiver::Shared); }
+    if (primitive == "u8" || primitive == "char")
+        && matches!(name, "make_ascii_uppercase" | "make_ascii_lowercase")
+    { return Some(Receiver::Mutable); }
+    if primitive == "u8" && name == "escape_ascii" { return Some(Receiver::Value); }
+    if integer(primitive) {
+        if matches!(name, "from_be" | "from_le" | "from_be_bytes" | "from_le_bytes"
+            | "from_ne_bytes" | "min_value" | "max_value" | "from_str_radix")
+        { return Some(Receiver::Associated); }
+        if matches!(name,
+            "abs_diff" | "checked_add" | "checked_div" | "checked_div_euclid"
+            | "checked_ilog" | "checked_ilog10" | "checked_ilog2" | "checked_mul" | "checked_neg"
+            | "checked_pow" | "checked_rem" | "checked_rem_euclid" | "checked_shl" | "checked_shr" | "checked_sub"
+            | "count_ones" | "count_zeros" | "div_euclid" | "highest_one" | "ilog" | "ilog10" | "ilog2"
+            | "isolate_highest_one" | "isolate_lowest_one" | "isqrt" | "leading_ones" | "leading_zeros"
+            | "lowest_one" | "midpoint"
+            | "overflowing_add" | "overflowing_div" | "overflowing_div_euclid" | "overflowing_mul"
+            | "overflowing_neg" | "overflowing_pow" | "overflowing_rem" | "overflowing_rem_euclid"
+            | "overflowing_shl" | "overflowing_shr" | "overflowing_sub"
+            | "pow" | "rem_euclid" | "reverse_bits" | "rotate_left" | "rotate_right"
+            | "saturating_add" | "saturating_div" | "saturating_mul" | "saturating_pow" | "saturating_sub"
+            | "strict_add" | "strict_div" | "strict_div_euclid" | "strict_mul" | "strict_neg" | "strict_pow"
+            | "strict_rem" | "strict_rem_euclid" | "strict_shl" | "strict_shr" | "strict_sub"
+            | "swap_bytes" | "to_be" | "to_be_bytes" | "to_le" | "to_le_bytes" | "to_ne_bytes"
+            | "trailing_ones" | "trailing_zeros" | "unbounded_shl" | "unbounded_shr"
+            | "unchecked_add" | "unchecked_mul" | "unchecked_shl" | "unchecked_shr" | "unchecked_sub"
+            | "wrapping_add" | "wrapping_div" | "wrapping_div_euclid" | "wrapping_mul" | "wrapping_neg"
+            | "wrapping_pow" | "wrapping_rem" | "wrapping_rem_euclid" | "wrapping_shl" | "wrapping_shr" | "wrapping_sub")
+        { return Some(Receiver::Value); }
+        if primitive.starts_with("i") && matches!(name,
+            "abs" | "cast_unsigned" | "checked_abs" | "checked_add_unsigned" | "checked_isqrt"
+            | "checked_sub_unsigned" | "is_negative" | "is_positive" | "overflowing_abs"
+            | "overflowing_add_unsigned" | "overflowing_sub_unsigned" | "saturating_abs"
+            | "saturating_add_unsigned" | "saturating_neg" | "saturating_sub_unsigned" | "signum"
+            | "strict_abs" | "strict_add_unsigned" | "strict_sub_unsigned" | "unchecked_neg"
+            | "unsigned_abs" | "wrapping_abs" | "wrapping_add_unsigned" | "wrapping_sub_unsigned")
+        { return Some(Receiver::Value); }
+        if primitive.starts_with("u") && matches!(name,
+            "bit_width" | "borrowing_sub" | "carrying_add" | "carrying_mul" | "carrying_mul_add"
+            | "cast_signed" | "checked_add_signed" | "checked_next_multiple_of"
+            | "checked_next_power_of_two" | "checked_signed_diff" | "checked_sub_signed" | "div_ceil"
+            | "is_multiple_of" | "is_power_of_two" | "next_multiple_of" | "next_power_of_two"
+            | "overflowing_add_signed" | "overflowing_sub_signed" | "saturating_add_signed"
+            | "saturating_sub_signed" | "strict_add_signed" | "strict_sub_signed"
+            | "wrapping_add_signed" | "wrapping_sub_signed")
+        { return Some(Receiver::Value); }
+    }
+    if primitive == "f64" {
+        if matches!(name, "from_bits" | "from_be_bytes" | "from_le_bytes" | "from_ne_bytes")
+        { return Some(Receiver::Associated); }
+        if name == "total_cmp" { return Some(Receiver::Shared); }
+        if matches!(name,
+            "floor" | "ceil" | "round" | "round_ties_even" | "trunc" | "fract" | "mul_add" | "div_euclid" | "rem_euclid"
+            | "powi" | "powf" | "sqrt" | "exp" | "exp2" | "ln" | "log" | "log2" | "log10" | "abs_sub" | "cbrt" | "hypot"
+            | "sin" | "cos" | "tan" | "asin" | "acos" | "atan" | "atan2" | "sin_cos" | "exp_m1" | "ln_1p"
+            | "sinh" | "cosh" | "tanh" | "asinh" | "acosh" | "atanh"
+            | "is_nan" | "is_infinite" | "is_finite" | "is_subnormal" | "is_normal" | "classify"
+            | "is_sign_positive" | "is_sign_negative" | "next_up" | "next_down" | "recip"
+            | "to_degrees" | "to_radians" | "max" | "min" | "midpoint" | "to_int_unchecked"
+            | "to_bits" | "to_be_bytes" | "to_le_bytes" | "to_ne_bytes" | "clamp" | "abs" | "signum" | "copysign")
+        { return Some(Receiver::Value); }
+    }
+    if primitive == "bool" && matches!(name, "then" | "then_some") { return Some(Receiver::Value); }
+    if primitive == "char" {
+        if matches!(name, "decode_utf16" | "from_u32" | "from_u32_unchecked" | "from_digit")
+        { return Some(Receiver::Associated); }
+        if matches!(name,
+            "is_digit" | "to_digit" | "escape_unicode" | "escape_debug" | "escape_default"
+            | "len_utf8" | "len_utf16" | "encode_utf8" | "encode_utf16"
+            | "is_alphabetic" | "is_lowercase" | "is_uppercase" | "is_numeric" | "is_alphanumeric"
+            | "is_whitespace" | "is_control" | "to_lowercase" | "to_uppercase")
+        { return Some(Receiver::Value); }
+    }
+    None
+}
+
+pub(super) fn method(primitive: &str, name: &str) -> Option<Receiver> {
+    member(primitive, name).filter(|receiver| *receiver != Receiver::Associated)
+}
+
+/// These ordinary library implementations supply existing inherent behavior.
+/// Compare their resolved declaration IDs, never a user's same-spelled trait.
+pub(super) fn provider(primitive: &str, name: &str) -> Option<&'static str> {
+    if integer(primitive) && matches!(name, "checked_add" | "checked_sub" | "checked_mul" | "checked_div" | "checked_rem")
+    { return Some("CheckedArithmetic"); }
+    if integer(primitive) && name == "saturating_add" { return Some("SaturatingArithmetic"); }
+    if primitive == "u8" && member(primitive, name) == Some(Receiver::Shared) { return Some("ByteAscii"); }
+    None
+}
+
+/// First occurrence of the declared self type in T, &T, &mut T, then autoderef.
+/// Keeping this calculation shared prevents inference from choosing another tier.
+pub(super) fn rank(references: &[bool], depth: usize, receiver: Receiver) -> usize {
+    adapted_rank(references, depth, None, receiver).unwrap()
+}
+
+pub(super) fn adapted_rank(references: &[bool], depth: usize, autoref: Option<bool>, receiver: Receiver) -> Option<usize> {
+    let mut declared = Vec::new();
+    if receiver == Receiver::Shared { declared.push(false); }
+    if receiver == Receiver::Mutable { declared.push(true); }
+    if let Some(mutable) = autoref { declared.push(mutable); }
+    declared.extend_from_slice(&references[depth..]);
+    for step in 0..references.len() + 1 {
+        let tail = &references[step..];
+        if declared.as_slice() == tail { return Some(step * 3); }
+        if declared.len() == tail.len() + 1 && &declared[1..] == tail {
+            return Some(step * 3 + if declared[0] { 2 } else { 1 });
+        }
+    }
+    None
+}
+
+/// Include unoverridden trait defaults; their receiver can precede an inherent one.
+pub(super) fn candidates(source: &a::Program, index: &crate::generics::ImplementationIndex,
+    head: Option<&str>, name: &str) -> Vec<usize> {
+    let mut found = BTreeSet::new();
+    for candidate in index.method_candidates_by_head(head, name) { found.insert(candidate); }
+    for (owner, declaration) in source.traits.iter().enumerate() {
+        let mut provided = false;
+        for method in &declaration.methods {
+            let function = &source.functions[*method];
+            if function.name == name && function.body.is_some()
+                && (!function.params.is_empty() && function.params[0].name == "self") {
+                provided = true;
+            }
+        }
+        if provided {
+            for candidate in index.trait_candidates_by_head(owner, head) { found.insert(candidate); }
+        }
+    }
+    let mut result = Vec::new();
+    for candidate in found { result.push(candidate); }
+    result
+}
+
+pub(super) fn unsupported(primitive: &str, name: &str, span: a::Span) -> a::Diagnostic {
+    err(span, "E_UNSUPPORTED", &format!(
+        "inherent primitive method {primitive}::{name} is not implemented; help: use an explicit trait-qualified call to select an extension method"))
+}
+
+impl super::Compiler<'_> {
+    pub(super) fn primitive_name(&self, ty: usize) -> Option<&str> {
+        if self.applications.contains_key(&ty) { return None; }
+        if matches!(self.types[ty].kind, ir::TypeKind::Int { .. } | ir::TypeKind::F64 | ir::TypeKind::Bool | ir::TypeKind::Char) {
+            Some(self.types[ty].name.as_str())
+        } else { None }
+    }
+}
+
+impl Builder<'_, '_> {
+    pub(super) fn primitive_method_selection(
+        &mut self, original: usize, name: &str, expression: a::ExprId, span: a::Span,
+    ) -> Result<Option<MethodSelection>> {
+        let mut scalar = original;
+        while let ir::TypeKind::Ref { inner, .. } = self.compiler.types[scalar].kind { scalar = inner; }
+        let primitive = match self.compiler.primitive_name(scalar) {
+            Some(name) => name.to_string(), None => return Ok(None),
+        };
+        let Some(inherent_receiver) = method(&primitive, name) else { return Ok(None); };
+        let mut owners = vec![original];
+        let mut references = Vec::new();
+        let mut current = original;
+        while let ir::TypeKind::Ref { inner, mutable } = self.compiler.types[current].kind {
+            references.push(mutable); owners.push(inner); current = inner;
+        }
+        let inherent_rank = rank(&references, references.len(), inherent_receiver);
+        let provider = match provider(&primitive, name) {
+            Some(provider) => match self.compiler.names.library_type("integer", provider, span) {
+                Ok(path) => path.declaration, Err(_) => None,
+            },
+            None => None,
+        };
+        let mut selected: Option<(usize, usize, Option<bool>, MethodTarget)> = None;
+        let mut ambiguous = false;
+        let mut source_inherent = None;
+        let mut unresolved_rank: Option<usize> = None;
+        let mut variants = Vec::new();
+        for depth in 0..owners.len() {
+            variants.push((owners[depth], depth, None));
+            for kind in 0..2 {
+                let mutable = kind == 1;
+                let borrowed = self.compiler.reference(owners[depth], mutable);
+                if !owners.contains(&borrowed) { variants.push((borrowed, depth, Some(mutable))); }
+            }
+        }
+        for (owner, depth, autoref) in variants {
+            let head = if owner == scalar { Some(primitive.as_str()) } else { None };
+            let implementations = candidates(self.compiler.source, &self.compiler.implementations, head, name);
+            for index in implementations {
+                let implementation = self.compiler.source.impls[index].clone();
+                let mut substitutions = BTreeMap::new();
+                if !self.infer_type_matches(implementation.target, owner, &mut substitutions)? { continue; }
+                substitutions.insert("Self".to_string(), owner);
+                if self.compiler.resolve(implementation.target, &substitutions).ok() != Some(owner) { continue; }
+                // Authored primitive inherent impls are an existing lkjscript extension.
+                // Rust refuses their definitions; preserve their ordinary source lookup.
+                if owner == scalar && implementation.trait_ty.is_none() { return Ok(None); }
+                let declaration = implementation.trait_ty.and_then(|ty| match &self.compiler.source.types[ty].kind {
+                    a::Type::Path(path) => path.declaration,
+                    _ => None,
+                });
+                let canonical = owner == scalar && provider.is_some() && declaration == provider;
+                if !canonical && !self.trait_available(&implementation, owner, span) { continue; }
+                let Some(method) = crate::generics::implementation_method(self.compiler.source, index, name) else { continue; };
+                {
+                    let candidate = method;
+                    let function = self.compiler.source.functions[candidate].clone();
+                    if function.name != name || (function.params.is_empty() || function.params[0].name != "self") { continue; }
+                    let first = match self.compiler.resolve(function.params[0].ty, &substitutions) {
+                        Ok(first) => first, Err(_) => continue,
+                    };
+                    let receiver = if first == owner { Receiver::Value }
+                        else { match self.compiler.types[first].kind {
+                            ir::TypeKind::Ref { inner, mutable } if inner == owner =>
+                                if mutable { Receiver::Mutable } else { Receiver::Shared },
+                            _ => continue,
+                        }};
+                    let Some(candidate_rank) = adapted_rank(&references, depth, autoref, receiver) else { continue; };
+                    if !canonical && candidate_rank >= inherent_rank { continue; }
+                    let mut application = substitutions.clone();
+                    if !self.complete_method_application(expression, index, candidate, &mut application) { continue; }
+                    let mut complete = true;
+                    for parameter in &implementation.generics {
+                        if !parameter.lifetime && !application.contains_key(&parameter.name) { complete = false; }
+                    }
+                    if !complete {
+                        unresolved_rank = Some(match unresolved_rank { Some(previous) => previous.min(candidate_rank), None => candidate_rank });
+                        continue;
+                    }
+                    if let Err(problem) = self.compiler.implementation_bounds(&implementation, &application) {
+                        // Equations from this application cannot authorize a different tier.
+                        if let Some(inferred) = self.inferred.method_applications.get(&expression) {
+                            if inferred.implementation == index && inferred.method == candidate { return Err(problem); }
+                        }
+                        continue;
+                    }
+                    if canonical {
+                        if source_inherent.replace(candidate).is_some() {
+                            return Err(err(span, "E_TRAIT", "ambiguous source primitive implementation"));
+                        }
+                        continue;
+                    }
+                    let target = if matches!(self.compiler.source.function_owner(a::FunctionId { index: candidate }), a::FunctionOwner::Trait(_)) {
+                        let bound = implementation.trait_ty.unwrap();
+                        let a::Type::Path(path) = self.compiler.source.types[bound].kind.clone() else { unreachable!() };
+                        let identity = self.compiler.trait_identity(&path, &application, span)?;
+                        self.compiler.bound_method_target(&identity, &self.sub, span)?
+                    } else { MethodTarget::Source(candidate) };
+                    let previous_rank = match &selected { Some((previous, _, _, _)) => Some(*previous), None => None };
+                    match previous_rank {
+                        Some(previous) if previous < candidate_rank => {}
+                        Some(previous) if previous == candidate_rank => ambiguous = true,
+                        _ => { selected = Some((candidate_rank, depth, autoref, target)); ambiguous = false; }
+                    }
+                }
+            }
+        }
+        let winning_rank = match &selected { Some((rank, _, _, _)) => *rank, None => inherent_rank };
+        if let Some(rank) = unresolved_rank {
+            if rank <= winning_rank { return Err(err(span, "E_TYPE", "cannot infer the earlier primitive trait implementation arguments")); }
+        }
+        if let Some((_, depth, autoref, target)) = selected {
+            if ambiguous { return Err(err(span, "E_TRAIT", "ambiguous primitive receiver methods")); }
+            return Ok(Some(MethodSelection { autoref, dereferences: depth, target }));
+        }
+        if methods::direct(methods::receiver(&self.compiler.types[scalar].kind), name).is_some() {
+            return Ok(Some(MethodSelection { autoref: None, dereferences: references.len(), target: MethodTarget::Builtin }));
+        }
+        if let Some(source) = source_inherent {
+            return Ok(Some(MethodSelection { autoref: None, dereferences: references.len(), target: MethodTarget::Source(source) }));
+        }
+        Err(unsupported(&primitive, name, span))
+    }
+}
