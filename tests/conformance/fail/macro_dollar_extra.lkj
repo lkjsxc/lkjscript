@@ -1,0 +1,4 @@
+// expect: reject E_MACRO_MATCH
+// witness: {"root":true,"rustAccept":false}
+macro_rules! exact { ($) => { 42i64 }; }
+fn probe() -> i64 { exact!($ token) }

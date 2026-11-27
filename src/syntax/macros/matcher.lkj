@@ -8,6 +8,23 @@ struct Value { path: Vec<usize>, tokens: Vec<MacroToken> }
 #[derive(Clone)]
 struct Binding { name: String, fragment: String, depth: usize, values: Vec<Value>, repetitions: Vec<(Vec<usize>, usize)> }
 struct Repetition { body: Vec<MacroToken>, separator: Option<MacroToken>, minimum: usize, optional: bool, next: usize }
+// Rust keeps a dollar literal only at the end of its current token tree.
+// Matchers recurse on group slices; transcribers retain closing delimiters.
+fn literal_dollar(tokens: &[MacroToken], at: usize) -> bool {
+    symbol(&tokens[at], "$") && (at + 1usize == tokens.len()
+        || tokens[at + 1usize].kind == 6u8 && closing(&tokens[at + 1usize].text))
+}
+// Rust transcribes an unbound keyword metavariable as a raw identifier.
+// The surface has no raw-identifier token identity; copying its keyword text
+// would select a different literal arm. Bound captures retain their own tokens.
+fn unbound_raw_keyword(name: &str) -> bool {
+    matches!(name, "as" | "break" | "const" | "continue" | "else" | "enum" | "extern" | "false"
+        | "fn" | "for" | "if" | "impl" | "in" | "let" | "loop" | "match" | "mod" | "move"
+        | "mut" | "pub" | "ref" | "return" | "static" | "struct" | "trait" | "true" | "type"
+        | "unsafe" | "use" | "where" | "while" | "abstract" | "become" | "box" | "do"
+        | "final" | "macro" | "override" | "priv" | "typeof" | "unsized" | "virtual" | "yield"
+        | "async" | "await" | "dyn" | "gen" | "try")
+}
 fn repetition(tokens: &[MacroToken], at: usize) -> Result<Repetition, Diagnostic> {
     let end = group_end(tokens, at + 1usize)?;
     let mut next = end + 1usize;
@@ -50,7 +67,7 @@ fn variables(tokens: &[MacroToken], depth: usize, expr_end: bool, ty_end: bool,
     let mut at = 0usize;
     let mut consumes = false;
     while at < tokens.len() {
-        if symbol(&tokens[at], "$") {
+        if symbol(&tokens[at], "$") && !literal_dollar(tokens, at) {
             if at + 1usize < tokens.len() && symbol(&tokens[at + 1usize], "(") {
                 let repeat = repetition(tokens, at)?;
                 let mut expr_follows = follower(tokens, repeat.next, expr_end, false)?;
@@ -95,6 +112,27 @@ fn variables(tokens: &[MacroToken], depth: usize, expr_end: bool, ty_end: bool,
     }
     Ok(consumes)
 }
+// Validate every template, including unselected rules and zero-length repeats.
+// Otherwise adding a literal-dollar matcher could admit a malformed definition
+// merely because an earlier rule won or an invalid body happened not to repeat.
+fn template_syntax(tokens: &[MacroToken]) -> Result<(), Diagnostic> {
+    let mut at = 0usize;
+    while at < tokens.len() {
+        if symbol(&tokens[at], "$") && !literal_dollar(tokens, at) {
+            if symbol(&tokens[at + 1usize], "(") {
+                let repeat = repetition(tokens, at)?;
+                template_syntax(&repeat.body)?;
+                at = repeat.next;
+                continue;
+            }
+            if tokens[at + 1usize].kind != 0u8 {
+                return Err(error(tokens[at].span, "E_MACRO_RULE", "expected a capture name after $"));
+            }
+            at += 2usize;
+        } else { at += 1usize; }
+    }
+    Ok(())
+}
 pub(super) fn rules(definition: &MacroDefinition) -> Result<Vec<Rule>, Diagnostic> {
     let tokens = &definition.body;
     let mut at = 0usize;
@@ -110,6 +148,7 @@ pub(super) fn rules(definition: &MacroDefinition) -> Result<Vec<Rule>, Diagnosti
         let pattern = tokens[at + 1usize..pattern_end].to_vec();
         let mut bindings = Vec::new();
         variables(&pattern, 0usize, true, true, &mut bindings)?;
+        template_syntax(&tokens[template_start + 1usize..template_end])?;
         result.push(Rule { pattern, template: tokens[template_start + 1usize..template_end].to_vec(), variables: bindings });
         at = template_end + 1usize;
         if at < tokens.len() && !symbol(&tokens[at], ";") {
@@ -192,7 +231,7 @@ fn starts(pattern: &[MacroToken], at: usize, token: &MacroToken) -> Result<(bool
         let (tail, tail_fragment) = starts(pattern, repeat.next, token)?;
         return Ok((head || tail, fragment || tail_fragment));
     }
-    if symbol(&pattern[at], "$") {
+    if symbol(&pattern[at], "$") && !literal_dollar(pattern, at) {
         let fragment = pattern[at + 3usize].text.as_str();
         let accepts = fragment_start(fragment, token);
         return Ok((accepts, accepts));
@@ -268,7 +307,7 @@ fn matches(program: &mut Program, invocation: &MacroInvocation, pattern: &[Macro
             continue;
         }
         if *position >= end { return Ok(false); }
-        if symbol(&pattern[at], "$") {
+        if symbol(&pattern[at], "$") && !literal_dollar(pattern, at) {
             let name = &pattern[at + 1usize].text;
             let binding = bindings.iter().position(|binding| binding.name == *name).unwrap();
             let fragment = bindings[binding].fragment.clone();
@@ -384,7 +423,7 @@ fn transcribe(program: &Program, definition: &MacroDefinition, invocation: &Macr
     output: &mut Vec<MacroToken>) -> Result<(), Diagnostic> {
     let mut at = 0usize;
     while at < template.len() {
-        if symbol(&template[at], "$") {
+        if symbol(&template[at], "$") && !literal_dollar(template, at) {
             if at + 1usize < template.len() && symbol(&template[at + 1usize], "(") {
                 let repeat = repetition(template, at)?;
                 let count = repeat_count(&repeat.body, bindings, path)?;
@@ -406,8 +445,18 @@ fn transcribe(program: &Program, definition: &MacroDefinition, invocation: &Macr
             if name == "crate" {
                 let mut token = projected(&template[at + 1usize], invocation, 0usize); token.text = root_name(program, definition); output.push(token);
             } else {
-                let binding = bindings.iter().find(|binding| binding.name == *name)
-                    .ok_or_else(|| error(template[at + 1usize].span, "E_MACRO_RULE", "unknown expansion capture"))?;
+                let Some(binding) = bindings.iter().find(|binding| binding.name == *name) else {
+                    if unbound_raw_keyword(name) {
+                        return Err(error(template[at + 1usize].span, "E_UNSUPPORTED_MACRO",
+                            "unbound keyword metavariable requires a raw identifier token"));
+                    }
+                    // An inner macro can own this metavariable. Preserve both
+                    // projected tokens for its parser; never erase or recapture it.
+                    output.push(projected(&template[at], invocation, context));
+                    output.push(projected(&template[at + 1usize], invocation, context));
+                    at += 2usize;
+                    continue;
+                };
                 if binding.depth > path.len() { return Err(error(template[at].span, "E_MACRO_EXPANSION", "capture is still repeating at this depth")); }
                 let wanted = &path[..binding.depth];
                 let value = binding.values.iter().find(|value| value.path.as_slice() == wanted)

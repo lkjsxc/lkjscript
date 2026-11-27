@@ -1,0 +1,17 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! dollars { ($($)*) => { 42i64 }; }
+macro_rules! ending { ($($name:ident)* $) => { 42i64 }; }
+macro_rules! separated {
+    ($($name:ident)$+) => { 0usize $(+ { let $name = 1usize; $name })+ };
+}
+macro_rules! emit { ($($name:ident),+) => { separated!($($name)$+) }; }
+fn probe() -> i64 {
+    assert_eq!(dollars!(), 42i64);
+    assert_eq!(dollars!($ $ $), 42i64);
+    assert_eq!(ending!($), 42i64);
+    assert_eq!(ending!(one two $), 42i64);
+    assert_eq!(separated!(one $ two $ three), 3usize);
+    assert_eq!(emit!(one, two, three), 3usize);
+    42i64
+}

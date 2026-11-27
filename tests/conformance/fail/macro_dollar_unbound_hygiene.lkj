@@ -1,0 +1,5 @@
+// expect: reject E_NAME
+// witness: {"root":true,"rustAccept":false,"rustCode":"E0425"}
+macro_rules! receive { ($d:tt $name:ident) => { $name }; }
+macro_rules! forward { () => { receive!($local) }; }
+fn probe() -> i64 { let local = 42i64; forward!() }

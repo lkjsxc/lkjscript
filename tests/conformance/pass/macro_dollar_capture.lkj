@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! take { ($d:tt) => { 42i64 }; }
+macro_rules! named { ($d:tt $name:ident) => { 42i64 }; }
+macro_rules! exact { ($) => { 42i64 }; }
+macro_rules! forward { ($d:tt) => { exact!($d) }; }
+macro_rules! append { ($d:tt) => { named!($d token) }; }
+macro_rules! tree { ($tree:tt) => { grouped!($tree) }; }
+macro_rules! grouped { ([$]) => { 42i64 }; }
+fn probe() -> i64 {
+    assert_eq!(take!($), 42i64);
+    assert_eq!(forward!($), 42i64);
+    assert_eq!(append!($), 42i64);
+    assert_eq!(tree!([$]), 42i64);
+    42i64
+}

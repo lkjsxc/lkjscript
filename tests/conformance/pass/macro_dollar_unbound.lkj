@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! receive { ($d:tt $name:ident) => { 42i64 }; }
+macro_rules! forward { () => { receive!($unbound) }; }
+macro_rules! names { ($($value:ident $d:tt $name:ident;)*) => { 42i64 }; }
+macro_rules! repeat {
+    ($($value:ident),+) => { names!($($value $unbound;)*) };
+}
+fn probe() -> i64 {
+    assert_eq!(forward!(), 42i64);
+    assert_eq!(repeat!(one, two), 42i64);
+    42i64
+}

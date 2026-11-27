@@ -1329,6 +1329,15 @@ Each emitted occurrence gets fresh syntax and ordinary checking at its use site,
 including positional `impl Trait` obligations and constructor inference.
 Empty nested repetitions retain their outer iteration counts.
 
+A bare `$` is literal only at the end of its current token tree, including a
+nested group. It can be captured as `tt`, matched exactly, and forwarded through
+self-invocations. Dollar repetition separators follow the ordinary fragment
+follower rules. Every template is syntax-checked, including unselected arms
+and empty repetitions. Unbound ordinary `$name` pairs retain projected tokens
+for a later macro. Unbound names that require raw identifier identity refuse
+with `E_UNSUPPORTED_MACRO`. Bound captures keep their exact token identity.
+Generated macro definitions remain unsupported and retain wildcard recovery.
+
 A fragment that cannot begin at the next token lets matching try another arm.
 Once its parse starts, a parse error is fatal. A type fragment must end at the
 matcher boundary or precede `{`, `[`, `,`, `=>`, `:`, `=`, `>`, `>>`,

@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED_MACRO
+// witness: {"root":true,"rustAccept":true}
+macro_rules! overlap { ($($)* $) => { 42i64 }; }
+fn probe() -> i64 { overlap!($) }

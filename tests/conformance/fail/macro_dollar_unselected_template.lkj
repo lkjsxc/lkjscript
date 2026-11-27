@@ -1,0 +1,5 @@
+// expect: reject E_MACRO_RULE
+// witness: {"root":true,"rustAccept":false}
+macro_rules! receive { ($($t:tt)*) => { 42i64 }; }
+macro_rules! invalid { (good) => { 42i64 }; (bad) => { receive!($,) }; }
+fn probe() -> i64 { invalid!(good) }

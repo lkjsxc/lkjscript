@@ -481,8 +481,8 @@ fn source() -> i64 { discard_type!(UnresolvedUnused) }
     let mut split_origin = program.clone();
     let last = split_origin.macro_captures[split].tokens.len() - 1usize;
     split_origin.macro_captures[split].tokens[last].origin.end += 1usize;
-    let count = refused(&split_origin) + lifetime_token_origins() + block_and_tree_origins();
-    assert!(count == 8usize);
+    let count = refused(&split_origin) + lifetime_token_origins() + block_and_tree_origins() + dollar_token_origins();
+    assert!(count == 16usize);
     count as i64
 }
 fn lifetime_token_origins() -> usize {
@@ -544,6 +544,117 @@ fn source() -> i64 { let value = 21i64; relay!([@tag] {value}) }
     let mut reused = program.clone();
     reused.macro_captures[capture].materializations[1usize] = first;
     refused(&punctuation) + refused(&block) + refused(&reused)
+}
+fn dollar_refusal(text: &str, message: &str) {
+    let report = source::load_report("main.lkj", None, &mut |path: &str| {
+        Ok(if path == "main.lkj" { Some(text.as_bytes().to_vec()) } else { None })
+    });
+    assert!(report.diagnostics.iter().any(|problem|
+        problem.code == "E_UNSUPPORTED_MACRO" && problem.message == message));
+    assert!(report.program.enums.is_empty());
+    let failure = report.recovery.iter().find(|failure| failure.kind == "macro invocation"
+        && failure.diagnostic.message == message).unwrap();
+    assert!(failure.namespace && failure.coherence && failure.names.is_empty());
+    let opaque = report.recovery.iter().find(|failure|
+        failure.diagnostic.message == "unsupported macro: thread_local!; no visible declarative definition").unwrap();
+    assert!(opaque.namespace && opaque.coherence && opaque.names.is_empty());
+}
+fn dollar_token_origins() -> usize {
+    let (program, inputs) = parsed_fixture(r#"
+macro_rules! accept { ($) => { 42i64 }; ($d:tt $name:ident) => { 42i64 }; }
+macro_rules! relay { ($d:tt) => { accept!($d) }; }
+macro_rules! indirect { () => { accept!($future) }; }
+macro_rules! builder {
+    (($d:tt) $name:ident) => { fn $name() -> i64 { relay!($d) } };
+    ($name:ident) => { builder!(($) $name); };
+}
+builder!(generated);
+fn source() -> i64 { indirect!() }
+"#);
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    origins::collect(&program, &resolver).unwrap();
+    mounted_replay(&program, &inputs);
+    let outer_call = program.macro_invocations.iter().position(|call|
+        call.name == "builder" && call.parent.is_none()).unwrap();
+    let outer = program.macro_expansions.iter().position(|expansion|
+        expansion.invocation == outer_call).unwrap();
+    assert!(program.macro_expansions[outer].rule == 1usize);
+    let inner_call = program.macro_invocations.iter().position(|call|
+        call.name == "builder" && call.parent == Some(outer)).unwrap();
+    let inner = program.macro_expansions.iter().position(|expansion|
+        expansion.invocation == inner_call).unwrap();
+    assert!(program.macro_expansions[inner].rule == 0usize);
+    let dollar = program.macro_invocations[inner_call].tokens.iter().position(|token|
+        token.text == "$").unwrap();
+    let literal = &program.macro_invocations[inner_call].tokens[dollar];
+    assert!(literal.span == program.macro_invocations[outer_call].span);
+    assert!(literal.context == program.macro_expansions[outer].context);
+    assert!(literal.origin.end - literal.origin.start == 1usize);
+    let relay = program.macro_invocations.iter().find(|call| call.name == "relay").unwrap();
+    assert!(relay.tokens[0usize] == *literal);
+    let unknown = program.macro_invocations.iter().position(|call|
+        call.name == "accept" && call.tokens.len() == 2usize).unwrap();
+    let parent = program.macro_invocations[unknown].parent.unwrap();
+    assert!(program.macro_invocations[unknown].tokens[0usize].text == "$");
+    assert!(program.macro_invocations[unknown].tokens[1usize].text == "future");
+    for token in &program.macro_invocations[unknown].tokens {
+        assert!(token.span == program.macro_invocations[unknown].span);
+        assert!(token.context == program.macro_expansions[parent].context);
+    }
+
+    let mut text = program.clone();
+    text.macro_invocations[inner_call].tokens[dollar].text = "@".to_string();
+    let mut count = refused(&text);
+    let mut kind = program.clone();
+    kind.macro_invocations[inner_call].tokens[dollar].kind = 0u8;
+    count += refused(&kind);
+    let mut origin = program.clone();
+    origin.macro_invocations[inner_call].tokens[dollar].origin.start += 1usize;
+    count += refused(&origin);
+    let mut context = program.clone();
+    context.macro_invocations[inner_call].tokens[dollar].context += 1usize;
+    count += refused(&context);
+    let mut outer_rule = program.clone();
+    outer_rule.macro_expansions[outer].rule = 0usize;
+    count += refused(&outer_rule);
+    let mut inner_rule = program.clone();
+    inner_rule.macro_expansions[inner].rule = 1usize;
+    count += refused(&inner_rule);
+    let mut name = program.clone();
+    name.macro_invocations[unknown].tokens[1usize].text = "changed".to_string();
+    count += refused(&name);
+    let declaration = program.macro_definitions.iter().position(|definition|
+        definition.name == "builder").unwrap();
+    let token = program.macro_definitions[declaration].body.iter().position(|token|
+        token.text == "$" && token.origin == literal.origin).unwrap();
+    let mut authored = program.clone();
+    authored.macro_input.as_mut().unwrap().macro_definitions[declaration].body[token].text = "@".to_string();
+    count += unauthenticated(&authored, &inputs);
+
+    dollar_refusal(r#"
+macro_rules! builder {
+    (($d:tt) $name:ident) => {
+        enum $name { Ready }
+        macro_rules! inner { ($value:expr) => { $value }; }
+    };
+    ($name:ident) => { builder!(($) $name); };
+}
+builder!(State);
+thread_local! { static UNKNOWN: i64 = 0i64; }
+"#, "generated macro definitions are not supported");
+    dollar_refusal(r#"
+macro_rules! builder {
+    (($d:tt) $name:ident) => {
+        enum $name { Ready }
+        macro_rules! inner { ($d($mut:ident)?) => {}; }
+    };
+    ($name:ident) => { builder!(($) $name); };
+}
+builder!(State);
+thread_local! { static UNKNOWN: i64 = 0i64; }
+"#, "unbound keyword metavariable requires a raw identifier token");
+    assert!(count == 8usize);
+    count
 }
 fn lexical_origins() -> i64 {
     let (program, inputs) = parsed_fixture(r#"
@@ -695,5 +806,5 @@ fn source() -> i64 {
 fn main() {
     let count = expression_origins() + type_origins() + fragment_token_origins()
         + lexical_origins() + statement_origins();
-    assert!(count == 87i64);
+    assert!(count == 95i64);
 }

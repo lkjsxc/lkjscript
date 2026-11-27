@@ -1,0 +1,43 @@
+// expect: value 42
+// witness: {"root":true}
+// The first-rule matcher is the pinned Sōzu 1.0.6 StateMachineBuilder matcher.
+// The ordinary function output isolates exact selection from generated macros.
+macro_rules! trait_marker { () => { 0usize }; (SessionState) => { 10usize }; }
+macro_rules! StateMachineBuilder {
+    (
+        ($d:tt)
+        $(#[$($state_macros:tt)*])*
+        enum $state_name:ident $(impl $trait:ident)? {
+            $($(#[$($variant_macros:tt)*])*
+            $variant_name:ident($state:ty$(,$($aux:ty),+)?) $(-> $override:expr)?),+ $(,)?
+        }
+    ) => {
+        fn $state_name() -> usize {
+            let mut result = trait_marker!($($trait)?);
+            $(
+                result += 1usize;
+                $($(result += std::mem::size_of::<$aux>();)+)?
+                $(result += $override;)?
+            )+
+            result
+        }
+    };
+    ($($tt:tt)+) => { StateMachineBuilder!{($) $($tt)+} };
+}
+StateMachineBuilder! {
+    #[allow(dead_code)]
+    enum HttpStateMachine impl SessionState { First(u8), Second(u16) -> 2usize, }
+}
+StateMachineBuilder! { ($) enum TcpStateMachine { First(u8), Second(u16) } }
+StateMachineBuilder! {
+    enum HttpsStateMachine impl SessionState {
+        #[allow(dead_code)]
+        First(u8, u16, u32), Second(u16) -> 3usize,
+    }
+}
+fn probe() -> i64 {
+    assert_eq!(HttpStateMachine(), 14usize);
+    assert_eq!(TcpStateMachine(), 2usize);
+    assert_eq!(HttpsStateMachine(), 21usize);
+    42i64
+}

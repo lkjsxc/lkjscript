@@ -1,0 +1,4 @@
+// expect: reject E_MACRO_RECURSION
+// witness: {"root":true,"rustAccept":false}
+macro_rules! forever { ($) => { forever!($) }; }
+fn probe() -> i64 { forever!($) }

@@ -1,0 +1,11 @@
+// expect: reject E_UNSUPPORTED_MACRO
+// witness: {"root":true,"rustAccept":true}
+macro_rules! StateMachineBuilder {
+    (($d:tt) $name:ident) => {
+        enum $name { Ready }
+        macro_rules! _fn_impl { ($value:expr) => { $value }; }
+    };
+    ($name:ident) => { StateMachineBuilder!(($) $name); };
+}
+StateMachineBuilder!(State);
+fn probe() -> i64 { _fn_impl!(42i64) }

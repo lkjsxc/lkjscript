@@ -1,0 +1,5 @@
+// expect: reject E_UNSUPPORTED_MACRO
+// witness: {"root":true,"rustAccept":true}
+macro_rules! receive { ($d:tt fn) => { 1i64 }; ($d:tt $name:ident) => { 42i64 }; }
+macro_rules! forward { () => { receive!($fn) }; }
+fn probe() -> i64 { forward!() }

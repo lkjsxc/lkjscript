@@ -1,0 +1,4 @@
+// expect: reject E_PARSE
+// witness: {"root":true,"rustAccept":false}
+macro_rules! invalid { () => { $missing }; }
+fn probe() -> i64 { invalid!() }

@@ -1,0 +1,15 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! exact { ($) => { 42i64 }; }
+macro_rules! grouped { (($) [$] {$}) => { 42i64 }; }
+macro_rules! plain { () => { exact!($) }; }
+macro_rules! nested { () => { grouped!(($) [$] {$}) }; }
+macro_rules! repeated { ($($name:ident),+) => { $(fn $name() -> i64 { exact!($) })+ }; }
+repeated!(first, second);
+fn probe() -> i64 {
+    assert_eq!(plain!(), 42i64);
+    assert_eq!(nested!(), 42i64);
+    assert_eq!(first(), 42i64);
+    assert_eq!(second(), 42i64);
+    42i64
+}

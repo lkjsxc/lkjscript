@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! exact { ($) => { 42i64 }; () => { 7i64 }; ($other:tt) => { 1i64 }; }
+macro_rules! groups { (($) [$] {$}) => { 42i64 }; ($($rest:tt)*) => { 0i64 }; }
+fn probe() -> i64 {
+    assert_eq!(exact!($), 42i64);
+    assert_eq!(exact!{$}, 42i64);
+    assert_eq!(exact!(), 7i64);
+    assert_eq!(exact!(@), 1i64);
+    assert_eq!(groups!(($) [$] {$}), 42i64);
+    assert_eq!(groups!(($) [@] {$}), 0i64);
+    42i64
+}

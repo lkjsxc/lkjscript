@@ -1,0 +1,4 @@
+// expect: reject E_MACRO_AMBIGUITY
+// witness: {"root":true,"rustAccept":false}
+macro_rules! ambiguous { ($($t:tt)* $) => { 42i64 }; }
+fn probe() -> i64 { ambiguous!($) }

@@ -1,0 +1,4 @@
+// expect: reject E_MACRO_RULE
+// witness: {"root":true,"rustAccept":false}
+macro_rules! invalid { ($[token]) => { 42i64 }; }
+fn probe() -> i64 { invalid!($[token]) }

@@ -1,0 +1,28 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! ordinary { ($d:tt fn) => { 42i64 }; ($d:tt $name:ident) => { 1i64 }; }
+macro_rules! bound { ($fn:ident, $d:tt) => { ordinary!($d $fn) }; }
+macro_rules! plain {
+    ($d:tt _) => { 42i64 }; ($d:tt self) => { 42i64 };
+    ($d:tt Self) => { 42i64 }; ($d:tt super) => { 42i64 };
+    ($d:tt union) => { 42i64 }; ($d:tt $name:ident) => { 1i64 };
+}
+macro_rules! special {
+    (underscore) => { plain!($_) }; (self) => { plain!($self) };
+    (Self) => { plain!($Self) }; (super) => { plain!($super) };
+    (union) => { plain!($union) };
+}
+#[macro_export]
+macro_rules! receive_invocation { ($d:tt $name:ident ! ()) => { 42i64 }; }
+#[macro_export(local_inner_macros)]
+macro_rules! unbound_invocation { () => { receive_invocation!($future!()) }; }
+fn probe() -> i64 {
+    assert_eq!(bound!(fn, $), 42i64);
+    assert_eq!(special!(underscore), 42i64);
+    assert_eq!(special!(self), 42i64);
+    assert_eq!(special!(Self), 42i64);
+    assert_eq!(special!(super), 42i64);
+    assert_eq!(special!(union), 42i64);
+    assert_eq!(unbound_invocation!(), 42i64);
+    42i64
+}
