@@ -1091,30 +1091,42 @@ checks. This report cannot replace the ordinary successful source check. Fully
 valid inputs retain their existing checking and output behavior.
 
 The report inventories retained non-library function definitions with bodies.
-Methods, generic functions and definitions outside the supported population
-remain visible as blocked items. Refused source regions appear separately as
+Definitions outside the supported population remain visible as blocked items.
+Refused source regions appear separately as
 tombstones carrying their exact diagnostic, source extent, scope, recognizable
 names and conservative namespace/coherence effects. A surviving declaration
 inside a refused region is still blocked; recovery never supplies a substitute
 body or proves that an erased binding was absent.
 
-The current independent population consists of nongeneric free functions with
-primitive scalars, references, tuples, arrays and slices, ordinary local control
-flow, and direct calls to other eligible free functions. Nominal types, methods,
-generic or qualified trait selection, indirect calls, closures, local declarations
-and incomplete macro contexts require complete source checking. Unknown names,
-failed imports and possible shadow declarations block affected lookups.
-Qualified paths conservatively include possible poison at intermediate aliases.
-Surviving imports propagate that cause through their aliases. Incomplete or
-qualified headers and special import segments such as terminal `self` retain
-wildcard poison until their binding can be established without guessing.
+The independent population covers scalar constants, primitive and view types,
+tuples, arrays, ordinary local control flow and direct calls to eligible source
+or library functions. Plain generic parameters use ordinary rigid checking.
+Supported explicit bounds are intrinsic `Copy` and `Sized` and exact empty
+source traits. The method case replays a complete inherent implementation for
+a nongeneric unit struct when the catalog has no competing implementation or
+refused coherence input. Applied traits, method calls and nominal values with
+additional dependencies still require complete source checking.
+
+Unloaded modules occupy their written names and poison dependent imports with
+their loader causes. A failed import with a complete tree contributes its
+ordinary aliases, including grouped and terminal `self` imports. Unresolved
+globs and unknown declaration shapes retain wildcard poison. A balanced outer
+attribute whose source semantics cannot add ordinary bindings preserves the
+written declaration owner. Unknown attributes and incomplete headers keep
+conservative poison. Qualified paths still conservatively include possible
+poison at intermediate aliases. A replay needs one source owner for each
+selected module path and its ancestors.
 
 Each eligible function and its transitive direct-call dependencies are reparsed
 from their original loaded source bytes, preserving source coordinates and
-configuration. Primitive type bindings and direct-call targets must agree with
-lookup in the original declaration context. The reconstructed closure then passes
-ordinary resolution, elaboration and the independent IR checker. A successful
-check of this closure establishes an item diagnostic fact only.
+configuration. Type, constant, trait and direct-call bindings must agree with
+lookup in the original declaration context. Selected library bodies participate
+in the closure even when they are demanded only by an abstract definition.
+A local expression macro with one authored producer replays exact definition
+bytes and invocation tokens through normal expansion. The rule, destination
+and token origins must agree. The reconstructed closure passes ordinary
+resolution, elaboration and independent checking, yielding an item diagnostic
+fact only.
 
 | Item status | Meaning |
 | --- | --- |

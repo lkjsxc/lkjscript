@@ -1,0 +1,14 @@
+trait Marker {}
+struct Counter;
+impl Counter {
+    fn measured(&self) -> i64 { 42 }
+    fn generic<T: Copy>(&self, value: T) -> (T, T) { (value, value) }
+}
+macro_rules! bump { ($value:expr) => { $value + 1i64 }; }
+fn identity<T: Marker>(value: T) -> T { value }
+fn duplicate<T: Copy>(value: T) -> (T, T) { (value, value) }
+fn concrete() -> (i64, i64) { duplicate::<i64>(42) }
+fn library() -> bool { std::char::__lkjscript_is_ascii_digit('9') }
+fn expanded() -> i64 { 5i64 + bump!(36i64) }
+fn invalid<T>(value: T) -> (T, T) { (value, value) }
+fn refusal() -> i64 { println!("unsupported"); 0 }

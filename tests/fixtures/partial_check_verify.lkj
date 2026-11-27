@@ -90,7 +90,7 @@ fn cases(name: &str) -> Vec<Expected> {
             expected(8, "good", "checked", 0, 0, "", ""),
         ],
         "normalized_self" => vec![
-            at(expected(1, "io::pick", "blocked", 2, 18, "E_CAPABILITY", ""), 14),
+            at(expected(1, "io::pick", "checked", 0, 0, "", ""), 14),
             expected(3, "probe", "blocked", 2, 18, "E_CAPABILITY", ""),
         ],
         "import_chain" => vec![
@@ -106,6 +106,34 @@ fn cases(name: &str) -> Vec<Expected> {
             expected(7, "borrowed", "blocked", 2, 5, "E_CAPABILITY", "*"),
             expected(8, "good", "checked", 0, 0, "", ""),
             expected(9, "probe", "checked", 0, 0, "", "good"),
+        ],
+        "grow_context" | "grow_library_mutant" | "grow_macro_mutant" | "grow_method_mutant" => {
+            let methods = name == "grow_method_mutant";
+            let mut rows = vec![
+                at(expected(4, "measured", if methods { "blocked" } else { "checked" },
+                    0, 0, "", if methods { "" } else { "generic" }), 5),
+                at(expected(5, "generic", if methods { "blocked" } else { "checked" },
+                    0, 0, "", if methods { "" } else { "measured" }), 5),
+                expected(8, "identity", "checked", 0, 0, "", ""),
+                expected(9, "duplicate", "checked", 0, 0, "", ""),
+                expected(10, "concrete", "checked", 0, 0, "", "duplicate"),
+                if name == "grow_library_mutant" { expected(11, "library", "blocked", 1, 5, "E_TYPE", "") }
+                else { expected(11, "library", "checked", 0, 0, "", "") },
+                if name == "grow_macro_mutant" { expected(12, "expanded", "rejected", 12, 37, "E_TYPE", "") }
+                else { expected(12, "expanded", "checked", 0, 0, "", "") },
+                expected(13, "invalid", "blocked", 14, 23, "E_CAPABILITY", ""),
+                expected(14, "refusal", "blocked", 14, 23, "E_CAPABILITY", ""),
+            ];
+            if methods { rows.push(at(expected(15, "measured", "blocked", 0, 0, "", ""), 16)); }
+            rows
+        },
+        "grow_module" => vec![
+            expected(3, "choose", "blocked", 1, 1, "E_UNSUPPORTED", ""),
+            expected(4, "carried", "blocked", 1, 1, "E_UNSUPPORTED", ""),
+            at(expected(7, "nested::read", "blocked", 6, 9, "E_MODULE_MISSING", ""), 9),
+            at(expected(9, "nested::imported", "blocked", 6, 9, "E_MODULE_MISSING", ""), 9),
+            expected(12, "independent", "checked", 0, 0, "", ""),
+            at(expected(17, "outer::same::ambiguous", "blocked", 15, 5, "E_UNSUPPORTED_MACRO", ""), 13),
         ],
         _ => panic!("unknown partial-check fixture"),
     }
@@ -176,7 +204,12 @@ fn main(mut world: World) {
                     assert!(reason.starts_with("complete context required:"));
                 }
                 let cause = found.get("cause").unwrap();
-                assert_eq!(text(cause, "path"), path);
+                let cause_path = text(cause, "path");
+                if name == "grow_library_mutant" && want.name == "library" {
+                    assert!(cause_path.as_str().ends_with("/library-mutant/char.lkj"));
+                } else {
+                    assert_eq!(cause_path, path);
+                }
                 let line = number(cause, "line");
                 let column = number(cause, "column");
                 let code = text(cause, "code");
@@ -187,7 +220,7 @@ fn main(mut world: World) {
                     assert_eq!(column, want.cause_column);
                     assert_eq!(code, want.cause_code);
                 }
-                let ordinary = format!("{path}:{line}:{column}: {code} {message}");
+                let ordinary = format!("{cause_path}:{line}:{column}: {code} {message}");
                 let mut present = false;
                 for row in diagnostics.as_str().lines() {
                     if row == ordinary.as_str() { present = true; }

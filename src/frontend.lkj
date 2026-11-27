@@ -19,6 +19,17 @@ pub fn check_source(program: &Program) -> Result<CheckedProgram, Diagnostic> {
     check::check(meaning).map_err(|problem| locate(program, problem))
 }
 
+/// A partial item replay explicitly selects every library body in its closure.
+/// Rigid definition checking must visit those bodies even without a concrete call.
+pub(crate) fn check_item_replay(program: &Program) -> Result<(), Diagnostic> {
+    let inferred = elaborate::infer_resolved_report_all_library(program)
+        .map_err(|problems| locate(program, elaborate::first_problem(problems)))?;
+    let meaning = elaborate::lower_definitions(inferred)
+        .map_err(|problems| locate(program, elaborate::first_problem(problems)))?;
+    check::check(meaning).map_err(|problem| locate(program, problem))?;
+    Ok(())
+}
+
 /// A bundle is closed over its source and library inputs; missing inputs are errors.
 pub fn check_bundle(bundle: &SourceBundle) -> Result<CheckedProgram, Diagnostic> {
     let program = source::parse_bundle(bundle)?;

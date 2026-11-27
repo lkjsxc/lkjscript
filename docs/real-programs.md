@@ -466,7 +466,7 @@ edges and cannot supply a semantic-check substitute. The agreed next slice is
 therefore the first conservative stage of item diagnostics after source refusal,
 with exact recovery ownership and dependency accounting.
 
-The production `check` command now emits a non-authorizing `LKJSCRIPT_ITEMS`
+The initial implementation made `check` emit a non-authorizing `LKJSCRIPT_ITEMS`
 report. Refused regions retain tombstones, and uncertain names, imports, macros
 and coherence inputs poison affected lookups. Eligible nongeneric free functions
 and their complete direct-call closures are reparsed from the exact loaded source
@@ -574,9 +574,38 @@ reproduces the same native bytes in 9.371 s. The two stopped full-gate attempts
 and their failures remain recorded separately; the final complete run used a
 fresh store and a new final-source input snapshot.
 
-The next precision work is refused-declaration ownership and partial declaration
-catalogs, followed by certified library/trait/macro dependency closures. Native
-macro-error replay cost is a separate measured performance frontier.
+#### Expanded independent item closures
+
+The partial declaration catalog keeps unloaded module names and their exact
+loader causes. A refused attribute or import carries the written declaration or
+alias when the parser can establish it. The replay requires a unique source
+owner for each selected module and gives a named lexical refusal priority over
+conservative poison from other scopes.
+
+The fixture cohort adds literal constants, rigid generic definitions, explicit
+library calls, an empty source trait bound, a complete inherent implementation
+and a local expression macro whose producer, rule and invocation tokens are
+replayed. Negative controls change a library body, a macro template and the
+inherent implementation inventory, and introduce ambiguous module ownership.
+The original capability and module-loading refusals remain authoritative.
+
+The ordinary Rust-built CLI checked the same pinned roots in both debug modes
+against `80278ca3f`. Both modes produced the same counts.
+
+| Root | Before checked / blocked / rejected | After checked / blocked / rejected |
+| --- | ---: | ---: |
+| Sōzu bin | 0 / 607 / 0 | 8 / 599 / 0 |
+| Sōzu lib | 0 / 1,234 / 0 | 9 / 1,225 / 0 |
+| nom 8.0.0 | 0 / 659 / 0 | 8 / 651 / 0 |
+| selectors 0.38.0 | 0 / 348 / 0 | 0 / 348 / 0 |
+
+Eight Sōzu checks cover the same scalar configuration defaults in the command
+provider loaded by both roots. The library root also checks
+`protocol::proxy_protocol::header::u16_to_array_of_u8`. The source checks all
+return status 1. The census maps all 470 syntax-complete logging sites to
+blocked items and matches the original capability, missing-module and unsafe
+rows byte for byte. Native and Rust-built selectors item reports agree in both
+debug modes.
 
 #### Earlier ordinary numeric traits frontier
 

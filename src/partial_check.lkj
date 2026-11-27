@@ -1,6 +1,6 @@
 //! Non-authorizing item facts for a source closure which already refused.
-//! A recovered arena is never admitted. Independently complete scalar function
-//! closures are replayed from the exact loaded text and checked normally.
+//! A recovered arena is never admitted. Independently complete item closures
+//! are replayed from the exact loaded text and checked normally.
 use crate::ast as a;
 use crate::diagnostics::Recovery;
 use crate::resolve::{Namespace, Resolver};
@@ -22,10 +22,18 @@ struct Lookup {
     namespace: Namespace,
     written: String,
     target: String,
-    function: Option<usize>,
+    item: Option<a::Item>,
 }
 #[derive(Clone, Default)]
-struct Plan { dependencies: Vec<usize>, lookups: Vec<Lookup>, structural: bool }
+struct Plan {
+    dependencies: Vec<usize>,
+    declarations: Vec<a::Item>,
+    lookups: Vec<Lookup>,
+    parameters: Vec<String>,
+    expansions: Vec<usize>,
+    implementation: Option<usize>,
+    structural: bool,
+}
 struct Record {
     function: usize,
     status: String,
@@ -72,38 +80,44 @@ fn block_within(program: &a::Program, scope: usize, owner: usize) -> bool {
     }
     false
 }
-fn scope_within(program: &a::Program, scope: usize, owner: usize) -> bool {
-    let mut current = Some(module_scope(program, scope));
-    while let Some(scope) = current {
-        if scope == owner { return true; }
-        current = program.scopes[scope].parent;
-    }
-    false
-}
 fn global(recovery: &Recovery) -> bool {
     matches!(recovery.kind.as_str(), "source input" | "source bundle" | "file")
 }
 fn poisoned(program: &a::Program, failures: &[Recovery], scope: usize, written: &str) -> Option<Failure> {
-    for failure in failures {
+    let module = module_scope(program, scope);
+    let qualified = written.contains("::");
+    let mut lexical = None;
+    let mut distant = None;
+    for (index, failure) in failures.iter().enumerate() {
         if !failure.namespace { continue; }
         // Qualified paths can cross a poisoned intermediate alias. Until each
         // segment has a dependency record, conservatively include every nonlocal
         // poison whose spelling intersects that path.
-        let affected = if global(failure) || failure.scope >= program.scopes.len()
-            || written.contains("::") && failure.block.is_none() { true }
+        let local = if failure.scope >= program.scopes.len() { false }
             else if let Some(block) = failure.block { block_within(program, scope, block) }
-            else { scope_within(program, scope, failure.scope) };
-        if !affected { continue; }
+            // Unqualified ordinary lookup stops at its own module. An
+            // ancestor's imports enter only through a separate path or glob.
+            else { module == failure.scope
+                || program.scopes[failure.scope].path == "$std::prelude" };
+        if !local && !global(failure) && failure.scope < program.scopes.len()
+            && !(qualified && failure.block.is_none()) { continue; }
         let mut matches = failure.names.is_empty();
         for part in written.split("::") {
             if failure.names.iter().any(|name| name.as_str() == part) { matches = true; }
         }
-        if matches {
-            return Some(Failure { cause: located(program, failure.diagnostic.clone()),
-                reason: format!("blocked name lookup {written}; refused source may change its binding") });
+        if !matches { continue; }
+        if local {
+            // Prefer an identified lexical binding over the fallback for a
+            // wildcard or a potentially traversed alias in another module.
+            if !failure.names.is_empty() { lexical = Some(index); break; }
+            if lexical.is_none() { lexical = Some(index); }
+        } else if distant.is_none() {
+            distant = Some(index);
         }
     }
-    None
+    let selected = lexical.or(distant)?;
+    Some(Failure { cause: located(program, failures[selected].diagnostic.clone()),
+        reason: format!("blocked name lookup {written}; refused source may change its binding") })
 }
 fn complete_context(first: &a::Diagnostic, detail: &str) -> Failure {
     Failure { cause: first.clone(), reason: format!("complete context required: {detail}") }
@@ -117,12 +131,32 @@ struct Inspector<'a> {
     resolver: &'a Resolver<'a>,
     failures: &'a [Recovery],
     first: &'a a::Diagnostic,
+    ambiguous_modules: &'a BTreeSet<String>,
 }
 impl<'a> Inspector<'a> {
     fn boundary(&self, detail: &str) -> Failure { complete_context(self.first, detail) }
+    fn declaration_scope(&self, path: &str) -> Result<usize, Failure> {
+        let scope = crate::resolve::module(self.program, path);
+        if self.program.scopes[scope].path != path { return Err(self.boundary("missing declaration scope")); }
+        let mut ancestor = Some(scope);
+        while let Some(current) = ancestor {
+            let owner = &self.program.scopes[current];
+            if self.ambiguous_modules.contains(&owner.path) {
+                if let Some(parent) = owner.parent {
+                    let start = owner.path.rfind("::").map(|at: usize| at + 2usize).unwrap_or(0usize);
+                    if let Some(failure) = poisoned(self.program, self.failures, parent, &owner.path[start..]) {
+                        return Err(failure);
+                    }
+                }
+                return Err(self.boundary("declaration scope has more than one source owner"));
+            }
+            ancestor = owner.parent;
+        }
+        Ok(scope)
+    }
     fn binding(&self, scope: usize, path: &a::Path, span: a::Span,
         namespace: Namespace, plan: &mut Plan) -> Result<Option<a::Item>, Failure> {
-        if path.qualification.is_some() || !path.args.is_empty() || !path.bindings.is_empty() {
+        if path.qualification.is_some() || !path.bindings.is_empty() {
             return Err(self.boundary("generic or qualified selection"));
         }
         if let Some(failure) = poisoned(self.program, self.failures, scope, &path.name) { return Err(failure); }
@@ -140,7 +174,7 @@ impl<'a> Inspector<'a> {
                 return Err(failure);
             }
         }
-        plan.lookups.push(Lookup { span, namespace, written: path.name.clone(), target, function });
+        plan.lookups.push(Lookup { span, namespace, written: path.name.clone(), target, item });
         Ok(item)
     }
     fn ty(&self, id: usize, plan: &mut Plan) -> Result<(), Failure> {
@@ -162,7 +196,8 @@ impl<'a> Inspector<'a> {
                 }
                 self.ty(*inner, plan)
             }
-            a::Type::Path(path) if scalar(&path.name) => {
+            a::Type::Path(path) if path.args.is_empty()
+                && (scalar(&path.name) || plan.parameters.contains(&path.name)) => {
                 if path.name == "str" { plan.structural = true; }
                 if self.binding(node.scope, path, node.span, Namespace::Type, plan)?.is_some() {
                     return Err(self.boundary("a scalar spelling has a source declaration"));
@@ -230,13 +265,26 @@ impl<'a> Inspector<'a> {
             a::Expr::Int(_) | a::Expr::Float(_) | a::Expr::Bool(_) | a::Expr::Char(_)
             | a::Expr::Continue => Ok(()),
             a::Expr::String(_) | a::Expr::Bytes(_) => { plan.structural = true; Ok(()) },
+            a::Expr::FilePath => { plan.structural = true; Ok(()) },
             a::Expr::Tuple(parts) | a::Expr::Array(parts) => {
                 plan.structural = true;
                 for part in parts { self.expression(*part, locals, plan)?; } Ok(())
             }
             a::Expr::Path(path) if path.qualification.is_none() && path.args.is_empty()
                 && path.bindings.is_empty() && locals.contains(&path.name) => Ok(()),
-            a::Expr::Path(_) => Err(self.boundary("nonlocal value or function value")),
+            a::Expr::Path(path) => {
+                if !path.args.is_empty() { return Err(self.boundary("applied nonlocal value")); }
+                let Some(a::Item::Constant(index)) = self.binding(node.scope, path, node.span, Namespace::Value, plan)? else {
+                    return Err(self.boundary("nonlocal value is not an independent constant"));
+                };
+                let value = &self.program.constants[index];
+                if value.owner.is_some() || !matches!(self.program.exprs[value.value].kind,
+                    a::Expr::Int(_) | a::Expr::Float(_) | a::Expr::Bool(_) | a::Expr::Char(_)) {
+                    return Err(self.boundary("constant initializer requires additional dependencies"));
+                }
+                self.declaration(a::Item::Constant(index), &value.module, &value.name, value.span, plan)?;
+                self.ty(value.ty, plan)
+            }
             a::Expr::Unary { op, value } => {
                 if op == "*" { plan.structural = true; }
                 self.expression(*value, locals, plan)
@@ -274,6 +322,7 @@ impl<'a> Inspector<'a> {
                     return Err(self.boundary("indirect callable selection"));
                 };
                 if locals.contains(&path.name) { return Err(self.boundary("local callable selection")); }
+                for argument in &path.args { self.ty(*argument, plan)?; }
                 let Some(a::Item::Function(function)) =
                     self.binding(target.scope, path, target.span, Namespace::Value, plan)? else {
                     return Err(self.boundary("call target is not a declared free function"));
@@ -325,21 +374,131 @@ impl<'a> Inspector<'a> {
             _ => Err(self.boundary("macro, trait, iterator, closure or generated-helper inputs")),
         }
     }
-    fn function(&self, index: usize) -> Result<Plan, Failure> {
-        let f = &self.program.functions[index];
-        for failure in self.failures {
-            if intersects(f.span, failure.span) {
-                return Err(Failure { cause: located(self.program, failure.diagnostic.clone()),
-                    reason: "the authored item overlaps a refused source region".to_string() });
+    fn parameters(&self, function: &a::Function, plan: &mut Plan) -> Result<(), Failure> {
+        if !function.predicates.is_empty() || !function.outlives.is_empty() {
+            return Err(self.boundary("where-clause or outlives context"));
+        }
+        for parameter in &function.generics {
+            if parameter.default.is_some() || parameter.constant || parameter.implicit {
+                return Err(self.boundary("defaulted, constant or implicit generic parameter"));
+            }
+            if !parameter.lifetime { plan.parameters.push(parameter.name.clone()); }
+            for bound in &parameter.bounds {
+                let node = &self.program.types[*bound];
+                let a::Type::Path(path) = &node.kind else {
+                    return Err(self.boundary("generic bound is not a plain trait path"));
+                };
+                if !path.args.is_empty() || self.program.relaxed_bounds.contains(bound) {
+                    return Err(self.boundary("applied or relaxed trait bound"));
+                }
+                match self.binding(node.scope, path, node.span, Namespace::Type, plan)? {
+                    None if matches!(path.name.as_str(), "Copy" | "Sized") => {}
+                    Some(a::Item::Trait(index)) => {
+                        let declaration = &self.program.traits[index];
+                        if !declaration.generics.is_empty() || !declaration.predicates.is_empty()
+                            || !declaration.bounds.is_empty() || !declaration.methods.is_empty()
+                            || !declaration.associated.is_empty() || !declaration.constants.is_empty() {
+                            return Err(self.boundary("trait bound has additional declaration dependencies"));
+                        }
+                        self.declaration(a::Item::Trait(index), &declaration.module, &declaration.name,
+                            declaration.span, plan)?;
+                    }
+                    _ => return Err(self.boundary("generic bound has an unproved trait contract")),
+                }
             }
         }
-        let scope = crate::resolve::module(self.program, &f.module);
-        if let Some(failure) = poisoned(self.program, self.failures, scope, &f.name) { return Err(failure); }
-        if !f.generics.is_empty() || !f.predicates.is_empty() || !f.outlives.is_empty() {
-            return Err(self.boundary("generic function contract"));
+        if !function.generics.is_empty() { plan.structural = true; }
+        Ok(())
+    }
+    fn declaration(&self, item: a::Item, module: &str, name: &str, span: a::Span,
+        plan: &mut Plan) -> Result<(), Failure> {
+        if let Some(refusal) = self.overlap(span) { return Err(refusal); }
+        let scope = self.declaration_scope(module)?;
+        if let Some(refusal) = poisoned(self.program, self.failures, scope, name) { return Err(refusal); }
+        if !plan.declarations.contains(&item) { plan.declarations.push(item); }
+        Ok(())
+    }
+    fn overlap(&self, span: a::Span) -> Option<Failure> {
+        self.failures.iter().find(|failure| intersects(span, failure.span))
+            .map(|failure| Failure { cause: located(self.program, failure.diagnostic.clone()),
+                reason: "the authored item overlaps a refused source region".to_string() })
+    }
+    fn implementation(&self, owner: usize, plan: &mut Plan) -> Result<(), Failure> {
+        let implementation = &self.program.impls[owner];
+        if let Some(refusal) = self.overlap(implementation.span) { return Err(refusal); }
+        // A missing implementation can change receiver selection or destruction.
+        // This projection keeps one complete inherent owner with no open
+        // coherence input. Trait implementations need their full witness set.
+        if let Some(failure) = self.failures.iter().find(|failure| failure.coherence) {
+            return Err(Failure { cause: located(self.program, failure.diagnostic.clone()),
+                reason: "implementation coherence depends on refused source".to_string() });
         }
-        if self.program.impls.iter().any(|owner| owner.methods.contains(&index))
-            || self.program.traits.iter().any(|owner| owner.methods.contains(&index)) {
+        if !implementation.generics.is_empty() || !implementation.predicates.is_empty()
+            || implementation.trait_ty.is_some() || !implementation.associated.is_empty()
+            || !implementation.constants.is_empty() {
+            return Err(self.boundary("inherent owner is not independently complete"));
+        }
+        let node = &self.program.types[implementation.target];
+        let a::Type::Path(path) = &node.kind else { return Err(self.boundary("non-nominal receiver")); };
+        if !path.args.is_empty() { return Err(self.boundary("applied receiver type")); }
+        let Some(a::Item::Struct(index)) = self.binding(node.scope, path, node.span, Namespace::Type, plan)? else {
+            return Err(self.boundary("implementation receiver is not a source struct"));
+        };
+        let declaration = &self.program.structs[index];
+        let root = self.program.files[implementation.span.file].crate_root;
+        if !declaration.unit || !declaration.generics.is_empty() || !declaration.predicates.is_empty()
+            || !declaration.attrs.is_empty() || self.program.files[declaration.span.file].crate_root != root
+            || library_scope(self.program, implementation.span.file)
+            || self.program.impls.iter().enumerate().any(|(i, item)|
+                i != owner && !library_scope(self.program, item.span.file)) {
+            return Err(self.boundary("receiver needs a complete nominal or competing implementation context"));
+        }
+        self.declaration(a::Item::Struct(index), &declaration.module, &declaration.name,
+            declaration.span, plan)?;
+        plan.parameters.push("Self".to_string());
+        plan.implementation = Some(owner);
+        plan.structural = true;
+        Ok(())
+    }
+    fn expansions(&self, function: &a::Function, plan: &mut Plan) -> Result<(), Failure> {
+        let scope = crate::resolve::module(self.program, &function.module);
+        let crate_root = self.program.scopes[scope].crate_root;
+        for (call, invocation) in self.program.macro_invocations.iter().enumerate() {
+            if invocation.parent.is_some() || !contains(function.span, invocation.span) { continue; }
+            if invocation.position != a::macros::MacroPosition::Expression
+                || invocation.name.contains("::") || invocation.scope != scope
+                || !self.program.macro_providers.is_empty() {
+                return Err(self.boundary("macro selection has nonlocal or item dependencies"));
+            }
+            for failure in self.failures {
+                if global(failure) || (failure.scope < self.program.scopes.len()
+                    && self.program.scopes[failure.scope].crate_root == crate_root
+                    && (failure.namespace && failure.block.is_none()
+                        || failure.kind == "macro definition" && failure.names.contains(&invocation.name))) {
+                    return Err(Failure { cause: located(self.program, failure.diagnostic.clone()),
+                        reason: "macro selection depends on refused source".to_string() });
+                }
+            }
+            let Some(index) = self.program.macro_expansions.iter().position(|origin| origin.invocation == call) else {
+                return Err(self.boundary("macro invocation has no complete expansion"));
+            };
+            let origin = &self.program.macro_expansions[index];
+            let definition = &self.program.macro_definitions[origin.definition];
+            if definition.exported || definition.scope != scope || definition.span.file != function.span.file
+                || self.program.macro_expansions.iter().any(|nested| nested.parent == Some(index)) {
+                return Err(self.boundary("macro expansion has external or nested producer dependencies"));
+            }
+            if let Some(refusal) = self.overlap(definition.span) { return Err(refusal); }
+            plan.expansions.push(index);
+        }
+        Ok(())
+    }
+    fn function(&self, index: usize) -> Result<Plan, Failure> {
+        let f = &self.program.functions[index];
+        if let Some(refusal) = self.overlap(f.span) { return Err(refusal); }
+        let scope = self.declaration_scope(&f.module)?;
+        if let Some(failure) = poisoned(self.program, self.failures, scope, &f.name) { return Err(failure); }
+        if self.program.traits.iter().any(|owner| owner.methods.contains(&index)) {
             return Err(self.boundary("method ownership and coherence"));
         }
         for (other, owner) in self.program.functions.iter().enumerate() {
@@ -348,10 +507,18 @@ impl<'a> Inspector<'a> {
             }
         }
         if self.program.macro_expansions.iter().any(|origin| origin.functions.contains(&index))
-            || self.program.macro_invocations.iter().any(|call| contains(f.span, call.span)) {
-            return Err(self.boundary("complete macro origin and consumer edges"));
+            || self.program.macro_invocations.iter().any(|call| contains(call.span, f.span)) {
+            return Err(self.boundary("generated function ownership"));
         }
         let mut plan = Plan::default();
+        self.parameters(f, &mut plan)?;
+        self.expansions(f, &mut plan)?;
+        if let Some(owner) = self.program.impls.iter().position(|owner| owner.methods.contains(&index)) {
+            self.implementation(owner, &mut plan)?;
+            for method in &self.program.impls[owner].methods {
+                if *method != index { plan.dependencies.push(*method); }
+            }
+        }
         let mut locals = BTreeSet::new();
         for parameter in &f.params { self.ty(parameter.ty, &mut plan)?; locals.insert(parameter.name.clone()); }
         self.ty(f.result, &mut plan)?;
@@ -360,26 +527,31 @@ impl<'a> Inspector<'a> {
         Ok(plan)
     }
 }
+fn library_scope(program: &a::Program, file: usize) -> bool {
+    let root = program.files[file].crate_root;
+    program.scopes.get(root).is_some_and(|scope| scope.path == "$std")
+}
 fn user_function(program: &a::Program, index: usize) -> bool {
     let f = &program.functions[index];
-    let root = program.files[f.span.file].crate_root;
-    f.body.is_some() && program.scopes.get(root).is_some_and(|scope| scope.path != "$std")
+    f.body.is_some() && !library_scope(program, f.span.file)
 }
 fn append_problem(problems: &mut Vec<a::Diagnostic>, problem: a::Diagnostic) {
     if !problems.contains(&problem) { problems.push(problem); }
 }
-fn import_failures(program: &a::Program, problems: &[a::Diagnostic], failures: &mut Vec<Recovery>) {
+fn import_failures(program: &a::Program, problems: &[a::Diagnostic], inherited: &BTreeSet<usize>,
+    failures: &mut Vec<Recovery>) {
     for problem in problems {
         let mut found = false;
-        for item in &program.uses {
+        for (index, item) in program.uses.iter().enumerate() {
             if item.span.file == problem.file && item.span.line == problem.line && item.span.column == problem.column {
+                found = true;
+                if inherited.contains(&index) { continue; }
                 let mut names = Vec::new();
                 if !item.glob { names.push(item.alias.clone()); }
                 failures.push(Recovery { span: item.span,
                     scope: crate::resolve::module(program, &item.module), block: item.block,
                     kind: "import".to_string(), names, namespace: true, coherence: true,
                     diagnostic: located(program, problem.clone()) });
-                found = true;
             }
         }
         if !found {
@@ -391,19 +563,31 @@ fn import_failures(program: &a::Program, problems: &[a::Diagnostic], failures: &
 }
 // A surviving import can depend on a refused alias at any path segment.
 // Propagate that exact cause before considering a caller's final spelling.
-fn propagate_import_poison(program: &a::Program, failures: &mut Vec<Recovery>) {
-    let mut marked = BTreeSet::new();
+fn propagate_import_poison(program: &a::Program, resolver: &Resolver<'_>,
+    failures: &mut Vec<Recovery>, marked: &mut BTreeSet<usize>) {
     loop {
         let mut changed = false;
         for (index, item) in program.uses.iter().enumerate() {
             if marked.contains(&index) { continue; }
             let scope = crate::resolve::module(program, &item.module);
             let lookup_scope = match item.block { Some(block) => program.scopes.len() + block, None => scope };
-            if let Some(failure) = poisoned(program, failures, lookup_scope, &item.path) {
+            let mut cause = poisoned(program, failures, lookup_scope, &item.path).map(|failure| failure.cause);
+            if cause.is_none() && item.glob {
+                // A glob can depend on refused members even when the module
+                // binding itself is intact. Propagate before checking a use.
+                if let Ok(Some((_, Some(a::Item::Module(id))))) =
+                    resolver.diagnostic_binding(lookup_scope, &item.path, Namespace::Type, item.span) {
+                    let target = program.modules[id].scope;
+                    cause = failures.iter().find(|failure| failure.namespace
+                        && failure.scope == target && failure.block.is_none())
+                        .map(|failure| failure.diagnostic.clone());
+                }
+            }
+            if let Some(diagnostic) = cause {
                 let names = if item.glob { Vec::new() } else { vec![item.alias.clone()] };
                 failures.push(Recovery { span: item.span, scope, block: item.block,
                     kind: "dependent import".to_string(), names, namespace: true, coherence: true,
-                    diagnostic: failure.cause });
+                    diagnostic });
                 marked.insert(index); changed = true;
             }
         }
@@ -424,6 +608,107 @@ fn closure(root: usize, plans: &[Option<Plan>], failures: &[Option<Failure>],
     }
     result.sort(); Ok(result)
 }
+fn parse_extent(source: &SourceReport, projected: &mut a::Program, span: a::Span,
+    module: &str) -> Result<Vec<a::Item>, String> {
+    let Some(text) = source.texts.get(span.file) else { return Err("source text is absent".to_string()); };
+    if span.end > text.len() || span.start >= span.end { return Err("source span is outside its input".to_string()); }
+    let mut bytes = text.as_bytes().to_vec();
+    for at in 0usize..bytes.len() {
+        if !(span.start <= at && at < span.end) && bytes[at] != b'\n' && bytes[at] != b'\r' { bytes[at] = b' '; }
+    }
+    let text = String::from_utf8(bytes).map_err(|_| -> String { "source projection is not UTF-8".to_string() })?;
+    let scope = crate::resolve::module(projected, module);
+    let parsed = crate::syntax::parse_file_report(projected, &text, span.file, scope);
+    if !parsed.diagnostics.is_empty() || !parsed.recovery.is_empty() {
+        return Err("authored source replay refused".to_string());
+    }
+    Ok(parsed.items)
+}
+fn replay_item(source: &SourceReport, original: &a::Program, projected: &mut a::Program,
+    item: a::Item) -> Result<(), String> {
+    let (span, module, expected) = match item {
+        a::Item::Struct(index) => {
+            let value = &original.structs[index];
+            (value.span, value.module.as_str(), a::Item::Struct(projected.structs.len()))
+        }
+        a::Item::Trait(index) => {
+            let value = &original.traits[index];
+            (value.span, value.module.as_str(), a::Item::Trait(projected.traits.len()))
+        }
+        a::Item::Constant(index) => {
+            let value = &original.constants[index];
+            (value.span, value.module.as_str(), a::Item::Constant(projected.constants.len()))
+        }
+        _ => return Err("item has no independent declaration replay".to_string()),
+    };
+    if parse_extent(source, projected, span, module)? != vec![expected] {
+        return Err("authored declaration changed during replay".to_string());
+    }
+    match (item, expected) {
+        (a::Item::Struct(original_id), a::Item::Struct(id)) =>
+            projected.structs[id].public = original.structs[original_id].public,
+        (a::Item::Trait(original_id), a::Item::Trait(id)) =>
+            projected.traits[id].public = original.traits[original_id].public,
+        (a::Item::Constant(original_id), a::Item::Constant(id)) =>
+            projected.constants[id].public = original.constants[original_id].public,
+        _ => return Err("authored declaration kind changed during replay".to_string()),
+    }
+    projected.items.push(expected);
+    Ok(())
+}
+fn same_binding(lookup: &Lookup, actual: Option<(String, Option<a::Item>)>,
+    original: &a::Program, replayed: &a::Program, source_indices: &[usize]) -> bool {
+    let Some((target, item)) = actual else { return false; };
+    if target != lookup.target { return false; }
+    match (lookup.item, item) {
+        (None, None) => true,
+        (Some(a::Item::Function(a)), Some(a::Item::Function(b))) =>
+            Some(a) == source_indices.get(b).copied(),
+        (Some(a::Item::Struct(a)), Some(a::Item::Struct(b))) =>
+            original.structs[a].span == replayed.structs[b].span,
+        (Some(a::Item::Trait(a)), Some(a::Item::Trait(b))) =>
+            original.traits[a].span == replayed.traits[b].span,
+        (Some(a::Item::Constant(a)), Some(a::Item::Constant(b))) =>
+            original.constants[a].span == replayed.constants[b].span,
+        _ => false,
+    }
+}
+fn replay_expansion_inputs(source: &SourceReport, original: &a::Program, projected: &mut a::Program,
+    expansions: &[usize]) -> Result<(), String> {
+    let mut definitions = BTreeSet::new();
+    for index in expansions {
+        let definition = original.macro_expansions[*index].definition;
+        if !definitions.insert(definition) { continue; }
+        let old = &original.macro_definitions[definition];
+        let before = projected.macro_definitions.len();
+        if !parse_extent(source, projected, old.span, &original.scopes[old.scope].path)?.is_empty()
+            || projected.macro_definitions.len() != before + 1usize
+            || projected.macro_definitions[before] != *old {
+            return Err("macro definition changed during exact replay".to_string());
+        }
+    }
+    Ok(())
+}
+fn same_expansions(original: &a::Program, projected: &a::Program, expected: &[usize]) -> bool {
+    if expected.len() != projected.macro_expansions.len() { return false; }
+    for index in expected {
+        let old = &original.macro_expansions[*index];
+        let call = &original.macro_invocations[old.invocation];
+        let mut matches = 0usize;
+        for origin in &projected.macro_expansions {
+            let invocation = &projected.macro_invocations[origin.invocation];
+            if invocation.span == call.span && invocation.name_span == call.name_span
+                && invocation.name == call.name && invocation.destination == call.destination
+                && invocation.position == call.position
+                && invocation.tokens == call.tokens && origin.parent.is_none() && origin.rule == old.rule
+                && projected.macro_definitions[origin.definition] == original.macro_definitions[old.definition] {
+                matches += 1usize;
+            }
+        }
+        if matches != 1usize { return false; }
+    }
+    true
+}
 fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
     plans: &[Option<Plan>]) -> Result<a::Program, String> {
     let mut projected = a::Program::default();
@@ -432,8 +717,26 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
     projected.scopes = original.scopes.clone();
     projected.loaded_modules = original.loaded_modules.clone();
     let mut scopes = BTreeSet::new();
+    let mut declarations = Vec::new();
+    let mut expansions = Vec::new();
     for index in selected {
-        let mut scope = Some(crate::resolve::module(original, &original.functions[*index].module));
+        let plan = plans[*index].as_ref().unwrap();
+        for declaration in &plan.declarations {
+            if !declarations.contains(declaration) { declarations.push(*declaration); }
+        }
+        for expansion in &plan.expansions { expansions.push(*expansion); }
+    }
+    let mut modules: Vec<String> = selected.iter().map(|index| original.functions[*index].module.clone()).collect();
+    for item in &declarations {
+        match item {
+            a::Item::Struct(index) => modules.push(original.structs[*index].module.clone()),
+            a::Item::Trait(index) => modules.push(original.traits[*index].module.clone()),
+            a::Item::Constant(index) => modules.push(original.constants[*index].module.clone()),
+            _ => {}
+        }
+    }
+    for module in &modules {
+        let mut scope = Some(crate::resolve::module(original, module));
         while let Some(current) = scope { scopes.insert(current); scope = original.scopes[current].parent; }
     }
     for module in &original.modules {
@@ -443,32 +746,48 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
             projected.modules.push(module); projected.items.push(a::Item::Module(index));
         }
     }
+    for item in declarations { replay_item(source, original, &mut projected, item)?; }
+    replay_expansion_inputs(source, original, &mut projected, &expansions)?;
     let mut source_indices = Vec::new();
+    let mut implementations = BTreeSet::new();
     for index in selected {
         let f = &original.functions[*index];
-        let Some(text) = source.texts.get(f.span.file) else { return Err("source text is absent".to_string()); };
-        if f.span.end > text.len() || f.span.start >= f.span.end { return Err("source span is outside its input".to_string()); }
-        let mut bytes = text.as_bytes().to_vec();
-        for at in 0usize..bytes.len() {
-            if !(f.span.start <= at && at < f.span.end) && bytes[at] != b'\n' && bytes[at] != b'\r' { bytes[at] = b' '; }
-        }
-        let text = String::from_utf8(bytes).map_err(|_| -> String { "source projection is not UTF-8".to_string() })?;
-        let scope = crate::resolve::module(original, &f.module);
         let before = projected.functions.len();
-        let parsed = crate::syntax::parse_file_report(&mut projected, &text, f.span.file, scope);
-        if !parsed.diagnostics.is_empty() || !parsed.recovery.is_empty() || projected.functions.len() != before + 1usize
-            || parsed.items != vec![a::Item::Function(before)] {
-            return Err("authored function replay did not yield exactly one complete item".to_string());
+        let members = if let Some(owner) = plans[*index].as_ref().unwrap().implementation {
+            if !implementations.insert(owner) { continue; }
+            let implementation = &original.impls[owner];
+            let id = projected.impls.len();
+            if parse_extent(source, &mut projected, implementation.span, &implementation.module)? != vec![a::Item::Impl(id)] {
+                return Err("inherent implementation changed during replay".to_string());
+            }
+            projected.items.push(a::Item::Impl(id));
+            implementation.methods.clone()
+        } else {
+            if parse_extent(source, &mut projected, f.span, &f.module)? != vec![a::Item::Function(before)] {
+                return Err("authored function replay did not yield one complete item".to_string());
+            }
+            projected.items.push(a::Item::Function(before));
+            vec![*index]
+        };
+        if projected.functions.len() != before + members.len() {
+            return Err("authored function population changed during replay".to_string());
         }
-        let next = &mut projected.functions[before];
-        if next.name != f.name || next.module != f.module || next.span != f.span
-            || next.const_qualified != f.const_qualified {
-            return Err("authored function identity changed during replay".to_string());
+        for (offset, member) in members.iter().enumerate() {
+            let f = &original.functions[*member];
+            let next = &mut projected.functions[before + offset];
+            if next.name != f.name || next.module != f.module || next.span != f.span
+                || next.const_qualified != f.const_qualified {
+                return Err("authored function identity changed during replay".to_string());
+            }
+            next.public = f.public; next.attrs = f.attrs.clone();
+            source_indices.push(*member);
         }
-        next.public = f.public; next.attrs = f.attrs.clone();
-        projected.items.push(a::Item::Function(before)); source_indices.push(*index);
     }
     crate::syntax::macros::expand(&mut projected).map_err(|_| -> String { "isolated source expansion refused".to_string() })?;
+    if !same_expansions(original, &projected, &expansions) {
+        return Err("macro invocation, token provenance or selected rule changed during replay".to_string());
+    }
+    crate::resolve::bind_lexical_scopes(&mut projected);
     let resolved = crate::resolve::resolve(&projected).map_err(|_| -> String { "isolated declaration lookup refused".to_string() })?;
     let names = Resolver::new(&resolved).map_err(|_| -> String { "isolated declaration catalog refused".to_string() })?;
     for index in selected {
@@ -482,7 +801,10 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
                             if path.name == lookup.written {
                                 let actual = names.diagnostic_binding(node.scope, &path.name, Namespace::Type, node.span)
                                     .map_err(|_| -> String { "replayed type lookup refused".to_string() })?;
-                                if actual == Some((lookup.target.clone(), None)) { matched = true; }
+                                if !same_binding(lookup, actual, original, &projected, &source_indices) {
+                                    return Err("a recorded source type binding changed during replay".to_string());
+                                }
+                                matched = true;
                             }
                         }
                     }
@@ -494,9 +816,10 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
                             if path.name == lookup.written {
                                 let actual = names.diagnostic_binding(node.scope, &path.name, Namespace::Value, node.span)
                                     .map_err(|_| -> String { "replayed call lookup refused".to_string() })?;
-                                if let Some((target, Some(a::Item::Function(function)))) = actual {
-                                    if target == lookup.target && lookup.function == source_indices.get(function).copied() { matched = true; }
+                                if !same_binding(lookup, actual, original, &projected, &source_indices) {
+                                    return Err("a recorded source value binding changed during replay".to_string());
                                 }
+                                matched = true;
                             }
                         }
                     }
@@ -592,35 +915,57 @@ pub fn analyze(source: &SourceReport) -> Report {
     let first = located(&program, source.diagnostics[0usize].clone());
     let mut failures = source.recovery.clone();
     let mut problems = Vec::new();
-    let (resolver, imported) = match Resolver::new_report(&program) {
+    let (resolver, imported) = match Resolver::partial_catalog(&program) {
         Ok(value) => value,
         Err(problem) => {
             return blocked_declarations(&program, problem, &failures);
         }
     };
     for problem in imported { append_problem(&mut problems, located(&program, problem)); }
-    import_failures(&program, &problems, &mut failures);
-    propagate_import_poison(&program, &mut failures);
-    let inspector = Inspector { program: &program, resolver: &resolver, failures: &failures, first: &first };
+    // Prefer an authored upstream refusal to the consequent unresolved import.
+    let mut inherited = BTreeSet::new();
+    propagate_import_poison(&program, &resolver, &mut failures, &mut inherited);
+    import_failures(&program, &problems, &inherited, &mut failures);
+    propagate_import_poison(&program, &resolver, &mut failures, &mut inherited);
+    let mut module_paths: BTreeSet<String> = BTreeSet::new();
+    let mut ambiguous_modules: BTreeSet<String> = BTreeSet::new();
+    for scope in &program.scopes {
+        if !module_paths.insert(scope.path.clone()) { ambiguous_modules.insert(scope.path.clone()); }
+    }
+    let inspector = Inspector { program: &program, resolver: &resolver, failures: &failures,
+        first: &first, ambiguous_modules: &ambiguous_modules };
     let mut plans: Vec<Option<Plan>> = vec![None; program.functions.len()];
     let mut refused: Vec<Option<Failure>> = vec![None; program.functions.len()];
+    let mut pending = Vec::new();
     for index in 0usize..program.functions.len() {
-        if !user_function(&program, index) { continue; }
+        if user_function(&program, index) { pending.push(index); }
+    }
+    let mut visited = BTreeSet::new();
+    while let Some(index) = pending.pop() {
+        if !visited.insert(index) { continue; }
         match inspector.function(index) {
-            Ok(plan) => plans[index] = Some(plan),
+            Ok(plan) => {
+                for dependency in &plan.dependencies { pending.push(*dependency); }
+                plans[index] = Some(plan);
+            }
             Err(problem) => refused[index] = Some(problem),
         }
     }
     let mut records = Vec::new();
     for index in 0usize..program.functions.len() {
         if !user_function(&program, index) { continue; }
-        let dependencies = match &plans[index] { Some(plan) => plan.dependencies.clone(), None => Vec::new() };
+        let mut dependencies = Vec::new();
+        if let Some(plan) = &plans[index] {
+            for dependency in &plan.dependencies {
+                if user_function(&program, *dependency) { dependencies.push(*dependency); }
+            }
+        }
         let mut record = Record { function: index, status: "blocked".to_string(), failure: None, dependencies };
         match closure(index, &plans, &refused, &first) {
             Err(failure) => record.failure = Some(failure),
             Ok(selected) => match replay(source, &program, &selected, &plans) {
                 Err(reason) => record.failure = Some(complete_context(&first, &reason)),
-                Ok(projected) => match crate::frontend::check_source(&projected) {
+                Ok(projected) => match crate::frontend::check_item_replay(&projected) {
                     Ok(_) => record.status = "checked".to_string(),
                     Err(problem) => {
                         let problem = located(&program, problem);

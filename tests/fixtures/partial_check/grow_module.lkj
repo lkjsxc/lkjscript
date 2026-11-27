@@ -1,0 +1,19 @@
+#[cfg(custom_unavailable)]
+fn choose() -> i64 { 0 }
+fn choose() -> i64 { 1 }
+fn carried() -> i64 { choose() }
+mod nested {
+    pub mod absent;
+    pub fn read() -> i64 { absent::pick() }
+    use absent::pick as via_import;
+    pub fn imported() -> i64 { via_import() }
+}
+const ANSWER: i64 = 42;
+fn independent() -> i64 { ANSWER }
+mod outer {
+    #[macro_use(one)]
+    mod same {}
+    mod same {
+        pub fn ambiguous() -> i64 { 42 }
+    }
+}

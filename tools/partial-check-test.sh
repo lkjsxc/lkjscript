@@ -31,7 +31,24 @@ mkdir "$work/cases"
 cp tests/fixtures/partial_check/*.lkj "$work/cases/"
 verifier_compiler=${baseline:-$compiler}
 "$verifier_compiler" build tests/fixtures/partial_check_verify.lkj --library-dir "$library" --no-store -o "$work/verify" > "$work/verifier-output" 2> "$work/verifier-error" || fail 'verifier build'
-cases=(independent unsafe_binding local_import global_static mutable_static qualified_header global_macro glob_import trait_impl type_failure qualified_import normalized_self import_chain library_inputs)
+cases=(independent unsafe_binding local_import global_static mutable_static qualified_header global_macro glob_import trait_impl type_failure qualified_import normalized_self import_chain library_inputs grow_context grow_module)
+sed '/^fn invalid</d; /^fn refusal()/d' "$work/cases/grow_context.lkj" > "$work/grow-valid.lkj"
+cat >> "$work/grow-valid.lkj" <<'EOF'
+impl Marker for i64 {}
+fn probe() -> i64 {
+    let counter = Counter;
+    let (left, right) = counter.generic(21i64);
+    let (x, y) = concrete();
+    if left + right == 42 && x == 42 && y == 42 && library()
+        && identity(42i64) == 42 && counter.measured() == 42 { expanded() } else { 0 }
+}
+EOF
+mkdir "$work/library-mutant"
+printf 'pub mod char;\n' > "$work/library-mutant/lib.lkj"
+printf 'pub fn __lkjscript_is_ascii_digit(_value: char) -> bool { 1i64 }\n' > "$work/library-mutant/char.lkj"
+sed 's/1i64 };/false };/' "$work/cases/grow_context.lkj" > "$work/macro-mutant.lkj"
+cp "$work/cases/grow_context.lkj" "$work/method-mutant.lkj"
+printf 'impl Counter { fn measured(&self) -> i64 { 0 } }\n' >> "$work/method-mutant.lkj"
 checks=0
 refusals=0
 for mode in on off; do
@@ -46,6 +63,19 @@ for mode in on off; do
         actual=$("$compiler" run "$work/valid-$mode.lkjir" --entry probe --engine "$engine" --no-store 2> "$work/error")
         [[ $actual == "$expected" ]] || fail "valid serialized $mode/$engine value"
         checks=$((checks + 2))
+        actual=$("$compiler" run "$work/grow-valid.lkj" --library-dir "$library" --debug-assertions "$mode" --engine "$engine" --no-store 2> "$work/error")
+        [[ $actual == 42 ]] || fail "grown closure $mode/$engine value"
+        checks=$((checks + 1))
+    done
+    for variant in library macro method; do
+        source="$work/cases/grow_context.lkj"
+        selected_library=$library
+        if [[ $variant == library ]]; then selected_library="$work/library-mutant"
+        else source="$work/$variant-mutant.lkj"; fi
+        status=0
+        "$compiler" check "$source" --library-dir "$selected_library" --debug-assertions "$mode" --no-store > "$work/output" 2> "$work/error" || status=$?
+        [[ $status == 1 && ! -s $work/output ]] || fail "$variant mutant $mode kept no source refusal"
+        "$work/verify" "$source" "grow_${variant}_mutant" < "$work/error" || fail "$variant mutant $mode item check"
     done
     if [[ -n $baseline ]]; then
         "$baseline" ir "$work/cases/valid.lkj" --library-dir "$library" --debug-assertions "$mode" --no-store -o "$work/baseline-$mode.lkjir" > "$work/output" 2> "$work/error"
@@ -64,7 +94,15 @@ for mode in on off; do
         cat "$work/verified"
         if [[ -n $baseline ]]; then
             status=0
-            "$baseline" check "$source" --library-dir "$library" --debug-assertions "$mode" --no-store > "$work/baseline-output" 2> "$work/baseline-error" || status=$?
+            baseline_command=check
+            baseline_args=()
+            if [[ $name == grow_module ]]; then
+                # Compare loader errors before the old partial catalog reports
+                # a duplicate from its different cfg recovery boundary.
+                baseline_command=build
+                baseline_args=(-o "$work/baseline-refused")
+            fi
+            "$baseline" "$baseline_command" "$source" --library-dir "$library" --debug-assertions "$mode" --no-store "${baseline_args[@]}" > "$work/baseline-output" 2> "$work/baseline-error" || status=$?
             [[ $status == 1 && ! -s $work/baseline-output ]] || fail "baseline $name/$mode refusal"
             while IFS= read -r line; do
                 [[ $line == *': E_'* && $line != *': E_BLOCKED '* ]] || continue
@@ -116,13 +154,18 @@ if [[ -n $witness ]]; then
                     independent|unsafe_binding|library_inputs)
                         [[ $status == 0 && $("$work/rust") == 42 ]] || fail "Rust capability-boundary twin $name/$mode/$level"
                         ;;
-                    local_import|global_static|mutable_static|qualified_header|global_macro|glob_import|trait_impl|type_failure|qualified_import|normalized_self|import_chain)
+                    local_import|global_static|mutable_static|qualified_header|global_macro|glob_import|trait_impl|type_failure|qualified_import|normalized_self|import_chain|grow_context|grow_module)
                         [[ $status != 0 ]] || fail "Rust accepted malformed context $name/$mode/$level"
                         ;;
                     *) fail "missing Rust oracle for $name" ;;
                 esac
                 rust_verdicts=$((rust_verdicts + 1))
             done
+            sed "s/std::char::__lkjscript_is_ascii_digit('9')/'9'.is_ascii_digit()/" "$work/grow-valid.lkj" > "$work/rust.lkj"
+            printf '\nfn main() { println!("{}", probe()); }\n' >> "$work/rust.lkj"
+            "$witness" --edition=2021 --crate-name partial_grow -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || fail "Rust grown closure $mode/$level"
+            [[ $("$work/rust") == 42 ]] || fail "Rust grown closure $mode/$level value"
+            rust_values=$((rust_values + 1))
             cp "$work/cases/unsafe_binding.lkj" "$work/rust.lkj"
             printf '\nfn main() { println!("{}", unsafe_local()); }\n' >> "$work/rust.lkj"
             "$witness" --edition=2021 --crate-name partial_shadow -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error"

@@ -474,6 +474,7 @@ pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<O
                     kind: "file".to_string(),
                     reason: error.message.clone(),
                 });
+                if let Some(index) = owner { recovery.push(unloaded_module(&program, index, &error)); }
                 diagnostics.push(error);
                 continue;
             }
@@ -501,6 +502,7 @@ pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<O
                 kind: "file".to_string(),
                 reason: error.message.clone(),
             });
+            if let Some(index) = owner { recovery.push(unloaded_module(&program, index, &error)); }
             diagnostics.push(error);
             continue;
         }
@@ -681,6 +683,7 @@ pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<O
                                 kind: "module".to_string(),
                                 reason: error.message.clone(),
                             });
+                            recovery.push(unloaded_module(&program, index, &error));
                             diagnostics.push(error);
                         }
                     }
@@ -701,6 +704,7 @@ pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<O
                         kind: "module".to_string(),
                         reason: error.message.clone(),
                     });
+                    recovery.push(unloaded_module(&program, index, &error));
                     diagnostics.push(error);
                     continue;
                 }
@@ -719,6 +723,7 @@ pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<O
                         kind: "module".to_string(),
                         reason: error.message.clone(),
                     });
+                    recovery.push(unloaded_module(&program, index, &error));
                     diagnostics.push(error);
                     continue;
                 }
@@ -737,12 +742,13 @@ pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<O
             }
         }
     }
-    let (expansion_errors, expansion_blocked) = syntax::macros::expand_report(&mut program);
+    let (expansion_errors, expansion_blocked, expansion_recovery) = syntax::macros::expand_report(&mut program);
     for mut diagnostic in expansion_errors {
         if diagnostic.path.is_empty() { diagnostic.path = program.files[diagnostic.file].path.clone(); }
         diagnostics.push(diagnostic);
     }
     for region in expansion_blocked { blocked.push(region); }
+    for failure in expansion_recovery { recovery.push(failure); }
     if !program.macro_expansions.is_empty() { capture_macro_includes(&mut program, read, &mut diagnostics); }
     if !diagnostics.is_empty() {
         blocked.push(BlockedRegion {
@@ -761,6 +767,13 @@ pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<O
         recovery,
         texts,
     }
+}
+
+fn unloaded_module(program: &Program, index: usize, error: &Diagnostic) -> Recovery {
+    let module = &program.modules[index];
+    Recovery { span: module.span, scope: program.scopes[module.scope].parent.unwrap(),
+        block: None, kind: "module".to_string(), names: vec![module.name.clone()],
+        namespace: true, coherence: true, diagnostic: error.clone() }
 }
 
 fn load_error(program: &Program, span: Span, code: &str, message: &str) -> Diagnostic {

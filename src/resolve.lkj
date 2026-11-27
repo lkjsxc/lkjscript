@@ -214,14 +214,19 @@ fn index_function_owners(program: &Program) -> Result<Vec<FunctionOwner>> {
 
 impl<'a> Resolver<'a> {
     pub fn new(program: &'a Program) -> Result<Self> {
-        let (resolver, problems) = Self::new_report(program)?;
+        let (resolver, problems) = Self::catalog(program, false)?;
         if let Some(failure) = problems.into_iter().next() {
             Err(failure)
         } else {
             Ok(resolver)
         }
     }
-    pub(crate) fn new_report(program: &'a Program) -> Result<(Self, Vec<Diagnostic>)> {
+    /// Unloaded module declarations still occupy their original names. The
+    /// diagnostic consumer must reject lookups affected by their loader errors.
+    pub(crate) fn partial_catalog(program: &'a Program) -> Result<(Self, Vec<Diagnostic>)> {
+        Self::catalog(program, true)
+    }
+    fn catalog(program: &'a Program, partial: bool) -> Result<(Self, Vec<Diagnostic>)> {
         if program.resolved && program.function_owners.len() != program.functions.len() {
             return Err(Diagnostic::new(
                 Span::default(),
@@ -326,7 +331,7 @@ impl<'a> Resolver<'a> {
             )?;
         }
         for (id, item) in program.modules.iter().enumerate() {
-            if item.external {
+            if item.external && !partial {
                 return Err(Diagnostic::new(
                     item.span,
                     "E_UNSUPPORTED",
@@ -351,7 +356,7 @@ impl<'a> Resolver<'a> {
                 }
             }
         }
-        if problems.is_empty() { result.index_associated_constants()?; }
+        if !partial && problems.is_empty() { result.index_associated_constants()?; }
         Ok((result, problems))
     }
     fn function_owner(&self, function: FunctionId) -> FunctionOwner {

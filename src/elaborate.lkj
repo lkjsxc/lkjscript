@@ -215,7 +215,7 @@ fn unsized_local_problem(
     }
     None
 }
-fn first_problem(problems: Vec<a::Diagnostic>) -> a::Diagnostic {
+pub(crate) fn first_problem(problems: Vec<a::Diagnostic>) -> a::Diagnostic {
     problems
         .into_iter()
         .next()

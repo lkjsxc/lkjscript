@@ -230,12 +230,16 @@ pub(super) fn replay(program: &mut Program) -> Result<(), Diagnostic> {
 
 /// Successful source loading uses the same expansion and provenance as replay.
 /// Only a refused input pays for isolated diagnostic recovery.
-pub(super) fn report(program: &mut Program) -> (Vec<Diagnostic>, Vec<BlockedRegion>) {
-    let mut problem = match run(program) { Ok(()) => return (Vec::new(), Vec::new()), Err(problem) => problem };
+pub(super) fn report(program: &mut Program)
+    -> (Vec<Diagnostic>, Vec<BlockedRegion>, Vec<crate::diagnostics::Recovery>) {
+    let mut problem = match run(program) {
+        Ok(()) => return (Vec::new(), Vec::new(), Vec::new()),
+        Err(problem) => problem,
+    };
     if problem.path.is_empty() { problem.path = program.files[problem.file].path.clone(); }
     let input = match program.macro_input.take() {
         Some(input) => input,
-        None => return (vec![problem], Vec::new()),
+        None => return (vec![problem], Vec::new(), Vec::new()),
     };
     *program = *input;
     recovery::run(program, problem)

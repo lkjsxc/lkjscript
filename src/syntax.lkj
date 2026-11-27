@@ -873,11 +873,43 @@ impl Parser {
         }
     }
 
-    // Only complete, plain lexical headers identify a failed binding. Attributes,
-    // groups, globs and unknown forms deliberately keep a wildcard namespace.
-    fn recovery_shape(&self, start: usize, end: usize, kind: &str) -> (Vec<String>, bool, bool) {
+    // These outer attributes cannot add ordinary bindings. A derive can still
+    // affect coherence. Inner and unknown attributes keep a wildcard footprint.
+    fn recovery_header(&self, start: usize) -> usize {
         let mut at = start;
-        if at < end && self.tokens[at].text == "pub" { at += 1usize; }
+        while at + 2usize < self.tokens.len()
+            && self.tokens[at].kind == TokenKind::Symbol && self.tokens[at].text == "#"
+            && self.tokens[at + 1usize].kind == TokenKind::Symbol && self.tokens[at + 1usize].text == "["
+            && self.tokens[at + 2usize].kind == TokenKind::Ident
+            && matches!(self.tokens[at + 2usize].text.as_str(), "cfg" | "derive" | "allow" | "doc"
+                | "deprecated" | "inline") {
+            let mut depth = 1usize;
+            let mut end = at + 3usize;
+            while end < self.tokens.len() && self.tokens[end].kind != TokenKind::End {
+                let token = &self.tokens[end];
+                if token.kind == TokenKind::Symbol && token.text == "[" { depth += 1usize; }
+                if token.kind == TokenKind::Symbol && token.text == "]" { depth -= 1usize; }
+                end += 1usize;
+                if depth == 0usize { break; }
+            }
+            if depth != 0usize { break; }
+            at = end;
+        }
+        at
+    }
+
+    fn recovery_visibility(&self, mut at: usize, end: usize) -> usize {
+        if at < end && self.tokens[at].kind == TokenKind::Ident && self.tokens[at].text == "pub" {
+            at += 1usize;
+            if at < end && self.tokens[at].text == "(" {
+                while at < end && self.tokens[at].text != ")" { at += 1usize; }
+                at += 1usize;
+            }
+        }
+        at
+    }
+    fn recovery_shape(&mut self, start: usize, end: usize, kind: &str) -> (Vec<String>, bool, bool) {
+        let mut at = self.recovery_visibility(self.recovery_header(start), end);
         if at >= end { return (Vec::new(), true, true); }
         // A recovery cut before the next declaration does not prove that an
         // unfinished qualifier or header belongs only to the preceding name.
@@ -889,7 +921,9 @@ impl Parser {
         }
         if self.tokens[at].text == "const" && at + 1usize < end
             && self.tokens[at + 1usize].text == "fn" { at += 1usize; }
-        let head = self.tokens[at].text.as_str();
+        if self.tokens[at].kind != TokenKind::Ident { return (Vec::new(), true, true); }
+        let head = self.tokens[at].text.clone();
+        let head = head.as_str();
         if matches!(head, "fn" | "struct" | "enum" | "type" | "mod" | "trait" | "const" | "static") {
             if at + 2usize < end && self.tokens[at + 1usize].kind == TokenKind::Ident
                 && recovery_binding_name(&self.tokens[at + 1usize].text) {
@@ -926,28 +960,21 @@ impl Parser {
             return (Vec::new(), true, true);
         }
         if head == "use" {
-            at += 1usize;
-            if at < end && self.tokens[at].text == "::" { at += 1usize; }
-            let mut name = String::new();
-            loop {
-                if at >= end || self.tokens[at].kind != TokenKind::Ident {
-                    return (Vec::new(), true, true);
-                }
-                name = self.tokens[at].text.clone(); at += 1usize;
-                if at < end && self.tokens[at].text == "::" { at += 1usize; }
-                else { break; }
+            let before = self.program.uses.len();
+            let resume = self.at;
+            let probing = self.probing;
+            self.probing = true;
+            self.at = at + 1usize;
+            let complete = self.use_item(Visibility::Private).is_ok() && self.at == end;
+            self.at = resume;
+            self.probing = probing;
+            let mut names = Vec::new();
+            if complete && self.program.uses[before..].iter().all(|item|
+                !item.glob && recovery_binding_name(&item.alias)) {
+                for item in &self.program.uses[before..] { names.push(item.alias.clone()); }
             }
-            if at < end && self.tokens[at].text == "as" {
-                at += 1usize;
-                if at >= end || self.tokens[at].kind != TokenKind::Ident {
-                    return (Vec::new(), true, true);
-                }
-                name = self.tokens[at].text.clone(); at += 1usize;
-            }
-            if at + 1usize == end && self.tokens[at].text == ";" && recovery_binding_name(&name) {
-                return (vec![name], true, true);
-            }
-            return (Vec::new(), true, true);
+            self.program.uses.truncate(before);
+            return (names, true, true);
         }
         if kind == "item" || matches!(head, "impl" | "union" | "macro_rules") {
             return (Vec::new(), true, true);
@@ -982,6 +1009,14 @@ impl Parser {
             start
         };
         let mut delimiters: Vec<u8> = Vec::new();
+        let header = self.recovery_header(start);
+        let head = self.recovery_visibility(header, self.tokens.len());
+        let import = self.tokens.get(head)
+            .is_some_and(|token| token.kind == TokenKind::Ident && token.text == "use");
+        let boundary = if header == start { start }
+            else if self.tokens.get(head).is_some_and(|token| token.text == "const")
+                && self.tokens.get(head + 1usize).is_some_and(|token| token.text == "fn") { head + 1usize }
+            else { head };
         let block_statement = kind == "statement"
             && matches!(
                 self.tokens[start].kind,
@@ -993,7 +1028,7 @@ impl Parser {
             );
         while self.tokens[at].kind != TokenKind::End {
             let token = &self.tokens[at];
-            if at > start
+            if at > boundary
                 && at >= self.at
                 && delimiters.is_empty()
                 && token.kind == TokenKind::Ident
@@ -1030,7 +1065,7 @@ impl Parser {
                             delimiters.pop();
                             if expected == b'{'
                                 && delimiters.is_empty()
-                                && (kind == "item" || block_statement)
+                                && (kind == "item" && !import || block_statement)
                             {
                                 at += 1;
                                 if self.tokens[at].kind != TokenKind::Ident

@@ -532,6 +532,10 @@ logic; it is a differential oracle. Optimization output is rechecked and rejecte
 output discarded, then native behavior is compared with interpretation of the
 original IR.
 
+Independent item diagnostics use the same checker on replayed source closures.
+The report gives no authority to publish the resulting IR or use it for an
+executable, interpreter run or checked edit of the refused source root.
+
 ## Native CPU profiles and selected IR
 
 CPU profiling is an explicit build option:

@@ -1,24 +1,34 @@
 //! Reporting retries the shared traversal from source after each failed call.
 //! Every retry discards all arenas and traversal state; partial trees never resolve.
 use super::*;
+use crate::diagnostics::Recovery;
 
-fn record(program: &Program, diagnostics: &mut Vec<Diagnostic>, mut problem: Diagnostic) {
+fn located(program: &Program, mut problem: Diagnostic) -> Diagnostic {
     if problem.path.is_empty() {
         if let Some(file) = program.files.get(problem.file) { problem.path = file.path.clone(); }
     }
+    problem
+}
+fn record(diagnostics: &mut Vec<Diagnostic>, problem: Diagnostic) {
     if !diagnostics.contains(&problem) { diagnostics.push(problem); }
 }
 fn blocked(program: &Program, regions: &mut Vec<BlockedRegion>, span: Span, kind: &str, code: &str) {
     regions.push(BlockedRegion { path: program.files[span.file].path.clone(), span,
         kind: kind.to_string(), reason: format!("not analyzed after {code}") });
 }
-pub(super) fn run(program: &mut Program, first: Diagnostic) -> (Vec<Diagnostic>, Vec<BlockedRegion>) {
+fn incomplete_recovery(problem: Diagnostic) -> Recovery {
+    Recovery { span: Span::default(), scope: 0usize, block: None, kind: "source input".to_string(),
+        names: Vec::new(), namespace: true, coherence: true, diagnostic: problem }
+}
+pub(super) fn run(program: &mut Program, first: Diagnostic)
+    -> (Vec<Diagnostic>, Vec<BlockedRegion>, Vec<Recovery>) {
     let input = program.clone();
     let mut source = input.clone();
     source.macro_input = Some(Box::new(input));
     let mut diagnostics = Vec::new();
     let mut regions = Vec::new();
-    record(&source, &mut diagnostics, first);
+    let mut recovery = Vec::new();
+    record(&mut diagnostics, first);
     let mut rules: Vec<Vec<matcher::Rule>> = Vec::new();
     let mut invalid: BTreeMap<usize, Diagnostic> = BTreeMap::new();
     let mut exports: BTreeMap<(usize, String), usize> = BTreeMap::new();
@@ -30,7 +40,7 @@ pub(super) fn run(program: &mut Program, first: Diagnostic) -> (Vec<Diagnostic>,
                 let problem = error(definition.name_span, "E_MACRO_RULE", "duplicate exported macro name");
                 invalid.insert(previous, problem.clone()); invalid.insert(id, problem.clone());
                 blocked(&source, &mut regions, definition.span, "item", &problem.code);
-                record(&source, &mut diagnostics, problem);
+                record(&mut diagnostics, located(&source, problem));
             } else { exports.insert(key, id); }
         }
         match matcher::rules(definition) {
@@ -38,9 +48,17 @@ pub(super) fn run(program: &mut Program, first: Diagnostic) -> (Vec<Diagnostic>,
             Err(problem) => {
                 rules.push(Vec::new()); invalid.insert(id, problem.clone());
                 blocked(&source, &mut regions, definition.span, "item", &problem.code);
-                record(&source, &mut diagnostics, problem);
+                record(&mut diagnostics, located(&source, problem));
             }
         }
+    }
+    // The traversal still selects an invalid definition normally and records
+    // every refused consumer. A definition alone introduces only a macro name.
+    for (id, problem) in &invalid {
+        let def = &source.macro_definitions[*id];
+        recovery.push(Recovery { span: def.span, scope: def.scope, block: None,
+            kind: "macro definition".to_string(), names: vec![def.name.clone()],
+            namespace: false, coherence: false, diagnostic: located(&source, problem.clone()) });
     }
     let mut failed: BTreeSet<usize> = BTreeSet::new();
     loop {
@@ -53,15 +71,27 @@ pub(super) fn run(program: &mut Program, first: Diagnostic) -> (Vec<Diagnostic>,
                 // Skip only the failed leaf: successful generated parents and independent
                 // siblings must remain available for the next diagnostic.
                 let call = expander.active.last().copied();
-                record(program, &mut diagnostics, problem.clone());
-                let Some(call) = call else { break; };
-                let Some(invocation) = program.macro_invocations.get(call) else { break; };
-                if !failed.insert(call) { break; }
+                let problem = located(program, problem);
+                record(&mut diagnostics, problem.clone());
+                let Some(call) = call else { recovery.push(incomplete_recovery(problem)); break; };
+                let Some(invocation) = program.macro_invocations.get(call) else {
+                    recovery.push(incomplete_recovery(problem)); break;
+                };
+                if !failed.insert(call) { recovery.push(incomplete_recovery(problem)); break; }
                 let kind = if invocation.position == MacroPosition::Item { "item" } else { "statement" };
                 blocked(program, &mut regions, invocation.span, kind, &problem.code);
+                let mut authored = call;
+                while let Some(parent) = program.macro_invocations[authored].parent {
+                    authored = program.macro_expansions[parent].invocation;
+                }
+                let owner = &program.macro_invocations[authored];
+                recovery.push(Recovery { span: owner.span, scope: owner.destination, block: owner.block,
+                    kind: "macro invocation".to_string(), names: Vec::new(),
+                    namespace: owner.position != MacroPosition::Expression, coherence: true,
+                    diagnostic: problem });
             }
         }
     }
     program.macros_expanded = false;
-    (diagnostics, regions)
+    (diagnostics, regions, recovery)
 }

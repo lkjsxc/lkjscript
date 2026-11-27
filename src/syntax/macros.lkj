@@ -474,4 +474,7 @@ fn statements(program: &mut Program, tokens: &[MacroToken], invocation: &MacroIn
 }
 
 pub(crate) fn expand(program: &mut Program) -> Result<(), Diagnostic> { expand::run(program) }
-pub(crate) fn expand_report(program: &mut Program) -> (Vec<Diagnostic>, Vec<BlockedRegion>) { expand::report(program) }
+pub(crate) fn expand_report(program: &mut Program)
+    -> (Vec<Diagnostic>, Vec<BlockedRegion>, Vec<crate::diagnostics::Recovery>) {
+    expand::report(program)
+}
