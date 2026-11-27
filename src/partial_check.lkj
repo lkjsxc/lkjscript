@@ -422,11 +422,15 @@ impl<'a> Inspector<'a> {
                 };
                 if locals.contains(&path.name) { return Err(self.boundary("local callable selection")); }
                 for argument in &path.args { self.ty(*argument, plan)?; }
-                let Some(a::Item::Function(function)) =
-                    self.binding(target.scope, path, target.span, Namespace::Value, plan)? else {
-                    return Err(self.boundary("call target is not a declared free function"));
-                };
-                if !plan.dependencies.contains(&function) { plan.dependencies.push(function); }
+                match self.binding(target.scope, path, target.span, Namespace::Value, plan)? {
+                    Some(a::Item::Function(function)) => {
+                        if !plan.dependencies.contains(&function) { plan.dependencies.push(function); }
+                    }
+                    None if plan.lookups.last().unwrap().target == crate::resolve::SCALAR_SIZE_OF => {
+                        plan.structural = true;
+                    }
+                    _ => return Err(self.boundary("call target is not a declared free function")),
+                }
                 for argument in args { self.expression(*argument, locals, plan)?; }
                 Ok(())
             }

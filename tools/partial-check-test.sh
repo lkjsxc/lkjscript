@@ -31,7 +31,7 @@ mkdir "$work/cases"
 cp tests/fixtures/partial_check/*.lkj "$work/cases/"
 verifier_compiler=${baseline:-$compiler}
 "$verifier_compiler" build tests/fixtures/partial_check_verify.lkj --library-dir "$library" --no-store -o "$work/verify" > "$work/verifier-output" 2> "$work/verifier-error" || fail 'verifier build'
-cases=(independent unsafe_binding local_import global_static mutable_static qualified_header global_macro glob_import trait_impl type_failure qualified_import normalized_self import_chain library_inputs grow_context grow_module receiver retained_impl qualified_chain scoped_coherence glob_anchor)
+cases=(independent unsafe_binding local_import global_static mutable_static qualified_header global_macro glob_import trait_impl type_failure qualified_import normalized_self import_chain library_inputs grow_context grow_module receiver retained_impl qualified_chain scoped_coherence glob_anchor scalar_size)
 sed '/^fn invalid</d; /^fn refusal()/d' "$work/cases/grow_context.lkj" > "$work/grow-valid.lkj"
 cat >> "$work/grow-valid.lkj" <<'EOF'
 impl Marker for i64 {}
@@ -84,6 +84,7 @@ sed -e 's/, absent::Missing//' -e '/^mod unrelated {$/,/^}$/d' \
     -e '/^fn poisoned()/d; /^fn malformed()/d; /^fn refusal()/d' \
     "$work/cases/qualified_chain.lkj" > "$work/qualified-chain-valid.lkj"
 sed '5,7d' "$work/cases/scoped_coherence.lkj" > "$work/scoped-coherence-valid.lkj"
+sed -n '2,3p' "$work/cases/scalar_size.lkj" > "$work/scalar-size-valid.lkj"
 sed 's/impl Bits<u16> for Ready/impl Bits<u8> for Ready/' \
     "$work/cases/scoped_coherence.lkj" > "$work/scoped-coherence-same.lkj"
 sed 's/dyn Missing) -> bool { false }/dyn Missing) -> bool { opaque!() }/' \
@@ -116,7 +117,7 @@ for mode in on off; do
         actual=$("$compiler" run "$work/retained-impl-valid.lkj" --library-dir "$library" --debug-assertions "$mode" --engine "$engine" --no-store 2> "$work/error")
         [[ $actual == 42 ]] || fail "retained implementation $mode/$engine value"
         checks=$((checks + 3))
-        for valid in qualified-chain scoped-coherence; do
+        for valid in qualified-chain scoped-coherence scalar-size; do
             actual=$("$compiler" run "$work/$valid-valid.lkj" --library-dir "$library" --debug-assertions "$mode" --engine "$engine" --no-store 2> "$work/error")
             [[ $actual == 42 ]] || fail "$valid $mode/$engine value"
             checks=$((checks + 1))
@@ -197,7 +198,7 @@ for mode in on off; do
         done
     done
     # Even when probe itself checks independently, the invalid source cannot publish an image or IR.
-    for name in independent receiver qualified_chain; do
+    for name in independent receiver qualified_chain scalar_size; do
         for command in build ir; do
             printf 'unreplaced destination\n' > "$work/destination"
             cp "$work/destination" "$work/destination-before"
@@ -249,7 +250,7 @@ if [[ -n $witness ]]; then
                     independent|unsafe_binding|library_inputs)
                         [[ $status == 0 && $("$work/rust") == 42 ]] || fail "Rust capability-boundary twin $name/$mode/$level"
                         ;;
-                    local_import|global_static|mutable_static|qualified_header|global_macro|glob_import|trait_impl|type_failure|qualified_import|normalized_self|import_chain|grow_context|grow_module|receiver|retained_impl|qualified_chain|scoped_coherence|glob_anchor)
+                    local_import|global_static|mutable_static|qualified_header|global_macro|glob_import|trait_impl|type_failure|qualified_import|normalized_self|import_chain|grow_context|grow_module|receiver|retained_impl|qualified_chain|scoped_coherence|glob_anchor|scalar_size)
                         [[ $status != 0 ]] || fail "Rust accepted malformed context $name/$mode/$level"
                         ;;
                     *) fail "missing Rust oracle for $name" ;;
@@ -271,7 +272,7 @@ if [[ -n $witness ]]; then
             "$witness" --edition=2021 --crate-name partial_retained_impl -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || fail "Rust retained implementation $mode/$level"
             [[ $("$work/rust") == 42 ]] || fail "Rust retained implementation $mode/$level value"
             rust_values=$((rust_values + 1))
-            for valid in qualified-chain scoped-coherence; do
+            for valid in qualified-chain scoped-coherence scalar-size; do
                 cp "$work/$valid-valid.lkj" "$work/rust.lkj"
                 printf '\nfn main() { println!("{}", probe()); }\n' >> "$work/rust.lkj"
                 "$witness" --edition=2021 --crate-name partial_lookup -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || fail "Rust $valid $mode/$level"

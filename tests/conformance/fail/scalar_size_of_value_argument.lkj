@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"rustCode":"E0061"}
+fn probe() -> usize {
+    std::mem::size_of::<usize>(1)
+}

@@ -121,11 +121,18 @@ Trait const methods, generic trait calls, callable/closure invocation, try,
 intrinsic calls, allocation, mutable borrowing and mutation through references
 remain located limits. Source queries retain const qualification, and checked
 renames/body edits preserve it; changing a callee to non-const is rejected when
-a const caller depends on it. Function calls in module constant initializers
-remain a located compile-time-evaluation limit, including scalar calls; general
-constant aggregate/reference evaluation is not claimed.
+a const caller depends on it. General function calls in module constant
+initializers remain a located compile-time-evaluation limit.
 [Const-function cases](../tests/conformance/pass/const_function_construct.lkj),
 [queries and edits](../tools/const-functions-test.sh).
+
+`std::mem::size_of::<T>()` and `core::mem::size_of::<T>()` produce a
+`usize` literal for unit and the builtin integer, bool, char and f64 types.
+They use the x86-64 target's scalar sizes, including eight bytes for pointer-sized
+integers and zero for unit. These queries work in const functions and constant
+initializers. An unrooted path follows ordinary type-namespace shadowing, and a
+leading `::` selects the standard root. Aliases, generic parameters, aggregate
+types and references remain unsupported.
 
 Unparenthesized block forms in statement position end before a binary operator,
 call or index that can start another expression; dot and ? continue the expression.
@@ -1142,6 +1149,8 @@ from their original loaded source bytes, preserving source coordinates and
 configuration. Type, constant, trait and direct-call bindings must agree with
 lookup in the original declaration context. Selected library bodies participate
 in the closure even when they are demanded only by an abstract definition.
+Scalar layout queries replay their value-namespace path and type arguments
+before ordinary resolution produces the literal.
 A local expression macro with one authored producer replays exact definition
 bytes and invocation tokens through normal expansion. The rule, destination
 and token origins must agree. The reconstructed closure passes ordinary

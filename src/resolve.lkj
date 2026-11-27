@@ -11,6 +11,13 @@ use import_scopes::ImportScopes;
 use std::collections::{BTreeMap, BTreeSet};
 
 type Result<T> = std::result::Result<T, Diagnostic>;
+pub(crate) const SCALAR_SIZE_OF: &str = "std::mem::size_of";
+
+fn scalar_size_path(path: &str) -> bool {
+    path == SCALAR_SIZE_OF
+        || matches!(path, "::std::mem::size_of" | "core::mem::size_of" | "::core::mem::size_of")
+}
+
 // A root nominal can share a primitive spelling; associated owner identities
 // retain its stable declaration qualification rather than a parse-order ID.
 pub(crate) fn nominal_receiver_name(name: &str) -> String {
@@ -598,6 +605,11 @@ impl<'a> Resolver<'a> {
         }
         if let Some(limit) = self.primitive_limit(scope, path, &parts, namespace, span)? {
             return Ok(Some(limit));
+        }
+        if namespace == Namespace::Value && scalar_size_path(path)
+            && (path.starts_with("::")
+                || self.lexical_path_reads(scope, parts[0].as_str(), Namespace::Type, span, reads).is_none()) {
+            return Ok(Some(Resolved::intrinsic(SCALAR_SIZE_OF.to_string())));
         }
         if matches!(
             path,
@@ -1313,6 +1325,9 @@ fn resolve_nodes(result: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
     }
     // Locals still resolve before declaration-valued expression paths.
     for id in 0..result.exprs.len() {
+        if let Some(bytes) = resolver.scalar_size_call(result, id)? {
+            result.exprs[id].kind = Expr::Int(format!("{bytes}usize"));
+        }
         let node = &mut result.exprs[id];
         let scope = node.scope;
         let span = node.span;
@@ -1327,6 +1342,45 @@ fn resolve_nodes(result: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
 }
 
 impl Resolver<'_> {
+    fn scalar_size_call(&self, program: &Program, id: ExprId) -> Result<Option<usize>> {
+        let node = &program.exprs[id];
+        let Expr::Call { callee, args } = &node.kind else { return Ok(None); };
+        let target = &program.exprs[*callee];
+        let Expr::Path(path) = &target.kind else { return Ok(None); };
+        if path.qualification.is_some() || !scalar_size_path(&path.name) {
+            return Ok(None);
+        }
+        if !self.path(target.scope, &path.name, Namespace::Value, target.span, true)?
+            .is_some_and(|found| found.binding.is_none() && found.name == SCALAR_SIZE_OF) {
+            return Ok(None);
+        }
+        if !args.is_empty() || path.args.len() != 1usize || !path.bindings.is_empty() {
+            return Err(Diagnostic::new(node.span, "E_TYPE",
+                "size_of requires one explicit type argument and no value arguments"));
+        }
+        let argument = &program.types[path.args[0]];
+        // Source scalar sizes are fixed by the x86-64 target. Aggregate and
+        // reference representations need their own source layout contract.
+        let bytes = match &argument.kind {
+            Type::Tuple(parts) if parts.is_empty() => Some(0usize),
+            Type::Path(ty) if ty.declaration.is_none() && ty.qualification.is_none()
+                && ty.args.is_empty() && ty.bindings.is_empty()
+                && !self.generic(argument.span, &ty.name) => match ty.name.as_str() {
+                    "bool" | "i8" | "u8" => Some(1usize),
+                    "i16" | "u16" => Some(2usize),
+                    "char" | "i32" | "u32" => Some(4usize),
+                    "f64" | "i64" | "u64" | "isize" | "usize" => Some(8usize),
+                    _ => None,
+                },
+            _ => None,
+        };
+        if bytes.is_none() {
+            return Err(Diagnostic::new(argument.span, "E_UNSUPPORTED",
+                "size_of requires a builtin scalar or unit type"));
+        }
+        Ok(bytes)
+    }
+
     fn module_array_length(&self, resolved: &Program, scope: ModuleId, name: &str, span: Span)
         -> Result<Option<(DeclarationId, usize)>> {
         if let Some(separator) = name.rfind("::") {

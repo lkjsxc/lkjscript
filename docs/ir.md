@@ -164,6 +164,8 @@ Bit conversions preserve every bit.
 
 Ordinary integer arithmetic, division and shifts trap on invalid operations.
 Wrapping operations compute modulo the declared width.
+Source scalar layout queries produce ordinary `int` instructions with a
+`usize` destination.
 
 The intrinsic signatures are checked in `src/check.lkj` and `src/check/io.lkj`:
 

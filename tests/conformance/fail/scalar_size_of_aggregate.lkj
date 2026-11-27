@@ -1,0 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"rustAccept":true}
+fn probe() -> usize {
+    std::mem::size_of::<(u8, usize)>()
+}

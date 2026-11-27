@@ -1,0 +1,8 @@
+fn broken() { println!("requires stdout"); }
+pub const fn delimiter_size() -> usize { std::mem::size_of::<usize>() }
+fn probe() -> usize { delimiter_size() + 34 }
+
+mod poisoned {
+    use crate::absent::Ghost as std;
+    fn blocked() -> usize { std::mem::size_of::<usize>() }
+}

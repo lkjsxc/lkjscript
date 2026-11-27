@@ -21,6 +21,12 @@ fn expected(line: usize, name: &str, status: &str, cause_line: usize,
 fn at(mut row: Expected, column: usize) -> Expected { row.column = column; row }
 fn cases(name: &str) -> Vec<Expected> {
     match name {
+        "scalar_size" => vec![
+            expected(1, "broken", "blocked", 1, 15, "E_CAPABILITY", ""),
+            at(expected(2, "delimiter_size", "checked", 0, 0, "", ""), 5),
+            expected(3, "probe", "checked", 0, 0, "", "delimiter_size"),
+            at(expected(7, "poisoned::blocked", "blocked", 6, 5, "E_IMPORT", ""), 5),
+        ],
         "independent" => vec![
             expected(1, "broken", "blocked", 2, 5, "E_CAPABILITY", ""),
             expected(5, "good", "checked", 0, 0, "", ""),

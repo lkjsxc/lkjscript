@@ -690,8 +690,22 @@ The nom 8.0.0 reduction retains the authored `ToUsize` declaration and the
 refused `u32` member. In both modes, it advances from zero checked methods to
 three at the original lines 1240, 1247 and 1254. The valid twin evaluates to 42
 on both lkjscript engines and in Rust at opt0 and opt3. The full pinned Sōzu and
-nom roots still have opaque declaration producers and keep eight, nine and
-eight checked items respectively.
+nom roots at that revision still have opaque declaration producers and keep
+eight, nine and eight checked items respectively.
+
+#### Scalar layout queries in refused Sōzu roots
+
+The pinned command provider's `channel::delimiter_size` at
+`command/src/channel.lkj:461` calls `std::mem::size_of::<usize>()`.
+The same source closure supplies both Sōzu roots. The scalar layout query now
+resolves through the ordinary value namespace and becomes a checked `usize`
+literal. Replay observes the original path and its type argument.
+
+In both debug configurations, Sōzu bin advances from 8 to 9 checked items
+and Sōzu lib from 9 to 10. Each root gains the same authored provider function.
+nom keeps its 8 checked items. The complete ordinary diagnostic streams,
+tombstones, item IDs and previous checked rows match the baseline in all six
+comparisons. All six whole-root checks return status 1.
 
 #### Earlier ordinary numeric traits frontier
 
