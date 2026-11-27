@@ -57,10 +57,8 @@ impl Expander {
         }
         Ok(())
     }
-    fn statement(&mut self, program: &mut Program, call: usize, block: BlockId, first: usize)
-        -> Result<(Vec<Stmt>, bool), Diagnostic> {
-        if self.failed.contains(&call) { return Ok((vec![Stmt::MacroInvocation(call)], false)); }
-        self.active.push(call);
+    fn parse_statement(&self, program: &mut Program, call: usize, block: BlockId)
+        -> Result<(usize, Vec<Stmt>, Option<ExprId>, bool), Diagnostic> {
         let invocation = self.invocation(program, call)?;
         let MacroPosition::Statement { semicolon, .. } = invocation.position else {
             return Err(error(invocation.span, "E_MACRO_EXPANSION", "macro invocation is not a statement"));
@@ -69,9 +67,19 @@ impl Expander {
             || program.blocks[block].scope != invocation.destination {
             return Err(error(invocation.span, "E_MACRO_EXPANSION", "statement macro destination block differs"));
         }
-        let (tokens, expansion) = self.begin(program, call)?;
+        let (tokens, expansion) = self.begin(program, call, &invocation)?;
         let (statements, tail) = super::super::statements(program, &tokens, &invocation, expansion)?;
         program.macro_expansions[expansion].end = crate::ast::macros::inventory(program);
+        Ok((expansion, statements, tail, semicolon))
+    }
+    fn statement(&mut self, program: &mut Program, call: usize, block: BlockId, first: usize)
+        -> Result<(Vec<Stmt>, bool), Diagnostic> {
+        if self.failed.contains(&call) { return Ok((vec![Stmt::MacroInvocation(call)], false)); }
+        let saved = self.attempt(program);
+        let parsed = self.parse_statement(program, call, block);
+        let Some((expansion, statements, tail, semicolon)) = self.prepared(program, call, saved, parsed)? else {
+            return Ok((vec![Stmt::MacroInvocation(call)], false));
+        };
         // A later empty splice can expose this output as the containing block's
         // tail. Keep it in statement form until that complete sequence is known.
         let (statements, tail, empty) = self.sequence(program, block, first, statements, tail,
@@ -79,7 +87,6 @@ impl Expander {
         program.macro_expansions[expansion].splice = Some(MacroSplice {
             block, first, count: statements.len(), tail,
         });
-        self.active.pop();
         Ok((statements, empty))
     }
     fn sequence(&mut self, program: &mut Program, block: BlockId, first: usize, input: Vec<Stmt>,
@@ -184,10 +191,10 @@ impl Expander {
         let node = program.exprs.get(id).cloned().ok_or_else(|| absent("expression"))?;
         match node.kind.clone() {
             Expr::MacroInvocation(call) => {
-                if self.failed.contains(&call) { return Ok(()); }
-                let expanded = self.expression(program, call)?;
-                program.macro_aliases.push(MacroAlias { expression: id, original: node, expanded, invocation: call });
-                program.exprs[id] = program.exprs[expanded].clone();
+                if let Some(expanded) = self.expression(program, call)? {
+                    program.macro_aliases.push(MacroAlias { expression: id, original: node, expanded, invocation: call });
+                    program.exprs[id] = program.exprs[expanded].clone();
+                }
             }
             Expr::Tuple(values) | Expr::Array(values) | Expr::Macro { args: values, .. } => {
                 for value in values { self.expression_node(program, value)?; }

@@ -4,30 +4,47 @@ mod expand;
 pub(crate) mod provenance;
 use super::{FormatOrigin, Parser, Token, TokenKind};
 use crate::ast::*;
-use crate::diagnostics::BlockedRegion;
+use crate::diagnostics::{BlockedRegion, Recovery};
 use std::collections::BTreeSet;
 
 /// State appended or materialized by a speculative syntax parse.
 pub(super) struct ParseCheckpoint {
     inventory: MacroInventory,
-    captures: Vec<(Option<ExprId>, usize, Option<TypeId>, usize)>,
-    origins: Vec<(usize, usize, usize)>,
+    expansions: usize,
+    writes: usize,
 }
+
+// These arenas own inert syntax and provenance records. Removing a suffix
+// preserves the prefix storage and needs no forward destructor order.
+fn discard_suffix<T>(values: &mut Vec<T>, length: usize) {
+    while values.len() > length { values.pop(); }
+}
+
 impl ParseCheckpoint {
     pub(super) fn new(program: &Program) -> Self {
-        let mut captures = Vec::new();
-        for capture in &program.macro_captures {
-            captures.push((capture.expression, capture.materializations.len(),
-                capture.ty, capture.type_materializations.len()));
-        }
-        let mut origins = Vec::new();
-        for origin in &program.macro_expansions {
-            origins.push((origin.types.len(), origin.expressions.len(), origin.patterns.len()));
-        }
-        Self { inventory: crate::ast::macros::inventory(program), captures, origins }
+        Self { inventory: crate::ast::macros::inventory(program),
+            expansions: program.macro_expansions.len(), writes: program.macro_parse_writes.len() }
     }
 
     pub(super) fn rollback(self, program: &mut Program) {
+        use crate::ast::macros::MacroParseWrite;
+        // Undo appends to existing provenance records before truncating the
+        // speculative arena suffix. Nested matcher probes share these writes.
+        while program.macro_parse_writes.len() > self.writes {
+            match program.macro_parse_writes.pop().unwrap() {
+                MacroParseWrite::CaptureExpression(id, prior) => {
+                    program.macro_captures[id].expression = prior;
+                    program.macro_captures[id].materializations.pop();
+                }
+                MacroParseWrite::CaptureType(id, prior) => {
+                    program.macro_captures[id].ty = prior;
+                    program.macro_captures[id].type_materializations.pop();
+                }
+                MacroParseWrite::OriginType(id) => { program.macro_expansions[id].types.pop(); }
+                MacroParseWrite::OriginExpression(id) => { program.macro_expansions[id].expressions.pop(); }
+                MacroParseWrite::OriginPattern(id) => { program.macro_expansions[id].patterns.pop(); }
+            }
+        }
         let counts = self.inventory;
         for id in counts.types..program.types.len() {
             program.impl_traits.remove(&id); program.constant_arguments.remove(&id);
@@ -36,26 +53,26 @@ impl ParseCheckpoint {
         }
         for id in counts.patterns..program.patterns.len() { program.macro_pattern_bindings.remove(&id); }
         for id in counts.scopes..program.scopes.len() { program.macro_use_modules.remove(&id); }
-        program.types.truncate(counts.types); program.exprs.truncate(counts.exprs);
-        program.patterns.truncate(counts.patterns); program.blocks.truncate(counts.blocks);
-        program.functions.truncate(counts.functions); program.structs.truncate(counts.structs); program.enums.truncate(counts.enums);
-        program.traits.truncate(counts.traits); program.impls.truncate(counts.impls); program.uses.truncate(counts.uses);
-        program.modules.truncate(counts.modules); program.aliases.truncate(counts.aliases); program.constants.truncate(counts.constants);
-        program.scopes.truncate(counts.scopes); program.attrs.truncate(counts.attrs);
-        program.macro_definitions.truncate(counts.macro_definitions);
-        program.macro_identifier_uses.truncate(counts.identifier_uses);
-        program.macro_invocations.truncate(counts.macro_invocations); program.macro_captures.truncate(counts.macro_captures);
-        for id in 0usize..self.captures.len() {
-            program.macro_captures[id].expression = self.captures[id].0;
-            program.macro_captures[id].materializations.truncate(self.captures[id].1);
-            program.macro_captures[id].ty = self.captures[id].2;
-            program.macro_captures[id].type_materializations.truncate(self.captures[id].3);
-        }
-        for id in 0usize..self.origins.len() {
-            let (types, expressions, patterns) = self.origins[id];
-            let origin = &mut program.macro_expansions[id]; origin.types.truncate(types);
-            origin.expressions.truncate(expressions); origin.patterns.truncate(patterns);
-        }
+        discard_suffix(&mut program.types, counts.types);
+        discard_suffix(&mut program.exprs, counts.exprs);
+        discard_suffix(&mut program.patterns, counts.patterns);
+        discard_suffix(&mut program.blocks, counts.blocks);
+        discard_suffix(&mut program.functions, counts.functions);
+        discard_suffix(&mut program.structs, counts.structs);
+        discard_suffix(&mut program.enums, counts.enums);
+        discard_suffix(&mut program.traits, counts.traits);
+        discard_suffix(&mut program.impls, counts.impls);
+        discard_suffix(&mut program.uses, counts.uses);
+        discard_suffix(&mut program.modules, counts.modules);
+        discard_suffix(&mut program.aliases, counts.aliases);
+        discard_suffix(&mut program.constants, counts.constants);
+        discard_suffix(&mut program.scopes, counts.scopes);
+        discard_suffix(&mut program.attrs, counts.attrs);
+        discard_suffix(&mut program.macro_definitions, counts.macro_definitions);
+        discard_suffix(&mut program.macro_identifier_uses, counts.identifier_uses);
+        discard_suffix(&mut program.macro_invocations, counts.macro_invocations);
+        discard_suffix(&mut program.macro_captures, counts.macro_captures);
+        discard_suffix(&mut program.macro_expansions, self.expansions);
     }
 }
 
@@ -403,11 +420,16 @@ impl Parser {
             self_context: self.self_context, parent, position: MacroPosition::Expression };
         let (node, _, _) = fragment_mode(&mut self.program, &tokens, &invocation,
             parent, fragment, true, self.probing, Some(scope))?;
-        let capture = &mut self.program.macro_captures[id];
         if fragment == ParsedFragment::Type {
+            let prior = self.program.macro_captures[id].ty;
+            self.program.macro_parse_writes.push(crate::ast::macros::MacroParseWrite::CaptureType(id, prior));
+            let capture = &mut self.program.macro_captures[id];
             if capture.ty.is_none() { capture.ty = Some(node); }
             capture.type_materializations.push(node);
         } else {
+            let prior = self.program.macro_captures[id].expression;
+            self.program.macro_parse_writes.push(crate::ast::macros::MacroParseWrite::CaptureExpression(id, prior));
+            let capture = &mut self.program.macro_captures[id];
             if capture.expression.is_none() { capture.expression = Some(node); }
             capture.materializations.push(node);
         }
@@ -474,7 +496,14 @@ fn statements(program: &mut Program, tokens: &[MacroToken], invocation: &MacroIn
 }
 
 pub(crate) fn expand(program: &mut Program) -> Result<(), Diagnostic> { expand::run(program) }
-pub(crate) fn expand_report(program: &mut Program)
-    -> (Vec<Diagnostic>, Vec<BlockedRegion>, Vec<crate::diagnostics::Recovery>) {
+
+#[derive(Default)]
+pub(crate) struct ExpansionReport {
+    pub diagnostics: Vec<Diagnostic>,
+    pub blocked: Vec<BlockedRegion>,
+    pub recovery: Vec<Recovery>,
+    pub attempts: usize,
+}
+pub(crate) fn expand_report(program: &mut Program) -> ExpansionReport {
     expand::report(program)
 }

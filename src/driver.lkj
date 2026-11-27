@@ -2613,6 +2613,8 @@ fn compile_snapshot(
             input.macro_providers = providers;
         }
     }
+    stats.count("macro_expansion_attempts", loaded.macro_expansion_attempts);
+    stats.count("macro_expansions", loaded.program.macro_expansions.len());
     stats.mark("load_parse")?;
     if !loaded.diagnostics.is_empty() {
         if options.command == "check" {

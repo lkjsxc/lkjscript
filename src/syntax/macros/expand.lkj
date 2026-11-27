@@ -119,11 +119,37 @@ struct Expander {
     expressions: BTreeMap<usize, usize>,
     visited: BTreeSet<(usize, usize)>,
     failed: BTreeSet<usize>,
-    active: Vec<usize>,
+    report: Option<ExpansionReport>,
 }
 impl Expander {
-    fn new(rules: Vec<Vec<matcher::Rule>>, invalid_rules: BTreeMap<usize, Diagnostic>, failed: BTreeSet<usize>) -> Self {
-        Self { rules, invalid_rules, expressions: BTreeMap::new(), visited: BTreeSet::new(), failed, active: Vec::new() }
+    fn new(rules: Vec<Vec<matcher::Rule>>, invalid_rules: BTreeMap<usize, Diagnostic>,
+        report: Option<ExpansionReport>) -> Self {
+        Self { rules, invalid_rules, expressions: BTreeMap::new(), visited: BTreeSet::new(),
+            failed: BTreeSet::new(), report }
+    }
+    fn attempt(&mut self, program: &Program) -> Option<ParseCheckpoint> {
+        let report = self.report.as_mut()?;
+        report.attempts += 1usize;
+        Some(ParseCheckpoint::new(program))
+    }
+    fn prepared<T>(&mut self, program: &mut Program, call: usize, saved: Option<ParseCheckpoint>,
+        result: Result<T, Diagnostic>) -> Result<Option<T>, Diagnostic> {
+        match result {
+            Ok(value) => {
+                discard_suffix(&mut program.macro_parse_writes, 0usize);
+                Ok(Some(value))
+            }
+            Err(problem) => {
+                let Some(saved) = saved else { return Err(problem); };
+                // Each invocation prepares its own syntax before walking any
+                // child. Roll back failed preparation without touching the
+                // completed prefix or renumbering surviving descendants.
+                saved.rollback(program);
+                recovery::refused_call(self.report.as_mut().unwrap(), program, call, problem)?;
+                self.failed.insert(call);
+                Ok(None)
+            }
+        }
     }
     fn invocation(&self, program: &Program, call: usize) -> Result<MacroInvocation, Diagnostic> {
         let invocation = program.macro_invocations.get(call).cloned()
@@ -133,9 +159,8 @@ impl Expander {
         }
         Ok(invocation)
     }
-    fn begin(&self, program: &mut Program, call: usize) -> Result<(Vec<MacroToken>, usize), Diagnostic> {
-        let invocation = self.invocation(program, call)?;
-        let definition = resolve(program, &invocation)?;
+    fn begin(&self, program: &mut Program, call: usize, invocation: &MacroInvocation) -> Result<(Vec<MacroToken>, usize), Diagnostic> {
+        let definition = resolve(program, invocation)?;
         if let Some(problem) = self.invalid_rules.get(&definition) { return Err(problem.clone()); }
         let key = fingerprint(&invocation.tokens);
         let mut ancestor = invocation.parent;
@@ -155,29 +180,33 @@ impl Expander {
             parent: invocation.parent, rule: 0usize, splice: None, types: Vec::new(), expressions: Vec::new(), patterns: Vec::new(),
             functions: Vec::new(), implementations: Vec::new(), items: Vec::new() });
         let declaration = program.macro_definitions[definition].clone();
-        let (tokens, rule) = matcher::apply(program, &declaration, &self.rules[definition], &invocation, context)?;
+        let (tokens, rule) = matcher::apply(program, &declaration, &self.rules[definition], invocation, context)?;
         program.macro_expansions[expansion].rule = rule;
         Ok((tokens, expansion))
     }
-    fn expression(&mut self, program: &mut Program, call: usize) -> Result<usize, Diagnostic> {
-        if let Some(id) = self.expressions.get(&call) { return Ok(*id); }
-        self.active.push(call);
+    fn parse_expression(&self, program: &mut Program, call: usize) -> Result<usize, Diagnostic> {
         let invocation = self.invocation(program, call)?;
         if invocation.position != MacroPosition::Expression { return Err(error(invocation.span, "E_MACRO_EXPANSION", "macro invocation is not an expression")); }
-        let (tokens, expansion) = self.begin(program, call)?;
+        let (tokens, expansion) = self.begin(program, call, &invocation)?;
         let (id, _) = super::expression(program, &tokens, &invocation, Some(expansion), true)?;
         let end = crate::ast::macros::inventory(program);
         program.macro_expansions[expansion].end = end;
-        self.expression_node(program, id)?;
-        self.expressions.insert(call, id);
-        self.active.pop();
         Ok(id)
     }
-    fn item(&mut self, program: &mut Program, call: usize) -> Result<Vec<Item>, Diagnostic> {
-        self.active.push(call);
+    fn expression(&mut self, program: &mut Program, call: usize) -> Result<Option<usize>, Diagnostic> {
+        if self.failed.contains(&call) { return Ok(None); }
+        if let Some(id) = self.expressions.get(&call) { return Ok(Some(*id)); }
+        let saved = self.attempt(program);
+        let parsed = self.parse_expression(program, call);
+        let Some(id) = self.prepared(program, call, saved, parsed)? else { return Ok(None); };
+        self.expression_node(program, id)?;
+        self.expressions.insert(call, id);
+        Ok(Some(id))
+    }
+    fn parse_item(&self, program: &mut Program, call: usize) -> Result<Vec<Item>, Diagnostic> {
         let invocation = self.invocation(program, call)?;
         if invocation.position != MacroPosition::Item { return Err(error(invocation.span, "E_MACRO_EXPANSION", "macro invocation is not an item")); }
-        let (tokens, expansion) = self.begin(program, call)?;
+        let (tokens, expansion) = self.begin(program, call, &invocation)?;
         let expanded = super::items(program, &tokens, &invocation, expansion)?;
         let end = crate::ast::macros::inventory(program);
         program.macro_expansions[expansion].end = end;
@@ -187,8 +216,6 @@ impl Expander {
                     "E_UNSUPPORTED_MACRO", "macro expansion cannot discover an external source module")); }
             }
         }
-        let expanded = self.items(program, expanded)?;
-        self.active.pop();
         Ok(expanded)
     }
     fn items(&mut self, program: &mut Program, input: Vec<Item>) -> Result<Vec<Item>, Diagnostic> {
@@ -196,19 +223,26 @@ impl Expander {
         for item in input {
             if let Item::MacroInvocation(call) = item {
                 if self.failed.contains(&call) { output.push(item); continue; }
-                for item in self.item(program, call)? { output.push(item); }
+                let saved = self.attempt(program);
+                let parsed = self.parse_item(program, call);
+                if let Some(items) = self.prepared(program, call, saved, parsed)? {
+                    for item in self.items(program, items)? { output.push(item); }
+                } else { output.push(item); }
             } else { self.item_node(program, item)?; output.push(item); }
         }
         Ok(output)
     }
 }
-pub(super) fn run(program: &mut Program) -> Result<(), Diagnostic> {
+fn remember_input(program: &mut Program) {
     if !program.macros_expanded && (!program.macro_definitions.is_empty() || !program.macro_invocations.is_empty()
         || !program.macro_providers.is_empty())
         && program.macro_input.is_none() {
         let mut input = program.clone(); input.macro_input = None;
         program.macro_input = Some(Box::new(input));
     }
+}
+pub(super) fn run(program: &mut Program) -> Result<(), Diagnostic> {
+    remember_input(program);
     replay(program)
 }
 pub(super) fn replay(program: &mut Program) -> Result<(), Diagnostic> {
@@ -222,7 +256,7 @@ pub(super) fn replay(program: &mut Program) -> Result<(), Diagnostic> {
         }
         rules.push(matcher::rules(definition)?);
     }
-    let mut expander = Expander::new(rules, BTreeMap::new(), BTreeSet::new());
+    let mut expander = Expander::new(rules, BTreeMap::new(), None);
     expander.program(program)?;
     program.macros_expanded = true;
     Ok(())
@@ -230,17 +264,12 @@ pub(super) fn replay(program: &mut Program) -> Result<(), Diagnostic> {
 
 /// Successful source loading uses the same expansion and provenance as replay.
 /// Only a refused input pays for isolated diagnostic recovery.
-pub(super) fn report(program: &mut Program)
-    -> (Vec<Diagnostic>, Vec<BlockedRegion>, Vec<crate::diagnostics::Recovery>) {
-    let mut problem = match run(program) {
-        Ok(()) => return (Vec::new(), Vec::new(), Vec::new()),
-        Err(problem) => problem,
-    };
-    if problem.path.is_empty() { problem.path = program.files[problem.file].path.clone(); }
-    let input = match program.macro_input.take() {
-        Some(input) => input,
-        None => return (vec![problem], Vec::new(), Vec::new()),
-    };
-    *program = *input;
-    recovery::run(program, problem)
+pub(super) fn report(program: &mut Program) -> ExpansionReport {
+    if program.macros_expanded { return ExpansionReport::default(); }
+    remember_input(program);
+    if program.macro_definitions.is_empty() && program.macro_invocations.is_empty() {
+        program.macros_expanded = true;
+        return ExpansionReport::default();
+    }
+    recovery::run(program)
 }

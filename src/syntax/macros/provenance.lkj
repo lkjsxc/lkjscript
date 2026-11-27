@@ -20,7 +20,7 @@ fn source_input(program: &Program) -> Result<(), Diagnostic> {
     if program.resolved || program.macros_expanded || program.macro_input.is_some()
         || !program.macro_expansions.is_empty() || !program.macro_aliases.is_empty()
         || !program.macro_inputs.is_empty() || !program.macro_captures.is_empty()
-            || !program.macro_identifier_uses.is_empty()
+            || !program.macro_identifier_uses.is_empty() || !program.macro_parse_writes.is_empty()
     {
         return Err(failure(Span::default(), "macro replay input is not an unexpanded source program"));
     }
@@ -72,6 +72,7 @@ pub(crate) fn validate(program: &Program) -> Result<(), Diagnostic> {
             || !program.macro_providers.is_empty()
             || !program.macro_inputs.is_empty() || !program.macro_captures.is_empty()
             || !program.macro_identifier_uses.is_empty()
+            || !program.macro_parse_writes.is_empty()
         {
             return Err(failure(Span::default(), "macro origins require their unexpanded token-bearing input"));
         }

@@ -1168,7 +1168,10 @@ impl Parser {
             scope: self.scope,
             block: self.block,
         });
-        if let Some(expansion) = self.expansion { self.program.macro_expansions[expansion].types.push(id); }
+        if let Some(expansion) = self.expansion {
+            self.program.macro_parse_writes.push(crate::ast::macros::MacroParseWrite::OriginType(expansion));
+            self.program.macro_expansions[expansion].types.push(id);
+        }
         id
     }
     fn add_expr(&mut self, kind: Expr, span: Span) -> ExprId {
@@ -1179,7 +1182,10 @@ impl Parser {
             scope: self.scope,
             block: self.block,
         });
-        if let Some(expansion) = self.expansion { self.program.macro_expansions[expansion].expressions.push(id); }
+        if let Some(expansion) = self.expansion {
+            self.program.macro_parse_writes.push(crate::ast::macros::MacroParseWrite::OriginExpression(expansion));
+            self.program.macro_expansions[expansion].expressions.push(id);
+        }
         id
     }
     fn add_pattern(&mut self, kind: Pattern, span: Span) -> PatternId {
@@ -1190,7 +1196,10 @@ impl Parser {
             scope: self.scope,
             block: self.block,
         });
-        if let Some(expansion) = self.expansion { self.program.macro_expansions[expansion].patterns.push(id); }
+        if let Some(expansion) = self.expansion {
+            self.program.macro_parse_writes.push(crate::ast::macros::MacroParseWrite::OriginPattern(expansion));
+            self.program.macro_expansions[expansion].patterns.push(id);
+        }
         id
     }
     fn add_finished_type(&mut self, kind: Type, span: Span) -> TypeId {

@@ -22,6 +22,7 @@ pub struct SourceReport {
     pub diagnostics: Vec<Diagnostic>,
     pub blocked: Vec<BlockedRegion>,
     pub recovery: Vec<Recovery>,
+    pub macro_expansion_attempts: usize,
     /// Original loaded UTF-8 source bytes, indexed by program.files. Recovered
     /// syntax and these texts support diagnostics only, never source admission.
     pub texts: Vec<String>,
@@ -742,13 +743,13 @@ pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<O
             }
         }
     }
-    let (expansion_errors, expansion_blocked, expansion_recovery) = syntax::macros::expand_report(&mut program);
-    for mut diagnostic in expansion_errors {
+    let expansion = syntax::macros::expand_report(&mut program);
+    for mut diagnostic in expansion.diagnostics {
         if diagnostic.path.is_empty() { diagnostic.path = program.files[diagnostic.file].path.clone(); }
         diagnostics.push(diagnostic);
     }
-    for region in expansion_blocked { blocked.push(region); }
-    for failure in expansion_recovery { recovery.push(failure); }
+    for region in expansion.blocked { blocked.push(region); }
+    for failure in expansion.recovery { recovery.push(failure); }
     if !program.macro_expansions.is_empty() { capture_macro_includes(&mut program, read, &mut diagnostics); }
     if !diagnostics.is_empty() {
         blocked.push(BlockedRegion {
@@ -765,6 +766,7 @@ pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<O
         diagnostics,
         blocked,
         recovery,
+        macro_expansion_attempts: expansion.attempts,
         texts,
     }
 }

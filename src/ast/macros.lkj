@@ -111,6 +111,16 @@ pub struct MacroAlias {
     pub expanded: ExprId,
     pub invocation: usize,
 }
+/// Undo records used while parsing one invocation. The expansion pass clears
+/// them before walking children or returning a source program.
+#[derive(Clone, PartialEq, Eq)]
+pub(crate) enum MacroParseWrite {
+    CaptureExpression(usize, Option<ExprId>),
+    CaptureType(usize, Option<TypeId>),
+    OriginType(usize),
+    OriginExpression(usize),
+    OriginPattern(usize),
+}
 #[derive(Clone, Default, PartialEq, Eq)]
 pub struct MacroInventory {
     pub types: usize, pub exprs: usize, pub patterns: usize, pub blocks: usize,

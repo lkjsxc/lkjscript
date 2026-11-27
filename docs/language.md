@@ -1233,6 +1233,17 @@ Normal destructor order matches the supported Rust intersection; outputs/statuse
 
 ### Declarative source macros
 
+After an expansion refusal, diagnostic recovery leaves the failed invocation
+at its consumer and continues through the same ordered traversal. It discards
+speculative syntax and restores capture and origin writes at that invocation.
+Completed parents, sibling expansions and their authored rule and token
+identities are retained. A recovered source closure carries its original
+diagnostics and the ordinary refusal.
+
+Source-loading `--stats` counts `macro_expansion_attempts` when a declarative
+invocation begins preparation and `macro_expansions` for retained origin
+records. These counters cover the traversed source closure.
+
 Module-scoped `macro_rules!` definitions produce ordinary source expressions,
 statement lists or items. Matchers accept literal token trees and `expr`, `ty`,
 `block`, `ident`, `lifetime` and `tt` fragments. `*`, `+`, and `?` repetitions

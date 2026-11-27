@@ -607,6 +607,30 @@ blocked items and matches the original capability, missing-module and unsafe
 rows byte for byte. Native and Rust-built selectors item reports agree in both
 debug modes.
 
+#### Macro recovery on the full Sōzu roots
+
+Recovery walks each source closure once. Matcher and parser rollback undo a
+failed invocation's writes and discard appended syntax from the end of private
+arenas. Completed parents and siblings keep their origin records.
+
+The paired Rust-built and candidate native wall times cover the pinned full
+roots. The ordered diagnostics, blocked extents, recovery owners and complete
+recovered programs agree, including all retained macro origins.
+
+| Root and debug mode | Invocation attempts before → after | Retained expansions | Rust-built wall before → after | Candidate native wall |
+| --- | ---: | ---: | ---: | ---: |
+| Sōzu bin off | 93,925 → 893 | 762 | 37.96 → 0.35 s | 1.88 s |
+| Sōzu bin on | 161,175 → 1,447 | 1,316 | 100.745 → 0.39 s | 2.24 s |
+| Sōzu lib off | 346,763 → 2,796 | 2,651 | 309.853 → 0.77 s | 3.77 s |
+| Sōzu lib on | 566,380 → 4,483 | 4,338 | 975.513 → 1.11 s | 5.05 s |
+
+All four source checks return status 1. Their native diagnostic streams,
+including item reports, match the published baseline bytes after the optional
+timing and work counters are excluded.
+The native bin-off baseline was still running when the measurement stopped
+after 2,435 s. The completed paired timings in the table use the Rust-built
+producers.
+
 #### Earlier ordinary numeric traits frontier
 
 <!-- numeric-evidence-v1 sha256:53c52136581be3be25a96ff0bfa4e7077207da1e8f75548cc3aaa456e746a484 -->
