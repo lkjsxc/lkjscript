@@ -23,7 +23,8 @@ step() {
     started_ns=$(date +%s%N)
     offset_ns=$((started_ns - check_started_ns))
     local details="target/gate/details-$label.log"
-    "$@" >"$details" 2>&1 || result=$?
+    local TIMEFORMAT="LKJSCRIPT_GATE_CPU user_s=%U system_s=%S"
+    { time "$@" >"$details" 2>&1; } 2>>"$details" || result=$?
     if ((result)); then
         local ended_ns failure_timing=
         if ended_ns=$(date +%s%N) && ((ended_ns >= started_ns)) && read -r load_end _ < /proc/loadavg; then
@@ -38,6 +39,9 @@ step() {
     read -r load_end _ < /proc/loadavg
     awk -v label="$label" -v elapsed_ns="$elapsed_ns" -v before="$load_start" -v after="$load_end" -v offset_ns="$offset_ns" '
         label ~ /^macro-origins-/ && /^macro-origins (shard |scope=|entry=)/ { print }
+        label == "bootstrap" && /^ok bootstrap handoff / { print }
+        /^LKJSCRIPT_GATE_WORKER / { sub(/^LKJSCRIPT_GATE_WORKER /, ""); printf "gate worker suite=%s %s\n", label, $0 }
+        /^LKJSCRIPT_GATE_CPU / { sub(/^LKJSCRIPT_GATE_CPU /, ""); printf "gate cpu suite=%s %s\n", label, $0 }
         /^LKJSCRIPT_STATS / {
             if (match($0, /"test_reused":[0-9]+/)) {
                 value=substr($0, RSTART, RLENGTH); sub(/^[^:]*:/, "", value)
@@ -65,7 +69,12 @@ step() {
     ' "$details"
 }
 step driver-roots sh tools/check-roots.sh
-step bootstrap timeout --kill-after=10s 600s sh tools/bootstrap.sh
+if [[ ${LKJSCRIPT_BOOTSTRAP_HANDOFF+x} ]]; then
+    step bootstrap bash tools/bootstrap-handoff.sh verify "$LKJSCRIPT_BOOTSTRAP_HANDOFF" "$LKJSCRIPT_STORE_KEY" "$LKJSCRIPT_STORE"
+    unset LKJSCRIPT_BOOTSTRAP_HANDOFF
+else
+    step bootstrap timeout --kill-after=10s 600s sh tools/bootstrap.sh
+fi
 check_binary=target/lkjscript
 step independence sh tools/check-independence.sh
 step tool-build timeout --kill-after=10s 600s bash -c '
@@ -88,7 +97,7 @@ world_cases() (
     timeout --kill-after=10s 600s target/gate/world-test "$check_binary" "$world_directory"
 )
 diagnostic_cases() {
-    timeout --kill-after=10s 600s "$check_binary" test tests/diagnostics --stats "${check_reuse[@]}" || return 1
+    bash tools/gate-worker-profile.sh timeout --kill-after=10s 600s "$check_binary" test tests/diagnostics --stats "${check_reuse[@]}" || return 1
     timeout --kill-after=10s 600s sh tests/diagnostics/test_library_directory.sh "$check_binary" || return 1
     sh tests/diagnostics/mutation_no_store.sh "$check_binary"
 }
@@ -258,14 +267,14 @@ parallel_step 1 package-source timeout --kill-after=10s 600s bash tools/programs
 parallel_step 1 concrete-unit-policy timeout --kill-after=10s 600s bash tools/programs-unit-policy-test.sh "$check_binary"
 parallel_step 2 runtime-admission timeout --kill-after=10s 600s bash tools/programs-admission-test.sh "$check_binary"
 parallel_step 4 pool-publication timeout --kill-after=10s 600s bash tools/programs-publication-test.sh --compiler "$check_binary"
-parallel_step "$check_suite_jobs" conformance timeout --kill-after=10s 1800s "$check_binary" test tests/conformance --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
-parallel_step "$check_suite_jobs" generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
-parallel_step "$check_suite_jobs" optimized-conformance timeout --kill-after=10s 1800s "$check_binary" test tests/conformance --stats --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"
-parallel_step "$check_suite_jobs" optimized-generated timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --stats --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"
+parallel_step "$check_suite_jobs" conformance bash tools/gate-worker-profile.sh timeout --kill-after=10s 1800s "$check_binary" test tests/conformance --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
+parallel_step "$check_suite_jobs" generated bash tools/gate-worker-profile.sh timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
+parallel_step "$check_suite_jobs" optimized-conformance bash tools/gate-worker-profile.sh timeout --kill-after=10s 1800s "$check_binary" test tests/conformance --stats --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"
+parallel_step "$check_suite_jobs" optimized-generated bash tools/gate-worker-profile.sh timeout --kill-after=10s 600s "$check_binary" test target/gate/generated --stats --jobs "$check_suite_jobs" --inline-limit 64 "${check_reuse[@]}"
 parallel_step "$check_suite_jobs" semantic-structure timeout --kill-after=10s 600s bash tools/closed-semantics.sh "$check_binary" structure
 parallel_step 1 semantic-host semantics
-parallel_step "$check_suite_jobs" semantic-cases timeout --kill-after=10s 600s "$check_binary" test tests/semantics --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
-parallel_step 1 references timeout --kill-after=10s 600s "$check_binary" test tests/reference --stats "${check_reuse[@]}"
+parallel_step "$check_suite_jobs" semantic-cases bash tools/gate-worker-profile.sh timeout --kill-after=10s 600s "$check_binary" test tests/semantics --stats --jobs "$check_suite_jobs" "${check_reuse[@]}"
+parallel_step 1 references bash tools/gate-worker-profile.sh timeout --kill-after=10s 600s "$check_binary" test tests/reference --stats "${check_reuse[@]}"
 while ((check_active)); do wait_finished; done
 for log in "${check_logs[@]}"; do cat "$log"; done
 awk '
