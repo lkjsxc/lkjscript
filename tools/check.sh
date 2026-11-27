@@ -64,6 +64,7 @@ step() {
         }
     ' "$details"
 }
+step driver-roots sh tools/check-roots.sh
 step bootstrap timeout --kill-after=10s 600s sh tools/bootstrap.sh
 check_binary=target/lkjscript
 step independence sh tools/check-independence.sh

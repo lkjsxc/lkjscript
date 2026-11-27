@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 cd "$(dirname "$0")/.."
+sh tools/check-roots.sh --witness
 if [[ ! -x target/lkjscript ]]; then sh tools/bootstrap.sh; fi
 export CARGO_TARGET_DIR="$PWD/target/witness"
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-1}"
