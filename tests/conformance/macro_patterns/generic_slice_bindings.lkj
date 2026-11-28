@@ -1,0 +1,41 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! one { ($value:ident) => { [$value] }; }
+macro_rules! ends { ($first:ident, $last:ident) => { [$first, .., $last] }; }
+
+fn parameter<T: Copy>(one!(value): [T; 1], remaining: i64) -> T {
+    if remaining == 0i64 { value } else { parameter([value], remaining - 1i64) }
+}
+
+fn local<T: Copy>(values: [T; 3], remaining: i64) -> T {
+    let ends!(first, last) = values;
+    if remaining == 0i64 { last } else { local([first, first, last], remaining - 1i64) }
+}
+
+fn borrowed<T: Copy>(values: &[T; 1], remaining: i64) -> T {
+    let one!(value) = values;
+    if remaining == 0i64 { *value } else { borrowed(&[*value], remaining - 1i64) }
+}
+
+fn explicit<T: Copy>(&one!(value): &[T; 1], remaining: i64) -> T {
+    if remaining == 0i64 { value } else { explicit(&[value], remaining - 1i64) }
+}
+
+fn identity<T>(value: T) -> T { value }
+
+fn slice<T: Copy>(values: &[T], fallback: T) -> T {
+    match values { [] => identity(fallback), [.., last] => identity(*last) }
+}
+
+fn closure<T: Copy>(value: T) -> T {
+    let extract = |one!(binding): [T; 1]| identity(binding);
+    extract([value])
+}
+
+fn probe() -> i64 {
+    assert_eq!(slice(&[1i64, 9i64, 7i64], 0i64), 7i64);
+    assert_eq!(slice(&[0i64; 0], 5i64), 5i64);
+    assert_eq!(closure(11i64), 11i64);
+    parameter([10i64], 2i64) + local([1i64, 900i64, 12i64], 2i64)
+        + borrowed(&[14i64], 2i64) + explicit(&[6i64], 2i64)
+}

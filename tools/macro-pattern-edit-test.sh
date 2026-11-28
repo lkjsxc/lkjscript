@@ -29,7 +29,7 @@ load() {
     case_name=$1
     project="$work/$case_name/project"
     mkdir -p "$project" "$work/$case_name/store"
-    cp "tests/fixtures/macro_patterns_edits/$case_name.lkj" "$project/main.lkj"
+    cp "${2:-tests/fixtures/macro_patterns_edits/$case_name.lkj}" "$project/main.lkj"
     common=(main.lkj --source-dir "$project" --library-dir "$root/library" --store "$work/$case_name/store" --store-key "$work/key")
 }
 publish() {
@@ -159,6 +159,27 @@ for case_name in pat nested_capture parameter let_else let_else_pat mixed_captur
         value 42
     fi
 done
+load at_binding_spans tests/conformance/macro_patterns/at_binding_spans.lkj
+for binding_case in 'by_value value r#value mut renamed_value 2' 'by_reference shared shared ref renamed_shared 1' 'by_mut_reference editable editable ref_mut renamed_editable 2'; do
+    read -r owner old spelling mode renamed uses <<< "$binding_case"
+    publish
+    identity=$(binding "value@$owner" "$old")
+    query text "$identity" > "$work/text"
+    grep -Fq "value=\"$spelling\"" "$work/text" || fail "$mode @ binding lost its exact identifier span"
+    query meta "$identity" > "$work/meta"
+    if grep -Eq 'origin=generated' "$work/meta"; then fail "$mode @ caller binding remains generated"; fi
+    checks=$((checks + 2))
+    exact_uses "$identity" "$spelling" "$uses"
+    rename_request "$identity" "$renamed"
+    apply
+    case "$mode" in
+        mut) grep -Fq "capture!(mut $renamed @ _)" "$project/main.lkj" || fail 'mut @ capture was not renamed' ;;
+        ref) grep -Fq "capture!(ref $renamed @ _)" "$project/main.lkj" || fail 'ref @ capture was not renamed' ;;
+        ref_mut) grep -Fq "capture!(ref mut $renamed @ _)" "$project/main.lkj" || fail 'ref mut @ capture was not renamed' ;;
+    esac
+    checks=$((checks + 1))
+    value 42
+done
 load body
 publish
 printf '%s\n' '{"version":1,"operations":[{"op":"replace-body","id":"main","source":"{ let payload!(value) = Some(43i64) else { return 0i64; }; value }"}]}' > "$work/request"
@@ -213,4 +234,4 @@ after=$(epoch macro-expansion:1)
 [[ $before != "$after" && $before_identity != "$identity" ]] || fail 'let-else binding epoch ignored sibling pattern producer change'
 checks=$((checks + 1))
 value 42
-printf 'ok macro-pattern edits: %s checks; exact caller ident/pat/header/let-else queries and renames; template/duplicate/rule/field-role refusals; body rollback; nested and mixed-export epochs; native/interpreter values\n' "$checks"
+printf 'ok macro-pattern edits: %s checks; exact caller ident/pat/header/let-else/mut/ref/ref-mut-@ queries and renames; template/duplicate/rule/field-role refusals; body rollback; nested and mixed-export epochs; native/interpreter values\n' "$checks"

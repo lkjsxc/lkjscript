@@ -234,30 +234,40 @@ fn literal_token(token: &MacroToken) -> bool {
 // Rust lets a literal-valued opaque expr match literal, but a parenthesized or
 // compound expression falls through. Inspect only capture spelling here; the
 // ordinary fragment parser still validates the selected literal independently.
-fn literal_capture(program: &Program, token: &MacroToken) -> bool {
+fn literal_capture(program: &Program, token: &MacroToken) -> Result<bool, Diagnostic> {
     let mut token = token.clone();
     let mut negative = false;
     for _ in 0usize..=program.macro_captures.len() {
-        if literal_token(&token) { return true; }
-        if token.kind != 8u8 && token.kind != LITERAL_FRAGMENT { return false; }
-        let Some(id) = token.capture else { return false; };
-        let Some(capture) = program.macro_captures.get(id) else { return false; };
+        if literal_token(&token) {
+            // Do not fall through to another arm after recognizing a literal.
+            // Nonnumeric negation is a located boundary, even for unused captures.
+            if negative && token.kind != 1u8 {
+                return Err(error(token.span, "E_MACRO_EXPANSION", "negation requires a numeric literal"));
+            }
+            return Ok(true);
+        }
+        if token.kind != 8u8 && token.kind != LITERAL_FRAGMENT { return Ok(false); }
+        let Some(id) = token.capture else { return Ok(false); };
+        let Some(capture) = program.macro_captures.get(id) else { return Ok(false); };
         if capture.tokens.len() == 1usize { token = capture.tokens[0usize].clone(); }
         else if capture.tokens.len() == 2usize && !negative && symbol(&capture.tokens[0usize], "-") {
             negative = true;
             token = capture.tokens[1usize].clone();
-        } else { return false; }
+        } else { return Ok(false); }
     }
-    false
+    Ok(false)
 }
-fn fragment_start(program: &Program, fragment: &str, token: &MacroToken) -> bool {
-    match fragment {
+fn fragment_start(program: &Program, fragment: &str, token: &MacroToken) -> Result<bool, Diagnostic> {
+    Ok(match fragment {
         "ident" => token.kind == 0u8 && token.text != "_",
         "lifetime" => token.kind == 5u8,
         "tt" => token.kind != 7u8 && !(token.kind == 6u8 && closing(&token.text)),
+        // Rust commits these opaque starts to parsing, including errors;
+        // narrowing them would select later rules or erase repetition ambiguity.
+        // A path-shaped opaque type also has a valid path materialization.
         "block" => token.kind == BLOCK_FRAGMENT || symbol(token, "{")
             || token.kind == 8u8 || token.kind == LITERAL_FRAGMENT,
-        "literal" => symbol(token, "-") || literal_capture(program, token),
+        "literal" => symbol(token, "-") || literal_capture(program, token)?,
         "path" => token.kind == 0u8 || symbol(token, "::")
             || matches!(token.kind, 8u8 | 9u8) || token.kind == PATTERN_FRAGMENT
             || token.kind == PATH_FRAGMENT || token.kind == LITERAL_FRAGMENT,
@@ -267,7 +277,7 @@ fn fragment_start(program: &Program, fragment: &str, token: &MacroToken) -> bool
             || token.kind == 6u8 && matches!(token.text.as_str(),
                 "(" | "[" | "&" | "&&" | "-" | ".." | "..=" | "|" | "::" | "<" | "<<"),
         _ => may_begin(token, fragment == "ty"),
-    }
+    })
 }
 // Repetition heads must determine whether to continue without speculative capture choices.
 // Pure literal overlaps can be legal in Rust's NFA matcher; this bounded reader locates them
@@ -283,7 +293,7 @@ fn starts(program: &Program, pattern: &[MacroToken], at: usize, token: &MacroTok
     }
     if symbol(&pattern[at], "$") && !literal_dollar(pattern, at) {
         let fragment = identifier_name(&pattern[at + 3usize].text);
-        let accepts = fragment_start(program, fragment, token);
+        let accepts = fragment_start(program, fragment, token)?;
         return Ok((accepts, accepts));
     }
     Ok((same(&pattern[at], token), false))
@@ -362,7 +372,7 @@ fn matches(program: &mut Program, invocation: &MacroInvocation, pattern: &[Macro
             let binding = bindings.iter().position(|binding| binding.name == name).unwrap();
             let fragment = bindings[binding].fragment.clone();
             let start = *position;
-            if !fragment_start(program, &fragment, &input.tokens[start]) { return Ok(false); }
+            if !fragment_start(program, &fragment, &input.tokens[start])? { return Ok(false); }
             let captured: Vec<MacroToken>;
             if matches!(fragment.as_str(), "ident" | "lifetime") {
                 *position += 1usize; captured = input.tokens[start..*position].to_vec();

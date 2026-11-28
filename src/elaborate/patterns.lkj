@@ -454,7 +454,7 @@ impl Builder<'_, '_> {
                 let literal = match &self.compiler.source.exprs[value].kind {
                     a::Expr::Int(_) | a::Expr::Char(_) | a::Expr::Bool(_) | a::Expr::Float(_) => true,
                     a::Expr::Unary { op, value } => op == "-"
-                        && matches!(self.compiler.source.exprs[*value].kind, a::Expr::Int(_)),
+                        && matches!(self.compiler.source.exprs[*value].kind, a::Expr::Int(_) | a::Expr::Float(_)),
                     _ => false,
                 };
                 if !literal {
@@ -519,6 +519,9 @@ impl Builder<'_, '_> {
                 borrow: if by_ref { Some(ref_mut) } else { borrow },
             },
             a::Pattern::Literal(value) => {
+                let signed_float = matches!(&self.compiler.source.exprs[value].kind,
+                    a::Expr::Unary { op, value } if op == "-"
+                        && matches!(self.compiler.source.exprs[*value].kind, a::Expr::Float(_)));
                 if Domain::new(&self.compiler.types[ty].kind).is_some() {
                     self.integer_pattern(value, ty)?;
                 } else if !matches!(
@@ -527,7 +530,8 @@ impl Builder<'_, '_> {
                         &self.compiler.types[ty].kind
                     ),
                     (a::Expr::Bool(_), ir::TypeKind::Bool) | (a::Expr::Float(_), ir::TypeKind::F64)
-                ) && !(string_literal
+                ) && !(signed_float && matches!(self.compiler.types[ty].kind, ir::TypeKind::F64))
+                    && !(string_literal
                     && matches!(self.compiler.types[ty].kind, ir::TypeKind::Ref { inner, mutable: false } if matches!(self.compiler.types[inner].kind, ir::TypeKind::Str)))
                 {
                     return Err(err(

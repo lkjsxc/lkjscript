@@ -1,0 +1,15 @@
+// expect: value 42
+// witness: {"root":true}
+struct Wrapper<T>(T);
+macro_rules! path_value { ($p:path) => { $p(40i64) }; }
+macro_rules! typed { ($t:ty, $value:expr) => {{ let value: $t = $value; value }}; }
+macro_rules! make {
+    ($t:ty) => {
+        fn probe() -> i64 {
+            let first = path_value!($t);
+            let second = typed!($t, first);
+            second.0 + 2i64
+        }
+    };
+}
+make!(Wrapper<i64>);

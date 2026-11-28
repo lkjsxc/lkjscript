@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {"root":true}
+const POSITIVE: f64 = 3.5f64;
+const NEGATIVE: f64 = -3.5f64;
+macro_rules! constant { ($p:path) => { $p }; }
+fn probe() -> i64 {
+    assert!(matches!(-3.5f64, -3.5f64));
+    let positive = match 3.5f64 { POSITIVE => 10i64, _ => 0i64 };
+    let negative = match -3.5f64 { constant!(NEGATIVE) => 32i64, _ => 0i64 };
+    positive + negative
+}

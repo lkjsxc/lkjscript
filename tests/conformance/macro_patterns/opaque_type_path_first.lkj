@@ -1,0 +1,15 @@
+// expect: value 42
+// witness: {"root":true}
+struct Marker;
+macro_rules! as_path { ($p:path) => { $p }; }
+macro_rules! typed_value { ($t:ty) => {{ let value: $t = Marker; value }}; }
+macro_rules! use_twice {
+    ($t:ty) => {
+        fn probe() -> i64 {
+            let score = match Marker { as_path!($t) => 40i64 };
+            let value = typed_value!($t);
+            match value { Marker => score + 2i64 }
+        }
+    };
+}
+use_twice!(Marker);

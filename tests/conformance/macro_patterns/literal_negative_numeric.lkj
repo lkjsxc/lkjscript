@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! literal { ($value:literal) => { 14i64 }; }
+macro_rules! forward { ($value:expr) => { literal!($value) }; }
+fn probe() -> i64 { literal!(-3i64) + literal!(-3.5f64) + forward!(-3.5f64) }

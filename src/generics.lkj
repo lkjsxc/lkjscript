@@ -863,22 +863,60 @@ impl Analysis<'_> {
         }
         type_term(self.source, f.result, &substitutions, &mut self.terms)
     }
-    fn bind(&self, pattern: PatternId, term: usize, bindings: &mut Vec<(String, usize)>) {
-        let mut stack = vec![(pattern, term)];
-        while let Some((p, t)) = stack.pop() {
-            match &self.source.patterns[p].kind {
-                Pattern::Bind { name, .. } => bindings.push((name.clone(), t)),
-                Pattern::At { binding, inner } => { stack.push((*inner, t)); stack.push((*binding, t)); }
+    fn bind(&mut self, pattern: PatternId, term: usize, bindings: &mut Vec<(String, usize)>) {
+        let mut stack: Vec<(PatternId, usize, Option<bool>)> = vec![(pattern, term, None)];
+        while let Some((p, mut t, mut mode)) = stack.pop() {
+            let kind = self.source.patterns[p].kind.clone();
+            // Structural patterns follow references and inherit their binding
+            // mode, just as definition inference and ordinary lowering do.
+            if matches!(kind, Pattern::Tuple(_) | Pattern::Slice(_)) {
+                while let Term::Named(name, kids) = &self.terms[t] {
+                    if (name != "&" && name != "&mut") || kids.len() != 1 { break; }
+                    mode = Some(mode.unwrap_or(true) && name == "&mut");
+                    t = kids[0];
+                }
+            }
+            match kind {
+                Pattern::Bind { name, by_ref, ref_mut, .. } => {
+                    let reference = if by_ref { Some(ref_mut) } else { mode };
+                    if let Some(mutable) = reference {
+                        t = self.term(Term::Named(if mutable { "&mut" } else { "&" }.to_string(), vec![t]));
+                    }
+                    bindings.push((name, t));
+                }
+                Pattern::At { binding, inner } => {
+                    stack.push((inner, t, mode)); stack.push((binding, t, mode));
+                }
                 Pattern::Tuple(items) => {
                     if let Term::Named(name, kids) = &self.terms[t] {
                         if name == "tuple" && kids.len() == items.len() {
                             for i in 0..items.len() {
-                                stack.push((items[i], kids[i]));
+                                stack.push((items[i], kids[i], mode));
                             }
                         }
                     }
                 }
-                _ => {}
+                Pattern::Slice(items) => {
+                    if let Term::Named(name, kids) = &self.terms[t] {
+                        if (name == "$array" || name == "[]") && !kids.is_empty() {
+                            for item in items {
+                                if !matches!(self.source.patterns[item].kind, Pattern::Rest) {
+                                    stack.push((item, kids[0], mode));
+                                }
+                            }
+                        }
+                    }
+                }
+                Pattern::Ref { inner, .. } => {
+                    if let Term::Named(name, kids) = &self.terms[t] {
+                        if (name == "&" || name == "&mut") && kids.len() == 1 {
+                            stack.push((inner, kids[0], None));
+                        }
+                    }
+                }
+                Pattern::MacroInvocation(_) | Pattern::Wild | Pattern::Rest | Pattern::Path(_)
+                | Pattern::Literal(_) | Pattern::Range { .. } | Pattern::Variant { .. }
+                | Pattern::Struct { .. } | Pattern::Or(_) => {}
             }
         }
     }

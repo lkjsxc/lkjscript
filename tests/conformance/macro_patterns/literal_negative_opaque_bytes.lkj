@@ -1,0 +1,6 @@
+// expect: reject E_MACRO_EXPANSION
+// witness: {"root":true,"rustAccept":true}
+// rust-value: 42
+macro_rules! literal { ($value:literal) => { 42i64 }; ($value:expr) => { 0i64 }; }
+macro_rules! forward { ($value:expr) => { literal!($value) }; }
+fn probe() -> i64 { forward!(-b"text") }

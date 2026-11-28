@@ -1,0 +1,6 @@
+// expect: reject E_PARSE
+// witness: {"root":true,"rustAccept":false}
+struct Marker;
+macro_rules! inner { ($v:path) => { 1i64 }; ($v:expr) => { 2i64 }; }
+macro_rules! outer { ($v:expr) => { inner!($v) }; }
+fn probe() -> i64 { outer!(42i64) }

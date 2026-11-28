@@ -502,7 +502,9 @@ impl Parser {
     fn macro_path_fragment(&mut self) -> Result<ExprId, Diagnostic> {
         let span = self.token().span;
         let captured_path = self.token().kind.clone();
-        if let TokenKind::Path(id) = captured_path {
+        // A forwarded type can contain a path. Materialize it in the path
+        // arena so retiring the parsing wrapper cannot corrupt capture.ty.
+        if let TokenKind::Path(id) | TokenKind::Type(id) = captured_path {
             self.at += 1usize;
             return self.macro_capture(id, ParsedFragment::Path);
         }
@@ -536,7 +538,7 @@ impl Parser {
             let literal = match &self.program.exprs[value].kind {
                 Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_) | Expr::Char(_) | Expr::Bytes(_) => true,
                 Expr::Unary { op, value } => op == "-" && matches!(self.program.exprs[*value].kind,
-                    Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_) | Expr::Char(_) | Expr::Bytes(_)),
+                    Expr::Int(_) | Expr::Float(_)),
                 _ => false,
             };
             if literal { return Ok(value); }
@@ -544,6 +546,9 @@ impl Parser {
         }
         let negative = self.take("-");
         let value = self.literal()?;
+        if negative && !matches!(self.program.exprs[value].kind, Expr::Int(_) | Expr::Float(_)) {
+            return Err(error(span, "E_MACRO_EXPANSION", "negation requires a numeric literal"));
+        }
         if negative { Ok(self.add_finished_expr(Expr::Unary { op: "-".to_string(), value }, span)) }
         else { Ok(value) }
     }

@@ -850,7 +850,50 @@ fn source() -> i64 {
     assert!(count == 18usize);
     count as i64
 }
+fn macro_free_pattern_exports() -> i64 {
+    let (program, _) = parsed_fixture("fn plain() -> i64 { let (value,) = (7i64,); value }");
+    assert!(program.macro_input.is_none() && program.pattern_exports.is_empty());
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    origins::collect(&program, &resolver).unwrap();
+    let outer = program.patterns.iter().position(|node| matches!(&node.kind, ast::Pattern::Tuple(fields) if fields.len() == 1usize)).unwrap();
+    let ast::Pattern::Tuple(fields) = &program.patterns[outer].kind else { unreachable!(); };
+    let source = fields[0usize];
+    let result = program.exprs.iter().position(|node| matches!(&node.kind, ast::Expr::Tuple(values) if values.len() == 1usize)).unwrap();
+    let mut forged = program.clone();
+    forged.pattern_exports.push(ast::macros::PatternExport { source, sources: vec![source], outer, result, expansion: None });
+    refused(&forged) as i64
+}
+fn type_path_materializations() {
+    let (program, inputs) = parsed_fixture(r#"
+struct Marker;
+macro_rules! as_path { ($p:path) => { $p }; }
+macro_rules! typed_value { ($t:ty) => {{ let value: $t = Marker; value }}; }
+macro_rules! use_twice {
+    ($t:ty) => {
+        fn probe() -> i64 {
+            let score = match Marker { as_path!($t) => 40i64 };
+            let value = typed_value!($t);
+            match value { Marker => score + 2i64 }
+        }
+    };
+}
+use_twice!(Marker);
+"#);
+    assert!(program.macro_captures.iter().any(|capture| capture.ty.is_some()));
+    for capture in &program.macro_captures {
+        if let Some(ty) = capture.ty {
+            assert!(matches!(program.types[ty].kind, ast::Type::Path(_)));
+        }
+        for ty in &capture.type_materializations {
+            assert!(matches!(program.types[*ty].kind, ast::Type::Path(_)));
+        }
+    }
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    origins::collect(&program, &resolver).unwrap();
+    mounted_replay(&program, &inputs);
+}
 fn pattern_origins() -> i64 {
+    type_path_materializations();
     let (program, inputs) = parsed_fixture(r#"
 enum Choice { Value(i64), Empty }
 macro_rules! bind { ($name:ident) => { $name }; }
@@ -944,12 +987,13 @@ fn source(input: Choice) -> i64 {
     let mut input_tokens = program.clone();
     input_tokens.macro_input.as_mut().unwrap().macro_invocations[source_call].tokens[0usize].text = "invented".to_string();
     count += unauthenticated(&input_tokens, &inputs);
-    assert!(count == 24usize);
+    count += macro_free_pattern_exports() as usize;
+    assert!(count == 25usize);
     count as i64
 }
 
 fn main() {
     let count = expression_origins() + type_origins() + fragment_token_origins()
         + lexical_origins() + statement_origins() + pattern_origins();
-    assert!(count == 130i64);
+    assert!(count == 131i64);
 }

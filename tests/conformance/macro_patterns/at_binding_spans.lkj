@@ -1,0 +1,21 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! capture { ($p:pat) => { $p }; }
+fn by_value() -> i64 {
+    let capture!(mut r#value @ _) = 40i64;
+    r#value += 2i64;
+    r#value
+}
+fn by_reference() -> i64 {
+    let capture!(ref shared @ _) = 42i64;
+    *shared
+}
+fn by_mut_reference() -> i64 {
+    let mut input = 40i64;
+    let capture!(ref mut editable @ _) = input;
+    *editable += 2i64;
+    *editable
+}
+fn probe() -> i64 {
+    (by_value() + by_reference() + by_mut_reference()) / 3i64
+}

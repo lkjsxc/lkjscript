@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {"root":true}
+fn last(values: &[i64]) -> i64 {
+    match values { [] => 0i64, [.., last] => *last }
+}
+fn probe() -> i64 { last(&[7i64, 900i64, 40i64]) + last(&[2i64]) + last(&[0i64; 0]) }

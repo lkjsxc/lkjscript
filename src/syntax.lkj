@@ -5040,12 +5040,14 @@ impl Parser {
             return Ok(self.add_finished_pattern(Pattern::Struct { path, fields, rest }, span));
         }
         if self.take("@") {
-            if opaque_path || path.qualification.is_some() || !path.args.is_empty() || path.name.contains("::") {
+            if opaque_path || path.qualification.is_some() || !path.args.is_empty()
+                || !path.bindings.is_empty() || path.name.contains("::") {
                 return Err(Diagnostic::new(span, "E_PARSE", "@ requires one binding identifier"));
             }
+            let binding_span = self.tokens[self.at - 2usize].span;
             let binding = self.add_pattern(Pattern::Bind {
                 name: crate::ast::macros::local_name(&path.name, context), mutable: mutable && !by_ref,
-                by_ref, ref_mut: mutable && by_ref }, span);
+                by_ref, ref_mut: mutable && by_ref }, binding_span);
             self.program.macro_pattern_bindings.insert(binding, (context, mutable, by_ref));
             let inner = self.pattern_atom()?;
             return Ok(self.add_finished_pattern(Pattern::At { binding, inner }, span));

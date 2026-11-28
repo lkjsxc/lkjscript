@@ -64,6 +64,7 @@ fi
 if [[ -n $witness ]]; then
     rust_values=0
     rust_refusals=0
+    rust_boundaries=0
     printf 'case\tdebug_assertions\topt_level\tclassification\tresult\n' > "$work/rust-matrix.tsv"
     for mode in off on; do
         for level in 0 3; do
@@ -85,6 +86,17 @@ if [[ -n $witness ]]; then
                     [[ ! -s $work/runtime.error ]] || fail "Rust $name $mode/opt$level stderr"
                     classification=value
                     rust_values=$((rust_values + 1))
+                elif grep -Eq '^// witness: .*"rustAccept":[[:space:]]*true' "$source"; then
+                    # Explicit lkjscript boundaries remain separate from agreed refusals.
+                    [[ $status == 0 ]] || fail "Rust $name $mode/opt$level expected accepted boundary"
+                    result=$(sed -n 's|^// rust-value: ||p' "$source")
+                    [[ -n $result ]] || fail "missing Rust boundary value: $source"
+                    "$work/rust" > "$work/runtime.output" 2> "$work/runtime.error" || fail "Rust $name $mode/opt$level boundary execution"
+                    printf '%s\n' "$result" > "$work/expected"
+                    cmp "$work/expected" "$work/runtime.output" || fail "Rust $name $mode/opt$level boundary value"
+                    [[ ! -s $work/runtime.error ]] || fail "Rust $name $mode/opt$level boundary stderr"
+                    classification=boundary
+                    rust_boundaries=$((rust_boundaries + 1))
                 else
                     [[ $status == 1 ]] || fail "Rust $name $mode/opt$level expected refusal"
                     code=$(sed -n 's|^// witness: .*"rustCode":"\([^"]*\)".*|\1|p' "$source")
@@ -107,5 +119,5 @@ if [[ -n $witness ]]; then
             done
         done
     done
-    printf 'ok macro-patterns Rust: %s agreed values and %s agreed refusals at opt0/opt3 in both debug configurations\n' "$rust_values" "$rust_refusals"
+    printf 'ok macro-patterns Rust: %s agreed values, %s agreed refusals and %s explicit lkjscript boundaries at opt0/opt3 in both debug configurations\n' "$rust_values" "$rust_refusals" "$rust_boundaries"
 fi

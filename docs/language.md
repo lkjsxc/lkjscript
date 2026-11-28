@@ -1438,7 +1438,10 @@ arms cannot inspect them. A `tt` capture forwards any of them as one opaque tree
 A literal `@` is punctuation in a token tree. A repeated `tt` consumes one
 punctuation token, opaque fragment or whole delimited group per iteration.
 Literal forms follow the ordinary source lexer; unsupported literal
-prefixes fail before matching. Literal matcher tokens retain their exact spelling, including raw
+prefixes fail before matching. A literal capture permits unary minus only on
+integer or float literals. Negated boolean, string, character and byte-string
+literals refuse even when unused or forwarded through an opaque expression;
+this explicit boundary does not select a later matcher arm. Literal matcher tokens retain their exact spelling, including raw
 string delimiters and byte escapes. Unused expression captures do not expand
 nested macros or read includes. Unused type captures do not resolve their names; unused pattern captures do not
 expand nested macros. Pattern and path captures retain their grammar category.
@@ -1581,12 +1584,13 @@ indexing, and `@` tests its subpattern before binding the complete value. Bound
 slice rests such as `middle @ ..` retain a located unsupported boundary.
 Indexed elements retain ordinary borrowing checks: moving a non-Copy array
 element and simultaneous mutable index bindings remain conservative refusals.
-Constant path patterns admit module constants with scalar literal initializers
-and require their declared type; associated and computed constant patterns
+Constant path patterns admit module constants with scalar literal initializers,
+including negative integers and floats, and require their declared type; associated and computed constant patterns
 retain explicit unsupported diagnostics.
 
 Pattern aliases, capture materializations, function patterns and let-else exports
-are authenticated by exact source and expansion replay. Generated query identities
+are authenticated by exact source and expansion replay. A macro-free program
+cannot carry synthetic pattern-export records. Generated query identities
 include nested and participating export dependencies. Exact caller-authored
 binding tokens passed through `ident` or `pat` can be renamed when every role and
 reference has complete, stable evidence. Template bindings, duplicated or mixed
@@ -1600,7 +1604,10 @@ source modules have located refusals. Built-in macro names remain reserved.
 Direct macro invocations in type positions remain unsupported. Captured types work in ordinary type positions,
 qualified receivers and generic arguments. A captured path can supply type,
 expression or pattern paths; an opaque type must be forwarded through a path
-fragment and actually contain a path before it can do so. Opaque types cannot
+fragment and actually contain a path before it can do so. Path materialization
+never retires a recorded type materialization. As in Rust, opaque starts commit
+to path/block parsing or repetition ambiguity; invalid materializations do not
+silently select a later arm. Opaque types cannot
 directly become struct literals or trait bounds. `impl $t for Target` with a captured trait type
 has a located unsupported diagnostic. Existing ordinary type and constant
 expression boundaries still apply. Repetition heads must determine continuation without overlapping the
