@@ -1330,8 +1330,9 @@ separation is part of the consumer contract.
 
 The checked `tools/programs-package-manifest.sh` CLI selects exact Git or
 checksum-pinned gzip/tar inventory. Its host adapter supplies nonblocking regular
-file reads, metadata, sanitized Git, one gzip member and exclusive file creation;
-checked source validates framing, hashes, notice and pin policy, and rolls back
+file reads, metadata, sanitized Git and exclusive file creation;
+checked source decodes gzip/DEFLATE (including CRC32 and ISIZE), validates
+tar framing, hashes, notice and pin policy, and rolls back
 its first output if the second cannot be created. Keep input and output namespaces
 quiescent. The adapter is an ambient Linux host boundary, not a sandbox.
 
@@ -1360,7 +1361,7 @@ original memchr source bytes. All 175 listed original file lengths/hashes,
 tree digests, notices, envelope digests and returned-buffer digests are
 independently audited. The [operation and execution receipt](../tests/fixtures/programs_package.operation.json)
 records each tested configuration and final source identities. The required gate
-runs the 21 independent inventory controls, 67 checked CLI controls, six pure
+runs the 21 independent inventory controls, 80 checked CLI controls, six pure
 contract tests on each execution engine,
 and 24 native read/issue/substitution controls including catalog isolation.
 This is source authentication; none of these large crates thereby becomes an

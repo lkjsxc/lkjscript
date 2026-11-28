@@ -1,7 +1,8 @@
 //! Exact source package inventory. The syscall adapter observes Linux files,
-//! runs sanitized Git commands and inflates one gzip member. All inventory,
+//! runs sanitized Git commands. All decompression, inventory,
 //! framing, digest, canonical JSON and publication decisions are checked here.
 mod programs_package_manifest_sha1;
+mod programs_package_manifest_gzip;
 use std::collections::{BTreeMap,BTreeSet};
 use std::json::{self,Value};
 use std::sha256;
@@ -235,6 +236,8 @@ impl Host {
     fn send(&mut self,raw:&[u8]) {
         let n=raw.len() as u64;let mut header=[0u8;8];
         for i in 0usize..8usize {header[i]=(n>>((i*8usize) as u64)) as u8;}
+        // Stdout::write is write-all (native stream_write retries short
+        // writes and EINTR), not the partial-write interface of a File.
         self.output.write(&header);self.output.write(raw);
     }
     fn exact(&mut self,n:usize) -> Result<Vec<u8>,String> {
@@ -409,6 +412,8 @@ fn tar_inventory(host:&mut Host,root:&str,raw:&[u8],prefix:&str)->Result<BTreeMa
         let magic=&header[257usize..263usize];
         require(magic==b"ustar\0" || magic==b"ustar " || zeros(magic),"unsupported tar magic")?;
         let name=tar_field(&header[..100usize])?;
+        require(!name.is_empty(),"empty tar member name")?;
+        require(magic==b"ustar\0" || zeros(&header[345usize..500usize]),"non-POSIX tar prefix metadata")?;
         let parent=tar_field(&header[345usize..500usize])?;
         let mut path=if parent.is_empty(){name}else{format!("{parent}/{name}")};
         let dir=kind==b'5' || path.ends_with("/");
@@ -432,11 +437,8 @@ fn archive_inventory(host:&mut Host,root:&str,archive:&str,checksum:&str,name:&s
     require(hex(checksum,64usize),"archive requires lowercase SHA256")?;
     let content=host.read(archive)?;
     require(sha256::hex_digest(&content)==checksum,"archive checksum mismatch")?;
-    let length=content.len();
-    let reply=host.raw("gzip",&vec![content])?;
-    require(reply.len()==2usize,"invalid gzip response")?;
-    require(text(&reply[0])?==format!("{length}"),"trailing compressed payload")?;
-    tar_inventory(host,root,&reply[1],&format!("{name}-{version}/"))
+    let raw=programs_package_manifest_gzip::gunzip(&content)?;
+    tar_inventory(host,root,&raw,&format!("{name}-{version}/"))
 }
 fn dependencies(host:&mut Host,pins:&[String])->Result<String,String>{
     let mut edges:BTreeMap<String,String>=BTreeMap::new();

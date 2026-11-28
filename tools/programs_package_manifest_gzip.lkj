@@ -1,0 +1,205 @@
+//! Single RFC 1952 member, with RFC 1951 DEFLATE and CRC32 validation.
+//! No host effects. All bounds and malformed-tree checks precede indexing.
+
+fn invalid()->String {"cannot decompress pinned archive".to_string()}
+fn require(ok:bool)->Result<(),String>{if ok{Ok(())}else{Err(invalid())}}
+
+fn le32(raw:&[u8])->u32{
+    (raw[0] as u32) | ((raw[1] as u32)<<8u32) |
+        ((raw[2] as u32)<<16u32) | ((raw[3] as u32)<<24u32)
+}
+fn crc32(raw:&[u8])->u32{
+    let mut table=[0u32;256];
+    for i in 0usize..256usize{
+        let mut c=i as u32;
+        for _ in 0usize..8usize{
+            c=if c&1u32!=0u32{(c>>1u32)^0xedb88320u32}else{c>>1u32};
+        }
+        table[i]=c;
+    }
+    let mut c=0xffffffffu32;
+    for b in raw{c=(c>>8u32)^table[((c^(*b as u32))&255u32) as usize];}
+    c^0xffffffffu32
+}
+
+// at counts loaded bytes, including the byte containing any remaining bits.
+// Each read leaves fewer than eight bits; alignment never discards a byte.
+struct Bits{at:usize,hold:u32,count:u32}
+impl Bits{
+    fn take(&mut self,raw:&[u8],n:u32)->Result<usize,String>{
+        while self.count<n{
+            require(self.at<raw.len())?;
+            self.hold|=(raw[self.at] as u32)<<self.count;
+            self.at+=1usize;
+            self.count+=8u32;
+        }
+        let value=self.hold&((1u32<<n)-1u32);
+        self.hold>>=n;
+        self.count-=n;
+        Ok(value as usize)
+    }
+    fn align(&mut self){self.hold=0u32;self.count=0u32;}
+}
+
+// Canonical codes in increasing length, then symbol order. Although the bit
+// stream packs ordinary fields least-significant-bit first, Huffman codes
+// themselves arrive most-significant-bit first (RFC 1951 section 3.1.1).
+struct Tree{counts:[usize;16],symbols:Vec<usize>,max:usize}
+fn tree(lengths:&[usize],single:bool,empty:bool)->Result<Tree,String>{
+    let mut counts=[0usize;16];
+    let mut max=0usize;
+    for length in lengths{
+        require(*length<=15usize)?;
+        if *length!=0usize{
+            counts[*length]+=1usize;
+            if *length>max{max=*length;}
+        }
+    }
+    if max==0usize{require(empty)?;}
+    else{
+        let mut left=1usize;
+        for len in 1usize..16usize{
+            left*=2usize;
+            require(counts[len]<=left)?;
+            left-=counts[len];
+        }
+        require(left==0usize || (single && max==1usize && counts[1]==1usize))?;
+    }
+    let mut symbols=Vec::new();
+    for len in 1usize..max+1usize{
+        for i in 0usize..lengths.len(){if lengths[i]==len{symbols.push(i);}}
+    }
+    Ok(Tree{counts,symbols,max})
+}
+fn decode(t:&Tree,bits:&mut Bits,raw:&[u8])->Result<usize,String>{
+    let mut code=0usize;
+    let mut first=0usize;
+    let mut index=0usize;
+    for len in 1usize..t.max+1usize{
+        code=code*2usize+bits.take(raw,1u32)?;
+        let count=t.counts[len];
+        if code>=first && code-first<count{return Ok(t.symbols[index+code-first]);}
+        index+=count;
+        first=(first+count)*2usize;
+    }
+    Err(invalid())
+}
+fn fixed()->Result<(Tree,Tree),String>{
+    let mut lengths=[8usize;288];
+    for i in 144usize..256usize{lengths[i]=9usize;}
+    for i in 256usize..280usize{lengths[i]=7usize;}
+    Ok((tree(&lengths,false,false)?,tree(&[5usize;32],false,false)?))
+}
+fn dynamic(bits:&mut Bits,raw:&[u8])->Result<(Tree,Tree),String>{
+    let nl=bits.take(raw,5u32)?+257usize;
+    let nd=bits.take(raw,5u32)?+1usize;
+    let nc=bits.take(raw,4u32)?+4usize;
+    require(nl<=286usize && nd<=32usize)?;
+    let order=[16usize,17usize,18usize,0usize,8usize,7usize,9usize,6usize,10usize,
+        5usize,11usize,4usize,12usize,3usize,13usize,2usize,14usize,1usize,15usize];
+    let mut code_lengths=[0usize;19];
+    for i in 0usize..nc{code_lengths[order[i]]=bits.take(raw,3u32)?;}
+    let codes=tree(&code_lengths,false,false)?;
+    let mut lengths:Vec<usize>=Vec::new();
+    while lengths.len()<nl+nd{
+        let symbol=decode(&codes,bits,raw)?;
+        if symbol<16usize{lengths.push(symbol);}
+        else{
+            let value=if symbol==16usize{
+                require(!lengths.is_empty())?;
+                lengths[lengths.len()-1usize]
+            }else{0usize};
+            let repeat=if symbol==16usize{bits.take(raw,2u32)?+3usize}
+                else if symbol==17usize{bits.take(raw,3u32)?+3usize}
+                else{bits.take(raw,7u32)?+11usize};
+            require(repeat<=nl+nd-lengths.len())?;
+            for _ in 0usize..repeat{lengths.push(value);}
+        }
+    }
+    require(lengths[256]!=0usize)?;
+    Ok((tree(&lengths[..nl],true,false)?,tree(&lengths[nl..],true,true)?))
+}
+fn compressed(lit:&Tree,dist:&Tree,bits:&mut Bits,raw:&[u8],out:&mut Vec<u8>)->Result<(),String>{
+    let length_base=[3usize,4,5,6,7,8,9,10,11,13,15,17,19,23,27,31,
+        35,43,51,59,67,83,99,115,131,163,195,227,258];
+    let length_extra=[0u32,0,0,0,0,0,0,0,1,1,1,1,2,2,2,2,
+        3,3,3,3,4,4,4,4,5,5,5,5,0];
+    let distance_base=[1usize,2,3,4,5,7,9,13,17,25,33,49,65,97,129,193,
+        257,385,513,769,1025,1537,2049,3073,4097,6145,8193,12289,16385,24577];
+    loop{
+        let symbol=decode(lit,bits,raw)?;
+        if symbol<256usize{out.push(symbol as u8);}
+        else if symbol==256usize{return Ok(());}
+        else{
+            require(symbol<=285usize)?;
+            let i=symbol-257usize;
+            let length=length_base[i]+bits.take(raw,length_extra[i])?;
+            let d=decode(dist,bits,raw)?;
+            require(d<30usize)?;
+            let extra=if d<4usize{0u32}else{(d/2usize-1usize) as u32};
+            let distance=distance_base[d]+bits.take(raw,extra)?;
+            require(distance<=out.len())?;
+            // Overlapping matches must copy forward, not snapshot the source.
+            for _ in 0usize..length{
+                let value=out[out.len()-distance];
+                out.push(value);
+            }
+        }
+    }
+}
+fn deflate(raw:&[u8],start:usize)->Result<(Vec<u8>,usize),String>{
+    let mut bits=Bits{at:start,hold:0u32,count:0u32};
+    let mut out=Vec::new();
+    loop{
+        let last=bits.take(raw,1u32)?!=0usize;
+        let kind=bits.take(raw,2u32)?;
+        if kind==0usize{
+            bits.align();
+            let n=bits.take(raw,16u32)?;
+            let complement=bits.take(raw,16u32)?;
+            require(n^complement==65535usize && n<=raw.len()-bits.at)?;
+            out.extend_from_slice(&raw[bits.at..bits.at+n]);
+            bits.at+=n;
+        }else{
+            require(kind!=3usize)?;
+            let (lit,dist)=if kind==1usize{fixed()?}else{dynamic(&mut bits,raw)?};
+            compressed(&lit,&dist,&mut bits,raw,&mut out)?;
+        }
+        if last{break;}
+    }
+    Ok((out,bits.at))
+}
+fn terminated(raw:&[u8],mut at:usize)->Result<usize,String>{
+    while at<raw.len(){
+        let byte=raw[at];at+=1usize;
+        if byte==0u8{return Ok(at);}
+    }
+    Err(invalid())
+}
+pub fn gunzip(raw:&[u8])->Result<Vec<u8>,String>{
+    require(raw.len()>=18usize && raw[0]==31u8 && raw[1]==139u8 &&
+        raw[2]==8u8 && raw[3]&224u8==0u8)?;
+    let flags=raw[3];
+    let mut at=10usize;
+    if flags&4u8!=0u8{
+        require(raw.len()-at>=2usize)?;
+        let n=(raw[at] as usize)|((raw[at+1usize] as usize)<<8usize);
+        at+=2usize;
+        require(n<=raw.len()-at)?;
+        at+=n;
+    }
+    if flags&8u8!=0u8{at=terminated(raw,at)?;}
+    if flags&16u8!=0u8{at=terminated(raw,at)?;}
+    if flags&2u8!=0u8{
+        require(raw.len()-at>=2usize)?;
+        let expected=(raw[at] as u32)|((raw[at+1usize] as u32)<<8u32);
+        require(crc32(&raw[..at])&65535u32==expected)?;
+        at+=2usize;
+    }
+    let (out,end)=deflate(raw,at)?;
+    require(raw.len()-end>=8usize)?;
+    require(le32(&raw[end..end+4usize])==crc32(&out) &&
+        le32(&raw[end+4usize..end+8usize])==out.len() as u32)?;
+    if raw.len()-end!=8usize{return Err("trailing compressed payload".to_string());}
+    Ok(out)
+}

@@ -8,6 +8,7 @@ case "$compiler" in /*) ;; *) compiler="$PWD/$compiler" ;; esac
 work=$(mktemp -d)
 trap 'rm -rf -- "$work"' EXIT
 trap 'exit 130' INT
-trap 'exit 143' HUP TERM
-build_package_manifest "$compiler" "$repo" "$work"
+trap 'exit 129' HUP
+trap 'exit 143' TERM
+build_package_manifest "$compiler" "$repo" "$work" >&2
 "$work/host" "$work/manifest" "$@"

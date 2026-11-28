@@ -171,9 +171,9 @@ without Node (and without invoking Perl). A release requires both jobs on the sa
 The gate exercises HTTP with an explicit lkjscript client.
 
 The exact source-package inventory CLI is `tools/programs-package-manifest.sh`.
-Its checked policy uses a narrow Linux syscall and zlib adapter; the launcher
-and native package gate require a C compiler and zlib development headers
-(`gcc libc6-dev zlib1g-dev` on Debian). These are not compiler bootstrap
+Its checked policy decodes gzip/DEFLATE and uses a narrow Linux syscall
+adapter; the launcher and native package gate require a C compiler
+(`gcc libc6-dev` on Debian), not zlib. These are not compiler bootstrap
 requirements. Set `LKJSCRIPT_COMPILER` to select a built compiler.
 
 ```sh

@@ -6,8 +6,8 @@ jobs:
     container: debian:bookworm-slim
     steps:
       - name: Gate dependencies
-        # C builds syscall witnesses, the projector host bridge, and the narrow inventory adapter; the compiler bootstraps from its seed.
-        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates gcc libc6-dev time zlib1g-dev
+        # C builds syscall witnesses, the projector host bridge, and the narrow syscall inventory adapter; the compiler bootstraps from its seed.
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates gcc libc6-dev time
       - uses: actions/checkout@v4
       - name: Seed-only compiler bootstrap
         run: |

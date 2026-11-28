@@ -212,6 +212,93 @@ cp -a "$src/LICENSE" "$src/src" "$work/fixture-1.0/"
 tar --format=ustar -cf "$work/dirs.tar" -C "$work" fixture-1.0
 gzip_tar "$work/dirs.tar" "$work/dirs.crate"
 archive_case ok archive-directories "$work/dirs.crate"
+# Prove the first block type, rather than assuming a gzip compression level
+# selects a particular DEFLATE representation.
+block_type() {
+    local byte
+    read -r byte < <(od -An -tu1 -j10 -N1 "$1")
+    test "$(((byte >> 1) & 3))" = "$2"
+}
+block_type "$work/original.crate" 1
+archive_case ok gzip-fixed "$work/original.crate"
+
+# Make an exact single stored block with an independently generated gzip
+# envelope and trailer. The known fixture fits in one 16-bit LEN field.
+emit_byte() { printf '%b' "\\$(printf '%03o' "$(($1 & 255))")"; }
+size=$(wc -c < "$work/original.tar")
+test "$size" -lt 65536
+{
+    head -c10 "$work/original.crate"
+    printf '\001'
+    emit_byte "$size"; emit_byte "$((size >> 8))"
+    emit_byte "$((65535 ^ size))"; emit_byte "$(((65535 ^ size) >> 8))"
+    cat "$work/original.tar"
+    tail -c8 "$work/original.crate"
+} > "$work/stored.crate"
+block_type "$work/stored.crate" 0
+archive_case ok gzip-stored "$work/stored.crate"
+
+# Exercise dynamic codes, multiple blocks, long backreferences, >128 KiB
+# binary archive/source responses and >128 KiB request/output frames. The
+# fixed-seed integer generator emits a reproducible 6-bit byte distribution.
+awk 'BEGIN { x=1; for(i=0;i<262144;i++){x=(48271*x)%2147483647;printf "%c",int(x/33554432)} }' > "$src/src/large.bin"
+cp "$src/src/large.bin" "$work/fixture-1.0/src/large.bin"
+tar --format=ustar -cf "$work/large.tar" -C "$work" fixture-1.0
+gzip_tar "$work/large.tar" "$work/large.crate"
+test "$(wc -c < "$work/large.crate")" -gt 131072
+test "$(wc -c < "$src/src/large.bin")" -gt 131072
+block_type "$work/large.crate" 2
+awk '{sub(/https:\/\/example.invalid\/fixture/,"@");split($0,a,"@");printf "%s",a[1];for(i=0;i<140000;i++)printf "x";printf "%s",a[2]}' "$work/child.pin" > "$work/large.pin"
+test "$(wc -c < "$work/large.pin")" -gt 131072
+archive_case ok gzip-dynamic-large "$work/large.crate" --dependency-pin "$work/large.pin"
+test "$(wc -c < "$work/manifest.actual")" -gt 131072
+test "$(wc -c < "$work/stdout")" -gt 131072
+rm "$src/src/large.bin" "$work/fixture-1.0/src/large.bin"
+
+# Exercise optional gzip header fields, including the low 16 bits of the
+# header CRC32, independently computed with gzip's normal data trailer.
+{
+    printf '\037\213\010\036\000\000\000\000\000\003'
+    printf '\007\000XY\003\000xyzfixture\000comment\000'
+} > "$work/optional.header"
+{
+    cat "$work/optional.header"
+    gzip -n -c "$work/optional.header" | tail -c8 | head -c2
+    tail -c+11 "$work/original.crate"
+} > "$work/optional.crate"
+gzip -t "$work/optional.crate"
+LKJSCRIPT_MANIFEST_ORACLE= archive_case ok gzip-optional-header-crc "$work/optional.crate"
+{
+    printf "\037\213\010\034"
+    tail -c+5 "$work/optional.header"
+    tail -c+11 "$work/original.crate"
+} > "$work/optional-no-crc.crate"
+archive_case ok gzip-optional-header "$work/optional-no-crc.crate"
+cp "$work/optional.crate" "$work/bad-header-crc.crate"
+header_size=$(wc -c < "$work/optional.header")
+read -r byte < <(od -An -tu1 -j"$header_size" -N1 "$work/optional.crate")
+emit_byte "$((byte ^ 1))" | dd of="$work/bad-header-crc.crate" bs=1 seek="$header_size" conv=notrunc status=none
+archive_case refuse gzip-bad-header-crc "$work/bad-header-crc.crate"
+
+# Isolate invalid CRC32 and ISIZE (archive checksum is recomputed per case).
+gzip_size=$(wc -c < "$work/original.crate")
+for field in crc isize; do
+    offset=$((gzip_size - 8))
+    if [[ $field == isize ]]; then offset=$((gzip_size - 4)); fi
+    read -r byte < <(od -An -tu1 -j"$offset" -N1 "$work/original.crate")
+    cp "$work/original.crate" "$work/bad-$field.crate"
+    emit_byte "$((byte ^ 1))" | dd of="$work/bad-$field.crate" bs=1 seek="$offset" conv=notrunc status=none
+    archive_case refuse "gzip-bad-$field" "$work/bad-$field.crate"
+done
+cp "$work/stored.crate" "$work/bad-len.crate"
+printf '\000' | dd of="$work/bad-len.crate" bs=1 seek=13 conv=notrunc status=none
+archive_case refuse gzip-bad-stored-len "$work/bad-len.crate"
+cp "$work/original.crate" "$work/reserved-block.crate"
+printf '\007' | dd of="$work/reserved-block.crate" bs=1 seek=10 conv=notrunc status=none
+archive_case refuse gzip-reserved-block "$work/reserved-block.crate"
+cp "$work/original.crate" "$work/truncated-gzip.crate"
+truncate -s -1 "$work/truncated-gzip.crate"
+archive_case refuse gzip-truncated-trailer "$work/truncated-gzip.crate"
 printf -v wrong '%064d' 0
 produce refuse checksum --archive "$work/original.crate" --checksum "$wrong"
 mkfifo "$work/archive-fifo"
@@ -252,6 +339,28 @@ mutate_header tar-extension 156 x
 mutate_header tar-directory-payload 156 5
 mutate_header tar-nonoctal 124 9
 mutate_header tar-wrong-prefix 345 X
+# Non-POSIX prefix bytes are not path components. Empty member names are
+# invalid even when a POSIX prefix would synthesize a plausible directory.
+# Archive::Tar may repair these fields, so the tightened policy is checked
+# independently rather than requiring legacy malformed-input parity.
+strict_tar_case() {
+    local label=$1 raw=$2 sum
+    sum=$(od -An -v -tu1 -N512 "$raw" | awk \
+        '{for(i=1;i<=NF;i++){s+=(at>=148&&at<156?32:$i);at++}} END{print s}')
+    printf '%06o\0 ' "$sum" | dd of="$raw" bs=1 seek=148 conv=notrunc status=none
+    gzip_tar "$raw" "$work/$label.crate"
+    LKJSCRIPT_MANIFEST_ORACLE= archive_case refuse "$label" "$work/$label.crate"
+}
+cp "$work/dirs.tar" "$work/gnu-prefix.tar"
+printf 'ustar ' | dd of="$work/gnu-prefix.tar" bs=1 seek=257 conv=notrunc status=none
+printf 'fixture-1.0' | dd of="$work/gnu-prefix.tar" bs=1 seek=345 conv=notrunc status=none
+strict_tar_case tar-gnu-metadata "$work/gnu-prefix.tar"
+grep -Fq 'non-POSIX tar prefix metadata' "$work/stderr"
+cp "$work/dirs.tar" "$work/empty-name.tar"
+dd if=/dev/zero of="$work/empty-name.tar" bs=100 count=1 conv=notrunc status=none
+printf 'fixture-1.0' | dd of="$work/empty-name.tar" bs=1 seek=345 conv=notrunc status=none
+strict_tar_case tar-empty-name "$work/empty-name.tar"
+grep -Fq 'empty tar member name' "$work/stderr"
 printf 'different bytes\n' > "$src/src/lib.rs"
 archive_case refuse extracted-mismatch "$work/original.crate"
 git_at add src/lib.rs
