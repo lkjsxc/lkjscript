@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#[cfg(doc)] extern crate absent;
+#[cfg(not(doc))] fn answer() -> i64 {42i64}
+#[cfg_attr(doc, unknown_producer)]
+fn probe() -> i64 { if cfg!(any(doc, doctest)) { 0i64 } else if cfg!(all(not(doc), not(doctest))) { answer() } else { 1i64 } }

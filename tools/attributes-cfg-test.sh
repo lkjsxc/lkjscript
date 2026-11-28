@@ -83,6 +83,45 @@ for source in "$cases"/*.lkj; do
 done
 printf 'attributes-cfg Rust: values=%s matching-verdicts=%s explicit-boundaries=%s\n' \
     "$rust_values" "$rust_shared" "$rust_boundaries"
+# Rust no_std actually selects core's prelude; it is not an inert capability hint.
+cat > "$work/rust/core-only.rs" <<'RS'
+#![no_std]
+pub fn answer() -> Option<i64> { Some(42i64) }
+RS
+cat > "$work/rust/conditional-core.rs" <<'RS'
+#![cfg_attr(not(feature = "std"), no_std)]
+pub fn answer() -> Option<i64> { Some(42i64) }
+RS
+cat > "$work/rust/std-prelude.rs" <<'RS'
+pub fn answer() -> usize { Vec::<i64>::new().len() }
+RS
+cat > "$work/rust/no-std-prelude.rs" <<'RS'
+#![no_std]
+pub fn answer() -> usize { Vec::<i64>::new().len() }
+RS
+cat > "$work/rust/conditional-no-std-prelude.rs" <<'RS'
+#![cfg_attr(not(feature = "std"), no_std)]
+pub fn answer() -> usize { Vec::<i64>::new().len() }
+RS
+no_std_contract=0
+for setting in on off; do
+    for optimization in 0 3; do
+        for specimen in core-only conditional-core std-prelude no-std-prelude conditional-no-std-prelude; do
+            status=0
+            "$witness" --edition=2021 -A warnings --crate-type lib --crate-name no_std_contract \
+                -C "opt-level=$optimization" -C "debug-assertions=$setting" \
+                "$work/rust/$specimen.rs" -o "$work/rust/library.rlib" \
+                > "$work/rust-output" 2> "$work/rust-error" || status=$?
+            if [[ $specimen == *no-std-prelude ]]; then
+                [[ $status == 1 ]] || fail "Rust no_std kept Vec in its prelude: $specimen"
+                grep -Fq E0433 "$work/rust-error" || fail "Rust no_std Vec refusal cause"
+            else [[ $status == 0 ]] || fail "Rust core/std control: $specimen"; fi
+            no_std_contract=$((no_std_contract + 1))
+        done
+    done
+done
+printf 'attributes-cfg Rust no_std prelude contract: %s verdicts\n' "$no_std_contract"
+
 fi
 [[ $mode != --rust-only ]] || exit 0
 
@@ -104,13 +143,15 @@ bash tools/attribute-parser-test.sh "$compiler"
 mkdir "$work/source" "$work/store" "$work/units" "$work/unit-store"
 head -c 32 /dev/urandom > "$work/key"
 cp "$cases/guide.txt" "$work/source/guide.txt"
-"$compiler" build macro_doc.lkj --source-dir "$cases" --library-dir "$library" --entry probe \
-    --index --store "$work/store" --store-key "$work/key" -o "$work/macro-doc-image" \
-    > "$work/macro-doc-index" 2> "$work/error"
-grep -q '^LKJSCRIPT_SNAPSHOT ' "$work/macro-doc-index" || fail 'macro documentation source replay/index'
+for specimen in macro_doc cfg_attr_macro; do
+    "$compiler" build "$specimen.lkj" --source-dir "$cases" --library-dir "$library" --entry probe \
+        --index --store "$work/store" --store-key "$work/key" -o "$work/macro-doc-image" \
+        > "$work/macro-doc-index" 2> "$work/error"
+    grep -q '^LKJSCRIPT_SNAPSHOT ' "$work/macro-doc-index" || fail "$specimen documentation source replay/index"
+done
 cat > "$work/source/main.lkj" <<'LKJ'
-#![doc = include_str!("guide.txt")]
-#[doc = include_str!("guide.txt")]
+#![cfg_attr(not(doc), doc = include_str!("guide.txt"))]
+#[cfg_attr(not(doc), doc = include_str!("guide.txt"), inline)]
 fn probe() -> i64 { 42i64 }
 LKJ
 cat > "$work/source/nested.lkj" <<'LKJ'
@@ -119,8 +160,8 @@ fn probe() -> i64 { nested::child::answer() }
 LKJ
 mkdir "$work/source/nested"
 cat > "$work/source/nested/child.lkj" <<'LKJ'
-#![doc = include_str!("../guide.txt")]
-#[doc = include_str!("../guide.txt")]
+#![cfg_attr(not(doc), doc = include_str!("../guide.txt"))]
+#[cfg_attr(not(doc), cfg_attr(all(), doc = include_str!("../guide.txt")))]
 pub fn answer() -> i64 { 42i64 }
 LKJ
 for setting in on off; do
@@ -168,7 +209,7 @@ for setting in on off; do
         "$source_after" > "$work/request"
     "$compiler" edit "${cache_args[@]}" --debug-assertions "$setting" --request "$work/request" \
         > "$work/edit-output" 2> "$work/error"
-    grep -Fq '#[doc = include_str!("guide.txt")]' "$work/source/main.lkj" || fail 'edit erased doc input'
+    grep -Fq '#[cfg_attr(not(doc), doc = include_str!("guide.txt"), inline)]' "$work/source/main.lkj" || fail 'edit erased doc input'
     for engine in native interpreter; do
         [[ $("$compiler" run "${cache_args[@]}" --debug-assertions "$setting" --engine "$engine" \
             2> "$work/error") == 43 ]] || fail "$setting/$engine checked doc edit value"
@@ -192,7 +233,7 @@ cp "$cases/guide.txt" "$work/source/guide.txt"
 printf 'outside source grant\n' > "$work/outside.txt"
 ln -s "$work/outside.txt" "$work/source/escape-link.txt"
 for spelling in ../outside.txt escape-link.txt; do
-    printf '#[doc = include_str!("%s")]\nfn probe() -> i64 { 42i64 }\n' "$spelling" > "$work/source/escape.lkj"
+    printf '#[cfg_attr(not(doc), doc = include_str!("%s"))]\nfn probe() -> i64 { 42i64 }\n' "$spelling" > "$work/source/escape.lkj"
     printf 'fn probe() -> usize { include_str!("%s").len() }\n' "$spelling" > "$work/source/expression.lkj"
     for setting in on off; do
         refuse 'E_INCLUDE_PATH|E_IO' "$compiler" check escape.lkj --source-dir "$work/source" \
@@ -224,9 +265,9 @@ const DEPENDS: &[&str] = &["app=base"];
 const ENTRY: &str = "app::main";
 LKJ
 cat > "$work/units/base.lkj" <<'LKJ'
-#![doc = include_str!("guide.txt")]
-#[cfg(doctest)] extern crate doc_comment;
-#[doc = include_str!("guide.txt")]
+#![cfg_attr(not(doc), doc = include_str!("guide.txt"))]
+#[cfg_attr(all(), cfg(any(doc, doctest)))] extern crate doc_comment;
+#[cfg_attr(not(doc), doc = include_str!("guide.txt"), inline)]
 pub fn number() -> i64 { 42i64 }
 LKJ
 cat > "$work/units/app.lkj" <<'LKJ'
@@ -307,15 +348,15 @@ partial_check() {
 for setting in on off; do
     # An unsupported qualified attribute may be an arbitrary item producer.
     for specimen in unknown_function unknown_inner \
-        leading_tool qualified_doc qualified_cfg qualified_tool_extra; do
+        leading_tool qualified_doc qualified_cfg qualified_tool_extra cfg_attr_unknown cfg_attr_inner_unknown no_std_boundary cfg_attr_no_std_boundary; do
         cp "$cases/$specimen.lkj" "$work/source/partial.lkj"
         partial_check global E_UNSUPPORTED
     done
-    for specimen in unknown_field unknown_variant; do
+    for specimen in unknown_field unknown_variant cfg_attr_unknown_field cfg_attr_unknown_variant; do
         cp "$cases/$specimen.lkj" "$work/source/partial.lkj"
         partial_check owned E_UNSUPPORTED
     done
-    specimen=doc_missing
+    specimen=cfg_attr_doc_missing_owned
     cp "$cases/$specimen.lkj" "$work/source/partial.lkj"
     printf 'fn dependent() -> i64 { refused() }\n' >> "$work/source/partial.lkj"
     cp "$work/source/partial.lkj" "$work/partial-before"
@@ -335,19 +376,27 @@ for setting in on off; do
     refuse E_INCLUDE_MISSING "$compiler" edit partial.lkj --source-dir "$work/source" \
         --library-dir "$library" --debug-assertions "$setting" --store "$work/store" --store-key "$work/key" --request "$work/request"
     cmp "$work/partial-before" "$work/source/partial.lkj" || fail 'edited a refused doc root'
-    for specimen in doc_missing_inner doc_missing_module; do
+    for specimen in doc_missing_inner doc_missing_module cfg_attr_inner_doc_missing; do
         cp "$cases/$specimen.lkj" "$work/source/partial.lkj"
         partial_check global E_INCLUDE_MISSING
     done
-    # Recovery reparses a documented closure using its real included input.
-    specimen=doc_partial_replay
-    cp "$cases/$specimen.lkj" "$work/source/partial.lkj"
-    for contents in Alpha Bravo; do
-        printf '%s\n' "$contents" > "$work/source/guide.txt"
+    # Recovery reparses the complete authored cfg_attr wrapper and its doc input.
+    for specimen in doc_partial_replay cfg_attr_doc_partial_replay; do
+        cp "$cases/$specimen.lkj" "$work/source/partial.lkj"
+        for contents in Alpha Bravo; do
+            printf '%s\n' "$contents" > "$work/source/guide.txt"
+            partial_check replay E_CAPABILITY
+        done
+        rm "$work/source/guide.txt"
+        partial_check global E_INCLUDE_MISSING
+        cp "$cases/guide.txt" "$work/source/guide.txt"
+    done
+    # Legacy bare metadata retains checked siblings; inactive conditional metadata
+    # has no effects, while the selected unknown case above retains global poison.
+    for specimen in ordinary_metadata_partial cfg_attr_inactive_partial; do
+        cp "$cases/$specimen.lkj" "$work/source/partial.lkj"
         partial_check replay E_CAPABILITY
     done
-    rm "$work/source/guide.txt"
-    partial_check global E_INCLUDE_MISSING
-    cp "$cases/guide.txt" "$work/source/guide.txt"
+
 done
 printf 'ok attributes-cfg: native/interpreter, doc confinement, replay, reuse, units and checked edits\n'

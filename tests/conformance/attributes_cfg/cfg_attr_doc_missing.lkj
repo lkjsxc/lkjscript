@@ -1,0 +1,5 @@
+// expect: reject E_INCLUDE_MISSING
+// witness: {"root":true}
+// attr-rust: reject
+#[cfg_attr(all(), doc = include_str!("missing.md"))]
+fn probe() -> i64 { 42i64 }

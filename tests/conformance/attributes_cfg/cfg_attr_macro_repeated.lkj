@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+macro_rules! make { ($($name:ident),*) => { $( #[cfg_attr(all(), doc = "same", rustfmt::skip)] fn $name() -> i64 { 21i64 } )* }; }
+make!(left, right);
+fn probe() -> i64 { left() + right() }

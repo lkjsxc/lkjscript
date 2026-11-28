@@ -1,0 +1,4 @@
+// expect: value 42
+// attr-rust: reject
+#[unknown_producer = 1]
+fn probe() -> i64 { 42i64 }

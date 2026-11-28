@@ -1,0 +1,4 @@
+// expect: value 42
+// attr-rust: accept
+#[cfg_attr(any(), doc = { #![allow(dead_code)] })]
+fn probe() -> i64 { 42i64 }

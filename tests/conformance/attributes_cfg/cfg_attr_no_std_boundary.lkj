@@ -1,0 +1,7 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"root":true,"rustAccept":true}
+// attr-rust: accept
+#![cfg_attr(not(feature = "std"), no_std)]
+extern crate std;
+use std::println;
+fn probe() -> i64 { 42i64 }

@@ -1,4 +1,4 @@
-//! Fixed schema-5 fingerprint vectors, independently checked from AST coordinates.
+//! Fixed schema-6 fingerprint vectors, independently checked from AST coordinates.
 use crate::{ast, elaborate, resolve, source};
 
 fn multi_inputs() -> Vec<(String, Vec<u8>)> {
@@ -243,27 +243,27 @@ pub fn dump() -> String {
     out
 }
 
-/// Fixed schema-5 records are checked independently from exported AST coordinates.
+/// Fixed schema-6 records are checked independently from exported AST coordinates.
 /// The body hashes and refusal outcomes retain the previous fixed contract.
 fn expected(case: usize) -> String {
     match case {
-        0usize => "case 0 multi-base\nsome eaf3bf9423fbf48e5f7fa5411902c5823eed761fc219fd5c9cf681ef09666606 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
-        1usize => "case 1 multi-reversed-functions\nsome 5ec739419e31d59cee97228e40b14fce0313c6c17d40102cd9ad066720af22e3 6\nbody 0 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nbody 1 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 2 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 3 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 4 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 5 empty\nend\n".to_string(),
-        2usize => "case 2 duplicate-parsed-later\nsome eaf3bf9423fbf48e5f7fa5411902c5823eed761fc219fd5c9cf681ef09666606 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
-        3usize => "case 3 duplicate-parsed-first\nsome eaf3bf9423fbf48e5f7fa5411902c5823eed761fc219fd5c9cf681ef09666606 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 20df9286b5b47e7f8d1c878dfba28ed577d2c52dc3aaf66e4aa4f50097420cde\nend\n".to_string(),
+        0usize => "case 0 multi-base\nsome 3ada5503599992cdde751fd8c71d6aa84eae10c52840bf2550c7385a745a2761 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
+        1usize => "case 1 multi-reversed-functions\nsome 2d04051993d02ff1b65a58c49a42028a70e5e5fdd17cacc71154da46dc1f68d6 6\nbody 0 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nbody 1 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 2 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 3 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 4 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 5 empty\nend\n".to_string(),
+        2usize => "case 2 duplicate-parsed-later\nsome 3ada5503599992cdde751fd8c71d6aa84eae10c52840bf2550c7385a745a2761 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
+        3usize => "case 3 duplicate-parsed-first\nsome 3ada5503599992cdde751fd8c71d6aa84eae10c52840bf2550c7385a745a2761 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 20df9286b5b47e7f8d1c878dfba28ed577d2c52dc3aaf66e4aa4f50097420cde\nend\n".to_string(),
         4usize => "case 4 missing-bodyless-source\nnone\nend\n".to_string(),
         5usize => "case 5 duplicate-first-truncated\nnone\nend\n".to_string(),
-        6usize => "case 6 ignored-invalid-function-file\nsome 023dd3da98c0869c177456f21ced5ff4541c8e5a37bddaeb2cc4837eb057aad1 6\nbody 0 empty\nbody 1 empty\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
+        6usize => "case 6 ignored-invalid-function-file\nsome 30e45ab5ebb266a840366e4396867dc798a92dd3cd91d86effbfd502ec8debb6 6\nbody 0 empty\nbody 1 empty\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
         7usize => "case 7 reversed-body-bounds\nnone\nend\n".to_string(),
         8usize => "case 8 body-past-eof\nnone\nend\n".to_string(),
         9usize => "case 9 overlapping-bodies\nnone\nend\n".to_string(),
         10usize => "case 10 type-past-eof\nnone\nend\n".to_string(),
-        11usize => "case 11 unparsed-order\nsome f071a7991b04c00f6c0e035f78d0565d202d6b905b11fb3dfbe0f43f457be747 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
-        12usize => "case 12 unparsed-duplicate\nsome 079ba4c103b232b5ba2f7d931b024bdc827d6354a34cf3c4a1b390926dc95891 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
-        13usize => "case 13 include-base\nsome ac484578d82feab17328f2e60bef5c7ed83873218aabbedea2556631d2486b4c 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n".to_string(),
-        14usize => "case 14 include-parsed-body\nsome c2c6a0fa49abd1f8c47ddafc3a7f9a608757f4332f0aca00e5198e944082d539 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 7c661f9a5e9dbdc8c3c46376af8060132c245f34dd18859e01cfaa6e9ffbfb49\nend\n".to_string(),
-        15usize => "case 15 include-binary-payload\nsome cf10ac3927aa2875fd60b7b3228baf9b8097193507b32e55f422a621511f8a20 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n".to_string(),
-        16usize => "case 16 include-string-payload\nsome f28ee30828676170dfec5df7cd61150f04acb9abf169da381a4e0044a83a1fc9 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n".to_string(),
+        11usize => "case 11 unparsed-order\nsome 343708c13bb25584ce8248c94d8adf24df6f545373759e221b042dd1bed9d124 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
+        12usize => "case 12 unparsed-duplicate\nsome e438a1f49c1cc263ca4eba917ff73b60e7cdb8fd0cedc36b2098c9868a9eaa13 6\nbody 0 empty\nbody 1 4cbba832175686dacb7e8f39a244ed8b4f33239a65f284e31c1253848d318e95\nbody 2 3ef043c83bc7c7e5f1646595d391eeded8d1501ef6628cbcd5e0cf9dd4176579\nbody 3 366d80ad3b958cbdd4249af7ba4b709b9b6fa55b504ee045cf2ef842bc8c0a3a\nbody 4 9f3ca80399c69a3f9a93915e5754ffa5e21bd62e17bc94e8f76f6ce130307551\nbody 5 f04df8fd64b957042c2b62f3ca5821196676aa7024b94e7c45a68dc4558a41e1\nend\n".to_string(),
+        13usize => "case 13 include-base\nsome fe7bf5c53ba9a47edf72b782f038598ddcf4888d6704be902bb68698497e1440 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n".to_string(),
+        14usize => "case 14 include-parsed-body\nsome 5be3407cf50a8874a61ad96ab8e9759d69e32b746010369eb44f0e0ee313e066 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 7c661f9a5e9dbdc8c3c46376af8060132c245f34dd18859e01cfaa6e9ffbfb49\nend\n".to_string(),
+        15usize => "case 15 include-binary-payload\nsome 6f8e52c29000605c6d00bd4e9fc381bc7683185281cb25c5f8195d8898c88858 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n".to_string(),
+        16usize => "case 16 include-string-payload\nsome 57e70bb774bde3cf300d9a175f04e034ef167a9acbc8c31549bbaa000814bce7 2\nbody 0 1086b8a175d4faf302d9cba3952e6c5993afba025c2123560d2f0b6bdfbe979b\nbody 1 6de380ea28ddebf42cafa84572c96a2784d6421fb89134ebd0daca249516e6ee\nend\n".to_string(),
         _ => panic!("unknown fingerprint golden {case}"),
     }
 }
@@ -282,17 +282,40 @@ fn fixed_topology_vectors() {
     let enabled = elaborate::incremental::fingerprint(&program, &inputs).unwrap();
     program.configuration.debug_assertions = false;
     let disabled = elaborate::incremental::fingerprint(&program, &inputs).unwrap();
-    assert_eq!(disabled.shape, "e649e2af72ca656c5aad995b63136f365a31a5419e9f5c2e5deb78be3aeeffeb", "explicit debug assertions off topology");
+    assert_eq!(disabled.shape, "24d23161dc0494e606c30e09491e78b26375c3a6aa0581214a5b4765f0698900", "explicit debug assertions off topology");
     assert_eq!(enabled.bodies, disabled.bodies, "configuration preserves body hashes");
     // Doctest is independently bound even though ordinary commands disable it.
     program.configuration.doctest = true;
     let doctest_off = elaborate::incremental::fingerprint(&program, &inputs).unwrap();
-    assert_eq!(doctest_off.shape, "d3193f35d9dfb4422c1a1bcd68ab707e63ed6e4ca26748ec0a2dad63bf37b216", "explicit doctest with debug assertions off topology");
+    assert_eq!(doctest_off.shape, "42bc7937edb176ac4ab6193c4faad9dd1356e0f9d68ccf52bb81785d76200d4f", "explicit doctest with debug assertions off topology");
     assert_eq!(disabled.bodies, doctest_off.bodies, "doctest preserves body hashes");
     program.configuration.debug_assertions = true;
     let doctest_on = elaborate::incremental::fingerprint(&program, &inputs).unwrap();
-    assert_eq!(doctest_on.shape, "082929be7ed1d7e3b78d9a18ce5ad0b13e70f01d96012e648662c2eda271d27e", "explicit doctest with debug assertions on topology");
+    assert_eq!(doctest_on.shape, "65ba858e87330304c0a56f2ad04b730090c5f591191cfe26a98f07c9bfbe28af", "explicit doctest with debug assertions on topology");
     assert_eq!(enabled.bodies, doctest_on.bodies, "doctest preserves body hashes");
+    // Independently encoded doc words distinguish all existing configuration modes.
+    program.configuration.doc = true;
+    program.configuration.debug_assertions = false;
+    program.configuration.doctest = false;
+    let doc_0_0 = elaborate::incremental::fingerprint(&program, &inputs).unwrap();
+    assert_eq!(doc_0_0.shape, "74e2ac0d83dcac605ed55bb51aa67eb789ae5ef9626b2988db4def152e6e0564", "explicit doc topology 0/0");
+    assert_eq!(enabled.bodies, doc_0_0.bodies, "doc preserves body hashes");
+    program.configuration.debug_assertions = false;
+    program.configuration.doctest = true;
+    let doc_0_1 = elaborate::incremental::fingerprint(&program, &inputs).unwrap();
+    assert_eq!(doc_0_1.shape, "ace4e1c32be0201154dc0aec6dc6cb5f4bdc1bd3913f7ef43a263b0ec5ac6c91", "explicit doc topology 0/1");
+    assert_eq!(enabled.bodies, doc_0_1.bodies, "doc preserves body hashes");
+    program.configuration.debug_assertions = true;
+    program.configuration.doctest = false;
+    let doc_1_0 = elaborate::incremental::fingerprint(&program, &inputs).unwrap();
+    assert_eq!(doc_1_0.shape, "cd8c153c30441efa68165430e98fa9444a15e7bb257bc02b75ed07483df1050b", "explicit doc topology 1/0");
+    assert_eq!(enabled.bodies, doc_1_0.bodies, "doc preserves body hashes");
+    program.configuration.debug_assertions = true;
+    program.configuration.doctest = true;
+    let doc_1_1 = elaborate::incremental::fingerprint(&program, &inputs).unwrap();
+    assert_eq!(doc_1_1.shape, "b61cf4bde7034a6f70b14adc3b3de469aeb81e3632acc31c59e38fc9602e1f1d", "explicit doc topology 1/1");
+    assert_eq!(enabled.bodies, doc_1_1.bodies, "doc preserves body hashes");
+
 }
 fn input_selection_and_extra_order() {
     for case in vec![2usize, 3usize, 4usize, 5usize, 11usize, 12usize] {

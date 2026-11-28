@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#[cfg_attr(all(), cfg(test))]
+fn hidden() -> i64 { missing() }
+#[cfg_attr(all(), cfg(any()))]
+fn also_hidden() -> i64 { missing() }
+#[cfg_attr(not(doc), cfg(all()))]
+fn probe() -> i64 { 42i64 }

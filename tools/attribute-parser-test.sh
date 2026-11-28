@@ -1,16 +1,18 @@
 #!/usr/bin/env bash
 # Exercise private parser cursor/rollback contracts using the production source.
 set -euo pipefail
-cd "$(dirname "$0")/.."
 [[ $# -le 2 ]] || { printf 'usage: %s [compiler [entry]]\n' "$0" >&2; exit 2; }
-compiler=$(realpath "${1:-target/lkjscript}")
+compiler=$(realpath "${1:-$(dirname "$0")/../target/lkjscript}")
+cd "$(dirname "$0")/.."
 entry=${2:-main}
 case "$entry" in
-    main) expected=27 ;;
+    main) expected=48 ;;
     probe_success) expected=5 ;;
     probe_failure) expected=4 ;;
     attribute_failure) expected=4 ;;
     disabled_items) expected=14 ;;
+    cfg_attributes) expected=21 ;;
+    cfg_depth) expected=2 ;;
     *) printf 'attribute-parser: unknown entry %s\n' "$entry" >&2; exit 2 ;;
 esac
 library=$PWD/library
@@ -39,6 +41,7 @@ cp tests/fixtures/attribute_parser.lkj "$fixture/contracts/main.lkj"
 cp tests/fixtures/attribute_parser_tests.lkj "$fixture/contracts/syntax/attribute_parser_tests.lkj"
 printf '\npub(crate) mod attribute_parser_tests;\n' >> "$fixture/contracts/syntax.lkj"
 for engine in native interpreter; do
+    if [[ $entry == cfg_depth && $engine == interpreter ]]; then continue; fi
     "$compiler" run main.lkj --source-dir "$fixture/contracts" --library-dir "$library" \
         --entry "$entry" --engine "$engine" --no-store > "$fixture/$engine.out" 2> "$fixture/$engine.error"
     [[ $(<"$fixture/$engine.out") == "$expected" ]] || {
@@ -47,3 +50,12 @@ for engine in native interpreter; do
     }
     printf 'attribute-parser entry=%s engine=%s controls=%s\n' "$entry" "$engine" "$expected"
 done
+
+# Deep selected recursion is a native stress control; the common fixture checks
+# speculative rollback and token/provenance restoration on both engines.
+if [[ $entry == main ]]; then
+    "$compiler" run main.lkj --source-dir "$fixture/contracts" --library-dir "$library" \
+        --entry cfg_depth --engine native --no-store > "$fixture/depth.out" 2> "$fixture/depth.error"
+    [[ $(<"$fixture/depth.out") == 2 ]] || { printf 'attribute-parser: depth controls failed\n' >&2; exit 1; }
+    printf 'attribute-parser entry=cfg_depth engine=native controls=2\n'
+fi

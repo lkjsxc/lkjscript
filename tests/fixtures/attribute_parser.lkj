@@ -14,6 +14,8 @@ pub fn probe_success() -> usize { syntax::attribute_parser_tests::probe_success(
 pub fn probe_failure() -> usize { syntax::attribute_parser_tests::probe_failure() }
 pub fn attribute_failure() -> usize { syntax::attribute_parser_tests::attribute_failure() }
 pub fn disabled_items() -> usize { syntax::attribute_parser_tests::disabled_items() }
+pub fn cfg_depth() -> usize { syntax::attribute_parser_tests::cfg_depth() }
+pub fn cfg_attributes() -> usize { syntax::attribute_parser_tests::cfg_attributes() }
 pub fn main() -> usize {
-    probe_success() + probe_failure() + attribute_failure() + disabled_items()
+    probe_success() + probe_failure() + attribute_failure() + disabled_items() + cfg_attributes()
 }

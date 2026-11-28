@@ -1,0 +1,6 @@
+// expect: reject E_PARSE
+// witness: {"root":true}
+// attr-rust: reject
+#[derive[Clone, Copy]]
+struct Number;
+fn probe() -> i64 { 42i64 }

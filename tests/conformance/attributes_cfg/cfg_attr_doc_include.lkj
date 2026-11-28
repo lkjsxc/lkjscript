@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#[cfg_attr(all(), doc = include_str!("guide.txt"), cfg_attr(not(doc), inline))]
+fn probe() -> i64 { 42i64 }

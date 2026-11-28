@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#[cfg_attr(any(), doc = { macro_rules! inert { () => { 1 }; } inert!() }, doc = include_str!(let), unknown = value::<Vec<Vec<i64>>>(), allow(,,,), derive[Copy])]
+fn probe() -> i64 { 42i64 }

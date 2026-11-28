@@ -1,0 +1,4 @@
+// expect: value 42
+// attr-rust: accept
+#[cfg_attr(any(), doc = { struct S { #[cfg(wut(1))] value: i64 } enum E { #[cfg(wut(1))] V } "doc" })]
+fn probe() -> i64 { 42i64 }

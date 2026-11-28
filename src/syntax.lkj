@@ -810,12 +810,13 @@ fn cfg_predicate(args: &[String], at: &mut usize, span: Span, configuration: Bui
     match name {
         "debug_assertions" => Ok(configuration.debug_assertions),
         "doctest" => Ok(configuration.doctest),
+        "doc" => Ok(configuration.doc),
         "test" | "windows" => Ok(false),
         "unix" => Ok(true),
         "false" if !spelling.starts_with("r#") => Ok(false),
         "true" if !spelling.starts_with("r#") => Ok(true),
         _ => Err(Diagnostic::new(span, "E_UNSUPPORTED", &format!(
-            "cfg predicate {spelling} is not supported; help: use debug_assertions, test or doctest for conditional declarations"))),
+            "cfg predicate {spelling} is not supported; help: use debug_assertions, test, doctest or doc for conditional declarations"))),
     }
 }
 fn cfg_value(args: &[String], span: Span, configuration: BuildConfiguration) -> Result<bool, Diagnostic> {
@@ -967,6 +968,18 @@ impl ParserCheckpoint {
         parser.fragment = self.fragment;
         self.program.rollback(&mut parser.program);
     }
+}
+
+// Attribute syntax is shared by authored wrappers and selected cfg_attr payloads.
+// Token ranges keep expression producers deferred until the complete owner is selected.
+struct AttributeInput {
+    attribute: Attribute,
+    diagnostic: Span,
+    conditional: bool,
+    input: bool,
+    parentheses: bool,
+    arguments: Option<(usize, usize)>,
+    value: Option<(usize, usize)>,
 }
 
 enum FormatOrigin { Literal(usize), Expansion, Other }
@@ -1377,101 +1390,234 @@ impl Parser {
         }
         Ok(())
     }
+    fn attribute_meta(&mut self) -> Result<AttributeInput, Diagnostic> {
+        let span = self.token().span;
+        let absolute = self.take("::");
+        let mut name = if absolute { "::".to_string() } else { String::new() };
+        name.push_str(&self.ident()?);
+        while self.take("::") {
+            name.push_str("::");
+            name.push_str(&self.ident()?);
+        }
+        let mut args = Vec::new();
+        let mut input = false;
+        let parentheses = self.is("(");
+        let mut arguments = None;
+        let mut value = None;
+        if self.is("(") || self.is("[") || self.is("{") {
+            input = true;
+            let mut delimiters: Vec<String> = vec![self.token().text.clone()];
+            self.at += 1usize;
+            let start = self.at;
+            while !delimiters.is_empty() {
+                if self.token().kind == TokenKind::End { return Err(self.err("unterminated attribute")); }
+                if self.token().kind == TokenKind::Symbol {
+                    if matches!(self.token().text.as_str(), "(" | "[" | "{") {
+                        delimiters.push(self.token().text.clone());
+                    } else if matches!(self.token().text.as_str(), ")" | "]" | "}") {
+                        let expected = match self.token().text.as_str() { ")" => "(", "]" => "[", _ => "{" };
+                        if delimiters.last().map(|value: &String| value.as_str()) != Some(expected) {
+                            return Err(self.err("mismatched attribute delimiter"));
+                        }
+                        delimiters.pop();
+                    }
+                }
+                let configuration = name == "cfg" || name == "cfg_attr";
+                if !delimiters.is_empty() && (configuration || !self.is(",")) {
+                    let value = if configuration && self.token().kind == TokenKind::String {
+                        format!("\"{}\"", self.token().text)
+                    } else if !configuration && self.token().kind == TokenKind::Ident {
+                        identifier_name(&self.token().text).to_string()
+                    } else { self.token().text.clone() };
+                    args.push(value);
+                }
+                self.at += 1usize;
+            }
+            arguments = Some((start, self.at - 1usize));
+        } else if self.take("=") {
+            input = true;
+            let (start, end) = self.attribute_value()?;
+            for token in &self.tokens[start..end] { args.push(token.text.clone()); }
+            value = Some((start, end));
+        }
+        Ok(AttributeInput {
+            attribute: Attribute { name, args, span: self.finish_span(span) },
+            diagnostic: span, conditional: false, input, parentheses, arguments, value,
+        })
+    }
+    fn attribute_payload(&mut self, end: usize, depth: usize, disabled: &mut bool, output: &mut Vec<AttributeInput>) -> Result<(), Diagnostic> {
+        while self.at < end {
+            let input = self.attribute_meta()?;
+            if self.at > end { return Err(self.err("attribute payload exceeds cfg_attr parentheses")); }
+            self.expand_attribute(input, depth, disabled, output)?;
+            if self.at == end { break; }
+            self.expect(",")?;
+        }
+        Ok(())
+    }
+    fn expand_attribute(&mut self, mut input: AttributeInput, depth: usize, disabled: &mut bool, output: &mut Vec<AttributeInput>) -> Result<(), Diagnostic> {
+        input.conditional = depth > 0usize;
+        // Inactive nested meta lists are opaque Rust attribute syntax. Their
+        // predicates, semantic admission and expression producers must not run.
+        if self.probing || *disabled {
+            output.push(input);
+            return Ok(());
+        }
+        let span = input.diagnostic;
+        if input.attribute.name == "cfg" {
+            if !input.parentheses {
+                return Err(Diagnostic::new(span, "E_PARSE", "cfg attributes require parentheses"));
+            }
+            *disabled = !cfg_value(&input.attribute.args, span, self.program.configuration)?;
+        }
+        if input.attribute.name != "cfg_attr" {
+            output.push(input);
+            return Ok(());
+        }
+        // This is a parser recursion bound, not a limit on emitted attributes.
+        if depth >= 64usize {
+            return Err(Diagnostic::new(span, "E_UNSUPPORTED", "cfg_attr nesting exceeds the supported depth of 64"));
+        }
+        if !input.parentheses {
+            return Err(Diagnostic::new(span, "E_PARSE", "cfg_attr attributes require parentheses"));
+        }
+        let (start, end) = input.arguments.unwrap();
+        let mut predicate_end = 0usize;
+        let selected = cfg_predicate(&input.attribute.args, &mut predicate_end, span, self.program.configuration)?;
+        if input.attribute.args.get(predicate_end).map(|value| value.as_str()) != Some(",") {
+            return Err(Diagnostic::new(span, "E_PARSE", "cfg_attr requires a comma after its predicate"));
+        }
+        let after = self.at;
+        self.at = start + predicate_end + 1usize;
+        let result = if selected {
+            self.attribute_payload(end, depth + 1usize, disabled, output)
+        } else {
+            let saved = ParserCheckpoint::new(self);
+            self.probing = true;
+            let mut discarded = Vec::new();
+            let result = self.attribute_payload(end, depth + 1usize, disabled, &mut discarded);
+            let problem = self.diagnostics.get(saved.diagnostics).cloned();
+            saved.restore(self);
+            match result {
+                Err(error) => Err(error),
+                Ok(()) => match problem { Some(error) => Err(error), None => Ok(()) },
+            }
+        };
+        self.at = after;
+        result
+    }
+    fn admit_attribute(&self, input: &AttributeInput) -> Result<(), Diagnostic> {
+        let name = input.attribute.name.as_str();
+        let span = input.diagnostic;
+        if name == "no_std" {
+            return Err(Diagnostic::new(span, "E_UNSUPPORTED",
+                "no_std is not supported; lkjscript uses its selected capability library and std prelude, not Rust's core-only prelude"));
+        }
+        if name.contains("::") {
+            if name != "rustfmt::skip" {
+                return Err(Diagnostic::new(span, "E_UNSUPPORTED", &format!(
+                    "qualified attribute {name} is not supported; help: only the inert rustfmt::skip tool attribute is admitted")));
+            }
+            if input.input {
+                return Err(Diagnostic::new(span, "E_UNSUPPORTED",
+                    "rustfmt::skip arguments are not supported; help: use the bare #[rustfmt::skip] attribute"));
+            }
+            return Ok(());
+        }
+        // Retain existing consumed attributes and inert lint/documentation/codegen
+        // hints. Path keeps its existing non-relocating module discovery contract.
+        let supported = matches!(name, "cfg" | "derive" | "test" | "macro_use" | "macro_export"
+            | "allow" | "warn" | "deny" | "forbid" | "doc" | "deprecated" | "inline"
+            | "cold" | "must_use" | "path");
+        // Generic meta parsing must not broaden the existing non-doc value
+        // boundary. Implemented conditional attributes use the same admission.
+        if name != "doc" && (!input.conditional || supported) {
+            if let Some((start, end)) = input.value {
+                if end != start + 1usize {
+                    return Err(Diagnostic::new(self.tokens[start + 1usize].span, "E_PARSE",
+                        "bare attribute values other than doc require a single token"));
+                }
+            }
+        }
+        if supported {
+            if input.arguments.is_some() && !input.parentheses {
+                return Err(Diagnostic::new(span, "E_PARSE", "built-in attribute lists require parentheses"));
+            }
+            return Ok(());
+        }
+        if name.starts_with("proc_macro") {
+            return Err(Diagnostic::new(span, "E_UNSUPPORTED_MACRO", "procedural macros require an explicit untrusted source producer"));
+        }
+        // Conditional expansion admits only implemented attributes. Ordinary bare
+        // metadata keeps its pre-existing parser contract; classifying external
+        // derive helpers requires authenticated producer metadata, not spellings.
+        if input.conditional {
+            return Err(Diagnostic::new(span, "E_UNSUPPORTED", &format!("attribute {name} is not supported")));
+        }
+        if input.arguments.is_some() && !input.parentheses {
+            return Err(Diagnostic::new(span, "E_PARSE", "attribute lists require parentheses"));
+        }
+        Ok(())
+    }
     fn attrs(&mut self, allow_inner: bool) -> Result<Vec<Attribute>, Diagnostic> {
         let mut attrs = Vec::new();
-        let mut qualified: Vec<(String, Span, bool, bool)> = Vec::new();
-        let mut values: Vec<(usize, usize, bool)> = Vec::new();
+        let mut selected: Vec<(AttributeInput, bool)> = Vec::new();
+        let mut disabled = false;
         while self.take("#") {
-            let span = self.tokens[self.at - 1].span;
+            let span = self.tokens[self.at - 1usize].span;
             let inner = self.take("!");
             if inner && !allow_inner {
                 return Err(Diagnostic::new(span, "E_PARSE", "this position requires outer attributes"));
             }
             self.expect("[")?;
-            let absolute = self.take("::");
-            let mut name = if absolute { "::".to_string() } else { String::new() };
-            name.push_str(&self.ident()?);
-            while self.take("::") {
-                name.push_str("::");
-                name.push_str(&self.ident()?);
-            }
-            let mut args = Vec::new();
-            let mut input = false;
-            if self.is("(") || name.contains("::") && (self.is("[") || self.is("{")) {
-                input = true;
-                let mut delimiters: Vec<String> = vec![self.token().text.clone()];
-                self.at += 1usize;
-                while !delimiters.is_empty() {
-                    if self.token().kind == TokenKind::End { return Err(self.err("unterminated attribute")); }
-                    if self.token().kind == TokenKind::Symbol {
-                        if matches!(self.token().text.as_str(), "(" | "[" | "{") {
-                            delimiters.push(self.token().text.clone());
-                        } else if matches!(self.token().text.as_str(), ")" | "]" | "}") {
-                            let expected = match self.token().text.as_str() { ")" => "(", "]" => "[", _ => "{" };
-                            if delimiters.last().map(|value: &String| value.as_str()) != Some(expected) {
-                                return Err(self.err("mismatched attribute delimiter"));
-                            }
-                            delimiters.pop();
-                        }
-                    }
-                    if !delimiters.is_empty() && (name == "cfg" || !self.is(",")) {
-                        let value = if name == "cfg" && self.token().kind == TokenKind::String {
-                            format!("\"{}\"", self.token().text)
-                        } else if name != "cfg" && self.token().kind == TokenKind::Ident {
-                            identifier_name(&self.token().text).to_string()
-                        } else { self.token().text.clone() };
-                        args.push(value);
-                    }
-                    self.at += 1usize;
-                }
-            } else if name == "cfg" {
-                return Err(Diagnostic::new(span, "E_PARSE", "cfg attributes require parentheses"));
-            } else if self.take("=") {
-                input = true;
-                if name == "doc" || name.contains("::") {
-                    let (start, end) = self.attribute_value()?;
-                    for token in &self.tokens[start..end] { args.push(token.text.clone()); }
-                    if name == "doc" { values.push((start, end, inner)); }
-                } else {
-                    if self.token().kind == TokenKind::End { return Err(self.err("expected attribute value")); }
-                    args.push(self.token().text.clone());
-                    self.at += 1usize;
-                }
-            }
+            let mut input = self.attribute_meta()?;
             self.expect("]")?;
-            let attr = Attribute { name, args, span: self.finish_span(span) };
-            if attr.name.contains("::") || attr.name == "cfg_attr" { qualified.push((attr.name.clone(), attr.span, inner, input)); }
+            let extent = self.finish_span(span);
+            let mut expanded = Vec::new();
+            input.diagnostic = extent;
+            // Inner attributes belong to their enclosing module, not the next
+            // declaration whose preceding outer cfg may already have excluded it.
             if inner {
-                if attr.name == "cfg" {
-                    return Err(Diagnostic::new(attr.span, "E_UNSUPPORTED",
-                        "inner cfg attributes are not supported; help: put #[cfg(...)] on an enclosing module or declaration"));
+                let mut inner_disabled = false;
+                self.expand_attribute(input, 0usize, &mut inner_disabled, &mut expanded)?;
+            } else { self.expand_attribute(input, 0usize, &mut disabled, &mut expanded)?; }
+            for mut input in expanded {
+                // Exact partial replay must start at the authored wrapper, not at
+                // a payload name inside cfg_attr. All token provenance is unchanged.
+                input.attribute.span = extent;
+                // Syntax probes expose no outer attributes to predicate or
+                // admission callers. Inner entries only mark block position;
+                // the enclosing checkpoint rolls those markers back as well.
+                if self.probing {
+                    if inner { self.program.attrs.push(input.attribute.clone()); }
+                    continue;
                 }
-                self.program.attrs.push(attr);
-            } else { attrs.push(attr); }
+                if inner {
+                    if input.attribute.name == "cfg" {
+                        return Err(Diagnostic::new(extent, "E_UNSUPPORTED",
+                            "inner cfg attributes are not supported; help: put #[cfg(...)] on an enclosing module or declaration"));
+                    }
+                    self.program.attrs.push(input.attribute.clone());
+                } else { attrs.push(input.attribute.clone()); }
+                selected.push((input, inner));
+            }
         }
         let enabled = self.enabled(&attrs)?;
         if !self.probing {
-            for (name, span, inner, input) in qualified {
+            for (input, inner) in &selected {
                 if !inner && !enabled { continue; }
-                if name == "cfg_attr" {
-                    return Err(Diagnostic::new(span, "E_UNSUPPORTED",
-                        "cfg_attr is not supported; help: put #[cfg(...)] on the enclosing declaration"));
-                }
-                if name != "rustfmt::skip" {
-                    return Err(Diagnostic::new(span, "E_UNSUPPORTED", &format!(
-                        "qualified attribute {name} is not supported; help: only the inert rustfmt::skip tool attribute is admitted")));
-                }
-                if input {
-                    return Err(Diagnostic::new(span, "E_UNSUPPORTED",
-                        "rustfmt::skip arguments are not supported; help: use the bare #[rustfmt::skip] attribute"));
-                }
+                self.admit_attribute(input)?;
             }
             let after = self.at;
-            for (start, end, inner) in values {
+            for (input, inner) in selected {
                 if !inner && !enabled { continue; }
-                let result = self.documentation_value(start, end);
-                self.at = after;
-                result?;
+                if input.attribute.name == "doc" {
+                    if let Some((start, end)) = input.value {
+                        let result = self.documentation_value(start, end);
+                        self.at = after;
+                        result?;
+                    }
+                }
             }
         }
         Ok(attrs)
@@ -1521,13 +1667,13 @@ impl Parser {
                 // Keep constant declarations for item(); only peel qualifiers when
                 // the complete prefix ends at a function, including const unsafe extern fn.
                 let mut at = self.at + 1usize;
-                if self.tokens.get(at).is_some_and(|token| token.text == "async") { at += 1usize; }
-                if self.tokens.get(at).is_some_and(|token| token.text == "unsafe") { at += 1usize; }
-                if self.tokens.get(at).is_some_and(|token| token.text == "extern") {
+                if self.tokens.get(at).is_some_and(|token| token.kind == TokenKind::Ident && token.text == "async") { at += 1usize; }
+                if self.tokens.get(at).is_some_and(|token| token.kind == TokenKind::Ident && token.text == "unsafe") { at += 1usize; }
+                if self.tokens.get(at).is_some_and(|token| token.kind == TokenKind::Ident && token.text == "extern") {
                     at += 1usize;
                     if self.tokens.get(at).is_some_and(|token| token.kind == TokenKind::String) { at += 1usize; }
                 }
-                if self.tokens.get(at).is_some_and(|token| token.text == "fn") { self.at = at; }
+                if self.tokens.get(at).is_some_and(|token| token.kind == TokenKind::Ident && token.text == "fn") { self.at = at; }
                 break;
             } else if self.take("extern") {
                 if self.take("crate") {
@@ -1709,9 +1855,6 @@ impl Parser {
     fn next_item(&mut self, disabled: &mut bool) -> Result<Option<Item>, Diagnostic> {
         let start = self.token().span;
         let attrs = self.attrs(true)?;
-        if attrs.iter().any(|attribute| attribute.name.starts_with("proc_macro")) {
-            return Err(Diagnostic::new(self.token().span, "E_UNSUPPORTED_MACRO", "procedural macros require an explicit untrusted source producer"));
-        }
         if !self.enabled(&attrs)? {
             self.remember_test_exclusion(&attrs);
             self.skip_disabled()?;

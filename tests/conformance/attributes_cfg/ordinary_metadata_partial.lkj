@@ -1,0 +1,7 @@
+// expect: reject E_CAPABILITY
+// attr-rust: reject
+#[unknown_producer]
+fn documented() -> i64 { 40i64 }
+fn probe() -> i64 { documented() + 2i64 }
+fn refused() -> i64 { println!("refused root"); 7i64 }
+fn dependent() -> i64 { refused() }

@@ -32,6 +32,7 @@ pub fn selector(path: &str, source: &Option<String>, library: &Option<String>, n
     let mut bytes = b"lkjscript-semantic-selector-2"[..].to_vec();
     store::push_word(&mut bytes, configuration.debug_assertions as usize);
     store::push_word(&mut bytes, configuration.doctest as usize);
+    store::push_word(&mut bytes, configuration.doc as usize);
     store::push_bytes(&mut bytes, path.as_bytes());
     for index in 0usize..2usize {
         let option = if index == 0usize { source } else { library };

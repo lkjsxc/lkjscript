@@ -161,3 +161,103 @@ pub fn disabled_items() -> usize {
     }
     count
 }
+
+fn nested_attributes(depth: usize, predicate: &str, leaf: &str) -> String {
+    let mut text = String::new();
+    for _ in 0usize..depth { text.push_str(&format!("cfg_attr({predicate}, ")); }
+    text.push_str(leaf);
+    for _ in 0usize..depth { text.push(')'); }
+    text
+}
+
+pub fn cfg_attributes() -> usize {
+    let mut count = 0usize;
+    for attributes in vec![
+        "#[cfg_attr(any(), unknown_producer, foo::bar, doc = include_str!(\"not-read.txt\"))]".to_string(),
+        "#![cfg_attr(doc, doc = include_str!(\"not-read.txt\"))]".to_string(),
+        "#[cfg_attr(any(), unknown = value::<Vec<Vec<i64>>>())]".to_string(),
+        "#[cfg_attr(any(), doc = { macro_rules! hidden { () => { 1 }; } hidden!() })]".to_string(),
+        "#[cfg_attr(any(), cfg_attr(), cfg_attr(unknown(1), producer), derive[Copy])]".to_string(),
+        "#[cfg_attr(doc, feature(doc_cfg), doc = include_str!(let))]".to_string(),
+        "#[cfg_attr(any(), doc = { #[cfg(wut(1))] let x = 1; \"doc\" })]".to_string(),
+        "#[cfg_attr(any(), doc = { #[cfg_attr(all(), unknown_producer)] let x = 1; \"doc\" })]".to_string(),
+        "#[cfg_attr(any(), doc = (#[unknown_producer] \"doc\"))]".to_string(),
+        "#[cfg_attr(any(), doc = { struct S { #[cfg(wut(1))] value: i64 } enum E { #[cfg(wut(1))] V } \"doc\" })]".to_string(),
+        "#[cfg_attr(any(), doc = match 0 { #[cfg(wut(1))] 0 => \"doc\", _ => \"doc\" })]".to_string(),
+        "#[cfg_attr(any(), doc = { #![allow(dead_code)] })]".to_string(),
+        "#[cfg_attr(any(), doc = { #![cfg(wut(1))] })]".to_string(),
+    ] {
+        let text = format!("{attributes} fn sentinel() {{}}");
+        let mut parser = parser(&text);
+        let tokens = parser.tokens.clone();
+        assert!(parser.attrs(true).unwrap().is_empty());
+        assert!(parser.is("fn"));
+        assert_eq!(parser.token().span.start, attributes.len() + 1usize);
+        assert!(parser.program.attrs.is_empty());
+        unchanged(&parser, &tokens);
+        count += 1usize;
+    }
+    for attributes in vec![
+        "#[cfg_attr(any(), doc =)]".to_string(),
+        "#[cfg_attr(any(), doc = { let broken = ; })]".to_string(),
+        "#[cfg_attr(any(), inline doc = \"comma\")]".to_string(),
+        "#[cfg_attr(any(), foo::)]".to_string(),
+        "#[cfg_attr(any(), doc = { #[cfg(any())] let broken = ; })]".to_string(),
+    ] {
+        let text = format!("{attributes} fn sentinel() {{}}");
+        let mut parser = parser(&text);
+        let tokens = parser.tokens.clone();
+        assert_eq!(parser.attrs(true).unwrap_err().code, "E_PARSE");
+        assert!(parser.is("fn"));
+        assert!(parser.program.attrs.is_empty());
+        unchanged(&parser, &tokens);
+        count += 1usize;
+    }
+    let attributes = "#[cfg_attr(all(), inline, cfg_attr(not(doc), rustfmt::skip), doc = \"ok\")]";
+    let text = format!("{attributes} fn sentinel() {{}}");
+    let mut parser = parser(&text);
+    let tokens = parser.tokens.clone();
+    let selected = parser.attrs(true).unwrap();
+    assert_eq!(selected.len(), 3usize);
+    assert_eq!(selected[0usize].name, "inline");
+    assert_eq!(selected[1usize].name, "rustfmt::skip");
+    assert_eq!(selected[2usize].name, "doc");
+    for attribute in &selected {
+        assert_eq!(attribute.span.start, 0usize);
+        assert_eq!(attribute.span.end, attributes.len());
+    }
+    unchanged(&parser, &tokens);
+    count += 1usize;
+
+    let mut parser = self::parser("#[cfg_attr(all(), unknown, doc = include_str!(\"not-read.txt\"), cfg(any()))] fn sentinel() {}");
+    let tokens = parser.tokens.clone();
+    let selected = parser.attrs(true).unwrap();
+    assert!(!parser.enabled(&selected).unwrap());
+    unchanged(&parser, &tokens);
+    count += 1usize;
+
+    let text = format!("#[cfg_attr(any(), {})] fn sentinel() {{}}", nested_attributes(256usize, "all()", "unknown"));
+    let mut parser = self::parser(&text);
+    let tokens = parser.tokens.clone();
+    assert!(parser.attrs(true).unwrap().is_empty());
+    unchanged(&parser, &tokens);
+    count + 1usize
+}
+
+// The canonical source suite also exercises both limits. Running this deep
+// parser stress natively keeps the routine interpreter rollback fixture focused.
+pub fn cfg_depth() -> usize {
+    let mut count = 0usize;
+    for depth in vec![64usize, 65usize] {
+        let text = format!("#[{}] fn sentinel() {{}}", nested_attributes(depth, "all()", "inline"));
+        let mut parser = self::parser(&text);
+        let tokens = parser.tokens.clone();
+        let result = parser.attrs(true);
+        if depth == 64usize { assert_eq!(result.unwrap()[0usize].name, "inline"); }
+        else { assert_eq!(result.unwrap_err().code, "E_UNSUPPORTED"); }
+        assert!(parser.is("fn"));
+        unchanged(&parser, &tokens);
+        count += 1usize;
+    }
+    count
+}

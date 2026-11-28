@@ -1,0 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"root":true,"rustAccept":true}
+// attr-rust: accept
+#[cfg(doc = "1")] fn hidden() {}
+fn probe() -> i64 { 42i64 }

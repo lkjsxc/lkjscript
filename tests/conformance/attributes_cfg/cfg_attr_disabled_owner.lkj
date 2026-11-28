@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#[cfg_attr(all(), unknown_producer, doc = include_str!("missing.md"), cfg(any()))]
+fn hidden() {}
+#[cfg_attr(all(), cfg(any()), doc = include_str!("missing.md"), foo::bar)]
+fn hidden_too() {}
+fn probe() -> i64 { 42i64 }

@@ -1,0 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"root":true}
+// attr-rust: reject E0554
+#![cfg_attr(all(), feature(doc_cfg))]
+fn probe() -> i64 { 42i64 }

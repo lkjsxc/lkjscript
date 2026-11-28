@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"root":true,"rustAccept":true}
+// attr-rust: accept
+fn probe() -> bool { cfg!(doc = "1") }

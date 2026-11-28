@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#![cfg_attr(all(), allow(dead_code), doc = include_str!("guide.txt"))]
+#![cfg_attr(doc, doc = include_str!("missing.md"))]
+fn probe() -> i64 { 42i64 }

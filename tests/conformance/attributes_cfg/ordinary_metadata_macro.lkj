@@ -1,0 +1,4 @@
+// expect: reject E_PARSE
+// attr-rust: reject
+#[unknown_producer = include_str!("not-read.txt")]
+fn probe() -> i64 { 42i64 }

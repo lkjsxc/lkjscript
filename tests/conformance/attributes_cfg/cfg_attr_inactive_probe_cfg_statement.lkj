@@ -1,0 +1,4 @@
+// expect: value 42
+// attr-rust: accept
+#[cfg_attr(any(), doc = { #[cfg(wut(1))] let x = 1; "doc" })]
+fn probe() -> i64 { 42i64 }

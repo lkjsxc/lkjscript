@@ -736,6 +736,7 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
     let mut input_identity = b"lkjscript-source-snapshot-2"[..].to_vec();
     word(&mut input_identity, program.configuration.debug_assertions as usize);
     word(&mut input_identity, program.configuration.doctest as usize);
+    word(&mut input_identity, program.configuration.doc as usize);
     for (index, (path, raw)) in inputs.iter().enumerate() { by_path.insert(path.clone(), index); }
     for (path, index) in &by_path {
         bytes(&mut input_identity, path.as_bytes());

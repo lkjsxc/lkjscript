@@ -1,0 +1,4 @@
+// expect: reject E_PARSE
+// attr-rust: reject
+#[cfg_attr(all(), inline = 1 + 2)]
+fn probe() -> i64 { 42i64 }

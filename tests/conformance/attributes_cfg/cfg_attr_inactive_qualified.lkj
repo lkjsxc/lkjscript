@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#[cfg_attr(doctest, foo::bar)]
+fn probe() -> i64 { 42i64 }

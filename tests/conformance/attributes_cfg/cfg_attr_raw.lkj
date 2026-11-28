@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#[r#cfg_attr(not(r#doc), r#rustfmt::r#skip, r#inline)]
+fn probe() -> i64 { 42i64 }

@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#![cfg_attr(feature = "docsrs", feature(doc_cfg))]
+#[cfg_attr(any(), unknown_producer, foo::bar, doc = include_str!("missing.md"))]
+fn probe() -> i64 { 42i64 }

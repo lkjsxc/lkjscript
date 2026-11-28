@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+fn probe() -> i64 { #[cfg_attr(all(), cfg(any()))] let ignored = missing(); #[cfg_attr(all(), rustfmt::skip)] let value = 42i64; value }

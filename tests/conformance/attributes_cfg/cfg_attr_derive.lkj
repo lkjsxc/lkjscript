@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#[cfg_attr(all(), derive(Clone, Copy, PartialEq, Eq), rustfmt::skip)]
+struct Number { value: i64 }
+fn probe() -> i64 { let a = Number { value: 42i64 }; let b = a.clone(); if a == b { b.value } else { 0i64 } }

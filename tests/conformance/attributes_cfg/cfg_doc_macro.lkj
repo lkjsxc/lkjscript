@@ -1,0 +1,5 @@
+// expect: value false
+// witness: {"root":true}
+// attr-rust: accept
+macro_rules! flag { () => { cfg!(doc) }; }
+fn probe() -> bool { flag!() || cfg!(doc) }

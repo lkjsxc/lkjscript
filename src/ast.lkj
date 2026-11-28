@@ -573,9 +573,10 @@ pub struct Declaration {
 pub struct BuildConfiguration {
     pub debug_assertions: bool,
     pub doctest: bool,
+    pub doc: bool,
 }
 impl Default for BuildConfiguration {
-    fn default() -> Self { Self { debug_assertions: true, doctest: false } }
+    fn default() -> Self { Self { debug_assertions: true, doctest: false, doc: false } }
 }
 
 #[derive(Clone, Default, PartialEq, Eq)]

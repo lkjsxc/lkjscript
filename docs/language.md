@@ -219,9 +219,14 @@ use a literal string or the existing include_str form.
 Attribute heads accept qualified paths, including an initial `::`. The exact relative
 `rustfmt::skip` path is inert on items, fields, variants, statements, expressions and
 match arms; inner forms are also inert. Raw path segments retain ordinary identity.
-Unknown qualified attributes refuse with a located `E_UNSUPPORTED`, preserving their
-possible producer footprint during partial checking. Leading `::` does not select the
-tool prelude. Arguments, including empty parentheses, on rustfmt::skip remain an
+Unknown qualified attributes refuse with a located `E_UNSUPPORTED`, preserving
+their possible producer footprint during partial checking. Ordinary unknown bare
+metadata retains its existing parser tolerance; this does not provide external
+attribute-macro or derive-helper semantics. Unknown selected cfg_attr payloads refuse
+with `E_UNSUPPORTED`, including bare names. Unifying direct bare-attribute admission
+requires an authenticated model of external derive helpers. Non-doc bare values keep
+their single-token boundary, also for implemented conditional outputs. Leading `::`
+does not select the tool prelude. Arguments, including empty parentheses, on rustfmt::skip remain an
 explicit lkjscript boundary: Rust accepts those tool inputs. Inner tool attributes
 and several expression placements are lkjscript extensions to stable Rust.
 
@@ -273,11 +278,12 @@ before resolution.
 Bare `cfg!(...)` returns an ordinary boolean; both branches of an ordinary `if`
 still undergo name, type, ownership and capability checking. Predicates compose
 through `all`, `any` and unary `not`, with comma separators and optional trailing
-commas. Existing target predicates describe Linux x86-64; cfg(test), cfg(doctest) and
-feature predicates remain false in ordinary commands. The explicit doctest=false input
-is bound alongside debug_assertions in replay, snapshots, reusable units and edits.
-String-valued doctest and cfg_attr remain explicit unsupported boundaries; Rust may
-accept them as unset options or conditionally applied attributes. Unknown predicates,
+commas. Existing target predicates describe Linux x86-64; cfg(test), cfg(doctest),
+cfg(doc) and feature predicates remain false in ordinary commands. Explicit doc=false
+and doctest=false inputs are bound alongside debug_assertions in replay, snapshots,
+reusable units and edits; no documentation-generation mode is provided. String-valued
+doc and doctest remain explicit unsupported boundaries; Rust accepts them as unset
+options. Unknown predicates,
 malformed forms, duplicate option values and a configuration flag on program IR
 without `--runtime-source` refuse.
 With an explicit source runtime, the flag selects only that runtime's configuration;
@@ -287,6 +293,34 @@ configuration to reproduce a source invocation using a custom runtime. The sourc
 frontend checkpoint, whole-program/unit cache keys, and query selectors bind the
 value; exact macro-origin replay reparses with that same explicit input.
 The recognized but unsupported debug_assert macros retain their existing boundary.
+
+Outer `#[cfg_attr(predicate, attr1, attr2, ...)]` and inner `#![cfg_attr(...)]`
+select zero or more attributes through the ordinary attribute parser and implemented
+attribute processing. Conditional outputs have stricter unknown-head admission than
+legacy ordinary bare metadata: selecting an unknown payload refuses rather than
+silently accepting it. A comma after the predicate is required; an empty payload and a trailing
+comma are accepted. Selected nested cfg_attr expands in authored order, with a
+located refusal beyond 64 selected nesting levels. An earlier cfg exclusion stops
+later cfg_attr predicate evaluation. Attribute admission and documentation producers
+wait until the complete owner is selected, so excluded owners perform no include
+reads or macro expansion. Inactive payloads still validate generic attribute syntax
+under a parser checkpoint; their nested token-tree inputs remain opaque. Value
+expressions are syntax-checked without evaluating their own attributes, and all
+speculative syntax, token, macro and diagnostic state is discarded. Expanded
+attributes retain the complete authored wrapper for partial source replay and use
+the original payload tokens for diagnostics and include provenance. Selected
+unsupported payloads retain conservative refusals and producer footprints;
+inner cfg, conditional fields/variants and unsupported derive forms keep their
+existing boundaries.
+
+`#![no_std]`, including a selected no_std payload, explicitly refuses with
+`E_UNSUPPORTED`. The selected lkjscript capability library and its std prelude
+remain the source model. Rust's [no_std](https://doc.rust-lang.org/reference/names/preludes.html#the-no_std-attribute)
+changes automatic linkage and selects a core prelude; lkjscript does not implement
+that switch and does not treat the attribute as an inert capability declaration.
+An inactive no_std payload has no effect. This boundary applies generally, including
+`#![cfg_attr(not(feature = "std"), no_std)]` when features are unset.
+
 Excluded declarations never enter resolution. Disabled declarations check recognized
 syntax with speculative syntax, token and macro state rolled back; unsupported grammar
 retains its balanced-token boundary. Disabled statements must parse as

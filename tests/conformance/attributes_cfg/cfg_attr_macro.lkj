@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+macro_rules! make { () => { #[cfg_attr(not(doc), doc = include_str!("guide.txt"), inline)] fn answer() -> i64 { 42i64 } }; }
+make!();
+fn probe() -> i64 { answer() }

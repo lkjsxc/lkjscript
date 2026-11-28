@@ -1,0 +1,4 @@
+// expect: reject E_PARSE
+// attr-rust: reject
+#[cfg_attr(any(), doc = { #[cfg(any())] let broken = ; })]
+fn probe() -> i64 { 42i64 }

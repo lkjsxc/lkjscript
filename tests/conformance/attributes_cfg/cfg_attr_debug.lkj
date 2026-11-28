@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#[cfg_attr(debug_assertions, inline)]
+#[cfg_attr(not(debug_assertions), rustfmt::skip)]
+fn probe() -> i64 { 42i64 }

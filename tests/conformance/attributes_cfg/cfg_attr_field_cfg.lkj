@@ -1,6 +1,5 @@
 // expect: reject E_UNSUPPORTED
 // witness: {"root":true,"rustAccept":true}
 // attr-rust: accept
-// Rust accepts this form; lkjscript retains an explicit unsupported boundary.
-#[cfg_attr(doctest, foo::bar)]
+struct Number { #[cfg_attr(all(), cfg(all()))] value:i64 }
 fn probe() -> i64 { 42i64 }

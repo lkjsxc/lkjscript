@@ -1,0 +1,7 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"root":true}
+// attr-rust: reject E0537
+#[cfg_attr(wut(1), arbitrary)]
+#[cfg(any())]
+fn hidden() {}
+fn probe() -> i64 { 42i64 }

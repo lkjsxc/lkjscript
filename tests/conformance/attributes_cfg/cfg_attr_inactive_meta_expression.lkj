@@ -1,0 +1,4 @@
+// expect: value 42
+// attr-rust: accept
+#[cfg_attr(any(), unknown_producer = 1 + 2)]
+fn probe() -> i64 { 42i64 }
