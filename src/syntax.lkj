@@ -1262,6 +1262,11 @@ impl Parser {
             || self.token().kind == TokenKind::Lifetime)
             && self.token().text == text
     }
+    fn is_macro_rules_definition(&self) -> bool {
+        self.token().kind == TokenKind::Ident
+            && self.token().text == "macro_rules"
+            && self.tokens.get(self.at + 1usize).is_some_and(|token| token.kind == TokenKind::Symbol && token.text == "!")
+    }
     fn take(&mut self, text: &str) -> bool {
         if self.is(text) {
             self.at += 1;
@@ -1484,7 +1489,7 @@ impl Parser {
         let (start, end) = input.arguments.unwrap();
         let mut predicate_end = 0usize;
         let selected = cfg_predicate(&input.attribute.args, &mut predicate_end, span, self.program.configuration)?;
-        if input.attribute.args.get(predicate_end).map(|value| value.as_str()) != Some(",") {
+        if !self.tokens.get(start + predicate_end).is_some_and(|token| token.kind == TokenKind::Symbol && token.text == ",") {
             return Err(Diagnostic::new(span, "E_PARSE", "cfg_attr requires a comma after its predicate"));
         }
         let after = self.at;
@@ -1687,7 +1692,7 @@ impl Parser {
         // Negative implementations are a Rust grammar frontier of ordinary lowering.
         // Their balanced disabled tokens cannot be mistaken for an impl! invocation.
         if self.is("impl") && self.tokens.get(self.at + 1usize).is_some_and(|token| token.text == "!") { return Ok(()); }
-        if self.is("macro_rules") {
+        if self.is_macro_rules_definition() {
             let attrs: Vec<Attribute> = Vec::new();
             return self.macro_definition(&attrs, &public);
         }
@@ -1698,7 +1703,7 @@ impl Parser {
     }
     fn skip_disabled_tokens(&mut self) -> Result<(), Diagnostic> {
         let mut delimiters: Vec<String> = Vec::new();
-        let mut braced_item = self.macro_item_ahead() || self.is("macro_rules");
+        let mut braced_item = self.macro_item_ahead() || self.is_macro_rules_definition();
         while self.token().kind != TokenKind::End {
             let token = &self.tokens[self.at];
             if delimiters.is_empty()
@@ -1870,7 +1875,7 @@ impl Parser {
             *disabled = true;
             return Ok(None);
         }
-        if self.token().kind == TokenKind::Ident && self.is("macro_rules") {
+        if self.is_macro_rules_definition() {
             self.macro_definition(&attrs, &public)?;
             *disabled = true;
             return Ok(None);
@@ -3404,7 +3409,7 @@ impl Parser {
     }
 
     fn block_part(&mut self) -> Result<BlockPart, Diagnostic> {
-        if self.probing && self.is("macro_rules") {
+        if self.probing && self.is_macro_rules_definition() {
             let attrs: Vec<Attribute> = Vec::new();
             self.macro_definition(&attrs, &Visibility::Private)?;
             return Ok(BlockPart::Skipped);
@@ -3422,9 +3427,10 @@ impl Parser {
             let enabled = self.enabled(&attrs)?;
             // Declaration attributes keep their existing item rules. Other outer
             // cfg attributes select one ordinary statement, including macro splices.
-            let declaration = self.token().kind == TokenKind::Ident && matches!(self.token().text.as_str(),
-                "fn" | "const" | "struct" | "enum" | "use" | "type" | "mod"
-                | "trait" | "impl" | "pub" | "extern" | "static" | "union" | "macro_rules");
+            let declaration = self.is_macro_rules_definition()
+                || (self.token().kind == TokenKind::Ident && matches!(self.token().text.as_str(),
+                    "fn" | "const" | "struct" | "enum" | "use" | "type" | "mod"
+                    | "trait" | "impl" | "pub" | "extern" | "static" | "union"));
             if attrs.is_empty() && self.program.attrs.len() != inner_attributes {
                 if self.is("}") { return Ok(BlockPart::Skipped); }
                 return self.block_part();
@@ -3735,10 +3741,15 @@ impl Parser {
         loop {
             let span = self.token().span;
             if self.take("&") {
-                let mutable = if self.probing && self.take("raw") {
-                    if self.take("const") { false }
-                    else if self.take("mut") { true }
-                    else { return Err(self.err("raw borrow requires const or mut")); }
+                let mutable = if self.probing
+                    && self.token().kind == TokenKind::Ident
+                    && self.token().text == "raw"
+                    && self.tokens.get(self.at + 1usize).is_some_and(|token| {
+                        token.kind == TokenKind::Ident && matches!(token.text.as_str(), "const" | "mut")
+                    })
+                {
+                    self.at += 1usize;
+                    if self.take("const") { false } else { self.take("mut") }
                 } else { self.take("mut") };
                 unary.push(("&".to_string(), mutable, span));
             } else if self.take("&&") {

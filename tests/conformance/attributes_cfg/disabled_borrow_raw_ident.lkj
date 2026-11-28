@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {"root":true}
+fn probe() -> i64 {
+    #[cfg(false)]
+    {
+        let mut raw = 1i64;
+        let _ = &raw;
+        let _ = &raw const raw;
+        let _ = &raw mut raw;
+    }
+    42i64
+}
