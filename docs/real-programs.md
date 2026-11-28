@@ -1328,6 +1328,13 @@ envelope and placing a matching decoy pin beside it must not replace the caller'
 trusted expectation. Package names do not grant authority. This deployment
 separation is part of the consumer contract.
 
+The checked `tools/programs-package-manifest.sh` CLI selects exact Git or
+checksum-pinned gzip/tar inventory. Its host adapter supplies nonblocking regular
+file reads, metadata, sanitized Git, one gzip member and exclusive file creation;
+checked source validates framing, hashes, notice and pin policy, and rolls back
+its first output if the second cannot be created. Keep input and output namespaces
+quiescent. The adapter is an ambient Linux host boundary, not a sandbox.
+
 The trusted inventory producer verifies Git HEAD/index/blob bytes or exact
 registry archive bytes. It is responsible for complete source inventory and
 notice provenance; signing does not prove omitted files were inventoried.
@@ -1343,7 +1350,7 @@ The envelope reader authenticates its fixed header before trusting the payload
 length, then reads that authenticated length and one EOF probe. Truncated or
 trailing payload data refuses before manifest construction. The final 24 native
 controls require normal exit status 1 and exact refusal text; a watchdog or signal
-never counts as a refusal. The inventory helper has 14 controls, including a FIFO
+never counts as a refusal. The independent inventory helper has 21 controls, including a FIFO
 case whose deliberately blocking mutant fails the watchdog rather than earning
 refusal credit.
 
@@ -1353,7 +1360,8 @@ original memchr source bytes. All 175 listed original file lengths/hashes,
 tree digests, notices, envelope digests and returned-buffer digests are
 independently audited. The [operation and execution receipt](../tests/fixtures/programs_package.operation.json)
 records each tested configuration and final source identities. The required gate
-runs the 14 inventory controls, six pure contract tests on each execution engine,
+runs the 21 independent inventory controls, 67 checked CLI controls, six pure
+contract tests on each execution engine,
 and 24 native read/issue/substitution controls including catalog isolation.
 This is source authentication; none of these large crates thereby becomes an
 admitted lkjscript program.

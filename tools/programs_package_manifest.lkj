@@ -1,0 +1,525 @@
+//! Exact source package inventory. The syscall adapter observes Linux files,
+//! runs sanitized Git commands and inflates one gzip member. All inventory,
+//! framing, digest, canonical JSON and publication decisions are checked here.
+mod programs_package_manifest_sha1;
+use std::collections::{BTreeMap,BTreeSet};
+use std::json::{self,Value};
+use std::sha256;
+
+fn require(ok:bool, why:&str)->Result<(),String> {
+    if ok {Ok(())} else {Err(why.to_string())}
+}
+fn text(raw:&[u8])->Result<String,String> {
+    String::from_utf8(raw.to_vec()).map_err(|_| -> String {"invalid UTF-8".to_string()})
+}
+fn latin1(raw:&[u8])->String {
+    let mut result=String::new();
+    for byte in raw {result.push(*byte as char);}
+    result
+}
+fn st(s:&str)->Value {Value::String(s.to_string())}
+fn num(n:usize)->Value {Value::from_usize(n)}
+fn quote(s:&str)->String {json::stringify(&st(s)).unwrap()}
+fn compact(v:&Value)->String {json::stringify(v).unwrap()}
+// JSON::PP decodes numbers through the host's 64-bit integers and double
+// precision, not through the library's exact number-text representation.
+// A canonical pin may contain opaque nested dependency data. Check numeric
+// fixed points as well as compact string/array/object encoding, without
+// introducing a JSON policy into the syscall adapter.
+fn digits_of(mut n:u64)->Vec<u8>{
+    let mut out=Vec::new();
+    while n!=0u64{out.push((n%10u64) as u8);n/=10u64;}
+    out
+}
+fn mul_small(digits:&mut Vec<u8>,factor:u8){
+    let mut carry=0u8;
+    for i in 0usize..digits.len(){
+        let value=digits[i]*factor+carry;
+        digits[i]=value%10u8;carry=value/10u8;
+    }
+    if carry!=0u8{digits.push(carry);}
+}
+fn round_up(digits:&[u8],drop:usize,odd:bool)->bool{
+    if drop==0usize || drop>digits.len(){return false;}
+    let first=digits[drop-1usize];
+    if first!=5u8{return first>5u8;}
+    for i in 0usize..drop-1usize{if digits[i]!=0u8{return true;}}
+    odd
+}
+fn subnormal_fixed(significand:u64,count:usize,exponent:i64)->bool{
+    // Round the exact decimal to a multiple of 2^-1074. Multiplication by
+    // powers of two/five in base ten avoids double-rounding at underflow.
+    let mut scaled=digits_of(significand);
+    for _ in 0usize..1074usize{mul_small(&mut scaled,2u8);}
+    let drop=(count as i64-1i64-exponent) as usize;
+    let mut units=0u64;let mut i=scaled.len();
+    while i>drop{i-=1usize;units=units*10u64+scaled[i] as u64;}
+    if round_up(&scaled,drop,units%2u64!=0u64){units+=1u64;}
+    if units==0u64{return false;}
+    let mut decimal=digits_of(units);
+    for _ in 0usize..1074usize{mul_small(&mut decimal,5u8);}
+    let mut e=decimal.len() as i64-1i64-1074i64;
+    let cut=if decimal.len()>15usize{decimal.len()-15usize}else{0usize};
+    let mut n=0u64;i=decimal.len();
+    while i>cut{i-=1usize;n=n*10u64+decimal[i] as u64;}
+    if round_up(&decimal,cut,n%2u64!=0u64){n+=1u64;}
+    if n==1000000000000000u64{n/=10u64;e+=1i64;}
+    while n%10u64==0u64{n/=10u64;}
+    n==significand && e==exponent
+}
+fn scientific_fixed(mantissa:&str,exponent_text:&str,negative:bool)->bool{
+    let eb=exponent_text.as_bytes();
+    if eb.len()<3usize || eb.len()>4usize || (eb[0]!=b'+' && eb[0]!=b'-') ||
+        (eb.len()==4usize && eb[1]==b'0'){return false;}
+    let magnitude=match exponent_text[1..].parse::<i64>(){Ok(n)=>n,Err(_)=>return false};
+    let exponent=if eb[0]==b'-'{-magnitude}else{magnitude};
+    if exponent>=-4i64 && exponent<15i64 || exponent>308i64 || exponent< -324i64{return false;}
+    let mb=mantissa.as_bytes();
+    if mb.is_empty() || mb[0]<b'1' || mb[0]>b'9'{return false;}
+    let mut n=(mb[0]-b'0') as u64;let mut count=1usize;
+    if mb.len()>1usize{
+        if mb[1]!=b'.' || mb.len()<3usize || mb[mb.len()-1usize]==b'0'{return false;}
+        for byte in &mb[2..]{n=n*10u64+(*byte-b'0') as u64;count+=1usize;if count>15usize{return false;}}
+    }
+    let mut padded=n;for _ in count..15usize{padded*=10u64;}
+    if exponent==308i64 && padded>179769313486231u64{return false;}
+    if exponent< -308i64 || (exponent== -308i64 && padded<222507385850721u64){
+        return subnormal_fixed(n,count,exponent);
+    }
+    if exponent>=15i64 && exponent<=19i64{
+        let mut integer=Some(n);
+        for _ in 0usize..(exponent as usize+1usize-count){
+            integer=integer.and_then(|v:u64| -> Option<u64>{v.checked_mul(10u64)});
+        }
+        if let Some(v)=integer {
+            if (!negative || v<=9223372036854775808u64) &&
+                (count==1usize || v>=9007199254740992u64){return false;}
+        }
+    }
+    true
+}
+fn canonical_number(s:&str)->bool{
+    let negative=s.starts_with("-");
+    let unsigned=if negative{&s[1..]}else{s};
+    if let Some((mantissa,exponent))=unsigned.split_once('e'){return scientific_fixed(mantissa,exponent,negative);}
+    if unsigned.contains("E"){return false;}
+    if let Some((integer,fraction))=unsigned.split_once('.') {
+        if fraction.ends_with("0"){return false;}
+        let mut count=0usize;let mut exponent=integer.len() as i64-1i64;
+        if integer=="0" {
+            let mut first=0usize;
+            while first<fraction.len() && fraction.as_bytes()[first]==b'0'{first+=1usize;}
+            if first==fraction.len(){return false;}
+            exponent= -1i64-first as i64;
+            count=fraction.len()-first;
+        } else {count=integer.len()+fraction.len();}
+        return exponent>=-4i64 && exponent<15i64 && count<=15usize;
+    }
+    if negative{s!="-0" && s.parse::<i64>().is_ok()}else{s.parse::<u64>().is_ok()}
+}
+fn number_range_error(s:&str)->bool{
+    let unsigned=if s.starts_with("-"){&s[1..]}else{s};
+    let (mantissa,power)=match unsigned.split_once('e').or_else(||unsigned.split_once('E')){
+        Some((m,p))=>{
+            let exponent=match p.parse::<i64>(){Ok(v)=>v,Err(_)=>if p.starts_with("-"){-1000i64}else{1000i64}};
+            (m,if exponent>1000i64{1000i64}else if exponent< -1000i64{-1000i64}else{exponent})
+        },None=>(unsigned,0i64),
+    };
+    let mut n=0u64;let mut seen=0usize;let mut before=0i64;let mut leading=0i64;let mut dot=false;
+    for b in mantissa.as_bytes(){
+        if *b==b'.'{dot=true;continue;}
+        if !dot{before+=1i64;}
+        if seen==0usize && *b==b'0'{leading+=1i64;continue;}
+        if seen<15usize{n=n*10u64+(*b-b'0') as u64;}
+        seen+=1usize;
+    }
+    if seen==0usize{return false;}
+    for _ in seen..15usize{n*=10u64;}
+    let exponent=before-leading-1i64+power;
+    exponent< -308i64 || (exponent== -308i64 && n<222507385850721u64) ||
+        exponent>308i64 || (exponent==308i64 && n>179769313486231u64)
+}
+fn canonical_numbers(value:&Value)->Result<(),String>{
+    match value {
+        Value::Number(s)=>{
+            if canonical_number(s){Ok(())}
+            else if number_range_error(s){Err("34:invalid dependency pin".to_string())}
+            else{Err("invalid dependency pin".to_string())}
+        },
+        Value::Array(items)=>{for item in items{canonical_numbers(item)?;}Ok(())},
+        Value::Object(fields)=>{for field in fields{canonical_numbers(&field.1)?;}Ok(())},
+        _=>Ok(()),
+    }
+}
+fn canonical(v:&Value)->String {
+    match v {
+        Value::Object(fields)=>{
+            let mut order:BTreeMap<String,usize>=BTreeMap::new();
+            for i in 0usize..fields.len(){order.insert(fields[i].0.clone(),i);}
+            let mut result="{".to_string();let mut first=true;
+            for (key,i) in &order {
+                if !first {result.push(',');} first=false;
+                result.push_str(&quote(key));result.push(':');result.push_str(&canonical(&fields[*i].1));
+            }
+            result.push('}');result
+        },
+        Value::Array(items)=>{
+            let mut result="[".to_string();let mut first=true;
+            for item in items {if !first{result.push(',');}first=false;result.push_str(&canonical(item));}
+            result.push(']');result
+        },
+        _=>compact(v),
+    }
+}
+fn identity_text(s:&str)->bool {
+    if s.is_empty(){return false;}
+    for b in s.as_bytes(){if *b<32u8 || *b==127u8 {return false;}}
+    true
+}
+fn package_name(s:&str)->bool {
+    if s.is_empty(){return false;}
+    for b in s.as_bytes(){
+        if !((*b>=b'a' && *b<=b'z') || (*b>=b'A' && *b<=b'Z') || (*b>=b'0' && *b<=b'9') || *b==b'_' || *b==b'-'){return false;}
+    }
+    true
+}
+fn hex(s:&str,n:usize)->bool {
+    if s.len()!=n{return false;}
+    for b in s.as_bytes(){if !((*b>=b'0' && *b<=b'9') || (*b>=b'a' && *b<=b'f')){return false;}}
+    true
+}
+fn safe_path(s:&str)->Result<(),String> {
+    require(identity_text(s) && !s.starts_with("/") && !s.contains("\\"),"noncanonical source path")?;
+    for part in s.split('/') {require(!part.is_empty() && part!="." && part!="..","noncanonical path component")?;}
+    Ok(())
+}
+const USAGE:&str="use --source ROOT (--git --revision COMMIT | --archive FILE --checksum SHA256) --name NAME --version VERSION --origin ORIGIN --notice PATH --output PREFIX";
+struct Options {
+    source:String,git:bool,archive:Option<String>,revision:Option<String>,checksum:Option<String>,
+    name:String,version:String,origin:String,output:String,notices:Vec<String>,pins:Vec<String>
+}
+fn options(raw:&[Vec<u8>])->Result<Options,String> {
+    let mut fields:BTreeMap<String,String>=BTreeMap::new();
+    let mut notices=Vec::new();let mut pins=Vec::new();let mut git=false;
+    let mut at=0usize;
+    while at<raw.len(){
+        let arg=text(&raw[at])?;at+=1usize;
+        if arg=="--" {require(at==raw.len(),USAGE)?;break;}
+        let flag=arg.as_str().strip_prefix("--").or_else(|| arg.as_str().strip_prefix("-")).ok_or(USAGE.to_string())?;
+        if flag=="git" {git=true;continue;}
+        let (key,inline)=match flag.split_once('='){Some((k,v))=>(k,Some(v)),None=>(flag,None)};
+        require(key=="source" || key=="archive" || key=="revision" || key=="checksum" || key=="name" ||
+            key=="version" || key=="origin" || key=="output" || key=="notice" || key=="dependency-pin","invalid arguments")?;
+        let value=match inline {
+            Some(s)=>s.to_string(),
+            None=>{require(at<raw.len(),"invalid arguments")?;let value=text(&raw[at])?;at+=1usize;value},
+        };
+        if key=="notice" {notices.push(value);}
+        else if key=="dependency-pin" {pins.push(value);}
+        else {fields.insert(key.to_string(),value);}
+    }
+    let archive=fields.get(&"archive".to_string()).cloned();
+    require(git!=archive.is_some() && !notices.is_empty(),USAGE)?;
+    let source=fields.get(&"source".to_string()).cloned().ok_or(USAGE.to_string())?;
+    let name=fields.get(&"name".to_string()).cloned().ok_or(USAGE.to_string())?;
+    let version=fields.get(&"version".to_string()).cloned().ok_or(USAGE.to_string())?;
+    let origin=fields.get(&"origin".to_string()).cloned().ok_or(USAGE.to_string())?;
+    let output=fields.get(&"output".to_string()).cloned().ok_or(USAGE.to_string())?;
+    require(package_name(&name),"invalid package name")?;
+    require(identity_text(&version) && identity_text(&origin),"invalid identity text")?;
+    Ok(Options{source,git,archive,revision:fields.get(&"revision".to_string()).cloned(),
+        checksum:fields.get(&"checksum".to_string()).cloned(),name,version,origin,output,notices,pins})
+}
+struct Host {input:Stdin,output:Stdout,errors:Stderr}
+impl Host {
+    fn send(&mut self,raw:&[u8]) {
+        let n=raw.len() as u64;let mut header=[0u8;8];
+        for i in 0usize..8usize {header[i]=(n>>((i*8usize) as u64)) as u8;}
+        self.output.write(&header);self.output.write(raw);
+    }
+    fn exact(&mut self,n:usize) -> Result<Vec<u8>,String> {
+        let mut result=Vec::new();let mut buffer=[0u8;8192];
+        while result.len()<n {
+            let want=std::cmp::min(buffer.len(),n-result.len());
+            let count=self.input.read(&mut buffer[..want]).map_err(|e:i64| -> String {format!("host read: errno {e}")})?;
+            require(count>0usize,"host adapter closed")?;
+            result.extend_from_slice(&buffer[..count]);
+        }
+        Ok(result)
+    }
+    fn receive(&mut self) -> Result<Vec<u8>,String> {
+        let header=self.exact(8usize)?;let mut n=0u64;
+        for i in 0usize..8usize {n|=(header[i] as u64)<<((i*8usize) as u64);}
+        self.exact(n as usize)
+    }
+    fn raw(&mut self,op:&str,args:&[Vec<u8>]) -> Result<Vec<Vec<u8>>,String> {
+        self.send(op.as_bytes());self.send(format!("{}",args.len()).as_bytes());
+        for arg in args {self.send(arg);}
+        let status=text(&self.receive()?)?;
+        let count=text(&self.receive()?)?.as_str().parse::<usize>().map_err(|_| -> String {"invalid host count".to_string()})?;
+        let mut fields=Vec::new();for _ in 0usize..count {fields.push(self.receive()?);}
+        if status=="error" {
+            require(fields.len()==1usize,"invalid host error")?;
+            return Err(text(&fields[0])?);
+        }
+        require(status=="ok","invalid host status")?;Ok(fields)
+    }
+    fn request(&mut self,op:&str,args:&[String]) -> Result<Vec<Vec<u8>>,String> {
+        let mut raw=Vec::new();for arg in args {raw.push(arg.as_bytes().to_vec());}self.raw(op,&raw)
+    }
+    fn string(&mut self,op:&str,args:&[String]) -> Result<String,String> {
+        let reply=self.request(op,args)?;require(reply.len()==1usize,"invalid host response")?;text(&reply[0])
+    }
+    fn read(&mut self,path:&str)->Result<Vec<u8>,String>{
+        let mut reply=self.request("read",&vec![path.to_string()])?;
+        require(reply.len()==1usize,"invalid host read response")?;
+        Ok(reply.pop().unwrap())
+    }
+    fn action(&mut self,op:&str,args:&[String])->Result<(),String>{self.request(op,args)?;Ok(())}
+    fn result(&mut self,value:&str)->Result<(),String>{self.raw("result",&vec![value.as_bytes().to_vec()])?;Ok(())}
+}
+fn source_bytes(host:&mut Host,root:&str,path:&str)->Result<Vec<u8>,String>{
+    safe_path(path)?;
+    let mut node=root.to_string();let mut count=0usize;
+    for _ in path.split('/') {count+=1usize;}
+    let mut i=0usize;
+    for part in path.split('/') {
+        i+=1usize;node.push('/');node.push_str(part);
+        let kind=host.string("stat",&vec![node.clone()])?;
+        require(kind!="link",&format!("symlink source node: {path}"))?;
+        if i==count {require(kind=="file",&format!("nonregular source leaf: {path}"))?;}
+        else {require(kind=="dir",&format!("non-directory source parent: {path}"))?;}
+    }
+    host.read(&node)
+}
+fn git_output(host:&mut Host,root:&str,args:&str)->Result<Vec<u8>,String>{
+    let mut command=vec![root.to_string()];
+    for a in args.split(' ') {command.push(a.to_string());}
+    let mut reply=host.request("git",&command)?;
+    require(reply.len()==1usize,"invalid Git response")?;
+    Ok(reply.pop().unwrap())
+}
+fn git_line(host:&mut Host,root:&str,args:&str)->Result<String,String>{
+    let raw=git_output(host,root,args)?;
+    require(raw.len()>0usize && raw[raw.len()-1usize]==b'\n',"malformed Git line")?;
+    text(&raw[..raw.len()-1usize])
+}
+struct GitNode {mode:String,object:String}
+fn git_nodes(raw:&[u8],index:bool)->Result<BTreeMap<String,GitNode>,String>{
+    let mut result=BTreeMap::new();
+    if raw.is_empty(){return Ok(result);}
+    require(raw[raw.len()-1usize]==0u8,"malformed Git inventory")?;
+    let decoded=text(&raw[..raw.len()-1usize])?;
+    for record in decoded.as_str().split('\0') {
+        let (meta,path)=record.split_once('\t').ok_or("malformed Git inventory".to_string())?;
+        safe_path(path)?;
+        let mut fields:Vec<String>=Vec::new();for part in meta.split(' '){fields.push(part.to_string());}
+        require(fields.len()==3usize,"malformed Git metadata")?;
+        let mode=&fields[0];let oid=if index {&fields[1]} else {&fields[2]};
+        require(mode=="100644" || mode=="100755","unsupported Git node")?;
+        require(if index {fields[2]=="0"} else {fields[1]=="blob"},"unsupported Git node or unmerged index")?;
+        require(hex(oid,40usize) || hex(oid,64usize),"malformed Git object")?;
+        require(!result.contains_key(&path.to_string()),"duplicate Git path")?;
+        result.insert(path.to_string(),GitNode{mode:mode.clone(),object:oid.clone()});
+    }
+    Ok(result)
+}
+fn file_record(path:&str,content:&[u8])->Value {
+    Value::Array(vec![st(path),num(content.len()),st(&sha256::hex_digest(content))])
+}
+fn git_inventory(host:&mut Host,root:&str,revision:&str)->Result<BTreeMap<String,Value>,String>{
+    require(hex(revision,40usize)||hex(revision,64usize),"Git requires an exact hexadecimal revision")?;
+    require(git_line(host,root,"rev-parse --verify HEAD^{commit}")?==revision,"source HEAD differs from requested revision")?;
+    let tree=git_nodes(&git_output(host,root,"ls-tree -r -z --full-tree HEAD")?,false)?;
+    let index=git_nodes(&git_output(host,root,"ls-files --stage -z")?,true)?;
+    require(tree.len()==index.len(),"Git index is not the exact HEAD tree")?;
+    for (path,node) in &tree {
+        let indexed=index.get(path).ok_or("Git index is not the exact HEAD tree".to_string())?;
+        require(indexed.mode==node.mode && indexed.object==node.object,"Git index is not the exact HEAD tree")?;
+    }
+    let format=git_line(host,root,"rev-parse --show-object-format")?;
+    require(format=="sha1" || format=="sha256","unsupported Git object hash")?;
+    let mut files=BTreeMap::new();
+    for (path,node) in &tree {
+        let content=source_bytes(host,root,path)?;
+        let mut raw=format!("blob {}\0",content.len()).as_bytes().to_vec();
+        raw.extend_from_slice(&content);
+        let oid=if format=="sha1" {programs_package_manifest_sha1::hex_digest(&raw)} else {sha256::hex_digest(&raw)};
+        require(oid==node.object,&format!("tracked source differs from Git object: {path}"))?;
+        files.insert(path.clone(),file_record(path,&content));
+    }
+    Ok(files)
+}
+fn zeros(raw:&[u8])->bool {for b in raw {if *b!=0u8{return false;}}true}
+fn octal(raw:&[u8])->Result<usize,String>{
+    let mut at=0usize;
+    while at<raw.len() && raw[at]==b' ' {at+=1usize;}
+    let start=at;let mut value=0usize;
+    while at<raw.len() && raw[at]>=b'0' && raw[at]<=b'7' {
+        value=value*8usize+(raw[at]-b'0') as usize;at+=1usize;
+    }
+    require(at>start,"empty tar numeric field")?;
+    while at<raw.len() {
+        require(raw[at]==0u8 || raw[at]==b' ',"non-octal tar framing")?;at+=1usize;
+    }
+    Ok(value)
+}
+fn tar_field(raw:&[u8])->Result<String,String>{
+    let mut end=0usize;
+    while end<raw.len() && raw[end]!=0u8 {end+=1usize;}
+    require(zeros(&raw[end..]),"invalid tar text field")?;
+    text(&raw[..end])
+}
+fn tar_frames(raw:&[u8])->Result<Vec<(usize,usize)>,String>{
+    require(raw.len()%512usize==0usize,"tar length is not block-aligned")?;
+    let mut frames=Vec::new();let mut at=0usize;
+    while at<raw.len(){
+        let header=&raw[at..at+512usize];
+        if zeros(header){
+            require(raw.len()-at>=1024usize,"tar lacks two final zero blocks")?;
+            require(zeros(&raw[at..]),"trailing tar payload")?;
+            return Ok(frames);
+        }
+        let size=octal(&header[124usize..136usize])?;
+        let check=octal(&header[148usize..156usize])?;
+        let mut sum=0usize;
+        for i in 0usize..512usize{sum+=if i>=148usize && i<156usize {32usize}else{header[i] as usize};}
+        require(sum==check,"tar header checksum mismatch")?;
+        let kind=header[156usize];
+        require(kind==0u8 || kind==b'0' || kind==b'5',"unsupported tar node/extension")?;
+        require(kind!=b'5' || size==0usize,"directory with tar payload")?;
+        let start=at+512usize;
+        require(size<=raw.len()-start,"truncated tar payload")?;
+        let padded=(size+511usize)/512usize*512usize;
+        require(padded<=raw.len()-start,"truncated tar payload")?;
+        frames.push((at,size));
+        at=start+padded;
+    }
+    Err("tar has no terminal framing".to_string())
+}
+fn tar_inventory(host:&mut Host,root:&str,raw:&[u8],prefix:&str)->Result<BTreeMap<String,Value>,String>{
+    let frames=tar_frames(raw)?;
+    let mut files=BTreeMap::new();
+    for frame in frames{
+        let at=frame.0;let size=frame.1;
+        let header=&raw[at..at+512usize];
+        let kind=header[156usize];
+        // Admit the standard ustar and GNU magic, plus old zero-magic tar.
+        // Reject ambiguous field encodings rather than normalizing raw paths.
+        let magic=&header[257usize..263usize];
+        require(magic==b"ustar\0" || magic==b"ustar " || zeros(magic),"unsupported tar magic")?;
+        let name=tar_field(&header[..100usize])?;
+        let parent=tar_field(&header[345usize..500usize])?;
+        let mut path=if parent.is_empty(){name}else{format!("{parent}/{name}")};
+        let dir=kind==b'5' || path.ends_with("/");
+        if dir {require(size==0usize,"directory with tar payload")?;}
+        if dir {
+            if path.ends_with("/") {let trimmed=path[..path.len()-1usize].to_string();path=trimmed;}
+            if path.as_str()==&prefix[..prefix.len()-1usize] {continue;}
+        }
+        require(path.starts_with(prefix),"archive member has wrong package prefix")?;
+        let relative=&path[prefix.len()..];safe_path(relative)?;
+        if dir {continue;}
+        require(!files.contains_key(&relative.to_string()),"duplicate archive member")?;
+        let start=at+512usize;
+        let content=&raw[start..start+size];
+        require(source_bytes(host,root,relative)?.as_slice()==content,&format!("extracted source differs from archive member: {relative}"))?;
+        files.insert(relative.to_string(),file_record(relative,content));
+    }
+    Ok(files)
+}
+fn archive_inventory(host:&mut Host,root:&str,archive:&str,checksum:&str,name:&str,version:&str)->Result<BTreeMap<String,Value>,String>{
+    require(hex(checksum,64usize),"archive requires lowercase SHA256")?;
+    let content=host.read(archive)?;
+    require(sha256::hex_digest(&content)==checksum,"archive checksum mismatch")?;
+    let length=content.len();
+    let reply=host.raw("gzip",&vec![content])?;
+    require(reply.len()==2usize,"invalid gzip response")?;
+    require(text(&reply[0])?==format!("{length}"),"trailing compressed payload")?;
+    tar_inventory(host,root,&reply[1],&format!("{name}-{version}/"))
+}
+fn dependencies(host:&mut Host,pins:&[String])->Result<String,String>{
+    let mut edges:BTreeMap<String,String>=BTreeMap::new();
+    for path in pins {
+        let raw=host.read(path)?;
+        let pin=json::parse(&raw).map_err(|_| -> String {"invalid dependency pin".to_string()})?;
+        let fields=pin.as_array().ok_or("invalid dependency pin".to_string())?;
+        require(fields.len()==3usize,"invalid dependency pin")?;
+        require(fields[0].as_str()==Some("lkjscript-package-pin-1") && fields[2].as_array().is_some(),"invalid dependency pin")?;
+        let edge=fields[1].as_array().ok_or("invalid dependency pin".to_string())?;
+        canonical_numbers(&pin)?;
+        require(edge.len()==5usize && canonical(&pin).as_bytes()==raw.as_slice(),"invalid dependency pin")?;
+        let mut texts:Vec<String>=Vec::new();
+        for field in edge {
+            let value=field.as_str().or_else(||field.as_number()).ok_or("invalid dependency identity field".to_string())?;
+            require(identity_text(value),"invalid dependency identity field")?;
+            texts.push(value.to_string());
+        }
+        require(package_name(&texts[0]) && hex(&texts[4],64usize),"invalid dependency identity")?;
+        require(!edges.contains_key(&texts[0]),"duplicate dependency name")?;
+        edges.insert(texts[0].clone(),canonical(&fields[1]));
+    }
+    let mut result="[".to_string();let mut first=true;
+    for (_,edge) in &edges {if !first{result.push(',');}first=false;result.push_str(edge);}
+    result.push(']');Ok(result)
+}
+fn publish(host:&mut Host,prefix:&str,manifest:&str,pin:&str)->Result<(),String>{
+    let manifest_path=format!("{prefix}.manifest.json");
+    let pin_path=format!("{prefix}.pin.json");
+    host.action("write-new",&vec![manifest_path.clone(),manifest.to_string()])?;
+    if let Err(e)=host.action("write-new",&vec![pin_path,pin.to_string()]){
+        host.action("unlink",&vec![manifest_path])?;
+        return Err(e);
+    }
+    Ok(())
+}
+fn run(host:&mut Host,o:Options)->Result<(),String>{
+    let root=host.string("realpath",&vec![o.source.clone()])?;
+    require(host.string("stat",&vec![root.clone()])?=="dir","source is not a directory")?;
+    let (records,revision,acquisition)=if o.git {
+        let revision=o.revision.ok_or("Git requires an exact hexadecimal revision".to_string())?;
+        let files=git_inventory(host,&root,&revision)?;
+        let acquisition=format!("{{\"inventory\":\"exact HEAD regular-file tree; index equals HEAD; raw worktree bytes match Git objects\",\"kind\":\"git\",\"revision\":{}}}",quote(&revision));
+        (files,revision,acquisition)
+    } else {
+        let archive=o.archive.unwrap();
+        let checksum=o.checksum.ok_or("archive requires lowercase SHA256".to_string())?;
+        let files=archive_inventory(host,&root,&archive,&checksum,&o.name,&o.version)?;
+        let acquisition=format!("{{\"archive_sha256\":{},\"inventory\":\"one fully consumed gzip stream and tar archive, regular files/directories without extension records; exact regular-file members match extracted bytes; extra acquisition state is not admitted\",\"kind\":\"registry-archive\"}}",quote(&checksum));
+        (files,format!("sha256:{checksum}"),acquisition)
+    };
+    require(!records.is_empty(),"empty source inventory")?;
+    let mut notice_set:BTreeSet<String>=BTreeSet::new();
+    for notice in o.notices {
+        safe_path(&notice)?;
+        require(records.contains_key(&notice) && notice_set.insert(notice.clone()),&format!("duplicate or unlisted notice: {notice}"))?;
+    }
+    let mut files="[".to_string();let mut first=true;
+    for (_,record) in &records {if !first{files.push(',');}first=false;files.push_str(&compact(record));}
+    files.push(']');
+    let mut notices=Vec::new();for notice in &notice_set {notices.push(st(notice));}
+    let notice_json=compact(&Value::Array(notices));
+    let edges=dependencies(host,&o.pins)?;
+    let mut preimage=b"lkjscript-source-tree-1\0"[..].to_vec();preimage.extend_from_slice(files.as_bytes());
+    let tree=sha256::hex_digest(&preimage);
+    // Perl's CLI arguments and abs_path result are octet strings. Preserve the
+    // historical JSON::PP encoding of identity text and the absolute root.
+    let identity=compact(&Value::Array(vec![st(&o.name),st(&latin1(o.version.as_bytes())),st(&latin1(o.origin.as_bytes())),st(&revision),st(&tree)]));
+    let manifest=format!("[\"lkjscript-package-source-1-regular\",{identity},{edges},{files},{notice_json}]");
+    let pin=format!("[\"lkjscript-package-pin-1\",{identity},{edges}]");
+    let report=format!("{{\"acquisition\":{acquisition},\"authentication\":\"local issuer only; this inventory producer has no key and makes no publisher-signature or execution-authority claim\",\"configuration\":\"build target, features and test selection are separate caller policy\",\"dependencies\":{edges},\"files\":{},\"identity\":{identity},\"notices\":{notice_json},\"source_root\":{}}}\n",records.len(),quote(&latin1(root.as_bytes())));
+    publish(host,&o.output,&manifest,&pin)?;
+    host.result(&report)
+}
+fn main(mut arguments:Arguments,input:Stdin,output:Stdout,mut errors:Stderr,mut status:ExitStatus){
+    let mut host=Host{input,output,errors};
+    let result=match options(&arguments.args()){Ok(o)=>run(&mut host,o),Err(e)=>Err(e)};
+    if let Err(e)=result {
+        let mut code=255u8;let mut reason=e.as_str();
+        if let Some((head,tail))=e.as_str().split_once(':') {
+            if let Ok(n)=head.parse::<u8>() {code=n;reason=tail;}
+        }
+        host.errors.write(format!("{reason}\n").as_bytes());
+        status.set_status(code);
+    }
+}

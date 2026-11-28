@@ -31,6 +31,7 @@ trap 'exit 130' INT
 trap 'exit 143' HUP TERM
 if [[ "$io_only" == no ]]; then
     bash tools/programs-package-manifest-test.sh "$work"
+    bash tools/programs-package-manifest-cli-test.sh "$compiler" "$work"
     printf 'ok 6 tests\n' > "$work/expected-tests.out"
     for engine in native interpreter; do
         "$compiler" test src/programs_package_tool.lkj --source-dir . --library-dir library --no-store --jobs 1 --engine "$engine" > "$work/$engine-tests.out" 2> "$work/$engine-tests.err"

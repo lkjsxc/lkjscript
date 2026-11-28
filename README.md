@@ -161,7 +161,7 @@ includes a generated-traffic harness with memory measurement and CPU profiling.
 - [Direction](docs/direction.md): the ordered development course.
 
 The native gate bootstraps from the stored seed and runs without Rust or Node.
-Perl serves other gate fixtures.
+Some unrelated gate shell fixtures still invoke Perl.
 Census, reranking, probe observations and Git projection run as checked lkjscript
 in the native gate. The projector uses a small C host bridge for Linux file identity,
 physical hardlinks and Git plumbing; building that bridge requires a C compiler.
@@ -169,6 +169,12 @@ The public probe invokes the adjacent checked projector. A required sibling job
 also runs the projection controls and the production probe/projector witness,
 without Node (and without invoking Perl). A release requires both jobs on the same check attempt.
 The gate exercises HTTP with an explicit lkjscript client.
+
+The exact source-package inventory CLI is `tools/programs-package-manifest.sh`.
+Its checked policy uses a narrow Linux syscall and zlib adapter; the launcher
+and native package gate require a C compiler and zlib development headers
+(`gcc libc6-dev zlib1g-dev` on Debian). These are not compiler bootstrap
+requirements. Set `LKJSCRIPT_COMPILER` to select a built compiler.
 
 ```sh
 LKJSCRIPT_GATE_JOBS=4 bash tools/check.sh

@@ -1,0 +1,43 @@
+//! Incremental SHA-1 for Git's original blob object format.
+pub struct Sha1 {state:[u32;5],block:[u8;64],used:usize,bytes:u64}
+fn rotate(value:u32,by:u32)->u32{(value<<by)|(value>>(32u32-by))}
+fn compress(state:&mut [u32;5],raw:&[u8]){
+    let mut words=[0u32;80];
+    for i in 0usize..16usize{let p=i*4usize;words[i]=((raw[p] as u32)<<24u32)|((raw[p+1usize] as u32)<<16u32)|((raw[p+2usize] as u32)<<8u32)|(raw[p+3usize] as u32);}
+    for i in 16usize..80usize{words[i]=rotate(words[i-3usize]^words[i-8usize]^words[i-14usize]^words[i-16usize],1u32);}
+    let mut a=state[0];let mut b=state[1];let mut c=state[2];let mut d=state[3];let mut e=state[4];
+    for i in 0usize..80usize{
+        let f=if i<20usize{(b&c)|((!b)&d)}else if i<40usize{b^c^d}else if i<60usize{(b&c)|(b&d)|(c&d)}else{b^c^d};
+        let k=if i<20usize{0x5a827999u32}else if i<40usize{0x6ed9eba1u32}else if i<60usize{0x8f1bbcdcu32}else{0xca62c1d6u32};
+        let next=rotate(a,5u32).wrapping_add(f).wrapping_add(e).wrapping_add(k).wrapping_add(words[i]);
+        e=d;d=c;c=rotate(b,30u32);b=a;a=next;
+    }
+    state[0]=state[0].wrapping_add(a);state[1]=state[1].wrapping_add(b);state[2]=state[2].wrapping_add(c);state[3]=state[3].wrapping_add(d);state[4]=state[4].wrapping_add(e);
+}
+impl Sha1{
+    pub fn new()->Self{Self{state:[0x67452301u32,0xefcdab89u32,0x98badcfeu32,0x10325476u32,0xc3d2e1f0u32],block:[0u8;64],used:0usize,bytes:0u64}}
+    pub fn update(&mut self,raw:&[u8]){
+        self.bytes=self.bytes.wrapping_add(raw.len() as u64);let mut at=0usize;
+        if self.used!=0usize{
+            while at<raw.len() && self.used<64usize{self.block[self.used]=raw[at];self.used+=1usize;at+=1usize;}
+            if self.used==64usize{compress(&mut self.state,&self.block);self.used=0usize;}
+        }
+        while raw.len()-at>=64usize{compress(&mut self.state,&raw[at..at+64usize]);at+=64usize;}
+        while at<raw.len(){self.block[self.used]=raw[at];self.used+=1usize;at+=1usize;}
+    }
+    pub fn finish(mut self)->String{
+        self.block[self.used]=128u8;self.used+=1usize;
+        if self.used>56usize{
+            while self.used<64usize{self.block[self.used]=0u8;self.used+=1usize;}
+            compress(&mut self.state,&self.block);self.used=0usize;
+        }
+        while self.used<56usize{self.block[self.used]=0u8;self.used+=1usize;}
+        let bits=self.bytes.wrapping_mul(8u64);
+        for i in 0usize..8usize{self.block[56usize+i]=(bits>>((7usize-i)*8usize) as u64) as u8;}
+        compress(&mut self.state,&self.block);
+        let digits=b"0123456789abcdef";let mut result=String::new();
+        for j in 0usize..5usize{for i in 0usize..8usize{result.push(digits[((self.state[j]>>((7usize-i)*4usize) as u32)&15u32) as usize] as char);}}
+        result
+    }
+}
+pub fn hex_digest(raw:&[u8])->String{let mut hash=Sha1::new();hash.update(raw);hash.finish()}

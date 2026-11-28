@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Independent, test-only inventory producer. This is NOT the general-purpose
-# acquisition CLI in programs-package-manifest.pl: fixture identities and paths
+# acquisition CLI in programs-package-manifest.sh: fixture identities and paths
 # are ASCII, archive members are regular ustar files, gzip is made with gzip -n,
 # and a dependency (if present) is a leaf pin. Never use it for external sources.
 set -euo pipefail
