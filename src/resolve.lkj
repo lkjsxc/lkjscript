@@ -592,6 +592,22 @@ impl<'a> Resolver<'a> {
             owner = self.import_scopes.parent(owner)?;
         }
     }
+    fn provider_ordinary_path(&self, scope: ModuleId, path: &str, parts: &[String],
+        namespace: Namespace, span: Span, reads: &mut Option<Vec<LookupRead>>) -> Result<()> {
+        if self.program.macro_providers.is_empty()
+            || self.program.scopes[module_scope(self.program, scope)].crate_root != 0usize { return Ok(()); }
+        let absolute = path.starts_with("::");
+        let first = if absolute { 1usize } else { 0usize };
+        let Some(name) = parts.get(first) else { return Ok(()); };
+        if (parts.len() == first + 1usize && namespace == Namespace::Value)
+            || !self.program.macro_providers.iter().any(|provider|
+                provider.input.alias == *name) { return Ok(()); }
+        if !absolute && self.lexical_path_reads(scope, name, Namespace::Type, span, reads).is_some() { return Ok(()); }
+        // These inputs currently expose only macros. Falling through to a
+        // primitive/prelude name would silently select a different source crate.
+        Err(Diagnostic::new(span, "E_MACRO_PROVIDER",
+            "ordinary paths through a selected macro provider are not implemented"))
+    }
     fn path(
         &self,
         scope: ModuleId,
@@ -624,6 +640,7 @@ impl<'a> Resolver<'a> {
             if reads.is_some() { self.lexical_path_reads(scope, parts[0].as_str(), first_namespace, span, reads); }
             return Ok(Some(Resolved::intrinsic(path.to_string())));
         }
+        self.provider_ordinary_path(scope, path, &parts, namespace, span, reads)?;
         if let Some(limit) = self.primitive_limit(scope, path, &parts, namespace, span)? {
             return Ok(Some(limit));
         }
@@ -1056,6 +1073,9 @@ impl<'a> Resolver<'a> {
         entries
     }
     fn module_anchor(&self, scope: ModuleId, path: &str, span: Span) -> Result<Option<ModuleId>> {
+        if !self.program.macro_providers.is_empty() {
+            self.provider_ordinary_path(scope, path, &path_parts(path), Namespace::Type, span, &mut None)?;
+        }
         let module = module_scope(self.program, scope);
         if path == "crate" {
             return Ok(Some(self.program.scopes[module].crate_root));

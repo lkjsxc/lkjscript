@@ -204,6 +204,13 @@ impl Parser {
             None => None,
         };
         let Some(index) = index else { return Ok(false); };
+        let result = self.selected_macro_provider_declaration(index, attrs, public);
+        if result.is_err() { self.program.macro_providers[index].declaration_failed = true; }
+        result
+    }
+
+    fn selected_macro_provider_declaration(&mut self, index: usize, attrs: &[Attribute], public: &Visibility)
+        -> Result<bool, Diagnostic> {
         let span = self.token().span;
         if self.fragment || !matches!(public, Visibility::Private)
             || attrs.iter().any(|attribute| attribute.name == "macro_use" && !attribute.args.is_empty()) {

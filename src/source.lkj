@@ -450,7 +450,7 @@ pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<O
     program.configuration = configuration;
     for input in providers {
         program.macro_providers.push(crate::ast::macros::MacroProvider {
-            input: input.clone(), declaration: None, root: None,
+            input: input.clone(), declaration: None, declaration_failed: false, root: None,
         });
     }
     program.scopes.push(ModuleScope {
@@ -551,7 +551,7 @@ pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<O
             let mut index = program.macro_providers.len();
             while index > 0usize {
                 index -= 1usize;
-                if program.macro_providers[index].declaration.is_some() {
+                if !program.macro_providers[index].declaration_failed {
                     let scope = program.scopes.len();
                     program.scopes.push(ModuleScope {
                         path: format!("$macro_provider{index}"), parent: None, crate_root: scope,
@@ -559,15 +559,6 @@ pub(crate) fn load_report_with_providers<F: FnMut(&str) -> std::result::Result<O
                     let provider = &mut program.macro_providers[index];
                     provider.root = Some(scope);
                     pending.push((provider.input.path.clone(), scope, None, String::new()));
-                } else {
-                    let provider = &program.macro_providers[index];
-                    let span = Span { file, ..Span::default() };
-                    let mut problem = Diagnostic::new(span, "E_MACRO_PROVIDER", &format!(
-                        "no matching crate-root #[macro_use] extern crate {} as {} declaration",
-                        provider.input.name, provider.input.alias,
-                    ));
-                    problem.path = path.clone();
-                    diagnostics.push(problem);
                 }
             }
         }

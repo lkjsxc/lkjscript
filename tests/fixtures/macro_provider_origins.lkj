@@ -1,0 +1,170 @@
+// Selected roots and optional macro_use declarations replay from actual source bytes.
+mod ast; mod diagnostic; mod names; mod syntax; mod resolve; mod source;
+mod diagnostics {
+    #[derive(Clone)]
+    pub struct BlockedRegion { pub path: String, pub span: crate::ast::Span, pub kind: String, pub reason: String }
+    #[derive(Clone)]
+    pub struct Recovery {
+        pub span: crate::ast::Span, pub scope: usize, pub block: Option<usize>,
+        pub kind: String, pub names: Vec<String>, pub namespace: bool,
+        pub coherence: bool, pub diagnostic: crate::ast::Diagnostic,
+    }
+}
+fn selected() -> Vec<ast::macros::MacroProviderInput> {
+    vec![ast::macros::MacroProviderInput {
+        name: "counters".to_string(), alias: "chosen".to_string(), path: "provider.lkj".to_string(),
+    }]
+}
+fn inputs(legacy: bool) -> Vec<(String, Vec<u8>)> {
+    let mut main = String::new();
+    if legacy { main.push_str("#[macro_use] extern crate counters as chosen;\n"); }
+    main.push_str("fn probe() -> i32 { chosen::count!(40) }");
+    vec![("main.lkj".to_string(), main.as_bytes().to_vec()),
+        ("provider.lkj".to_string(), b"
+            pub mod helper;
+            #[macro_export] macro_rules! count { ($value:expr) => { $crate::helper::add($value) }; }
+        "[..].to_vec()),
+        ("helper.lkj".to_string(), b"pub fn add(value: i32) -> i32 { value + 2 }"[..].to_vec())]
+}
+fn parsed(bytes: &[(String, Vec<u8>)]) -> ast::Program {
+    let program = source::load_report_with_providers("main.lkj", None, &selected(),
+        ast::BuildConfiguration::default(), &mut |path: &str| -> Result<Option<Vec<u8>>, String> {
+            Ok(bytes.iter().find(|(name, _)| name == path).map(|(_, bytes)| bytes.clone()))
+        }).into_result().unwrap();
+    resolve::resolve(&program).unwrap()
+}
+fn accepts(program: &ast::Program, bytes: &[(String, Vec<u8>)]) -> usize {
+    syntax::macros::provenance::validate(program).unwrap();
+    syntax::macros::provenance::validate_inputs(program, bytes).unwrap();
+    1usize
+}
+fn refuses(program: &ast::Program, bytes: &[(String, Vec<u8>)]) -> usize {
+    match syntax::macros::provenance::validate_inputs(program, bytes) {
+        Err(problem) => assert_eq!(problem.code, "E_IDENTITY_ORIGIN"),
+        Ok(()) => panic!("forged provider selection or declaration accepted"),
+    }
+    1usize
+}
+fn failed_binding_is_not_absence() -> usize {
+    let providers = vec![
+        ast::macros::MacroProviderInput {
+            name: "counters".to_string(), alias: "chosen".to_string(), path: "missing.lkj".to_string(),
+        },
+        ast::macros::MacroProviderInput {
+            name: "other".to_string(), alias: "other".to_string(), path: "other.lkj".to_string(),
+        },
+    ];
+    let text = b"#[macro_use] extern crate counters as wrong; #[macro_use] extern crate counters as chosen; fn probe() -> i32 { 42 }";
+    let mut reads: Vec<String> = Vec::new();
+    let report = source::load_report_with_providers("main.lkj", None, &providers,
+        ast::BuildConfiguration::default(), &mut |path: &str| -> Result<Option<Vec<u8>>, String> {
+            reads.push(path.to_string());
+            Ok(match path {
+                "main.lkj" => Some(text[..].to_vec()),
+                "other.lkj" => Some(b"pub fn unused() -> i32 { 1 }"[..].to_vec()),
+                _ => None,
+            })
+        });
+    assert!(!report.diagnostics.is_empty());
+    assert!(report.program.macro_providers[0usize].declaration_failed);
+    assert!(report.program.macro_providers[0usize].root.is_none());
+    assert!(report.program.macro_providers[1usize].root.is_some());
+    assert!(reads.iter().any(|path| path == "other.lkj"));
+    assert!(!reads.iter().any(|path| path == "missing.lkj"));
+    1usize
+}
+fn main() -> usize {
+    let bytes = inputs(false);
+    let program = parsed(&bytes);
+    assert!(program.macro_providers[0usize].declaration.is_none());
+    assert_eq!(program.macro_expansions.len(), 1usize);
+    let mut count = accepts(&program, &bytes);
+
+    let mut mutant = program.clone();
+    mutant.macro_input.as_mut().unwrap().macro_providers[0usize].declaration =
+        Some(ast::Span { file: 0usize, start: 0usize, end: 1usize, ..ast::Span::default() });
+    count += refuses(&mutant, &bytes);
+
+    let legacy_bytes = inputs(true);
+    let legacy = parsed(&legacy_bytes);
+    assert!(legacy.macro_providers[0usize].declaration.is_some());
+    count += accepts(&legacy, &legacy_bytes);
+    let mut mutant = legacy.clone();
+    mutant.macro_input.as_mut().unwrap().macro_providers[0usize].declaration = None;
+    count += refuses(&mutant, &legacy_bytes);
+
+    let mut mutant = program.clone();
+    mutant.macro_input.as_mut().unwrap().macro_providers[0usize].declaration_failed = true;
+    count += refuses(&mutant, &bytes);
+    let mut mutant = program.clone();
+    mutant.macro_input.as_mut().unwrap().macro_providers[0usize].root = None;
+    count += refuses(&mutant, &bytes);
+    let mut mutant = program.clone();
+    mutant.macro_input.as_mut().unwrap().macro_providers[0usize].root = Some(0usize);
+    count += refuses(&mutant, &bytes);
+    let mut mutant = program.clone();
+    mutant.macro_input.as_mut().unwrap().macro_providers[0usize].input.path = "invented.lkj".to_string();
+    count += refuses(&mutant, &bytes);
+    let mut mutant = program.clone();
+    mutant.macro_input.as_mut().unwrap().macro_providers[0usize].input.alias = "invented".to_string();
+    count += refuses(&mutant, &bytes);
+
+    let mut mutant = program.clone();
+    let root = mutant.macro_input.as_ref().unwrap().macro_providers[0usize].root.unwrap();
+    mutant.macro_input.as_mut().unwrap().scopes[root].path = "$macro_provider99".to_string();
+    count += refuses(&mutant, &bytes);
+    let mut mutant = legacy.clone();
+    let mut provider_file = 0usize;
+    for loaded in &mutant.macro_input.as_ref().unwrap().loaded_modules {
+        if loaded.scope == root { provider_file = loaded.file; }
+    }
+    assert_ne!(provider_file, 0usize);
+    mutant.macro_input.as_mut().unwrap().macro_providers[0usize].declaration =
+        Some(ast::Span { file: provider_file, start: 0usize, end: 1usize, ..ast::Span::default() });
+    count += refuses(&mutant, &legacy_bytes);
+    let mut mutant = legacy.clone();
+    mutant.macro_input.as_mut().unwrap().macro_providers[0usize].declaration =
+        Some(ast::Span { file: 0usize, start: 2usize, end: 1usize, ..ast::Span::default() });
+    count += refuses(&mutant, &legacy_bytes);
+
+    let mut changed = bytes.clone();
+    changed[1usize].1 = b"#[macro_export] macro_rules! count { ($value:expr) => { 42 }; }"[..].to_vec();
+    count += refuses(&program, &changed);
+    let mut changed = bytes.clone();
+    changed[2usize].1 = b"pub fn add(value: i32) -> i32 { value + 3 }"[..].to_vec();
+    count += refuses(&program, &changed);
+    let missing = vec![bytes[0usize].clone(), bytes[1usize].clone()];
+    count += refuses(&program, &missing);
+    let mut changed = bytes.clone();
+    changed[0usize].1 = legacy_bytes[0usize].1.clone();
+    count += refuses(&program, &changed);
+
+    let empty = vec![
+        ("main.lkj".to_string(), b"fn probe() -> i32 { 42 }"[..].to_vec()),
+        ("provider.lkj".to_string(), b"pub fn unused() -> i32 { 7 }"[..].to_vec()),
+    ];
+    let unused = parsed(&empty);
+    assert!(unused.macro_definitions.is_empty());
+    assert!(unused.macro_invocations.is_empty());
+    assert!(unused.macro_input.is_some());
+    count += accepts(&unused, &empty);
+    let mut changed = empty.clone();
+    changed[1usize].1 = b"pub fn unused() -> i32 { 8 }"[..].to_vec();
+    count += refuses(&unused, &changed);
+    let mut mutant = unused.clone();
+    mutant.macro_input.as_mut().unwrap().macro_providers[0usize].declaration_failed = true;
+    count += refuses(&mutant, &empty);
+
+    let mut mutant = unused.clone();
+    mutant.macro_input.as_mut().unwrap().macro_providers[0usize].input.name = "std".to_string();
+    count += refuses(&mutant, &empty);
+    let mut mutant = unused.clone();
+    mutant.macro_input.as_mut().unwrap().macro_providers[0usize].input.alias = "std".to_string();
+    count += refuses(&mutant, &empty);
+
+    count += failed_binding_is_not_absence();
+    let mut changed = bytes.clone();
+    changed[0usize].1 = b"fn probe() -> i32 { chosen::count!(41) }"[..].to_vec();
+    count += refuses(&program, &changed);
+    count
+}

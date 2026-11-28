@@ -193,3 +193,6 @@ if [[ -n $witness ]]; then
     done
     printf 'ok macro provider Rust: four matching values, seven matching refusals and the ambient-output boundary\n'
 fi
+
+# Explicit external-prelude selection shares the same provider contract.
+bash tools/macro-provider-prelude-test.sh "$compiler" "$witness"

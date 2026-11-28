@@ -356,6 +356,9 @@ fn macro_provider_option(spec: &str) -> Result<MacroProviderInput, String> {
     let malformed = || "E_USAGE --macro-provider requires CRATE:ALIAS=relative/root.lkj beneath --source-dir".to_string();
     let (names, path) = spec.split_once('=').ok_or_else(malformed)?;
     let (name, alias) = names.split_once(':').ok_or_else(malformed)?;
+    if name == "std" || alias == "std" {
+        return Err("E_USAGE macro providers cannot replace the implicit std crate or prelude".to_string());
+    }
     if !macro_provider_path(path) || !crate::syntax::macro_provider_name(name)
         || !crate::syntax::macro_provider_name(alias) {
         return Err(malformed());

@@ -11,7 +11,10 @@ pub struct MacroProviderInput {
 #[derive(Clone, PartialEq, Eq)]
 pub struct MacroProvider {
     pub input: MacroProviderInput,
+    /// A legacy macro_use declaration imports exports without qualification.
     pub declaration: Option<Span>,
+    /// A failed authored binding is different from an absent optional declaration.
+    pub declaration_failed: bool,
     pub root: Option<ModuleId>,
 }
 

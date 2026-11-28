@@ -1536,20 +1536,32 @@ body replacements may change them. All candidates revalidate exact macro origins
 
 A compiler invocation can select a declarative provider with
 `--source-dir DIR --macro-provider CRATE:ALIAS=PATH`. Use a separate relative
-`.lkj` root under DIR and an exact consumer-root
-`#[macro_use] extern crate CRATE as ALIAS;` declaration. When the names match,
-`as ALIAS` is optional. Repeat the flag for each declared provider. The loader
-reads the selected root and its declared modules through the ordinary source
-directory capability. The invocation supplies the complete provider selection.
-Each provider has a separate crate identity. Its `#[macro_export]` definitions
-enter unqualified lookup after the consumer's ordinary macro bindings. When
+`.lkj` root under DIR. Each explicit selector loads that root and its declared
+modules through the ordinary source directory capability, even without an
+`extern crate` declaration. Its `#[macro_export]` definitions are available as
+`ALIAS::NAME!` or `::ALIAS::NAME!` in the consumer crate, following the Rust
+2018-and-later external prelude. Selection alone never imports them unqualified.
+An optional exact consumer-root `#[macro_use] extern crate CRATE as ALIAS;`
+declaration additionally imports the exports after ordinary local macro bindings;
+`as ALIAS` is optional when the names match. A failed authored binding suppresses
+that provider's source reads, including after a later matching declaration.
+Repeat the flag for each provider; each has a separate crate identity. When
 two imports export the same spelling, the later source declaration wins.
 `::ALIAS::NAME!` selects the exact export; `ALIAS::NAME!` also works when the
 alias is free of possible lexical shadowing. Built-in macro names remain
 reserved. `$crate` still names the defining root and observes ordinary privacy.
 Provider source and expanded calls undergo ordinary diagnostics and checking.
+Ordinary macro `use`/re-export paths, transitive provider dependency aliases,
+plain `extern crate` without `macro_use`, and generated build-script includes
+remain explicit boundaries. Provider selection supplies only the consumer's
+external macro aliases; it does not invent a dependency graph. The crate name
+and alias `std` are reserved: replacing the implicit standard crate or prelude
+is outside this macro-provider interface.
 Use the selector with source `check`, `build` without `--index`, `run`, `ir`,
-`authority` or `residual`. Authored provider paths select macros. Generated
+`authority` or `residual`. Authored provider paths select macros. Ordinary paths through an external alias
+refuse before primitive/prelude fallback, so aliases such as `core` cannot silently
+select a different crate. Ordinary lexical type/module bindings and generic
+parameters retain their precedence; `crate::` and `self::` remain local. Generated
 `$crate` paths may also reach ordinary items in the defining crate.
 
 Statement invocations splice their output directly into the destination block;

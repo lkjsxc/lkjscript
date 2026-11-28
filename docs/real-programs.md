@@ -701,6 +701,85 @@ implementation coherence. nom and selectors retain every item row unchanged.
 The next DOM experiment needs an explicitly selected pinned macro provider;
 this slice does not invent provider definitions.
 
+#### Explicit DOM provider inputs
+
+Explicit provider selection now exposes exported qualified macros without
+requiring a legacy `#[macro_use] extern crate` declaration. An authored
+`macro_use` declaration still imports unqualified macros, and a malformed or
+mismatched declaration stays failed instead of silently becoming an absent
+optional declaration. Source replay authenticates both forms, the exact
+selected root, and all loaded provider bytes. Ordinary items through a provider
+alias remain unsupported; the resolver refuses them before primitive or
+standard-library fallbacks. Replacing the implicit `std` crate or prelude is
+outside this macro-only interface and is rejected at selection and replay.
+
+The DOM experiment selects html5ever 0.39.0, markup5ever 0.39.0 and web_atoms
+0.2.3 from the original DOM lockfile. Cached crate archives match their pinned
+checksums. The staged DOM projection retains every original byte and symlink;
+31 additional `.lkj` aliases expose unchanged provider `.rs` bytes. No
+upstream code is edited, and no generated atom definitions are supplied.
+The exact explicit selections are:
+
+```text
+html5ever:html5ever=providers/html5ever-0.39.0/src/lib.lkj
+markup5ever:markup5ever=providers/markup5ever-0.39.0/lib.lkj
+web_atoms:web_atoms=providers/web_atoms-0.2.3/lib.lkj
+```
+
+The paired five-root census compares a fresh `ea54a118c` compiler with the
+fixed-point candidate. Each row below applies separately to debug assertions
+off and on. Counts are checked / blocked / rejected; the before column uses
+the original census flags and the after column adds the three DOM selections.
+
+| Root | Before | After | Changed original first causes | Added / removed items |
+| --- | --- | --- | ---: | ---: |
+| Sōzu bin | 9 / 622 / 0 | 9 / 622 / 0 | 0 | 0 / 0 |
+| Sōzu lib | 10 / 1236 / 0 | 10 / 1236 / 0 | 0 | 0 / 0 |
+| nom | 8 / 652 / 0 | 8 / 652 / 0 | 0 | 0 / 0 |
+| DOM | 0 / 416 / 0 | 0 / 679 / 0 | 288 | 263 / 0 |
+| selectors | 0 / 348 / 0 | 0 / 348 / 0 | 0 | 0 / 0 |
+
+All **54 checked observations are deeply identical** to both the fresh baseline
+and preceding pattern census. All 416 original DOM IDs, names, paths and
+source extents remain, with no status changes. The added blocked owners are
+219 html5ever and 44 markup5ever items; web_atoms contributes no item rows.
+
+Of the 288 changed DOM first causes, 287 move from unavailable `ns!` at
+`src/document.lkj:74:33` to html5ever's ambient `print!` refusal at
+`src/tree_builder/mod.lkj:301:30`. Their reason remains implementation
+coherence depending on refused source. The other row changes an unresolved
+`html5ever::serialize::Serializer` import at `src/node/serializing.lkj:5:1`
+to the explicit ordinary-provider-path refusal at the same location. The
+remaining 128 original rows are deeply identical.
+
+Two controls separate compiler behavior from added inputs. With the original
+flags, every item row remains unchanged across all five roots. With the same
+three provider selections on both compilers, the change removes three obsolete
+missing-declaration diagnostics and changes 400 original DOM first causes;
+16 remain unchanged. These figures describe different comparisons and must not
+be combined into an admission count.
+
+All 42 original DOM unsupported-macro lines remain byte-identical: six `ns!`
+and 36 `local_name!`. Selecting the roots has not made these imports or
+reexports expand. Final selected DOM diagnostics total 2,263, including 761
+unsupported macros (42 DOM, 711 html5ever, six markup5ever and two web_atoms
+`include!` calls). All 131 original DOM recovery source slots remain; provider
+loading adds 1,484 tombstones. The new ambient-output first cause does not
+justify weakening capability checks.
+
+Sōzu item rows remain identical, but ordinary diagnostic streams change under
+its already selected provider aliases. In each mode, bin replaces 143
+`E_IMPORT` lines with 12 explicit `E_MACRO_PROVIDER` lines, and lib replaces
+139 with 18. Bin retains all recovery slots; lib drops two duplicate dependent
+import records while retaining their original import leaves. nom, selectors
+and the unselected DOM ordinary diagnostics remain byte-identical.
+
+The next bounded slice is ordinary macro imports and reexports, beginning with
+html5ever's existing `time!` and `unwrap_or_return!` definitions. Their 62
+current invocation refusals do not require generated atoms. Later work needs
+explicit per-provider dependency mappings and authenticated web_atoms generator
+outputs; the selected roots alone do not establish either capability.
+
 #### Borrowed receiver and trait evidence
 
 The receiver fixture retains Sōzu's `Ready` tuple declaration and

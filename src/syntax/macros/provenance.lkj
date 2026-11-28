@@ -24,13 +24,21 @@ fn source_input(program: &Program) -> Result<(), Diagnostic> {
     {
         return Err(failure(Span::default(), "macro replay input is not an unexpanded source program"));
     }
-    for provider in &program.macro_providers {
-        let Some(span) = provider.declaration else {
-            return Err(failure(Span::default(), "macro provider has no authored declaration"));
-        };
+    for (index, provider) in program.macro_providers.iter().enumerate() {
+        let span = provider.declaration.unwrap_or(Span::default());
+        if provider.input.name == "std" || provider.input.alias == "std" {
+            return Err(failure(span, "macro provider cannot replace the implicit std crate or prelude"));
+        }
+        if provider.declaration_failed {
+            return Err(failure(span, "macro provider has a failed authored declaration"));
+        }
         let Some(root) = provider.root else { return Err(failure(span, "macro provider has no crate root")); };
-        if !program.files.get(span.file).is_some_and(|file| file.crate_root == 0)
-            || !program.scopes.get(root).is_some_and(|scope| scope.parent.is_none() && scope.crate_root == root)
+        if provider.declaration.is_some_and(|declaration|
+                declaration.start > declaration.end
+                    || !program.files.get(declaration.file).is_some_and(|file| file.crate_root == 0))
+            || root == 0usize
+            || !program.scopes.get(root).is_some_and(|scope| scope.parent.is_none() && scope.crate_root == root
+                && scope.path == format!("$macro_provider{index}"))
             || root_path(program, root)? != provider.input.path {
             return Err(failure(span, "macro provider declaration or source root differs from its input"));
         }
