@@ -1,0 +1,55 @@
+//! Exact projector JSON: scalar key order, three spaces, ASCII-only strings.
+use std::json::{self, Value};
+use std::collections::BTreeMap;
+pub fn st(s: &str) -> Value { Value::String(s.to_string()) }
+pub fn num(n: usize) -> Value { Value::from_usize(n) }
+fn hex4(out: &mut String, code: u32) {
+    out.push_str("\\u");
+    let digits = b"0123456789abcdef";
+    for i in 0usize..4usize {
+        out.push(digits[((code >> ((3usize-i)*4usize) as u32) & 15u32) as usize] as char);
+    }
+}
+fn quoted(out: &mut String, value: &str) {
+    let encoded = json::stringify(&st(value)).unwrap();
+    for ch in encoded.as_str().chars() {
+        let code = ch as u32;
+        if code < 127u32 { out.push(ch); }
+        else if code <= 65535u32 { hex4(out,code); }
+        else {
+            let rest = code-65536u32;
+            hex4(out,55296u32+rest/1024u32);
+            hex4(out,56320u32+rest%1024u32);
+        }
+    }
+}
+fn indent(out: &mut String, depth: usize) { out.push('\n'); out.push_str(&" ".repeat(depth*3usize)); }
+fn encode(value: &Value, out: &mut String, depth: usize) {
+    match value {
+        Value::String(s) => quoted(out,s),
+        Value::Array(items) => {
+            out.push('[');
+            for i in 0usize..items.len() {
+                if i != 0usize { out.push(','); }
+                indent(out,depth+1usize); encode(&items[i],out,depth+1usize);
+            }
+            if !items.is_empty() { indent(out,depth); } out.push(']');
+        },
+        Value::Object(fields) => {
+            // Valid UTF-8 byte order is Unicode scalar order.
+            let mut order: BTreeMap<String,usize> = BTreeMap::new();
+            for i in 0usize..fields.len() { order.insert(fields[i].0.clone(),i); }
+            out.push('{'); let mut first = true;
+            for (_, i) in &order {
+                if !first { out.push(','); } first=false;
+                indent(out,depth+1usize); quoted(out,&fields[*i].0); out.push_str(" : ");
+                encode(&fields[*i].1,out,depth+1usize);
+            }
+            if !first { indent(out,depth); } out.push('}');
+        },
+        _ => out.push_str(&json::stringify(value).unwrap()),
+    }
+}
+pub fn canonical(value: &Value) -> String {
+    let mut result=String::new(); encode(value,&mut result,0usize); result.push('\n'); result
+}

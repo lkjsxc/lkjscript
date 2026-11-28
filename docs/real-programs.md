@@ -265,7 +265,21 @@ explicit review inputs with the code; retain upstream originals and notices once
 The larger comparison JSON can then be regenerated from these inputs. A receipt
 still under `target/` is a temporary candidate observation, not a durable evidence
 link. Fresh observations additionally require the original/projected trees to pass
-`node tools/real-programs/project.mjs --verify`; use `tools/real-programs/probe.sh --help` for its exact entry and package options.
+`tools/real-programs/project.sh --verify`; use `tools/real-programs/probe.sh --help` for its exact entry and package options.
+
+`tools/real-programs/project.sh SOURCE DEST` creates the projection; `--self-test`
+runs the original 81 assertions, including SIGINT/SIGTERM cleanup. Checked source
+owns Git blob hashes (SHA-1 and SHA-256), path and symlink graph policy, manifest
+bytes, inode verification and cleanup decisions. Its small C adapter supplies
+Linux `lstat`, `readlink`, descriptor reads/metadata, physical hardlinks, exclusive
+creation and sanitized Git subprocesses. Regular-file hashes stream through the
+adapter; no projected payload is copied. The composed tool retains ambient host
+permissions and requires quiescent namespaces; its stream grants are not an OS
+sandbox. A C compiler builds the adapter, and GNU time supplies probe measurements.
+The Node/Perl-free native test includes full-manifest goldens, syscall fault and
+cross-filesystem controls, and the public probe/projector path with the real
+compiler. The separate pinned probe fixture verifier remains an independent
+observation check.
 
 #### Match-arm configuration
 

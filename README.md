@@ -162,10 +162,12 @@ includes a generated-traffic harness with memory measurement and CPU profiling.
 
 The native gate bootstraps from the stored seed and runs without Rust or Node.
 Perl serves other gate fixtures.
-The separate required real-program host-tool job uses Node to test Git projection.
-Census, reranking and probe fixture observations run in the native gate. The
-production probe still invokes the hosted projection verifier. A release requires
-both jobs to pass on the same check attempt.
+Census, reranking, probe observations and Git projection run as checked lkjscript
+in the native gate. The projector uses a small C host bridge for Linux file identity,
+physical hardlinks and Git plumbing; building that bridge requires a C compiler.
+The public probe invokes the adjacent checked projector. A required sibling job
+also runs the projection controls and the production probe/projector witness,
+without Node or Perl. A release requires both jobs on the same check attempt.
 The gate exercises HTTP with an explicit lkjscript client.
 
 ```sh

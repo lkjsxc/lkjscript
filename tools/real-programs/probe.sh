@@ -9,4 +9,4 @@ trap 'rm -rf -- "$work"' EXIT
 trap 'exit 130' INT
 trap 'exit 143' HUP TERM
 build_probe "$compiler" "$repo/tools/real-programs/probe.lkj" "$repo/library" "$work"
-run_probe "$work/select" "$work/probe" node "$repo/tools/real-programs/project.mjs" "$@"
+run_probe "$work/select" "$work/probe" "$repo/tools/real-programs/project.sh" "$@"

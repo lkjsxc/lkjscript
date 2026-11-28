@@ -1,0 +1,536 @@
+//! Git projection policy in ordinary checked code. project-host.c supplies
+//! Linux observations and mutations; it does not decide their meaning.
+//! The composed host tool requires quiescent SOURCE and DEST namespaces.
+mod project_json;
+mod project_sha1;
+use project_json::{canonical, st, num};
+use std::json::Value;
+use std::collections::{BTreeMap,BTreeSet};
+use std::sha256;
+
+macro_rules! object {
+    ($($key:tt => $value:expr),*) => { Value::Object(vec![$(($key.to_string(),$value)),*]) };
+}
+const MANIFEST: &str="projection.json";
+const HELP: &str="Usage: project.sh SOURCE DEST\n       project.sh --verify SOURCE DEST\n       project.sh --self-test\nClean Git SOURCE and fresh DEST on the same filesystem are required. Tracked files,\nsafe internal symlink objects and .rs-to-.lkj aliases are hardlinked without copies.\nManifest records exact Git identity and byte hashes. --verify is read-only and\nrequires original-source inode identity. Keep both namespaces quiescent: cleanup\nchecks the created root identity but is not hardened against concurrent swaps.\n";
+fn text(raw: &[u8], what: &str) -> Result<String,String> {
+    String::from_utf8(raw.to_vec()).map_err(|_| -> String {format!("non-UTF-8 {what}")})
+}
+fn require(ok: bool, why: &str) -> Result<(),String> { if ok {Ok(())} else {Err(why.to_string())} }
+fn display_error(why: &str) -> String {
+    if why.starts_with("!") {why[1..].to_string()} else {format!("real-programs-project: {why}")}
+}
+fn report_error(errors: &mut Stderr,status: &mut ExitStatus,why: &str) {
+    errors.write(format!("{}\n",display_error(why)).as_bytes());status.set_status(255u8);
+}
+struct Options {source:String,dest:String,verify:bool,self_test:bool,help:bool}
+fn options(raw: &[Vec<u8>]) -> Result<Options,String> {
+    let mut args:Vec<String>=Vec::new();let mut verify=false;let mut self_test=false;let mut help=false;let mut end=false;
+    let mut decoded:Vec<String>=Vec::new();
+    for item in raw {decoded.push(text(item,"command-line arguments")?);}
+    for arg in decoded {
+        if end {args.push(arg.clone());continue;}
+        match arg.as_str() {
+            "--"=>end=true,"--verify"=>verify=true,"--self-test"=>self_test=true,"--help"=>help=true,
+            _=>{if arg.starts_with("-"){return Err("use --help for usage".to_string());}args.push(arg.clone());}
+        }
+    }
+    if help {return Ok(Options{source:String::new(),dest:String::new(),verify,self_test,help});}
+    if self_test {require(args.is_empty() && !verify,"--self-test takes no SOURCE, DEST, or --verify")?;}
+    else {require(args.len()==2usize,"SOURCE and DEST are required; use --help")?;}
+    let source=if args.is_empty(){String::new()}else{args[0].clone()};
+    let dest=if args.is_empty(){String::new()}else{args[1].clone()};
+    Ok(Options{source,dest,verify,self_test,help})
+}
+fn select(mut arguments:Arguments,mut output:Stdout,mut errors:Stderr,mut status:ExitStatus) {
+    let raw=arguments.args();
+    if raw.is_empty(){report_error(&mut errors,&mut status,"missing launcher path");return;}
+    if let Err(e)=text(&raw[0],"command-line arguments"){report_error(&mut errors,&mut status,&e);return;}
+    match options(&raw[1..]) {
+        Err(e)=>report_error(&mut errors,&mut status,&e),
+        Ok(o)=>{if o.help {output.write(b"help\0");output.write(HELP.as_bytes());}
+            else if o.self_test {output.write(b"self\0");}
+            else {output.write(b"project\0");}}
+    }
+}
+struct Host {input:Stdin,output:Stdout,errors:Stderr}
+impl Host {
+    fn send(&mut self,raw:&[u8]) {
+        let n=raw.len() as u64;let mut header=[0u8;8];
+        for i in 0usize..8usize {header[i]=(n>>((i*8usize) as u64)) as u8;}
+        self.output.write(&header);self.output.write(raw);
+    }
+    fn exact(&mut self,n:usize) -> Result<Vec<u8>,String> {
+        let mut result=Vec::new();let mut buffer=[0u8;8192];
+        while result.len()<n {
+            let want=std::cmp::min(buffer.len(),n-result.len());
+            let count=self.input.read(&mut buffer[..want]).map_err(|e:i64| -> String {format!("host read: errno {e}")})?;
+            require(count>0usize,"host adapter closed")?;
+            result.extend_from_slice(&buffer[..count]);
+        }
+        Ok(result)
+    }
+    fn receive(&mut self) -> Result<Vec<u8>,String> {
+        let header=self.exact(8usize)?;let mut n=0u64;
+        for i in 0usize..8usize {n|=(header[i] as u64)<<((i*8usize) as u64);}
+        self.exact(n as usize)
+    }
+    fn raw(&mut self,op:&str,args:&[Vec<u8>]) -> Result<Vec<Vec<u8>>,String> {
+        self.send(op.as_bytes());self.send(format!("{}",args.len()).as_bytes());
+        for arg in args {self.send(arg);}
+        let status=text(&self.receive()?,"host status")?;
+        let count=text(&self.receive()?,"host count")?.as_str().parse::<usize>().map_err(|_| -> String {"invalid host count".to_string()})?;
+        let mut fields=Vec::new();for _ in 0usize..count {fields.push(self.receive()?);}
+        if status=="error" {
+            require(fields.len()==1usize,"invalid host error")?;
+            return Err(format!("!{}",text(&fields[0],"host error")?));
+        }
+        require(status=="ok","invalid host status")?;Ok(fields)
+    }
+    fn request(&mut self,op:&str,args:&[String]) -> Result<Vec<Vec<u8>>,String> {
+        let mut raw=Vec::new();for arg in args {raw.push(arg.as_bytes().to_vec());}self.raw(op,&raw)
+    }
+    fn string(&mut self,op:&str,args:&[String]) -> Result<String,String> {
+        let reply=self.request(op,args)?;require(reply.len()==1usize,"invalid host response")?;text(&reply[0],"host output")
+    }
+    fn empty(&mut self,op:&str)->Result<Vec<Vec<u8>>,String> {let args:Vec<String>=Vec::new();self.request(op,&args)}
+    fn cwd(&mut self)->Result<String,String>{let fields=self.empty("cwd")?;require(fields.len()==1usize,"invalid cwd response")?;text(&fields[0],"host output")}
+    fn action(&mut self,op:&str,args:&[String]) -> Result<(),String> {self.request(op,args)?;Ok(())}
+    fn result(&mut self,value:&str) -> Result<(),String> {self.raw("result",&vec![value.as_bytes().to_vec()])?;Ok(())}
+    fn stat(&mut self,path:&str) -> Result<Option<Stat>,String> {
+        let value=self.string("stat",&vec![path.to_string()])?;parse_stat(&value)
+    }
+}
+#[derive(Clone)]
+struct Stat {device:String,inode:String,mode:u32,size:usize,kind:u32,mtime:String,ctime:String}
+fn parse_stat(raw:&str) -> Result<Option<Stat>,String> {
+    if raw=="missing" {return Ok(None);}
+    let mut parts:Vec<String>=Vec::new();for item in raw.split('\t') {parts.push(item.to_string());}
+    require(parts.len()==10usize,"invalid host metadata")?;
+    let mode=parts[2].as_str().parse::<u32>().map_err(|_| -> String {"invalid host mode".to_string()})?;
+    let size=parts[3].as_str().parse::<usize>().map_err(|_| -> String {"invalid host size".to_string()})?;
+    let kind=parts[5].as_str().parse::<u32>().map_err(|_| -> String {"invalid host kind".to_string()})?;
+    Ok(Some(Stat{device:parts[0].clone(),inode:parts[1].clone(),mode,size,kind,
+        mtime:format!("{}:{}",parts[6],parts[7]),ctime:format!("{}:{}",parts[8],parts[9])}))
+}
+fn stat_field(raw:&[u8]) -> Result<Stat,String> {parse_stat(&text(raw,"host metadata")?)?.ok_or("missing host metadata".to_string())}
+fn same(a:&Stat,b:&Stat)->bool {a.device==b.device && a.inode==b.inode}
+fn parent(path:&str)->String {
+    let mut end=path.len();while end>1usize && path.as_bytes()[end-1usize]==b'/' {end-=1usize;}
+    let mut split=end;while split>0usize && path.as_bytes()[split-1usize]!=b'/' {split-=1usize;}
+    if split==0usize {".".to_string()} else if split==1usize {"/".to_string()} else {path[..split-1usize].to_string()}
+}
+fn basename(path:&str)->String {
+    let mut start=path.len();while start>0usize && path.as_bytes()[start-1usize]!=b'/' {start-=1usize;}path[start..].to_string()
+}
+fn join(root:&str,name:&str)->String {if root=="/"{format!("/{name}")}else{format!("{root}/{name}")}}
+fn canonical_directory(host:&mut Host,input:&str,description:&str)->Result<String,String> {
+    require(!input.is_empty() && !input.as_bytes().contains(&0u8),&format!("empty or NUL-containing {description}"))?;
+    let absolute=if input.starts_with("/"){input.to_string()}else{join(&host.cwd()?,input)};
+    let mut walk="/".to_string();
+    for part in absolute.as_str().split('/') {
+        if part.is_empty() || part=="." {continue;}
+        if part==".." {walk=parent(&walk);continue;}
+        walk=join(&walk,part);
+        let info=host.stat(&walk)?.ok_or(format!("missing directory component in {description}: {walk}"))?;
+        require(info.kind!=40960u32,&format!("symlink directory component in {description}: {walk}"))?;
+        require(info.kind==16384u32,&format!("non-directory component in {description}: {walk}"))?;
+    }
+    host.string("realpath",&vec![walk])
+}
+fn ambiguous(path:&str)->bool {
+    let b=path.as_bytes();
+    path.starts_with("/") || path.contains("\\") || b.contains(&0u8) ||
+        (b.len()>=2usize && ((b[0]>=b'a' && b[0]<=b'z')||(b[0]>=b'A' && b[0]<=b'Z')) && b[1]==b':')
+}
+fn safe_path(path:&str)->Result<(),String> {
+    require(!path.is_empty(),"empty tracked path")?;
+    require(!ambiguous(path),&format!("absolute or ambiguous tracked path: {path}"))?;
+    for part in path.split('/') {require(!part.is_empty() && part!="." && part!="..",&format!("escaping or noncanonical tracked path: {path}"))?;}
+    Ok(())
+}
+fn node_path(host:&mut Host,root:&str,relative:&str,allow_link:bool)->Result<String,String> {
+    safe_path(relative)?;let mut walk=root.to_string();let mut count=0usize;
+    for _ in relative.split('/') {count+=1usize;}
+    let mut i=0usize;
+    for part in relative.split('/') {
+        walk=join(&walk,part);let info=host.stat(&walk)?.ok_or(format!("missing node: {walk}"))?;
+        i+=1usize;
+        if i==count {require(info.kind==32768u32 || (allow_link && info.kind==40960u32),&format!("nonregular file: {walk}"))?;}
+        else {
+            require(info.kind!=40960u32,&format!("symlink parent: {walk}"))?;
+            require(info.kind==16384u32,&format!("non-directory parent: {walk}"))?;
+        }
+    }
+    Ok(walk)
+}
+#[derive(Clone)]
+struct Node {info:Stat,kind:String,raw:Vec<u8>,digest:String,git_blob:String,bytes:usize}
+fn read_error(error:String,path:&str)->String {
+    if error=="!@link-changed"{return format!("symbolic link changed while reading: {path}");}
+    if error=="!@identity-changed"{return format!("file identity changed while opening: {path}");}
+    if error=="!@not-link"{return format!("not a symbolic link: {path}");}
+    if error=="!@not-regular"{return format!("not a regular file: {path}");}
+    error
+}
+fn hex_bytes(raw:&[u8])->String {
+    let digits=b"0123456789abcdef";let mut result=String::new();
+    for byte in raw{result.push(digits[(*byte>>4u8) as usize] as char);result.push(digits[(*byte&15u8) as usize] as char);}result
+}
+fn hash_regular(host:&mut Host,path:&str,fields:&[Vec<u8>],format:&str,keep:bool)->Result<Node,String> {
+    require(fields.len()==2usize,"invalid host open response")?;
+    let before=stat_field(&fields[0])?;let opened=stat_field(&fields[1])?;
+    require(opened.kind==32768u32 && same(&before,&opened),&format!("file identity changed while opening: {path}"))?;
+    let mut content=sha256::Sha256::new();let mut sha1=project_sha1::Sha1::new();let mut git256=sha256::Sha256::new();
+    let header=format!("blob {}\0",opened.size);
+    if format=="sha1"{sha1.update(header.as_bytes());}else if format=="sha256"{git256.update(header.as_bytes());}
+    let mut bytes=0usize;let mut raw=Vec::new();
+    loop{
+        let reply=host.empty("read-chunk")?;require(reply.len()==1usize,"invalid host chunk")?;
+        let chunk=&reply[0];if chunk.is_empty(){break;}
+        bytes+=chunk.len();content.update(chunk);
+        if format=="sha1"{sha1.update(chunk);}else if format=="sha256"{git256.update(chunk);}
+        if keep{raw.extend_from_slice(chunk);}
+    }
+    let git_blob=if format=="sha1"{sha1.finish()}else if format=="sha256"{hex_bytes(&git256.finish())}else{String::new()};
+    Ok(Node{info:opened,kind:"regular".to_string(),raw,digest:hex_bytes(&content.finish()),git_blob,bytes})
+}
+fn read_node(host:&mut Host,path:&str,link:bool,format:&str,keep:bool)->Result<Node,String> {
+    if !link{
+        let fields=host.request("open-file",&vec![path.to_string()]).map_err(|e:String|->String{read_error(e,path)})?;
+        let result=hash_regular(host,path,&fields,format,keep);
+        // Always close the exact opened descriptor before returning a refusal.
+        let after=host.empty("close-file")?;
+        require(after.len()==1usize,"invalid host close response")?;
+        let after=stat_field(&after[0])?;let node=result?;
+        require(node.bytes==node.info.size && node.bytes==after.size && node.info.mtime==after.mtime && node.info.ctime==after.ctime,
+            &format!("file changed while reading: {path}"))?;
+        return Ok(node);
+    }
+    let fields=host.request("read-link",&vec![path.to_string()]).map_err(|e:String|->String{read_error(e,path)})?;
+    require(fields.len()==3usize,"invalid host readlink response")?;
+    let before=stat_field(&fields[0])?;let after=stat_field(&fields[1])?;let raw=&fields[2];
+    require(before.kind==40960u32 && after.kind==40960u32 && same(&before,&after) && before.mtime==after.mtime && before.ctime==after.ctime,
+        &format!("symbolic link changed while reading: {path}"))?;
+    let mut git_blob=String::new();
+    if !format.is_empty(){
+        let mut blob=format!("blob {}\0",raw.len()).into_bytes();blob.extend_from_slice(raw);
+        git_blob=if format=="sha1"{project_sha1::hex_digest(&blob)}else{sha256::hex_digest(&blob)};
+    }
+    Ok(Node{info:before,kind:"symlink".to_string(),raw:raw.clone(),digest:sha256::hex_digest(raw),git_blob,bytes:raw.len()})
+}
+#[derive(Clone)]
+struct Resolved {path:String,kind:String}
+fn implicit_directories(nodes:&BTreeMap<String,Node>)->BTreeSet<String> {
+    let mut dirs=BTreeSet::new();dirs.insert(String::new());
+    for (path,_) in nodes {
+        let mut p=parent(path);while p!="." && p!="/" {dirs.insert(p.clone());p=parent(&p);}
+    }
+    dirs
+}
+fn resolve_link(path:&str,nodes:&BTreeMap<String,Node>,dirs:&BTreeSet<String>,resolved:&mut BTreeMap<String,Resolved>,active:&mut BTreeSet<String>)->Result<Resolved,String> {
+    let key=path.to_string();require(!active.contains(&key),&format!("cyclic symlink chain: {path}"))?;
+    if let Some(r)=resolved.get(&key) {return Ok(r.clone());}
+    let target=text(&nodes.get(&key).unwrap().raw,"symlink target")?;
+    active.insert(key.clone());
+    let base=parent(path);let mut stack:Vec<String>=Vec::new();
+    if base!="." {for part in base.as_str().split('/') {stack.push(part.to_string());}}
+    let mut pending:Vec<String>=Vec::new();for part in target.as_str().split('/') {pending.push(part.to_string());}
+    let mut answer=Resolved{path:String::new(),kind:"directory".to_string()};let mut ended=false;
+    for i in 0usize..pending.len() {
+        let part=pending[i].as_str();if part.is_empty() || part=="." {continue;}
+        if part==".." {require(!stack.is_empty(),"symlink target escapes SOURCE")?;stack.pop();continue;}
+        let p=if stack.is_empty(){part.to_string()}else{format!("{}/{part}",join_parts(&stack))};
+        if let Some(node)=nodes.get(&p) {
+            let dest=if node.kind=="symlink"{resolve_link(&p,nodes,dirs,resolved,active)?}else{Resolved{path:p.clone(),kind:"file".to_string()}};
+            require(i+1usize==pending.len() || dest.kind=="directory",&format!("symlink target traverses a non-directory: {p}"))?;
+            if i+1usize==pending.len(){answer=dest;ended=true;break;}
+            stack.clear();if !dest.path.is_empty(){for bit in dest.path.as_str().split('/') {stack.push(bit.to_string());}}
+        }else if dirs.contains(&p){stack.push(part.to_string());}
+        else{return Err(format!("dangling or untracked symlink target: {p}"));}
+    }
+    if !ended {answer.path=join_parts(&stack);}
+    active.remove(&key);resolved.insert(key,answer.clone());Ok(answer)
+}
+fn graph_visit(dir:&str,edges:&BTreeMap<String,BTreeSet<String>>,states:&mut BTreeMap<String,u8>)->Result<(),String> {
+    let key=dir.to_string();let state=states.get(&key).copied().unwrap_or(0u8);
+    require(state!=1u8,&format!("cyclic directory symlink graph at: {dir}"))?;
+    if state==2u8 {return Ok(());}states.insert(key.clone(),1u8);
+    if let Some(children)=edges.get(&key){for child in children{graph_visit(child,edges,states)?;}}
+    states.insert(key,2u8);Ok(())
+}
+fn graph_edge(edges:&mut BTreeMap<String,BTreeSet<String>>,from:String,to:String) {
+    if !edges.contains_key(&from){edges.insert(from.clone(),BTreeSet::new());}
+    edges.get_mut(&from).unwrap().insert(to);
+}
+fn validate_links(nodes:&BTreeMap<String,Node>)->Result<BTreeMap<String,Resolved>,String> {
+    let dirs=implicit_directories(nodes);let mut links=Vec::new();
+    for (path,node) in nodes {
+        if node.kind!="symlink"{continue;}
+        links.push(path.clone());let target=text(&node.raw,"symlink target")?;
+        require(!target.is_empty() && !ambiguous(&target),&format!("empty, absolute, or ambiguous symlink target: {path}"))?;
+    }
+    let mut resolved=BTreeMap::new();
+    for path in &links {resolve_link(path,nodes,&dirs,&mut resolved,&mut BTreeSet::new())?;}
+    let mut edges=BTreeMap::new();
+    for dir in &dirs {if !dir.is_empty(){let p=parent(dir);graph_edge(&mut edges,if p=="."{String::new()}else{p},dir.clone());}}
+    for path in &links {
+        let r=resolved.get(path).unwrap();
+        if r.kind=="directory"{let p=parent(path);graph_edge(&mut edges,if p=="."{String::new()}else{p},r.path.clone());}
+    }
+    graph_visit("",&edges,&mut BTreeMap::new())?;Ok(resolved)
+}
+#[derive(PartialEq,Eq)]
+struct GitEntry {mode:String,oid:String}
+fn hex(raw:&str)->bool {!raw.is_empty() && raw.as_bytes().iter().all(|b:&u8|(*b>=b'0' && *b<=b'9')||(*b>=b'a' && *b<=b'f'))}
+fn parse_entries(raw:&[u8],tree:bool)->Result<BTreeMap<String,GitEntry>,String> {
+    let input=text(raw,"Git entries")?;let mut records=BTreeMap::new();
+    let malformed=format!("malformed Git {} entry",if tree{"tree"}else{"index"});
+    for record in input.as_str().split('\0') {
+        if record.is_empty(){continue;}
+        let (header,path)=record.split_once('\t').ok_or(malformed.clone())?;
+        let mut fields:Vec<String>=Vec::new();for s in header.split(' '){fields.push(s.to_string());}
+        require(fields.len()==3usize && !path.is_empty(),&malformed)?;
+        let mode=&fields[0];let oid=&fields[if tree{2usize}else{1usize}];
+        require(mode.len()==6usize && mode.as_bytes().iter().all(|b:&u8|*b>=b'0' && *b<=b'7') && hex(oid),&malformed)?;
+        if tree {require(!fields[1].is_empty() && fields[1].as_bytes().iter().all(|b:&u8|b.is_ascii_alphanumeric()||*b==b'_'),&malformed)?;}
+        else {require(fields[2].len()==1usize && fields[2].as_bytes()[0]>=b'0' && fields[2].as_bytes()[0]<=b'3',&malformed)?;}
+        safe_path(path)?;let p=path.to_string();
+        require(!records.contains_key(&p) && (tree||fields[2]=="0"),&format!("unmerged or duplicate tracked path: {path}"))?;
+        require((mode=="100644"||mode=="100755"||mode=="120000") && (!tree||fields[1]=="blob"),&format!("gitlink or unsupported tracked mode {mode}: {path}"))?;
+        records.insert(p,GitEntry{mode:mode.clone(),oid:oid.clone()});
+    }
+    Ok(records)
+}
+fn git(host:&mut Host,root:&str,args:&[String])->Result<Vec<u8>,String> {
+    let mut command=vec![root.to_string()];for arg in args {command.push(arg.clone());}
+    let result=host.request("git",&command)?;require(result.len()==3usize,"invalid host Git response")?;
+    let status=text(&result[0],"Git status")?;
+    if status!="0"{host.errors.write(&result[2]);return Err(format!("Git {} failed (status {status})",args[0]));}
+    Ok(result[1].clone())
+}
+fn git_text(host:&mut Host,root:&str,args:&[String])->Result<String,String> {
+    let out=text(&git(host,root,args)?,"Git output")?;if out.ends_with("\n"){Ok(out[..out.len()-1usize].to_string())}else{Ok(out)}
+}
+struct Snapshot {root:String,commit:String,origin:String,format:String,files:Vec<Value>,nodes:BTreeMap<String,Node>}
+fn source_snapshot(host:&mut Host,input:&str)->Result<Snapshot,String> {
+    let root=canonical_directory(host,input,"SOURCE")?;
+    require(git_text(host,&root,&vec!["rev-parse".to_string(),"--show-toplevel".to_string()])?==root,"SOURCE must be the Git worktree root")?;
+    let commit=git_text(host,&root,&vec!["rev-parse".to_string(),"--verify".to_string(),"HEAD^{commit}".to_string()])?;
+    require((commit.len()==40usize||commit.len()==64usize)&&hex(&commit),"invalid Git HEAD identity")?;
+    let format=git_text(host,&root,&vec!["rev-parse".to_string(),"--show-object-format".to_string()])?;
+    require(format=="sha1"||format=="sha256",&format!("unsupported Git object format: {format}"))?;
+    let origin_raw=text(&git(host,&root,&vec!["config".to_string(),"--null".to_string(),"--get-all".to_string(),"remote.origin.url".to_string()])?,"origin URL")?;
+    let mut origins=Vec::new();for part in origin_raw.as_str().split('\0'){origins.push(part.to_string());}
+    let trailing={origins.last().map(|s:&String|s.is_empty()).unwrap_or(false)};if trailing{origins.pop();}
+    require(origins.len()==1usize && !origins[0].is_empty(),"SOURCE needs exactly one nonempty origin URL")?;
+    let index=parse_entries(&git(host,&root,&vec!["ls-files".to_string(),"--stage".to_string(),"-z".to_string()])?,false)?;
+    let tree=parse_entries(&git(host,&root,&vec!["ls-tree".to_string(),"-r".to_string(),"-z".to_string(),"--full-tree".to_string(),commit.clone()])?,true)?;
+    require(index.len()==tree.len() && index.iter().all(|item:(&String,&GitEntry)|tree.get(item.0)==Some(item.1)),"dirty Git index: tracked entries differ from HEAD")?;
+    require(!index.is_empty(),"SOURCE has no tracked files")?;
+    let mut nodes=BTreeMap::new();
+    for (path,entry) in &index {
+        let link=entry.mode=="120000";let p=node_path(host,&root,path,link)?;
+        let node=read_node(host,&p,link,&format,false)?;
+        require(node.git_blob==entry.oid,&format!("dirty tracked bytes (including filters/assume-unchanged): {path}"))?;
+        let mode=if link{"120000"}else if node.info.mode & 64u32 !=0u32{"100755"}else{"100644"};
+        require(mode==entry.mode,&format!("dirty tracked executable mode: {path}"))?;
+        if link {text(&node.raw,"symlink target")?;}
+        nodes.insert(path.clone(),node);
+    }
+    let resolved=validate_links(&nodes)?;let mut files=Vec::new();
+    for (path,node) in &nodes {
+        let mode=&index.get(path).unwrap().mode;
+        let mut fields=vec![("path".to_string(),st(path)),("sha256".to_string(),st(&node.digest)),("bytes".to_string(),num(node.bytes)),("git_blob".to_string(),st(&node.git_blob)),("git_mode".to_string(),st(mode))];
+        if node.kind=="symlink" {
+            let r=resolved.get(path).unwrap();
+            fields.push(("kind".to_string(),st("symlink")));fields.push(("target".to_string(),st(&text(&node.raw,"symlink target")?)));
+            fields.push(("resolved_target".to_string(),st(&r.path)));fields.push(("target_kind".to_string(),st(&r.kind)));
+        }
+        files.push(Value::Object(fields));
+    }
+    Ok(Snapshot{root,commit,origin:origins[0].clone(),format,files,nodes})
+}
+#[derive(Clone,PartialEq,Eq,PartialOrd,Ord)]
+struct Link {to:String,from:String}
+struct Plan {json:String,links:Vec<Link>,targets:BTreeMap<String,String>,directories:Vec<String>,kinds:BTreeMap<String,String>,aliases:usize,symlinks:usize}
+fn reserve(path:&str,description:&str,targets:&mut BTreeMap<String,String>,dirs:&mut Vec<String>)->Result<(),String> {
+    safe_path(path)?;let key=path.to_string();
+    if let Some(previous)=targets.get(&key){return Err(format!("projection path collision: {path} ({previous}, {description})"));}
+    targets.insert(key,description.to_string());
+    let mut p=parent(path);
+    while p!="." && p!="/" {if !dirs.contains(&p){dirs.push(p.clone());}p=parent(&p);}Ok(())
+}
+fn layout(snapshot:Snapshot)->Result<(Snapshot,Plan),String> {
+    let mut targets=BTreeMap::new();let mut directories=Vec::new();let mut links=Vec::new();let mut aliases=Vec::new();let mut symlinks=0usize;let mut kinds=BTreeMap::new();
+    for (path,node) in &snapshot.nodes {
+        reserve(path,"tracked original",&mut targets,&mut directories)?;
+        links.push(Link{from:path.clone(),to:path.clone()});kinds.insert(path.clone(),node.kind.clone());
+        if node.kind=="symlink"{symlinks+=1usize;}
+        if path.ends_with(".rs"){
+            let alias=format!("{}.lkj",&path[..path.len()-3usize]);
+            reserve(&alias,"Rust suffix alias",&mut targets,&mut directories)?;
+            links.push(Link{from:path.clone(),to:alias.clone()});kinds.insert(alias.clone(),node.kind.clone());
+            aliases.push(object!("from"=>st(path),"to"=>st(&alias)));
+        }
+    }
+    reserve(MANIFEST,"projection manifest",&mut targets,&mut directories)?;kinds.insert(MANIFEST.to_string(),"regular".to_string());
+    for dir in &directories {require(!targets.contains_key(dir),&format!("projection file/directory collision: {dir}"))?;}
+    let count=aliases.len();
+    let mut fields=vec![
+        ("schema".to_string(),num(1usize)),("kind".to_string(),st("git_tracked_suffix_projection")),
+        ("source".to_string(),object!("root"=>st(&snapshot.root),"commit"=>st(&snapshot.commit),"origin"=>st(&snapshot.origin),"object_format"=>st(&snapshot.format))),
+        ("claim".to_string(),st(if symlinks==0usize{"Path-only projection: tracked bytes are unchanged; .rs files gain .lkj aliases. No Rust compatibility, semantic equivalence, or checker acceptance is claimed."}else{"Path-only projection: tracked regular-file bytes and symbolic-link target bytes are unchanged; .rs paths gain .lkj aliases. No Rust compatibility, semantic equivalence, or checker/loader acceptance is claimed."})),
+        ("storage".to_string(),st(if symlinks==0usize{"All tracked originals and suffix aliases are hardlinks to SOURCE; no payload copies. Hardlinks share writable contents and are not a write-protection boundary."}else{"Tracked regular files, symbolic-link objects and suffix aliases are hardlinks to SOURCE, including symlink inodes on Linux. No target payload copies or chmod. Hardlinks share writable contents and are not a write-protection boundary."})),
+        ("provenance".to_string(),st("Records Git identity and byte integrity; does not authenticate a publisher or verify signatures.")),
+        ("concurrency".to_string(),st("SOURCE and DEST namespaces must remain quiescent during creation, verification and cleanup. This tool is not a boundary against concurrent host filesystem mutation.")),
+        ("clean_state".to_string(),st(if symlinks==0usize{"Index equals HEAD; every tracked file equals its raw Git blob and executable mode. Untracked files are ignored. Symlinks and gitlinks are refused."}else{"Index equals HEAD; regular files equal their raw Git blobs and executable modes, and symlink targets equal their raw Git blobs. Untracked files are ignored. Gitlinks and nonregular nonsymlink nodes are refused."})),
+        ("aliases".to_string(),Value::Array(aliases)),
+    ];
+    if symlinks>0usize {fields.push(("symlink_policy".to_string(),st("Only relative links resolving entirely within the original tracked-node/directory graph are admitted. Absolute, escaping, dangling/untracked, chain-cyclic and directory-cyclic targets are refused. Inventory uses lstat/readlink and never traverses a symbolic link.")));}
+    // Move the manifest rows, then restore them only when a caller needs a new
+    // snapshot: creation always regenerates its verification from SOURCE.
+    let mut snapshot=snapshot;let files=std::mem::replace(&mut snapshot.files,Vec::new());fields.push(("files".to_string(),Value::Array(files)));
+    let json=canonical(&Value::Object(fields));links.sort();
+    Ok((snapshot,Plan{json,links,targets,directories,kinds,aliases:count,symlinks}))
+}
+fn destination(host:&mut Host,input:&str,source:&str)->Result<String,String> {
+    require(!input.is_empty() && !input.as_bytes().contains(&0u8),"empty or NUL-containing DEST")?;
+    let mut end=input.len();while end>0usize && input.as_bytes()[end-1usize]==b'/'{end-=1usize;}
+    let input=&input[..end];let name=basename(input);
+    require(!name.is_empty() && name!="." && name!="..","DEST must name a fresh directory")?;
+    let parent=canonical_directory(host,&parent(input),"DEST parent")?;let dest=join(&parent,&name);
+    require(source!="/" && dest!=source && !dest.starts_with(&format!("{source}/")),"DEST must be outside SOURCE")?;Ok(dest)
+}
+fn visit_tree(host:&mut Host,root:&str,relative:&str,plan:&Plan)->Result<(),String> {
+    let path=if relative.is_empty(){root.to_string()}else{join(root,relative)};
+    let info=host.stat(&path)?.ok_or(format!("missing projection node: {path}"))?;
+    if !relative.is_empty(){
+        require(info.kind==32768u32||info.kind==16384u32||info.kind==40960u32,&format!("nonregular nonsymlink projection node: {relative}"))?;
+        if info.kind==16384u32 {require(plan.directories.contains(&relative.to_string()),&format!("unexpected projection directory: {relative}"))?;}
+        else{
+            require(plan.targets.contains_key(&relative.to_string()),&format!("unexpected projection file: {relative}"))?;
+            let kind=if info.kind==40960u32{"symlink"}else{"regular"};
+            require(plan.kinds.get(&relative.to_string()).map(|s:&String|s.as_str())==Some(kind),&format!("projection node type changed: {relative}"))?;
+        }
+    }
+    if info.kind!=16384u32{return Ok(());}
+    let response=host.request("list",&vec![path])?;require(response.len()==1usize,"invalid host listing")?;
+    let mut names=Vec::new();
+    for raw in split_nul(&response[0]){if !raw.is_empty(){names.push(text(&raw,"projection path")?);}}
+    names.sort();for name in names{let rel=if relative.is_empty(){name}else{join(relative,&name)};visit_tree(host,root,&rel,plan)?;}Ok(())
+}
+struct Summary {manifest:String,digest:String,commit:String,files:usize,aliases:usize,symlinks:usize,create:bool}
+fn summary(value:&Summary)->String {
+    let mut fields=vec![("operation".to_string(),st(if value.create{"create"}else{"verify"})),("manifest".to_string(),st(&value.manifest)),("manifest_sha256".to_string(),st(&value.digest)),("commit".to_string(),st(&value.commit)),("tracked_files".to_string(),num(value.files)),("aliases".to_string(),num(value.aliases))];
+    if !value.create{fields.push(("read_only".to_string(),Value::Bool(true)));}
+    if value.symlinks>0usize{fields.push(("tracked_symlinks".to_string(),num(value.symlinks)));}
+    canonical(&Value::Object(fields))
+}
+fn verify_projection(host:&mut Host,source:&str,dest:&str)->Result<Summary,String> {
+    let (snapshot,plan)=layout(source_snapshot(host,source)?)?;
+    let dest=destination(host,dest,&snapshot.root)?;canonical_directory(host,&dest,"DEST")?;
+    visit_tree(host,&dest,"",&plan)?;
+    let p=node_path(host,&dest,MANIFEST,false)?;let manifest=read_node(host,&p,false,"",true)?;
+    require(manifest.raw.as_slice()==plan.json.as_bytes(),"manifest differs from current clean SOURCE identity, hashes, or prescribed layout")?;
+    for link in &plan.links {
+        let original=snapshot.nodes.get(&link.from).unwrap();let is_link=original.kind=="symlink";
+        let p=node_path(host,&dest,&link.to,is_link)?;let node=read_node(host,&p,is_link,"",false)?;
+        require(same(&node.info,&original.info),&format!("not an original-source hardlink: {}",link.to))?;
+        require(node.bytes==original.bytes && node.digest==original.digest,&format!("projection bytes changed: {}",link.to))?;
+        if is_link {require(node.raw==original.raw,&format!("projection symlink target changed: {}",link.to))?;}
+    }
+    Ok(Summary{manifest:join(&dest,MANIFEST),digest:manifest.digest,commit:snapshot.commit,files:snapshot.nodes.len(),aliases:plan.aliases,symlinks:plan.symlinks,create:false})
+}
+fn remove_raw(host:&mut Host,path:&[u8])->Result<(),String> {
+    let fields=host.raw("stat",&vec![path.to_vec()])?;require(fields.len()==1usize,"invalid cleanup stat")?;
+    if let Some(info)=parse_stat(&text(&fields[0],"host metadata")?)? {
+        if info.kind==16384u32 {
+            let names=host.raw("list",&vec![path.to_vec()])?;require(names.len()==1usize,"invalid cleanup listing")?;
+            for name in split_nul(&names[0]) {
+                if !name.is_empty(){let mut next=path.to_vec();next.push(b'/');next.extend_from_slice(&name);remove_raw(host,&next)?;}
+            }
+            host.raw("rmdir",&vec![path.to_vec()])?;
+        }else{host.raw("unlink",&vec![path.to_vec()])?;}
+    }
+    Ok(())
+}
+fn remove_owned(host:&mut Host,path:&str,identity:&Stat)->Result<(),String> {
+    if let Some(current)=host.stat(path)? {
+        require(current.kind==16384u32 && same(&current,identity),&format!("refusing cleanup of replaced destination: {path}"))?;
+        remove_raw(host,path.as_bytes())?;
+    }
+    Ok(())
+}
+fn create_owned(host:&mut Host,snapshot:&Snapshot,plan:&Plan,dest:&str,identity:&mut Option<Stat>)->Result<Summary,String> {
+    host.empty("checkpoint")?;
+    host.action("mkdir",&vec![dest.to_string()])?;
+    *identity=Some(host.stat(dest)?.ok_or("cannot record newly created DEST identity".to_string())?);
+    host.empty("checkpoint")?;
+    let mut directories=plan.directories.clone();directories.sort();
+    for dir in directories{host.action("mkdir",&vec![join(dest,&dir)])?;host.empty("checkpoint")?;}
+    for link in &plan.links {
+        let from=node_path(host,&snapshot.root,&link.from,true)?;let to=join(dest,&link.to);
+        if let Err(e)=host.action("link",&vec![from,to.clone()]) {
+            let message=if e.starts_with("!"){e[1..].to_string()}else{e};
+            return Err(format!("hardlink {to}: {message} (copy fallback is forbidden)"));
+        }
+        host.empty("checkpoint")?;
+    }
+    host.raw("write-new",&vec![join(dest,MANIFEST).into_bytes(),plan.json.as_bytes().to_vec()])?;
+    host.empty("checkpoint")?;
+    let mut result=verify_projection(host,&snapshot.root,dest)?;host.empty("checkpoint")?;
+    result.create=true;Ok(result)
+}
+fn project(host:&mut Host,source:&str,dest:&str)->Result<Summary,String> {
+    host.empty("interruptible")?;
+    let (snapshot,plan)=layout(source_snapshot(host,source)?)?;let dest=destination(host,dest,&snapshot.root)?;
+    require(host.stat(&dest)?.is_none(),&format!("DEST already exists: {dest}"))?;
+    let mut identity=None;let result=create_owned(host,&snapshot,&plan,&dest,&mut identity);
+    match result{
+        Ok(value)=>Ok(value),
+        Err(e)=>{
+            if let Some(info)=identity {
+                if let Err(cleanup)=remove_owned(host,&dest,&info){return Err(format!("!{}\ncleanup also failed: {}",display_error(&e),display_error(&cleanup)));}
+            }
+            Err(e)
+        },
+    }
+}
+fn main(mut arguments:Arguments,input:Stdin,output:Stdout,errors:Stderr,mut status:ExitStatus) {
+    let mut host=Host{input,output,errors};
+    let result=match options(&arguments.args()) {
+        Err(e)=>Err(e),
+        Ok(o)=>{
+            if o.help{host.result(HELP)}
+            else if o.self_test{Err("self-test requires the fixture launcher".to_string())}
+            else {
+                let r=if o.verify{verify_projection(&mut host,&o.source,&o.dest)}else{project(&mut host,&o.source,&o.dest)};
+                match r{Err(e)=>Err(e),Ok(value)=>host.result(&summary(&value))}
+            }
+        },
+    };
+    if let Err(e)=result{report_error(&mut host.errors,&mut status,&e);}
+}
+fn self_checks(mut output:Stdout,mut errors:Stderr,mut status:ExitStatus) {
+    let mut nodes=BTreeMap::new();
+    nodes.insert("src/lib.rs".to_string(),Node{info:Stat{device:String::new(),inode:String::new(),mode:0u32,size:0usize,kind:32768u32,mtime:String::new(),ctime:String::new()},kind:"regular".to_string(),raw:Vec::new(),digest:String::new(),git_blob:String::new(),bytes:0usize});
+    let legacy=Snapshot{root:"/fixture/source".to_string(),commit:"a".repeat(40usize),origin:"https://example.invalid/specimen.git".to_string(),format:"sha1".to_string(),
+        files:vec![object!("path"=>st("src/lib.rs"),"sha256"=>st(&sha256::hex_digest(b"")),"bytes"=>num(0usize),"git_blob"=>st("e69de29bb2d1d6434b8b29ae775ad8c2e48c5391"),"git_mode"=>st("100644"))],nodes};
+    let result=layout(legacy).and_then(|pair:(Snapshot,Plan)| -> Result<(),String> {
+        require(sha256::hex_digest(pair.1.json.as_bytes())=="1f747dc9f11deb92d2ab2942bb19257601eddd9f4f2555ddd26c478767674ab2","self-test: legacy regular-only manifest is byte-identical")?;
+        require(safe_path("../escape.rs").is_err(),"self-test: parent escape rejected")?;
+        require(safe_path("/escape.rs").is_err(),"self-test: absolute path rejected")?;
+        Ok(())
+    });
+    match result{Err(e)=>report_error(&mut errors,&mut status,&e),Ok(())=>output.write(b"3\n")}
+}
+
+fn split_nul(raw:&[u8])->Vec<Vec<u8>> {
+    let mut result=Vec::new();let mut start=0usize;
+    for i in 0usize..raw.len(){if raw[i]==0u8{result.push(raw[start..i].to_vec());start=i+1usize;}}
+    if start<raw.len(){result.push(raw[start..].to_vec());}result
+}
+fn join_parts(parts:&[String])->String {
+    let mut result=String::new();for i in 0usize..parts.len(){if i>0usize{result.push('/');}result.push_str(&parts[i]);}result
+}

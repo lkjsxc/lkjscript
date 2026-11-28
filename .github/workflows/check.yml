@@ -6,8 +6,8 @@ jobs:
     container: debian:bookworm-slim
     steps:
       - name: Gate dependencies
-        # C builds independent syscall witnesses; the compiler bootstraps from its seed.
-        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates gcc libc6-dev
+        # C builds syscall witnesses and the projector host bridge; the compiler bootstraps from its seed.
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates gcc libc6-dev time
       - uses: actions/checkout@v4
       - name: Seed-only compiler bootstrap
         run: |
@@ -40,10 +40,18 @@ jobs:
     container: debian:bookworm-slim
     steps:
       - name: Host-tool dependencies
-        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates nodejs
+        run: apt-get update && apt-get install -y --no-install-recommends git ca-certificates gcc libc6-dev time
       - uses: actions/checkout@v4
-      - name: Git projection
-        run: node tools/real-programs/project.mjs --self-test
+      - name: Checked Git projection and production probe
+        run: |
+          for tool in node nodejs; do
+            if command -v "$tool" >/dev/null 2>&1; then
+              printf 'unexpected host-tool dependency: %s\n' "$tool" >&2
+              exit 1
+            fi
+          done
+          sh tools/bootstrap.sh
+          bash tools/real-programs/project-test.sh target/lkjscript
   witness:
     runs-on: ubuntu-latest
     continue-on-error: true

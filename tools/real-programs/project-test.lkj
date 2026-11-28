@@ -1,0 +1,115 @@
+//! Independent fixture assertions over actual projector files and reports.
+//! No production policy or JSON renderer is imported.
+use std::json::{self,Value};
+use std::sha256;
+fn require(ok:bool,why:&str)->Result<(),String>{if ok{Ok(())}else{Err(why.to_string())}}
+fn read(root:&mut ReadDirectory,path:&str)->Result<Vec<u8>,String>{
+    let mut file=root.open(path).map_err(|n:i64|->String{format!("open {path}: {n}")})?;
+    file.read_to_end().map_err(|n:i64|->String{format!("read {path}: {n}")})
+}
+fn parse(root:&mut ReadDirectory,path:&str)->Result<Value,String>{
+    json::parse(&read(root,path)?).map_err(|e:std::json::Error|->String{format!("{e}")})
+}
+fn field<'a>(v:&'a Value,name:&str)->Result<&'a Value,String>{v.get(name).ok_or(format!("missing field: {name}"))}
+fn string<'a>(v:&'a Value,name:&str)->Result<&'a str,String>{field(v,name)?.as_str().ok_or(format!("non-string: {name}"))}
+fn number(v:&Value,name:&str,n:&str)->bool{v.get(name).and_then(|x:&Value|x.as_number())==Some(n)}
+fn check(args:&[String],root:&mut ReadDirectory,output:&mut Stdout)->Result<(),String>{
+    require(!args.is_empty(),"missing validator mode")?;
+    if args[0]=="get"{
+        require(args.len()==3usize,"get FILE KEY")?;let v=parse(root,&args[1])?;let f=field(&v,&args[2])?;
+        if let Some(s)=f.as_str(){output.write(s.as_bytes());}
+        else{output.write(json::stringify(f).unwrap().as_bytes());}output.write(b"\n");return Ok(());
+    }
+    if args[0]=="report"{
+        require(args.len()==10usize,"report FILE SOURCE DEST COMMIT OP FILES ALIASES SYMLINKS MANIFEST")?;
+        let v=parse(root,&args[1])?;let manifest=read(root,&args[9])?;let m=json::parse(&manifest).map_err(|e:std::json::Error|->String{format!("{e}")})?;
+        require(string(&v,"operation")?==args[5].as_str(),"operation")?;
+        require(string(&v,"manifest")?==format!("{}/projection.json",args[3]).as_str(),"manifest path")?;
+        require(string(&v,"manifest_sha256")?==sha256::hex_digest(&manifest).as_str(),"manifest digest")?;
+        require(string(&v,"commit")?==args[4].as_str(),"real Git commit")?;
+        require(number(&v,"tracked_files",&args[6]) && number(&v,"aliases",&args[7]),"file/alias counts")?;
+        if args[8]=="0"{require(v.get("tracked_symlinks").is_none(),"omit zero symlink count")?;}
+        else{require(number(&v,"tracked_symlinks",&args[8]),"symlink count")?;}
+        if args[5]=="create"{require(v.get("read_only").is_none(),"create omits read_only")?;}
+        else{require(v.get("read_only").and_then(|x:&Value|x.as_bool())==Some(true),"verify read_only")?;}
+        let source=field(&m,"source")?;
+        require(string(source,"root")?==args[2].as_str() && string(source,"commit")?==args[4].as_str(),"source root and commit")?;
+        let files=field(&m,"files")?.as_array().ok_or("files array".to_string())?;
+        let aliases=field(&m,"aliases")?.as_array().ok_or("aliases array".to_string())?;
+        require(format!("{}",files.len()).as_str()==args[6].as_str() && format!("{}",aliases.len()).as_str()==args[7].as_str(),"manifest counts")?;
+        return Ok(());
+    }
+    if args[0]=="directory-link"{
+        require(args.len()==2usize,"directory-link MANIFEST")?;
+        let m=parse(root,&args[1])?;let files=field(&m,"files")?.as_array().ok_or("files".to_string())?;
+        for f in files{if string(f,"path")?=="bench/test-pages"{
+            require(string(f,"kind")?=="symlink" && string(f,"target")?=="../test-pages" &&
+                string(f,"resolved_target")?=="test-pages" && string(f,"target_kind")?=="directory" &&
+                string(f,"sha256")?==sha256::hex_digest(b"../test-pages").as_str(),"link bytes and original graph")?;return Ok(());
+        }}
+        return Err("missing directory symlink".to_string());
+    }
+    if args[0]=="golden"{
+        require(args.len()==3usize,"golden MANIFEST SHA256")?;
+        let raw=read(root,&args[1])?;let input=String::from_utf8(raw).map_err(|_|->String{"UTF-8 manifest".to_string()})?;
+        let mut normalized=String::new();let mut roots=0usize;let mut commits=0usize;
+        // Replace only the two nondeterministic source fields, preserving every
+        // other byte of the original producer's pinned ASCII fixture manifest.
+        for line in input.as_str().split('\n'){
+            if line.starts_with("      \"root\" : "){normalized.push_str("      \"root\" : \"/fixture/source\"");roots+=1usize;}
+            else if line.starts_with("      \"commit\" : "){normalized.push_str(&format!("      \"commit\" : \"{}\",","a".repeat(40usize)));commits+=1usize;}
+            else{normalized.push_str(line);}
+            normalized.push('\n');
+        }
+        require(roots==1usize && commits==1usize,"normalization fields")?;
+        // split includes the final empty field; remove only its added newline.
+        let raw=&normalized.as_bytes()[..normalized.len()-1usize];
+        require(sha256::hex_digest(raw).as_str()==args[2].as_str(),"independent full-manifest golden")?;return Ok(());
+    }
+    if args[0]=="probe"{
+        require(args.len()==5usize,"probe RECEIPT MANIFEST COMMIT COMPILER_HASH")?;
+        let receipt=parse(root,&args[1])?;let manifest=read(root,&args[2])?;
+        let manifest_value=json::parse(&manifest).map_err(|e:std::json::Error|->String{format!("{e}")})?;
+        let digest=sha256::hex_digest(&manifest);
+        require(string(&receipt,"kind")?=="unmodified_real_program_root_observations","probe kind")?;
+        let package=field(&receipt,"package")?;require(string(package,"commit")?==args[3].as_str(),"probe actual Git identity")?;
+        require(string(&receipt,"projection_manifest_sha256")?==digest.as_str(),"probe exact projection bytes")?;
+        let compiler=field(&receipt,"compiler")?;
+        require(string(compiler,"sha256")?==args[4].as_str(),"probe actual compiler identity")?;
+        let before=field(&receipt,"verification_before")?;let after=field(&receipt,"verification_after")?;
+        require(json::stringify(before).unwrap()==json::stringify(after).unwrap(),"before/after production verifier identity")?;
+        require(string(before,"operation")?=="verify" && string(before,"commit")?==args[3].as_str() &&
+            string(before,"manifest_sha256")?==digest.as_str() && before.get("read_only").and_then(|v:&Value|v.as_bool())==Some(true),"production verifier fields")?;
+        let source=string(field(&manifest_value,"source")?,"root")?;
+        let library=string(field(&receipt,"library")?,"root")?;
+        let projected_manifest=string(before,"manifest")?;
+        require(projected_manifest.ends_with("/projection.json"),"projected manifest suffix")?;
+        let projected=&projected_manifest[..projected_manifest.len()-16usize];
+        let rows=field(&receipt,"observations")?.as_array().ok_or("probe observations".to_string())?;
+        require(rows.len()==2usize,"two production observations")?;
+        for i in 0usize..2usize{
+            let row=&rows[i];let route=if i==0usize{"original_suffix"}else{"suffix_projection"};
+            let entry=if i==0usize{"src/lib.rs"}else{"src/lib.lkj"};let selected_root=if i==0usize{source}else{projected};
+            require(string(row,"route")?==route && string(row,"upstream_entry")?=="src/lib.rs","production route selection")?;
+            require(number(row,"launcher_signal","0") && number(row,"exit_status",if i==0usize{"1"}else{"0"}),"actual compiler refusal/acceptance")?;
+            let command=field(row,"command")?.as_array().ok_or("probe command".to_string())?;
+            require(command.len()==7usize && command[0].as_str()==Some(string(compiler,"path")?) &&
+                command[1].as_str()==Some("check") && command[2].as_str()==Some(entry) &&
+                command[3].as_str()==Some("--source-dir") && command[4].as_str()==Some(selected_root) &&
+                command[5].as_str()==Some("--library-dir") && command[6].as_str()==Some(library),"actual compiler command")?;
+            for stream in vec!["stdout".to_string(),"stderr".to_string(),"time_report".to_string()]{
+                let record=field(row,&stream)?;let raw=string(record,"text")?;
+                require(number(record,"bytes",&format!("{}",raw.len())) && string(record,"sha256")?==sha256::hex_digest(raw.as_bytes()).as_str(),"raw diagnostic identity")?;
+            }
+            if i==0usize{require(string(field(row,"stderr")?,"text")?=="src/lib.rs: E_SOURCE_EXTENSION source files use .lkj; checked IR uses .lkjir\n","original suffix diagnostic")?;}
+            else{require(number(field(row,"stderr")?,"bytes","0"),"projected clean diagnostics")?;}
+        }
+        Ok(())
+    }else{Err("unknown validator mode".to_string())}
+
+}
+fn main(mut arguments:Arguments,mut fixture:ReadDirectory,mut output:Stdout,mut errors:Stderr,mut status:ExitStatus){
+    let mut args:Vec<String>=Vec::new();
+    for raw in arguments.args(){match String::from_utf8(raw){Ok(s)=>args.push(s),Err(_)=>{errors.write(b"invalid test argument\n");status.set_status(1u8);return;}}}
+    if let Err(e)=check(&args,&mut fixture,&mut output){errors.write(format!("project test: {e}\n").as_bytes());status.set_status(1u8);}
+}

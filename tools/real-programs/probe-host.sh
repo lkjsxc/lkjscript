@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Linux host boundary: path resolution for grants, the still-hosted Git verifier,
+# Linux host boundary: path resolution for grants, the adjacent checked Git verifier,
 # the explicitly chosen GNU-time launcher, and hardlink publication. The checked
 # program drives the transaction through a NUL-framed, fixed-verb protocol.
 # Source this file; the public launcher never accepts a substitute verifier.
@@ -20,8 +20,8 @@ build_probe() (
 
 run_probe() (
     set -euo pipefail
-    local select=$1 main=$2 verifier_kind=$3 verifier=$4
-    shift 4
+    local select=$1 main=$2 verifier=$3
+    shift 3
     local scratch temporary='' child='' request_fd reply_fd
     scratch=$(mktemp -d)
     cleanup() {
@@ -111,19 +111,8 @@ run_probe() (
         case "$verb" in
             verify)
                 rc=0
-                if [[ $verifier_kind == node ]]; then
-                    if ! command -v node >/dev/null 2>&1; then
-                        : > "$scratch/stdout"; : > "$scratch/stderr"
-                        reply 'error:projection verification failed: spawnSync node ENOENT'
-                        continue
-                    fi
-                    supervise "$scratch/stdout" "$scratch/stderr" \
-                        node "$verifier" --verify "$source" "$projection"
-                else
-                    # Test-only entry, called directly by the offline harness.
-                    supervise "$scratch/stdout" "$scratch/stderr" \
-                        "$verifier" --verify "$source" "$projection"
-                fi
+                supervise "$scratch/stdout" "$scratch/stderr" \
+                    "$verifier" --verify "$source" "$projection"
                 if ((signal)); then reply null; else reply "$rc"; fi
                 ;;
             load)

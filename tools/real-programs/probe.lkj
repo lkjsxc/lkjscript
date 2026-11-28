@@ -32,7 +32,7 @@ fn parse_json(raw: &[u8], description: &str) -> Result<Value,String> {
     json::parse(value.as_bytes()).map_err(|e: std::json::Error| -> String { format!("{e}") })
 }
 fn line(v: &Value) -> String { format!("{}\n",canonical(v,false)) }
-const HELP: &str = "Usage: probe.sh --compiler COMPILER --library LIBRARY --source SOURCE\n       --projection PROJECTION --package NAME --version EXACT --entry src/lib.rs\n       [--entry another/root.rs ...] --output NEW_RECEIPT.json [--time GNU_TIME]\nSOURCE and PROJECTION must already pass project.mjs --verify. Every diagnostic byte,\nexact command, input identity, load, elapsed wall time and peak process RSS is retained.\nThese source-root observations do not establish Cargo-equivalent admission.\n";
+const HELP: &str = "Usage: probe.sh --compiler COMPILER --library LIBRARY --source SOURCE\n       --projection PROJECTION --package NAME --version EXACT --entry src/lib.rs\n       [--entry another/root.rs ...] --output NEW_RECEIPT.json [--time GNU_TIME]\nSOURCE and PROJECTION must already pass project.sh --verify. Every diagnostic byte,\nexact command, input identity, load, elapsed wall time and peak process RSS is retained.\nThese source-root observations do not establish Cargo-equivalent admission.\n";
 
 struct Options {
     paths: Vec<Vec<u8>>,
@@ -320,7 +320,7 @@ fn run(args: &[Vec<u8>], host: &mut Host, clock: &mut Clock, compiler_dir: &mut 
     if args[5].as_slice()!=b"yes" { return fail("compiler is not executable"); }
     if args[6].as_slice()!=b"yes" { return fail("GNU-time-compatible launcher is not executable"); }
     if args[7].as_slice()==b"yes" { return fail("output already exists"); }
-    if args[8].as_slice()!=b"yes" { return fail("project.mjs must be adjacent to probe.sh"); }
+    if args[8].as_slice()!=b"yes" { return fail("project.sh must be adjacent to probe.sh"); }
     let leaf = text(&args[9],"resolved input path")?;
     let before = verify(host,errors)?;
     let manifest_raw = read(projection_dir,"projection.json")?;

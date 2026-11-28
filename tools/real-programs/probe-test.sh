@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Offline byte-path and observation controls. Git projection is still a separate
-# hosted job; this suite supplies a pinned, independently verified fixture
-# manifest with the same verifier response contract, not a fake probe receipt.
+# Offline byte-path and observation controls. This suite retains a pinned,
+# independent fixture verifier. project-test.sh separately runs the production
+# probe.sh + project.sh path with real Git and compiler observations.
 set -euo pipefail
 
 sanitize_git() {
@@ -114,7 +114,7 @@ test_probe() (
     fixture "$tmp" utf-roots src/café.rs yes
     local -a args
     local checks=0 label entry unicode receipt rc output expected
-    invoke() { run_probe "$work/select" "$work/probe" executable "$tmp/verifier" "$@"; }
+    invoke() { run_probe "$work/select" "$work/probe" "$tmp/verifier" "$@"; }
     for label in ascii utf-entry utf-roots; do
         entry=src/café.rs; unicode=no; receipt=receipt-源.json
         [[ $label != ascii ]] || { entry=src/lib.rs; receipt=receipt.json; }
