@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#[cfg(doctest)]
+const IGNORED: i64 = unresolved::<Vec<Vec<i64>>>();
+#[cfg(doctest)]
+const DOCUMENT: &str = include_str!("absent-disabled-constant.txt");
+#[cfg(doctest)]
+const fn ignored() -> i64 { unresolved() }
+#[cfg(doctest)]
+pub const unsafe extern "C" fn qualified() -> i64 { unresolved() }
+#[cfg(doctest)]
+extern crate absent as _;
+fn probe() -> i64 { 42i64 }

@@ -902,6 +902,73 @@ struct Parser {
     fragment: bool,
 }
 
+// Syntax probes restore parser context and token occurrence identity together.
+// The program checkpoint also undoes writes to existing macro provenance records.
+struct ParserCheckpoint {
+    tokens: Vec<Token>,
+    at: usize,
+    program: macros::ParseCheckpoint,
+    module: String,
+    scope: ModuleId,
+    block: Option<BlockId>,
+    macro_scope: Option<ModuleId>,
+    carriers: usize,
+    diagnostics: usize,
+    blocked: usize,
+    recovery: usize,
+    diagnostic_keys: BTreeSet<(FileId, usize, usize, String, String)>,
+    self_context: Option<usize>,
+    expansion: Option<usize>,
+    probing: bool,
+    fragment: bool,
+}
+
+impl ParserCheckpoint {
+    fn new(parser: &Parser) -> Self {
+        Self {
+            tokens: parser.tokens.clone(), at: parser.at,
+            program: macros::ParseCheckpoint::new(&parser.program),
+            module: parser.module.clone(), scope: parser.scope, block: parser.block,
+            macro_scope: parser.macro_scope, carriers: parser.macro_carriers.len(),
+            diagnostics: parser.diagnostics.len(), blocked: parser.blocked.len(), recovery: parser.recovery.len(),
+            diagnostic_keys: parser.diagnostic_keys.clone(), self_context: parser.self_context,
+            expansion: parser.expansion, probing: parser.probing, fragment: parser.fragment,
+        }
+    }
+    fn restored_cursor(&self, parser: &Parser) -> Option<usize> {
+        // Parsing rewrites only the consumed prefix. The remaining suffix identifies
+        // the occurrence even when macro-transcribed tokens share source spans.
+        let remaining = parser.tokens.len().checked_sub(parser.at)?;
+        let end = self.tokens.len().checked_sub(remaining)?;
+        let actual = parser.tokens.get(parser.at)?;
+        let original = self.tokens.get(end)?;
+        if end < self.at || actual.kind != original.kind || actual.text != original.text
+            || actual.literal_spelling != original.literal_spelling || actual.span != original.span
+            || actual.origin != original.origin || actual.context != original.context {
+            return None;
+        }
+        Some(end)
+    }
+    fn restore(self, parser: &mut Parser) {
+        parser.tokens = self.tokens;
+        parser.at = self.at;
+        parser.module = self.module;
+        parser.scope = self.scope;
+        parser.block = self.block;
+        parser.macro_scope = self.macro_scope;
+        parser.macro_carriers.truncate(self.carriers);
+        parser.diagnostics.truncate(self.diagnostics);
+        parser.blocked.truncate(self.blocked);
+        parser.recovery.truncate(self.recovery);
+        parser.diagnostic_keys = self.diagnostic_keys;
+        parser.self_context = self.self_context;
+        parser.expansion = self.expansion;
+        parser.probing = self.probing;
+        parser.fragment = self.fragment;
+        self.program.rollback(&mut parser.program);
+    }
+}
+
 enum FormatOrigin { Literal(usize), Expansion, Other }
 
 enum BlockPart {
@@ -1278,39 +1345,37 @@ impl Parser {
     // Attribute values have expression syntax, but their producers run only after
     // conditional selection. A syntax probe must not retain captures or include reads.
     fn attribute_value(&mut self) -> Result<(usize, usize), Diagnostic> {
-        let start = self.at;
-        let tokens = self.tokens.clone();
-        let saved = macros::ParseCheckpoint::new(&self.program);
-        let probing = self.probing;
-        let scope = self.scope;
-        let block = self.block;
-        let module = self.module.clone();
-        let macro_scope = self.macro_scope;
-        let self_context = self.self_context;
-        let carriers = self.macro_carriers.len();
-        let diagnostics = self.diagnostics.len();
-        let keys = self.diagnostic_keys.clone();
-        let blocked = self.blocked.len();
-        let recovery = self.recovery.len();
+        let saved = ParserCheckpoint::new(self);
+        let start = saved.at;
         self.probing = true;
         let result = self.expr(true);
-        let problem = self.diagnostics.get(diagnostics).cloned();
-        self.probing = probing;
-        self.scope = scope;
-        self.block = block;
-        self.module = module;
-        self.macro_scope = macro_scope;
-        self.self_context = self_context;
-        self.macro_carriers.truncate(carriers);
-        self.diagnostics.truncate(diagnostics);
-        self.diagnostic_keys = keys;
-        self.blocked.truncate(blocked);
-        self.recovery.truncate(recovery);
-        saved.rollback(&mut self.program);
-        self.tokens = tokens;
+        let problem = self.diagnostics.get(saved.diagnostics).cloned();
+        let end = saved.restored_cursor(self);
+        saved.restore(self);
         result?;
         if let Some(problem) = problem { return Err(problem); }
-        Ok((start, self.at))
+        let end = end.ok_or_else(|| self.err("attribute value must end at a complete token boundary"))?;
+        self.at = end;
+        Ok((start, end))
+    }
+    fn documentation_value(&mut self, start: usize, end: usize) -> Result<(), Diagnostic> {
+        self.at = start;
+        let literal = self.token().kind == TokenKind::String && end == start + 1usize;
+        let include = self.token().kind == TokenKind::Ident
+            && identifier_name(&self.token().text) == "include_str"
+            && self.tokens.get(start + 1usize).is_some_and(|token| token.text == "!");
+        if !literal && !include {
+            return Err(Diagnostic::new(self.token().span, "E_UNSUPPORTED",
+                "doc values support a string literal or include_str! with a literal file path"));
+        }
+        if literal { return Ok(()); }
+        let value = self.expr(true)?;
+        if self.at != end || !(matches!(&self.program.exprs[value].kind, Expr::String(_))
+            || matches!(&self.program.exprs[value].kind, Expr::Macro { name, .. } if name == "include_str")) {
+            return Err(Diagnostic::new(self.tokens[start].span, "E_UNSUPPORTED",
+                "doc values support a string literal or include_str! with a literal file path"));
+        }
+        Ok(())
     }
     fn attrs(&mut self, allow_inner: bool) -> Result<Vec<Attribute>, Diagnostic> {
         let mut attrs = Vec::new();
@@ -1404,24 +1469,10 @@ impl Parser {
             let after = self.at;
             for (start, end, inner) in values {
                 if !inner && !enabled { continue; }
-                self.at = start;
-                let literal = self.token().kind == TokenKind::String && end == start + 1usize;
-                let include = self.token().kind == TokenKind::Ident
-                    && identifier_name(&self.token().text) == "include_str"
-                    && self.tokens.get(start + 1usize).is_some_and(|token| token.text == "!");
-                if !literal && !include {
-                    return Err(Diagnostic::new(self.token().span, "E_UNSUPPORTED",
-                        "doc values support a string literal or include_str! with a literal file path"));
-                }
-                if literal { self.at = end; continue; }
-                let value = self.expr(true)?;
-                if self.at != end || !(matches!(&self.program.exprs[value].kind, Expr::String(_))
-                    || matches!(&self.program.exprs[value].kind, Expr::Macro { name, .. } if name == "include_str")) {
-                    return Err(Diagnostic::new(self.tokens[start].span, "E_UNSUPPORTED",
-                        "doc values support a string literal or include_str! with a literal file path"));
-                }
+                let result = self.documentation_value(start, end);
+                self.at = after;
+                result?;
             }
-            self.at = after;
         }
         Ok(attrs)
     }
@@ -1441,26 +1492,13 @@ impl Parser {
     fn skip_disabled(&mut self) -> Result<(), Diagnostic> {
         let start = self.at;
         self.skip_disabled_tokens()?;
-        let end = self.at;
-        let tokens = self.tokens.clone();
-        let saved = macros::ParseCheckpoint::new(&self.program);
-        let probing = self.probing;
-        let scope = self.scope;
-        let block = self.block;
-        let module = self.module.clone();
-        let macro_scope = self.macro_scope;
-        let self_context = self.self_context;
-        let carriers = self.macro_carriers.len();
-        let diagnostics = self.diagnostics.len();
-        let keys = self.diagnostic_keys.clone();
-        let blocked = self.blocked.len();
-        let recovery = self.recovery.len();
+        let saved = ParserCheckpoint::new(self);
         self.at = start;
         self.probing = true;
         let result = self.disabled_item_syntax();
         let mut problem: Option<Diagnostic> = None;
         let mut unsupported = false;
-        for error in &self.diagnostics[diagnostics..] {
+        for error in &self.diagnostics[saved.diagnostics..] {
             // Recovery after a grammar frontier can produce secondary parse errors.
             // They cannot establish invalid Rust syntax in a discarded declaration.
             if error.code != "E_PARSE" { unsupported = true; }
@@ -1469,20 +1507,7 @@ impl Parser {
         if let Err(error) = result {
             if error.code == "E_PARSE" && !unsupported && problem.is_none() { problem = Some(error); }
         }
-        self.tokens = tokens;
-        self.at = end;
-        self.probing = probing;
-        self.scope = scope;
-        self.block = block;
-        self.module = module;
-        self.macro_scope = macro_scope;
-        self.self_context = self_context;
-        self.macro_carriers.truncate(carriers);
-        self.diagnostics.truncate(diagnostics);
-        self.diagnostic_keys = keys;
-        self.blocked.truncate(blocked);
-        self.recovery.truncate(recovery);
-        saved.rollback(&mut self.program);
+        saved.restore(self);
         if let Some(problem) = problem { return Err(problem); }
         Ok(())
     }
@@ -1490,8 +1515,20 @@ impl Parser {
         let start = self.token().span;
         let public = self.visibility()?;
         loop {
-            if self.is("unsafe") || self.is("async") || self.is("const") {
+            if self.is("unsafe") || self.is("async") {
                 self.at += 1usize;
+            } else if self.is("const") {
+                // Keep constant declarations for item(); only peel qualifiers when
+                // the complete prefix ends at a function, including const unsafe extern fn.
+                let mut at = self.at + 1usize;
+                if self.tokens.get(at).is_some_and(|token| token.text == "async") { at += 1usize; }
+                if self.tokens.get(at).is_some_and(|token| token.text == "unsafe") { at += 1usize; }
+                if self.tokens.get(at).is_some_and(|token| token.text == "extern") {
+                    at += 1usize;
+                    if self.tokens.get(at).is_some_and(|token| token.kind == TokenKind::String) { at += 1usize; }
+                }
+                if self.tokens.get(at).is_some_and(|token| token.text == "fn") { self.at = at; }
+                break;
             } else if self.take("extern") {
                 if self.take("crate") {
                     self.ident()?;
@@ -1508,8 +1545,7 @@ impl Parser {
             let attrs: Vec<Attribute> = Vec::new();
             return self.macro_definition(&attrs, &public);
         }
-        if self.macro_item_ahead() || matches!(self.token().text.as_str(), "fn" | "struct" | "enum" | "trait" | "impl" | "mod")
-            || self.is("const") && self.tokens.get(self.at + 1usize).is_some_and(|token| token.text == "fn") {
+        if self.macro_item_ahead() || matches!(self.token().text.as_str(), "fn" | "const" | "struct" | "enum" | "trait" | "impl" | "mod") {
             self.item(Vec::new(), public, start)?;
         }
         Ok(())

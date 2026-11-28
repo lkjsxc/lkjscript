@@ -1,0 +1,163 @@
+use super::{Lexer, Parser, Token, TokenKind};
+use crate::ast::*;
+use std::collections::BTreeSet;
+
+fn parser(text: &str) -> Parser {
+    let mut lexer = Lexer { source: text, at: 0usize, line: 1usize, column: 1usize };
+    let mut program = Program::default();
+    program.scopes.push(ModuleScope { path: String::new(), parent: None, crate_root: 0usize });
+    program.files.push(SourceFile { path: "case.lkj".to_string(), crate_root: 0usize });
+    let mut parser = Parser {
+        tokens: lexer.lex().unwrap(), at: 0usize, program, module: String::new(), scope: 0usize,
+        block: None, macro_scope: None, macro_carriers: Vec::new(), diagnostics: Vec::new(),
+        blocked: Vec::new(), recovery: Vec::new(), diagnostic_keys: BTreeSet::new(),
+        self_context: None, expansion: None, probing: false, fragment: false,
+    };
+    parser.add_type(Type::Infer, Span::default());
+    parser.add_type(Type::Tuple(Vec::new()), Span::default());
+    parser
+}
+fn unchanged(parser: &Parser, tokens: &[Token]) {
+    assert_eq!(parser.tokens.len(), tokens.len());
+    for (actual, expected) in parser.tokens.iter().zip(tokens.iter()) {
+        assert!(actual.kind == expected.kind);
+        assert_eq!(actual.text, expected.text);
+        assert_eq!(actual.literal_spelling, expected.literal_spelling);
+        assert!(actual.span == expected.span);
+        assert!(actual.origin == expected.origin);
+        assert_eq!(actual.context, expected.context);
+    }
+    assert_eq!(parser.program.types.len(), 2usize);
+    assert!(parser.program.exprs.is_empty());
+    assert!(parser.program.patterns.is_empty());
+    assert!(parser.program.blocks.is_empty());
+    assert!(parser.program.constants.is_empty());
+    assert!(parser.program.functions.is_empty());
+    assert!(parser.program.modules.is_empty());
+    assert_eq!(parser.program.scopes.len(), 1usize);
+    assert!(parser.program.macro_definitions.is_empty());
+    assert!(parser.program.macro_invocations.is_empty());
+    assert!(parser.program.macro_captures.is_empty());
+    assert!(parser.program.macro_parse_writes.is_empty());
+    assert!(parser.diagnostics.is_empty());
+    assert!(parser.diagnostic_keys.is_empty());
+    assert!(parser.blocked.is_empty());
+    assert!(parser.recovery.is_empty());
+    assert!(parser.macro_carriers.is_empty());
+    assert_eq!(parser.scope, 0usize);
+    assert!(parser.module.is_empty());
+    assert!(parser.block.is_none());
+    assert!(parser.macro_scope.is_none());
+    assert!(parser.self_context.is_none());
+    assert!(!parser.probing);
+}
+
+pub fn probe_success() -> usize {
+    let mut count = 0usize;
+    for expression in vec![
+        "value::<Vec<Vec<i64>>>()".to_string(),
+        "value as Vec<Vec<i64>>".to_string(),
+        "value::<Vec<Vec<i64>>>() + other::<Vec<Vec<i64>>>()".to_string(),
+        "include_str!(\"not-read.txt\")".to_string(),
+    ] {
+        let text = format!("{expression} ] fn sentinel() {{}}");
+        let mut parser = parser(&text);
+        let tokens = parser.tokens.clone();
+        let (start, end) = parser.attribute_value().unwrap();
+        assert_eq!(start, 0usize);
+        assert_eq!(parser.at, end);
+        assert!(parser.is("]"));
+        assert_eq!(parser.token().span.start, expression.len() + 1usize);
+        unchanged(&parser, &tokens);
+        count += 1usize;
+    }
+    let mut parser = parser("value::<Vec<Vec<i64>>>()");
+    let tokens = parser.tokens.clone();
+    let (start, end) = parser.attribute_value().unwrap();
+    assert_eq!(start, 0usize);
+    assert_eq!(end, tokens.len() - 1usize);
+    assert!(parser.token().kind == TokenKind::End);
+    unchanged(&parser, &tokens);
+    count + 1usize
+}
+
+pub fn probe_failure() -> usize {
+    let mut count = 0usize;
+    for expression in vec![
+        "value::<Vec<Vec<i64>>>( ]".to_string(),
+        "value as Vec<i64>> ]".to_string(),
+        "{ let broken = ; } ]".to_string(),
+    ] {
+        let mut parser = parser(&expression);
+        let tokens = parser.tokens.clone();
+        assert_eq!(parser.attribute_value().unwrap_err().code, "E_PARSE");
+        assert_eq!(parser.at, 0usize);
+        unchanged(&parser, &tokens);
+        count += 1usize;
+    }
+    let mut parser = parser("#[doc = value::<Vec<Vec<i64>>>()");
+    let tokens = parser.tokens.clone();
+    assert_eq!(parser.attrs(true).unwrap_err().code, "E_PARSE");
+    assert!(parser.token().kind == TokenKind::End);
+    unchanged(&parser, &tokens);
+    count + 1usize
+}
+
+pub fn attribute_failure() -> usize {
+    let mut count = 0usize;
+    for attributes in vec![
+        "#[doc = value::<Vec<Vec<i64>>>()] #[doc = \"later\"]".to_string(),
+        "#[doc = include_str!(let)] #[doc = \"later\"]".to_string(),
+        "#[doc = include_str!(\"not-read.txt\") + 1] #[doc = \"later\"]".to_string(),
+        "#[doc = \"first\"] #![doc = unsupported()]".to_string(),
+    ] {
+        let text = format!("{attributes} fn sentinel() {{}}");
+        let mut parser = parser(&text);
+        assert!(parser.attrs(true).is_err());
+        assert!(parser.is("fn"), "attribute error left cursor inside {attributes}");
+        assert_eq!(parser.token().span.start, attributes.len() + 1usize);
+        count += 1usize;
+    }
+    count
+}
+
+pub fn disabled_items() -> usize {
+    let mut count = 0usize;
+    for declaration in vec![
+        "const BAD: i64 = ;".to_string(),
+        "const BAD i64 = 1;".to_string(),
+        "const BAD: i64 1;".to_string(),
+        "const extern crate missing;".to_string(),
+        "const unsafe trait Hidden {}".to_string(),
+        "const fn bad() { let value = ; }".to_string(),
+        "pub const unsafe extern \"C\" fn bad() { let value = ; }".to_string(),
+    ] {
+        let text = format!("{declaration} fn sentinel() {{}}");
+        let mut parser = parser(&text);
+        let tokens = parser.tokens.clone();
+        assert_eq!(parser.skip_disabled().unwrap_err().code, "E_PARSE", "{declaration}");
+        assert!(parser.is("fn"));
+        assert_eq!(parser.token().span.start, declaration.len() + 1usize);
+        unchanged(&parser, &tokens);
+        count += 1usize;
+    }
+    for declaration in vec![
+        "const IGNORED: i64 = unresolved::<Vec<Vec<i64>>>();".to_string(),
+        "pub const _: i64 = unresolved();".to_string(),
+        "const DOCUMENT: &str = include_str!(\"not-read.txt\");".to_string(),
+        "const fn ignored() -> i64 { unresolved() }".to_string(),
+        "pub const unsafe extern \"C\" fn ignored() -> i64 { unresolved() }".to_string(),
+        "extern crate missing as _;".to_string(),
+        "mod ignored { macro_rules! hidden { () => { 1 }; } const VALUE: i64 = 1; }".to_string(),
+    ] {
+        let text = format!("{declaration} fn sentinel() {{}}");
+        let mut parser = parser(&text);
+        let tokens = parser.tokens.clone();
+        parser.skip_disabled().unwrap();
+        assert!(parser.is("fn"));
+        assert_eq!(parser.token().span.start, declaration.len() + 1usize);
+        unchanged(&parser, &tokens);
+        count += 1usize;
+    }
+    count
+}

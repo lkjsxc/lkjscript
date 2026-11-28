@@ -99,6 +99,8 @@ for setting in on off; do
     done
 done
 
+bash tools/attribute-parser-test.sh "$compiler"
+
 mkdir "$work/source" "$work/store" "$work/units" "$work/unit-store"
 head -c 32 /dev/urandom > "$work/key"
 cp "$cases/guide.txt" "$work/source/guide.txt"

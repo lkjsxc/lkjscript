@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#[cfg(doctest)]
+#[doc = value::<Vec<Vec<i64>>>()]
+fn turbofish() {}
+#[doc = (value as Vec<Vec<i64>>)]
+#[cfg(doctest)]
+fn cast() {}
+#[cfg(doctest)]
+#[unknown::tool = value::<Vec<Vec<i64>>>()]
+fn qualified() {}
+fn probe() -> i64 { 42i64 }

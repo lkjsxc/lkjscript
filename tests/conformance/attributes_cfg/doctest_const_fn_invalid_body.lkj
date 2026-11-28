@@ -1,0 +1,6 @@
+// expect: reject E_PARSE
+// witness: {"root":true}
+// attr-rust: reject expected expression
+#[cfg(doctest)]
+pub const unsafe extern "C" fn bad() { let value = ; }
+fn probe() -> i64 { 42i64 }
