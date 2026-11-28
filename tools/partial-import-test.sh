@@ -28,7 +28,7 @@ trap 'exit 130' INT
 trap 'exit 143' HUP TERM
 fail() { printf 'partial-import: %s\n' "$*" >&2; exit 1; }
 cases=(import_replay import_ambiguity import_poison import_nonleak import_outer_local import_macro_local import_empty import_pattern import_pattern_hidden import_namespaces import_ambiguous_inner import_ambiguous_outer import_ambiguous_pattern import_explicit_patterns import_grouped import_block_hidden import_inner_ambiguity import_inner_poison import_type_local import_enum_glob)
-valids=(replay ambiguity poison nonleak pattern pattern-hidden namespaces ambiguous-inner ambiguous-outer explicit-patterns grouped block-hidden outer-local macro-local inner-ambiguity inner-poison type-local block-projected enum-glob)
+valids=(replay ambiguity poison nonleak pattern pattern-hidden namespaces ambiguous-inner ambiguous-outer explicit-patterns grouped block-hidden outer-local macro-local inner-ambiguity inner-poison type-local block-projected pattern-projected enum-glob)
 mkdir "$work/cases"
 for name in "${cases[@]}"; do cp "tests/fixtures/partial_check/$name.lkj" "$work/cases/"; done
 verifier_compiler=${baseline:-$compiler}
@@ -37,7 +37,7 @@ sed '/^fn refusal()/d' "$work/cases/import_replay.lkj" > "$work/replay-valid.lkj
 sed '/^fn refusal()/d' "$work/cases/import_pattern.lkj" > "$work/pattern-valid.lkj"
 sed '/^fn refusal()/d' "$work/cases/import_namespaces.lkj" > "$work/namespaces-valid.lkj"
 sed '/^fn refusal()/d' "$work/cases/import_pattern_hidden.lkj" > "$work/pattern-hidden-valid.lkj"
-sed '/^    fn x()/d' "$work/pattern-hidden-valid.lkj" > "$work/pattern-projected-invalid.lkj"
+sed '/^    fn x()/d' "$work/pattern-hidden-valid.lkj" > "$work/pattern-projected-valid.lkj"
 sed '/^mod conflict {$/,/^}$/d; /^fn local_conflict()/,/^}$/d; /^fn refusal()/d' \
     "$work/cases/import_ambiguity.lkj" > "$work/ambiguity-valid.lkj"
 sed '/^fn after()/,/^}$/d; /^fn sibling()/,/^}$/d; /^fn other()/d; /^fn refusal()/d' \
@@ -82,10 +82,13 @@ for mode in off on; do
     # lkjscript still admits that isolated root, unlike Rust; count those
     # routes as a frontend boundary. The changed block projection now agrees
     # with Rust because its newly visible inner import hides the outer local.
+    # The changed pattern projection also agrees with Rust: the glob-visible
+    # scalar constant makes the macro's bare `x` a constant pattern (value 0).
     for name in "${valids[@]}" ambiguous-pattern; do
         source="$work/$name-valid.lkj"
         expected=42
         if [[ $name == block-projected ]]; then expected=22; fi
+        if [[ $name == pattern-projected ]]; then expected=0; fi
         "$compiler" ir "$source" --entry probe --library-dir "$library" --debug-assertions "$mode" --no-store -o "$work/$name-$mode.lkjir" > "$work/output" 2> "$work/error" || fail "$name valid $mode IR"
         for engine in native interpreter; do
             actual=$("$compiler" run "$source" --entry probe --library-dir "$library" --debug-assertions "$mode" --engine "$engine" --no-store 2> "$work/error") || fail "$name valid $mode/$engine"
@@ -100,7 +103,8 @@ for mode in off on; do
         # These cases exercise the corrected meaning rather than preserving
         # the baseline's inherited-local precedence or macro marked spelling.
         if [[ -n $baseline && $name != outer-local && $name != macro-local
-            && $name != inner-poison && $name != block-projected ]]; then
+            && $name != inner-poison && $name != block-projected
+            && $name != pattern-projected ]]; then
             "$baseline" ir "$source" --entry probe --library-dir "$library" --debug-assertions "$mode" --no-store -o "$work/baseline.lkjir" > "$work/output" 2> "$work/error" || fail "$name baseline valid IR"
             cmp "$work/baseline.lkjir" "$work/$name-$mode.lkjir" || fail "$name $mode ordinary IR changed"
         fi
@@ -174,10 +178,9 @@ for mode in off on; do
     done
     # Remove the unrelated capability refusal so the ordinary route must reach
     # ambiguity and absent lexical bindings themselves.
-    for name in ambiguity nonleak poison pattern-projected inner-ambiguity inner-poison; do
+    for name in ambiguity nonleak poison inner-ambiguity inner-poison; do
         code=E_NAME
         if [[ $name == poison || $name == inner-poison ]]; then code=E_UNSUPPORTED; fi
-        if [[ $name == pattern-projected ]]; then code=E_TYPE; fi
         for engine in native interpreter; do
             status=0
             "$compiler" run "$work/$name-invalid.lkj" --entry probe --library-dir "$library" --debug-assertions "$mode" --engine "$engine" --no-store > "$work/output" 2> "$work/refused-error" || status=$?
@@ -195,12 +198,12 @@ fi
 if [[ -n $witness ]]; then
     rust_values=0
     rust_verdicts=0
-    rust_projection_values=0
     for mode in off on; do
         for level in 0 3; do
             for name in "${valids[@]}"; do
                 expected=42
                 if [[ $name == block-projected ]]; then expected=22; fi
+                if [[ $name == pattern-projected ]]; then expected=0; fi
                 cp "$work/$name-valid.lkj" "$work/rust.lkj"
                 printf '\nfn main() { println!("{}", probe()); }\n' >> "$work/rust.lkj"
                 "$witness" --edition=2021 --crate-name partial_imports -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || fail "Rust $name valid $mode/$level"
@@ -234,11 +237,6 @@ if [[ -n $witness ]]; then
             fi
             grep -Fq 'error[E0659]' "$work/rust-error" || fail "Rust isolated bare ambiguous pattern $mode/$level wrong refusal"
             rust_verdicts=$((rust_verdicts + 1))
-            cp "$work/pattern-projected-invalid.lkj" "$work/rust.lkj"
-            printf '\nfn main() { println!("{}", probe()); }\n' >> "$work/rust.lkj"
-            "$witness" --edition=2021 --crate-name partial_imports -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || fail "Rust changed pattern projection $mode/$level"
-            [[ $("$work/rust") == 0 ]] || fail "Rust changed pattern projection $mode/$level value"
-            rust_projection_values=$((rust_projection_values + 1))
             cp "$work/poison-type-invalid.lkj" "$work/rust.lkj"
             printf '\nfn main() { println!("{}", probe()); }\n' >> "$work/rust.lkj"
             if "$witness" --edition=2021 --crate-name partial_imports -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error"; then
@@ -248,5 +246,5 @@ if [[ -n $witness ]]; then
             rust_verdicts=$((rust_verdicts + 1))
         done
     done
-    printf 'ok partial-import Rust: %s agreed values, %s context/boundary verdicts and %s changed-pattern projection boundary values; opt0/opt3 and both configurations\n' "$rust_values" "$rust_verdicts" "$rust_projection_values"
+    printf 'ok partial-import Rust: %s agreed values and %s context/boundary verdicts; opt0/opt3 and both configurations\n' "$rust_values" "$rust_verdicts"
 fi

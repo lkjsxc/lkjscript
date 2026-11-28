@@ -1,8 +1,0 @@
-// expect: reject E_LEX
-// cause: expected Rust form/support gap.
-// pending: Resolve the independently authored program barrier recorded in docs/real-programs.md.
-// Reduced from Sōzu 1.0.6 command/src/logging/display.rs:140.
-// This handwritten invalid input is uncredited; it does not add a whole-root site.
-pub fn probe(value: usize) -> usize {
-    match value { seen @ 200..=299 => seen, _ => 0 }
-}

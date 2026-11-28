@@ -1,0 +1,13 @@
+// expect: value 42
+// entry: verify
+// witness: {}
+// Reduced from Sōzu 1.0.6 command/src/logging/display.rs:140; admitted since pattern-position @ bindings landed.
+pub fn probe(value: usize) -> usize {
+    match value { seen @ 200..=299 => seen, _ => 0 }
+}
+
+pub fn verify() -> i64 {
+    assert_eq!(probe(250usize), 250usize);
+    assert_eq!(probe(404usize), 0usize);
+    42
+}
