@@ -1,0 +1,5 @@
+// expect: value 42
+// attr-rust: accept
+#![doc = include_str!{r#"guide.txt"#}]
+#[doc = include_str!["guide.txt",]]
+fn probe() -> i64 { 42i64 }

@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"root":true,"rustAccept":true}
+// attr-rust: accept
+// Rust accepts this form; lkjscript retains an explicit unsupported boundary.
+#[cfg(doctest = "1")] fn discarded() {}
+fn probe() -> i64 { 42i64 }

@@ -36,9 +36,9 @@ for engine in native interpreter; do
     if [[ $mode == --native && $engine != native || $mode == --interpreter && $engine != interpreter ]]; then continue; fi
     "$compiler" run main.lkj --source-dir "$fixture/contracts" --library-dir "$library" --no-store \
         --engine "$engine" > "$fixture/$engine.out" 2> "$fixture/$engine.error"
-    if [[ $(<"$fixture/$engine.out") != 18 ]]; then
-        printf 'configuration-origins: expected 18 controls on %s\n' "$engine" >&2
+    if [[ $(<"$fixture/$engine.out") != 28 ]]; then
+        printf 'configuration-origins: expected 28 controls on %s\n' "$engine" >&2
         exit 1
     fi
-    printf 'configuration-origins engine=%s controls=18\n' "$engine"
+    printf 'configuration-origins engine=%s controls=28\n' "$engine"
 done

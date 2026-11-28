@@ -1,0 +1,1 @@
+Documentation fixture: UTF-8 Ω 日本語.

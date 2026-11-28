@@ -2319,6 +2319,7 @@ fn request_key(options: &Options) -> String {
     optional_key(&mut out, &options.runtime_source);
     store::push_word(&mut out, options.no_library as usize);
     store::push_word(&mut out, options.configuration.debug_assertions as usize);
+    store::push_word(&mut out, options.configuration.doctest as usize);
     store::push_word(&mut out, options.profile as usize);
     store::push_word(&mut out, options.roundtrip as usize);
     match options.inline_limit {

@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#[rustfmt::skip]
+macro_rules! answer { () => { 42i64 }; }
+fn probe() -> i64 { answer!() }

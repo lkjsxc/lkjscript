@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+fn probe() -> i64 {
+    match 1i64 {
+        #[rustfmt::skip] 1i64 => 42i64,
+        _ => 0i64,
+    }
+}

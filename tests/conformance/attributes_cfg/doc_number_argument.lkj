@@ -1,0 +1,5 @@
+// expect: reject E_INCLUDE_PATH
+// witness: {"root":true,"rustAccept":false}
+// attr-rust: reject
+#[doc = include_str!(12)]
+fn probe() -> i64 { 42i64 }

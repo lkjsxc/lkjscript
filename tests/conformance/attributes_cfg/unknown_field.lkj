@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"root":true,"rustAccept":false}
+// attr-rust: reject E0433
+struct Refused { #[foo::bar] value: i64 }
+fn probe() -> i64 { 42i64 }
+fn dependent() -> i64 { Refused { value: 7i64 }.value }

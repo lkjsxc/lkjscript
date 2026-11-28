@@ -1,0 +1,8 @@
+// expect: reject E_INCLUDE_MISSING
+// witness: {"root":true,"rustAccept":false}
+// attr-rust: reject
+mod documented {
+    #![doc = include_str!("absent-doc.txt")]
+    pub fn value() -> i64 { 7i64 }
+}
+fn probe() -> i64 { 42i64 }

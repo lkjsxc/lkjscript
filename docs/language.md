@@ -210,6 +210,20 @@ include_str!("path") produces static UTF-8 text; include_bytes!("path") produces
 a static reference to an exact-size byte array. Paths are literal, relative to the
 containing file and beneath the granted source root. Missing/escaping paths reject;
 invalid UTF-8 needs include_bytes. [Include case](../tests/reference/include.lkj).
+The same loader accepts outer and inner `doc = include_str!("path")` attributes.
+Documentation is inert, but its included bytes and file identity remain source inputs
+for replay, reusable builds, source units and checked edits. Disabled owners do not
+expand their documentation macros or read the files. Other doc-value macros refuse;
+use a literal string or the existing include_str form.
+
+Attribute heads accept qualified paths, including an initial `::`. The exact relative
+`rustfmt::skip` path is inert on items, fields, variants, statements, expressions and
+match arms; inner forms are also inert. Raw path segments retain ordinary identity.
+Unknown qualified attributes refuse with a located `E_UNSUPPORTED`, preserving their
+possible producer footprint during partial checking. Leading `::` does not select the
+tool prelude. Arguments, including empty parentheses, on rustfmt::skip remain an
+explicit lkjscript boundary: Rust accepts those tool inputs. Inner tool attributes
+and several expression placements are lkjscript extensions to stable Rust.
 
 Resolution uses declaration/module identities, lexical scopes, aliases, qualified
 crate/self/super paths and prelude priority. Local declarations shadow prelude and
@@ -259,9 +273,13 @@ before resolution.
 Bare `cfg!(...)` returns an ordinary boolean; both branches of an ordinary `if`
 still undergo name, type, ownership and capability checking. Predicates compose
 through `all`, `any` and unary `not`, with comma separators and optional trailing
-commas. Existing target predicates describe Linux x86-64; cfg(test) and feature
-predicates remain false. Unknown predicates, malformed forms, duplicate option
-values and a configuration flag on program IR without `--runtime-source` refuse.
+commas. Existing target predicates describe Linux x86-64; cfg(test), cfg(doctest) and
+feature predicates remain false in ordinary commands. The explicit doctest=false input
+is bound alongside debug_assertions in replay, snapshots, reusable units and edits.
+String-valued doctest and cfg_attr remain explicit unsupported boundaries; Rust may
+accept them as unset options or conditionally applied attributes. Unknown predicates,
+malformed forms, duplicate option values and a configuration flag on program IR
+without `--runtime-source` refuse.
 With an explicit source runtime, the flag selects only that runtime's configuration;
 program IR retains its already-selected meaning and carries no configuration authority.
 A separately serialized program must receive the same external runtime source and
@@ -269,11 +287,14 @@ configuration to reproduce a source invocation using a custom runtime. The sourc
 frontend checkpoint, whole-program/unit cache keys, and query selectors bind the
 value; exact macro-origin replay reparses with that same explicit input.
 The recognized but unsupported debug_assert macros retain their existing boundary.
-Excluded declarations never enter resolution. Disabled statements must parse as
+Excluded declarations never enter resolution. Disabled declarations check recognized
+syntax with speculative syntax, token and macro state rolled back; unsupported grammar
+retains its balanced-token boundary. Disabled statements must parse as
 statements, but contribute no bindings, macro expansions or source loads. Removing
 a final statement can expose a preceding block expression as the block's value;
 a surviving semicolon still discards that value, including across macro splices.
-Other surviving statement attributes remain unsupported.
+The inert rustfmt::skip attribute is also accepted; other surviving statement
+attributes remain unsupported.
 Match arms accept outer `#[cfg(...)]` with the same predicates. Disabled arms
 must parse as arms and contribute no names, macro expansions or pattern coverage.
 Enabled arms keep their source order and ordinary guard, ownership and exhaustiveness rules.

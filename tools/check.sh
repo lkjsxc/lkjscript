@@ -194,6 +194,7 @@ parallel_step 1 module-path timeout --kill-after=10s 600s bash tools/module-path
 parallel_step 1 file-line timeout --kill-after=10s 600s bash tools/file-test.sh "$check_binary"
 parallel_step 1 unit-file timeout --kill-after=10s 600s bash tools/unit-file-test.sh "$check_binary"
 parallel_step 1 debug-configuration timeout --kill-after=10s 600s bash tools/debug-configuration-test.sh "$check_binary"
+parallel_step 1 attributes-cfg timeout --kill-after=10s 600s bash tools/attributes-cfg-test.sh "$check_binary"
 parallel_step 1 configuration-origins-native timeout --kill-after=10s 600s bash tools/configuration-origin-test.sh "$check_binary" --native
 parallel_step 1 configuration-origins-interpreter timeout --kill-after=10s 600s bash tools/configuration-origin-test.sh "$check_binary" --interpreter
 parallel_step 1 macro-statements timeout --kill-after=10s 600s bash tools/macro-statement-test.sh "$check_binary"

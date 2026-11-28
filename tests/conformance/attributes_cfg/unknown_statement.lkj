@@ -1,0 +1,7 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"root":true,"rustAccept":false}
+// attr-rust: reject E0433
+fn probe() -> i64 {
+    #[foo::bar] let value = 42i64;
+    value
+}

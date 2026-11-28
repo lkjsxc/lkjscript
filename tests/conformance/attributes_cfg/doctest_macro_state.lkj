@@ -1,0 +1,15 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#[cfg(doctest)]
+macro_rules! selected { () => { 0i64 }; }
+macro_rules! selected { () => { 42i64 }; }
+#[cfg(doctest)]
+fn discarded() {
+    macro_rules! hidden { () => { missing() }; }
+    hidden!();
+}
+fn probe() -> i64 {
+    #[cfg(doctest)] { unknown!(let = 1); }
+    selected!()
+}

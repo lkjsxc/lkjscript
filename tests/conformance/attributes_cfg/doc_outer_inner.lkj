@@ -1,0 +1,11 @@
+// expect: value 42
+// attr-rust: accept
+#![doc = include_str!("guide.txt")]
+#[doc = include_str!("guide.txt")]
+mod values {
+    #![doc = include_str!("guide.txt")]
+    #[doc = include_str!("guide.txt")]
+    pub fn answer() -> i64 { 42i64 }
+}
+#[doc = include_str!("guide.txt")]
+fn probe() -> i64 { values::answer() }

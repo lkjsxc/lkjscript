@@ -628,7 +628,7 @@ impl<'a> Inspector<'a> {
             if attr.name == "derive" && attr.args.iter().all(|name| matches!(name.as_str(),
                 "Copy" | "Clone" | "PartialEq" | "Eq" | "PartialOrd" | "Ord")) {
                 derives.extend_from_slice(&attr.args);
-            } else if !matches!(attr.name.as_str(), "cfg" | "allow" | "doc" | "deprecated") {
+            } else if !matches!(attr.name.as_str(), "cfg" | "allow" | "doc" | "deprecated" | "rustfmt::skip") {
                 return Err(self.boundary("receiver attribute needs additional declaration evidence"));
             }
         }
@@ -941,7 +941,7 @@ impl<'a> Inspector<'a> {
     }
     fn function(&self, index: usize) -> Result<Plan, Failure> {
         let f = &self.program.functions[index];
-        if let Some(refusal) = self.overlap(f.span) { return Err(refusal); }
+        if let Some(refusal) = self.overlap(attributed_span(f.span, &f.attrs)) { return Err(refusal); }
         let scope = self.declaration_scope(&f.module)?;
         if let Some(failure) = poisoned(self.program, self.failures, scope, &f.name) { return Err(failure); }
         if self.program.traits.iter().any(|owner| owner.methods.contains(&index)) {
@@ -1459,7 +1459,7 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
             if !implementations.insert(owner) { continue; }
             replay_implementation(source, &mut projected, &original.impls[owner], selected)?
         } else {
-            if parse_extent(source, &mut projected, f.span, &f.module)? != vec![a::Item::Function(before)] {
+            if parse_extent(source, &mut projected, attributed_span(f.span, &f.attrs), &f.module)? != vec![a::Item::Function(before)] {
                 return Err("authored function replay did not yield one complete item".to_string());
             }
             projected.items.push(a::Item::Function(before));
@@ -1468,6 +1468,26 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
         replay_members(original, &mut projected, before, &members, &mut source_indices, owner.is_some())?;
     }
     crate::syntax::macros::expand(&mut projected).map_err(|_| -> String { "isolated source expansion refused".to_string() })?;
+    // Exact authored extents may carry documentation includes outside function
+    // bodies. Reuse only a uniquely matching value already loaded from this source;
+    // partial replay never obtains ambient filesystem authority.
+    for index in 0usize..projected.exprs.len() {
+        let expression = projected.exprs[index].clone();
+        if let a::Expr::Macro { name, .. } = &expression.kind {
+            if name == "include_str" || name == "include_bytes" {
+                let mut found: Option<a::Expr> = None;
+                for candidate in &original.exprs {
+                    if candidate.span == expression.span && candidate.scope == expression.scope
+                        && (name == "include_str" && matches!(candidate.kind, a::Expr::String(_))
+                            || name == "include_bytes" && matches!(candidate.kind, a::Expr::Bytes(_))) {
+                        if found.is_some() { return Err("include replay has ambiguous source ownership".to_string()); }
+                        found = Some(candidate.kind.clone());
+                    }
+                }
+                projected.exprs[index].kind = found.ok_or_else(|| -> String { "include replay has no exact loaded source value".to_string() })?;
+            }
+        }
+    }
     if !same_expansions(original, &projected, &expansions) {
         return Err("macro invocation, token provenance or selected rule changed during replay".to_string());
     }

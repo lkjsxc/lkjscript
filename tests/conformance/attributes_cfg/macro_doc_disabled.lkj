@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+macro_rules! discarded {
+    ($name:ident) => {
+        #[doc = include_str!("absent-macro-doc.txt")]
+        #[cfg(doctest)]
+        fn $name() -> i64 { 0i64 }
+    };
+}
+discarded!(answer);
+fn answer() -> i64 { 42i64 }
+fn probe() -> i64 { answer() }

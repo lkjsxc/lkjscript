@@ -1,0 +1,21 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#[cfg(doctest)] fn selected() -> i64 { missing() }
+#[cfg(not(doctest))] fn selected() -> i64 { 40i64 }
+#[cfg(all(not(doctest), any(unix, windows)))]
+fn offset() -> i64 { 2i64 }
+fn probe() -> i64 {
+    assert!(!cfg!(doctest));
+    assert!(cfg!(not(doctest)));
+    assert!(cfg!(all(not(doctest), any(unix, windows))));
+    assert!(cfg!(any(doctest, not(doctest))));
+    #[cfg(doctest)] let removed = missing();
+    #[cfg(not(doctest))] let value = selected();
+    let extra = match 1i64 {
+        #[cfg(doctest)] 1i64 => unknown!(let = 1),
+        #[cfg(not(doctest))] 1i64 => offset(),
+        _ => 0i64,
+    };
+    value + extra
+}

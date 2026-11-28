@@ -1,0 +1,7 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"root":true,"rustAccept":false}
+// attr-rust: reject E0433
+#[serial_test::serial]
+fn refused() -> i64 { 7i64 }
+fn probe() -> i64 { 42i64 }
+fn dependent() -> i64 { refused() }

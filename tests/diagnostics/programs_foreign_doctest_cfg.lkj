@@ -1,8 +1,6 @@
-// expect: reject E_UNSUPPORTED
-// cause: expected Rust form/support gap.
-// pending: Resolve the independently authored program barrier recorded in docs/real-programs.md.
+// expect: value 0
 // Reduced from nom 8.0.0 src/lib.rs:385, src/lib.rs:388.
-// This handwritten invalid input is uncredited; it does not add a whole-root site.
+// Documentation-only declarations are absent from ordinary compilation.
 #[cfg(doctest)]
 fn documentation_only() {}
 pub fn probe() -> usize { 0usize }

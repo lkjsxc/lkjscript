@@ -1,0 +1,5 @@
+// expect: reject E_PARSE
+// witness: {"root":true,"rustAccept":false}
+// attr-rust: reject
+#[cfg(doctest)] fn discarded(value:) {}
+fn probe() -> i64 { 42i64 }

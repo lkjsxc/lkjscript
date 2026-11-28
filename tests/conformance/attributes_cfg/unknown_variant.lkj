@@ -1,0 +1,6 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"root":true,"rustAccept":false}
+// attr-rust: reject E0433
+enum Refused { #[foo::bar] Value(i64) }
+fn probe() -> i64 { 42i64 }
+fn dependent() -> i64 { match Refused::Value(7i64) { Refused::Value(value) => value } }

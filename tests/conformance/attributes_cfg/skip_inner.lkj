@@ -1,0 +1,12 @@
+// expect: value 42
+// attr-rust: reject E0658
+// Bare inner/expression tool attributes are an lkjscript extension.
+#![rustfmt::skip]
+mod values {
+    #![rustfmt::skip]
+    pub fn answer() -> i64 {
+        #![rustfmt::skip]
+        42i64
+    }
+}
+fn probe() -> i64 { values::answer() }

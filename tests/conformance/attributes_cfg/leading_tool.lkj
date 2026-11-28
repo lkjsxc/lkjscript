@@ -1,0 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"root":true,"rustAccept":false}
+// attr-rust: reject E0433
+#[::rustfmt::skip]
+fn probe() -> i64 { 42i64 }

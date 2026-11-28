@@ -93,6 +93,7 @@ fn request_key(unit: &Definition, root: &str, options: &Options) -> String {
     optional_key(&mut result, &options.library_directory);
     store::push_word(&mut result, options.no_library as usize);
     store::push_word(&mut result, options.configuration.debug_assertions as usize);
+    store::push_word(&mut result, options.configuration.doctest as usize);
     sha256::hex_digest(&result)
 }
 fn dependencies(unit: &Definition, records: &mut Records) -> Result<Vec<Dependency>, String> {

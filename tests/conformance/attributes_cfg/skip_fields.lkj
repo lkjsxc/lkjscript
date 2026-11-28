@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+struct Named { #[rustfmt::skip] value: i64 }
+struct Tuple(#[rustfmt::skip] i64);
+enum Choice { #[rustfmt::skip] Number(#[rustfmt::skip] i64) }
+fn probe() -> i64 {
+    let named = Named { value: 40i64 };
+    let tuple = Tuple(named.value);
+    match Choice::Number(tuple.0) { Choice::Number(value) => value + 2i64 }
+}

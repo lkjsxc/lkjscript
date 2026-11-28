@@ -1,0 +1,8 @@
+// expect: value 42
+// attr-rust: accept
+struct Named { #[doc = include_str!("guide.txt")] value: i64 }
+enum Choice { #[doc = include_str!("guide.txt")] Number(i64) }
+fn probe() -> i64 {
+    let value = Named { value: 42i64 };
+    match Choice::Number(value.value) { Choice::Number(number) => number }
+}

@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#[doc = include_str!("absent-doc.txt")]
+#[cfg(doctest)]
+fn before() {}
+#[cfg(doctest)]
+#[doc = include_str!("absent-doc.txt")]
+fn after() {}
+#[cfg(doctest)]
+#[doc = include_str!(1, 2)]
+fn arguments() {}
+#[cfg(doctest)]
+#[doc = unknown_doc!(let = 1, @@@)]
+fn opaque() {}
+fn probe() -> i64 { 42i64 }

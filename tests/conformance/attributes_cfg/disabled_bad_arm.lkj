@@ -1,0 +1,9 @@
+// expect: reject E_PARSE
+// witness: {"root":true,"rustAccept":false}
+// attr-rust: reject
+fn probe() -> i64 {
+    match 1i64 {
+        #[cfg(doctest)] 1i64 => { let = 1; 0i64 },
+        _ => 42i64,
+    }
+}

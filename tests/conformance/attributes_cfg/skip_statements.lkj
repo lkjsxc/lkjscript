@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+fn number() -> i64 { 42i64 }
+fn consume(_value: i64) {}
+fn probe() -> i64 {
+    #[rustfmt::skip] let value = number();
+    #[rustfmt::skip] consume(value);
+    #[rustfmt::skip] assert_eq!(value, 42i64);
+    #[rustfmt::skip] return value;
+}

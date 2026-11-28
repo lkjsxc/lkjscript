@@ -1,0 +1,22 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#[rustfmt::skip]
+mod values {
+    #[rustfmt::skip] pub const OFFSET: i64 = 2i64;
+    #[rustfmt::skip] pub fn answer() -> i64 { 40i64 }
+}
+#[rustfmt::skip]
+struct Value { value: i64 }
+#[rustfmt::skip]
+enum Choice { Number(i64) }
+#[rustfmt::skip]
+impl Value {
+    #[rustfmt::skip] fn get(&self) -> i64 { self.value }
+}
+fn probe() -> i64 {
+    let value = Value { value: values::answer() };
+    match Choice::Number(value.get()) {
+        Choice::Number(number) => number + values::OFFSET,
+    }
+}

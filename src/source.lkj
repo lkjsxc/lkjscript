@@ -407,6 +407,21 @@ fn complete_recovery(program: &Program, texts: &[String], diagnostics: &[Diagnos
                         matches += 1usize; span = expression.span;
                         scope = expression.scope; block = expression.block; kind = "expression".to_string();
                         namespace = false; coherence = false;
+                        // Partial replay retains these declarations and their exact
+                        // attributes. Module/crate documentation is a context input:
+                        // empty module wrappers cannot discharge its failed read.
+                        let owns = |owner: Span| owner.file == expression.span.file
+                            && owner.start <= expression.span.start && expression.span.end <= owner.end;
+                        let retained = program.functions.iter().any(|value| owns(value.span)
+                            || value.attrs.iter().any(|attr| owns(attr.span)))
+                            || program.structs.iter().any(|value| owns(value.span)
+                                || value.attrs.iter().any(|attr| owns(attr.span)))
+                            || program.enums.iter().any(|value| owns(value.span)
+                                || value.attrs.iter().any(|attr| owns(attr.span)))
+                            || program.constants.iter().any(|value| owns(value.span));
+                        if !retained {
+                            namespace = true; coherence = true; kind = "source input".to_string();
+                        }
                     }
                 }
             }

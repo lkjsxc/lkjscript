@@ -314,7 +314,7 @@ impl Parser {
             return Err(error(name_span, "E_UNSUPPORTED_MACRO", "built-in macro names are reserved"));
         }
         for attribute in attrs {
-            if !matches!(attribute.name.as_str(), "macro_export" | "allow" | "cfg" | "doc" | "deprecated") {
+            if !matches!(attribute.name.as_str(), "macro_export" | "allow" | "cfg" | "doc" | "deprecated" | "rustfmt::skip") {
                 return Err(error(attribute.span, "E_UNSUPPORTED_MACRO", "unsupported attribute on macro definition"));
             }
             if attribute.name == "macro_export" && !attribute.args.is_empty()

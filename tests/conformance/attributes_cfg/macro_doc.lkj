@@ -1,0 +1,17 @@
+// expect: value 42
+// attr-rust: accept
+macro_rules! fixed {
+    () => {
+        #[doc = include_str!("guide.txt")]
+        fn two() -> i64 { 2i64 }
+    };
+}
+macro_rules! documented {
+    ($name:ident, $path:tt) => {
+        #[doc = include_str!($path)]
+        fn $name() -> i64 { 40i64 }
+    };
+}
+fixed!();
+documented!(forty, "guide.txt");
+fn probe() -> i64 { forty() + two() }

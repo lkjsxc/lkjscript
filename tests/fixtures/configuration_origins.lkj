@@ -29,7 +29,7 @@ fn expanded() -> bool { flag!() }
 }
 fn parsed(inputs: &[(String, Vec<u8>)], enabled: bool) -> ast::Program {
     let providers: Vec<ast::macros::MacroProviderInput> = Vec::new();
-    let configuration = ast::BuildConfiguration { debug_assertions: enabled };
+    let configuration = ast::BuildConfiguration { debug_assertions: enabled, doctest: false };
     let program = source::load_report_with_providers("main.lkj", None, &providers, configuration, &mut |path: &str| {
         Ok(inputs.iter().find(|(name, _)| name == path).map(|(_, bytes)| bytes.clone()))
     }).into_result().unwrap();
@@ -124,8 +124,59 @@ fn configuration_origins(enabled: bool) -> usize {
     assert!(count == 9usize);
     count
 }
+fn doctest_origins(enabled: bool) -> usize {
+    let text = r#"
+macro_rules! flag { () => { cfg!(doctest) }; }
+#[cfg(doctest)]
+fn documentation_only() -> i64 { 11i64 }
+#[cfg(not(doctest))]
+fn ordinary_only() -> i64 { 17i64 }
+fn direct() -> bool { cfg!(doctest) }
+fn expanded() -> bool { flag!() }
+"#;
+    let inputs = vec![("main.lkj".to_string(), text.as_bytes().to_vec())];
+    let program = parsed(&inputs, enabled);
+    assert!(!program.configuration.doctest);
+    assert!(!program.macro_input.as_ref().unwrap().configuration.doctest);
+    assert!(program.functions.iter().any(|function| function.name == "ordinary_only"));
+    assert!(!program.functions.iter().any(|function| function.name == "documentation_only"));
+    assert!(program.exprs[direct_boolean(&program)].kind == ast::Expr::Bool(false));
+    let expanded = program.macro_aliases.iter().find(|alias|
+        matches!(program.exprs[alias.expanded].kind, ast::Expr::Bool(_))).unwrap().expanded;
+    assert!(program.exprs[expanded].kind == ast::Expr::Bool(false));
+    syntax::macros::provenance::validate(&program).unwrap();
+    syntax::macros::provenance::validate_inputs(&program, &inputs).unwrap();
+
+    let mut count = 0usize;
+    let mut outer = program.clone();
+    outer.configuration.doctest = true;
+    count += refused(&outer);
+    let mut snapshot = program.clone();
+    snapshot.macro_input.as_mut().unwrap().configuration.doctest = true;
+    count += refused(&snapshot);
+    count += unauthenticated(&snapshot, &inputs);
+    let mut output = program.clone();
+    output.exprs[expanded].kind = ast::Expr::Bool(true);
+    count += refused(&output);
+
+    // Even coherent configuration and Boolean mutations cannot retain the
+    // declaration selected by a different exact source configuration.
+    let mut coherent = program.clone();
+    coherent.configuration.doctest = true;
+    flip_booleans(&mut coherent);
+    {
+        let original = coherent.macro_input.as_mut().unwrap();
+        original.configuration.doctest = true;
+        flip_booleans(original);
+    }
+    syntax::macros::provenance::validate(&coherent).unwrap();
+    count += unauthenticated(&coherent, &inputs);
+    assert!(count == 5usize);
+    count
+}
 fn main() -> i64 {
-    let count = configuration_origins(true) + configuration_origins(false);
-    assert!(count == 18usize);
+    let count = configuration_origins(true) + configuration_origins(false)
+        + doctest_origins(true) + doctest_origins(false);
+    assert!(count == 28usize);
     count as i64
 }

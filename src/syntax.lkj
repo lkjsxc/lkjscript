@@ -809,12 +809,13 @@ fn cfg_predicate(args: &[String], at: &mut usize, span: Span, configuration: Bui
     }
     match name {
         "debug_assertions" => Ok(configuration.debug_assertions),
+        "doctest" => Ok(configuration.doctest),
         "test" | "windows" => Ok(false),
         "unix" => Ok(true),
         "false" if !spelling.starts_with("r#") => Ok(false),
         "true" if !spelling.starts_with("r#") => Ok(true),
         _ => Err(Diagnostic::new(span, "E_UNSUPPORTED", &format!(
-            "cfg predicate {spelling} is not supported; help: use debug_assertions or test for conditional declarations"))),
+            "cfg predicate {spelling} is not supported; help: use debug_assertions, test or doctest for conditional declarations"))),
     }
 }
 fn cfg_value(args: &[String], span: Span, configuration: BuildConfiguration) -> Result<bool, Diagnostic> {
@@ -930,12 +931,18 @@ impl Parser {
     // affect coherence. Inner and unknown attributes keep a wildcard footprint.
     fn recovery_header(&self, start: usize) -> usize {
         let mut at = start;
-        while at + 2usize < self.tokens.len()
+        while at + 3usize < self.tokens.len()
             && self.tokens[at].kind == TokenKind::Symbol && self.tokens[at].text == "#"
             && self.tokens[at + 1usize].kind == TokenKind::Symbol && self.tokens[at + 1usize].text == "["
             && self.tokens[at + 2usize].kind == TokenKind::Ident
-            && matches!(identifier_name(&self.tokens[at + 2usize].text), "cfg" | "derive" | "allow" | "doc"
-                | "deprecated" | "inline") {
+            && (matches!(identifier_name(&self.tokens[at + 2usize].text), "cfg" | "derive" | "allow" | "doc"
+                | "deprecated" | "inline") && self.tokens[at + 3usize].text != "::"
+                || at + 5usize < self.tokens.len()
+                && identifier_name(&self.tokens[at + 2usize].text) == "rustfmt"
+                && self.tokens[at + 3usize].kind == TokenKind::Symbol && self.tokens[at + 3usize].text == "::"
+                && self.tokens[at + 4usize].kind == TokenKind::Ident
+                && identifier_name(&self.tokens[at + 4usize].text) == "skip"
+                && self.tokens[at + 5usize].kind == TokenKind::Symbol && self.tokens[at + 5usize].text == "]") {
             let mut depth = 1usize;
             let mut end = at + 3usize;
             while end < self.tokens.len() && self.tokens[end].kind != TokenKind::End {
@@ -1268,65 +1275,153 @@ impl Parser {
         let span = self.finish_span(span);
         self.add_pattern(kind, span)
     }
+    // Attribute values have expression syntax, but their producers run only after
+    // conditional selection. A syntax probe must not retain captures or include reads.
+    fn attribute_value(&mut self) -> Result<(usize, usize), Diagnostic> {
+        let start = self.at;
+        let tokens = self.tokens.clone();
+        let saved = macros::ParseCheckpoint::new(&self.program);
+        let probing = self.probing;
+        let scope = self.scope;
+        let block = self.block;
+        let module = self.module.clone();
+        let macro_scope = self.macro_scope;
+        let self_context = self.self_context;
+        let carriers = self.macro_carriers.len();
+        let diagnostics = self.diagnostics.len();
+        let keys = self.diagnostic_keys.clone();
+        let blocked = self.blocked.len();
+        let recovery = self.recovery.len();
+        self.probing = true;
+        let result = self.expr(true);
+        let problem = self.diagnostics.get(diagnostics).cloned();
+        self.probing = probing;
+        self.scope = scope;
+        self.block = block;
+        self.module = module;
+        self.macro_scope = macro_scope;
+        self.self_context = self_context;
+        self.macro_carriers.truncate(carriers);
+        self.diagnostics.truncate(diagnostics);
+        self.diagnostic_keys = keys;
+        self.blocked.truncate(blocked);
+        self.recovery.truncate(recovery);
+        saved.rollback(&mut self.program);
+        self.tokens = tokens;
+        result?;
+        if let Some(problem) = problem { return Err(problem); }
+        Ok((start, self.at))
+    }
     fn attrs(&mut self, allow_inner: bool) -> Result<Vec<Attribute>, Diagnostic> {
         let mut attrs = Vec::new();
+        let mut qualified: Vec<(String, Span, bool, bool)> = Vec::new();
+        let mut values: Vec<(usize, usize, bool)> = Vec::new();
         while self.take("#") {
             let span = self.tokens[self.at - 1].span;
             let inner = self.take("!");
             if inner && !allow_inner {
-                return Err(Diagnostic::new(span, "E_PARSE", "match arms require outer attributes"));
+                return Err(Diagnostic::new(span, "E_PARSE", "this position requires outer attributes"));
             }
             self.expect("[")?;
-            let name = self.ident()?;
+            let absolute = self.take("::");
+            let mut name = if absolute { "::".to_string() } else { String::new() };
+            name.push_str(&self.ident()?);
+            while self.take("::") {
+                name.push_str("::");
+                name.push_str(&self.ident()?);
+            }
             let mut args = Vec::new();
-            if self.take("(") {
-                let mut depth = 1usize;
-                while depth != 0 {
-                    if self.token().kind == TokenKind::End {
-                        return Err(self.err("unterminated attribute"));
+            let mut input = false;
+            if self.is("(") || name.contains("::") && (self.is("[") || self.is("{")) {
+                input = true;
+                let mut delimiters: Vec<String> = vec![self.token().text.clone()];
+                self.at += 1usize;
+                while !delimiters.is_empty() {
+                    if self.token().kind == TokenKind::End { return Err(self.err("unterminated attribute")); }
+                    if self.token().kind == TokenKind::Symbol {
+                        if matches!(self.token().text.as_str(), "(" | "[" | "{") {
+                            delimiters.push(self.token().text.clone());
+                        } else if matches!(self.token().text.as_str(), ")" | "]" | "}") {
+                            let expected = match self.token().text.as_str() { ")" => "(", "]" => "[", _ => "{" };
+                            if delimiters.last().map(|value: &String| value.as_str()) != Some(expected) {
+                                return Err(self.err("mismatched attribute delimiter"));
+                            }
+                            delimiters.pop();
+                        }
                     }
-                    if self.is("(") {
-                        depth += 1;
-                    }
-                    if self.is(")") {
-                        depth -= 1;
-                    }
-                    if depth != 0 && (name == "cfg" || !self.is(",")) {
+                    if !delimiters.is_empty() && (name == "cfg" || !self.is(",")) {
                         let value = if name == "cfg" && self.token().kind == TokenKind::String {
                             format!("\"{}\"", self.token().text)
-                        } else if name != "cfg" && self.token().kind == TokenKind::Ident { identifier_name(&self.token().text).to_string() }
-                        else { self.token().text.clone() };
+                        } else if name != "cfg" && self.token().kind == TokenKind::Ident {
+                            identifier_name(&self.token().text).to_string()
+                        } else { self.token().text.clone() };
                         args.push(value);
                     }
-                    self.at += 1;
+                    self.at += 1usize;
                 }
             } else if name == "cfg" {
                 return Err(Diagnostic::new(span, "E_PARSE", "cfg attributes require parentheses"));
             } else if self.take("=") {
-                if self.token().kind == TokenKind::End {
-                    return Err(self.err("expected attribute value"));
+                input = true;
+                if name == "doc" || name.contains("::") {
+                    let (start, end) = self.attribute_value()?;
+                    for token in &self.tokens[start..end] { args.push(token.text.clone()); }
+                    if name == "doc" { values.push((start, end, inner)); }
+                } else {
+                    if self.token().kind == TokenKind::End { return Err(self.err("expected attribute value")); }
+                    args.push(self.token().text.clone());
+                    self.at += 1usize;
                 }
-                args.push(self.token().text.clone());
-                self.at += 1;
             }
             self.expect("]")?;
-            let attr = Attribute {
-                name,
-                args,
-                span: self.finish_span(span),
-            };
+            let attr = Attribute { name, args, span: self.finish_span(span) };
+            if attr.name.contains("::") || attr.name == "cfg_attr" { qualified.push((attr.name.clone(), attr.span, inner, input)); }
             if inner {
                 if attr.name == "cfg" {
-                    return Err(Diagnostic::new(
-                        attr.span,
-                        "E_UNSUPPORTED",
-                        "inner cfg attributes are not supported; help: put #[cfg(...)] on an enclosing module or declaration",
-                    ));
+                    return Err(Diagnostic::new(attr.span, "E_UNSUPPORTED",
+                        "inner cfg attributes are not supported; help: put #[cfg(...)] on an enclosing module or declaration"));
                 }
                 self.program.attrs.push(attr);
-            } else {
-                attrs.push(attr);
+            } else { attrs.push(attr); }
+        }
+        let enabled = self.enabled(&attrs)?;
+        if !self.probing {
+            for (name, span, inner, input) in qualified {
+                if !inner && !enabled { continue; }
+                if name == "cfg_attr" {
+                    return Err(Diagnostic::new(span, "E_UNSUPPORTED",
+                        "cfg_attr is not supported; help: put #[cfg(...)] on the enclosing declaration"));
+                }
+                if name != "rustfmt::skip" {
+                    return Err(Diagnostic::new(span, "E_UNSUPPORTED", &format!(
+                        "qualified attribute {name} is not supported; help: only the inert rustfmt::skip tool attribute is admitted")));
+                }
+                if input {
+                    return Err(Diagnostic::new(span, "E_UNSUPPORTED",
+                        "rustfmt::skip arguments are not supported; help: use the bare #[rustfmt::skip] attribute"));
+                }
             }
+            let after = self.at;
+            for (start, end, inner) in values {
+                if !inner && !enabled { continue; }
+                self.at = start;
+                let literal = self.token().kind == TokenKind::String && end == start + 1usize;
+                let include = self.token().kind == TokenKind::Ident
+                    && identifier_name(&self.token().text) == "include_str"
+                    && self.tokens.get(start + 1usize).is_some_and(|token| token.text == "!");
+                if !literal && !include {
+                    return Err(Diagnostic::new(self.token().span, "E_UNSUPPORTED",
+                        "doc values support a string literal or include_str! with a literal file path"));
+                }
+                if literal { self.at = end; continue; }
+                let value = self.expr(true)?;
+                if self.at != end || !(matches!(&self.program.exprs[value].kind, Expr::String(_))
+                    || matches!(&self.program.exprs[value].kind, Expr::Macro { name, .. } if name == "include_str")) {
+                    return Err(Diagnostic::new(self.tokens[start].span, "E_UNSUPPORTED",
+                        "doc values support a string literal or include_str! with a literal file path"));
+                }
+            }
+            self.at = after;
         }
         Ok(attrs)
     }
@@ -1341,17 +1436,93 @@ impl Parser {
         }
         Ok(true)
     }
-    // Disabled declarations do not contribute names, bodies or recovery sites.
-    // Only balanced tokens are needed, just as for Rust conditional compilation.
+    // Disabled declarations retain syntax errors, but no speculative declarations,
+    // producer state, diagnostics or includes. Unsupported grammar stays token-only.
     fn skip_disabled(&mut self) -> Result<(), Diagnostic> {
+        let start = self.at;
+        self.skip_disabled_tokens()?;
+        let end = self.at;
+        let tokens = self.tokens.clone();
+        let saved = macros::ParseCheckpoint::new(&self.program);
+        let probing = self.probing;
+        let scope = self.scope;
+        let block = self.block;
+        let module = self.module.clone();
+        let macro_scope = self.macro_scope;
+        let self_context = self.self_context;
+        let carriers = self.macro_carriers.len();
+        let diagnostics = self.diagnostics.len();
+        let keys = self.diagnostic_keys.clone();
+        let blocked = self.blocked.len();
+        let recovery = self.recovery.len();
+        self.at = start;
+        self.probing = true;
+        let result = self.disabled_item_syntax();
+        let mut problem: Option<Diagnostic> = None;
+        let mut unsupported = false;
+        for error in &self.diagnostics[diagnostics..] {
+            // Recovery after a grammar frontier can produce secondary parse errors.
+            // They cannot establish invalid Rust syntax in a discarded declaration.
+            if error.code != "E_PARSE" { unsupported = true; }
+            if error.code == "E_PARSE" && !unsupported && problem.is_none() { problem = Some(error.clone()); }
+        }
+        if let Err(error) = result {
+            if error.code == "E_PARSE" && !unsupported && problem.is_none() { problem = Some(error); }
+        }
+        self.tokens = tokens;
+        self.at = end;
+        self.probing = probing;
+        self.scope = scope;
+        self.block = block;
+        self.module = module;
+        self.macro_scope = macro_scope;
+        self.self_context = self_context;
+        self.macro_carriers.truncate(carriers);
+        self.diagnostics.truncate(diagnostics);
+        self.diagnostic_keys = keys;
+        self.blocked.truncate(blocked);
+        self.recovery.truncate(recovery);
+        saved.rollback(&mut self.program);
+        if let Some(problem) = problem { return Err(problem); }
+        Ok(())
+    }
+    fn disabled_item_syntax(&mut self) -> Result<(), Diagnostic> {
+        let start = self.token().span;
+        let public = self.visibility()?;
+        loop {
+            if self.is("unsafe") || self.is("async") || self.is("const") {
+                self.at += 1usize;
+            } else if self.take("extern") {
+                if self.take("crate") {
+                    self.ident()?;
+                    if self.take("as") { self.ident()?; }
+                    return self.expect(";");
+                }
+                if self.token().kind == TokenKind::String { self.at += 1usize; }
+            } else { break; }
+        }
+        // Negative implementations are a Rust grammar frontier of ordinary lowering.
+        // Their balanced disabled tokens cannot be mistaken for an impl! invocation.
+        if self.is("impl") && self.tokens.get(self.at + 1usize).is_some_and(|token| token.text == "!") { return Ok(()); }
+        if self.is("macro_rules") {
+            let attrs: Vec<Attribute> = Vec::new();
+            return self.macro_definition(&attrs, &public);
+        }
+        if self.macro_item_ahead() || matches!(self.token().text.as_str(), "fn" | "struct" | "enum" | "trait" | "impl" | "mod")
+            || self.is("const") && self.tokens.get(self.at + 1usize).is_some_and(|token| token.text == "fn") {
+            self.item(Vec::new(), public, start)?;
+        }
+        Ok(())
+    }
+    fn skip_disabled_tokens(&mut self) -> Result<(), Diagnostic> {
         let mut delimiters: Vec<String> = Vec::new();
-        let mut braced_item = false;
+        let mut braced_item = self.macro_item_ahead() || self.is("macro_rules");
         while self.token().kind != TokenKind::End {
             let token = &self.tokens[self.at];
             if delimiters.is_empty()
                 && matches!(
                     token.text.as_str(),
-                    "fn" | "struct" | "enum" | "trait" | "impl" | "mod"
+                    "fn" | "struct" | "enum" | "union" | "trait" | "impl" | "mod"
                 )
             {
                 braced_item = true;
@@ -1556,7 +1727,7 @@ impl Parser {
         if self.macro_item_ahead() {
             let span = self.token().span;
             if !matches!(public, Visibility::Private) { return Err(Diagnostic::new(span, "E_MACRO_RULE", "macro item visibility belongs to the expanded declarations")); }
-            if attrs.iter().any(|attribute| !matches!(attribute.name.as_str(), "allow" | "cfg")) {
+            if attrs.iter().any(|attribute| !matches!(attribute.name.as_str(), "allow" | "cfg" | "rustfmt::skip")) {
                 return Err(Diagnostic::new(span, "E_UNSUPPORTED_MACRO", "attributes on declarative macro invocations are not supported"));
             }
             let path = self.value_path()?;
@@ -2057,6 +2228,11 @@ impl Parser {
                             span,
                         });
                     }
+                    if self.probing && (self.is("unsafe") || self.is("extern")) {
+                        self.take("unsafe");
+                        if self.take("extern") && self.token().kind == TokenKind::String { self.at += 1usize; }
+                        if !self.is("fn") { return Err(self.err("qualified function pointer requires fn")); }
+                    }
                     let captured = self.token().kind.clone();
                     if let TokenKind::Type(id) = captured {
                         self.at += 1usize;
@@ -2529,7 +2705,7 @@ impl Parser {
         let mut fields = Vec::new();
         while !self.is(end) {
             let span = self.token().span;
-            for attr in self.attrs(true)? {
+            for attr in self.attrs(false)? {
                 if attr.name == "cfg" {
                     return Err(Diagnostic::new(
                         attr.span,
@@ -2615,6 +2791,12 @@ impl Parser {
         let mut variants = Vec::new();
         while !self.is("}") {
             let start = self.token().span;
+            for attr in self.attrs(false)? {
+                if attr.name == "cfg" {
+                    return Err(Diagnostic::new(attr.span, "E_UNSUPPORTED",
+                        "conditional variants are not supported; help: put #[cfg(...)] on the whole enum declaration"));
+                }
+            }
             let variant_name = self.ident()?;
             let mut style = VariantStyle::Unit;
             let fields = if self.take("(") {
@@ -2834,6 +3016,7 @@ impl Parser {
         let span = self.token().span;
         self.expect("impl")?;
         let mut generics = self.generics()?;
+        if self.probing && self.is("!") { return Err(self.unsupported("negative implementation")); }
         let captured_trait = matches!(self.token().kind, TokenKind::Type(_));
         let first = self.ty()?;
         let captured_trait = captured_trait || self.macro_type_materialization(first);
@@ -3042,6 +3225,11 @@ impl Parser {
     }
 
     fn block_part(&mut self) -> Result<BlockPart, Diagnostic> {
+        if self.probing && self.is("macro_rules") {
+            let attrs: Vec<Attribute> = Vec::new();
+            self.macro_definition(&attrs, &Visibility::Private)?;
+            return Ok(BlockPart::Skipped);
+        }
         // A surviving empty statement remains a tail barrier after cfg removal.
         if self.take(";") {
             let span = self.tokens[self.at - 1usize].span;
@@ -3058,7 +3246,11 @@ impl Parser {
             let declaration = self.token().kind == TokenKind::Ident && matches!(self.token().text.as_str(),
                 "fn" | "const" | "struct" | "enum" | "use" | "type" | "mod"
                 | "trait" | "impl" | "pub" | "extern" | "static" | "union" | "macro_rules");
-            if declaration || attrs.is_empty() || self.program.attrs.len() != inner_attributes {
+            if attrs.is_empty() && self.program.attrs.len() != inner_attributes {
+                if self.is("}") { return Ok(BlockPart::Skipped); }
+                return self.block_part();
+            }
+            if declaration {
                 if !enabled { self.skip_disabled()?; return Ok(BlockPart::Skipped); }
                 let public = self.visibility()?;
                 let start = self.tokens[attribute_start].span;
@@ -3066,11 +3258,11 @@ impl Parser {
                 return Ok(BlockPart::Statement(Stmt::Item(item)));
             }
             if enabled {
-                if let Some(attribute) = attrs.iter().find(|attribute| attribute.name != "cfg") {
+                if let Some(attribute) = attrs.iter().find(|attribute| !matches!(attribute.name.as_str(), "cfg" | "rustfmt::skip")) {
                     let macro_statement = self.macro_statement_ahead()?.is_some();
                     let code = if macro_statement { "E_UNSUPPORTED_MACRO" } else { "E_UNSUPPORTED" };
                     return Err(Diagnostic::new(attribute.span, code,
-                        "ordinary statements support only cfg attributes"));
+                        "ordinary statements support only cfg or rustfmt::skip attributes"));
                 }
                 self.macro_carriers.push((attribute_start, self.at));
                 return self.block_part();
@@ -3364,7 +3556,11 @@ impl Parser {
         loop {
             let span = self.token().span;
             if self.take("&") {
-                let mutable = self.take("mut");
+                let mutable = if self.probing && self.take("raw") {
+                    if self.take("const") { false }
+                    else if self.take("mut") { true }
+                    else { return Err(self.err("raw borrow requires const or mut")); }
+                } else { self.take("mut") };
                 unary.push(("&".to_string(), mutable, span));
             } else if self.take("&&") {
                 unary.push(("&".to_string(), false, span));
@@ -3603,6 +3799,35 @@ impl Parser {
         Ok(self.add_expr(kind, token.span))
     }
     fn atom(&mut self, allow_struct: bool) -> Result<ExprId, Diagnostic> {
+        if self.is("#") {
+            let attrs = self.attrs(false)?;
+            for attr in &attrs {
+                if attr.name != "rustfmt::skip" {
+                    return Err(Diagnostic::new(attr.span, "E_UNSUPPORTED",
+                        "expression attributes support only rustfmt::skip"));
+                }
+            }
+            return self.prefix(allow_struct);
+        }
+        if self.probing && self.is("async") {
+            let mut next = self.at + 1usize;
+            if self.tokens.get(next).is_some_and(|token| token.text == "move") { next += 1usize; }
+            let closure = self.tokens.get(next).is_some_and(|token| matches!(token.text.as_str(), "|" | "||"));
+            if closure {
+                self.at += 1usize;
+                return self.atom(allow_struct);
+            }
+        }
+        if self.probing && (self.is("try") || self.is("gen")) {
+            return Err(self.unsupported("effectful block syntax"));
+        }
+        if self.probing && (self.is("unsafe") || self.is("async")) {
+            let span = self.token().span;
+            self.at += 1usize;
+            self.take("move");
+            let block = self.block()?;
+            return Ok(self.add_finished_expr(Expr::Block(block), span));
+        }
         let span = self.token().span;
         let context = self.token().context;
         let captured = self.tokens[self.at].kind.clone();
@@ -3810,8 +4035,8 @@ impl Parser {
                 let start = self.token().span;
                 let attrs = self.attrs(false)?;
                 for attr in &attrs {
-                    if attr.name != "cfg" {
-                        return Err(Diagnostic::new(attr.span, "E_UNSUPPORTED", "match arms support only cfg attributes"));
+                    if !matches!(attr.name.as_str(), "cfg" | "rustfmt::skip") {
+                        return Err(Diagnostic::new(attr.span, "E_UNSUPPORTED", "match arms support only cfg or rustfmt::skip attributes"));
                     }
                 }
                 let block_like = if self.enabled(&attrs)? {

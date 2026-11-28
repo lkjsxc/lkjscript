@@ -1,0 +1,17 @@
+// expect: value 42
+// witness: {"root":true}
+// attr-rust: accept
+#[cfg(doctest)]
+extern crate doc_comment;
+#[cfg(doctest)]
+doc_comment::doctest!(let = 1, @@@, fn);
+#[cfg(doctest)]
+unsafe fn pointer(value: *const Missing) -> Missing { value.read() }
+#[cfg(doctest)]
+fn semantic_errors() {
+    let value: i64 = "not a number";
+    unknown::opaque!(let = 1, @@@);
+}
+#[cfg(doctest)]
+macro_rules! never_expand { invalid Rust; }
+fn probe() -> i64 { 42i64 }
