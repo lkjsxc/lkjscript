@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! some { ($pattern:pat) => { Some($pattern) }; }
+fn read(value: Option<i64>) -> i64 {
+    let some!(ref number) = value else { return 0i64; };
+    *number
+}
+fn mutate() -> i64 {
+    let mut value = Some(41i64);
+    let some!(ref mut number) = value else { return 0i64; };
+    *number += 1i64;
+    *number
+}
+fn probe() -> i64 { assert_eq!(read(Some(42i64)), 42i64); read(None) + mutate() }

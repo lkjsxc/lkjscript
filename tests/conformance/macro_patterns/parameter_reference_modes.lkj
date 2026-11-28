@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! shared { ($name:ident) => { ref $name }; }
+macro_rules! unique { ($name:ident) => { ref mut $name }; }
+fn read(shared!(value): i64) -> i64 { *value }
+fn change(unique!(value): i64) -> i64 { *value += 1i64; *value }
+fn ordinary(ref mut value: i64) -> i64 { *value += 1i64; *value }
+fn probe() -> i64 { assert_eq!(ordinary(41i64), 42i64); read(0i64) + change(41i64) }

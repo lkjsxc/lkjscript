@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! some { ($name:ident) => { Some($name) }; }
+fn read(value: Option<i64>) -> i64 { let some!(item) = value else { return 0i64; }; item }
+fn probe() -> i64 { read(Some(42i64)) + read(None) }

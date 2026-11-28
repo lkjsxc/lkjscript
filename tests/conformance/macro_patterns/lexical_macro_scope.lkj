@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! selected { () => { 1i64 }; }
+mod inner {
+    macro_rules! selected { () => { 2i64 }; }
+    pub fn read() -> i64 { match 2i64 { selected!() => 40i64, _ => 0i64 } }
+}
+fn probe() -> i64 { match 1i64 { selected!() => inner::read() + 2i64, _ => 0i64 } }

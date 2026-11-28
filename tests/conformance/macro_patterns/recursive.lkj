@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! peel { (($($tail:tt)*)) => { peel!($($tail)*) }; ($name:ident) => { $name }; }
+fn probe() -> i64 { let peel!((((value)))) = 42i64; value }

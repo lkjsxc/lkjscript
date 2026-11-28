@@ -1,5 +1,5 @@
 //! Declarative expansion is producer data; none of these identities enter checked IR.
-use super::{BlockId, ExprId, FileId, Item, ModuleId, Span, TypeId};
+use super::{BlockId, ExprId, FileId, Item, ModuleId, Span, TypeId, PatternId};
 
 #[derive(Clone, PartialEq, Eq)]
 pub struct MacroProviderInput {
@@ -40,7 +40,7 @@ pub struct MacroDefinition {
     pub local_inner: bool,
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
-pub enum MacroPosition { Item, Expression, Statement { semicolon: bool, braces: bool } }
+pub enum MacroPosition { Item, Expression, Pattern, Statement { semicolon: bool, braces: bool } }
 #[derive(Clone, PartialEq, Eq)]
 pub struct MacroSplice {
     pub block: BlockId, pub first: usize, pub count: usize, pub tail: Option<ExprId>,
@@ -94,6 +94,8 @@ pub fn source_name(name: &str) -> &str {
 pub struct MacroCapture {
     pub materializations: Vec<ExprId>,
     pub type_materializations: Vec<TypeId>,
+    pub pattern_materializations: Vec<PatternId>,
+    pub pattern: Option<PatternId>,
     pub ty: Option<TypeId>,
     pub name: String,
     pub path: Vec<usize>,
@@ -111,12 +113,29 @@ pub struct MacroAlias {
     pub expanded: ExprId,
     pub invocation: usize,
 }
+#[derive(Clone, PartialEq, Eq)]
+pub struct MacroPatternAlias {
+    pub pattern: PatternId,
+    pub original: super::PatternNode,
+    pub expanded: PatternId,
+    pub invocation: usize,
+}
+/// Let-else exports are completed after their pattern macros are expanded.
+#[derive(Clone, PartialEq, Eq)]
+pub struct PatternExport {
+    pub source: PatternId,
+    pub sources: Vec<PatternId>,
+    pub outer: PatternId,
+    pub result: ExprId,
+    pub expansion: Option<usize>,
+}
 /// Undo records used while parsing one invocation. The expansion pass clears
 /// them before walking children or returning a source program.
 #[derive(Clone, PartialEq, Eq)]
 pub(crate) enum MacroParseWrite {
     CaptureExpression(usize, Option<ExprId>),
     CaptureType(usize, Option<TypeId>),
+    CapturePattern(usize, Option<PatternId>),
     OriginType(usize),
     OriginExpression(usize),
     OriginPattern(usize),

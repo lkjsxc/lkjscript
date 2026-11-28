@@ -1,0 +1,3 @@
+macro_rules! inner { ($p:pat) => { $p }; }
+macro_rules! outer { ($p:pat) => { inner!($p) }; }
+fn main() -> i64 { let outer!((value, other)) = (40i64, 2i64); value + other }

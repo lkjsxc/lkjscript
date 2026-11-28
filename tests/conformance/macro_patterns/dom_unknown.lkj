@@ -1,0 +1,8 @@
+// expect: reject E_UNSUPPORTED_MACRO
+// witness: {}
+pub fn probe() -> i64 {
+    if matches!(
+        1i64,
+        local_name!("pre") | 2i64
+    ) { 42 } else { 0 }
+}

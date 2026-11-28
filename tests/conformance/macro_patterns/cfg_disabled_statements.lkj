@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {"root":true}
+fn probe() -> i64 {
+    #[cfg(any())]
+    let missing!(value) = unreachable!();
+    #[cfg(any())]
+    while let unknown!(value) = Some(1i64) { break; }
+    42i64
+}

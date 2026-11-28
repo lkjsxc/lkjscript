@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! tuple { ($($name:ident),+ $(,)?) => { ($($name,)+) }; }
+macro_rules! choices { ($($pattern:pat_param)|+) => { $($pattern)|+ }; }
+fn probe() -> i64 {
+    let tuple!(a, b, c,) = (10i64, 30i64, 2i64);
+    match c { choices!(1i64 | 2i64 | 3i64) => a + b + c, _ => 0i64 }
+}

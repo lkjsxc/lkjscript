@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {"root":true}
+enum Either { Left(i64), Right(i64) }
+macro_rules! either { ($name:ident) => { Either::Left($name) | Either::Right($name) }; }
+fn read(value: Either) -> i64 { match value { either!(number) if number >= 0i64 => number, _ => 0i64 } }
+macro_rules! ends { ($name:ident) => { [0i64, $name, ..] | [.., $name, 0i64] }; }
+fn guarded(values: &[i64]) -> i64 { match values { ends!(number) if *number > 10i64 => *number, _ => 0i64 } }
+fn probe() -> i64 {
+    assert_eq!(read(Either::Right(40i64)), 40i64);
+    read(Either::Left(2i64)) + guarded(&[0i64, 1i64, 40i64, 0i64])
+}

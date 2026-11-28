@@ -1,0 +1,5 @@
+// expect: reject E_MACRO_MATCH
+// witness: {"root":true}
+// rust-error: error: no rules expected `|`
+macro_rules! one { ($p:pat_param) => { $p }; }
+fn probe() -> i64 { match 1i64 { one!(1i64 | 2i64) => 42i64, _ => 0i64 } }

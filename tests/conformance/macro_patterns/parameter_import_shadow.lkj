@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {"root":true}
+mod constants { pub const value: i64 = 42i64; }
+macro_rules! parameter { ($name:ident) => { $name }; }
+fn inspect(parameter!(value): i64) -> i64 { use constants::value; value }
+fn probe() -> i64 { inspect(99i64) }

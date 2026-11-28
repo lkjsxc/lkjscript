@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! answer { () => { 42i64 }; }
+fn probe() -> i64 {
+    match 42i64 {
+        #[cfg(any())]
+        missing!() => 0i64,
+        answer!() => 42i64,
+        _ => 0i64,
+    }
+}

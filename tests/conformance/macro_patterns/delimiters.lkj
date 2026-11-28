@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! bind { ($name:ident) => { $name }; }
+fn probe() -> i64 {
+    let bind!(a) = 10i64;
+    let bind![b] = 30i64;
+    let bind!{c} = 2i64;
+    a + b + c
+}

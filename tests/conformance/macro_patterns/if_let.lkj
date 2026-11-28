@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! pair { ($a:ident, $b:ident) => { Some(($a, $b)) }; }
+fn read(value: Option<(i64, i64)>) -> i64 { if let pair!(a, b) = value { a + b } else { 0i64 } }
+fn probe() -> i64 { read(Some((2i64, 40i64))) + read(None) }

@@ -26,6 +26,13 @@ pub(super) enum PatternKind {
     Literal(usize),
     Range(IntegerRange),
     Product(Vec<(ir::Projection, usize)>),
+    At { binding: usize, inner: usize },
+    Sequence {
+        fields: Vec<(ir::Projection, usize)>,
+        prefix: usize,
+        rest: bool,
+        length: Option<usize>,
+    },
     Variant {
         tag: usize,
         fields: Vec<(ir::Projection, usize)>,
@@ -92,12 +99,14 @@ impl PatternPlan {
         while let Some(id) = pending.pop() {
             match &self.nodes[id].kind {
                 PatternKind::Or(_) => return true,
-                PatternKind::Product(fields) | PatternKind::Variant { fields, .. } => {
+                PatternKind::Product(fields) | PatternKind::Variant { fields, .. }
+                | PatternKind::Sequence { fields, .. } => {
                     for (_, id) in fields {
                         pending.push(*id);
                     }
                 }
                 PatternKind::Deref(inner) => pending.push(*inner),
+                PatternKind::At { binding, inner } => { pending.push(*inner); pending.push(*binding); }
                 _ => {}
             }
         }
@@ -109,8 +118,10 @@ impl PatternPlan {
         while let Some((id, place)) = pending.pop() {
             match &self.nodes[id].kind {
                 PatternKind::Literal(_) | PatternKind::Range(_) => tested.push(place),
-                PatternKind::Product(fields) | PatternKind::Variant { fields, .. } => {
-                    if matches!(self.nodes[id].kind, PatternKind::Variant { .. }) {
+                PatternKind::At { inner, .. } => pending.push((*inner, place)),
+                PatternKind::Product(fields) | PatternKind::Variant { fields, .. }
+                | PatternKind::Sequence { fields, .. } => {
+                    if matches!(self.nodes[id].kind, PatternKind::Variant { .. } | PatternKind::Sequence { .. }) {
                         tested.push(place.clone());
                     }
                     for (projection, child) in fields {
@@ -161,12 +172,16 @@ impl PatternPlan {
                         return false;
                     }
                 }
-                PatternKind::Product(fields) | PatternKind::Variant { fields, .. } => {
+                PatternKind::Product(fields) | PatternKind::Variant { fields, .. }
+                | PatternKind::Sequence { fields, .. } => {
                     for (projection, child) in fields {
                         let mut child_place = place.clone();
                         child_place.projections.push(projection.clone());
                         pending.push((*child, child_place));
                     }
+                }
+                PatternKind::At { binding, inner } => {
+                    pending.push((*inner, place.clone())); pending.push((*binding, place));
                 }
                 PatternKind::Deref(inner) => {
                     let mut child_place = place;
@@ -200,7 +215,8 @@ impl PatternPlan {
                     ty: node.ty,
                     place,
                 }),
-                PatternKind::Product(fields) | PatternKind::Variant { fields, .. } => {
+                PatternKind::Product(fields) | PatternKind::Variant { fields, .. }
+                | PatternKind::Sequence { fields, .. } => {
                     let mut index = fields.len();
                     while index != 0 {
                         index -= 1;
@@ -208,6 +224,10 @@ impl PatternPlan {
                         child.projections.push(fields[index].0.clone());
                         pending.push((fields[index].1, child));
                     }
+                }
+                PatternKind::At { binding, inner } => {
+                    // Copy or borrow selected payloads before moving their whole owner.
+                    pending.push((*binding, place.clone())); pending.push((*inner, place));
                 }
                 PatternKind::Deref(inner) => {
                     let mut child = place;
@@ -322,6 +342,7 @@ impl Builder<'_, '_> {
                     }
                     ids
                 }
+                a::Pattern::At { inner, .. } => { pending.push(*inner); Vec::new() }
                 a::Pattern::Or(ids) => {
                     pending.extend_from_slice(ids);
                     Vec::new()
@@ -417,7 +438,37 @@ impl Builder<'_, '_> {
         ty: usize,
         borrow: Option<bool>,
     ) -> Result<usize> {
-        let node = self.compiler.source.patterns[pattern].clone();
+        let mut node = self.compiler.source.patterns[pattern].clone();
+        let mut constant_type: Option<usize> = None;
+        let written = node.kind.clone();
+        if let a::Pattern::Path(path) = written {
+            if let Some(a::Item::Constant(index)) = self.compiler.declaration_item(&path) {
+                if !path.args.is_empty() || !path.bindings.is_empty() {
+                    return Err(err(node.span, "E_TYPE", "constant patterns take no generic arguments"));
+                }
+                let constant = self.compiler.source.constants[index].clone();
+                if constant.owner.is_some() {
+                    return Err(err(node.span, "E_UNSUPPORTED", "associated constant patterns are not supported"));
+                }
+                let value = constant.value;
+                let literal = match &self.compiler.source.exprs[value].kind {
+                    a::Expr::Int(_) | a::Expr::Char(_) | a::Expr::Bool(_) | a::Expr::Float(_) => true,
+                    a::Expr::Unary { op, value } => op == "-"
+                        && matches!(self.compiler.source.exprs[*value].kind, a::Expr::Int(_)),
+                    _ => false,
+                };
+                if !literal {
+                    return Err(err(node.span, "E_UNSUPPORTED", "constant patterns require scalar literal initializers"));
+                }
+                if self.compiler.diagnostic_functions.is_some() {
+                    return Err(err(node.span, "E_BLOCKED", "constant initializer requires its complete dependency checks"));
+                }
+                constant_type = Some(self.compiler.resolve(constant.ty, &BTreeMap::new())?);
+                // Keep the authored path and declaration in source/provenance.
+                // Only this local plan view uses its already typed literal.
+                node.kind = a::Pattern::Literal(value);
+            }
+        }
         if let a::Pattern::Path(path)
         | a::Pattern::Variant { path, .. }
         | a::Pattern::Struct { path, .. } = &node.kind
@@ -435,6 +486,7 @@ impl Builder<'_, '_> {
                     | a::Pattern::Wild
                     | a::Pattern::Ref { .. }
                     | a::Pattern::Or(_)
+                    | a::Pattern::At { .. }
             )
         {
             if let ir::TypeKind::Ref { inner, mutable } = self.compiler.types[ty].kind {
@@ -443,7 +495,11 @@ impl Builder<'_, '_> {
                 return Ok(plan.add(ty, node.span, PatternKind::Deref(child)));
             }
         }
+        if constant_type.is_some_and(|declared| declared != ty) {
+            return Err(err(node.span, "E_TYPE", "constant pattern type differs from scrutinee type"));
+        }
         let kind = match node.kind {
+            a::Pattern::MacroInvocation(_) => return Err(err(node.span, "E_UNSUPPORTED_MACRO", "unexpanded pattern macro")),
             a::Pattern::Wild => PatternKind::Any,
             a::Pattern::Rest => {
                 return Err(err(
@@ -589,6 +645,48 @@ impl Builder<'_, '_> {
                     roots.push(root);
                 }
                 PatternKind::Or(roots)
+            }
+            a::Pattern::At { binding, inner } => {
+                let binding = self.prepare_pattern_inner(plan, binding, ty, borrow)?;
+                if !matches!(plan.nodes[binding].kind, PatternKind::Bind { .. }) {
+                    return Err(err(node.span, "E_TYPE", "left side of @ must bind one name"));
+                }
+                let inner = self.prepare_pattern_inner(plan, inner, ty, borrow)?;
+                PatternKind::At { binding, inner }
+            }
+            a::Pattern::Slice(fields) => {
+                if crate::generics::phantom::argument(&self.compiler.applications, ty).is_some() {
+                    return Err(err(node.span, "E_TYPE", "slice pattern requires an array or slice"));
+                }
+                let (element, length) = match self.compiler.types[ty].kind {
+                    ir::TypeKind::Array { inner, len } => (inner, Some(len)),
+                    ir::TypeKind::Slice { inner, .. } => (inner, None),
+                    _ => return Err(err(node.span, "E_TYPE", "slice pattern requires an array or slice")),
+                };
+                let mut rest = None;
+                for (index, pattern) in fields.iter().enumerate() {
+                    if matches!(self.compiler.source.patterns[*pattern].kind, a::Pattern::Rest) {
+                        if rest.replace(index).is_some() {
+                            return Err(err(node.span, "E_TYPE", "slice pattern has more than one rest"));
+                        }
+                    }
+                }
+                let count = fields.len() - rest.is_some() as usize;
+                if length.is_some_and(|length: usize| -> bool { count > length || rest.is_none() && count != length }) {
+                    return Err(err(node.span, "E_TYPE", "array pattern field count differs"));
+                }
+                let prefix = rest.unwrap_or(count);
+                let mut children = Vec::new();
+                for (position, pattern) in fields.iter().enumerate() {
+                    if Some(position) == rest { continue; }
+                    let value = if position < prefix { position }
+                        else { match length { Some(length) => length - (fields.len() - position), None => 0usize } };
+                    let index = self.local(ir::U64, "$pattern_index", true);
+                    self.emit(ir::Op::Int { dst: index, value: value as i64 }, node.span.line);
+                    children.push((ir::Projection::Index(index),
+                        self.prepare_pattern_inner(plan, *pattern, element, borrow)?));
+                }
+                PatternKind::Sequence { fields: children, prefix, rest: rest.is_some(), length }
             }
             a::Pattern::Tuple(fields) => {
                 let declared = match &self.compiler.types[ty].kind {
@@ -873,6 +971,24 @@ impl Builder<'_, '_> {
                 Ok(dst)
             }
             PatternKind::Range(range) => self.range_condition(place, node.ty, *range, line),
+            PatternKind::At { inner, .. } => self.pattern_condition(plan, *inner, place),
+            PatternKind::Sequence { fields, length, .. } => {
+                if length.is_some() { return self.product_condition(plan, fields, place, line); }
+                let result = self.local(ir::BOOL, "$pattern", true);
+                let no = self.pattern_boolean(false, line);
+                self.emit(ir::Op::Assign { place: ir::Place::local(result), src: no }, line);
+                let (condition, size) = self.sequence_length_condition(plan, id, place.clone())?;
+                self.emit(ir::Op::If { condition }, line);
+                let before = self.snapshot();
+                let start = self.live.len();
+                self.sequence_indices(plan, id, size, line)?;
+                let yes = self.product_condition(plan, fields, place, line)?;
+                self.emit(ir::Op::Assign { place: ir::Place::local(result), src: yes }, line);
+                self.cleanup(start, None, line);
+                self.emit(ir::Op::End, line);
+                self.restore(&before);
+                Ok(result)
+            }
             PatternKind::Product(fields) => self.product_condition(plan, fields, place, line),
             PatternKind::Variant { tag, fields } => {
                 let result = self.local(ir::BOOL, "$pattern", true);
@@ -928,6 +1044,45 @@ impl Builder<'_, '_> {
                 Ok(result)
             }
         }
+    }
+    pub(super) fn sequence_length_condition(
+        &mut self, plan: &PatternPlan, id: usize, place: ir::Place,
+    ) -> Result<(usize, usize)> {
+        let node = &plan.nodes[id];
+        let PatternKind::Sequence { fields, rest, length, .. } = &node.kind else { unreachable!() };
+        let line = node.span.line;
+        if let Some(length) = length {
+            let size = self.temp(ir::U64);
+            self.emit(ir::Op::Int { dst: size, value: *length as i64 }, line);
+            return Ok((self.pattern_boolean(true, line), size));
+        }
+        let input = self.borrow(place, false, line)?.0;
+        let size = self.temp(ir::U64);
+        self.emit(ir::Op::Intrinsic { dst: size, name: ir::IntrinsicOp::VecLen, args: vec![input] }, line);
+        let minimum = self.temp(ir::U64);
+        self.emit(ir::Op::Int { dst: minimum, value: fields.len() as i64 }, line);
+        let condition = self.temp(ir::BOOL);
+        // The length also supplies suffix indices after the successful test.
+        let left = self.read(ir::Place::local(size), line)?.0;
+        self.emit(ir::Op::Binary { dst: condition, op: if *rest { ir::BinaryOp::Ge } else { ir::BinaryOp::Eq }, left, right: minimum }, line);
+        Ok((condition, size))
+    }
+    pub(super) fn sequence_indices(
+        &mut self, plan: &PatternPlan, id: usize, size: usize, line: usize,
+    ) -> Result<()> {
+        let PatternKind::Sequence { fields, prefix, length, .. } = &plan.nodes[id].kind else { unreachable!() };
+        if length.is_some() { return Ok(()); }
+        // This subtraction is emitted only inside the successful length branch.
+        for index in *prefix..fields.len() {
+            let distance = self.temp(ir::U64);
+            self.emit(ir::Op::Int { dst: distance, value: (fields.len() - index) as i64 }, line);
+            let left = self.read(ir::Place::local(size), line)?.0;
+            let value = self.temp(ir::U64);
+            self.emit(ir::Op::Binary { dst: value, op: ir::BinaryOp::Sub, left, right: distance }, line);
+            let ir::Projection::Index(destination) = fields[index].0 else { unreachable!() };
+            self.emit(ir::Op::Assign { place: ir::Place::local(destination), src: value }, line);
+        }
+        Ok(())
     }
     fn product_condition(
         &mut self,
@@ -1009,12 +1164,17 @@ impl Builder<'_, '_> {
                     line,
                 );
             }
+            PatternKind::At { binding, inner } => {
+                self.bind_pattern_tree(plan, *inner, place.clone(), targets, line)?;
+                self.bind_pattern_tree(plan, *binding, place, targets, line)?;
+            }
             PatternKind::Deref(inner) => {
                 let mut place = place;
                 place.projections.push(ir::Projection::Deref);
                 self.bind_pattern_tree(plan, *inner, place, targets, line)?;
             }
-            PatternKind::Product(fields) | PatternKind::Variant { fields, .. } => {
+            PatternKind::Product(fields) | PatternKind::Variant { fields, .. }
+                | PatternKind::Sequence { fields, .. } => {
                 if let PatternKind::Variant { tag, .. } = &plan.nodes[id].kind {
                     self.establish_pattern_tag(place.clone(), *tag, line);
                 }
@@ -1079,12 +1239,14 @@ impl Builder<'_, '_> {
         let mut pending = vec![(root, place)];
         while let Some((id, place)) = pending.pop() {
             match &plan.nodes[id].kind {
+                PatternKind::At { inner, .. } => pending.push((*inner, place)),
                 PatternKind::Deref(inner) => {
                     let mut nested = place;
                     nested.projections.push(ir::Projection::Deref);
                     pending.push((*inner, nested));
                 }
-                PatternKind::Product(fields) | PatternKind::Variant { fields, .. } => {
+                PatternKind::Product(fields) | PatternKind::Variant { fields, .. }
+                | PatternKind::Sequence { fields, .. } => {
                     if let PatternKind::Variant { tag, .. } = &plan.nodes[id].kind {
                         if established.insert((place.clone(), *tag)) {
                             self.establish_pattern_tag(place.clone(), *tag, line);
@@ -1385,11 +1547,14 @@ impl Builder<'_, '_> {
             match &plan.nodes[id].kind {
                 PatternKind::Any | PatternKind::Bind { .. } => {}
                 PatternKind::Product(fields) => {
-                    for (_, id) in fields {
-                        pending.push(*id);
-                    }
+                    for (_, id) in fields { pending.push(*id); }
+                }
+                PatternKind::Sequence { fields, rest, length, .. } => {
+                    if length.is_none() && (!*rest || !fields.is_empty()) { return false; }
+                    for (_, id) in fields { pending.push(*id); }
                 }
                 PatternKind::Deref(inner) => pending.push(*inner),
+                PatternKind::At { binding, inner } => { pending.push(*inner); pending.push(*binding); }
                 PatternKind::Variant { fields, .. } => {
                     if !matches!(&self.compiler.types[plan.nodes[id].ty].kind, ir::TypeKind::Enum { variants, .. } if variants.len() == 1)
                     {
@@ -1415,6 +1580,7 @@ impl Builder<'_, '_> {
             match &plan.nodes[id].kind {
                 PatternKind::Or(alternatives) => pending.extend_from_slice(alternatives),
                 PatternKind::Deref(inner) => pending.push(*inner),
+                PatternKind::At { inner, .. } => pending.push(*inner),
                 PatternKind::Variant { tag, .. } => present[*tag] = true,
                 PatternKind::Any | PatternKind::Bind { .. } => return message,
                 _ => {}
@@ -1458,7 +1624,9 @@ impl Builder<'_, '_> {
         while row_index < rows.len() {
             let mut column = 0;
             while column < rows[row_index].len() {
-                if let Some(id) = rows[row_index][column] {
+                if let Some(mut id) = rows[row_index][column] {
+                    while let PatternKind::At { inner, .. } = plan.nodes[id].kind { id = inner; }
+                    rows[row_index][column] = Some(id);
                     if matches!(
                         plan.nodes[id].kind,
                         PatternKind::Any | PatternKind::Bind { .. }
@@ -1486,6 +1654,73 @@ impl Builder<'_, '_> {
         memo.insert(key, result);
         Ok(result)
     }
+    /// Slice coverage has finitely many distinct length classes. Beyond every
+    /// exact length and the sum of the largest prefix/suffix, selected indices
+    /// no longer overlap and all longer lengths have the same pattern matrix.
+    fn pattern_sequence_matrix(
+        &self, plan: &PatternPlan, rows: &[Vec<Option<usize>>], types: &[usize],
+        inner: usize, fixed: Option<usize>, memo: &mut CoverageMemo,
+    ) -> Result<bool> {
+        let lengths = if let Some(length) = fixed { vec![length] } else {
+            let mut exact = 0usize;
+            let mut front = 0usize;
+            let mut back = 0usize;
+            for row in rows {
+                if let Some(id) = row[0usize] {
+                    if let PatternKind::Sequence { fields, prefix, rest, .. } = &plan.nodes[id].kind {
+                        if *rest {
+                            front = front.max(*prefix);
+                            back = back.max(fields.len() - *prefix);
+                        } else { exact = exact.max(fields.len()); }
+                    }
+                }
+            }
+            let count = front.checked_add(back).and_then(|value: usize| -> Option<usize> { value.max(exact).checked_add(1usize) })
+                .ok_or_else(|| err(a::Span::default(), "E_TYPE", "slice coverage length is not representable"))?;
+            let mut lengths = Vec::new();
+            for length in 0usize..=count { lengths.push(length); }
+            lengths
+        };
+        for length in lengths {
+            let mut selections: Vec<(usize, Vec<(usize, usize)>)> = Vec::new();
+            let mut positions = BTreeSet::new();
+            for (index, row) in rows.iter().enumerate() {
+                let mut selected = Vec::new();
+                if let Some(id) = row[0usize] {
+                    match &plan.nodes[id].kind {
+                        PatternKind::Any | PatternKind::Bind { .. } => {},
+                        PatternKind::Sequence { fields, prefix, rest, .. } => {
+                            if length < fields.len() || !*rest && length != fields.len() { continue; }
+                            for (index, (_, child)) in fields.iter().enumerate() {
+                                let position = if index < *prefix { index } else { length - (fields.len() - index) };
+                                positions.insert(position);
+                                selected.push((position, *child));
+                            }
+                        }
+                        _ => continue,
+                    }
+                }
+                selections.push((index, selected));
+            }
+            let mut specialized = Vec::new();
+            for (row, selected) in selections {
+                let mut next = Vec::new();
+                for position in &positions {
+                    let mut found = None;
+                    for (index, child) in &selected {
+                        if index == position { found = Some(*child); break; }
+                    }
+                    next.push(found);
+                }
+                next.extend_from_slice(&rows[row][1usize..]);
+                specialized.push(next);
+            }
+            let mut next_types = vec![inner; positions.len()];
+            next_types.extend_from_slice(&types[1usize..]);
+            if !self.pattern_matrix(plan, specialized, next_types, memo)? { return Ok(false); }
+        }
+        Ok(true)
+    }
     fn pattern_matrix_inner(
         &self,
         plan: &PatternPlan,
@@ -1503,6 +1738,9 @@ impl Builder<'_, '_> {
         let mut pending = std::mem::replace(&mut rows, Vec::new());
         while let Some(row) = pending.pop() {
             if let Some(id) = row[0] {
+                if let PatternKind::At { inner, .. } = plan.nodes[id].kind {
+                    let mut next = row; next[0usize] = Some(inner); pending.push(next); continue;
+                }
                 if let PatternKind::Or(alternatives) = &plan.nodes[id].kind {
                     for alternative in alternatives {
                         let mut next = row.clone();
@@ -1534,6 +1772,14 @@ impl Builder<'_, '_> {
             }
         }
         let ty = types[0];
+        match self.compiler.types[ty].kind {
+            ir::TypeKind::Array { inner, len }
+                if crate::generics::phantom::argument(&self.compiler.applications, ty).is_none() =>
+                    return self.pattern_sequence_matrix(plan, &rows, &types, inner, Some(len), memo),
+            ir::TypeKind::Slice { inner, .. } =>
+                return self.pattern_sequence_matrix(plan, &rows, &types, inner, None, memo),
+            _ => {},
+        }
         let constructors: Vec<PatternConstructor> = match &self.compiler.types[ty].kind {
             ir::TypeKind::Enum { variants, .. } => {
                 let mut constructors = Vec::new();

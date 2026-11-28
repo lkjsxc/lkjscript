@@ -1,0 +1,5 @@
+// expect: reject E_MACRO_RULE
+// witness: {"root":true}
+// rust-error: error: `$p:path` is followed by `+`, which is not allowed for `path` fragments
+macro_rules! wrong { ($p:path +) => { $p }; }
+fn probe() -> i64 { 42i64 }

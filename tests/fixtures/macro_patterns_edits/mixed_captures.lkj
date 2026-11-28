@@ -1,0 +1,5 @@
+macro_rules! payload { ($x:ident) => { Some($x) }; }
+fn main() -> i64 {
+    let (ordinary, payload!(captured)) = (40i64, Some(2i64)) else { return 0i64; };
+    ordinary + captured
+}

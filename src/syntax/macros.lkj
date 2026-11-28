@@ -12,6 +12,7 @@ pub(super) struct ParseCheckpoint {
     inventory: MacroInventory,
     expansions: usize,
     writes: usize,
+    pattern_exports: usize,
 }
 
 // These arenas own inert syntax and provenance records. Removing a suffix
@@ -23,7 +24,8 @@ fn discard_suffix<T>(values: &mut Vec<T>, length: usize) {
 impl ParseCheckpoint {
     pub(super) fn new(program: &Program) -> Self {
         Self { inventory: crate::ast::macros::inventory(program),
-            expansions: program.macro_expansions.len(), writes: program.macro_parse_writes.len() }
+            expansions: program.macro_expansions.len(), writes: program.macro_parse_writes.len(),
+            pattern_exports: program.pattern_exports.len() }
     }
 
     pub(super) fn rollback(self, program: &mut Program) {
@@ -40,12 +42,18 @@ impl ParseCheckpoint {
                     program.macro_captures[id].ty = prior;
                     program.macro_captures[id].type_materializations.pop();
                 }
+                MacroParseWrite::CapturePattern(id, prior) => {
+                    program.macro_captures[id].pattern = prior;
+                    program.macro_captures[id].pattern_materializations.pop();
+                }
                 MacroParseWrite::OriginType(id) => { program.macro_expansions[id].types.pop(); }
                 MacroParseWrite::OriginExpression(id) => { program.macro_expansions[id].expressions.pop(); }
                 MacroParseWrite::OriginPattern(id) => { program.macro_expansions[id].patterns.pop(); }
             }
         }
+        discard_suffix(&mut program.pattern_exports, self.pattern_exports);
         let counts = self.inventory;
+        for id in counts.functions..program.functions.len() { program.function_patterns.remove(&id); }
         for id in counts.types..program.types.len() {
             program.impl_traits.remove(&id); program.constant_arguments.remove(&id);
             program.value_argument_lists.remove(&id); program.array_length_spans.remove(&id); program.relaxed_bounds.remove(&id);
@@ -90,6 +98,9 @@ fn partner(text: &str) -> String {
     match text { "(" => ")".to_string(), "[" => "]".to_string(), "{" => "}".to_string(), _ => String::new() }
 }
 const BLOCK_FRAGMENT: u8 = 10u8;
+const PATTERN_FRAGMENT: u8 = 11u8;
+const PATH_FRAGMENT: u8 = 12u8;
+const LITERAL_FRAGMENT: u8 = 13u8;
 
 fn token_kind(kind: &TokenKind) -> u8 {
     match kind {
@@ -97,12 +108,15 @@ fn token_kind(kind: &TokenKind) -> u8 {
         TokenKind::Char => 3u8, TokenKind::Bytes => 4u8, TokenKind::Lifetime => 5u8,
         TokenKind::Symbol => 6u8, TokenKind::End => 7u8, TokenKind::Expression(_) => 8u8,
         TokenKind::Type(_) => 9u8, TokenKind::Block(_) => BLOCK_FRAGMENT,
+        TokenKind::Pattern(_) => PATTERN_FRAGMENT, TokenKind::Path(_) => PATH_FRAGMENT,
+        TokenKind::Literal(_) => LITERAL_FRAGMENT,
     }
 }
 fn capture_token(token: &Token) -> MacroToken {
     MacroToken { kind: token_kind(&token.kind), text: token.text.clone(), literal_spelling: token.literal_spelling.clone(), span: token.span,
         origin: token.origin, context: token.context,
-        capture: match token.kind { TokenKind::Expression(id) | TokenKind::Type(id) | TokenKind::Block(id) => Some(id), _ => None } }
+        capture: match token.kind { TokenKind::Expression(id) | TokenKind::Type(id) | TokenKind::Block(id)
+            | TokenKind::Pattern(id) | TokenKind::Path(id) | TokenKind::Literal(id) => Some(id), _ => None } }
 }
 fn restore_token(token: MacroToken) -> Token {
     let kind = match token.kind {
@@ -111,6 +125,9 @@ fn restore_token(token: MacroToken) -> Token {
         6u8 => TokenKind::Symbol, 8u8 => TokenKind::Expression(token.capture.unwrap()),
         9u8 => TokenKind::Type(token.capture.unwrap()),
         kind if kind == BLOCK_FRAGMENT => TokenKind::Block(token.capture.unwrap()),
+        kind if kind == PATTERN_FRAGMENT => TokenKind::Pattern(token.capture.unwrap()),
+        kind if kind == PATH_FRAGMENT => TokenKind::Path(token.capture.unwrap()),
+        kind if kind == LITERAL_FRAGMENT => TokenKind::Literal(token.capture.unwrap()),
         _ => TokenKind::End,
     };
     Token { kind, text: token.text, literal_spelling: token.literal_spelling, span: token.span, origin: token.origin, context: token.context }
@@ -355,7 +372,7 @@ fn parser(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvoca
         self_context: invocation.self_context, expansion, probing: false, fragment: true, macro_carriers: Vec::new() }
 }
 #[derive(Clone, Copy, PartialEq, Eq)]
-enum ParsedFragment { Expression, Type, Block }
+enum ParsedFragment { Expression, Type, Block, Pattern, PatternParam, Path, Literal }
 
 fn fragment_mode(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation,
     expansion: Option<usize>, fragment: ParsedFragment, complete: bool, probing: bool,
@@ -367,6 +384,10 @@ fn fragment_mode(program: &mut Program, tokens: &[MacroToken], invocation: &Macr
     let mut result = match fragment {
         ParsedFragment::Expression => parser.expr(true),
         ParsedFragment::Type => parser.ty(),
+        ParsedFragment::Pattern => parser.pattern(),
+        ParsedFragment::PatternParam => parser.pattern_atom(),
+        ParsedFragment::Path => parser.macro_path_fragment(),
+        ParsedFragment::Literal => parser.macro_literal_fragment(),
         ParsedFragment::Block => parser.block().map(|block| {
             let span = parser.program.blocks[block].span;
             parser.add_expr(Expr::Block(block), span)
@@ -381,6 +402,9 @@ fn fragment_mode(program: &mut Program, tokens: &[MacroToken], invocation: &Macr
         result = Err(error(parser.token().span, "E_MACRO_EXPANSION",
             match fragment {
                 ParsedFragment::Type => "macro capture must be one complete type",
+                ParsedFragment::Pattern | ParsedFragment::PatternParam => "macro expansion must be one complete pattern",
+                ParsedFragment::Path => "macro capture must be one complete path",
+                ParsedFragment::Literal => "macro capture must be one complete literal",
                 ParsedFragment::Block => "macro capture must be one complete block",
                 ParsedFragment::Expression => "statement-list expansion needs statement position; help: use a brace call, a semicolon after the call, or a block template",
             }));
@@ -401,6 +425,12 @@ fn expression(program: &mut Program, tokens: &[MacroToken], invocation: &MacroIn
     }
     fragment_mode(program, tokens, invocation, expansion, ParsedFragment::Expression, complete, false, None)
         .map(|(id, consumed, _)| (id, consumed))
+}
+fn pattern(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation,
+    expansion: usize) -> Result<PatternId, Diagnostic> {
+    if tokens.is_empty() { return Err(error(invocation.span, "E_MACRO_EXPANSION", "empty expansion in pattern position")); }
+    fragment_mode(program, tokens, invocation, Some(expansion), ParsedFragment::Pattern, true, false, None)
+        .map(|(id, _, _)| id)
 }
 fn probe_fragment(program: &mut Program, tokens: &[MacroToken], invocation: &MacroInvocation, fragment: ParsedFragment)
     -> Result<(usize, usize, Option<MacroToken>), Diagnostic> {
@@ -426,6 +456,12 @@ impl Parser {
             let capture = &mut self.program.macro_captures[id];
             if capture.ty.is_none() { capture.ty = Some(node); }
             capture.type_materializations.push(node);
+        } else if matches!(fragment, ParsedFragment::Pattern | ParsedFragment::PatternParam) {
+            let prior = self.program.macro_captures[id].pattern;
+            self.program.macro_parse_writes.push(crate::ast::macros::MacroParseWrite::CapturePattern(id, prior));
+            let capture = &mut self.program.macro_captures[id];
+            if capture.pattern.is_none() { capture.pattern = Some(node); }
+            capture.pattern_materializations.push(node);
         } else {
             let prior = self.program.macro_captures[id].expression;
             self.program.macro_parse_writes.push(crate::ast::macros::MacroParseWrite::CaptureExpression(id, prior));
@@ -451,6 +487,65 @@ impl Parser {
             let Some(next) = token.capture else { return FormatOrigin::Other; }; id = next;
         }
         FormatOrigin::Other
+    }
+    pub(super) fn macro_capture_pattern(&mut self, id: usize) -> Result<PatternId, Diagnostic> {
+        self.macro_capture(id, ParsedFragment::Pattern)
+    }
+    pub(super) fn macro_capture_path(&mut self, id: usize) -> Result<Path, Diagnostic> {
+        let node = self.macro_capture(id, ParsedFragment::Path)?;
+        let Expr::Path(path) = &self.program.exprs[node].kind else { unreachable!() };
+        Ok(path.clone())
+    }
+    pub(super) fn macro_capture_literal(&mut self, id: usize) -> Result<ExprId, Diagnostic> {
+        self.macro_capture(id, ParsedFragment::Literal)
+    }
+    fn macro_path_fragment(&mut self) -> Result<ExprId, Diagnostic> {
+        let span = self.token().span;
+        let captured_path = self.token().kind.clone();
+        if let TokenKind::Path(id) = captured_path {
+            self.at += 1usize;
+            return self.macro_capture(id, ParsedFragment::Path);
+        }
+        if self.token().kind == TokenKind::Ident && super::raw_identifier_keyword(&self.token().text) {
+            return Err(error(span, "E_PARSE", "expected a path identifier"));
+        }
+        let ty = self.ty()?;
+        let kind = self.program.types[ty].kind.clone();
+        let Type::Path(path) = kind else {
+            return Err(error(span, "E_MACRO_EXPANSION", "path fragment requires a path"));
+        };
+        // The outer node is only a parsing wrapper: a path chooses its namespace
+        // at the use site. Retain its arena identity for capture replay, without
+        // resolving value paths such as constants as types. Arguments and
+        // qualified receivers remain ordinary type nodes. Every capture use
+        // materializes fresh syntax, so this cannot rewrite another use's type.
+        self.program.types[ty].kind = Type::Infer;
+        Ok(self.add_finished_expr(Expr::Path(path), span))
+    }
+    fn macro_literal_fragment(&mut self) -> Result<ExprId, Diagnostic> {
+        let span = self.token().span;
+        let captured_literal = self.token().kind.clone();
+        if let TokenKind::Literal(id) = captured_literal {
+            self.at += 1usize;
+            return self.macro_capture(id, ParsedFragment::Literal);
+        }
+        let captured_expression = self.token().kind.clone();
+        if let TokenKind::Expression(id) = captured_expression {
+            self.at += 1usize;
+            let value = self.macro_capture_expression(id)?;
+            let literal = match &self.program.exprs[value].kind {
+                Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_) | Expr::Char(_) | Expr::Bytes(_) => true,
+                Expr::Unary { op, value } => op == "-" && matches!(self.program.exprs[*value].kind,
+                    Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_) | Expr::Char(_) | Expr::Bytes(_)),
+                _ => false,
+            };
+            if literal { return Ok(value); }
+            return Err(error(span, "E_MACRO_EXPANSION", "expression capture is not a literal"));
+        }
+        let negative = self.take("-");
+        let value = self.literal()?;
+        if negative { Ok(self.add_finished_expr(Expr::Unary { op: "-".to_string(), value }, span)) }
+        else { Ok(value) }
     }
     pub(super) fn macro_capture_expression(&mut self, id: usize) -> Result<ExprId, Diagnostic> {
         self.macro_capture(id, ParsedFragment::Expression)

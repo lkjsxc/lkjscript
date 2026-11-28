@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! small { () => { 1i64 | 2i64 }; }
+macro_rules! large { () => { 40i64 | 41i64 }; }
+macro_rules! both { () => { small!() | large!() }; }
+fn classify(value: i64) -> i64 { match value { both!() => value, _ => 0i64 } }
+fn probe() -> i64 { classify(2i64) + classify(40i64) + classify(9i64) }

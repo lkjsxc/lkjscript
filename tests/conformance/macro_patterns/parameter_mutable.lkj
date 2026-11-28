@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! parameter { ($name:ident) => { mut $name }; }
+fn increment(parameter!(value): i64) -> i64 { value += 1i64; value }
+fn probe() -> i64 { increment(41i64) }

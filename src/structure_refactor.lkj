@@ -637,9 +637,10 @@ fn pattern_target(catalog: &semantic::Catalog, unit: &Unit, index: usize, wanted
 }
 fn pattern_children(program: &a::Program, index: usize) -> Vec<usize> {
     match &program.patterns[index].kind {
-        a::Pattern::Tuple(values) | a::Pattern::Or(values) | a::Pattern::Variant { fields: values, .. } => values.clone(),
+        a::Pattern::Tuple(values) | a::Pattern::Slice(values) | a::Pattern::Or(values) | a::Pattern::Variant { fields: values, .. } => values.clone(),
         a::Pattern::Struct { fields, .. } => { let mut result = Vec::new(); for (_, child) in fields { result.push(*child); } result }
         a::Pattern::Ref { inner, .. } => vec![*inner],
+        a::Pattern::At { binding, inner } => vec![*binding, *inner],
         _ => Vec::new(),
     }
 }
@@ -656,6 +657,7 @@ fn pattern_direct(catalog: &semantic::Catalog, unit: &Unit, index: usize, target
     match &unit.tree.patterns[index].kind {
         a::Pattern::Or(values) => values.iter().any(|value| pattern_direct(catalog, unit, *value, targets)),
         a::Pattern::Ref { inner, .. } => pattern_direct(catalog, unit, *inner, targets),
+        a::Pattern::At { inner, .. } => pattern_direct(catalog, unit, *inner, targets),
         _ => false,
     }
 }
@@ -663,6 +665,7 @@ fn catch_all(program: &a::Program, index: usize) -> bool {
     match &program.patterns[index].kind {
         a::Pattern::Wild | a::Pattern::Bind { .. } => true,
         a::Pattern::Or(values) => values.iter().any(|value| catch_all(program, *value)),
+        a::Pattern::At { inner, .. } => catch_all(program, *inner),
         _ => false,
     }
 }
@@ -1867,6 +1870,16 @@ fn move_item(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)], target: 
 
 fn binding_declaration(catalog: &semantic::Catalog, inputs: &[(String, Vec<u8>)],
         target: &semantic::Item, name: &str, patches: &mut Vec<edit::Patch>) -> Result<(), String> {
+        if let Some(site) = semantic::macro_renames::binding_site(catalog, &target.identity) {
+            let bytes = edit::input(inputs, &site.file)?;
+            if site.file != target.file || site.start != target.name_start || site.end != target.name_end
+                || site.start >= site.end || site.end > bytes.len()
+                || !edit::identifier_bytes(&bytes[site.start..site.end], &target.name) {
+                return Err(fail(&target.identity, "BINDING_SITE", "captured binding has no exact authenticated caller token"));
+            }
+            edit::patch(patches, &target.identity, &site.file, site.start, site.end, name);
+            return Ok(());
+        }
         let owner = edit::item(catalog, &target.parent)?; let unit = parse_unit(catalog, owner, inputs)?;
         let mut selected: Option<(usize, usize, usize)> = None;
         for pattern in &unit.tree.patterns {

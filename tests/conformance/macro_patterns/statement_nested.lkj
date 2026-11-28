@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! bind { ($name:ident) => { $name }; }
+macro_rules! declare { ($name:ident, $value:expr) => { let bind!($name) = $value; }; }
+macro_rules! function { ($name:ident) => { fn $name(bind!(value): i64) -> i64 { value } }; }
+function!(identity);
+fn probe() -> i64 { declare!(value, identity(42i64)); value }

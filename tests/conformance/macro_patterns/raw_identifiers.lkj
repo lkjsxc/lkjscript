@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! r#type { ($r#name:ident) => { $r#name }; }
+macro_rules! borrow { ($name:ident) => { ref $name }; }
+fn probe() -> i64 {
+    let r#type!(r#match) = 40i64;
+    let borrow!(r#mut) = 2i64;
+    r#match + *r#mut
+}

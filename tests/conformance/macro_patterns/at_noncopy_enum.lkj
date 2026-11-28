@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {"root":true}
+enum Packet { First(String, i64, i64), Second(String, i64, i64) }
+macro_rules! complete { ($whole:ident, $number:ident) => { $whole @ (Packet::First(_, $number, _) | Packet::Second(_, _, $number)) }; }
+fn length(value: &Packet) -> usize {
+    match value { Packet::First(text, _, _) | Packet::Second(text, _, _) => text.len() }
+}
+fn read(value: Packet) -> i64 {
+    match value { complete!(whole, number) if number > 0i64 => number + length(&whole) as i64, _ => 0i64 }
+}
+fn probe() -> i64 {
+    assert_eq!(read(Packet::Second(String::from("b"), 900i64, 41i64)), 42i64);
+    read(Packet::First(String::from("a"), 41i64, 900i64)) + read(Packet::First(String::from("c"), 0i64, 900i64))
+}

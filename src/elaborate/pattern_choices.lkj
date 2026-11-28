@@ -99,7 +99,7 @@ impl Builder<'_, '_> {
                 continue;
             }
             match &plan.nodes[id].kind {
-                PatternKind::Variant { fields, .. } => {
+                PatternKind::Variant { fields, .. } | PatternKind::Sequence { fields, .. } => {
                     let index = slots.len();
                     slots.insert(id, index);
                     for (_, child) in fields {
@@ -116,6 +116,7 @@ impl Builder<'_, '_> {
                     }
                 }
                 PatternKind::Deref(inner) => pending.push(*inner),
+                PatternKind::At { binding, inner } => { pending.push(*inner); pending.push(*binding); }
                 PatternKind::Or(alternatives) => pending.extend_from_slice(alternatives),
                 _ => {}
             }
@@ -164,9 +165,10 @@ impl Builder<'_, '_> {
                 PatternKind::Literal(_) | PatternKind::Range(_) => {
                     self.cached_test(&cache, id, line)?
                 }
-                PatternKind::Deref(inner) => self.cached_possible(&cache, *inner, line)?,
-                PatternKind::Product(fields) | PatternKind::Variant { fields, .. } => {
-                    let initial = if matches!(plan.nodes[id].kind, PatternKind::Variant { .. }) {
+                PatternKind::Deref(inner) | PatternKind::At { inner, .. } => self.cached_possible(&cache, *inner, line)?,
+                PatternKind::Product(fields) | PatternKind::Variant { fields, .. }
+                | PatternKind::Sequence { fields, .. } => {
+                    let initial = if matches!(plan.nodes[id].kind, PatternKind::Variant { .. } | PatternKind::Sequence { .. }) {
                         self.cached_test(&cache, id, line)?
                     } else {
                         self.pattern_scalar(ir::BOOL, 1, line)
@@ -232,6 +234,24 @@ impl Builder<'_, '_> {
                 self.emit(ir::Op::End, line);
                 self.restore(&before);
             }
+            PatternKind::Sequence { fields, .. } => {
+                let (condition, size) = self.sequence_length_condition(plan, id, place.clone())?;
+                let value = self.read(ir::Place::local(condition), line)?.0;
+                self.cache_test(cache, id, value, line);
+                self.emit(ir::Op::If { condition }, line);
+                let before = self.snapshot();
+                let start = self.live.len();
+                self.sequence_indices(plan, id, size, line)?;
+                for (projection, child) in fields {
+                    let mut field = place.clone();
+                    field.projections.push(projection.clone());
+                    self.fill_pattern_cache(plan, *child, field, cache)?;
+                }
+                self.cleanup(start, None, line);
+                self.emit(ir::Op::End, line);
+                self.restore(&before);
+            }
+            PatternKind::At { inner, .. } => self.fill_pattern_cache(plan, *inner, place, cache)?,
             PatternKind::Product(fields) => {
                 for (projection, child) in fields {
                     let mut field = place.clone();
@@ -290,13 +310,13 @@ impl Builder<'_, '_> {
                 Ok(self.pattern_scalar(ir::BOOL, 1, line))
             }
             PatternKind::Literal(_) | PatternKind::Range(_) => self.cached_test(cache, id, line),
-            PatternKind::Deref(inner) => {
+            PatternKind::Deref(inner) | PatternKind::At { inner, .. } => {
                 self.cached_pattern_condition(plan, *inner, cache, choices)
             }
             PatternKind::Product(fields) => {
                 self.cached_product_condition(plan, fields, cache, choices, line)
             }
-            PatternKind::Variant { fields, .. } => {
+            PatternKind::Variant { fields, .. } | PatternKind::Sequence { fields, .. } => {
                 let condition = self.cached_test(cache, id, line)?;
                 if fields.is_empty() {
                     return Ok(condition);
@@ -438,7 +458,8 @@ impl Builder<'_, '_> {
                         pending.push(alternatives[index]);
                     }
                 }
-                PatternKind::Product(fields) | PatternKind::Variant { fields, .. } => {
+                PatternKind::Product(fields) | PatternKind::Variant { fields, .. }
+                | PatternKind::Sequence { fields, .. } => {
                     let mut index = fields.len();
                     while index != 0 {
                         index -= 1;
@@ -446,6 +467,7 @@ impl Builder<'_, '_> {
                     }
                 }
                 PatternKind::Deref(inner) => pending.push(*inner),
+                PatternKind::At { binding, inner } => { pending.push(*inner); pending.push(*binding); }
                 _ => {}
             }
         }

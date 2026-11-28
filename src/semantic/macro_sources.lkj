@@ -56,9 +56,73 @@ pub(super) fn append_entries(catalog: &mut Catalog, files: &[SourceText], progra
     Ok(())
 }
 
-pub(super) fn epoch(epoch: &mut Vec<u8>, files: &[SourceText], program: &a::Program, mut expansion: usize) {
-    loop {
-        let value = &program.macro_expansions[expansion];
+fn pattern_expansions(program: &a::Program, root: usize,
+    aliases: &BTreeMap<usize, (usize, usize)>) -> BTreeSet<usize> {
+    let mut result = BTreeSet::new();
+    let mut seen = BTreeSet::new();
+    let mut pending = vec![root];
+    while let Some(pattern) = pending.pop() {
+        if !seen.insert(pattern) { continue; }
+        if let Some((expansion, expanded)) = aliases.get(&pattern) {
+            result.insert(*expansion); pending.push(*expanded);
+        }
+        match &program.patterns[pattern].kind {
+            a::Pattern::Tuple(fields) | a::Pattern::Slice(fields) | a::Pattern::Or(fields)
+            | a::Pattern::Variant { fields, .. } => {
+                for field in fields { pending.push(*field); }
+            }
+            a::Pattern::Struct { fields, .. } => { for (_, field) in fields { pending.push(*field); } }
+            a::Pattern::Ref { inner, .. } => pending.push(*inner),
+            a::Pattern::At { binding, inner } => { pending.push(*binding); pending.push(*inner); }
+            _ => {},
+        }
+    }
+    result
+}
+fn epoch_edge(edges: &mut BTreeMap<usize, Vec<usize>>, from: usize, to: usize) {
+    if !edges.contains_key(&from) { edges.insert(from, Vec::new()); }
+    edges.get_mut(&from).unwrap().push(to);
+}
+pub(super) fn epoch(epoch: &mut Vec<u8>, files: &[SourceText], program: &a::Program, expansion: usize) {
+    let mut calls = BTreeMap::new();
+    let mut edges = BTreeMap::new();
+    for (index, value) in program.macro_expansions.iter().enumerate() {
+        calls.insert(value.invocation, index);
+        if let Some(parent) = value.parent {
+            epoch_edge(&mut edges, index, parent); epoch_edge(&mut edges, parent, index);
+        }
+    }
+    let mut aliases = BTreeMap::new();
+    for alias in &program.macro_pattern_aliases {
+        if let Some(expansion) = calls.get(&alias.invocation) {
+            aliases.insert(alias.pattern, (*expansion, alias.expanded));
+        }
+    }
+    let mut exports = Vec::new();
+    for export in &program.pattern_exports {
+        let dependencies = pattern_expansions(program, export.source, &aliases);
+        let first = dependencies.iter().next().copied();
+        if let Some(first) = first {
+            for dependency in &dependencies {
+                epoch_edge(&mut edges, first, *dependency);
+                epoch_edge(&mut edges, *dependency, first);
+            }
+        }
+        exports.push((export.source, dependencies));
+    }
+    let mut selected = BTreeSet::new();
+    let mut pending = vec![expansion];
+    while let Some(index) = pending.pop() {
+        if !selected.insert(index) { continue; }
+        if let Some(neighbors) = edges.get(&index) {
+            for neighbor in neighbors { pending.push(*neighbor); }
+        }
+    }
+    bytes(epoch, b"lkjscript-macro-dependency-epoch-2");
+    word(epoch, selected.len());
+    for index in &selected {
+        word(epoch, *index);
+        let value = &program.macro_expansions[*index];
         let definition = &program.macro_definitions[value.definition];
         let invocation = &program.macro_invocations[value.invocation];
         let file = &files[definition.span.file];
@@ -68,11 +132,15 @@ pub(super) fn epoch(epoch: &mut Vec<u8>, files: &[SourceText], program: &a::Prog
         bytes(epoch, format!("{}:{}", definition.exported, definition.local_inner).as_bytes());
         let file = &files[invocation.span.file];
         bytes(epoch, token_digest(&file.tokens, invocation.span.start, invocation.span.end).as_bytes());
-        match value.parent { Some(parent) => expansion = parent, None => break }
+    }
+    for (source, dependencies) in exports {
+        if !dependencies.iter().any(|dependency| selected.contains(dependency)) { continue; }
+        bytes(epoch, b"pattern-export"); word(epoch, source);
+        let span = program.patterns[source].span;
+        bytes(epoch, token_digest(&files[span.file].tokens, span.start, span.end).as_bytes());
     }
     for (path, input) in &program.macro_inputs {
-        bytes(epoch, path.as_bytes());
-        bytes(epoch, sha256::hex_digest(input).as_bytes());
+        bytes(epoch, path.as_bytes()); bytes(epoch, sha256::hex_digest(input).as_bytes());
     }
 }
 
@@ -195,33 +263,144 @@ pub(super) fn generated_nodes(catalog: &mut Catalog, files: &[SourceText], progr
     Ok(())
 }
 
-/// Generated binders belong to their expansion epoch, never an authored body ordinal.
+/// Header patterns keep their lexical block. Their semantic function owner is
+/// instead recovered from the sparse signature graph, including replaced roots.
+pub(super) fn pattern_function_owners(program: &a::Program) -> BTreeMap<usize, usize> {
+    let mut aliases = BTreeMap::new();
+    for alias in &program.macro_pattern_aliases { aliases.insert(alias.pattern, alias.expanded); }
+    let mut result = BTreeMap::new();
+    for (function, parameters) in &program.function_patterns {
+        let mut pending = Vec::new();
+        for (_, pattern) in parameters { pending.push(*pattern); }
+        let mut seen = BTreeSet::new();
+        while let Some(pattern) = pending.pop() {
+            if !seen.insert(pattern) { continue; }
+            result.insert(pattern, *function);
+            if let Some(expanded) = aliases.get(&pattern) { pending.push(*expanded); }
+            match &program.patterns[pattern].kind {
+                a::Pattern::Tuple(fields) | a::Pattern::Slice(fields) | a::Pattern::Or(fields)
+                | a::Pattern::Variant { fields, .. } => { for field in fields { pending.push(*field); } }
+                a::Pattern::Struct { fields, .. } => { for (_, field) in fields { pending.push(*field); } }
+                a::Pattern::Ref { inner, .. } => pending.push(*inner),
+                a::Pattern::At { binding, inner } => { pending.push(*binding); pending.push(*inner); }
+                _ => {},
+            }
+        }
+    }
+    result
+}
+pub(super) fn pattern_function_owner(program: &a::Program, roots: &BTreeMap<usize, usize>,
+    parameters: &BTreeMap<usize, usize>, pattern: usize) -> Option<usize> {
+    parameters.get(&pattern).copied()
+        .or_else(|| function_owner(program, roots, program.patterns[pattern].block))
+}
+
+/// A deferred let-else export is the same authored binding as its success arm.
+pub(super) fn canonical_binding(program: &a::Program, mut pattern: usize) -> usize {
+    let mut seen = BTreeSet::new();
+    while seen.insert(pattern) {
+        let mut original = None;
+        for export in &program.pattern_exports {
+            let a::Pattern::Tuple(fields) = &program.patterns[export.outer].kind else { continue; };
+            for (position, field) in fields.iter().enumerate() {
+                if *field == pattern { original = export.sources.get(position).copied(); }
+            }
+        }
+        let Some(original) = original else { break; };
+        pattern = original;
+    }
+    pattern
+}
+/// A spelling is editable only when one original caller token owns it. Template
+/// marks, widened anchors, repeated names and incomplete source ranges grant no site.
+pub(super) fn binding_token(program: &a::Program, pattern: usize) -> Option<(usize, usize, a::Span)> {
+    let input = program.macro_input.as_ref()?;
+    let node = &program.patterns[canonical_binding(program, pattern)];
+    let a::Pattern::Bind { name, .. } = &node.kind else { return None; };
+    if a::macros::source_name(name) != name { return None; }
+    let mut found = None;
+    for (call, invocation) in input.macro_invocations.iter().enumerate() {
+        for (index, token) in invocation.tokens.iter().enumerate() {
+            if token.kind != 0u8 || token.context != 0usize || token.span != token.origin
+                || token.span.file != node.span.file || token.span.start < node.span.start
+                || token.span.end > node.span.end || crate::syntax::identifier_name(&token.text) != name { continue; }
+            if found.is_some() { return None; }
+            found = Some((call, index, token.span));
+        }
+    }
+    found
+}
+/// Template binders remain projections. Caller-owned tokens may identify a
+/// binding, but editing still requires the complete capture-role/replay proof.
 pub(super) fn generated_bindings(catalog: &mut Catalog, files: &[SourceText], program: &a::Program,
     origins: &origins::Origins, bindings: &mut BTreeMap<usize, String>,
     evidence: &Option<crate::elaborate::semantic::Evidence>) -> Result<(), String> {
     let mut counts: BTreeMap<(usize, String), usize> = BTreeMap::new();
+    let parameters = pattern_function_owners(program);
+    let mut roots = BTreeMap::new();
+    for (function, value) in program.functions.iter().enumerate() {
+        if let Some(body) = value.body { roots.insert(body, function); }
+    }
     for (pattern, expansion) in &origins.macros.patterns {
         if origins.patterns.contains_key(pattern) || !origins.macros.live_patterns.contains(pattern) { continue; }
-        let node = &program.patterns[*pattern];
+        if !matches!(program.patterns[*pattern].kind, a::Pattern::Bind { .. }) { continue; }
+        let source = canonical_binding(program, *pattern);
+        let existing = bindings.get(&source).cloned();
+        if let Some(identity) = existing {
+            bindings.insert(*pattern, identity); continue;
+        }
+        let node = &program.patterns[source];
         let a::Pattern::Bind { name, .. } = &node.kind else { continue; };
         let name = a::macros::source_name(name).to_string();
-        let owner = origins::macros::expansion_identity(*expansion);
+        let expansion = origins.macros.patterns.get(&source).copied().unwrap_or(*expansion);
+        let owner = origins::macros::expansion_identity(expansion);
         let index = *catalog.by_identity.get(&owner).unwrap();
         let epoch = catalog.items[index].body_digest.clone();
-        let key = (*expansion, name.clone());
+        let key = (expansion, name.clone());
         let ordinal = counts.get(&key).copied().unwrap_or(0usize);
         counts.insert(key, ordinal + 1usize);
-        let identity = format!("{owner}::derived:{epoch}::binding:{name}:{ordinal}");
-        bindings.insert(*pattern, identity.clone());
-        let ty = evidence.as_ref().and_then(|value| value.bindings.get(pattern)).cloned();
-        append(catalog, files, identity.clone(), owner, "binding", &name, node.span, None,
-            ty.clone().unwrap_or_else(|| -> String { "inferred type is unavailable".to_string() }), false)?;
-        generated_projection(catalog, files, program, &identity,
-            origins::Origin { declaration: None, expansion: origins::Expansion::Macro(*expansion) }, name, false)?;
+        let ty = evidence.as_ref().and_then(|value| value.bindings.get(&source)).cloned();
+        let function = pattern_function_owner(program, &roots, &parameters, source);
+        let position = program.macro_invocations[program.macro_expansions[expansion].invocation].position;
+        let authored = if position == a::MacroPosition::Pattern {
+            function.and_then(|function| {
+                let identity = &catalog.function_ids[function];
+                let index = *catalog.by_identity.get(identity)?;
+                if !catalog.items[index].generated_from.is_empty()
+                    || !evidence.as_ref().is_some_and(|value| value.definitions.contains(&function)) { return None; }
+                binding_token(program, source).map(|(call, token, span)| (function, call, token, span))
+            })
+        } else { None };
+        let identity: String;
+        if let Some((function, call, token, span)) = authored {
+            let parent = catalog.function_ids[function].clone();
+            identity = format!("{parent}::capture:{call}:{token}::binding:{name}:{source}");
+            append(catalog, files, identity.clone(), parent, "binding", &name, span, None,
+                ty.clone().unwrap_or_else(|| -> String { "inferred type is unavailable".to_string() }), false)?;
+            catalog.references.push(Reference { owner: identity.clone(), target: owner,
+                file: files[span.file].path.clone(), kind: "macro-capture".to_string(), start: span.start, end: span.end });
+        } else {
+            identity = format!("{owner}::derived:{epoch}::binding:{name}:{ordinal}");
+            append(catalog, files, identity.clone(), owner, "binding", &name, node.span, None,
+                ty.clone().unwrap_or_else(|| -> String { "inferred type is unavailable".to_string() }), false)?;
+            generated_projection(catalog, files, program, &identity,
+                origins::Origin { declaration: None, expansion: origins::Expansion::Macro(expansion) }, name, false)?;
+        }
+        bindings.insert(source, identity.clone()); bindings.insert(*pattern, identity.clone());
         let index = *catalog.by_identity.get(&identity).unwrap();
         if let Some(ty) = ty {
             catalog.items[index].type_name = display_type_evidence(&ty)?;
             catalog.items[index].canonical_type = ty; catalog.items[index].type_resolved = true;
+        }
+    }
+    // Ordinary siblings of a macro in a deferred let-else have the same
+    // source/export identity, even though neither binding has a macro owner.
+    for export in &program.pattern_exports {
+        let a::Pattern::Tuple(fields) = &program.patterns[export.outer].kind else { continue; };
+        for field in fields {
+            let source = canonical_binding(program, *field);
+            let identity = bindings.get(&source).cloned();
+            if let Some(identity) = identity { bindings.insert(*field, identity); }
         }
     }
     Ok(())
@@ -251,14 +430,29 @@ pub(super) fn local_identity(catalog: &Catalog, program: &a::Program, bindings: 
     }
 }
 
+/// Let-else exports bridge an internal match binding to its continuation.
+/// Their path nodes have no source spelling; full capture replay still checks
+/// their targets, but source-reference queries must not invent an edit site.
+pub(super) fn pattern_export_values(program: &a::Program) -> BTreeSet<usize> {
+    let mut result = BTreeSet::new();
+    for export in &program.pattern_exports {
+        if let a::Expr::Tuple(values) = &program.exprs[export.result].kind {
+            for value in values { result.insert(*value); }
+        }
+    }
+    result
+}
+
 pub(super) fn generated_locals(catalog: &mut Catalog, files: &[SourceText], program: &a::Program,
     origins: &origins::Origins, bindings: &BTreeMap<usize, String>,
     evidence: &Option<crate::elaborate::semantic::Evidence>) {
     let Some(evidence) = evidence else { return; };
     let mut roots: BTreeMap<usize, usize> = BTreeMap::new();
     for (function, value) in program.functions.iter().enumerate() { if let Some(body) = value.body { roots.insert(body, function); } }
+    let synthetic = pattern_export_values(program);
     for (expression, expansion) in &origins.macros.expressions {
-        if origins.expressions.contains_key(expression) || !origins.macros.live_expressions.contains(expression) { continue; }
+        if origins.expressions.contains_key(expression) || !origins.macros.live_expressions.contains(expression)
+            || synthetic.contains(expression) { continue; }
         let Some(target) = evidence.locals.get(expression).copied() else { continue; };
         let node = &program.exprs[*expression];
         let a::Expr::Path(_) = &node.kind else { continue; };

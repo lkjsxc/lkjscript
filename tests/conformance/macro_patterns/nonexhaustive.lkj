@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"root":true,"rustCode":"E0004"}
+macro_rules! yes { () => { true }; }
+fn probe() -> i64 { match false { whole @ yes!() => 42i64 } }

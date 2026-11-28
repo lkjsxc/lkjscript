@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! mutable { ($name:ident) => { mut $name }; }
+macro_rules! borrowed { ($name:ident) => { ref $name }; }
+macro_rules! exclusive { ($name:ident) => { ref mut $name }; }
+fn probe() -> i64 {
+    let mutable!(value) = 1i64;
+    value += 1i64;
+    let borrowed!(shared) = value;
+    let copy = *shared;
+    let mut target = 0i64;
+    { let exclusive!(loan) = target; *loan = 40i64; }
+    copy + target
+}

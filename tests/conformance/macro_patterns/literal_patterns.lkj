@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! number { () => { -7i64 }; }
+macro_rules! character { () => { 'x' }; }
+macro_rules! boolean { () => { true }; }
+macro_rules! string { () => { "pattern" }; }
+fn probe() -> i64 {
+    let a = match -7i64 { number!() => 10i64, _ => 0i64 };
+    let b = match 'x' { character!() => 10i64, _ => 0i64 };
+    let c = match true { boolean!() => 10i64, false => 0i64 };
+    let d = match "pattern" { string!() => 12i64, _ => 0i64 };
+    a + b + c + d
+}

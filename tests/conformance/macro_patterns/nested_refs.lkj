@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! bind { ($name:ident) => { $name }; }
+macro_rules! two { () => { 2i64 }; }
+fn probe() -> i64 {
+    let value = 40i64;
+    let &&bind!(answer) = &&value;
+    let extra = match &&2i64 { &&two!() => 2i64, _ => 0i64 };
+    answer + extra
+}

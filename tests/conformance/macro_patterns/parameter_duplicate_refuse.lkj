@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"root":true,"rustCode":"E0415"}
+macro_rules! bind { ($name:ident) => { $name }; }
+fn repeated(bind!(value): i64, bind!(value): i64) -> i64 { value }
+fn probe() -> i64 { repeated(1i64, 42i64) }

@@ -1,0 +1,3 @@
+// expect: reject E_UNSUPPORTED_MACRO
+// witness: {"root":true,"rustCode":"E0433"}
+fn probe() -> i64 { let external::pattern!(value) = 42i64; value }

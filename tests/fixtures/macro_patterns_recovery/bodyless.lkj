@@ -1,0 +1,6 @@
+trait Contract {
+    fn inspect(missing!(selected): i64);
+}
+fn selected() -> i64 { 42i64 }
+fn good() -> i64 { selected() }
+fn probe() -> i64 { good() }

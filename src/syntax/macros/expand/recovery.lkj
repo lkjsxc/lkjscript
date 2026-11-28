@@ -105,18 +105,43 @@ pub(super) fn refused_call(report: &mut ExpansionReport, program: &Program, call
     let problem = located(program, problem);
     let Some(invocation) = program.macro_invocations.get(call) else { return Err(problem); };
     record(&mut report.diagnostics, problem.clone());
-    let kind = if invocation.position == MacroPosition::Item { "item" } else { "statement" };
+    let kind = if invocation.position == MacroPosition::Item { "item" }
+        else if invocation.position == MacroPosition::Pattern { "pattern" } else { "statement" };
     blocked(program, &mut report.blocked, invocation.span, kind, &problem.code);
     let mut authored = call;
     while let Some(parent) = program.macro_invocations[authored].parent {
         authored = program.macro_expansions[parent].invocation;
     }
     let owner = &program.macro_invocations[authored];
-    let coherence = footprint.is_none();
-    report.recovery.push(Recovery { span: owner.span, scope: owner.destination, block: owner.block,
+    // A pattern-only root cannot introduce items or implementations. A header
+    // pattern looks up names outside its function body but binds inside it.
+    // Keep those ownership coordinates separate for recovery as for resolution.
+    let coherence = footprint.is_none() && owner.position != MacroPosition::Pattern;
+    let mut block = owner.block;
+    let mut namespace = owner.position != MacroPosition::Expression;
+    if owner.position == MacroPosition::Pattern {
+        let mut header: Option<usize> = None;
+        let mut width = 18446744073709551615usize;
+        for (index, function) in program.functions.iter().enumerate() {
+            if function.span.file != owner.span.file || function.span.start > owner.span.start
+                || owner.span.end > function.span.end { continue; }
+            let header_end = match function.body {
+                Some(body) => program.blocks[body].span.start,
+                None => function.span.end,
+            };
+            let candidate = function.span.end - function.span.start;
+            if owner.span.end <= header_end && candidate < width {
+                header = Some(index); width = candidate;
+            }
+        }
+        if let Some(function) = header {
+            block = program.functions[function].body;
+            namespace = block.is_some();
+        }
+    }
+    report.recovery.push(Recovery { span: owner.span, scope: owner.destination, block,
         kind: "macro invocation".to_string(), names: footprint.unwrap_or(Vec::new()),
-        namespace: owner.position != MacroPosition::Expression, coherence,
-        diagnostic: problem });
+        namespace, coherence, diagnostic: problem });
     Ok(())
 }
 pub(super) fn run(program: &mut Program, mut report: ExpansionReport) -> ExpansionReport {

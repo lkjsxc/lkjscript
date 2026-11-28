@@ -850,8 +850,106 @@ fn source() -> i64 {
     assert!(count == 18usize);
     count as i64
 }
+fn pattern_origins() -> i64 {
+    let (program, inputs) = parsed_fixture(r#"
+enum Choice { Value(i64), Empty }
+macro_rules! bind { ($name:ident) => { $name }; }
+macro_rules! pattern { ($p:pat) => { $p }; }
+macro_rules! repeat { ($p:pat) => { ($p, $p) }; }
+macro_rules! nested { ($p:pat) => { pattern!($p) }; }
+fn parameter(bind!(r#type): i64) -> i64 { r#type }
+fn source(input: Choice) -> i64 {
+    #[cfg(any())] let missing!() = 0i64;
+    #[cfg_attr(all(), cfg(any()))] let missing!() = input else { return 0i64; };
+    let nested!(Choice::Value(value)) = input else { return 0i64; };
+    match (value, value) { repeat!(1i64 | 2i64) => 1i64, _ => value }
+}
+"#);
+    syntax::macros::provenance::validate_inputs(&program, &inputs).unwrap();
+    let resolver = resolve::Resolver::new(&program).unwrap();
+    let relation = origins::collect(&program, &resolver).unwrap();
+    mounted_replay(&program, &inputs);
+    assert!(program.macro_invocations.iter().all(|call| call.name != "missing"));
+    assert!(program.pattern_exports.len() == 1usize);
+    assert!(program.function_patterns.len() == 1usize);
+    let alias = program.macro_pattern_aliases.iter().position(|entry|
+        relation.macros.live_patterns.contains(&entry.pattern)).unwrap();
+    let root = program.macro_pattern_aliases[alias].pattern;
+    assert!(relation.macros.patterns.contains_key(&root));
+    let call = program.macro_pattern_aliases[alias].invocation;
+    assert!(program.macro_invocations[call].position == ast::MacroPosition::Pattern);
+    let capture = program.macro_captures.iter().position(|capture|
+        capture.pattern_materializations.len() > 1usize).unwrap();
+    let first = program.macro_captures[capture].pattern_materializations[0usize];
+    let second = program.macro_captures[capture].pattern_materializations[1usize];
+    assert!(first != second);
+    let expansion = program.macro_expansions.iter().position(|entry| entry.invocation == call).unwrap();
+    let mut count = 0usize;
+    let mut kind = program.clone(); kind.patterns[root].kind = ast::Pattern::Wild;
+    count += refused(&kind);
+    let mut original = program.clone(); original.macro_pattern_aliases[alias].original.kind = ast::Pattern::Wild;
+    count += refused(&original);
+    let mut expanded = program.clone(); expanded.macro_pattern_aliases[alias].expanded = root;
+    count += refused(&expanded);
+    let mut absent = program.clone(); absent.macro_pattern_aliases.clear();
+    count += refused(&absent);
+    let mut alias_call = program.clone(); alias_call.macro_pattern_aliases[alias].invocation = program.macro_invocations.len();
+    count += refused(&alias_call);
+    let mut position = program.clone(); position.macro_invocations[call].position = ast::MacroPosition::Expression;
+    count += refused(&position);
+    let mut scope = program.clone(); scope.macro_invocations[call].block = program.functions.iter().find(|function| function.name == "parameter").unwrap().body;
+    count += refused(&scope);
+    let mut rule = program.clone(); rule.macro_expansions[expansion].rule += 1usize;
+    count += refused(&rule);
+    let mut context = program.clone(); context.macro_expansions[expansion].context += 1usize;
+    count += refused(&context);
+    let mut no_pattern = program.clone(); no_pattern.macro_captures[capture].pattern = None;
+    count += refused(&no_pattern);
+    let mut duplicate = program.clone(); duplicate.macro_captures[capture].pattern_materializations[1usize] = first;
+    count += refused(&duplicate);
+    let mut extra = program.clone(); extra.macro_captures[capture].pattern_materializations.push(first);
+    count += refused(&extra);
+    let mut capture_tokens = program.clone(); capture_tokens.macro_captures[capture].tokens.clear();
+    count += refused(&capture_tokens);
+    let mut capture_parent = program.clone(); capture_parent.macro_captures[capture].parent = Some(expansion);
+    count += refused(&capture_parent);
+    let mut bindings = program.clone(); bindings.macro_pattern_bindings.clear();
+    count += refused(&bindings);
+    let mut exports = program.clone(); exports.pattern_exports.clear();
+    count += refused(&exports);
+    let mut export_sources = program.clone(); export_sources.pattern_exports[0usize].sources.clear();
+    count += refused(&export_sources);
+    let mut export_owner = program.clone(); export_owner.pattern_exports[0usize].expansion = Some(expansion);
+    count += refused(&export_owner);
+    let bridge = program.pattern_exports[0usize].result;
+    let ast::Expr::Tuple(values) = &program.exprs[bridge].kind else { panic!("missing export tuple"); };
+    let bridge_value = values[0usize];
+    let mut export_result = program.clone(); export_result.pattern_exports[0usize].result = bridge_value;
+    count += refused(&export_result);
+    let mut bridge_target = program.clone();
+    {
+        let ast::Expr::Path(path) = &mut bridge_target.exprs[bridge_value].kind else { panic!("missing export path"); };
+        path.name = "invented".to_string();
+    }
+    count += refused(&bridge_target);
+    let mut parameters = program.clone(); parameters.function_patterns.clear();
+    count += refused(&parameters);
+    let mut leftover = program.clone(); leftover.patterns[root].kind = ast::Pattern::MacroInvocation(call);
+    count += refused(&leftover);
+    let source_call = program.macro_input.as_ref().unwrap().macro_invocations.iter()
+        .position(|call| call.position == ast::MacroPosition::Pattern).unwrap();
+    let mut input_position = program.clone();
+    input_position.macro_input.as_mut().unwrap().macro_invocations[source_call].position = ast::MacroPosition::Expression;
+    count += unauthenticated(&input_position, &inputs);
+    let mut input_tokens = program.clone();
+    input_tokens.macro_input.as_mut().unwrap().macro_invocations[source_call].tokens[0usize].text = "invented".to_string();
+    count += unauthenticated(&input_tokens, &inputs);
+    assert!(count == 24usize);
+    count as i64
+}
+
 fn main() {
     let count = expression_origins() + type_origins() + fragment_token_origins()
-        + lexical_origins() + statement_origins();
-    assert!(count == 106i64);
+        + lexical_origins() + statement_origins() + pattern_origins();
+    assert!(count == 130i64);
 }

@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! bind { ($name:ident) => { $name }; }
+macro_rules! triple { ($a:ident, $b:ident, $c:ident) => { [$a, $b, $c] }; }
+macro_rules! first { ($p:pat) => { [$p, ..] }; }
+fn classified(values: &[bool]) -> i64 {
+    match values { [] => 0i64, first!(false) => 20i64, first!(true) => 22i64 }
+}
+fn probe() -> i64 {
+    let [bind!(a), bind!(b), bind!(c)] = [2i64, 10i64, 30i64];
+    let triple!(x, y, z) = [a, b, c];
+    assert_eq!(x + y + z, 42i64);
+    classified(&[false; 0]) + classified(&[false]) + classified(&[true, false])
+}

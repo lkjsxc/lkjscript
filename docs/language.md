@@ -1423,15 +1423,16 @@ invocation begins preparation and `macro_expansions` for retained origin
 records. These counters cover the traversed source closure.
 
 Module-scoped `macro_rules!` definitions produce ordinary source expressions,
-statement lists or items. Matchers accept literal token trees and `expr`, `ty`,
-`block`, `ident`, `lifetime` and `tt` fragments. `*`, `+`, and `?` repetitions
+patterns, statement lists or items. Matchers accept literal token trees and
+`expr`, `ty`, `block`, `pat`, `pat_param`, `path`, `literal`, `ident`,
+`lifetime` and `tt` fragments. `*`, `+`, and `?` repetitions
 preserve nesting and require matching
 capture lengths when several repeated names are emitted together. Separators,
 optional trailing commas, recursive item producers, and nested macro calls are
 supported. When a repetition requires input after a comma and the only
 following matcher is `$(,)?`, the final comma can end the list. Both a comma
 separator and an explicit comma before a capture can introduce another member.
-Expression, block and type captures remain distinct opaque fragments when
+Expression, block, type, pattern, path and literal captures remain opaque when
 forwarded. Substitution preserves precedence; later literal-token or identifier
 arms cannot inspect them. A `tt` capture forwards any of them as one opaque tree.
 A literal `@` is punctuation in a token tree. A repeated `tt` consumes one
@@ -1439,7 +1440,8 @@ punctuation token, opaque fragment or whole delimited group per iteration.
 Literal forms follow the ordinary source lexer; unsupported literal
 prefixes fail before matching. Literal matcher tokens retain their exact spelling, including raw
 string delimiters and byte escapes. Unused expression captures do not expand
-nested macros or read includes. Unused type captures do not resolve their names.
+nested macros or read includes. Unused type captures do not resolve their names; unused pattern captures do not
+expand nested macros. Pattern and path captures retain their grammar category.
 Each emitted occurrence gets fresh syntax and ordinary checking at its use site,
 including positional `impl Trait` obligations and constructor inference.
 Empty nested repetitions retain their outer iteration counts.
@@ -1460,13 +1462,20 @@ token tape retain the complete token spelling.
 Generated macro definitions remain unsupported and retain wildcard recovery.
 
 A fragment that cannot begin at the next token lets matching try another arm.
-Once its parse starts, a parse error is fatal. A type fragment must end at the
+Once its parse starts, a parse error is fatal. A type or path fragment must end at the
 matcher boundary or precede `{`, `[`, `,`, `=>`, `:`, `=`, `>`, `>>`,
 `;`, `|`, `as`, `where`, or a repetition with allowed first tokens.
 Separated repetitions use the same follow set. Nested generic closers can split
 `>>`, `>=` and `>>=`: the type owns its consumed prefix, the matcher retains
 the suffix, and failed arms or repetition iterations restore the exact input.
-Splitting preserves source origins and never joins separate tokens.
+Splitting preserves source origins and never joins separate tokens. Pattern
+fragments may precede `=>`, `,`, `=`, `if` or `in`; `pat_param` also permits `|`.
+`pat` includes top-level alternatives, while `pat_param` parses one non-alternative
+pattern. Forwarded opaque patterns retain their original parse. Nullable nested
+repetitions must satisfy the following-token rule when skipped as well as taken.
+A literal-valued expression capture can supply a pattern; an opaque arbitrary
+expression or constant-path expression cannot. Use `path` for a constant or
+constructor path. Opaque expressions can still match unused pattern captures.
 
 A `lifetime` capture consumes one lifetime token, including `'static` or `'_`,
 and remains transparent through nested calls and `tt` forwarding: literal
@@ -1553,13 +1562,46 @@ and replay traversal. Captured binders obey ordinary shadowing, block imports
 cover the destination block, and ownership, views and cleanup retain their ordinary
 rules. Local items and generated macro definitions keep their existing refusals.
 
+Pattern invocations expand as exactly one complete pattern, including in match
+arms, `matches!`, let/let-else, if-let, while-let, for loops, and function or
+closure parameters. Tuple, named-field, enum, slice, reference, `@` binding and
+or-pattern children use the same expansion traversal and active-invocation
+recursion check. An expansion may supply tuple/slice `..`; ordinary typed
+placement checks still apply. Empty output, trailing syntax and invalid
+expression-to-pattern materializations refuse. Unknown or unavailable providers
+have `E_UNSUPPORTED_MACRO` at the invocation, with failed attempts rolled back.
+Inactive cfg/cfg_attr carriers do not retain invocations or capture materializations.
+
+Parameter patterns retain header lookup scope and are bound before body imports;
+a body import can hide a parameter without changing its declaration pattern.
+Bodyless signatures allow expanded immutable single bindings or wildcards.
+Let-else waits for expanded bindings before constructing its success tuple,
+preserving reference modes and mutability. Array/slice patterns test length before
+indexing, and `@` tests its subpattern before binding the complete value. Bound
+slice rests such as `middle @ ..` retain a located unsupported boundary.
+Indexed elements retain ordinary borrowing checks: moving a non-Copy array
+element and simultaneous mutable index bindings remain conservative refusals.
+Constant path patterns admit module constants with scalar literal initializers
+and require their declared type; associated and computed constant patterns
+retain explicit unsupported diagnostics.
+
+Pattern aliases, capture materializations, function patterns and let-else exports
+are authenticated by exact source and expansion replay. Generated query identities
+include nested and participating export dependencies. Exact caller-authored
+binding tokens passed through `ident` or `pat` can be renamed when every role and
+reference has complete, stable evidence. Template bindings, duplicated or mixed
+roles, and changes to macro selection or another reference refuse without
+publishing files. Parameter ownership is recorded separately from lexical lookup.
+
 The current fragment set is deliberate. Other fragment kinds, procedural
 macros, block-local or generated macro definitions, selective `macro_use`
 imports, attributes on invocations, and expansion that discovers external
 source modules have located refusals. Built-in macro names remain reserved.
-Macro invocations in type and pattern positions are not admitted by this slice. Captured types work in ordinary type positions,
-qualified receivers and generic arguments; they cannot become expression paths,
-struct literals or trait bounds. `impl $t for Target` with a captured trait type
+Direct macro invocations in type positions remain unsupported. Captured types work in ordinary type positions,
+qualified receivers and generic arguments. A captured path can supply type,
+expression or pattern paths; an opaque type must be forwarded through a path
+fragment and actually contain a path before it can do so. Opaque types cannot
+directly become struct literals or trait bounds. `impl $t for Target` with a captured trait type
 has a located unsupported diagnostic. Existing ordinary type and constant
 expression boundaries still apply. Repetition heads must determine continuation without overlapping the
 following matcher. Fragment ambiguity has a located diagnostic; pure literal

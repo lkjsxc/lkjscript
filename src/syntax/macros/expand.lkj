@@ -117,6 +117,7 @@ struct Expander {
     rules: Vec<Vec<matcher::Rule>>,
     invalid_rules: BTreeMap<usize, Diagnostic>,
     expressions: BTreeMap<usize, usize>,
+    patterns: BTreeMap<usize, usize>,
     visited: BTreeSet<(usize, usize)>,
     failed: BTreeSet<usize>,
     report: Option<ExpansionReport>,
@@ -124,7 +125,7 @@ struct Expander {
 impl Expander {
     fn new(rules: Vec<Vec<matcher::Rule>>, invalid_rules: BTreeMap<usize, Diagnostic>,
         report: Option<ExpansionReport>) -> Self {
-        Self { rules, invalid_rules, expressions: BTreeMap::new(), visited: BTreeSet::new(),
+        Self { rules, invalid_rules, expressions: BTreeMap::new(), patterns: BTreeMap::new(), visited: BTreeSet::new(),
             failed: BTreeSet::new(), report }
     }
     fn attempt(&mut self, program: &Program) -> Option<ParseCheckpoint> {
@@ -201,6 +202,24 @@ impl Expander {
         let Some(id) = self.prepared(program, call, saved, parsed, None)? else { return Ok(None); };
         self.expression_node(program, id)?;
         self.expressions.insert(call, id);
+        Ok(Some(id))
+    }
+    fn parse_pattern(&self, program: &mut Program, call: usize) -> Result<PatternId, Diagnostic> {
+        let invocation = self.invocation(program, call)?;
+        if invocation.position != MacroPosition::Pattern { return Err(error(invocation.span, "E_MACRO_EXPANSION", "macro invocation is not a pattern")); }
+        let (tokens, expansion) = self.begin(program, call, &invocation)?;
+        let id = super::pattern(program, &tokens, &invocation, expansion)?;
+        program.macro_expansions[expansion].end = crate::ast::macros::inventory(program);
+        Ok(id)
+    }
+    fn pattern(&mut self, program: &mut Program, call: usize) -> Result<Option<PatternId>, Diagnostic> {
+        if self.failed.contains(&call) { return Ok(None); }
+        if let Some(id) = self.patterns.get(&call) { return Ok(Some(*id)); }
+        let saved = self.attempt(program);
+        let parsed = self.parse_pattern(program, call);
+        let Some(id) = self.prepared(program, call, saved, parsed, None)? else { return Ok(None); };
+        self.pattern_node(program, id)?;
+        self.patterns.insert(call, id);
         Ok(Some(id))
     }
     fn parse_item(&self, program: &mut Program, call: usize, footprint: &mut Option<Vec<String>>)

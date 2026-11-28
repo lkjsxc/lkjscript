@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! bind { ($name:ident) => { $name }; }
+macro_rules! reference { ($name:ident) => { &bind!($name) }; }
+fn probe() -> i64 { let value = 42i64; let reference!(read) = &value; read }

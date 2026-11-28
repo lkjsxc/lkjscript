@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! some { ($name:ident) => { Some($name) }; }
+fn probe() -> i64 {
+    let mut source = Some(6i64);
+    let mut total = 0i64;
+    while let some!(value) = source {
+        total += value * 2i64;
+        source = if value > 1i64 { Some(value - 1i64) } else { None };
+    }
+    total
+}

@@ -1,0 +1,6 @@
+// expect: reject E_MACRO_EXPANSION
+// witness: {"root":true}
+// rust-error: error: arbitrary expressions aren't allowed in patterns
+const ANSWER: i64 = 42i64;
+macro_rules! expression { ($p:expr) => { $p }; }
+fn probe() -> i64 { match 42i64 { expression!(ANSWER) => 42i64, _ => 0i64 } }

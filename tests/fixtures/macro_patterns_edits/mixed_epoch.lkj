@@ -1,0 +1,6 @@
+macro_rules! first { () => { _ }; }
+macro_rules! second { () => { Some(hidden) }; }
+fn main() -> i64 {
+    let (first!(), second!()) = (0i64, Some(42i64)) else { return 0i64; };
+    42i64
+}

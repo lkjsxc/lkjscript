@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! alternatives { ($left:pat_param | $right:pat_param) => { $left | $right }; }
+fn probe() -> i64 { match 2i64 { alternatives!(1i64 | 2i64) => 42i64, _ => 0i64 } }

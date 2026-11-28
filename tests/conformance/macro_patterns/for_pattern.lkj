@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! bind { ($name:ident) => { $name }; }
+fn probe() -> i64 { let mut total = 0i64; for bind!(value) in 1i64..7i64 { total += value * 2i64; } total }

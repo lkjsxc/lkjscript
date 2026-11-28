@@ -653,6 +653,54 @@ The native bin-off baseline was still running when the measurement stopped
 after 2,435 s. The completed paired timings in the table use the Rust-built
 producers.
 
+#### Declarative patterns in the DOM census
+
+Declarative invocations now expand through ordinary pattern checking, including
+nested calls in `matches!`, parameters and let-else bindings. The
+[focused suite](../tests/conformance/macro_patterns) includes all five DOM
+pattern shapes with declared local providers and a missing-provider control.
+The paired census uses unchanged pinned projections and library bytes, a frozen
+`0a45fa5a6` baseline, and fixed-point producer
+`bb5b54c48b1ffb5a2b5c4b029ba6f6e6e35fa2933edb96d14ba7ce7121aab832`.
+
+Each row applies separately to debug assertions off and on. Counts are
+checked / blocked / rejected.
+
+| Root | Before | After | Changed existing first causes | Added / removed items |
+| --- | --- | --- | ---: | ---: |
+| Sōzu bin | 9 / 622 / 0 | 9 / 622 / 0 | 1 | 0 / 0 |
+| Sōzu lib | 10 / 1235 / 0 | 10 / 1236 / 0 | 1 | 1 / 0 |
+| nom | 8 / 652 / 0 | 8 / 652 / 0 | 0 | 0 / 0 |
+| DOM | 0 / 416 / 0 | 0 / 416 / 0 | 301 | 0 / 0 |
+| selectors | 0 / 348 / 0 | 0 / 348 / 0 | 0 | 0 / 0 |
+
+All **54 previously checked observations** remain deeply identical against both
+the fresh baseline and preceding cfg_attr census. No root loses an item identity.
+The fresh final census takes 27.73 s; these are refusal-frontier measurements,
+not whole-root admission or execution.
+
+In each DOM mode, all four former `E_PARSE` diagnostics disappear. All 26
+pattern invocations now have accurately located `E_UNSUPPORTED_MACRO`
+diagnostics and pattern tombstones, including the two formerly masked calls at
+text_formatting line 117. The pinned html5ever macro provider is absent. Unknown
+macro diagnostics rise from 15 to 42: the 26 pattern calls and one formerly
+swallowed expression call at node_data:273:38. Statement tombstones change from
+19 to 16 (four parse tombstones removed, one expression tombstone added).
+
+The 301 DOM first-cause rows per mode all remain blocked: 287 now reach the
+existing `ns!` refusal at document:74:33, ten reach the existing
+`local_name!` refusal at node_data:107:39, and four reach the exact pattern
+calls at text_formatting:42:51, 113:9, 127:9 and node_data:269:13. Across both
+modes, 602 parser-first-cause observations advance without new DOM admissions.
+
+Ordinary `@` support also advances one existing Sōzu row per root/mode past
+logging/display:140:17: bin reaches its existing `extern` refusal, and lib
+reaches its unavailable `RefCell` capability. Sōzu lib exposes one additional
+`protocol::h2::parser::from` item, still blocked by existing `dyn`
+implementation coherence. nom and selectors retain every item row unchanged.
+The next DOM experiment needs an explicitly selected pinned macro provider;
+this slice does not invent provider definitions.
+
 #### Borrowed receiver and trait evidence
 
 The receiver fixture retains Sōzu's `Ready` tuple declaration and

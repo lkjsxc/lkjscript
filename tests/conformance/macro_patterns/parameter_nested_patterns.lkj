@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! bind { ($name:ident) => { $name }; }
+fn sum((bind!(a), (ref b, c)): (i64, (i64, i64)), &d: &i64) -> i64 { a + *b + c + d }
+fn probe() -> i64 { let last = 2i64; sum((10i64, (20i64, 10i64)), &last) }

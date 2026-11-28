@@ -1,0 +1,5 @@
+// expect: reject E_MACRO_RECURSION
+// witness: {"root":true}
+// rust-error: error: recursion limit reached while expanding `again!`
+macro_rules! again { () => { again!() }; }
+fn probe() -> i64 { let again!() = 42i64; 0i64 }

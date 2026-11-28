@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! expression { ($value:expr) => { $value }; }
+fn probe() -> i64 {
+    let a = match 2i64 { expression!(2i64) => 2i64, _ => 0i64 };
+    let b = match -40i64 { expression!(-40i64) => 40i64, _ => 0i64 };
+    a + b
+}

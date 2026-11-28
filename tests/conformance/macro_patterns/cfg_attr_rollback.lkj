@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! bind { ($name:ident) => { $name }; }
+fn probe() -> i64 {
+    #[cfg_attr(all(), cfg(any()))]
+    let unavailable!(ghost) = 99i64;
+    #[cfg_attr(any(), unknown(payload!(tokens)))]
+    let bind!(value) = 42i64;
+    value
+}

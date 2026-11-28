@@ -1,0 +1,5 @@
+// expect: reject E_MACRO_RULE
+// witness: {"root":true}
+// rust-error: error: `$p:pat` is followed by `|`, which is not allowed for `pat` fragments
+macro_rules! wrong { ($($p:pat)|+) => { $($p)|+ }; }
+fn probe() -> i64 { 42i64 }

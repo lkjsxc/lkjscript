@@ -1,0 +1,5 @@
+// expect: reject E_UNSUPPORTED
+// witness: {"root":true}
+macro_rules! parameter { () => { (left, right) }; }
+trait Contract { fn inspect(parameter!(): (i64, i64)); }
+fn probe() -> i64 { 42i64 }

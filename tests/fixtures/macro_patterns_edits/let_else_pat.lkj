@@ -1,0 +1,5 @@
+macro_rules! payload { ($p:pat) => { $p }; }
+fn main() -> i64 {
+    let payload!(Some(value)) = Some(42i64) else { return 0i64; };
+    value
+}

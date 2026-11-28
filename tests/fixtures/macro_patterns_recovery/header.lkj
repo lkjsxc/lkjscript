@@ -1,0 +1,8 @@
+fn selected() -> i64 { 42i64 }
+fn broken(missing!(selected): i64) -> i64 {
+    selected()
+}
+fn dependent() -> i64 { broken(0i64) }
+fn transitive() -> i64 { dependent() }
+fn good() -> i64 { selected() }
+fn probe() -> i64 { good() }

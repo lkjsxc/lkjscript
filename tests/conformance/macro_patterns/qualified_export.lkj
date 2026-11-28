@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {"root":true}
+mod patterns {
+    #[macro_export]
+    macro_rules! exported { ($name:ident) => { $name }; }
+}
+fn probe() -> i64 { let crate::exported!(value) = 42i64; value }

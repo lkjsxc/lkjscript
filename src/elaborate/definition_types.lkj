@@ -1268,6 +1268,9 @@ impl Infer<'_, '_> {
             return Ok(());
         }
         let node = self.source.patterns[pattern].clone();
+        if let a::Pattern::At { inner, .. } = &node.kind {
+            return self.constrain_pattern(*inner, subject);
+        }
         if let a::Pattern::Ref { inner, .. } = &node.kind {
             if let Some(Shape::Ref(_, referent)) = self.shape(subject) {
                 return self.constrain_pattern(*inner, referent);
@@ -1343,6 +1346,7 @@ impl Infer<'_, '_> {
         if matches!(
             node.kind,
             a::Pattern::Tuple(_)
+                | a::Pattern::Slice(_)
                 | a::Pattern::Variant { .. }
                 | a::Pattern::Struct { .. }
                 | a::Pattern::Path(_)
@@ -1369,6 +1373,25 @@ impl Infer<'_, '_> {
                     self.definition.semantic_bindings.push((pattern, value));
                 }
                 self.bindings.push_origin((name, value), super::semantic::LocalTarget::Pattern(pattern));
+            }
+            a::Pattern::At { binding, inner } => {
+                self.bind_pattern_mode(binding, value, mode)?;
+                self.bind_pattern_mode(inner, value, mode)?;
+            }
+            a::Pattern::Slice(fields) => {
+                let element = match self.shape(value) {
+                    Some(Shape::Array(element, _) | Shape::Slice(element)) => element,
+                    _ => return Err(err(node.span, "E_TYPE", "slice pattern requires an array or slice")),
+                };
+                for field in fields {
+                    if matches!(self.source.patterns[field].kind, a::Pattern::Rest) { continue; }
+                    if let a::Pattern::At { inner, .. } = self.source.patterns[field].kind {
+                        if matches!(self.source.patterns[inner].kind, a::Pattern::Rest) {
+                            return Err(err(node.span, "E_UNSUPPORTED", "binding a slice rest is not supported"));
+                        }
+                    }
+                    self.bind_pattern_mode(field, element, mode)?;
+                }
             }
             a::Pattern::Tuple(fields) => {
                 let mut rest = false;
@@ -1480,6 +1503,14 @@ impl Infer<'_, '_> {
                 self.bind_nominal_pattern(&path, &fields, value, mode, node.scope, node.span)?;
             }
             a::Pattern::Path(path) => {
+                if let Some(declaration) = path.declaration {
+                    if let a::Item::Constant(index) = self.source.declarations[declaration].item {
+                        let ty = self.source.constants[index].ty;
+                        let expected = self.source_type(ty, &BTreeMap::new())?;
+                        self.unify(value, expected, node.span)?;
+                        return Ok(());
+                    }
+                }
                 let no_fields: Vec<(String, a::PatternId)> = Vec::new();
                 self.bind_nominal_pattern(&path, &no_fields, value, mode, node.scope, node.span)?;
             }
@@ -2847,7 +2878,15 @@ pub(super) fn infer(
     inference.definition.result = inference.result;
     for (position, parameter) in function.params.iter().enumerate() {
         let ty = inference.source_type(parameter.ty, &environment)?;
-        inference.bindings.push_origin((parameter.name.clone(), ty), super::semantic::LocalTarget::Parameter(position));
+        let pattern = source.function_patterns.get(&index)
+            .and_then(|patterns| patterns.iter().find(|entry| entry.0 == position))
+            .map(|entry| entry.1);
+        if let Some(pattern) = pattern {
+            inference.definition.bindings.insert(pattern, ty);
+            inference.bind_pattern(pattern, ty, true)?;
+        } else {
+            inference.bindings.push_origin((parameter.name.clone(), ty), super::semantic::LocalTarget::Parameter(position));
+        }
     }
     if let Some(body) = function.body {
         let body = inference.block(body)?;

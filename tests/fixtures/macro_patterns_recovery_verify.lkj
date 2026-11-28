@@ -1,0 +1,154 @@
+// Independent consumer of pattern-recovery item diagnostics and authored locations.
+use std::json::{self, Value};
+
+struct Expected {
+    line: usize,
+    column: usize,
+    name: String,
+    status: String,
+    dependency: usize,
+}
+fn row(line: usize, column: usize, name: &str, status: &str, dependency: usize) -> Expected {
+    Expected { line, column, name: name.to_string(), status: status.to_string(), dependency }
+}
+fn cases(name: &str) -> Vec<Expected> {
+    match name {
+        "header" => vec![
+            row(1, 1, "selected", "checked", 0), row(2, 1, "broken", "blocked", 0),
+            row(5, 1, "dependent", "blocked", 2), row(6, 1, "transitive", "blocked", 5),
+            row(7, 1, "good", "checked", 1), row(8, 1, "probe", "checked", 7),
+        ],
+        "body" => vec![
+            row(1, 1, "selected", "checked", 0), row(2, 1, "broken", "blocked", 0),
+            row(6, 1, "dependent", "blocked", 2), row(7, 1, "transitive", "blocked", 6),
+            row(8, 1, "good", "checked", 1), row(9, 1, "probe", "checked", 8),
+        ],
+        "nested_header" => vec![
+            row(1, 1, "selected", "checked", 0), row(2, 1, "outer", "blocked", 0),
+            row(3, 5, "broken", "blocked", 0), row(4, 5, "sibling", "blocked", 0),
+            row(7, 1, "dependent", "blocked", 2), row(8, 1, "good", "checked", 1),
+            row(9, 1, "probe", "checked", 8),
+        ],
+        "bodyless" => vec![
+            row(4, 1, "selected", "checked", 0), row(5, 1, "good", "checked", 4),
+            row(6, 1, "probe", "checked", 5),
+        ],
+        _ => panic!("unknown pattern recovery fixture"),
+    }
+}
+fn text(value: &Value, key: &str) -> String {
+    value.get(key).unwrap().as_str().unwrap().to_string()
+}
+fn number(value: &Value, key: &str) -> usize {
+    value.get(key).unwrap().as_usize().unwrap()
+}
+fn identity(path: &str, line: usize, column: usize) -> String {
+    format!("{path}@{line}:{column}")
+}
+fn cause(value: &Value, path: &str, line: usize, column: usize) {
+    assert_eq!(text(value, "path"), path);
+    assert_eq!(number(value, "line"), line);
+    assert_eq!(number(value, "column"), column);
+    assert_eq!(text(value, "code"), "E_UNSUPPORTED_MACRO");
+    assert_eq!(text(value, "message"), "unsupported macro: missing!; no visible declarative definition");
+}
+fn main(mut world: World) {
+    let arguments = world.args();
+    assert_eq!(arguments.len(), 2usize);
+    let path = String::from_utf8(arguments[0].clone()).unwrap();
+    let name = String::from_utf8(arguments[1].clone()).unwrap();
+    let input = world.stdin().read_to_end().unwrap();
+    let diagnostics = String::from_utf8(input).unwrap();
+    let mut records = 0usize;
+    let mut report: Option<Value> = None;
+    for line in diagnostics.as_str().lines() {
+        if line.starts_with("LKJSCRIPT_ITEMS ") {
+            records += 1usize;
+            report = Some(json::parse(line[16usize..].as_bytes()).unwrap());
+        }
+    }
+    assert_eq!(records, 1usize);
+    let report = report.unwrap();
+    assert_eq!(number(&report, "schema"), 1usize);
+    let (cause_line, cause_column, start, end) = match name.as_str() {
+        "header" => (2usize, 11usize, 41usize, 59usize),
+        "body" => (3usize, 9usize, 60usize, 78usize),
+        "nested_header" => (3usize, 15usize, 65usize, 83usize),
+        "bodyless" => (2usize, 16usize, 32usize, 50usize),
+        _ => panic!("unknown pattern recovery fixture"),
+    };
+    let ordinary = format!("{path}:{cause_line}:{cause_column}: E_UNSUPPORTED_MACRO unsupported macro: missing!; no visible declarative definition");
+    let mut present = false;
+    for line in diagnostics.as_str().lines() {
+        if line == ordinary.as_str() { present = true; }
+    }
+    assert!(present);
+    let tombstones = report.get("tombstones").unwrap().as_array().unwrap();
+    assert_eq!(tombstones.len(), 1usize);
+    let tombstone = &tombstones[0usize];
+    assert_eq!(number(tombstone, "scope"), 0usize);
+    assert_eq!(text(tombstone, "module"), "");
+    assert_eq!(text(tombstone, "kind"), "macro invocation");
+    assert_eq!(text(tombstone, "path"), path);
+    assert_eq!(number(tombstone, "line"), cause_line);
+    assert_eq!(number(tombstone, "column"), cause_column);
+    assert_eq!(number(tombstone, "start"), start);
+    assert_eq!(number(tombstone, "end"), end);
+    assert_eq!(tombstone.get("namespace").unwrap().as_bool().unwrap(), name != "bodyless");
+    assert!(!tombstone.get("coherence").unwrap().as_bool().unwrap());
+    assert!(tombstone.get("names").unwrap().as_array().unwrap().is_empty());
+    if name == "bodyless" {
+        assert!(matches!(tombstone.get("block").unwrap(), Value::Null));
+    } else {
+        // Block 1 is broken's body, except the nested header: outer is block 1
+        // and broken owns block 2. Header lookup still retains its lexical block.
+        assert_eq!(number(tombstone, "block"), if name == "nested_header" { 2usize } else { 1usize });
+    }
+    cause(tombstone.get("cause").unwrap(), &path, cause_line, cause_column);
+    let rows = report.get("items").unwrap().as_array().unwrap();
+    let expected = cases(&name);
+    assert_eq!(rows.len(), expected.len());
+    let mut checked = 0usize;
+    let mut blocked = 0usize;
+    for want in &expected {
+        let mut selected = None;
+        for index in 0usize..rows.len() {
+            if text(&rows[index], "name") == want.name {
+                assert!(selected.is_none());
+                selected = Some(index);
+            }
+        }
+        let found = &rows[selected.unwrap()];
+        assert_eq!(text(found, "path"), path);
+        assert_eq!(text(found, "id"), identity(&path, want.line, want.column));
+        assert_eq!(number(found, "line"), want.line);
+        assert_eq!(number(found, "column"), want.column);
+        assert_eq!(text(found, "status"), want.status);
+        if want.status == "checked" {
+            checked += 1usize;
+            assert!(matches!(found.get("cause").unwrap(), Value::Null));
+        } else {
+            blocked += 1usize;
+            cause(found.get("cause").unwrap(), &path, cause_line, cause_column);
+            let reason = text(found, "reason");
+            if name == "nested_header" && want.name == "sibling" {
+                // This is an existing replay boundary, not leaked binding poison.
+                assert_eq!(reason, "complete context required: nested function declaration context");
+            } else {
+                assert_eq!(reason, "the authored item overlaps a refused source region");
+            }
+        }
+        let dependencies = found.get("dependencies").unwrap().as_array().unwrap();
+        if want.dependency == 0usize {
+            assert!(dependencies.is_empty());
+        } else {
+            assert_eq!(dependencies.len(), 1usize);
+            let target = identity(&path, want.dependency, 1usize);
+            assert_eq!(dependencies[0usize].as_str().unwrap(), target.as_str());
+        }
+    }
+    assert_eq!(number(&report, "checked"), checked);
+    assert_eq!(number(&report, "blocked"), blocked);
+    assert_eq!(number(&report, "rejected"), 0usize);
+    world.stdout().write(format!("ok pattern recovery {name}: checked={checked} blocked={blocked}; exact invocation cause and lexical tombstone\n").as_bytes());
+}

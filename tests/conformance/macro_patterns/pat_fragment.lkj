@@ -1,0 +1,8 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! identity { ($pattern:pat, unused) => { $pattern }; ($pattern:pat) => { $pattern }; }
+fn probe() -> i64 {
+    let identity!((left, right)) = (2i64, 40i64);
+    let selected = match right { identity!(39i64 | 40i64) => right, _ => 0i64 };
+    match Some(left + selected) { identity!(Some(value)) => value, identity!(None) => 0i64 }
+}

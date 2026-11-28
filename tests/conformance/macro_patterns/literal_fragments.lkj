@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! literal { ($value:literal) => { $value }; }
+fn probe() -> i64 {
+    let a = match -2i64 { literal!(-2i64) => 2i64, _ => 0i64 };
+    let b = match 'x' { literal!('x') => 10i64, _ => 0i64 };
+    let c = match "hello" { literal!("hello") => 10i64, _ => 0i64 };
+    let d = match true { literal!(true) => 20i64, false => 0i64 };
+    a + b + c + d
+}

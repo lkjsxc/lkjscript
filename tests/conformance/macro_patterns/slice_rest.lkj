@@ -1,0 +1,15 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! rest { () => { .. }; }
+macro_rules! edge { ($a:ident, $b:ident) => { [$a, rest!(), $b] }; }
+macro_rules! bind { ($name:ident) => { $name }; }
+fn ends(values: &[i64]) -> i64 {
+    match values { edge!(a, b) => *a + *b, _ => 0i64 }
+}
+fn probe() -> i64 {
+    let values = [2i64, 900i64, 40i64];
+    let edge!(a, b) = values;
+    let [bind!(x), .., bind!(y)] = values;
+    assert_eq!(a + b, x + y);
+    ends(&values) + ends(&[0i64; 0]) + ends(&[9i64])
+}

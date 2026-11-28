@@ -1,0 +1,7 @@
+macro_rules! bind { ($x:ident) => { $x }; }
+macro_rules! twice { ($x:ident) => {{
+    let bind!($x) = 40i64;
+    let first = $x;
+    { let bind!($x) = 2i64; first + $x }
+}}; }
+fn main() -> i64 { twice!(value) }

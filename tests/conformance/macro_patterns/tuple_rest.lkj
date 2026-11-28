@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! rest { () => { .. }; }
+macro_rules! bind { ($name:ident) => { $name }; }
+macro_rules! pair { ($left:ident, $right:ident) => { ($left, $right) }; }
+fn probe() -> i64 {
+    let (bind!(first), rest!(), pair!(a, b)) = (2i64, 900i64, (10i64, 30i64));
+    first + a + b
+}

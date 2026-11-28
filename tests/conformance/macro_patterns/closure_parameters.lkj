@@ -1,0 +1,4 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! pair { ($a:ident, $b:ident) => { ($a, $b) }; }
+fn probe() -> i64 { let sum = |pair!(a, b): (i64, i64)| a + b; sum((2i64, 40i64)) }

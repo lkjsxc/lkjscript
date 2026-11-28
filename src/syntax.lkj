@@ -22,6 +22,9 @@ enum TokenKind {
     Expression(usize),
     Type(usize),
     Block(usize),
+    Pattern(usize),
+    Path(usize),
+    Literal(usize),
     End,
 }
 #[derive(Clone)]
@@ -643,7 +646,8 @@ pub fn semantic_tokens(source: &str) -> Result<Vec<SemanticToken>, Diagnostic> {
             TokenKind::String => 2u8, TokenKind::Char => 3u8,
             TokenKind::Bytes => 4u8, TokenKind::Lifetime => 5u8,
             TokenKind::Symbol => 6u8, TokenKind::End => continue,
-            TokenKind::Expression(_) | TokenKind::Type(_) | TokenKind::Block(_) => unreachable!(),
+            TokenKind::Expression(_) | TokenKind::Type(_) | TokenKind::Block(_)
+                | TokenKind::Pattern(_) | TokenKind::Path(_) | TokenKind::Literal(_) => unreachable!(),
         };
         result.push(SemanticToken { kind, text: token.text, span: token.span });
     }
@@ -2253,6 +2257,11 @@ impl Parser {
         Ok(predicates)
     }
     fn value_path(&mut self) -> Result<Path, Diagnostic> {
+        let captured_path = self.token().kind.clone();
+        if let TokenKind::Path(id) = captured_path {
+            self.at += 1usize;
+            return self.macro_capture_path(id);
+        }
         let span = self.token().span;
         if self.lt() {
             let receiver = self.ty()?;
@@ -2421,6 +2430,10 @@ impl Parser {
                     if let TokenKind::Type(id) = captured {
                         self.at += 1usize;
                         value = self.macro_capture_type(id)?;
+                    } else if let TokenKind::Path(id) = captured {
+                        self.at += 1usize;
+                        let path = self.macro_capture_path(id)?;
+                        value = self.add_finished_type(Type::Path(path), span);
                     } else if self.lt() {
                         frames.push(TypeFrame::QualifiedReceiver { span });
                         frames.push(TypeFrame::Parse);
@@ -2802,9 +2815,11 @@ impl Parser {
         let mut generics = self.generics()?;
         self.expect("(")?;
         let mut params = Vec::new();
+        let mut patterns: Vec<(usize, PatternId)> = Vec::new();
         let mut method_context = None;
         while !self.is(")") {
             let start = self.token().span;
+            let parameter_at = self.at;
             let reference = self.take("&");
             let lifetime = if reference && self.token().kind == TokenKind::Lifetime {
                 let s = self.token().text.clone();
@@ -2814,43 +2829,54 @@ impl Parser {
                 String::new()
             };
             let mutable = self.take("mut");
-            let param_context = self.token().context;
-            let param_name = self.ident()?;
-            if param_name == "self" { method_context = Some(param_context); }
-            let mut ty: TypeId;
-            if param_name == "self" && !self.is(":") {
-                ty = self.add_type(
-                    Type::Path(Path {
-                        qualification: None, bindings: Vec::new(),
-                        declaration: None,
-                        name: "Self".to_string(),
-                        args: Vec::new(),
-                    }),
-                    start,
-                );
-                if reference {
+            let simple = !reference && self.token().kind == TokenKind::Ident
+                && self.tokens.get(self.at + 1usize).is_some_and(|token| token.text == ":");
+            if self.is("self") || simple {
+                let param_context = self.token().context;
+                let param_name = self.ident()?;
+                if param_name == "self" { method_context = Some(param_context); }
+                let mut ty: TypeId;
+                if param_name == "self" && !self.is(":") {
                     ty = self.add_type(
-                        Type::Ref {
-                            mutable,
-                            lifetime,
-                            inner: ty,
-                        },
+                        Type::Path(Path {
+                            qualification: None, bindings: Vec::new(),
+                            declaration: None,
+                            name: "Self".to_string(),
+                            args: Vec::new(),
+                        }),
                         start,
                     );
+                    if reference {
+                        ty = self.add_type(Type::Ref { mutable, lifetime, inner: ty }, start);
+                    }
+                } else {
+                    if reference {
+                        return Err(self.unsupported("reference pattern in explicit self parameter"));
+                    }
+                    self.expect(":")?;
+                    ty = self.ty()?;
                 }
+                params.push(Param {
+                    name: crate::ast::macros::local_name(&param_name, param_context),
+                    ty,
+                    mutable: mutable && !reference,
+                    span: self.finish_span(start),
+                });
             } else {
-                if reference {
-                    return Err(self.unsupported("reference pattern in parameter position"));
-                }
+                self.at = parameter_at;
+                let pattern = self.pattern_atom()?;
                 self.expect(":")?;
-                ty = self.ty()?;
+                let ty = self.ty()?;
+                patterns.push((params.len(), pattern));
+                params.push(Param {
+                    name: format!("$parameter{}", params.len()),
+                    ty,
+                    // The hidden subject permits ref-mut destructuring; the
+                    // pattern alone controls each visible binding's mutability.
+                    mutable: true,
+                    span: self.finish_span(start),
+                });
             }
-            params.push(Param {
-                name: crate::ast::macros::local_name(&param_name, param_context),
-                ty,
-                mutable: mutable && !reference,
-                span: self.finish_span(start),
-            });
             if !self.take(",") {
                 break;
             }
@@ -2864,6 +2890,15 @@ impl Parser {
         let body = if self.take(";") { Ok(None) } else { self.block().map(|body: usize| -> Option<usize> { Some(body) }) };
         self.self_context = previous_self;
         let body = body?;
+        if body.is_none() {
+            for (_, pattern) in &patterns {
+                if !self.macro_pattern_pending(*pattern) && !matches!(self.program.patterns[*pattern].kind,
+                    Pattern::Wild | Pattern::Bind { mutable: false, by_ref: false, .. }) {
+                    return Err(Diagnostic::new(self.program.patterns[*pattern].span,
+                        "E_UNSUPPORTED", "a function without a body requires a simple parameter binding"));
+                }
+            }
+        }
         self.argument_impl_traits(&params, &mut generics);
         let id = self.program.functions.len();
         if let Some(form) = self.program.impl_traits.get_mut(&result) {
@@ -2883,6 +2918,7 @@ impl Parser {
             public,
             span: self.finish_span(span),
         });
+        if !patterns.is_empty() { self.program.function_patterns.insert(id, patterns); }
         Ok(id)
     }
     fn fields(&mut self, named: bool, end: &str) -> Result<Vec<Field>, Diagnostic> {
@@ -3504,6 +3540,7 @@ impl Parser {
                 let otherwise = self.add_expr(Expr::Diverge(otherwise), block_span);
                 // A match produces exactly the bindings exported by the pattern.
                 // Generated tuple bindings do not repeat ref binding modes.
+                let deferred = self.macro_pattern_pending(pattern);
                 let mut pending = vec![pattern];
                 let mut bindings: Vec<(String, bool)> = Vec::new();
                 let mut seen: BTreeSet<String> = BTreeSet::new();
@@ -3514,7 +3551,7 @@ impl Parser {
                                 bindings.push((name, mutable));
                             }
                         }
-                        Pattern::Tuple(fields) | Pattern::Variant { fields, .. } => {
+                        Pattern::Tuple(fields) | Pattern::Slice(fields) | Pattern::Variant { fields, .. } => {
                             let mut at = fields.len();
                             while at > 0 {
                                 at -= 1;
@@ -3529,6 +3566,7 @@ impl Parser {
                             }
                         }
                         Pattern::Ref { inner, .. } => pending.push(inner),
+                        Pattern::At { binding, inner } => { pending.push(inner); pending.push(binding); }
                         Pattern::Or(alternatives) => {
                             if let Some(first) = alternatives.first() {
                                 pending.push(*first);
@@ -3537,6 +3575,7 @@ impl Parser {
                         _ => {}
                     }
                 }
+                if deferred { bindings.clear(); }
                 let mut result = Vec::new();
                 let mut outer = Vec::new();
                 for (name, mutable) in bindings {
@@ -3631,7 +3670,10 @@ impl Parser {
                     },
                     start,
                 );
+                let source_pattern = pattern;
                 let pattern = self.add_pattern(Pattern::Tuple(outer), start);
+                if deferred { self.program.pattern_exports.push(crate::ast::macros::PatternExport {
+                    source: source_pattern, sources: Vec::new(), outer: pattern, result: output, expansion: self.expansion }); }
                 (pattern, Some(value), None)
             } else {
                 (pattern, value, ty)
@@ -4022,6 +4064,12 @@ impl Parser {
         let context = self.token().context;
         let captured = self.tokens[self.at].kind.clone();
         if let TokenKind::Expression(id) = captured { self.at += 1usize; return self.macro_capture_expression(id); }
+        if let TokenKind::Literal(id) = captured { self.at += 1usize; return self.macro_capture_literal(id); }
+        if let TokenKind::Path(id) = captured {
+            self.at += 1usize;
+            let path = self.macro_capture_path(id)?;
+            return Ok(self.add_finished_expr(Expr::Path(path), span));
+        }
         if let TokenKind::Block(id) = captured { self.at += 1usize; return self.macro_capture_block_expression(id); }
         if matches!(captured, TokenKind::Type(_)) { return Err(Diagnostic::new(span,
             "E_MACRO_EXPANSION", "an opaque type capture cannot be used as an expression")); }
@@ -4727,6 +4775,22 @@ impl Parser {
         args[format_index] = self.add_expr(Expr::String(normalized), span);
         Ok(())
     }
+    fn macro_pattern_pending(&self, pattern: PatternId) -> bool {
+        let mut pending = vec![pattern];
+        while let Some(id) = pending.pop() {
+            match &self.program.patterns[id].kind {
+                Pattern::MacroInvocation(_) => return true,
+                Pattern::Tuple(fields) | Pattern::Slice(fields) | Pattern::Variant { fields, .. } | Pattern::Or(fields) => {
+                    for field in fields { pending.push(*field); }
+                }
+                Pattern::Struct { fields, .. } => { for (_, field) in fields { pending.push(*field); } }
+                Pattern::Ref { inner, .. } => pending.push(*inner),
+                Pattern::At { binding, inner } => { pending.push(*inner); pending.push(*binding); }
+                _ => {},
+            }
+        }
+        false
+    }
     fn pattern(&mut self) -> Result<PatternId, Diagnostic> {
         self.take("|");
         let first = self.pattern_atom()?;
@@ -4745,10 +4809,15 @@ impl Parser {
     }
     fn pattern_bound(&mut self) -> Result<ExprId, Diagnostic> {
         let span = self.token().span;
+        let captured_literal = self.token().kind.clone();
+        if let TokenKind::Literal(id) = captured_literal {
+            self.at += 1usize;
+            return self.macro_capture_literal(id);
+        }
         let negative = self.take("-");
         let value =
             if self.token().kind == TokenKind::Ident && !self.is("true") && !self.is("false")
-                || self.is("::")
+                || matches!(self.token().kind, TokenKind::Path(_)) || self.is("::")
             {
                 let path = self.value_path()?;
                 self.add_finished_expr(Expr::Path(path), span)
@@ -4814,16 +4883,60 @@ impl Parser {
     }
     fn pattern_atom(&mut self) -> Result<PatternId, Diagnostic> {
         let span = self.token().span;
+        let captured_pattern = self.token().kind.clone();
+        if let TokenKind::Pattern(id) = captured_pattern {
+            self.at += 1usize;
+            return self.macro_capture_pattern(id);
+        }
+        let captured = self.token().kind.clone();
+        if matches!(captured, TokenKind::Expression(_) | TokenKind::Literal(_)) {
+            let value = match captured {
+                TokenKind::Expression(id) => { self.at += 1usize; self.macro_capture_expression(id)? }
+                TokenKind::Literal(id) => { self.at += 1usize; self.macro_capture_literal(id)? }
+                _ => unreachable!(),
+            };
+            let valid = match &self.program.exprs[value].kind {
+                Expr::Int(_) | Expr::Float(_) | Expr::Bool(_) | Expr::String(_) | Expr::Char(_) | Expr::Bytes(_) => true,
+                Expr::Path(_) => false,
+                Expr::Unary { op, value } => op == "-" && matches!(self.program.exprs[*value].kind, Expr::Int(_) | Expr::Float(_)),
+                _ => false,
+            };
+            if !valid { return Err(Diagnostic::new(span, "E_MACRO_EXPANSION", "expression capture is not a literal pattern")); }
+            if self.is("..") || self.is("..=") { return self.pattern_range(Some(value), span); }
+            return Ok(self.add_pattern(Pattern::Literal(value), span));
+        }
+        if self.take("[") {
+            let mut fields = Vec::new();
+            while !self.is("]") {
+                if self.is("..") && self.tokens.get(self.at + 1usize)
+                    .is_some_and(|token| matches!(token.text.as_str(), "," | "]")) {
+                    let rest_span = self.token().span;
+                    self.at += 1usize;
+                    fields.push(self.add_pattern(Pattern::Rest, rest_span));
+                } else { fields.push(self.pattern()?); }
+                if !self.take(",") { break; }
+            }
+            self.expect("]")?;
+            return Ok(self.add_finished_pattern(Pattern::Slice(fields), span));
+        }
         if self.take("_") {
             return Ok(self.add_pattern(Pattern::Wild, span));
+        }
+        if self.fragment && self.is("..") && self.tokens.get(self.at + 1usize).is_some_and(|token|
+            token.kind == TokenKind::End || matches!(token.text.as_str(), "," | ")" | "]")) {
+            self.at += 1usize;
+            return Ok(self.add_pattern(Pattern::Rest, span));
         }
         if self.is("..") || self.is("..=") {
             return self.pattern_range(None, span);
         }
-        if self.take("&") {
+        if self.take("&") || self.take("&&") {
+            let doubled = self.tokens[self.at - 1usize].text == "&&";
             let mutable = self.take("mut");
             let inner = self.pattern_atom()?;
-            return Ok(self.add_finished_pattern(Pattern::Ref { mutable, inner }, span));
+            let inner = self.add_finished_pattern(Pattern::Ref { mutable, inner }, span);
+            return if doubled { Ok(self.add_finished_pattern(Pattern::Ref { mutable: false, inner }, span)) }
+                else { Ok(inner) };
         }
         if self.take("(") {
             let mut fields = Vec::new();
@@ -4860,7 +4973,19 @@ impl Parser {
         let by_ref = self.take("ref");
         let mutable = self.take("mut");
         let context = self.token().context;
+        let opaque_path = matches!(self.token().kind, TokenKind::Path(_));
+        if self.token().kind == TokenKind::Ident && raw_identifier_keyword(&self.token().text) {
+            return Err(self.err("expected a pattern identifier"));
+        }
         let path = self.value_path()?;
+        if self.take("!") {
+            if by_ref || mutable || path.qualification.is_some() || !path.args.is_empty() || !path.bindings.is_empty() {
+                return Err(Diagnostic::new(span, "E_UNSUPPORTED_MACRO", "pattern macro invocation requires an unmodified macro path"));
+            }
+            let name_span = self.tokens[self.at - 2usize].span;
+            let invocation = self.macro_invocation(path.name, span, name_span, MacroPosition::Pattern)?;
+            return Ok(self.add_finished_pattern(Pattern::MacroInvocation(invocation), span));
+        }
         if self.is("..") || self.is("..=") {
             if by_ref || mutable {
                 return Err(self.unsupported("binding range endpoint"));
@@ -4914,10 +5039,18 @@ impl Parser {
             self.expect("}")?;
             return Ok(self.add_finished_pattern(Pattern::Struct { path, fields, rest }, span));
         }
-        if self.is("@") {
-            return Err(self.unsupported("binding pattern with @"));
+        if self.take("@") {
+            if opaque_path || path.qualification.is_some() || !path.args.is_empty() || path.name.contains("::") {
+                return Err(Diagnostic::new(span, "E_PARSE", "@ requires one binding identifier"));
+            }
+            let binding = self.add_pattern(Pattern::Bind {
+                name: crate::ast::macros::local_name(&path.name, context), mutable: mutable && !by_ref,
+                by_ref, ref_mut: mutable && by_ref }, span);
+            self.program.macro_pattern_bindings.insert(binding, (context, mutable, by_ref));
+            let inner = self.pattern_atom()?;
+            return Ok(self.add_finished_pattern(Pattern::At { binding, inner }, span));
         }
-        let is_path = path.name.contains("::") || path.name.as_bytes()[0].is_ascii_uppercase();
+        let is_path = opaque_path || path.name.contains("::") || path.name.as_bytes()[0].is_ascii_uppercase();
         let kind = if is_path {
             Pattern::Path(path)
         } else {
@@ -4929,7 +5062,7 @@ impl Parser {
             }
         };
         let id = self.add_finished_pattern(kind, span);
-        if self.expansion.is_some() || self.fragment {
+        if !opaque_path && (self.expansion.is_some() || self.fragment) {
             self.program.macro_pattern_bindings.insert(id, (context, mutable, by_ref));
         }
         Ok(id)

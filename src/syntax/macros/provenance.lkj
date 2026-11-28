@@ -18,7 +18,7 @@ fn raw_token(program: &Program, token: &MacroToken) -> bool {
 }
 fn source_input(program: &Program) -> Result<(), Diagnostic> {
     if program.resolved || program.macros_expanded || program.macro_input.is_some()
-        || !program.macro_expansions.is_empty() || !program.macro_aliases.is_empty()
+        || !program.macro_expansions.is_empty() || !program.macro_aliases.is_empty() || !program.macro_pattern_aliases.is_empty()
         || !program.macro_inputs.is_empty() || !program.macro_captures.is_empty()
             || !program.macro_identifier_uses.is_empty() || !program.macro_parse_writes.is_empty()
     {
@@ -68,7 +68,7 @@ fn source_input(program: &Program) -> Result<(), Diagnostic> {
 pub(crate) fn validate(program: &Program) -> Result<(), Diagnostic> {
     let Some(input) = &program.macro_input else {
         if !program.macro_definitions.is_empty() || !program.macro_invocations.is_empty()
-            || !program.macro_expansions.is_empty() || !program.macro_aliases.is_empty()
+            || !program.macro_expansions.is_empty() || !program.macro_aliases.is_empty() || !program.macro_pattern_aliases.is_empty()
             || !program.macro_providers.is_empty()
             || !program.macro_inputs.is_empty() || !program.macro_captures.is_empty()
             || !program.macro_identifier_uses.is_empty()

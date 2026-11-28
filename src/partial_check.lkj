@@ -347,9 +347,12 @@ impl<'a> Inspector<'a> {
                 }
                 locals.insert(name.clone()); Ok(())
             }
-            a::Pattern::Tuple(parts) => {
+            a::Pattern::Tuple(parts) | a::Pattern::Slice(parts) => {
                 plan.structural = true;
                 for part in parts { self.pattern(*part, locals, plan)?; } Ok(())
+            }
+            a::Pattern::At { binding, inner } => {
+                self.pattern(*binding, locals, plan)?; self.pattern(*inner, locals, plan)
             }
             a::Pattern::Or(parts) => {
                 for part in parts { self.pattern(*part, locals, plan)?; } Ok(())
@@ -911,7 +914,7 @@ impl<'a> Inspector<'a> {
         let crate_root = self.program.scopes[scope].crate_root;
         for (call, invocation) in self.program.macro_invocations.iter().enumerate() {
             if invocation.parent.is_some() || !contains(function.span, invocation.span) { continue; }
-            if invocation.position != a::macros::MacroPosition::Expression
+            if !matches!(invocation.position, a::macros::MacroPosition::Expression | a::macros::MacroPosition::Pattern)
                 || invocation.name.contains("::") || invocation.scope != scope
                 || !self.program.macro_providers.is_empty() {
                 return Err(self.boundary("macro selection has nonlocal or item dependencies"));
@@ -983,7 +986,11 @@ impl<'a> Inspector<'a> {
         let mut locals = BTreeSet::new();
         for (offset, parameter) in f.params.iter().enumerate() {
             if !nominal || offset != 0usize { self.ty(parameter.ty, &mut plan)?; }
-            locals.insert(parameter.name.clone());
+            let patterns = self.program.function_patterns.get(&index).cloned().unwrap_or(Vec::new());
+            let mut pattern = None;
+            for (position, candidate) in patterns { if position == offset { pattern = Some(candidate); } }
+            if let Some(pattern) = pattern { self.pattern(pattern, &mut locals, &mut plan)?; }
+            else { locals.insert(parameter.name.clone()); }
         }
         self.ty(f.result, &mut plan)?;
         let Some(body) = f.body else { return Err(self.boundary("function body is absent")); };

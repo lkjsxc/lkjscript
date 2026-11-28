@@ -1,0 +1,5 @@
+// expect: reject E_MACRO_EXPANSION
+// witness: {"root":true}
+// rust-error: error: macro expansion ends with an incomplete expression: expected pattern
+macro_rules! empty { () => {}; }
+fn probe() -> i64 { let empty!() = 42i64; 0i64 }

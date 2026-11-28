@@ -37,6 +37,9 @@ fn nodes(program: &a::Program) -> Result<(BTreeSet<usize>, BTreeSet<usize>, BTre
     for function in &program.functions {
         if let Some(body) = function.body { pending.push((1usize, body)); }
     }
+    for patterns in program.function_patterns.values() {
+        for (_, pattern) in patterns { pending.push((2usize, *pattern)); }
+    }
     for constant in &program.constants { pending.push((0usize, constant.value)); }
     for definition in &program.enums {
         for variant in &definition.variants {
@@ -125,16 +128,18 @@ fn nodes(program: &a::Program) -> Result<(BTreeSet<usize>, BTreeSet<usize>, BTre
             if !patterns.insert(index) { continue; }
             let Some(pattern) = program.patterns.get(index) else { return Err(failure("macro", "expanded pattern edge is absent")); };
             match &pattern.kind {
+                a::Pattern::MacroInvocation(_) => return Err(failure("macro", "an invocation remains in the expanded pattern graph")),
                 a::Pattern::Literal(value) => pending.push((0usize, *value)),
                 a::Pattern::Range { start, end, .. } => {
                     if let Some(value) = start { pending.push((0usize, *value)); }
                     if let Some(value) = end { pending.push((0usize, *value)); }
                 }
-                a::Pattern::Tuple(values) | a::Pattern::Variant { fields: values, .. } | a::Pattern::Or(values) => {
+                a::Pattern::Tuple(values) | a::Pattern::Slice(values) | a::Pattern::Variant { fields: values, .. } | a::Pattern::Or(values) => {
                     for value in values { pending.push((2usize, *value)); }
                 }
                 a::Pattern::Struct { fields, .. } => { for (_, value) in fields { pending.push((2usize, *value)); } }
                 a::Pattern::Ref { inner, .. } => pending.push((2usize, *inner)),
+                a::Pattern::At { binding, inner } => { pending.push((2usize, *binding)); pending.push((2usize, *inner)); }
                 a::Pattern::Wild | a::Pattern::Rest | a::Pattern::Bind { .. } | a::Pattern::Path(_) => {}
             }
         }
@@ -178,6 +183,33 @@ pub(crate) fn collect(program: &a::Program) -> Result<MacroOrigins, String> {
         let expansion = program.macro_expansions.iter().position(|entry| entry.invocation == alias.invocation)
             .ok_or_else(|| failure("macro", "an expanded alias has no invocation receipt"))?;
         result.expressions.insert(alias.expression, expansion);
+    }
+    for alias in &program.macro_pattern_aliases {
+        let expansion = program.macro_expansions.iter().position(|entry| entry.invocation == alias.invocation)
+            .ok_or_else(|| failure("macro", "an expanded pattern alias has no invocation receipt"))?;
+        result.patterns.insert(alias.pattern, expansion);
+    }
+    for export in &program.pattern_exports {
+        if let Some(expansion) = export.expansion {
+            result.patterns.insert(export.outer, expansion);
+            result.expressions.insert(export.result, expansion);
+        }
+        let a::Pattern::Tuple(fields) = &program.patterns[export.outer].kind else {
+            return Err(failure("macro", "pattern export has no outer tuple"));
+        };
+        let a::Expr::Tuple(values) = &program.exprs[export.result].kind else {
+            return Err(failure("macro", "pattern export has no result tuple"));
+        };
+        if fields.len() != export.sources.len() || values.len() != export.sources.len() {
+            return Err(failure("macro", "pattern export binding sources differ"));
+        }
+        for (index, source) in export.sources.iter().enumerate() {
+            let expansion = result.patterns.get(source).copied().or(export.expansion);
+            if let Some(expansion) = expansion {
+                result.patterns.insert(fields[index], expansion);
+                result.expressions.insert(values[index], expansion);
+            }
+        }
     }
     Ok(result)
 }

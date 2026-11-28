@@ -1,0 +1,80 @@
+// expect: value 42
+// witness: {}
+enum Name { Pre, Br, Hr, Li, Tr, Td, Th, Article, Blockquote, Section, Div, P, H1, H2, H3, H4, H5, H6, Ul, Ol, Dl, Table, A, Area, Link, Other }
+struct Element { name: Name }
+macro_rules! local_name {
+    ("pre") => { Name::Pre };
+    ("br") => { Name::Br };
+    ("hr") => { Name::Hr };
+    ("li") => { Name::Li };
+    ("tr") => { Name::Tr };
+    ("td") => { Name::Td };
+    ("th") => { Name::Th };
+    ("article") => { Name::Article };
+    ("blockquote") => { Name::Blockquote };
+    ("section") => { Name::Section };
+    ("div") => { Name::Div };
+    ("p") => { Name::P };
+    ("h1") => { Name::H1 };
+    ("h2") => { Name::H2 };
+    ("h3") => { Name::H3 };
+    ("h4") => { Name::H4 };
+    ("h5") => { Name::H5 };
+    ("h6") => { Name::H6 };
+    ("ul") => { Name::Ul };
+    ("ol") => { Name::Ol };
+    ("dl") => { Name::Dl };
+    ("table") => { Name::Table };
+    ("a") => { Name::A };
+    ("area") => { Name::Area };
+    ("link") => { Name::Link };
+}
+macro_rules! nested_name { ($name:tt) => { local_name!($name) }; }
+macro_rules! break_names { () => { local_name!("br") | local_name!("hr") | local_name!("li") | local_name!("tr") }; }
+fn requires_linebreak(name: Name) -> bool {
+    matches!(name,
+        local_name!("article")
+        | local_name!("blockquote")
+        | local_name!("section")
+        | local_name!("div")
+        | local_name!("p")
+        | local_name!("pre")
+        | local_name!("h1")
+        | local_name!("h2")
+        | local_name!("h3")
+        | local_name!("h4")
+        | local_name!("h5")
+        | local_name!("h6")
+        | local_name!("ul")
+        | local_name!("ol")
+        | local_name!("dl")
+        | local_name!("table")
+    )
+}
+pub fn probe() -> i64 {
+    assert!(matches!(Name::Pre, local_name!("pre")));
+    assert!(matches!(Name::Tr, local_name!("br") | local_name!("hr") | local_name!("li") | local_name!("tr")));
+    assert!(matches!(Name::Th, local_name!("td") | local_name!("th")));
+    assert!(matches!(Name::Link, local_name!("a") | local_name!("area") | local_name!("link")));
+    assert!(matches!((Name::Pre, Name::Hr), (nested_name!("pre"), break_names!())));
+    assert!(matches!(Element { name: Name::Th }, Element { name: local_name!("td") | local_name!("th") }));
+    assert!(!matches!(Name::Other, break_names!()));
+    assert!(requires_linebreak(Name::Article));
+    assert!(requires_linebreak(Name::Blockquote));
+    assert!(requires_linebreak(Name::Section));
+    assert!(requires_linebreak(Name::Div));
+    assert!(requires_linebreak(Name::P));
+    assert!(requires_linebreak(Name::Pre));
+    assert!(requires_linebreak(Name::H1));
+    assert!(requires_linebreak(Name::H2));
+    assert!(requires_linebreak(Name::H3));
+    assert!(requires_linebreak(Name::H4));
+    assert!(requires_linebreak(Name::H5));
+    assert!(requires_linebreak(Name::H6));
+    assert!(requires_linebreak(Name::Ul));
+    assert!(requires_linebreak(Name::Ol));
+    assert!(requires_linebreak(Name::Dl));
+    assert!(requires_linebreak(Name::Table));
+    assert!(!requires_linebreak(Name::Other));
+    42
+}

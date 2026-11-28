@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! number { () => { 1i64..=9i64 }; }
+macro_rules! captured { ($name:ident) => { $name @ number!() }; }
+fn probe() -> i64 {
+    let pair @ (left, right) = (2i64, 40i64);
+    assert_eq!(pair.0 + pair.1, left + right);
+    match 7i64 { captured!(value) if value > 0i64 => value * 6i64, _ => 0i64 }
+}

@@ -809,6 +809,8 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
             generated_projection(&mut result, &files, program, &identity, structure, function_signature(program, value), true)?;
         }
         for (position, parameter) in value.params.iter().enumerate() {
+            if program.function_patterns.get(&index)
+                .is_some_and(|patterns| patterns.iter().any(|entry| entry.0 == position)) { continue; }
             append_typed(&mut result, &files, program, parameter_identity(&identity, &parameter.name, position), identity.clone(),
                 "parameter", &parameter.name, parameter.span, Some(parameter.ty), false)?;
         }
@@ -1065,14 +1067,19 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         let mut source_functions: BTreeMap<String, usize> = BTreeMap::new();
         for (index, function) in program.functions.iter().enumerate() {
             let mut locals = BTreeSet::new();
-            for parameter in &function.params { locals.insert(parameter.name.clone()); }
+            for (position, parameter) in function.params.iter().enumerate() {
+                if program.function_patterns.get(&index)
+                    .is_some_and(|patterns| patterns.iter().any(|entry| entry.0 == position)) { continue; }
+                locals.insert(parameter.name.clone());
+            }
             local_names.insert(result.function_ids[index].clone(), locals);
             source_functions.insert(result.function_ids[index].clone(), index);
         }
         let mut binding_counts: BTreeMap<(String, String), usize> = BTreeMap::new();
         let mut binding_ids: BTreeMap<usize, String> = BTreeMap::new();
         for (pattern, node) in program.patterns.iter().enumerate() {
-            if generated_patterns.contains_key(&pattern) { continue; }
+            if generated_patterns.contains_key(&pattern)
+                || macro_sources::canonical_binding(program, pattern) != pattern { continue; }
             if let a::Pattern::Bind { name, .. } = &node.kind {
                 let file = &files[node.span.file];
                 if let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) {
@@ -1098,9 +1105,11 @@ fn catalog_mode(program: &a::Program, inputs: &[(String, Vec<u8>)], checked: &ir
         macro_sources::generated_bindings(&mut result, &files, program, &origins, &mut binding_ids, evidence)?;
         macro_sources::generated_locals(&mut result, &files, program, &origins, &binding_ids, evidence);
         macro_renames::append(&mut result, &files, program, &resolver, &origins, &binding_ids, evidence);
+        let synthetic = macro_sources::pattern_export_values(program);
         let mut calls: BTreeMap<String, usize> = BTreeMap::new();
         for (expression, node) in program.exprs.iter().enumerate() {
-            if origins.expressions.contains_key(&expression) || origins.macros.expressions.contains_key(&expression) { continue; }
+            if origins.expressions.contains_key(&expression) || origins.macros.expressions.contains_key(&expression)
+                || synthetic.contains(&expression) { continue; }
             let file = &files[node.span.file];
             let Some(owner) = owners.get(&file.path, node.span.start, node.span.end) else { continue; };
             let key = (file.path.clone(), node.span.start, node.span.end);

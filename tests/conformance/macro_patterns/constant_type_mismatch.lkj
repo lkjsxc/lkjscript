@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"root":true,"rustCode":"E0308"}
+const ANSWER: u8 = 42u8;
+macro_rules! constant { ($p:path) => { $p }; }
+fn probe() -> i64 { match 42i64 { constant!(ANSWER) => 42i64, _ => 0i64 } }

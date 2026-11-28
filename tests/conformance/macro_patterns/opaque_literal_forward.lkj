@@ -1,0 +1,5 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! selected { (1i64) => { 99i64 }; ($p:literal) => { $p }; }
+macro_rules! forward { ($p:literal) => { selected!($p) }; }
+fn probe() -> i64 { match 1i64 { forward!(1i64) => 42i64, _ => 0i64 } }

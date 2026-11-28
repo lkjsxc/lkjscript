@@ -868,6 +868,7 @@ impl Analysis<'_> {
         while let Some((p, t)) = stack.pop() {
             match &self.source.patterns[p].kind {
                 Pattern::Bind { name, .. } => bindings.push((name.clone(), t)),
+                Pattern::At { binding, inner } => { stack.push((*inner, t)); stack.push((*binding, t)); }
                 Pattern::Tuple(items) => {
                     if let Term::Named(name, kids) = &self.terms[t] {
                         if name == "tuple" && kids.len() == items.len() {
@@ -889,9 +890,14 @@ impl Analysis<'_> {
         };
         let env = self.generics[caller].clone();
         let mut bindings = Vec::new();
-        for param in &function.params {
+        let patterns = self.source.function_patterns.get(&caller).cloned().unwrap_or(Vec::new());
+        for (index, param) in function.params.iter().enumerate() {
             let t = type_term(self.source, param.ty, &env, &mut self.terms);
-            bindings.push((param.name.clone(), t));
+            if let Some((_, pattern)) = patterns.iter().find(|(position, _)| *position == index) {
+                self.bind(*pattern, t, &mut bindings);
+            } else {
+                bindings.push((param.name.clone(), t));
+            }
         }
         let mut exprs: BTreeMap<usize, usize> = BTreeMap::new();
         let mut blocks: BTreeMap<usize, usize> = BTreeMap::new();

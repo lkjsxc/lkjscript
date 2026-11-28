@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {"root":true}
+struct Pair { left: i64, right: Option<i64> }
+macro_rules! bind { ($name:ident) => { $name }; }
+macro_rules! some { ($name:ident) => { Some(bind!($name)) }; }
+macro_rules! pair { ($left:ident, $right:ident) => { Pair { left: bind!($left), right: some!($right) } }; }
+fn probe() -> i64 {
+    match (Pair { left: 2i64, right: Some(40i64) }) { pair!(a, b) => a + b, _ => 0i64 }
+}

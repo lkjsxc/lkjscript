@@ -1,0 +1,3 @@
+macro_rules! inner { () => { hidden }; }
+macro_rules! outer { () => { inner!() }; }
+fn main() -> i64 { let outer!() = 42i64; 42i64 }

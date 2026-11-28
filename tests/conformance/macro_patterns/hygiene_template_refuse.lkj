@@ -1,0 +1,4 @@
+// expect: reject E_NAME
+// witness: {"root":true,"rustCode":"E0425"}
+macro_rules! private { () => { hidden }; }
+fn probe() -> i64 { let private!() = 42i64; hidden }

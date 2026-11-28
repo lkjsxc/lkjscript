@@ -1,0 +1,7 @@
+// expect: reject E_MOVE
+// witness: {"root":true,"rustCode":"E0382"}
+macro_rules! both { ($whole:ident, $inner:ident) => { $whole @ ($inner, _) }; }
+fn probe() -> i64 {
+    let both!(whole, inner) = (String::from("a"), 42i64);
+    whole.0.len() as i64 + inner.len() as i64
+}

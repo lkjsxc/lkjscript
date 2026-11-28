@@ -159,7 +159,7 @@ macro_origin_step() {
 }
 macro_origin_type_fragment_lexical() {
     local scope status=0
-    for scope in type_origins fragment_token_origins lexical_origins; do
+    for scope in type_origins fragment_token_origins lexical_origins pattern_origins; do
         macro_origin_step --interpreter "$scope" || status=$?
     done
     return "$status"
@@ -170,6 +170,9 @@ parallel_step 1 macro-origins-native macro_origin_step --native
 parallel_step 1 macro-origins-expression macro_origin_step --interpreter expression_origins
 parallel_step 1 macro-origins-statement macro_origin_step --interpreter statement_origins
 parallel_step 1 macro-origins-type-fragment-lexical macro_origin_type_fragment_lexical
+parallel_step 1 macro-pattern-edits timeout --kill-after=10s 1800s bash tools/macro-pattern-edit-test.sh "$check_binary"
+parallel_step 1 macro-pattern-recovery timeout --kill-after=10s 600s bash tools/macro-pattern-recovery-test.sh "$check_binary"
+parallel_step 2 macro-pattern-parity timeout --kill-after=10s 600s env LKJSCRIPT_MACRO_PATTERN_JOBS=2 bash tools/macro-pattern-parity.sh "$check_binary"
 parallel_step 1 closed-semantics timeout --kill-after=10s 600s bash tools/closed-semantics.sh "$check_binary" run
 parallel_step 1 closed-proof-attacks timeout --kill-after=10s 600s bash tools/gate-reuse-test.sh "$check_binary"
 parallel_step 1 toolchain toolchain
@@ -295,16 +298,16 @@ if ! awk '
         total += substr($3, length("cases=") + 1)
     }
     END {
-        if (records != 5 || total != 106) exit 1
+        if (records != 6 || total != 130) exit 1
         if (scopes["scope=expression_origins"] != 1 || scopes["scope=statement_origins"] != 1 ||
             scopes["scope=type_origins"] != 1 || scopes["scope=fragment_token_origins"] != 1 ||
-            scopes["scope=lexical_origins"] != 1) exit 1
+            scopes["scope=lexical_origins"] != 1 || scopes["scope=pattern_origins"] != 1) exit 1
     }
 ' "${check_logs[@]}"; then
-    echo 'FAIL macro-origins (expected five interpreter scopes and 106 controls)' >&2
+    echo 'FAIL macro-origins (expected six interpreter scopes and 130 controls)' >&2
     exit 1
 fi
-printf 'ok macro-origins (106 malformed origins; statement positions/splices/roles/rules; both engines)\n'
+printf 'ok macro-origins (130 malformed origins; statement and pattern positions/splices/roles/rules; both engines)\n'
 step ir-mutation timeout --kill-after=10s 600s "$check_binary" mutate 1701 128 --jobs "$check_jobs" "${check_reuse[@]}"
 check_elapsed_ns=$(($(date +%s%N)-check_started_ns))
 read -r check_load_end _ < /proc/loadavg

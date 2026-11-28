@@ -1,0 +1,6 @@
+macro_rules! bind { ($p:pat) => { $p }; }
+fn main() -> i64 {
+    let bind!((mut value, other)) = (40i64, 2i64);
+    value += 0i64;
+    value + other
+}

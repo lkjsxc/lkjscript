@@ -464,6 +464,7 @@ pub struct Arm {
 
 #[derive(Clone, PartialEq, Eq)]
 pub enum Pattern {
+    MacroInvocation(usize),
     Wild,
     /// An omitted tuple/tuple-variant field span, expanded after arity is known.
     Rest,
@@ -481,6 +482,8 @@ pub enum Pattern {
         inclusive: bool,
     },
     Tuple(Vec<PatternId>),
+    Slice(Vec<PatternId>),
+    At { binding: PatternId, inner: PatternId },
     Variant {
         path: Path,
         fields: Vec<PatternId>,
@@ -584,6 +587,9 @@ pub struct Program {
     pub configuration: BuildConfiguration,
     pub macro_input: Option<Box<Program>>,
     pub macro_aliases: Vec<MacroAlias>,
+    pub macro_pattern_aliases: Vec<macros::MacroPatternAlias>,
+    pub pattern_exports: Vec<macros::PatternExport>,
+    pub function_patterns: std::collections::BTreeMap<usize, Vec<(usize, PatternId)>>,
     pub macro_inputs: Vec<(String, Vec<u8>)>,
     pub macro_captures: Vec<MacroCapture>,
     pub macro_identifier_uses: Vec<Span>,

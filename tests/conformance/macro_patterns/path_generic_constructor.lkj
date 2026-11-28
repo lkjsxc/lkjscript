@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {"root":true}
+enum Value<T> { Number(T), Empty }
+macro_rules! constructor { ($path:path, $name:ident) => { $path($name) }; }
+fn probe() -> i64 {
+    match Value::Number(42i64) {
+        constructor!(Value::<i64>::Number, answer) => answer,
+        Value::Empty => 0i64,
+    }
+}

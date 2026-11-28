@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! complete { ($whole:ident, $number:ident) => { $whole @ (_, $number) }; }
+fn ordinary() -> i64 { let whole @ (_, number) = (String::from("a"), 41i64); number + whole.0.len() as i64 }
+fn probe() -> i64 {
+    assert_eq!(ordinary(), 42i64);
+    let complete!(whole, number) = (String::from("a"), 41i64);
+    number + whole.0.len() as i64
+}

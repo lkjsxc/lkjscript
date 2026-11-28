@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! private { () => { hidden }; }
+macro_rules! public { ($name:ident) => { $name }; }
+fn probe() -> i64 {
+    let hidden = 40i64;
+    let private!() = 99i64;
+    let public!(visible) = 2i64;
+    { let public!(hidden) = 7i64; assert_eq!(hidden, 7i64); }
+    hidden + visible
+}

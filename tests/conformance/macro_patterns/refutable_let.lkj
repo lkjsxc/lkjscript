@@ -1,0 +1,4 @@
+// expect: reject E_TYPE
+// witness: {"root":true,"rustCode":"E0005"}
+macro_rules! some { ($name:ident) => { Some($name) }; }
+fn probe() -> i64 { let whole @ some!(value) = Some(42i64); value }

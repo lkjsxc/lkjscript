@@ -1480,6 +1480,26 @@ impl Compiler<'_> {
             Some(body) => body,
             None => return Err(err(source.span, "E_TYPE", "function has no body")),
         };
+        let parameter_patterns = builder.compiler.source.function_patterns.get(&instance.source).cloned();
+        if let Some(parameter_patterns) = parameter_patterns {
+            let mut parameter_names: BTreeSet<String> = BTreeSet::new();
+            for parameter in &source.params { parameter_names.insert(parameter.name.clone()); }
+            for (position, pattern) in parameter_patterns {
+                let mut plan = patterns::PatternPlan::default();
+                let ty = builder.function.locals[position].ty;
+                let root = builder.prepare_pattern(&mut plan, pattern, ty, None)?;
+                let span = builder.compiler.source.patterns[pattern].span;
+                if !builder.patterns_exhaustive(&plan, &[root], ty)? {
+                    return Err(err(span, "E_TYPE", "function parameter requires an irrefutable pattern"));
+                }
+                for binding in plan.bindings(root, ir::Place::local(position)) {
+                    if !parameter_names.insert(binding.name) {
+                        return Err(err(span, "E_TYPE", "function parameters bind a name more than once"));
+                    }
+                }
+                builder.bind_pattern_plan(&plan, root, ir::Place::local(position), span.line)?;
+            }
+        }
         let result = builder.block(source_body, Some(result_ty))?;
         if builder.reachable {
             if result.1 != result_ty {
@@ -2417,7 +2437,7 @@ impl Builder<'_, '_> {
         while let Some(pattern) = patterns.pop() {
             match &self.compiler.source.patterns[pattern].kind {
                 a::Pattern::Bind { by_ref: true, .. } => return true,
-                a::Pattern::Tuple(fields)
+                a::Pattern::Tuple(fields) | a::Pattern::Slice(fields)
                 | a::Pattern::Variant { fields, .. }
                 | a::Pattern::Or(fields) => patterns.extend_from_slice(fields),
                 a::Pattern::Struct { fields, .. } => {
@@ -2426,6 +2446,7 @@ impl Builder<'_, '_> {
                     }
                 }
                 a::Pattern::Ref { inner, .. } => patterns.push(*inner),
+                a::Pattern::At { binding, inner } => { patterns.push(*binding); patterns.push(*inner); }
                 _ => {}
             }
         }

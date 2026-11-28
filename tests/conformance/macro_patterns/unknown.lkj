@@ -1,0 +1,4 @@
+// expect: reject E_UNSUPPORTED_MACRO
+// witness: {"root":true}
+// rust-error: error: cannot find macro `missing` in this scope
+fn probe() -> i64 { match 1i64 { missing!() => 42i64, _ => 0i64 } }

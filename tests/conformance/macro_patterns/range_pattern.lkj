@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! bounds { () => { -5i64..=5i64 }; }
+macro_rules! character { () => { 'a'..='z' }; }
+fn probe() -> i64 {
+    let number = match 0i64 { bounds!() => 2i64, _ => 0i64 };
+    let letter = match 'm' { character!() => 40i64, _ => 0i64 };
+    number + letter
+}

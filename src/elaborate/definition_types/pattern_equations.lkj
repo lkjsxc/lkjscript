@@ -16,9 +16,13 @@ impl Infer<'_, '_> {
     }
 
     pub(super) fn pattern_pending(&self, pattern: a::PatternId, mut subject: Variable) -> bool {
+        if let a::Pattern::At { inner, .. } = self.source.patterns[pattern].kind {
+            return self.pattern_pending(inner, subject);
+        }
         if !matches!(
             self.source.patterns[pattern].kind,
             a::Pattern::Tuple(_)
+                | a::Pattern::Slice(_)
                 | a::Pattern::Variant { .. }
                 | a::Pattern::Struct { .. }
                 | a::Pattern::Path(_)
@@ -57,7 +61,7 @@ impl Infer<'_, '_> {
                         self.bindings.push_origin((name, value), super::super::semantic::LocalTarget::Pattern(pattern));
                     }
                 }
-                a::Pattern::Tuple(children) | a::Pattern::Or(children) => {
+                a::Pattern::Tuple(children) | a::Pattern::Slice(children) | a::Pattern::Or(children) => {
                     let mut children = children;
                     while let Some(child) = children.pop() {
                         pending.push(child);
@@ -75,6 +79,7 @@ impl Infer<'_, '_> {
                         pending.push(pattern);
                     }
                 }
+                a::Pattern::At { binding, inner } => { pending.push(inner); pending.push(binding); }
                 a::Pattern::Ref { inner, .. } => pending.push(inner),
                 _ => {}
             }

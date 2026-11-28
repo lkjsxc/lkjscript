@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {"root":true}
+enum Item { Pair(i64, i64), Empty }
+struct Packet { item: Item, flag: bool }
+fn probe() -> i64 {
+    let packet = Packet { item: Item::Pair(20i64, 22i64), flag: true };
+    match packet {
+        Packet { item: Item::Pair(left, right), flag: true } if left == 20i64 => {
+            let pair = (left, right);
+            let (first, second) = pair;
+            if let Item::Pair(_, _) = Item::Pair(first, second) { first + second } else { 0i64 }
+        }
+        Packet { item: Item::Empty, .. } | Packet { flag: false, .. } => 0i64,
+        _ => 0i64,
+    }
+}

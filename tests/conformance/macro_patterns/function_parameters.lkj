@@ -1,0 +1,6 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! bind { ($name:ident) => { $name }; }
+macro_rules! pair { ($a:ident, $b:ident) => { ($a, $b) }; }
+fn sum(pair!(a, b): (i64, i64), bind!(c): i64) -> i64 { a + b + c }
+fn probe() -> i64 { sum((10i64, 30i64), 2i64) }

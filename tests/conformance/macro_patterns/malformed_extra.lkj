@@ -1,0 +1,5 @@
+// expect: reject E_MACRO_EXPANSION
+// witness: {"root":true}
+// rust-error: error: macro expansion ignores `;` and any tokens following
+macro_rules! extra { ($name:ident) => { $name; }; }
+fn probe() -> i64 { let extra!(value) = 42i64; value }

@@ -23,6 +23,17 @@ impl Expander {
             Item::Function(id) => {
                 if !self.visited.insert((3usize, id)) { return Ok(()); }
                 let body = program.functions.get(id).ok_or_else(|| absent("function"))?.body;
+                let patterns = program.function_patterns.get(&id).cloned();
+                if let Some(patterns) = patterns {
+                    for (_, pattern) in patterns {
+                        self.pattern_node(program, pattern)?;
+                        if body.is_none() && !matches!(program.patterns[pattern].kind,
+                            Pattern::Wild | Pattern::Bind { mutable: false, by_ref: false, .. } | Pattern::MacroInvocation(_)) {
+                            return Err(error(program.patterns[pattern].span, "E_UNSUPPORTED",
+                                "a function without a body requires a simple parameter binding"));
+                        }
+                    }
+                }
                 if let Some(body) = body { self.block_node(program, body)?; }
             }
             Item::Module(id) => {
@@ -168,22 +179,85 @@ impl Expander {
         program.blocks[id].tail = tail;
         Ok(())
     }
-    fn pattern_node(&mut self, program: &mut Program, id: PatternId) -> Result<(), Diagnostic> {
+    fn export_pattern(&mut self, program: &mut Program, source: PatternId) -> Result<(), Diagnostic> {
+        let records: Vec<usize> = program.pattern_exports.iter().enumerate()
+            .filter_map(|(id, export)| if export.source == source { Some(id) } else { None }).collect();
+        for record in records {
+            let export = program.pattern_exports[record].clone();
+            let mut pending = vec![source];
+            let mut bindings: Vec<(PatternId, String, bool)> = Vec::new();
+            let mut seen: BTreeSet<String> = BTreeSet::new();
+            let mut complete = true;
+            while let Some(id) = pending.pop() {
+                match &program.patterns[id].kind {
+                    Pattern::MacroInvocation(_) => { complete = false; }
+                    Pattern::Bind { name, mutable, .. } => {
+                        if seen.insert(name.clone()) { bindings.push((id, name.clone(), *mutable)); }
+                    }
+                    Pattern::Tuple(fields) | Pattern::Slice(fields) | Pattern::Variant { fields, .. } => {
+                        let mut at = fields.len(); while at > 0usize { at -= 1usize; pending.push(fields[at]); }
+                    }
+                    Pattern::Struct { fields, .. } => {
+                        let mut at = fields.len(); while at > 0usize { at -= 1usize; pending.push(fields[at].1); }
+                    }
+                    Pattern::Ref { inner, .. } => pending.push(*inner),
+                    Pattern::At { binding, inner } => { pending.push(*inner); pending.push(*binding); }
+                    Pattern::Or(arms) => { if let Some(first) = arms.first() { pending.push(*first); } }
+                    _ => {},
+                }
+            }
+            if !complete { continue; }
+            let outer = program.patterns[export.outer].clone();
+            let result = program.exprs[export.result].clone();
+            let mut output = Vec::new();
+            let mut patterns = Vec::new();
+            let mut sources = Vec::new();
+            for (source, name, mutable) in bindings {
+                sources.push(source);
+                let expression = program.exprs.len();
+                program.exprs.push(ExprNode { kind: Expr::Path(Path { qualification: None,
+                    bindings: Vec::new(), declaration: None, name: name.clone(), args: Vec::new() }), ..result.clone() });
+                output.push(expression);
+                let pattern = program.patterns.len();
+                program.patterns.push(PatternNode { kind: Pattern::Bind { name, mutable, by_ref: false, ref_mut: false },
+                    span: program.patterns[source].span, ..outer.clone() });
+                patterns.push(pattern);
+            }
+            program.exprs[export.result].kind = Expr::Tuple(output);
+            program.patterns[export.outer].kind = Pattern::Tuple(patterns);
+            program.pattern_exports[record].sources = sources;
+        }
+        Ok(())
+    }
+    pub(super) fn pattern_node(&mut self, program: &mut Program, id: PatternId) -> Result<(), Diagnostic> {
         if !self.visited.insert((2usize, id)) { return Ok(()); }
         let node = program.patterns.get(id).cloned().ok_or_else(|| absent("pattern"))?;
         match node.kind {
+            Pattern::MacroInvocation(call) => {
+                if let Some(expanded) = self.pattern(program, call)? {
+                    program.macro_pattern_aliases.push(crate::ast::macros::MacroPatternAlias {
+                        pattern: id, original: node, expanded, invocation: call });
+                    program.patterns[id] = program.patterns[expanded].clone();
+                    let binding = program.macro_pattern_bindings.get(&expanded).copied();
+                    if let Some(binding) = binding {
+                        program.macro_pattern_bindings.insert(id, binding);
+                    }
+                }
+            }
             Pattern::Literal(value) => self.expression_node(program, value)?,
             Pattern::Range { start, end, .. } => {
                 if let Some(value) = start { self.expression_node(program, value)?; }
                 if let Some(value) = end { self.expression_node(program, value)?; }
             }
-            Pattern::Tuple(values) | Pattern::Variant { fields: values, .. } | Pattern::Or(values) => {
+            Pattern::Tuple(values) | Pattern::Slice(values) | Pattern::Variant { fields: values, .. } | Pattern::Or(values) => {
                 for value in values { self.pattern_node(program, value)?; }
             }
             Pattern::Struct { fields, .. } => { for (_, value) in fields { self.pattern_node(program, value)?; } }
             Pattern::Ref { inner, .. } => self.pattern_node(program, inner)?,
+            Pattern::At { binding, inner } => { self.pattern_node(program, binding)?; self.pattern_node(program, inner)?; }
             Pattern::Wild | Pattern::Rest | Pattern::Bind { .. } | Pattern::Path(_) => {}
         }
+        self.export_pattern(program, id)?;
         Ok(())
     }
     pub(super) fn expression_node(&mut self, program: &mut Program, id: ExprId) -> Result<(), Diagnostic> {

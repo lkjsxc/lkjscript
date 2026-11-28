@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {"root":true}
+enum Message { Pair(i64, i64), Other }
+macro_rules! bind { ($name:ident) => { $name }; }
+macro_rules! pair { ($a:ident, $b:ident) => { Message::Pair(bind!($a), $b) }; }
+fn read(value: Message) -> i64 { match value { pair!(a, b) => a + b, Message::Other => 0i64 } }
+fn probe() -> i64 { read(Message::Pair(2i64, 40i64)) + read(Message::Other) }

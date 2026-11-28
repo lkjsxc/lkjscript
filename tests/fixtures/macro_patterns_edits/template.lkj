@@ -1,0 +1,2 @@
+macro_rules! fixed { () => { (hidden, _) }; }
+fn main() -> i64 { let fixed!() = (40i64, 2i64); 42i64 }

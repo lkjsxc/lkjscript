@@ -1,0 +1,5 @@
+// expect: reject E_MACRO_MATCH
+// witness: {"root":true}
+// rust-error: error: no rules expected `no`
+macro_rules! only { (yes) => { 42i64 }; }
+fn probe() -> i64 { match 42i64 { only!(no) => 42i64, _ => 0i64 } }

@@ -1,0 +1,5 @@
+// expect: reject E_TYPE
+// witness: {"root":true,"rustCode":"E0004"}
+macro_rules! nonempty { () => { [_, ..] }; }
+fn read(values: &[i64]) -> i64 { match values { nonempty!() => 42i64 } }
+fn probe() -> i64 { read(&[]) }

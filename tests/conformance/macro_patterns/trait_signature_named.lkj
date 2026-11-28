@@ -1,0 +1,7 @@
+// expect: value 42
+// witness: {"root":true}
+macro_rules! parameter { () => { value }; }
+trait Contract { fn inspect(parameter!(): i64) -> i64; }
+struct Reader;
+impl Contract for Reader { fn inspect(value: i64) -> i64 { value } }
+fn probe() -> i64 { Reader::inspect(42i64) }

@@ -1,0 +1,5 @@
+// expect: reject E_MACRO_EXPANSION
+// witness: {"root":true}
+// rust-error: error: expected a pattern, found an expression
+macro_rules! sum { () => { 1i64 + 2i64 }; }
+fn probe() -> i64 { match 3i64 { sum!() => 42i64, _ => 0i64 } }
