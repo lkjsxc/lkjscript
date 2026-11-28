@@ -25,7 +25,7 @@ mod source {
     pub use lkjscript::source::*;
 }
 mod syntax {
-    pub use lkjscript::macro_provider_name;
+    pub use lkjscript::{identifier_name, macro_provider_name};
     pub use lkjscript::syntax::*;
 }
 mod partial_check {

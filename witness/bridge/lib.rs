@@ -79,6 +79,11 @@ pub fn macro_provider_name(name: &str) -> bool {
     syntax::macro_provider_name(name)
 }
 
+/// Bridge semantic identifier normalization across the witness's library/binary split.
+pub fn identifier_name(spelling: &str) -> &str {
+    syntax::identifier_name(spelling)
+}
+
 /// Bridge source loading with explicit macro providers across the same split.
 pub fn load_report_with_providers<F: FnMut(&str) -> Result<Option<Vec<u8>>, String>>(
     root: &str,

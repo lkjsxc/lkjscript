@@ -26,15 +26,16 @@ c"#[test] unsafe" cr##"await"## b"extern" "escaped \" unsafe"
 RS
     # BOM, non-ASCII whitespace and XID boundary differences. White_Space
     # separates an identifier from !, whereas a punctuation scalar does not.
+    # Use UTF-8 bytes: Bash Unicode escapes depend on the locale at parse/print time.
     printf '\357\273\277unsafe\r\n' > "$work/package/src/edges.rs"
-    printf 'a\u0085!(); b\u00a0!(); c\u1680!(); d\u2000!(); e\u200a!(); f\u2028!(); g\u2029!(); h\u202f!(); i\u205f!(); j\u3000!(); k\ufeff!(); l\u200b!();\n' >> "$work/package/src/edges.rs"
-    printf '\u037aunsafe \u309bawait \u2118async \u212edyn unsafe\u00b7 await\u0301 unsafe\u200c async\u200d \u1c89extern \U00016ea0unsafe \U00010400::\u03b1!();\n' >> "$work/package/src/edges.rs"
+    printf 'a\xc2\x85!(); b\xc2\xa0!(); c\xe1\x9a\x80!(); d\xe2\x80\x80!(); e\xe2\x80\x8a!(); f\xe2\x80\xa8!(); g\xe2\x80\xa9!(); h\xe2\x80\xaf!(); i\xe2\x81\x9f!(); j\xe3\x80\x80!(); k\xef\xbb\xbf!(); l\xe2\x80\x8b!();\n' >> "$work/package/src/edges.rs"
+    printf '\xcd\xbaunsafe \xe3\x82\x9bawait \xe2\x84\x98async \xe2\x84\xaedyn unsafe\xc2\xb7 await\xcc\x81 unsafe\xe2\x80\x8c async\xe2\x80\x8d \xe1\xb2\x89extern \xf0\x96\xba\xa0unsafe \xf0\x90\x90\x80::\xce\xb1!();\n' >> "$work/package/src/edges.rs"
     printf '🦀 #[test] async\r\n' > "$work/package/tests/𐐀.rs"
     printf '#![test]\n#[cfg_attr(x, test)]\n' > "$work/package/tests/other.rs"
     printf 'unsafe' > "$work/package/extra/one.rs"
     : > "$work/package/src/empty.rs"
-    printf 'await\n' > "$work/package/src/"$'\ue000.rs'
-    printf 'dyn\n' > "$work/package/src/"$'\U00010000.rs'
+    printf 'await\n' > "$work/package/src/"$'\xee\x80\x80.rs'
+    printf 'dyn\n' > "$work/package/src/"$'\xf0\x90\x80\x80.rs'
     printf 'extern\n' > "$work/package/src/"$'del\x7f\nname.rs'
     printf 'async\n' > "$work/package/examples/skipped.rs"
     printf 'unsafe\n' > "$work/package/src/not-rust.txt"
