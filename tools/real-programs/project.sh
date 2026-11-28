@@ -16,6 +16,7 @@ startup_signal() {
     kill -s "$signal" "$$"
 }
 trap 'startup_signal INT' INT
+trap 'startup_signal HUP' HUP
 trap 'startup_signal TERM' TERM
 build_project "$compiler" "$repo/tools/real-programs/project.lkj" "$repo/library" "$work"
 "$work/select" "$0" "$@" > "$work/options"

@@ -214,8 +214,8 @@ static void dispatch(const char *op, size_t n, Bytes *a) {
     else if(IS("read-link",1)) read_link(P(0));
     else if(IS("list",1)) {
         DIR *d=opendir(P(0)); if(!d){error_path(errno,"scandir",P(0),NULL);return;}
-        Bytes names=bytes("",0); struct dirent *e; errno=0;
-        while((e=readdir(d))) if(strcmp(e->d_name,".") && strcmp(e->d_name,"..")) append(&names,e->d_name,strlen(e->d_name)+1);
+        Bytes names=bytes("",0); struct dirent *e;
+        while((errno=0,(e=readdir(d)))) if(strcmp(e->d_name,".") && strcmp(e->d_name,"..")) append(&names,e->d_name,strlen(e->d_name)+1);
         int problem=errno; closedir(d); if(problem){release(names);error_path(problem,"scandir",P(0),NULL);}else one(names);
     }
     else if(IS("mkdir",1)) { if(mkdir(P(0),0700)) error_path(errno,"mkdir",P(0),NULL); else ok(); }

@@ -167,7 +167,7 @@ in the native gate. The projector uses a small C host bridge for Linux file iden
 physical hardlinks and Git plumbing; building that bridge requires a C compiler.
 The public probe invokes the adjacent checked projector. A required sibling job
 also runs the projection controls and the production probe/projector witness,
-without Node or Perl. A release requires both jobs on the same check attempt.
+without Node (and without invoking Perl). A release requires both jobs on the same check attempt.
 The gate exercises HTTP with an explicit lkjscript client.
 
 ```sh

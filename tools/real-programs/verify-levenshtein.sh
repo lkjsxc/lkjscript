@@ -8,8 +8,8 @@ if (($# != 1)) || [[ $1 == --* ]]; then
 fi
 # Node's path.join lexically normalizes before opening. The selected root
 # itself may be a symlink; the three input basenames may not.
-if ! IFS= read -r -d '' logical < <(realpath -msz -- "${1:-.}") ||
-    ! IFS= read -r -d '' directory < <(realpath -ez -- "$logical") ||
+if ! IFS= read -r -d '' logical < <(realpath -msz -- "${1:-.}" 2>/dev/null) ||
+    ! IFS= read -r -d '' directory < <(realpath -ez -- "$logical" 2>/dev/null) ||
     [[ ! -d $directory ]]; then
     printf 'provenance refusal: cannot resolve specimen directory\n' >&2
     exit 255

@@ -40,7 +40,7 @@ for foreign_case in macro_rules impl_trait qualified_type qualified_call nested_
         "$foreign_source" -o "$work/foreign_$foreign_case.rmeta" \
         > "$work/foreign_$foreign_case.out" 2> "$work/foreign_$foreign_case.err"
 done
-bash tools/real-programs/verify-levenshtein.sh "$source" > "$work/provenance.json"
+env -u LKJSCRIPT_VERIFY_LEVENSHTEIN_BINARY bash tools/real-programs/verify-levenshtein.sh "$source" > "$work/provenance.json"
 # Check the files rustc will read against the checked provenance report.
 "$lkj_compiler" build tools/real-programs/levenshtein-checksums.lkj --library-dir library --no-store \
     --grant report --grant output --grant errors --grant status -o "$work/checksums" \
