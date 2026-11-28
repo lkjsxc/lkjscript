@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {"root":true}
+mod selected { pub fn marker() -> usize { 0 } }
+fn take<const M: usize>() -> usize { M }
+fn count<const N: usize>() -> usize {
+    let ordinary = [21i64; N];
+    let typed = { use crate::selected as N; let value = [21i64; N]; value.len() + N::marker() };
+    ordinary.len() + typed + take::<N>()
+}
+pub fn probe() -> usize { count::<14>() }

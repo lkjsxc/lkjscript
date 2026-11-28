@@ -1,0 +1,15 @@
+// expect: reject E_TYPE
+// witness: {"root":true,"rustAccept":false,"rustCode":"E0070"}
+mod chosen { pub fn item() -> i64 { 42 } }
+fn effect(counter: &mut i64) -> i64 { *counter += 1; 42 }
+pub fn probe() -> i64 {
+    let mut counter = 0i64;
+    match Some(42i64) {
+        Some(mut item) if {
+            use crate::chosen::item;
+            item = effect(&mut counter);
+            true
+        } => item,
+        _ => 0,
+    }
+}

@@ -1,0 +1,14 @@
+mod one { pub fn item() -> i64 { 1 } }
+mod two { pub fn item() -> i64 { 2 } }
+fn ambiguous() -> i64 {
+    let item = 7i64;
+    { use crate::one::*; use crate::two::*; item() }
+}
+fn same_block() -> i64 {
+    use crate::one::*;
+    use crate::two::*;
+    let mut item = 42i64;
+    item
+}
+fn probe() -> i64 { same_block() }
+fn refusal() { println!("source refusal remains"); }

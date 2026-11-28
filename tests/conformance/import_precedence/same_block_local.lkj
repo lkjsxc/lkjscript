@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {"root":true}
+mod chosen { pub fn item() -> i64 { 3 } }
+pub fn probe() -> i64 {
+    use crate::chosen::item;
+    let first = item();
+    let item = || 11i64;
+    let second = item();
+    let third = { item() };
+    let fourth = { let item = 17i64; item };
+    first + second + third + fourth
+}

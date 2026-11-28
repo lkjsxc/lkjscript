@@ -93,6 +93,7 @@ pub struct Resolver<'a> {
     generic_ranges: BTreeMap<(FileId, String), Vec<Span>>,
     generic_value_ranges: BTreeMap<(FileId, String), Vec<Span>>,
     import_scopes: ImportScopes,
+    block_values: BTreeMap<BlockId, Vec<String>>,
     trait_names: BTreeMap<(usize, DeclarationId), BTreeSet<String>>,
     anonymous_traits: BTreeSet<(usize, DeclarationId)>,
     // Only an unresolved input needs a newly built relation. Resolved inputs
@@ -270,6 +271,7 @@ impl<'a> Resolver<'a> {
             generic_ranges: BTreeMap::new(),
             generic_value_ranges: BTreeMap::new(),
             import_scopes: ImportScopes::default(),
+            block_values: BTreeMap::new(),
             trait_names: BTreeMap::new(),
             anonymous_traits: BTreeSet::new(),
             function_owners,
@@ -370,6 +372,17 @@ impl<'a> Resolver<'a> {
             )?;
         }
         let problems = result.imports();
+        // Freeze each block's hoisted value slots after explicit/glob selection.
+        // Ambiguous slots still hide inherited locals; access reports ambiguity
+        // only when an expression actually selects the import.
+        let mut block_values: BTreeMap<BlockId, Vec<String>> = BTreeMap::new();
+        for ((owner, name, namespace), _) in &result.names {
+            if *owner < program.scopes.len() || *namespace != Namespace::Value { continue; }
+            let block = *owner - program.scopes.len();
+            if !block_values.contains_key(&block) { block_values.insert(block, Vec::new()); }
+            block_values.get_mut(&block).unwrap().push(name.clone());
+        }
+        result.block_values = block_values;
         for provider in &program.macro_providers {
             if let Some(span) = provider.declaration {
                 if result.lookup(0usize, &provider.input.alias, Namespace::Type).is_some() {
@@ -380,6 +393,13 @@ impl<'a> Resolver<'a> {
         }
         if !partial && problems.is_empty() { result.index_associated_constants()?; }
         Ok((result, problems))
+    }
+    pub(crate) fn block_value_imports(&self, block: BlockId) -> Vec<String> {
+        match self.block_values.get(&block) { Some(names) => names.clone(), None => Vec::new() }
+    }
+    pub(crate) fn block_value_imported(&self, scope: ModuleId, name: &str, span: Span) -> bool {
+        self.lookup_owner(scope, crate::ast::macros::source_name(name), Namespace::Value, span)
+            .is_some_and(|owner| owner >= self.program.scopes.len())
     }
     fn function_owner(&self, function: FunctionId) -> FunctionOwner {
         match &self.function_owners {
@@ -595,12 +615,13 @@ impl<'a> Resolver<'a> {
                 return Ok(Some(resolved));
             }
         }
-        let local_type = self
-            .lookup_owner(scope, parts[0].as_str(), Namespace::Type, span)
+        let first_namespace = if parts.len() > 1usize { Namespace::Type } else { namespace };
+        let local_item = self
+            .lookup_owner(scope, parts[0].as_str(), first_namespace, span)
             .is_some_and(|owner| owner >= self.program.scopes.len());
-        if !local_type && self.generic(span, parts[0].as_str())
+        if !local_item && self.generic(span, parts[0].as_str())
             && (namespace == Namespace::Type || parts[0] == "Self" || parts.len() > 1usize || self.generic_value(span, parts[0].as_str())) {
-            if reads.is_some() { self.lexical_path_reads(scope, parts[0].as_str(), Namespace::Type, span, reads); }
+            if reads.is_some() { self.lexical_path_reads(scope, parts[0].as_str(), first_namespace, span, reads); }
             return Ok(Some(Resolved::intrinsic(path.to_string())));
         }
         if let Some(limit) = self.primitive_limit(scope, path, &parts, namespace, span)? {
@@ -1290,7 +1311,8 @@ fn resolve_nodes(result: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
             let Type::Array { len, .. } = &node.kind else { continue; };
             let name = crate::ast::macros::source_name(len);
             if name.as_bytes().first().is_some_and(|byte| byte.is_ascii_digit())
-                || resolver.generic_value(node.span, name) { continue; }
+                || (resolver.generic_value(node.span, name)
+                    && !resolver.block_value_imported(node.scope, name, node.span)) { continue; }
             (node.scope, len.clone())
         };
         let name = crate::ast::macros::source_name(&written);
@@ -1333,7 +1355,7 @@ fn resolve_nodes(result: &mut Program, resolver: &Resolver<'_>) -> Result<()> {
             resolver.resolve_path(scope, path, namespace, span)?;
         }
     }
-    // Locals still resolve before declaration-valued expression paths.
+    // Expression paths select locals and block imports together during elaboration.
     for id in 0..result.exprs.len() {
         if let Some(bytes) = resolver.scalar_size_call(result, id)? {
             result.exprs[id].kind = Expr::Int(format!("{bytes}usize"));

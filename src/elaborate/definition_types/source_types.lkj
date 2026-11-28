@@ -18,7 +18,7 @@ enum Work {
     Qualified { id: a::TypeId, qualification: a::QualifiedPath, name: String, args: Vec<a::TypeId>, environment: usize },
     Reference(bool),
     Slice,
-    Array(String, usize),
+    Array(a::TypeId, String, usize),
     Tuple(usize),
 }
 
@@ -52,7 +52,7 @@ impl Infer<'_, '_> {
                         });
                     }
                     a::Type::Array { inner, len } => {
-                        pending.push(Work::Array(len, environment));
+                        pending.push(Work::Array(id, len, environment));
                         pending.push(Work::Source {
                             id: inner,
                             environment,
@@ -97,8 +97,12 @@ impl Infer<'_, '_> {
                             } else {
                                 &environments[environment - 1]
                             };
-                            if let Some(value) = bindings.get(&path.name) {
-                                values.push(*value);
+                            if let Some(value) = bindings.get(&path.name).copied() {
+                                let node = &self.source.types[id];
+                                let hidden_constant = matches!(self.shape(value),
+                                    Some(Shape::Constant(_) | Shape::ConstantRigid(_)))
+                                    && self.names.block_value_imported(node.scope, &path.name, node.span);
+                                values.push(if hidden_constant { self.blocked() } else { value });
                                 continue;
                             }
                             if integer_name(&path.name)
@@ -185,10 +189,14 @@ impl Infer<'_, '_> {
                     let inner = values.pop().expect("slice inference child");
                     values.push(self.shaped(Shape::Slice(inner)));
                 }
-                Work::Array(len, environment) => {
+                Work::Array(id, len, environment) => {
                     let inner = values.pop().expect("array inference child");
+                    let scope = self.source.types[id].scope;
+                    let span = self.source.types[id].span;
                     let count = if let Some(len) = crate::generics::const_arguments::literal(&len) {
                         self.shaped(Shape::Constant(len))
+                    } else if self.names.block_value_imported(scope, &len, span) {
+                        self.blocked()
                     } else {
                         let bindings = if environment == 0 { base_environment }
                             else { &environments[environment - 1usize] };

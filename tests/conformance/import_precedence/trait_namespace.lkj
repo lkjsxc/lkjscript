@@ -1,0 +1,14 @@
+// expect: value 42
+// witness: {"root":true}
+mod chosen {
+    pub struct Item { pub value: i64 }
+    pub trait Read { fn read(&self) -> i64; }
+    impl Read for Item { fn read(&self) -> i64 { self.value } }
+}
+pub fn probe() -> i64 {
+    let read = 3i64;
+    let value = chosen::Item { value: 18 };
+    let first = { use crate::chosen::Read as read; value.read() + read };
+    let second = { use crate::chosen::Read; let read = 3i64; value.read() + read };
+    first + second
+}

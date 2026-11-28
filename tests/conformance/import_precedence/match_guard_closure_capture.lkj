@@ -1,0 +1,24 @@
+// expect: value 42
+// witness: {"root":true}
+mod chosen { pub fn item() -> i64 { 21 } }
+pub fn probe() -> i64 {
+    let ordinary = match Some(7i64) {
+        Some(item) if { let read = || item; read() == 7 } => 14,
+        _ => 0,
+    };
+    let imported = match Some(7i64) {
+        Some(item) if { use crate::chosen::item; let read = || item(); read() == 21 } => 14,
+        _ => 0,
+    };
+    let local = match Some(7i64) {
+        Some(item) if {
+            use crate::chosen::item;
+            let first = || item();
+            let item = 11i64;
+            let later = || item;
+            first() == 21 && later() == 11
+        } => 14,
+        _ => 0,
+    };
+    ordinary + imported + local
+}

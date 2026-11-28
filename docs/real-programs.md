@@ -757,11 +757,13 @@ that would expose a formerly hidden constant. An absent block-slot control also
 refuses a projection that would change an inherited local into an imported value.
 Bare binding patterns under ambiguous outer globs remain refused, matching Rust's
 classification boundary; a mutable parameter supplies the accepted isolation twin.
-Macro-generated inherited-local controls expose a pre-existing ordinary lowering
-mismatch: native/interpreter
-select the outer value 3 where Rust selects the inner imported value 10. Partial
-replay explicitly refuses that intersection. Empty local import trees and enum
-glob targets remain separate bounded contexts.
+At that checkpoint, macro-generated inherited-local controls exposed an ordinary
+lowering mismatch: native/interpreter selected the outer value 3 where Rust
+selected the inner imported value 10, and partial replay refused the intersection.
+The [lexical precedence correction](status.md) now makes inner value imports hide
+inherited ordinary and macro-generated locals and lifts that replay boundary.
+The same five-root census remains byte-identical against baseline `933ac61fa2`.
+Empty local import trees and enum glob targets remain separate bounded contexts.
 
 #### Scalar layout queries in refused Sōzu roots
 

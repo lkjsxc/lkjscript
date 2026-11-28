@@ -1,0 +1,19 @@
+// expect: value 42
+// witness: {"root":true}
+mod chosen { pub fn item() -> i64 { 10 } }
+pub fn probe() -> i64 {
+    let item = 99i64;
+    let sum = {
+        let before_use = item();
+        use crate::chosen::item;
+        let item = item() + 1;
+        before_use + item
+    };
+    assert_eq!(item, 99);
+    let after_local = {
+        let item = 21i64;
+        use crate::chosen::item;
+        item
+    };
+    sum + after_local
+}

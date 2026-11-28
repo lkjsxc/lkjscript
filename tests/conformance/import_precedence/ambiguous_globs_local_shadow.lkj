@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {"root":true}
+mod first { pub fn item() -> i64 { 1 } }
+mod second { pub fn item() -> i64 { 2 } }
+pub fn probe() -> i64 {
+    use crate::first::*;
+    use crate::second::*;
+    let mut item = 21i64;
+    let first = item;
+    let second = { let mut item = 21i64; item };
+    first + second
+}

@@ -222,7 +222,11 @@ impl<'a> Inspector<'a> {
         if !plain_path(path) {
             return Err(self.boundary("generic or qualified selection"));
         }
-        self.observe(scope, &path.name, span, namespace, true)
+        // Macro marks identify locals; declaration lookup uses the authored
+        // spelling after an inner import wins over an inherited local.
+        let written = if namespace == Namespace::Value { a::macros::source_name(&path.name) }
+            else { path.name.as_str() };
+        self.observe(scope, written, span, namespace, true)
     }
     fn lookup(&self, scope: usize, path: &a::Path, span: a::Span,
         namespace: Namespace) -> Result<(String, Option<a::Item>), Failure> {
@@ -277,7 +281,9 @@ impl<'a> Inspector<'a> {
             }
         }
         self.record_imports(&trace.reads, plan)?;
-        plan.lookups.push(Lookup { span, namespace, written: path.name.clone(), result: Some((target, item)),
+        let written = if namespace == Namespace::Value { a::macros::source_name(&path.name) }
+            else { path.name.as_str() };
+        plan.lookups.push(Lookup { span, namespace, written: written.to_string(), result: Some((target, item)),
             reads: trace.reads, import_site: None, pattern_site: false, block_site: None });
         Ok(item)
     }
@@ -364,9 +370,10 @@ impl<'a> Inspector<'a> {
         let mut locals = inherited.clone();
         let block = &self.program.blocks[id];
         if self.program.uses.iter().any(|input| input.block == Some(id)) {
-            // Ordinary lowering currently searches inherited locals before all
-            // imports. An inner import can hide that local in Rust; do not
-            // certify the wrong meaning until shared local lookup models it.
+            // A block's hoisted imports hide inherited locals. Its own let
+            // bindings become visible only after their initializers and restore
+            // local precedence for later statements. Cloning keeps sibling and
+            // enclosing blocks' active bindings unchanged.
             let scope = self.program.scopes.len() + id;
             for name in inherited {
                 let written = a::macros::source_name(name);
@@ -377,8 +384,12 @@ impl<'a> Inspector<'a> {
                 if let Some(failure) = traced_poison(self.program, self.failures, scope, written, &[read.clone()]) {
                     return Err(failure);
                 }
-                if read.import.is_some() {
-                    return Err(self.boundary("block import shadows an inherited local"));
+                if read.binding.is_some() {
+                    locals.remove(name);
+                    // Do not select an unused import or diagnose its ambiguity.
+                    // An actual source use records the full lookup and import
+                    // antecedent through binding(), including genuine failures.
+                    continue;
                 }
                 // A retained glob can expose a formerly hidden member when
                 // its source module is reduced. Preserve this absent slot too.
@@ -1540,8 +1551,9 @@ fn replay(source: &SourceReport, original: &a::Program, selected: &[usize],
                 for node in &projected.exprs {
                     if node.span == lookup.span {
                         if let a::Expr::Path(path) = &node.kind {
-                            if path.name == lookup.written {
-                                let actual = names.diagnostic_trace(node.scope, &path.name, Namespace::Value, node.span, true)
+                            let written = a::macros::source_name(&path.name);
+                            if written == lookup.written.as_str() {
+                                let actual = names.diagnostic_trace(node.scope, written, Namespace::Value, node.span, true)
                                     .map_err(|_| -> String { "replayed call lookup refused".to_string() })?;
                                 if !same_binding(lookup, actual, original, &resolved, &source_indices) {
                                     return Err("a recorded source value binding changed during replay".to_string());

@@ -9,7 +9,7 @@ impl Builder<'_, '_> {
     fn panic_literal_capture(&self, name: &str, span: a::Span) -> Option<String> {
         let local = self.binding(name)?;
         if local < self.function.params || self.function.locals[local].mutable
-            || self.capture_locals.contains(&local) || self.guard_aliases.contains_key(&name.to_string())
+            || self.capture_locals.contains(&local) || self.guard_binding(name).is_some()
         { return None; }
         let ir::TypeKind::Ref { inner, mutable: false } = self.compiler.types[self.ty(local)].kind else {
             return None;

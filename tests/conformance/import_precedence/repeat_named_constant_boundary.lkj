@@ -1,0 +1,10 @@
+// expect: reject E_TYPE
+// witness: {"root":true,"rustAccept":true}
+// rust-value: 2
+// boundary: E_TYPE array length requires a literal or a declared const usize parameter
+mod chosen { pub const N: usize = 2; }
+pub fn probe() -> usize {
+    use crate::chosen::N;
+    let value = [21i64; N];
+    value.len()
+}

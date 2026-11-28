@@ -1,0 +1,7 @@
+// expect: reject E_TYPE
+// witness: {"root":true,"rustAccept":true}
+// rust-value: 42
+// boundary: E_TYPE unknown value chosen::item
+// This closest qualified twin establishes the existing function-item boundary.
+mod chosen { pub fn item() -> i64 { 42 } }
+pub fn probe() -> i64 { let call = crate::chosen::item; call() }

@@ -1505,11 +1505,13 @@ impl Compiler<'_> {
 }
 
 /// The stack records lexical scope restoration; the index answers each use
-/// without scanning earlier declarations. A shadow has its own stack entry.
+/// without scanning earlier declarations. Hoisted block imports hide only
+/// entries inherited at block entry, so later local declarations still win.
 #[derive(Default)]
 struct Bindings {
     entries: Vec<(String, usize)>,
     visible: BTreeMap<String, Vec<usize>>,
+    import_floors: BTreeMap<String, Vec<usize>>,
 }
 impl Bindings {
     fn push(&mut self, binding: (String, usize)) {
@@ -1527,10 +1529,34 @@ impl Bindings {
     }
     fn entry(&self, name: &str) -> Option<(usize, usize)> {
         let entry = *self.visible.get(&name.to_string())?.last()?;
+        if !self.import_floors.is_empty() {
+            // Macro marks distinguish locals, while item imports use source names.
+            let spelling = crate::ast::macros::source_name(name).to_string();
+            if self.import_floors.get(&spelling).and_then(|floors| floors.last())
+                .is_some_and(|floor| entry < *floor) { return None; }
+        }
         Some((entry, self.entries[entry].1))
     }
     fn get(&self, name: &str) -> Option<usize> {
         self.entry(name).map(|(_, value)| value)
+    }
+    fn enter_imports(&mut self, imports: &[String]) {
+        for name in imports {
+            if !self.import_floors.contains_key(name) {
+                self.import_floors.insert(name.clone(), Vec::new());
+            }
+            self.import_floors.get_mut(name).unwrap().push(self.entries.len());
+        }
+    }
+    fn leave_imports(&mut self, imports: &[String]) {
+        for name in imports {
+            let empty = {
+                let floors = self.import_floors.get_mut(name).unwrap();
+                floors.pop();
+                floors.is_empty()
+            };
+            if empty { self.import_floors.remove(name); }
+        }
     }
     fn truncate(&mut self, len: usize) {
         while self.entries.len() > len {
@@ -1599,7 +1625,7 @@ struct Builder<'a, 'b> {
     typed_bindings: Vec<crate::check::scoped::Annotation>,
     sub: BTreeMap<String, usize>,
     bindings: Bindings,
-    guard_aliases: BTreeMap<String, ir::Place>,
+    guard_aliases: BTreeMap<String, (usize, ir::Place)>,
     guard_shells: Vec<ir::Place>,
     capture_aliases: BTreeMap<a::ExprId, ir::Place>,
     capture_locals: std::collections::BTreeSet<usize>,
@@ -1741,6 +1767,12 @@ impl Builder<'_, '_> {
     }
     fn binding(&self, name: &str) -> Option<usize> {
         self.bindings.get(name)
+    }
+    fn guard_binding(&self, name: &str) -> Option<&ir::Place> {
+        let (entry, place) = self.guard_aliases.get(&name.to_string())?;
+        if self.bindings.entry(name).is_some_and(|(visible, _)| visible == *entry) {
+            Some(place)
+        } else { None }
     }
     fn set_live(&mut self, local: usize, live: bool) {
         self.live.set(local, live);
@@ -2065,7 +2097,7 @@ impl Builder<'_, '_> {
         match self.compiler.source.exprs[id].kind.clone() {
             a::Expr::Path(p) => {
                 if p.qualification.is_some() { return None; }
-                let guarded = match self.guard_aliases.get(&p.name) {
+                let guarded = match self.guard_binding(&p.name) {
                     Some(place) => place_type(&self.compiler.types, self.function, place),
                     None => None,
                 };
@@ -2141,7 +2173,7 @@ impl Builder<'_, '_> {
         let node = self.compiler.source.exprs[id].clone();
         match node.kind {
             a::Expr::Path(path) => {
-                if let Some(place) = self.guard_aliases.get(&path.name) {
+                if let Some(place) = self.guard_binding(&path.name) {
                     Ok(place.clone())
                 } else if let Some(local) = self.binding(&path.name) {
                     Ok(ir::Place::local(local))
@@ -2217,7 +2249,7 @@ impl Builder<'_, '_> {
             a::Expr::Path(path) => {
                 path.qualification.is_none() && (self.capture_aliases.contains_key(&id)
                     || self.binding(&path.name).is_some()
-                    || self.guard_aliases.contains_key(&path.name))
+                    || self.guard_binding(&path.name).is_some())
             }
             a::Expr::Field { .. } | a::Expr::Index { .. } => true,
             a::Expr::Unary { op, .. } => op == "*",
@@ -2453,6 +2485,8 @@ impl Builder<'_, '_> {
         let block = self.compiler.source.blocks[id].clone();
         let start = self.live.len();
         let bindings = self.bindings.len();
+        let imports = self.compiler.names.block_value_imports(id);
+        self.bindings.enter_imports(&imports);
         let mut checking_dead = false;
         for (statement, stmt) in block.statements.into_iter().enumerate() {
             if !self.reachable {
@@ -2570,6 +2604,7 @@ impl Builder<'_, '_> {
         };
         self.cleanup(start, Some(result.0), block.span.line);
         self.bindings.truncate(bindings);
+        self.bindings.leave_imports(&imports);
         Ok(result)
     }
     // Inferred closure results constrain types without creating a reborrow site.
@@ -2621,7 +2656,7 @@ impl Builder<'_, '_> {
             a::Expr::Path(path) => {
                 self.capture_aliases.contains_key(&id)
                     || self.binding(&path.name).is_some()
-                    || self.guard_aliases.contains_key(&path.name)
+                    || self.guard_binding(&path.name).is_some()
             }
             a::Expr::Field { .. } | a::Expr::Index { .. } => true,
             a::Expr::Unary { op, .. } => op == "*",
@@ -2910,12 +2945,13 @@ impl Builder<'_, '_> {
                 if path.qualification.is_some() && !matches!(self.compiler.declaration_item(&path), Some(a::Item::Constant(_))) {
                     return Err(err(node.span, "E_UNSUPPORTED", "fully qualified function values require an immediate call"));
                 }
-                if self.binding(&path.name).is_some() || self.guard_aliases.contains_key(&path.name)
+                if self.binding(&path.name).is_some() || self.guard_binding(&path.name).is_some()
                 {
                     let place = self.place(id)?;
                     return self.read(place, line);
                 }
-                if path.declaration.is_none() && path.args.is_empty() {
+                if path.declaration.is_none() && path.args.is_empty()
+                    && !self.compiler.names.block_value_imported(node.scope, &path.name, node.span) {
                     let constant = if path.name.starts_with("__macro$") {
                         let name = crate::ast::macros::source_name(&path.name).to_string();
                         self.sub.get(&name).copied()
@@ -2983,7 +3019,7 @@ impl Builder<'_, '_> {
                     a::Expr::Path(path) => {
                         self.capture_aliases.contains_key(&value)
                             || self.binding(&path.name).is_some()
-                            || self.guard_aliases.contains_key(&path.name)
+                            || self.guard_binding(&path.name).is_some()
                     }
                     a::Expr::Field { .. } | a::Expr::Index { .. } => true,
                     a::Expr::Unary { op, .. } => op == "*",
@@ -3109,9 +3145,9 @@ impl Builder<'_, '_> {
             a::Expr::Repeat { value, count } => {
                 let count_node = self.compiler.source.exprs[count].clone();
                 let marker = match &count_node.kind {
-                    a::Expr::Int(text) => self.compiler.constant_length(text, &self.sub, count_node.span)?,
+                    a::Expr::Int(text) => self.compiler.constant_length(text, &self.sub, count_node.scope, count_node.span)?,
                     a::Expr::Path(path) if path.qualification.is_none() && path.declaration.is_none()
-                        && path.args.is_empty() => self.compiler.constant_length(&path.name, &self.sub, count_node.span)?,
+                        && path.args.is_empty() => self.compiler.constant_length(&path.name, &self.sub, count_node.scope, count_node.span)?,
                     _ => return Err(err(count_node.span, "E_UNSUPPORTED", "array repeat count requires a literal or const usize parameter")),
                 };
                 let symbolic = matches!(crate::generics::const_arguments::value(&self.compiler.types, marker),
@@ -5098,7 +5134,7 @@ impl Builder<'_, '_> {
         let hint = self.hint(value).or_else(|| self.pattern_hint(arms));
         let existing = match &self.compiler.source.exprs[value].kind {
             a::Expr::Path(path) => {
-                self.binding(&path.name).is_some() || self.guard_aliases.contains_key(&path.name)
+                self.binding(&path.name).is_some() || self.guard_binding(&path.name).is_some()
             }
             a::Expr::Field { .. } | a::Expr::Index { .. } => true,
             a::Expr::Unary { op, .. } => op == "*",

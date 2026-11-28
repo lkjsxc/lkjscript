@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {"root":true}
+mod chosen { pub fn item() -> i64 { 21 } }
+pub fn probe() -> i64 {
+    let item = 3i64;
+    let first = match Some(7i64) {
+        Some(item) if { use crate::chosen::item; item() == 21 } => item * 3,
+        _ => 0,
+    };
+    let second = match Some(9i64) {
+        Some(item) if { use crate::chosen::*; item() == 21 } => { use crate::chosen::item; item() },
+        _ => 0,
+    };
+    assert_eq!(item, 3);
+    first + second
+}

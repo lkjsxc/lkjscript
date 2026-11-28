@@ -1,0 +1,10 @@
+mod refused { pub const selected: dyn Missing = 1; }
+fn explicit() -> i64 {
+    let selected = 7i64;
+    { use crate::refused::selected; selected }
+}
+fn glob() -> i64 {
+    let selected = 7i64;
+    { use crate::refused::*; selected }
+}
+fn probe() -> i64 { 42 }

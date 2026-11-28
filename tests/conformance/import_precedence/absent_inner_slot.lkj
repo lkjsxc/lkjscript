@@ -1,0 +1,9 @@
+// expect: value 42
+// witness: {"root":true}
+mod imports { pub fn other() -> i64 { 7 } }
+pub fn probe() -> i64 {
+    let item = 14i64;
+    let first = { use crate::imports::*; item + other() };
+    let second = { use crate::imports::other; let call = || item + other(); call() };
+    first + second
+}

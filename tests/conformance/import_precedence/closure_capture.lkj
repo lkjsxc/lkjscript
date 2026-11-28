@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {"root":true}
+mod chosen { pub fn item() -> i64 { 10 } pub const amount: i64 = 10; }
+pub fn probe() -> i64 {
+    let item = 3i64;
+    let amount = 9i64;
+    let captured = { let call = || item + amount; call() };
+    let explicit = { use crate::chosen::item; let call = || item(); call() };
+    let glob = { use crate::chosen::*; let call = || item() + amount; call() };
+    captured + explicit + glob
+}

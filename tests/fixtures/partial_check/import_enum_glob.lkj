@@ -1,0 +1,7 @@
+enum Choice { Selected }
+fn selected() -> i64 {
+    use crate::Choice::*;
+    match Selected { Selected => 42 }
+}
+fn probe() -> i64 { selected() }
+fn refusal() { println!("source refusal remains"); }

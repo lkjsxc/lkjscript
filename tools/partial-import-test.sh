@@ -27,8 +27,8 @@ trap cleanup EXIT
 trap 'exit 130' INT
 trap 'exit 143' HUP TERM
 fail() { printf 'partial-import: %s\n' "$*" >&2; exit 1; }
-cases=(import_replay import_ambiguity import_poison import_nonleak import_outer_local import_macro_local import_empty import_pattern import_pattern_hidden import_namespaces import_ambiguous_inner import_ambiguous_outer import_ambiguous_pattern import_explicit_patterns import_grouped import_block_hidden)
-valids=(replay ambiguity poison nonleak pattern pattern-hidden namespaces ambiguous-inner ambiguous-outer explicit-patterns grouped block-hidden)
+cases=(import_replay import_ambiguity import_poison import_nonleak import_outer_local import_macro_local import_empty import_pattern import_pattern_hidden import_namespaces import_ambiguous_inner import_ambiguous_outer import_ambiguous_pattern import_explicit_patterns import_grouped import_block_hidden import_inner_ambiguity import_inner_poison import_type_local import_enum_glob)
+valids=(replay ambiguity poison nonleak pattern pattern-hidden namespaces ambiguous-inner ambiguous-outer explicit-patterns grouped block-hidden outer-local macro-local inner-ambiguity inner-poison type-local block-projected enum-glob)
 mkdir "$work/cases"
 for name in "${cases[@]}"; do cp "tests/fixtures/partial_check/$name.lkj" "$work/cases/"; done
 verifier_compiler=${baseline:-$compiler}
@@ -60,6 +60,16 @@ for name in ambiguous_inner ambiguous_outer ambiguous_pattern explicit_patterns 
     sed '/^fn refusal()/d' "$work/cases/import_$name.lkj" > "$work/${name//_/-}-valid.lkj"
 done
 sed '/^    fn x()/d' "$work/block-hidden-valid.lkj" > "$work/block-projected-valid.lkj"
+for name in outer_local macro_local type_local enum_glob; do
+    sed '/^fn refusal()/d' "$work/cases/import_$name.lkj" > "$work/${name//_/-}-valid.lkj"
+done
+sed '/^fn ambiguous()/,/^}/d; /^fn refusal()/d' "$work/cases/import_inner_ambiguity.lkj" > "$work/inner-ambiguity-valid.lkj"
+sed '/^fn refusal()/d' "$work/cases/import_inner_ambiguity.lkj" > "$work/inner-ambiguity-invalid.lkj"
+sed 's/dyn Missing/i64/; /^fn probe()/d' "$work/cases/import_inner_poison.lkj" > "$work/inner-poison-valid.lkj"
+cat >> "$work/inner-poison-valid.lkj" <<'EOF'
+fn probe() -> i64 { if explicit() == 1 && glob() == 1 { 42 } else { 0 } }
+EOF
+cp "$work/cases/import_inner_poison.lkj" "$work/inner-poison-invalid.lkj"
 mkdir "$work/edit"
 head -c 32 /dev/urandom > "$work/edit-key"
 printf '%s\n' '{"version":1,"operations":[{"op":"replace-body","id":"probe","source":"{ 0i64 }"}]}' > "$work/edit-request"
@@ -70,22 +80,27 @@ for mode in off on; do
     # Explicit binding modes in ambiguous globs are shared positive controls.
     # The bare twin must remain blocked in the diagnostic report. Ordinary
     # lkjscript still admits that isolated root, unlike Rust; count those
-    # routes and changed block projections as frontend boundaries.
-    for name in "${valids[@]}" ambiguous-pattern block-projected; do
+    # routes as a frontend boundary. The changed block projection now agrees
+    # with Rust because its newly visible inner import hides the outer local.
+    for name in "${valids[@]}" ambiguous-pattern; do
         source="$work/$name-valid.lkj"
         expected=42
+        if [[ $name == block-projected ]]; then expected=22; fi
         "$compiler" ir "$source" --entry probe --library-dir "$library" --debug-assertions "$mode" --no-store -o "$work/$name-$mode.lkjir" > "$work/output" 2> "$work/error" || fail "$name valid $mode IR"
         for engine in native interpreter; do
             actual=$("$compiler" run "$source" --entry probe --library-dir "$library" --debug-assertions "$mode" --engine "$engine" --no-store 2> "$work/error") || fail "$name valid $mode/$engine"
             [[ $actual == "$expected" ]] || fail "$name valid $mode/$engine value"
             actual=$("$compiler" run "$work/$name-$mode.lkjir" --entry probe --engine "$engine" --no-store 2> "$work/error") || fail "$name IR $mode/$engine"
-            [[ $actual == 42 ]] || fail "$name IR $mode/$engine value"
+            [[ $actual == "$expected" ]] || fail "$name IR $mode/$engine value"
             case "$name" in
-                ambiguous-pattern|block-projected) boundary_values=$((boundary_values + 2)) ;;
+                ambiguous-pattern) boundary_values=$((boundary_values + 2)) ;;
                 *) checks=$((checks + 2)) ;;
             esac
         done
-        if [[ -n $baseline ]]; then
+        # These cases exercise the corrected meaning rather than preserving
+        # the baseline's inherited-local precedence or macro marked spelling.
+        if [[ -n $baseline && $name != outer-local && $name != macro-local
+            && $name != inner-poison && $name != block-projected ]]; then
             "$baseline" ir "$source" --entry probe --library-dir "$library" --debug-assertions "$mode" --no-store -o "$work/baseline.lkjir" > "$work/output" 2> "$work/error" || fail "$name baseline valid IR"
             cmp "$work/baseline.lkjir" "$work/$name-$mode.lkjir" || fail "$name $mode ordinary IR changed"
         fi
@@ -150,7 +165,7 @@ for mode in off on; do
                 --request "$work/edit-request" "${edit_flags[@]}" > "$work/output" 2> "$work/refused-error" || status=$?
             [[ $status == 1 && ! -s $work/output ]] || fail "$name $mode edit $edit_mode admitted a refused root"
             code=E_CAPABILITY
-            if [[ $name == import_poison ]]; then code=E_UNSUPPORTED; fi
+            if [[ $name == import_poison || $name == import_inner_poison ]]; then code=E_UNSUPPORTED; fi
             grep -q ": $code " "$work/refused-error" || fail "$name $mode edit lost original refusal"
             cmp "$source" "$work/edit/main.lkj" || fail "$name $mode edit changed refused source"
             [[ ! -e $work/edit/.lkjscript-edit.pending ]] || fail "$name $mode edit left a pending transaction"
@@ -159,9 +174,9 @@ for mode in off on; do
     done
     # Remove the unrelated capability refusal so the ordinary route must reach
     # ambiguity and absent lexical bindings themselves.
-    for name in ambiguity nonleak poison pattern-projected; do
+    for name in ambiguity nonleak poison pattern-projected inner-ambiguity inner-poison; do
         code=E_NAME
-        if [[ $name == poison ]]; then code=E_UNSUPPORTED; fi
+        if [[ $name == poison || $name == inner-poison ]]; then code=E_UNSUPPORTED; fi
         if [[ $name == pattern-projected ]]; then code=E_TYPE; fi
         for engine in native interpreter; do
             status=0
@@ -175,18 +190,17 @@ done
 printf 'ok partial-import: both modes, exact slots/dependencies/causes/poison owners, %s source/IR value routes and %s execution/publication/edit/lookup refusals\n' "$checks" "$refusals"
 printf 'ok partial-import frontend boundaries: %s source/IR value routes, reported separately from Rust agreement\n' "$boundary_values"
 if [[ -n $baseline ]]; then
-    printf 'ok partial-import baseline: all accepted twins preserve exact ordinary IR in both modes and every prior ordinary primary diagnostic remains\n'
+    printf 'ok partial-import baseline: unchanged accepted twins preserve exact ordinary IR in both modes and every prior ordinary primary diagnostic remains\n'
 fi
 if [[ -n $witness ]]; then
     rust_values=0
     rust_verdicts=0
-    rust_shadow_values=0
     rust_projection_values=0
-    rust_block_projection_values=0
     for mode in off on; do
         for level in 0 3; do
             for name in "${valids[@]}"; do
                 expected=42
+                if [[ $name == block-projected ]]; then expected=22; fi
                 cp "$work/$name-valid.lkj" "$work/rust.lkj"
                 printf '\nfn main() { println!("{}", probe()); }\n' >> "$work/rust.lkj"
                 "$witness" --edition=2021 --crate-name partial_imports -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || fail "Rust $name valid $mode/$level"
@@ -199,25 +213,19 @@ if [[ -n $witness ]]; then
                 status=0
                 "$witness" --edition=2021 --crate-name partial_imports -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || status=$?
                 case "$name" in
-                    import_replay|import_outer_local|import_macro_local|import_empty|import_pattern|import_pattern_hidden|import_namespaces|import_ambiguous_inner|import_ambiguous_outer|import_explicit_patterns|import_grouped|import_block_hidden)
+                    import_replay|import_outer_local|import_macro_local|import_empty|import_pattern|import_pattern_hidden|import_namespaces|import_ambiguous_inner|import_ambiguous_outer|import_explicit_patterns|import_grouped|import_block_hidden|import_type_local|import_enum_glob)
                         [[ $status == 0 && $("$work/rust") == 42 ]] || fail "Rust capability-boundary $name $mode/$level"
                         ;;
-                    import_ambiguity|import_nonleak|import_poison|import_ambiguous_pattern)
+                    import_ambiguity|import_nonleak|import_poison|import_ambiguous_pattern|import_inner_ambiguity|import_inner_poison)
                         [[ $status != 0 ]] || fail "Rust accepted $name $mode/$level"
                         code=E0659
                         if [[ $name == import_nonleak ]]; then code=E0425; fi
                         if [[ $name == import_poison ]]; then code=E0432; fi
+                        if [[ $name == import_inner_poison ]]; then code=E0405; fi
                         grep -Fq "error[$code]" "$work/rust-error" || fail "Rust wrong refusal for $name $mode/$level"
                         ;;
                 esac
                 rust_verdicts=$((rust_verdicts + 1))
-            done
-            for entry in macro_explicit macro_glob; do
-                cp "$work/cases/import_macro_local.lkj" "$work/rust.lkj"
-                printf '\nfn main() { println!("{}", %s()); }\n' "$entry" >> "$work/rust.lkj"
-                "$witness" --edition=2021 --crate-name partial_imports -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || fail "Rust macro shadow boundary $entry $mode/$level"
-                [[ $("$work/rust") == 10 ]] || fail "Rust macro shadow boundary $entry $mode/$level value"
-                rust_shadow_values=$((rust_shadow_values + 1))
             done
             cp "$work/ambiguous-pattern-valid.lkj" "$work/rust.lkj"
             printf '\nfn main() { println!("{}", probe()); }\n' >> "$work/rust.lkj"
@@ -231,11 +239,6 @@ if [[ -n $witness ]]; then
             "$witness" --edition=2021 --crate-name partial_imports -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || fail "Rust changed pattern projection $mode/$level"
             [[ $("$work/rust") == 0 ]] || fail "Rust changed pattern projection $mode/$level value"
             rust_projection_values=$((rust_projection_values + 1))
-            cp "$work/block-projected-valid.lkj" "$work/rust.lkj"
-            printf '\nfn main() { println!("{}", probe()); }\n' >> "$work/rust.lkj"
-            "$witness" --edition=2021 --crate-name partial_imports -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error" || fail "Rust changed block projection $mode/$level"
-            [[ $("$work/rust") == 22 ]] || fail "Rust changed block projection $mode/$level value"
-            rust_block_projection_values=$((rust_block_projection_values + 1))
             cp "$work/poison-type-invalid.lkj" "$work/rust.lkj"
             printf '\nfn main() { println!("{}", probe()); }\n' >> "$work/rust.lkj"
             if "$witness" --edition=2021 --crate-name partial_imports -C "debug-assertions=$mode" -C "opt-level=$level" "$work/rust.lkj" -o "$work/rust" > "$work/rust-output" 2> "$work/rust-error"; then
@@ -245,5 +248,5 @@ if [[ -n $witness ]]; then
             rust_verdicts=$((rust_verdicts + 1))
         done
     done
-    printf 'ok partial-import Rust: %s agreed values, %s context/boundary verdicts, %s macro-shadow, %s changed-pattern and %s changed-block projection boundary values; opt0/opt3 and both configurations\n' "$rust_values" "$rust_verdicts" "$rust_shadow_values" "$rust_projection_values" "$rust_block_projection_values"
+    printf 'ok partial-import Rust: %s agreed values, %s context/boundary verdicts and %s changed-pattern projection boundary values; opt0/opt3 and both configurations\n' "$rust_values" "$rust_verdicts" "$rust_projection_values"
 fi

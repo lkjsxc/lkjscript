@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {"root":true}
+mod chosen { pub struct Item { pub value: i64 } }
+mod aliased { pub use crate::chosen::Item as item; }
+pub fn probe() -> i64 {
+    let item = 3i64;
+    let explicit = { use crate::chosen::Item as item; let value = item { value: 18 }; value.value + item };
+    let glob = { use crate::aliased::*; let value = item { value: 18 }; value.value + item };
+    explicit + glob
+}

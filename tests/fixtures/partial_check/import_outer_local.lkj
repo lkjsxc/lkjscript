@@ -1,5 +1,6 @@
 mod chosen {
     pub fn item() -> i64 { 42 }
+    pub const selected: i64 = 42;
 }
 fn inner_import() -> i64 {
     let item = 7i64;
@@ -9,5 +10,42 @@ fn inner_glob() -> i64 {
     let item = 7i64;
     { use crate::chosen::*; item() }
 }
-fn probe() -> i64 { 42 }
+fn inner_constant() -> i64 {
+    let selected = 7i64;
+    { use crate::chosen::selected; selected }
+}
+fn parameter_import(item: i64) -> i64 {
+    use crate::chosen::item;
+    item()
+}
+fn before_and_after() -> i64 {
+    let item = 7i64;
+    {
+        let before = item();
+        use crate::chosen::item;
+        let item = item() - before;
+        item + before
+    }
+}
+fn nested_alternation() -> i64 {
+    let item = 7i64;
+    let result = {
+        use crate::chosen::item;
+        let middle = item();
+        let inner = { let item = 5i64; item };
+        middle + inner - 5
+    };
+    result + item - 7
+}
+fn sibling_restoration() -> i64 {
+    let item = 7i64;
+    let first = { use crate::chosen::*; item() };
+    let second = { item };
+    first + second - 7
+}
+fn probe() -> i64 {
+    if inner_import() == 42 && inner_glob() == 42 && inner_constant() == 42
+        && parameter_import(7) == 42 && before_and_after() == 42
+        && nested_alternation() == 42 && sibling_restoration() == 42 { 42 } else { 0 }
+}
 fn refusal() { println!("source refusal remains"); }

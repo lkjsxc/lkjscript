@@ -1,0 +1,10 @@
+// expect: reject E_TYPE
+// witness: {"root":true,"rustAccept":true}
+// rust-value: 42
+// boundary: E_TYPE unknown value chosen::item
+// Selecting the inner function is correct; function-item values remain unsupported.
+mod chosen { pub fn item() -> i64 { 42 } }
+pub fn probe() -> i64 {
+    let item = || 3i64;
+    { use crate::chosen::item; let call = item; call() }
+}

@@ -205,7 +205,7 @@ impl Builder<'_, '_> {
         }
         let existing = match &self.compiler.source.exprs[expression].kind {
             a::Expr::Path(path) => {
-                self.binding(&path.name).is_some() || self.guard_aliases.contains_key(&path.name)
+                self.binding(&path.name).is_some() || self.guard_binding(&path.name).is_some()
             }
             a::Expr::Field { .. } | a::Expr::Index { .. } => true,
             a::Expr::Unary { op, .. } => op == "*",

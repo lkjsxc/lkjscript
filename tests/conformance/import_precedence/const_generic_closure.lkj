@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {"root":true}
+mod chosen { pub const N: usize = 21; }
+fn explicit<const N: usize>() -> usize {
+    let outside = || N;
+    let value = { use crate::chosen::N; let inside = || N; inside() };
+    assert_eq!(outside(), 3);
+    value
+}
+fn glob<const N: usize>() -> usize {
+    let outside = || N;
+    let value = { use crate::chosen::*; let inside = || N; inside() };
+    assert_eq!(outside(), 3);
+    value
+}
+pub fn probe() -> usize { explicit::<3>() + glob::<3>() }

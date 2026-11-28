@@ -42,9 +42,15 @@ impl Compiler<'_> {
         }
     }
 
-    pub(super) fn constant_length(&mut self, text: &str, substitutions: &BTreeMap<String, usize>, span: a::Span) -> Result<usize> {
+    pub(super) fn constant_length(&mut self, text: &str, substitutions: &BTreeMap<String, usize>,
+        scope: a::ModuleId, span: a::Span) -> Result<usize> {
         let text = crate::ast::macros::source_name(text);
         if let Some(count) = const_generics::literal(text) { return Ok(self.constant(count)); }
+        // Named repeat counts and const arguments remain unsupported. An inner
+        // value import must not turn them into the hidden generic parameter.
+        if self.names.block_value_imported(scope, text, span) {
+            return Err(err(span, "E_TYPE", "array length requires a literal or a declared const usize parameter"));
+        }
         if let Some(value) = substitutions.get(&text.to_string()) {
             if const_generics::value(&self.types, *value).is_some() { return Ok(*value); }
             return Err(err(span, "E_TYPE", "array length names a type parameter rather than a const usize parameter"));
@@ -58,11 +64,11 @@ impl Compiler<'_> {
         if constant {
             let argument = self.source.constant_arguments.get(&source).cloned();
             if let Some(text) = argument {
-                return self.constant_length(&text, substitutions, node.span);
+                return self.constant_length(&text, substitutions, node.scope, node.span);
             }
             if let a::Type::Path(path) = &node.kind {
                 if path.qualification.is_none() && path.declaration.is_none() && path.args.is_empty() && path.bindings.is_empty() {
-                    return self.constant_length(&path.name, substitutions, node.span);
+                    return self.constant_length(&path.name, substitutions, node.scope, node.span);
                 }
             }
             return Err(err(node.span, "E_TYPE", "const argument requires a usize literal or const parameter"));

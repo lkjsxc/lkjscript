@@ -18,8 +18,7 @@ impl Builder<'_, '_> {
             match &self.compiler.source.exprs[expression].kind {
                 a::Expr::Path(path) => {
                     break self
-                        .guard_aliases
-                        .get(&path.name)
+                        .guard_binding(&path.name)
                         .and_then(|place| place_type(&self.compiler.types, self.function, place))
                         .or_else(|| self.binding(&path.name).map(|local| self.ty(local)))?;
                 }
@@ -111,15 +110,34 @@ impl Builder<'_, '_> {
         let mut live = Facts::default();
         let mut definite_live = Facts::default();
         let mut written = Facts::default();
+        let mut remapped = BTreeMap::new();
         for (name, original) in &self.bindings.entries {
             let local = function.locals.len();
             function
                 .locals
                 .push(self.function.locals[*original].clone());
             bindings.push((name.clone(), local));
+            remapped.insert(*original, local);
             live.push(self.live.at(*original));
             definite_live.push(self.definite_live.at(*original));
             written.push(self.written.at(*original));
+        }
+        // The binding entry order is unchanged, including hidden entries.
+        bindings.import_floors = self.bindings.import_floors.clone();
+        let mut guard_aliases = BTreeMap::new();
+        for (name, (entry, place)) in &self.guard_aliases {
+            let local = if remapped.contains_key(&place.local) { *remapped.get(&place.local).unwrap() } else {
+                let local = function.locals.len();
+                function.locals.push(self.function.locals[place.local].clone());
+                live.push(self.live.at(place.local));
+                definite_live.push(self.definite_live.at(place.local));
+                written.push(self.written.at(place.local));
+                remapped.insert(place.local, local);
+                local
+            };
+            let mut place = place.clone();
+            place.local = local;
+            guard_aliases.insert(name.clone(), (*entry, place));
         }
         let references = Facts::new(function.locals.len());
         let mut loops = Vec::new();
@@ -150,7 +168,7 @@ impl Builder<'_, '_> {
                 typed_bindings: Vec::new(),
                 sub: self.sub.clone(),
                 bindings,
-                guard_aliases: BTreeMap::new(),
+                guard_aliases,
                 guard_shells: Vec::new(),
                 capture_aliases: self.capture_aliases.clone(),
                 capture_locals: self.capture_locals.clone(),

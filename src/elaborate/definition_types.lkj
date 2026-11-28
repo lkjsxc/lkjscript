@@ -1587,6 +1587,8 @@ impl Infer<'_, '_> {
     fn block(&mut self, id: a::BlockId) -> Result<Variable> {
         let block = self.source.blocks[id].clone();
         let bindings = self.bindings.len();
+        let imports = self.names.block_value_imports(id);
+        self.bindings.names.enter_imports(&imports);
         let mut diverges = false;
         for statement in block.statements {
             match statement {
@@ -1627,6 +1629,7 @@ impl Infer<'_, '_> {
             self.atom("()")
         };
         self.bindings.truncate(bindings);
+        self.bindings.names.leave_imports(&imports);
         if diverges {
             Ok(self.shaped(Shape::Never))
         } else {
@@ -1664,7 +1667,8 @@ impl Infer<'_, '_> {
                     let name = crate::ast::macros::source_name(&path.name).to_string(); self.environment.get(&name).copied()
                 } else { self.environment.get(&path.name).copied() };
                 let constant_parameter = constant_value.is_some_and(|value|
-                    matches!(self.shape(value), Some(Shape::Constant(_) | Shape::ConstantRigid(_))));
+                    matches!(self.shape(value), Some(Shape::Constant(_) | Shape::ConstantRigid(_))))
+                    && !self.names.block_value_imported(node.scope, &path.name, span);
                 if let Some((entry, value)) = local {
                     if self.capture_references {
                         self.definition.local_paths.push((id, self.bindings.origin_at(entry)));
@@ -1737,7 +1741,9 @@ impl Infer<'_, '_> {
                 };
                 let count = if let Some(len) = length { Some(self.shaped(Shape::Constant(len))) }
                     else if let a::Expr::Path(path) = &self.source.exprs[count].kind {
-                        self.environment.get(&path.name).copied()
+                        let node = &self.source.exprs[count];
+                        if self.names.block_value_imported(node.scope, &path.name, node.span) { None }
+                        else { self.environment.get(&path.name).copied() }
                     } else { None };
                 if let Some(count) = count { self.shaped(Shape::Array(value, count)) }
                     else { self.blocked() }

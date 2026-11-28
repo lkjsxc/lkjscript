@@ -1,0 +1,8 @@
+// expect: reject E_TYPE
+// witness: {"root":true,"rustAccept":false,"rustCode":"E0618"}
+mod chosen { pub fn item() -> i64 { 42 } }
+pub fn probe() -> i64 {
+    use crate::chosen::item;
+    let item = 42i64;
+    item()
+}

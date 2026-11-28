@@ -1,7 +1,11 @@
-mod chosen { pub const selected: i64 = 10; }
+mod chosen { pub const selected: i64 = 10; pub fn item() -> i64 { 10 } }
 macro_rules! choose_explicit { () => {{ let selected = 3i64; { use crate::chosen::selected; selected } }}; }
 macro_rules! choose_glob { () => {{ let selected = 3i64; { use crate::chosen::*; selected } }}; }
+macro_rules! choose_local { () => {{ use crate::chosen::item; let before = item(); let item = 3i64; before + item - 3 }}; }
 fn macro_explicit() -> i64 { choose_explicit!() }
 fn macro_glob() -> i64 { choose_glob!() }
-fn probe() -> i64 { 42 }
+fn macro_local() -> i64 { choose_local!() }
+fn probe() -> i64 {
+    if macro_explicit() == 10 && macro_glob() == 10 && macro_local() == 10 { 42 } else { 0 }
+}
 fn refusal() { println!("source refusal remains"); }

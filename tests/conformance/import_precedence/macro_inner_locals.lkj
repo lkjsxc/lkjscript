@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {"root":true}
+mod chosen { pub fn item() -> i64 { 3 } }
+macro_rules! local_after_import { ($name:ident) => { let $name = || 13i64; }; }
+macro_rules! generated_scope { () => {{ use crate::chosen::item; let item = 13i64; item }}; }
+pub fn probe() -> i64 {
+    let item = 99i64;
+    let inside = {
+        use crate::chosen::item;
+        let before = item();
+        local_after_import!(item);
+        before + item()
+    };
+    assert_eq!(item, 99);
+    inside + generated_scope!() + generated_scope!()
+}

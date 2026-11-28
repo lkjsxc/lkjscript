@@ -1278,24 +1278,25 @@ impl Builder<'_, '_> {
         }
         for binding in bindings {
             let local = *destinations.get(&binding.name).unwrap();
+            let entry = self.bindings.len();
+            self.bindings.push((binding.name.clone(), local));
             if binding.borrow.is_none() {
                 self.guard_aliases.insert(
                     binding.name,
-                    ir::Place {
+                    (entry, ir::Place {
                         local,
                         projections: vec![ir::Projection::Deref],
-                    },
+                    }),
                 );
             } else {
-                self.bindings.push((binding.name.clone(), local));
                 if binding.borrow == Some(true) {
                     let frozen = self.borrow(ir::Place::local(local), false, line)?.0;
                     self.guard_aliases.insert(
                         binding.name,
-                        ir::Place {
+                        (entry, ir::Place {
                             local: frozen,
                             projections: vec![ir::Projection::Deref],
-                        },
+                        }),
                     );
                 }
             }

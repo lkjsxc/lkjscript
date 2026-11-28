@@ -1,0 +1,11 @@
+// expect: value 42
+// witness: {"root":true}
+mod chosen { pub fn item() -> i64 { 14 } }
+fn root_body(item: i64) -> i64 { use crate::chosen::item; item() }
+fn nested_body(item: i64) -> i64 { { use crate::chosen::*; item() } }
+fn local_body(item: i64) -> i64 {
+    use crate::chosen::item;
+    let item = item();
+    item
+}
+pub fn probe() -> i64 { root_body(1) + nested_body(2) + local_body(3) }

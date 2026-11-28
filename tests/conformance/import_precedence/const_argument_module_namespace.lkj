@@ -1,0 +1,7 @@
+// expect: reject E_TYPE
+// witness: {"root":true,"rustAccept":false,"rustCode":"E0573"}
+// Unlike array/repeat counts, an unbraced argument first selects the type namespace.
+mod chosen { pub fn marker() -> usize { 0 } }
+fn take<const M: usize>() -> usize { M }
+fn selected<const N: usize>() -> usize { use crate::chosen as N; take::<N>() }
+pub fn probe() -> usize { selected::<3>() }

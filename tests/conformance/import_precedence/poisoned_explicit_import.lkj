@@ -1,0 +1,7 @@
+// expect: reject E_IMPORT
+// witness: {"root":true,"rustAccept":false,"rustCode":"E0432"}
+mod chosen { pub fn other() -> i64 { 21 } }
+pub fn probe() -> i64 {
+    let item = 42i64;
+    { use crate::chosen::missing as item; item }
+}

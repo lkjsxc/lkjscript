@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {"root":true}
+mod chosen { pub const item: i64 = 14; }
+macro_rules! introduced { () => {{ let item = 3i64; { use crate::chosen::item; item } }}; }
+macro_rules! introduced_glob { () => {{ let item = 3i64; { use crate::chosen::*; item } }}; }
+macro_rules! caller_local { ($name:ident) => { let $name = 3i64; }; }
+pub fn probe() -> i64 {
+    caller_local!(item);
+    let caller = { use crate::chosen::item; item };
+    assert_eq!(item, 3);
+    introduced!() + introduced_glob!() + caller
+}

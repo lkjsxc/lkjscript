@@ -1,0 +1,8 @@
+// expect: reject E_NAME
+// witness: {"root":true,"rustAccept":true}
+// rust-value: 2
+// boundary: E_NAME unresolved name N
+// Without a generic parameter the resolver already refuses this named argument.
+mod chosen { pub const N: usize = 2; }
+fn take<const M: usize>() -> usize { M }
+pub fn probe() -> usize { use crate::chosen::N; take::<N>() }

@@ -1,0 +1,10 @@
+// expect: value 42
+// witness: {"root":true}
+mod chosen { pub fn item() -> i64 { 21 } }
+pub fn probe() -> i64 {
+    let item = 3i64;
+    let direct = { use crate::chosen::item; item() };
+    let indirect = { use crate::chosen::item; let call = || item(); call() };
+    assert_eq!(item, 3);
+    direct + indirect
+}

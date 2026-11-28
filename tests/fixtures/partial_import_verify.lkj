@@ -89,10 +89,12 @@ fn cases(name: &str) -> Vec<Expected> {
             row(15, 1, "refusal", false, 15, 16, "E_CAPABILITY", ""),
         ],
         "import_macro_local" => vec![
-            row(4, 1, "macro_explicit", false, 7, 16, "E_CAPABILITY", ""),
-            row(5, 1, "macro_glob", false, 7, 16, "E_CAPABILITY", ""),
-            row(6, 1, "probe", true, 0, 0, "", ""),
-            row(7, 1, "refusal", false, 7, 16, "E_CAPABILITY", ""),
+            row(1, 48, "chosen::item", true, 0, 0, "", ""),
+            row(5, 1, "macro_explicit", true, 0, 0, "", ""),
+            row(6, 1, "macro_glob", true, 0, 0, "", ""),
+            row(7, 1, "macro_local", true, 0, 0, "", "chosen::item"),
+            row(8, 1, "probe", true, 0, 0, "", "macro_explicit,macro_glob,macro_local"),
+            row(11, 1, "refusal", false, 11, 16, "E_CAPABILITY", ""),
         ],
         "import_empty" => vec![
             row(2, 9, "chosen::target", true, 0, 0, "", ""),
@@ -103,14 +105,19 @@ fn cases(name: &str) -> Vec<Expected> {
         ],
         "import_outer_local" => vec![
             row(2, 9, "chosen::item", true, 0, 0, "", ""),
-            row(4, 1, "inner_import", false, 13, 16, "E_CAPABILITY", ""),
-            row(8, 1, "inner_glob", false, 13, 16, "E_CAPABILITY", ""),
-            row(12, 1, "probe", true, 0, 0, "", ""),
-            row(13, 1, "refusal", false, 13, 16, "E_CAPABILITY", ""),
+            row(5, 1, "inner_import", true, 0, 0, "", "chosen::item"),
+            row(9, 1, "inner_glob", true, 0, 0, "", "chosen::item"),
+            row(13, 1, "inner_constant", true, 0, 0, "", ""),
+            row(17, 1, "parameter_import", true, 0, 0, "", "chosen::item"),
+            row(21, 1, "before_and_after", true, 0, 0, "", "chosen::item"),
+            row(30, 1, "nested_alternation", true, 0, 0, "", "chosen::item"),
+            row(40, 1, "sibling_restoration", true, 0, 0, "", "chosen::item"),
+            row(46, 1, "probe", true, 0, 0, "", "inner_import,inner_glob,inner_constant,parameter_import,before_and_after,nested_alternation,sibling_restoration"),
+            row(51, 1, "refusal", false, 51, 16, "E_CAPABILITY", ""),
         ],
         "import_ambiguous_inner" => vec![
-            row(3, 1, "selected", false, 8, 16, "E_CAPABILITY", ""),
-            row(7, 1, "probe", false, 8, 16, "E_CAPABILITY", "selected"),
+            row(3, 1, "selected", true, 0, 0, "", ""),
+            row(7, 1, "probe", true, 0, 0, "", "selected"),
             row(8, 1, "refusal", false, 8, 16, "E_CAPABILITY", ""),
         ],
         "import_ambiguous_outer" => vec![
@@ -152,6 +159,30 @@ fn cases(name: &str) -> Vec<Expected> {
             row(7, 5, "provider::x", true, 0, 0, "", ""),
             row(9, 1, "probe", false, 13, 16, "E_CAPABILITY", "upstream::y"),
             row(13, 1, "refusal", false, 13, 16, "E_CAPABILITY", ""),
+        ],
+        "import_inner_ambiguity" => vec![
+            row(1, 15, "one::item", true, 0, 0, "", ""),
+            row(2, 15, "two::item", true, 0, 0, "", ""),
+            row(3, 1, "ambiguous", false, 5, 45, "E_NAME", ""),
+            row(7, 1, "same_block", true, 0, 0, "", ""),
+            row(13, 1, "probe", true, 0, 0, "", "same_block"),
+            row(14, 1, "refusal", false, 14, 16, "E_CAPABILITY", ""),
+        ],
+        "import_inner_poison" => vec![
+            row(2, 1, "explicit", false, 1, 35, "E_UNSUPPORTED", ""),
+            row(6, 1, "glob", false, 1, 35, "E_UNSUPPORTED", ""),
+            row(10, 1, "probe", true, 0, 0, "", ""),
+        ],
+        "import_type_local" => vec![
+            row(2, 1, "explicit", true, 0, 0, "", ""),
+            row(6, 1, "glob", true, 0, 0, "", ""),
+            row(10, 1, "probe", true, 0, 0, "", "explicit,glob"),
+            row(11, 1, "refusal", false, 11, 16, "E_CAPABILITY", ""),
+        ],
+        "import_enum_glob" => vec![
+            row(2, 1, "selected", false, 7, 16, "E_CAPABILITY", ""),
+            row(6, 1, "probe", false, 7, 16, "E_CAPABILITY", "selected"),
+            row(7, 1, "refusal", false, 7, 16, "E_CAPABILITY", ""),
         ],
         _ => panic!("unknown import replay fixture"),
     }
@@ -251,9 +282,11 @@ fn main(mut world: World) {
             if name == "import_nonleak" && want.name != "refusal" {
                 assert_eq!(reason, "complete context required: unresolved input target");
             }
-            if matches!(name.as_str(), "import_outer_local" | "import_macro_local" | "import_ambiguous_inner") && want.name != "refusal" {
-                assert!(reason.starts_with("complete context required:"));
-                assert!(reason.contains("inherited local"));
+            if name == "import_inner_ambiguity" && want.name == "ambiguous" {
+                assert_eq!(reason, "original source lookup refused");
+            }
+            if name == "import_enum_glob" && want.name != "refusal" {
+                assert_eq!(reason, "complete context required: glob target needs an exact module");
             }
             if name == "import_empty" && want.name != "refusal" {
                 assert_eq!(reason, "complete context required: local import statement needs a distinct authored leaf");

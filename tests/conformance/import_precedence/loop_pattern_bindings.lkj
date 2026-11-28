@@ -1,0 +1,16 @@
+// expect: value 42
+// witness: {"root":true}
+mod chosen { pub fn item() -> i64 { 7 } }
+pub fn probe() -> i64 {
+    let mut total = 0i64;
+    for item in 0..2 { use crate::chosen::item; total += item(); }
+    if let Some(item) = Some(3i64) { use crate::chosen::*; total += item(); }
+    total += match Some(3i64) {
+        Some(item) => { use crate::chosen::item; item() },
+        None => 0,
+    };
+    let mut once = Some(3i64);
+    while let Some(item) = once { use crate::chosen::*; total += item(); once = None; }
+    let item = 7i64;
+    total + item
+}

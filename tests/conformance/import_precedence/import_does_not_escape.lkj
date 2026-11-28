@@ -1,0 +1,7 @@
+// expect: reject E_NAME
+// witness: {"root":true,"rustAccept":false,"rustCode":"E0425"}
+mod chosen { pub fn item() -> i64 { 42 } }
+pub fn probe() -> i64 {
+    { use crate::chosen::item; assert_eq!(item(), 42); }
+    item()
+}

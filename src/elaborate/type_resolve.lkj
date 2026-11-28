@@ -51,6 +51,7 @@ enum Work {
     Slice { span: a::Span },
     Array {
         len: String,
+        scope: a::ModuleId,
         span: a::Span,
         environment: usize,
     },
@@ -204,6 +205,7 @@ impl Compiler<'_> {
                         a::Type::Array { inner, len } => {
                             work.pending.push(Work::Array {
                                 len: len.clone(),
+                                scope: node.scope,
                                 span: node.span,
                                 environment,
                             });
@@ -379,9 +381,9 @@ impl Compiler<'_> {
                     );
                     work.values.push(id);
                 }
-                Work::Array { len, span, environment } => {
+                Work::Array { len, scope, span, environment } => {
                     let inner = work.values.pop().expect("array child");
-                    let constant = self.constant_length(&len, &work.environments[environment], span)?;
+                    let constant = self.constant_length(&len, &work.environments[environment], scope, span)?;
                     self.check_owned_element(inner, span)?;
                     let id = self.array_type(inner, constant, span)?;
                     work.values.push(id);

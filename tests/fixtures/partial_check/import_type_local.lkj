@@ -1,0 +1,11 @@
+mod chosen { pub type item = i64; }
+fn explicit() -> i64 {
+    let item = 42i64;
+    { use crate::chosen::item; item }
+}
+fn glob() -> i64 {
+    let item = 42i64;
+    { use crate::chosen::*; item }
+}
+fn probe() -> i64 { if explicit() == 42 && glob() == 42 { 42 } else { 0 } }
+fn refusal() { println!("source refusal remains"); }

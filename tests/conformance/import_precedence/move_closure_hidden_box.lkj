@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {"root":true}
+mod functions { pub fn item() -> i64 { 21 } }
+mod constants { pub const item: i64 = 21; }
+pub fn probe() -> i64 {
+    let item = Box::new(3i64);
+    let explicit = { use crate::functions::item; let read = move || item(); read() };
+    assert_eq!(*item, 3);
+    let glob = { use crate::constants::*; let read = move || item; read() };
+    assert_eq!(*item, 3);
+    explicit + glob
+}

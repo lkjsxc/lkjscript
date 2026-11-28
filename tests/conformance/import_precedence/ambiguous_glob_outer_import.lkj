@@ -1,0 +1,9 @@
+// expect: reject E_NAME
+// witness: {"root":true,"rustAccept":false,"rustCode":"E0659"}
+mod first { pub fn item() -> i64 { 21 } }
+mod second { pub fn item() -> i64 { 22 } }
+mod outer { pub fn item() -> i64 { 42 } }
+pub fn probe() -> i64 {
+    use crate::outer::item;
+    { use crate::first::*; use crate::second::*; item() }
+}

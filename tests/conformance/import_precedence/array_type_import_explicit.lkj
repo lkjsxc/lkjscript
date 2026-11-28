@@ -1,0 +1,12 @@
+// expect: value 42
+// witness: {"root":true}
+mod chosen { pub const N: usize = 2; }
+fn body<const N: usize>() -> i64 {
+    use crate::chosen::N;
+    let value: [i64; N] = [10i64, 11i64];
+    value[0] + value[1]
+}
+fn nested<const N: usize>() -> i64 {
+    { use crate::chosen::N; let value: [i64; N] = [10i64, 11i64]; value[0] + value[1] }
+}
+pub fn probe() -> i64 { body::<3>() + nested::<3>() }

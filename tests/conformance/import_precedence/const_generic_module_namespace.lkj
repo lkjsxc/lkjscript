@@ -1,0 +1,13 @@
+// expect: value 42
+// witness: {"root":true}
+mod chosen { pub fn extra() -> usize { 18 } }
+fn body<const N: usize>() -> usize {
+    use crate::chosen as N;
+    N + N::extra()
+}
+fn nested<const N: usize>() -> usize {
+    let result = { use crate::chosen as N; let read = || N; read() + N::extra() };
+    assert_eq!(N, 3);
+    result
+}
+pub fn probe() -> usize { body::<3>() + nested::<3>() }

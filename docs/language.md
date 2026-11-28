@@ -228,10 +228,21 @@ or patterns, never types; suffixes cannot reuse an enclosing enum's type identit
 
 Explicit declarations/imports shadow module/enum globs. Unused glob ambiguity is
 allowed; conflicting use is diagnosed. Public globs preserve private binding
-restrictions. Block imports cover their entire lexical block and nested blocks,
-not neighboring functions. Qualified paths retain module meaning. use Trait as _
-adds method evidence without a name. Generic parameters retain original lexical/file
-scope and shadow unrelated declarations, not resolved nominal/intrinsic identities.
+restrictions. Block imports are hoisted over their entire lexical block and nested
+blocks, not neighboring functions. Within the value namespace, a block's explicit
+import precedes its globs and both precede inherited locals, including function
+parameters and macro-generated locals. A local declared in that block takes
+precedence only after its initializer; an inner block applies the same rules
+again. Definition inference, closure captures and lowering share this lookup.
+Const-generic value parameters follow the same rule, including supported literal
+module constants in array types. Module constants used as repeat counts or generic
+arguments remain unsupported; they cannot fall back to a hidden parameter.
+Type-only and module imports do not hide value locals. Binding patterns still
+distinguish declarations from constant/constructor patterns; the local-shadowing
+rule does not make an imported constant a freely shadowable binding.
+Qualified paths retain module meaning. use Trait as _ adds method evidence
+without a name. Generic parameters retain original lexical/file scope and shadow
+unrelated declarations, not resolved nominal/intrinsic identities.
 
 Types/instances use structural declaration/child IDs and substitutions. Printable
 names, including compact child IDs, are labels rather than semantic identity.
@@ -1208,10 +1219,11 @@ member. Unclassifiable binding patterns retain a complete-context boundary roote
 in an actual source refusal. A local may shadow an imported function; its source
 antecedent remains in the recorded closure.
 Replay requires unique module owners and structural block ancestry, independent
-of arena numbering. Empty local use trees, enum glob targets and an inner
-import hiding an inherited local remain explicit replay boundaries. The last
-boundary includes macro-generated locals: ordinary lowering currently gives
-the outer local priority, whereas Rust selects the inner import.
+of arena numbering. It follows each block's own value import before inherited
+locals, including macro-generated locals, and restores local precedence after
+each same-block binding's initializer. Selected declaration spellings preserve
+macro source identity when projection renumbers expansion contexts. Empty local
+use trees and enum glob targets remain explicit replay boundaries.
 
 Coherence compares retained headers by exact receiver identity, trait
 declaration and closed scalar arguments. A balanced refused member with a
